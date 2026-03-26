@@ -1,8 +1,8 @@
-import { SyntaxStyle, RGBA, type TerminalColors } from "@opentui/core"
+import { CliRenderEvents, SyntaxStyle, RGBA, type TerminalColors } from "@opentui/core"
 import path from "path"
-import { createEffect, createMemo, onMount } from "solid-js"
-import { useSync } from "@tui/context/sync"
+import { createEffect, createMemo, onCleanup, onMount } from "solid-js"
 import { createSimpleContext } from "./helper"
+import { Glob } from "../../../../util/glob"
 import aura from "./theme/aura.json" with { type: "json" }
 import ayu from "./theme/ayu.json" with { type: "json" }
 import catppuccin from "./theme/catppuccin.json" with { type: "json" }
@@ -35,12 +35,13 @@ import tokyonight from "./theme/tokyonight.json" with { type: "json" }
 import vercel from "./theme/vercel.json" with { type: "json" }
 import vesper from "./theme/vesper.json" with { type: "json" }
 import zenburn from "./theme/zenburn.json" with { type: "json" }
+import carbonfox from "./theme/carbonfox.json" with { type: "json" }
 import { useKV } from "./kv"
 import { useRenderer } from "@opentui/solid"
 import { createStore, produce } from "solid-js/store"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
-import { useSDK } from "./sdk"
+import { useTuiConfig } from "./tui-config"
 
 type ThemeColors = {
   primary: RGBA
@@ -170,6 +171,7 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   vesper,
   vercel,
   zenburn,
+  carbonfox,
 }
 
 function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
@@ -278,22 +280,29 @@ function ansiToRgba(code: number): RGBA {
 export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   name: "Theme",
   init: (props: { mode: "dark" | "light" }) => {
-    const sync = useSync()
+    const renderer = useRenderer()
+    const config = useTuiConfig()
     const kv = useKV()
+    const pick = (value: unknown) => {
+      if (value === "dark" || value === "light") return value
+      return
+    }
+    const lock = pick(kv.get("theme_mode_lock"))
     const [store, setStore] = createStore({
       themes: DEFAULT_THEMES,
-      mode: kv.get("theme_mode", props.mode),
-      active: (sync.data.config.theme ?? kv.get("theme", "opencode")) as string,
+      mode: lock ?? pick(kv.get("theme_mode", props.mode)) ?? props.mode,
+      lock,
+      active: (config.theme ?? kv.get("theme", "opencode")) as string,
       ready: false,
     })
 
     createEffect(() => {
-      const theme = sync.data.config.theme
+      const theme = config.theme
       if (theme) setStore("active", theme)
     })
 
     function init() {
-      resolveSystemTheme()
+      resolveSystemTheme(store.mode)
       getCustomThemes()
         .then((custom) => {
           setStore(
@@ -314,14 +323,12 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     onMount(init)
 
-    function resolveSystemTheme() {
-      console.log("resolveSystemTheme")
+    function resolveSystemTheme(mode: "dark" | "light" = store.mode) {
       renderer
         .getPalette({
           size: 16,
         })
         .then((colors) => {
-          console.log(colors.palette)
           if (!colors.palette[0]) {
             if (store.active === "system") {
               setStore(
@@ -335,7 +342,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
           }
           setStore(
             produce((draft) => {
-              draft.themes.system = generateSystem(colors, store.mode)
+              draft.themes.system = generateSystem(colors, mode)
               if (store.active === "system") {
                 draft.ready = true
               }
@@ -344,14 +351,42 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         })
     }
 
-    const renderer = useRenderer()
-    process.on("SIGUSR2", async () => {
+    function apply(mode: "dark" | "light") {
+      kv.set("theme_mode", mode)
+      if (store.mode === mode) return
+      setStore("mode", mode)
       renderer.clearPaletteCache()
-      init()
+      resolveSystemTheme(mode)
+    }
+
+    function pin(mode: "dark" | "light" = store.mode) {
+      setStore("lock", mode)
+      kv.set("theme_mode_lock", mode)
+      apply(mode)
+    }
+
+    function free() {
+      setStore("lock", undefined)
+      kv.set("theme_mode_lock", undefined)
+      const mode = renderer.themeMode
+      if (mode) apply(mode)
+    }
+
+    const handle = (mode: "dark" | "light") => {
+      if (store.lock) return
+      apply(mode)
+    }
+    renderer.on(CliRenderEvents.THEME_MODE, handle)
+    onCleanup(() => {
+      renderer.off(CliRenderEvents.THEME_MODE, handle)
     })
 
     const values = createMemo(() => {
       return resolveTheme(store.themes[store.active] ?? store.themes.opencode, store.mode)
+    })
+
+    createEffect(() => {
+      renderer.setBackgroundColor(values().background)
     })
 
     const syntax = createMemo(() => generateSyntax(values()))
@@ -375,9 +410,17 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       mode() {
         return store.mode
       },
+      locked() {
+        return store.lock !== undefined
+      },
+      lock() {
+        pin(store.mode)
+      },
+      unlock() {
+        free()
+      },
       setMode(mode: "dark" | "light") {
-        setStore("mode", mode)
-        kv.set("theme_mode", mode)
+        pin(mode)
       },
       set(theme: string) {
         setStore("active", theme)
@@ -390,7 +433,6 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   },
 })
 
-const CUSTOM_THEME_GLOB = new Bun.Glob("themes/*.json")
 async function getCustomThemes() {
   const directories = [
     Global.Path.config,
@@ -404,14 +446,14 @@ async function getCustomThemes() {
 
   const result: Record<string, ThemeJson> = {}
   for (const dir of directories) {
-    for await (const item of CUSTOM_THEME_GLOB.scan({
-      absolute: true,
-      followSymlinks: true,
-      dot: true,
+    for (const item of await Glob.scan("themes/*.json", {
       cwd: dir,
+      absolute: true,
+      dot: true,
+      symlink: true,
     })) {
       const name = path.basename(item, ".json")
-      result[name] = await Bun.file(item).json()
+      result[name] = await Filesystem.readJson(item)
     }
   }
   return result
@@ -427,6 +469,7 @@ export function tint(base: RGBA, overlay: RGBA, alpha: number): RGBA {
 function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJson {
   const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0]!)
   const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!)
+  const transparent = RGBA.fromValues(bg.r, bg.g, bg.b, 0)
   const isDark = mode == "dark"
 
   const col = (i: number) => {
@@ -477,8 +520,8 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
       textMuted,
       selectedListItemText: bg,
 
-      // Background colors
-      background: bg,
+      // Background colors - use transparent to respect terminal transparency
+      background: transparent,
       backgroundPanel: grays[2],
       backgroundElement: grays[3],
       backgroundMenu: grays[3],

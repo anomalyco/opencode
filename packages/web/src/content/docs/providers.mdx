@@ -57,7 +57,39 @@ tested and verified to work well with OpenCode. [Learn more](/docs/zen).
 If you are new, we recommend starting with OpenCode Zen.
 :::
 
-1. Run the `/connect` command in the TUI, select opencode, and head to [opencode.ai/auth](https://opencode.ai/auth).
+1. Run the `/connect` command in the TUI, select `OpenCode Zen`, and head to [opencode.ai/auth](https://opencode.ai/zen).
+
+   ```txt
+   /connect
+   ```
+
+2. Sign in, add your billing details, and copy your API key.
+
+3. Paste your API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run `/models` in the TUI to see the list of models we recommend.
+
+   ```txt
+   /models
+   ```
+
+It works like any other provider in OpenCode and is completely optional to use.
+
+---
+
+## OpenCode Go
+
+OpenCode Go is a low cost subscription plan that provides reliable access to popular open coding models provided by the OpenCode team that have been
+tested and verified to work well with OpenCode.
+
+1. Run the `/connect` command in the TUI, select `OpenCode Go`, and head to [opencode.ai/auth](https://opencode.ai/zen).
 
    ```txt
    /connect
@@ -135,6 +167,8 @@ To use Amazon Bedrock with OpenCode:
 
 2. **Configure authentication** using one of the following methods:
 
+   ***
+
    #### Environment Variables (Quick Start)
 
    Set one of these environment variables while running opencode:
@@ -156,6 +190,8 @@ To use Amazon Bedrock with OpenCode:
    export AWS_PROFILE=my-dev-profile
    export AWS_REGION=us-east-1
    ```
+
+   ***
 
    #### Configuration File (Recommended)
 
@@ -184,6 +220,8 @@ To use Amazon Bedrock with OpenCode:
    Configuration file options take precedence over environment variables.
    :::
 
+   ***
+
    #### Advanced: VPC Endpoints
 
    If you're using VPC endpoints for Bedrock:
@@ -207,11 +245,15 @@ To use Amazon Bedrock with OpenCode:
    The `endpoint` option is an alias for the generic `baseURL` option, using AWS-specific terminology. If both `endpoint` and `baseURL` are specified, `endpoint` takes precedence.
    :::
 
+   ***
+
    #### Authentication Methods
    - **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**: Create an IAM user and generate access keys in the AWS Console
    - **`AWS_PROFILE`**: Use named profiles from `~/.aws/credentials`. First configure with `aws configure --profile my-profile` or `aws sso login`
    - **`AWS_BEARER_TOKEN_BEDROCK`**: Generate long-term API keys from the Amazon Bedrock console
    - **`AWS_WEB_IDENTITY_TOKEN_FILE` / `AWS_ROLE_ARN`**: For EKS IRSA (IAM Roles for Service Accounts) or other Kubernetes environments with OIDC federation. These environment variables are automatically injected by Kubernetes when using service account annotations.
+
+   ***
 
    #### Authentication Precedence
 
@@ -229,11 +271,29 @@ To use Amazon Bedrock with OpenCode:
    /models
    ```
 
+:::note
+For custom inference profiles, use the model and provider name in the key and set the `id` property to the arn. This ensures correct caching.
+:::
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "amazon-bedrock": {
+      // ...
+      "models": {
+        "anthropic-claude-sonnet-4.5": {
+          "id": "arn:aws:bedrock:us-east-1:xxx:application-inference-profile/yyy"
+        }
+      }
+    }
+  }
+}
+```
+
 ---
 
 ### Anthropic
-
-We recommend signing up for [Claude Pro](https://www.anthropic.com/news/claude-pro) or [Max](https://www.anthropic.com/max).
 
 1. Once you've signed up, run the `/connect` command and select Anthropic.
 
@@ -247,8 +307,6 @@ We recommend signing up for [Claude Pro](https://www.anthropic.com/news/claude-p
    ```txt
    ┌ Select auth method
    │
-   │ Claude Pro/Max
-   │ Create an API Key
    │ Manually enter API Key
    └
    ```
@@ -259,11 +317,20 @@ We recommend signing up for [Claude Pro](https://www.anthropic.com/news/claude-p
    /models
    ```
 
-##### Using API keys
+:::info
+There are plugins that allow you to use your Claude Pro/Max models with
+OpenCode. Anthropic explicitly prohibits this.
 
-You can also select **Create an API Key** if you don't have a Pro/Max subscription. It'll also open your browser and ask you to login to Anthropic and give you a code you can paste in your terminal.
+Previous versions of OpenCode came bundled with these plugins but that is no
+longer the case as of 1.3.0
 
-Or if you already have an API key, you can select **Manually enter API Key** and paste it in your terminal.
+Other companies support freedom of choice with developer tooling - you can use
+the following subscriptions in OpenCode with zero setup:
+
+- ChatGPT Plus
+- Github Copilot
+- Gitlab Duo
+  :::
 
 ---
 
@@ -477,6 +544,47 @@ Cloudflare AI Gateway lets you access models from OpenAI, Anthropic, Workers AI,
 
 ---
 
+### Cloudflare Workers AI
+
+Cloudflare Workers AI lets you run AI models on Cloudflare's global network directly via REST API, with no separate provider accounts needed for supported models.
+
+1. Head over to the [Cloudflare dashboard](https://dash.cloudflare.com/), navigate to **Workers AI**, and select **Use REST API** to get your Account ID and create an API token.
+
+2. Set your Account ID as an environment variable.
+
+   ```bash title="~/.bash_profile"
+   export CLOUDFLARE_ACCOUNT_ID=your-32-character-account-id
+   ```
+
+3. Run the `/connect` command and search for **Cloudflare Workers AI**.
+
+   ```txt
+   /connect
+   ```
+
+4. Enter your Cloudflare API token.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+   Or set it as an environment variable.
+
+   ```bash title="~/.bash_profile"
+   export CLOUDFLARE_API_KEY=your-api-token
+   ```
+
+5. Run the `/models` command to select a model.
+
+   ```txt
+   /models
+   ```
+
+---
+
 ### Cortecs
 
 1. Head over to the [Cortecs console](https://cortecs.ai/), create an account, and generate an API key.
@@ -558,6 +666,33 @@ Cloudflare AI Gateway lets you access models from OpenAI, Anthropic, Workers AI,
 
 ---
 
+### Firmware
+
+1. Head over to the [Firmware dashboard](https://app.firmware.ai/signup), create an account, and generate an API key.
+
+2. Run the `/connect` command and search for **Firmware**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your Firmware API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select a model.
+
+   ```txt
+   /models
+   ```
+
+---
+
 ### Fireworks AI
 
 1. Head over to the [Fireworks AI console](https://app.fireworks.ai/), create an account, and click **Create API Key**.
@@ -587,7 +722,20 @@ Cloudflare AI Gateway lets you access models from OpenAI, Anthropic, Workers AI,
 
 ### GitLab Duo
 
-GitLab Duo provides AI-powered agentic chat with native tool calling capabilities through GitLab's Anthropic proxy.
+:::caution[Experimental]
+GitLab Duo support in OpenCode is experimental. Features, configuration, and
+behavior may change in future releases.
+:::
+
+OpenCode integrates with the [GitLab Duo Agent Platform](https://docs.gitlab.com/user/duo_agent_platform/),
+providing AI-powered agentic chat with native tool calling capabilities.
+
+:::note[License requirements]
+GitLab Duo Agent Platform requires a **Premium** or **Ultimate** GitLab
+subscription. It is available on GitLab.com and GitLab Self-Managed.
+See [GitLab Duo Agent Platform prerequisites](https://docs.gitlab.com/user/duo_agent_platform/#prerequisites)
+for full requirements.
+:::
 
 1. Run the `/connect` command and select GitLab.
 
@@ -627,20 +775,78 @@ GitLab Duo provides AI-powered agentic chat with native tool calling capabilitie
    - **duo-chat-sonnet-4-5** - Balanced performance for most workflows
    - **duo-chat-opus-4-5** - Most capable for complex analysis
 
+:::note
+You can also specify 'GITLAB_TOKEN' environment variable if you don't want
+to store token in opencode auth storage.
+:::
+
 ##### Self-Hosted GitLab
+
+:::note[compliance note]
+OpenCode uses a small model for some AI tasks like generating the session title.
+It is configured to use gpt-5-nano by default, hosted by Zen. To lock OpenCode
+to only use your own GitLab-hosted instance, add the following to your
+`opencode.json` file. It is also recommended to disable session sharing.
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "small_model": "gitlab/duo-chat-haiku-4-5",
+  "share": "disabled"
+}
+```
+
+:::
 
 For self-hosted GitLab instances:
 
 ```bash
-GITLAB_INSTANCE_URL=https://gitlab.company.com GITLAB_TOKEN=glpat-xxxxxxxxxxxxxxxxxxxx opencode
+export GITLAB_INSTANCE_URL=https://gitlab.company.com
+export GITLAB_TOKEN=glpat-...
+```
+
+If your instance runs a custom AI Gateway:
+
+```bash
+GITLAB_AI_GATEWAY_URL=https://ai-gateway.company.com
 ```
 
 Or add to your bash profile:
 
 ```bash title="~/.bash_profile"
 export GITLAB_INSTANCE_URL=https://gitlab.company.com
-export GITLAB_TOKEN=glpat-xxxxxxxxxxxxxxxxxxxx
+export GITLAB_AI_GATEWAY_URL=https://ai-gateway.company.com
+export GITLAB_TOKEN=glpat-...
 ```
+
+:::note
+Your GitLab administrator must:
+
+1. [Turn on GitLab Duo](https://docs.gitlab.com/user/duo_agent_platform/turn_on_off/#turn-gitlab-duo-on-or-off)
+   for the user, group, or instance
+2. [Turn on the Agent Platform](https://docs.gitlab.com/user/duo_agent_platform/turn_on_off/#turn-gitlab-duo-agent-platform-on-or-off)
+   (GitLab 18.8+) or [enable beta and experimental features](https://docs.gitlab.com/user/duo_agent_platform/turn_on_off/#turn-on-beta-and-experimental-features)
+   (GitLab 18.7 and earlier)
+3. For Self-Managed, [configure your instance](https://docs.gitlab.com/administration/gitlab_duo/configure/gitlab_self_managed/)
+   :::
+
+##### OAuth for Self-Hosted instances
+
+In order to make Oauth working for your self-hosted instance, you need to create
+a new application (Settings → Applications) with the
+callback URL `http://127.0.0.1:8080/callback` and following scopes:
+
+- api (Access the API on your behalf)
+- read_user (Read your personal information)
+- read_repository (Allows read-only access to the repository)
+
+Then expose application ID as environment variable:
+
+```bash
+export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
+```
+
+More documentation on [opencode-gitlab-auth](https://www.npmjs.com/package/opencode-gitlab-auth) homepage.
 
 ##### Configuration
 
@@ -652,25 +858,35 @@ Customize through `opencode.json`:
   "provider": {
     "gitlab": {
       "options": {
-        "instanceUrl": "https://gitlab.com",
-        "featureFlags": {
-          "duo_agent_platform_agentic_chat": true,
-          "duo_agent_platform": true
-        }
+        "instanceUrl": "https://gitlab.com"
       }
     }
   }
 }
 ```
 
-##### GitLab API Tools (Optional)
+##### GitLab Duo Agent Platform (DAP) Workflow Models
+
+DAP workflow models provide an alternative execution path that routes tool calls
+through GitLab's Duo Workflow Service (DWS) instead of the standard agentic chat.
+When a `duo-workflow-*` model is selected, OpenCode will:
+
+1. Discover available models from your GitLab namespace
+2. Present a selection picker if multiple models are available
+3. Cache the selected model to disk for fast subsequent startups
+4. Route tool execution requests through OpenCode's permission-gated tool system
+
+Available DAP workflow models follow the `duo-workflow-*` naming convention and
+are dynamically discovered from your GitLab instance.
+
+##### GitLab API Tools (Optional, but highly recommended)
 
 To access GitLab tools (merge requests, issues, pipelines, CI/CD, etc.):
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["@gitlab/opencode-gitlab-plugin"]
+  "plugin": ["opencode-gitlab-plugin"]
 }
 ```
 
@@ -685,8 +901,6 @@ To use your GitHub Copilot subscription with opencode:
 :::note
 Some models might need a [Pro+
 subscription](https://github.com/features/copilot/plans) to use.
-
-Some models need to be manually enabled in your [GitHub Copilot settings](https://docs.github.com/en/copilot/how-tos/use-ai-models/configure-access-to-ai-models#setup-for-individual-use).
 :::
 
 1. Run the `/connect` command and search for GitHub Copilot.
@@ -1116,6 +1330,10 @@ To use Kimi K2 from Moonshot AI:
 
 You can configure opencode to use local models through Ollama.
 
+:::tip
+Ollama can automatically configure itself for OpenCode. See the [Ollama integration docs](https://docs.ollama.com/integrations/opencode) for details.
+:::
+
 ```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
 {
   "$schema": "https://opencode.ai/config.json",
@@ -1363,6 +1581,39 @@ SAP AI Core provides access to 40+ models from OpenAI, Anthropic, Google, Amazon
    :::
 
 5. Run the `/models` command to select from 40+ available models.
+
+   ```txt
+   /models
+   ```
+
+---
+
+### STACKIT
+
+STACKIT AI Model Serving provides fully managed soverign hosting environment for AI models, focusing on LLMs like Llama, Mistral, and Qwen, with maximum data sovereignty on European infrastructure.
+
+1. Head over to [STACKIT Portal](https://portal.stackit.cloud), navigate to **AI Model Serving**, and create an auth token for your project.
+
+   :::tip
+   You need a STACKIT customer account, user account, and project before creating auth tokens.
+   :::
+
+2. Run the `/connect` command and search for **STACKIT**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your STACKIT AI Model Serving auth token.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select from available models like _Qwen3-VL 235B_ or _Llama 3.3 70B_.
 
    ```txt
    /models
@@ -1708,7 +1959,7 @@ You can use any OpenAI-compatible provider with opencode. Most modern AI provide
    ```
 
    Here are the configuration options:
-   - **npm**: AI SDK package to use, `@ai-sdk/openai-compatible` for OpenAI-compatible providers
+   - **npm**: AI SDK package to use, `@ai-sdk/openai-compatible` for OpenAI-compatible providers (for `/v1/chat/completions`). If your provider/model uses `/v1/responses`, use `@ai-sdk/openai`.
    - **name**: Display name in UI.
    - **models**: Available models.
    - **options.baseURL**: API endpoint URL.
@@ -1775,5 +2026,5 @@ If you are having trouble with configuring a provider, check the following:
 
 2. For custom providers, check the opencode config and:
    - Make sure the provider ID used in the `/connect` command matches the ID in your opencode config.
-   - The right npm package is used for the provider. For example, use `@ai-sdk/cerebras` for Cerebras. And for all other OpenAI-compatible providers, use `@ai-sdk/openai-compatible`.
+   - The right npm package is used for the provider. For example, use `@ai-sdk/cerebras` for Cerebras. And for all other OpenAI-compatible providers, use `@ai-sdk/openai-compatible` (for `/v1/chat/completions`); if a model uses `/v1/responses`, use `@ai-sdk/openai`. For mixed setups under one provider, you can override per model via `provider.npm`.
    - Check correct API endpoint is used in the `options.baseURL` field.

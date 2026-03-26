@@ -1,0 +1,156 @@
+---
+title: ACP 支持
+description: 在任何兼容 ACP 的编辑器中使用 OpenCode。
+---
+
+OpenCode 支持 [Agent Client Protocol](https://agentclientprotocol.com)（ACP），允许你直接在兼容的编辑器和 IDE 中使用它。
+
+:::tip
+有关支持 ACP 的编辑器和工具列表，请查看 [ACP 进展报告](https://zed.dev/blog/acp-progress-report#available-now)。
+:::
+
+ACP 是一个开放协议，用于标准化代码编辑器与 AI 编码代理之间的通信。
+
+---
+
+## 配置
+
+要通过 ACP 使用 OpenCode，请在编辑器中配置运行 `opencode acp` 命令。
+
+该命令会将 OpenCode 作为兼容 ACP 的子进程启动，通过 stdio 上的 JSON-RPC 与编辑器进行通信。
+
+以下是支持 ACP 的常用编辑器的配置示例。
+
+---
+
+### Zed
+
+添加到你的 [Zed](https://zed.dev) 配置文件（`~/.config/zed/settings.json`）中：
+
+```json title="~/.config/zed/settings.json"
+{
+  "agent_servers": {
+    "OpenCode": {
+      "command": "opencode",
+      "args": ["acp"]
+    }
+  }
+}
+```
+
+打开方式：在**命令面板**中执行 `agent: new thread` 操作。
+
+你也可以通过编辑 `keymap.json` 来绑定键盘快捷键：
+
+```json title="keymap.json"
+[
+  {
+    "bindings": {
+      "cmd-alt-o": [
+        "agent::NewExternalAgentThread",
+        {
+          "agent": {
+            "custom": {
+              "name": "OpenCode",
+              "command": {
+                "command": "opencode",
+                "args": ["acp"]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+]
+```
+
+---
+
+### JetBrains IDEs
+
+根据[文档](https://www.jetbrains.com/help/ai-assistant/acp.html)，将以下内容添加到你的 [JetBrains IDE](https://www.jetbrains.com/) 的 acp.json 中：
+
+```json title="acp.json"
+{
+  "agent_servers": {
+    "OpenCode": {
+      "command": "/absolute/path/bin/opencode",
+      "args": ["acp"]
+    }
+  }
+}
+```
+
+打开方式：在 AI Chat 代理选择器中选择新的 'OpenCode' 代理。
+
+---
+
+### Avante.nvim
+
+添加到你的 [Avante.nvim](https://github.com/yetone/avante.nvim) 配置中：
+
+```lua
+{
+  acp_providers = {
+    ["opencode"] = {
+      command = "opencode",
+      args = { "acp" }
+    }
+  }
+}
+```
+
+如果需要传递环境变量：
+
+```lua {6-8}
+{
+  acp_providers = {
+    ["opencode"] = {
+      command = "opencode",
+      args = { "acp" },
+      env = {
+        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+      }
+    }
+  }
+}
+```
+
+---
+
+### CodeCompanion.nvim
+
+要在 [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim) 中将 OpenCode 用作 ACP 代理，请将以下内容添加到你的 Neovim 配置中：
+
+```lua
+require("codecompanion").setup({
+  interactions = {
+    chat = {
+      adapter = {
+        name = "opencode",
+        model = "claude-sonnet-4",
+      },
+    },
+  },
+})
+```
+
+此配置将 CodeCompanion 设置为使用 OpenCode 作为聊天的 ACP 代理。
+
+如果需要传递环境变量（如 `OPENCODE_API_KEY`），请参阅 CodeCompanion.nvim 文档中的[配置适配器：环境变量](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)了解详细信息。
+
+## 支持
+
+OpenCode 通过 ACP 使用时与在终端中使用的效果完全一致。所有功能均受支持：
+
+:::note
+部分内置斜杠命令（如 `/undo` 和 `/redo`）目前暂不支持。
+:::
+
+- 内置工具（文件操作、终端命令等）
+- 自定义工具和斜杠命令
+- 在 OpenCode 配置中配置的 MCP 服务器
+- 来自 `AGENTS.md` 的项目级规则
+- 自定义格式化工具和代码检查工具
+- 代理和权限系统

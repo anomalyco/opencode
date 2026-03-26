@@ -1,20 +1,115 @@
 import type { ColorValue, DesktopTheme, HexColor, ResolvedTheme, ThemeVariant } from "./types"
-import { generateNeutralScale, generateScale, hexToOklch, oklchToHex, withAlpha } from "./color"
+import { blend, generateNeutralScale, generateScale, hexToOklch, hexToRgb, shift, withAlpha } from "./color"
 
 export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): ResolvedTheme {
-  const { seeds, overrides = {} } = variant
+  const colors = getColors(variant)
+  const { overrides = {} } = variant
 
-  const neutral = generateNeutralScale(seeds.neutral, isDark)
-  const primary = generateScale(seeds.primary, isDark)
-  const success = generateScale(seeds.success, isDark)
-  const warning = generateScale(seeds.warning, isDark)
-  const error = generateScale(seeds.error, isDark)
-  const info = generateScale(seeds.info, isDark)
-  const interactive = generateScale(seeds.interactive, isDark)
-  const diffAdd = generateScale(seeds.diffAdd, isDark)
-  const diffDelete = generateScale(seeds.diffDelete, isDark)
+  const neutral = generateNeutralScale(colors.neutral, isDark, colors.ink)
+  const primary = generateScale(colors.primary, isDark)
+  const accent = generateScale(colors.accent, isDark)
+  const success = generateScale(colors.success, isDark)
+  const warning = generateScale(colors.warning, isDark)
+  const error = generateScale(colors.error, isDark)
+  const info = generateScale(colors.info, isDark)
+  const interactive = generateScale(colors.interactive, isDark)
+  const amber = generateScale(
+    shift(colors.warning, isDark ? { h: -16, l: -0.058, c: 1.14 } : { h: -22, l: -0.082, c: 0.94 }),
+    isDark,
+  )
+  const blue = generateScale(shift(colors.interactive, { h: -12, l: 0.128, c: 1.12 }), isDark)
+  const diffAdd = generateScale(
+    colors.diffAdd ?? shift(colors.success, { c: isDark ? 0.7 : 0.55, l: isDark ? -0.18 : 0.14 }),
+    isDark,
+  )
+  const diffDelete = generateScale(
+    colors.diffDelete ?? shift(colors.error, { c: isDark ? 0.82 : 0.7, l: isDark ? -0.08 : 0.08 }),
+    isDark,
+  )
+  const ink = colors.ink ?? colors.neutral
+  const tint = colors.compact ? hexToOklch(ink) : undefined
+  const body = tint
+    ? shift(ink, {
+        l: isDark ? Math.max(0, 0.88 - tint.l) * 0.4 : -Math.max(0, tint.l - 0.18) * 0.24,
+        c: isDark ? 1.04 : 1.02,
+      })
+    : undefined
+  const backgroundOverride = overrides["background-base"]
+  const backgroundHex = getHex(backgroundOverride)
+  const overlay = Boolean(backgroundOverride) && !backgroundHex
+  const content = (seed: HexColor, scale: HexColor[]) => {
+    const base = hexToOklch(seed)
+    const value = isDark ? (base.l > 0.84 ? shift(seed, { c: 1.18 }) : scale[10]) : scale[10]
+    return shift(value, { l: isDark ? 0.034 : -0.024, c: isDark ? 1.3 : 1.18 })
+  }
+  const modified = () => {
+    if (!colors.compact) return isDark ? "#ffba92" : "#FF8C00"
+    const warningHue = hexToOklch(colors.warning).h
+    const deleteHue = hexToOklch(colors.diffDelete ?? colors.error).h
+    const delta = Math.abs(((((deleteHue - warningHue) % 360) + 540) % 360) - 180)
+    if (delta < 48) return isDark ? "#ffba92" : "#FF8C00"
+    return content(colors.warning, warning)
+  }
+  const surface = (
+    seed: HexColor,
+    alpha: { base: number; weak: number; weaker: number; strong: number; stronger: number },
+  ) => {
+    const base = alphaTone(seed, alpha.base)
+    return {
+      base,
+      weak: alphaTone(seed, alpha.weak),
+      weaker: alphaTone(seed, alpha.weaker),
+      strong: alphaTone(seed, alpha.strong),
+      stronger: alphaTone(seed, alpha.stronger),
+    }
+  }
+  const background = backgroundHex ?? neutral[0]
+  const alphaTone = (color: HexColor, alpha: number) =>
+    overlay ? (withAlpha(color, alpha) as ColorValue) : blend(color, background, alpha)
+  const borderTone = (light: number, dark: number) =>
+    alphaTone(ink, isDark ? Math.min(1, dark + 0.024 + (colors.compact ? 0.08 : 0)) : Math.min(1, light + 0.024))
+  const diffHiddenSurface = surface(
+    isDark ? shift(colors.interactive, { c: 0.55, l: 0 }) : shift(colors.interactive, { c: 0.45, l: 0.08 }),
+    isDark
+      ? { base: 0.14, weak: 0.08, weaker: 0.18, strong: 0.26, stronger: 0.42 }
+      : { base: 0.12, weak: 0.08, weaker: 0.16, strong: 0.24, stronger: 0.36 },
+  )
 
   const neutralAlpha = generateNeutralAlphaScale(neutral, isDark)
+  const brandb = primary[8]
+  const brandh = primary[9]
+  const interb = interactive[isDark ? 6 : 4]
+  const interh = interactive[isDark ? 7 : 5]
+  const interw = interactive[isDark ? 5 : 3]
+  const succb = success[isDark ? 6 : 4]
+  const succw = success[isDark ? 5 : 3]
+  const succs = success[10]
+  const warnb = warning[isDark ? 6 : 4]
+  const warnw = warning[isDark ? 5 : 3]
+  const warns = warning[10]
+  const critb = error[isDark ? 6 : 4]
+  const critw = error[isDark ? 5 : 3]
+  const crits = error[10]
+  const infob = info[isDark ? 6 : 4]
+  const infow = info[isDark ? 5 : 3]
+  const infos = info[10]
+  const lum = (hex: HexColor) => {
+    const rgb = hexToRgb(hex)
+    const lift = (v: number) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4))
+    return 0.2126 * lift(rgb.r) + 0.7152 * lift(rgb.g) + 0.0722 * lift(rgb.b)
+  }
+  const hit = (a: HexColor, b: HexColor) => {
+    const x = lum(a)
+    const y = lum(b)
+    const light = Math.max(x, y)
+    const dark = Math.min(x, y)
+    return (light + 0.05) / (dark + 0.05)
+  }
+  const on = (fill: HexColor) => {
+    const light = "#ffffff" as HexColor
+    const dark = "#000000" as HexColor
+    return hit(light, fill) > hit(dark, fill) ? light : dark
+  }
 
   const tokens: ResolvedTheme = {}
 
@@ -37,8 +132,8 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
     : (withAlpha(neutral[3], 0.09) as ColorValue)
   tokens["surface-inset-strong-hover"] = tokens["surface-inset-strong"]
   tokens["surface-raised-base"] = neutralAlpha[0]
-  tokens["surface-float-base"] = isDark ? neutral[0] : neutral[11]
-  tokens["surface-float-base-hover"] = isDark ? neutral[1] : neutral[10]
+  tokens["surface-float-base"] = isDark ? neutral[1] : neutral[11]
+  tokens["surface-float-base-hover"] = isDark ? neutral[2] : neutral[10]
   tokens["surface-raised-base-hover"] = neutralAlpha[1]
   tokens["surface-raised-base-active"] = neutralAlpha[2]
   tokens["surface-raised-strong"] = isDark ? neutralAlpha[3] : neutral[0]
@@ -50,34 +145,34 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["surface-strong"] = isDark ? neutralAlpha[6] : "#ffffff"
   tokens["surface-raised-stronger-non-alpha"] = isDark ? neutral[2] : "#ffffff"
 
-  tokens["surface-brand-base"] = primary[8]
-  tokens["surface-brand-hover"] = primary[9]
+  tokens["surface-brand-base"] = brandb
+  tokens["surface-brand-hover"] = brandh
 
-  tokens["surface-interactive-base"] = interactive[2]
-  tokens["surface-interactive-hover"] = interactive[3]
-  tokens["surface-interactive-weak"] = interactive[1]
-  tokens["surface-interactive-weak-hover"] = interactive[2]
+  tokens["surface-interactive-base"] = interb
+  tokens["surface-interactive-hover"] = interh
+  tokens["surface-interactive-weak"] = interw
+  tokens["surface-interactive-weak-hover"] = interb
 
-  tokens["surface-success-base"] = success[2]
-  tokens["surface-success-weak"] = success[1]
-  tokens["surface-success-strong"] = success[8]
-  tokens["surface-warning-base"] = warning[2]
-  tokens["surface-warning-weak"] = warning[1]
-  tokens["surface-warning-strong"] = warning[8]
-  tokens["surface-critical-base"] = error[2]
-  tokens["surface-critical-weak"] = error[1]
-  tokens["surface-critical-strong"] = error[8]
-  tokens["surface-info-base"] = info[2]
-  tokens["surface-info-weak"] = info[1]
-  tokens["surface-info-strong"] = info[8]
+  tokens["surface-success-base"] = succb
+  tokens["surface-success-weak"] = succw
+  tokens["surface-success-strong"] = succs
+  tokens["surface-warning-base"] = warnb
+  tokens["surface-warning-weak"] = warnw
+  tokens["surface-warning-strong"] = warns
+  tokens["surface-critical-base"] = critb
+  tokens["surface-critical-weak"] = critw
+  tokens["surface-critical-strong"] = crits
+  tokens["surface-info-base"] = infob
+  tokens["surface-info-weak"] = infow
+  tokens["surface-info-strong"] = infos
 
   tokens["surface-diff-unchanged-base"] = isDark ? neutral[0] : "#ffffff00"
   tokens["surface-diff-skip-base"] = isDark ? neutralAlpha[0] : neutral[1]
-  tokens["surface-diff-hidden-base"] = interactive[isDark ? 1 : 2]
-  tokens["surface-diff-hidden-weak"] = interactive[isDark ? 0 : 1]
-  tokens["surface-diff-hidden-weaker"] = interactive[isDark ? 2 : 0]
-  tokens["surface-diff-hidden-strong"] = interactive[4]
-  tokens["surface-diff-hidden-stronger"] = interactive[isDark ? 10 : 8]
+  tokens["surface-diff-hidden-base"] = diffHiddenSurface.base
+  tokens["surface-diff-hidden-weak"] = diffHiddenSurface.weak
+  tokens["surface-diff-hidden-weaker"] = diffHiddenSurface.weaker
+  tokens["surface-diff-hidden-strong"] = diffHiddenSurface.strong
+  tokens["surface-diff-hidden-stronger"] = diffHiddenSurface.stronger
   tokens["surface-diff-add-base"] = diffAdd[2]
   tokens["surface-diff-add-weak"] = diffAdd[isDark ? 3 : 1]
   tokens["surface-diff-add-weaker"] = diffAdd[isDark ? 2 : 0]
@@ -90,73 +185,75 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["surface-diff-delete-stronger"] = diffDelete[isDark ? 10 : 8]
 
   tokens["input-base"] = isDark ? neutral[1] : neutral[0]
-  tokens["input-hover"] = neutral[1]
-  tokens["input-active"] = interactive[0]
-  tokens["input-selected"] = interactive[3]
-  tokens["input-focus"] = interactive[0]
+  tokens["input-hover"] = isDark ? neutral[2] : neutral[1]
+  tokens["input-active"] = isDark ? interactive[6] : interactive[0]
+  tokens["input-selected"] = isDark ? interactive[7] : interactive[3]
+  tokens["input-focus"] = isDark ? interactive[6] : interactive[0]
   tokens["input-disabled"] = neutral[3]
 
-  tokens["text-base"] = neutral[10]
-  tokens["text-weak"] = neutral[8]
-  tokens["text-weaker"] = neutral[7]
-  tokens["text-strong"] = neutral[11]
-  tokens["text-invert-base"] = isDark ? neutral[10] : neutralAlpha[10]
-  tokens["text-invert-weak"] = isDark ? neutral[8] : neutralAlpha[8]
-  tokens["text-invert-weaker"] = isDark ? neutral[7] : neutralAlpha[7]
-  tokens["text-invert-strong"] = isDark ? neutral[11] : neutralAlpha[11]
-  tokens["text-interactive-base"] = interactive[isDark ? 10 : 8]
-  tokens["text-on-brand-base"] = neutralAlpha[10]
-  tokens["text-on-interactive-base"] = isDark ? neutral[11] : neutral[0]
-  tokens["text-on-interactive-weak"] = neutralAlpha[10]
-  tokens["text-on-success-base"] = success[isDark ? 8 : 9]
-  tokens["text-on-critical-base"] = error[isDark ? 8 : 9]
-  tokens["text-on-critical-weak"] = error[7]
-  tokens["text-on-critical-strong"] = error[11]
-  tokens["text-on-warning-base"] = neutralAlpha[10]
-  tokens["text-on-info-base"] = neutralAlpha[10]
+  tokens["text-base"] = colors.compact ? (body as HexColor) : neutral[10]
+  tokens["text-weak"] = colors.compact ? shift(body as HexColor, { l: isDark ? -0.11 : 0.11, c: 0.9 }) : neutral[8]
+  tokens["text-weaker"] = colors.compact
+    ? shift(body as HexColor, { l: isDark ? -0.2 : 0.21, c: isDark ? 0.78 : 0.72 })
+    : neutral[7]
+  tokens["text-strong"] = colors.compact
+    ? isDark
+      ? blend("#ffffff", body as HexColor, 0.9)
+      : shift(body as HexColor, { l: -0.07, c: 1.04 })
+    : neutral[11]
+  tokens["text-invert-base"] = isDark ? neutral[10] : neutral[1]
+  tokens["text-invert-weak"] = isDark ? neutral[8] : neutral[2]
+  tokens["text-invert-weaker"] = isDark ? neutral[7] : neutral[3]
+  tokens["text-invert-strong"] = isDark ? neutral[11] : neutral[0]
+  tokens["text-interactive-base"] = interactive[isDark ? 10 : 9]
+  tokens["text-on-brand-base"] = on(brandb)
+  tokens["text-on-interactive-base"] = on(interb)
+  tokens["text-on-interactive-weak"] = on(interb)
+  tokens["text-on-success-base"] = on(succb)
+  tokens["text-on-critical-base"] = on(critb)
+  tokens["text-on-critical-weak"] = on(critb)
+  tokens["text-on-critical-strong"] = on(crits)
+  tokens["text-on-warning-base"] = on(warnb)
+  tokens["text-on-info-base"] = on(infob)
   tokens["text-diff-add-base"] = diffAdd[10]
-  tokens["text-diff-delete-base"] = diffDelete[isDark ? 8 : 9]
+  tokens["text-diff-delete-base"] = diffDelete[9]
   tokens["text-diff-delete-strong"] = diffDelete[11]
   tokens["text-diff-add-strong"] = diffAdd[isDark ? 7 : 11]
-  tokens["text-on-info-weak"] = neutralAlpha[8]
-  tokens["text-on-info-strong"] = neutralAlpha[11]
-  tokens["text-on-warning-weak"] = neutralAlpha[8]
-  tokens["text-on-warning-strong"] = neutralAlpha[11]
-  tokens["text-on-success-weak"] = success[isDark ? 7 : 5]
-  tokens["text-on-success-strong"] = success[11]
-  tokens["text-on-brand-weak"] = neutralAlpha[8]
-  tokens["text-on-brand-weaker"] = neutralAlpha[7]
-  tokens["text-on-brand-strong"] = neutralAlpha[11]
+  tokens["text-on-info-weak"] = on(infob)
+  tokens["text-on-info-strong"] = on(infos)
+  tokens["text-on-warning-weak"] = on(warnb)
+  tokens["text-on-warning-strong"] = on(warns)
+  tokens["text-on-success-weak"] = on(succb)
+  tokens["text-on-success-strong"] = on(succs)
+  tokens["text-on-brand-weak"] = on(brandb)
+  tokens["text-on-brand-weaker"] = on(brandb)
+  tokens["text-on-brand-strong"] = on(brandh)
 
+  tokens["button-primary-base"] = neutral[11]
   tokens["button-secondary-base"] = isDark ? neutral[2] : neutral[0]
   tokens["button-secondary-hover"] = isDark ? neutral[3] : neutral[1]
   tokens["button-ghost-hover"] = neutralAlpha[1]
   tokens["button-ghost-hover2"] = neutralAlpha[2]
 
-  tokens["border-base"] = neutralAlpha[6]
-  tokens["border-hover"] = neutralAlpha[7]
-  tokens["border-active"] = neutralAlpha[8]
+  tokens["border-base"] = colors.compact ? borderTone(0.22, 0.16) : neutralAlpha[6]
+  tokens["border-hover"] = colors.compact ? borderTone(0.28, 0.2) : neutralAlpha[7]
+  tokens["border-active"] = colors.compact ? borderTone(0.34, 0.24) : neutralAlpha[8]
   tokens["border-selected"] = withAlpha(interactive[8], isDark ? 0.9 : 0.99) as ColorValue
-  tokens["border-disabled"] = neutralAlpha[7]
-  tokens["border-focus"] = neutralAlpha[8]
-  tokens["border-weak-base"] = neutralAlpha[isDark ? 5 : 4]
-  tokens["border-strong-base"] = neutralAlpha[isDark ? 7 : 6]
-  tokens["border-strong-hover"] = neutralAlpha[7]
-  tokens["border-strong-active"] = neutralAlpha[isDark ? 7 : 6]
+  tokens["border-disabled"] = colors.compact ? borderTone(0.18, 0.12) : neutralAlpha[7]
+  tokens["border-focus"] = colors.compact ? borderTone(0.34, 0.24) : neutralAlpha[8]
+  tokens["border-weak-base"] = colors.compact ? borderTone(0.1, 0.08) : neutralAlpha[isDark ? 5 : 4]
+  tokens["border-strong-base"] = colors.compact ? borderTone(0.34, 0.24) : neutralAlpha[isDark ? 7 : 6]
+  tokens["border-strong-hover"] = colors.compact ? borderTone(0.4, 0.28) : neutralAlpha[7]
+  tokens["border-strong-active"] = colors.compact ? borderTone(0.46, 0.32) : neutralAlpha[isDark ? 7 : 6]
   tokens["border-strong-selected"] = withAlpha(interactive[5], 0.6) as ColorValue
-  tokens["border-strong-disabled"] = neutralAlpha[5]
-  tokens["border-strong-focus"] = neutralAlpha[isDark ? 7 : 6]
-  tokens["border-weak-hover"] = neutralAlpha[isDark ? 6 : 5]
-  tokens["border-weak-active"] = neutralAlpha[isDark ? 7 : 6]
+  tokens["border-strong-disabled"] = colors.compact ? borderTone(0.14, 0.1) : neutralAlpha[5]
+  tokens["border-strong-focus"] = colors.compact ? borderTone(0.46, 0.32) : neutralAlpha[isDark ? 7 : 6]
+  tokens["border-weak-hover"] = colors.compact ? borderTone(0.16, 0.12) : neutralAlpha[isDark ? 6 : 5]
+  tokens["border-weak-active"] = colors.compact ? borderTone(0.22, 0.16) : neutralAlpha[isDark ? 7 : 6]
   tokens["border-weak-selected"] = withAlpha(interactive[4], isDark ? 0.6 : 0.5) as ColorValue
-  tokens["border-weak-disabled"] = neutralAlpha[5]
-  tokens["border-weak-focus"] = neutralAlpha[isDark ? 7 : 6]
-  tokens["border-weaker-base"] = neutralAlpha[2]
-  tokens["border-weaker-hover"] = neutralAlpha[3]
-  tokens["border-weaker-active"] = neutralAlpha[5]
-  tokens["border-weaker-selected"] = withAlpha(interactive[3], isDark ? 0.3 : 0.4) as ColorValue
-  tokens["border-weaker-disabled"] = neutralAlpha[1]
-  tokens["border-weaker-focus"] = neutralAlpha[5]
+  tokens["border-weak-disabled"] = colors.compact ? borderTone(0.08, 0.06) : neutralAlpha[5]
+  tokens["border-weak-focus"] = colors.compact ? borderTone(0.22, 0.16) : neutralAlpha[isDark ? 7 : 6]
+  tokens["border-weaker-base"] = colors.compact ? borderTone(0.06, 0.04) : neutralAlpha[2]
 
   tokens["border-interactive-base"] = interactive[6]
   tokens["border-interactive-hover"] = interactive[7]
@@ -165,31 +262,31 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["border-interactive-disabled"] = neutral[7]
   tokens["border-interactive-focus"] = interactive[8]
 
-  tokens["border-success-base"] = success[5]
-  tokens["border-success-hover"] = success[6]
+  tokens["border-success-base"] = success[isDark ? 6 : 6]
+  tokens["border-success-hover"] = success[isDark ? 7 : 7]
   tokens["border-success-selected"] = success[8]
-  tokens["border-warning-base"] = warning[5]
-  tokens["border-warning-hover"] = warning[6]
+  tokens["border-warning-base"] = warning[isDark ? 6 : 6]
+  tokens["border-warning-hover"] = warning[isDark ? 7 : 7]
   tokens["border-warning-selected"] = warning[8]
-  tokens["border-critical-base"] = error[isDark ? 4 : 5]
-  tokens["border-critical-hover"] = error[6]
+  tokens["border-critical-base"] = error[isDark ? 6 : 6]
+  tokens["border-critical-hover"] = error[isDark ? 7 : 7]
   tokens["border-critical-selected"] = error[8]
-  tokens["border-info-base"] = info[5]
-  tokens["border-info-hover"] = info[6]
+  tokens["border-info-base"] = info[isDark ? 6 : 6]
+  tokens["border-info-hover"] = info[isDark ? 7 : 7]
   tokens["border-info-selected"] = info[8]
   tokens["border-color"] = "#ffffff"
 
-  tokens["icon-base"] = neutral[8]
-  tokens["icon-hover"] = neutral[isDark ? 9 : 10]
-  tokens["icon-active"] = neutral[isDark ? 10 : 11]
-  tokens["icon-selected"] = neutral[11]
+  tokens["icon-base"] = colors.compact && !isDark ? tokens["text-weak"] : neutral[isDark ? 9 : 8]
+  tokens["icon-hover"] = colors.compact && !isDark ? tokens["text-base"] : neutral[10]
+  tokens["icon-active"] = colors.compact && !isDark ? tokens["text-strong"] : neutral[11]
+  tokens["icon-selected"] = colors.compact && !isDark ? tokens["text-strong"] : neutral[11]
   tokens["icon-disabled"] = neutral[isDark ? 6 : 7]
-  tokens["icon-focus"] = neutral[11]
+  tokens["icon-focus"] = colors.compact && !isDark ? tokens["text-strong"] : neutral[11]
   tokens["icon-invert-base"] = isDark ? neutral[0] : "#ffffff"
   tokens["icon-weak-base"] = neutral[isDark ? 5 : 6]
-  tokens["icon-weak-hover"] = neutral[6]
-  tokens["icon-weak-active"] = neutral[7]
-  tokens["icon-weak-selected"] = neutral[8]
+  tokens["icon-weak-hover"] = neutral[isDark ? 11 : 7]
+  tokens["icon-weak-active"] = neutral[8]
+  tokens["icon-weak-selected"] = neutral[isDark ? 8 : 9]
   tokens["icon-weak-disabled"] = neutral[isDark ? 3 : 5]
   tokens["icon-weak-focus"] = neutral[8]
   tokens["icon-strong-base"] = neutral[11]
@@ -200,81 +297,121 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["icon-strong-focus"] = isDark ? "#fdfcfc" : "#020202"
   tokens["icon-brand-base"] = isDark ? "#ffffff" : neutral[11]
   tokens["icon-interactive-base"] = interactive[8]
-  tokens["icon-success-base"] = success[isDark ? 6 : 6]
-  tokens["icon-success-hover"] = success[7]
+  tokens["icon-success-base"] = success[isDark ? 8 : 6]
+  tokens["icon-success-hover"] = success[9]
   tokens["icon-success-active"] = success[10]
-  tokens["icon-warning-base"] = warning[6]
-  tokens["icon-warning-hover"] = warning[7]
-  tokens["icon-warning-active"] = warning[10]
+  tokens["icon-warning-base"] = amber[isDark ? 8 : 6]
+  tokens["icon-warning-hover"] = amber[9]
+  tokens["icon-warning-active"] = amber[10]
   tokens["icon-critical-base"] = error[isDark ? 8 : 9]
-  tokens["icon-critical-hover"] = error[10]
-  tokens["icon-critical-active"] = error[11]
-  tokens["icon-info-base"] = info[isDark ? 6 : 6]
-  tokens["icon-info-hover"] = info[7]
+  tokens["icon-critical-hover"] = error[9]
+  tokens["icon-critical-active"] = error[10]
+  tokens["icon-info-base"] = info[isDark ? 8 : 6]
+  tokens["icon-info-hover"] = info[isDark ? 9 : 7]
   tokens["icon-info-active"] = info[10]
-  tokens["icon-on-brand-base"] = neutralAlpha[10]
-  tokens["icon-on-brand-hover"] = neutralAlpha[11]
-  tokens["icon-on-brand-selected"] = neutralAlpha[11]
-  tokens["icon-on-interactive-base"] = isDark ? neutral[11] : neutral[0]
+  tokens["icon-on-brand-base"] = on(brandb)
+  tokens["icon-on-brand-hover"] = on(brandh)
+  tokens["icon-on-brand-selected"] = on(brandh)
+  tokens["icon-on-interactive-base"] = on(interb)
 
   tokens["icon-agent-plan-base"] = info[8]
-  tokens["icon-agent-docs-base"] = warning[8]
-  tokens["icon-agent-ask-base"] = interactive[8]
+  tokens["icon-agent-docs-base"] = amber[8]
+  tokens["icon-agent-ask-base"] = blue[8]
   tokens["icon-agent-build-base"] = interactive[isDark ? 10 : 8]
 
-  tokens["icon-on-success-base"] = withAlpha(success[8], 0.9) as ColorValue
-  tokens["icon-on-success-hover"] = withAlpha(success[9], 0.9) as ColorValue
-  tokens["icon-on-success-selected"] = withAlpha(success[10], 0.9) as ColorValue
-  tokens["icon-on-warning-base"] = withAlpha(warning[8], 0.9) as ColorValue
-  tokens["icon-on-warning-hover"] = withAlpha(warning[9], 0.9) as ColorValue
-  tokens["icon-on-warning-selected"] = withAlpha(warning[10], 0.9) as ColorValue
-  tokens["icon-on-critical-base"] = withAlpha(error[8], 0.9) as ColorValue
-  tokens["icon-on-critical-hover"] = withAlpha(error[9], 0.9) as ColorValue
-  tokens["icon-on-critical-selected"] = withAlpha(error[10], 0.9) as ColorValue
-  tokens["icon-on-info-base"] = info[8]
-  tokens["icon-on-info-hover"] = withAlpha(info[9], 0.9) as ColorValue
-  tokens["icon-on-info-selected"] = withAlpha(info[10], 0.9) as ColorValue
+  tokens["icon-on-success-base"] = on(succb)
+  tokens["icon-on-success-hover"] = on(succs)
+  tokens["icon-on-success-selected"] = on(succs)
+  tokens["icon-on-warning-base"] = on(warnb)
+  tokens["icon-on-warning-hover"] = on(warns)
+  tokens["icon-on-warning-selected"] = on(warns)
+  tokens["icon-on-critical-base"] = on(critb)
+  tokens["icon-on-critical-hover"] = on(crits)
+  tokens["icon-on-critical-selected"] = on(crits)
+  tokens["icon-on-info-base"] = on(infob)
+  tokens["icon-on-info-hover"] = on(infos)
+  tokens["icon-on-info-selected"] = on(infos)
 
   tokens["icon-diff-add-base"] = diffAdd[10]
   tokens["icon-diff-add-hover"] = diffAdd[isDark ? 9 : 11]
   tokens["icon-diff-add-active"] = diffAdd[isDark ? 10 : 11]
-  tokens["icon-diff-delete-base"] = diffDelete[isDark ? 8 : 9]
-  tokens["icon-diff-delete-hover"] = diffDelete[isDark ? 9 : 10]
+  tokens["icon-diff-delete-base"] = diffDelete[9]
+  tokens["icon-diff-delete-hover"] = diffDelete[isDark ? 10 : 10]
+  tokens["icon-diff-modified-base"] = modified()
 
-  tokens["syntax-comment"] = "var(--text-weak)"
-  tokens["syntax-regexp"] = "var(--text-base)"
-  tokens["syntax-string"] = isDark ? "#00ceb9" : "#006656"
-  tokens["syntax-keyword"] = "var(--text-weak)"
-  tokens["syntax-primitive"] = isDark ? "#ffba92" : "#fb4804"
-  tokens["syntax-operator"] = isDark ? "var(--text-weak)" : "var(--text-base)"
-  tokens["syntax-variable"] = "var(--text-strong)"
-  tokens["syntax-property"] = isDark ? "#ff9ae2" : "#ed6dc8"
-  tokens["syntax-type"] = isDark ? "#ecf58c" : "#596600"
-  tokens["syntax-constant"] = isDark ? "#93e9f6" : "#007b80"
-  tokens["syntax-punctuation"] = isDark ? "var(--text-weak)" : "var(--text-base)"
-  tokens["syntax-object"] = "var(--text-strong)"
-  tokens["syntax-success"] = success[9]
-  tokens["syntax-warning"] = warning[9]
-  tokens["syntax-critical"] = error[isDark ? 9 : 9]
-  tokens["syntax-info"] = isDark ? "#93e9f6" : "#0092a8"
-  tokens["syntax-diff-add"] = diffAdd[10]
-  tokens["syntax-diff-delete"] = diffDelete[10]
-  tokens["syntax-diff-unknown"] = "#ff0000"
+  if (colors.compact) {
+    tokens["syntax-comment"] = "var(--text-weak)"
+    tokens["syntax-regexp"] = "var(--text-base)"
+    tokens["syntax-string"] = content(colors.success, success)
+    tokens["syntax-keyword"] = content(colors.accent, accent)
+    tokens["syntax-primitive"] = content(colors.primary, primary)
+    tokens["syntax-operator"] = isDark ? "var(--text-weak)" : "var(--text-base)"
+    tokens["syntax-variable"] = "var(--text-strong)"
+    tokens["syntax-property"] = content(colors.info, info)
+    tokens["syntax-type"] = content(colors.warning, warning)
+    tokens["syntax-constant"] = content(colors.accent, accent)
+    tokens["syntax-punctuation"] = isDark ? "var(--text-weak)" : "var(--text-base)"
+    tokens["syntax-object"] = "var(--text-strong)"
+    tokens["syntax-success"] = success[10]
+    tokens["syntax-warning"] = amber[10]
+    tokens["syntax-critical"] = error[10]
+    tokens["syntax-info"] = content(colors.info, info)
+    tokens["syntax-diff-add"] = diffAdd[10]
+    tokens["syntax-diff-delete"] = diffDelete[10]
+    tokens["syntax-diff-unknown"] = "#ff0000"
 
-  tokens["markdown-heading"] = isDark ? "#9d7cd8" : "#d68c27"
-  tokens["markdown-text"] = isDark ? "#eeeeee" : "#1a1a1a"
-  tokens["markdown-link"] = isDark ? "#fab283" : "#3b7dd8"
-  tokens["markdown-link-text"] = isDark ? "#56b6c2" : "#318795"
-  tokens["markdown-code"] = isDark ? "#7fd88f" : "#3d9a57"
-  tokens["markdown-block-quote"] = isDark ? "#e5c07b" : "#b0851f"
-  tokens["markdown-emph"] = isDark ? "#e5c07b" : "#b0851f"
-  tokens["markdown-strong"] = isDark ? "#f5a742" : "#d68c27"
-  tokens["markdown-horizontal-rule"] = isDark ? "#808080" : "#8a8a8a"
-  tokens["markdown-list-item"] = isDark ? "#fab283" : "#3b7dd8"
-  tokens["markdown-list-enumeration"] = isDark ? "#56b6c2" : "#318795"
-  tokens["markdown-image"] = isDark ? "#fab283" : "#3b7dd8"
-  tokens["markdown-image-text"] = isDark ? "#56b6c2" : "#318795"
-  tokens["markdown-code-block"] = isDark ? "#eeeeee" : "#1a1a1a"
+    tokens["markdown-heading"] = content(colors.primary, primary)
+    tokens["markdown-text"] = tokens["text-base"]
+    tokens["markdown-link"] = content(colors.interactive, interactive)
+    tokens["markdown-link-text"] = content(colors.info, info)
+    tokens["markdown-code"] = content(colors.success, success)
+    tokens["markdown-block-quote"] = content(colors.warning, warning)
+    tokens["markdown-emph"] = content(colors.warning, warning)
+    tokens["markdown-strong"] = content(colors.accent, accent)
+    tokens["markdown-horizontal-rule"] = tokens["border-base"]
+    tokens["markdown-list-item"] = content(colors.interactive, interactive)
+    tokens["markdown-list-enumeration"] = content(colors.info, info)
+    tokens["markdown-image"] = content(colors.interactive, interactive)
+    tokens["markdown-image-text"] = content(colors.info, info)
+    tokens["markdown-code-block"] = tokens["text-base"]
+  }
+
+  if (!colors.compact) {
+    tokens["syntax-comment"] = "var(--text-weak)"
+    tokens["syntax-regexp"] = "var(--text-base)"
+    tokens["syntax-string"] = isDark ? "#00ceb9" : "#006656"
+    tokens["syntax-keyword"] = "var(--text-weak)"
+    tokens["syntax-primitive"] = isDark ? "#ffba92" : "#fb4804"
+    tokens["syntax-operator"] = isDark ? "var(--text-weak)" : "var(--text-base)"
+    tokens["syntax-variable"] = "var(--text-strong)"
+    tokens["syntax-property"] = isDark ? "#ff9ae2" : "#ed6dc8"
+    tokens["syntax-type"] = isDark ? "#ecf58c" : "#596600"
+    tokens["syntax-constant"] = isDark ? "#93e9f6" : "#007b80"
+    tokens["syntax-punctuation"] = isDark ? "var(--text-weak)" : "var(--text-base)"
+    tokens["syntax-object"] = "var(--text-strong)"
+    tokens["syntax-success"] = success[10]
+    tokens["syntax-warning"] = amber[10]
+    tokens["syntax-critical"] = error[10]
+    tokens["syntax-info"] = isDark ? "#93e9f6" : "#0092a8"
+    tokens["syntax-diff-add"] = diffAdd[10]
+    tokens["syntax-diff-delete"] = diffDelete[10]
+    tokens["syntax-diff-unknown"] = "#ff0000"
+
+    tokens["markdown-heading"] = isDark ? "#9d7cd8" : "#d68c27"
+    tokens["markdown-text"] = isDark ? "#eeeeee" : "#1a1a1a"
+    tokens["markdown-link"] = isDark ? "#fab283" : "#3b7dd8"
+    tokens["markdown-link-text"] = isDark ? "#56b6c2" : "#318795"
+    tokens["markdown-code"] = isDark ? "#7fd88f" : "#3d9a57"
+    tokens["markdown-block-quote"] = isDark ? "#e5c07b" : "#b0851f"
+    tokens["markdown-emph"] = isDark ? "#e5c07b" : "#b0851f"
+    tokens["markdown-strong"] = isDark ? "#f5a742" : "#d68c27"
+    tokens["markdown-horizontal-rule"] = isDark ? "#808080" : "#8a8a8a"
+    tokens["markdown-list-item"] = isDark ? "#fab283" : "#3b7dd8"
+    tokens["markdown-list-enumeration"] = isDark ? "#56b6c2" : "#318795"
+    tokens["markdown-image"] = isDark ? "#fab283" : "#3b7dd8"
+    tokens["markdown-image-text"] = isDark ? "#56b6c2" : "#318795"
+    tokens["markdown-code-block"] = isDark ? "#eeeeee" : "#1a1a1a"
+  }
 
   tokens["avatar-background-pink"] = isDark ? "#501b3f" : "#feeef8"
   tokens["avatar-background-mint"] = isDark ? "#033a34" : "#e1fbf4"
@@ -293,22 +430,100 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
     tokens[key] = value
   }
 
+  if (colors.compact && "text-weak" in overrides && !("text-weaker" in overrides)) {
+    const weak = tokens["text-weak"]
+    if (weak.startsWith("#")) {
+      tokens["text-weaker"] = shift(weak as HexColor, { l: isDark ? -0.12 : 0.12, c: 0.75 })
+    } else {
+      tokens["text-weaker"] = weak
+    }
+  }
+
+  if (colors.compact) {
+    if (!("markdown-text" in overrides)) {
+      tokens["markdown-text"] = tokens["text-base"]
+    }
+    if (!("markdown-code-block" in overrides)) {
+      tokens["markdown-code-block"] = tokens["text-base"]
+    }
+  }
+
+  if (!("text-stronger" in overrides)) {
+    tokens["text-stronger"] = tokens["text-strong"]
+  }
+
   return tokens
+}
+
+interface ThemeColors {
+  compact: boolean
+  neutral: HexColor
+  ink?: HexColor
+  primary: HexColor
+  accent: HexColor
+  success: HexColor
+  warning: HexColor
+  error: HexColor
+  info: HexColor
+  interactive: HexColor
+  diffAdd?: HexColor
+  diffDelete?: HexColor
+}
+
+function getColors(variant: ThemeVariant): ThemeColors {
+  const input = variant as { palette?: unknown; seeds?: unknown }
+  if (input.palette && input.seeds) {
+    throw new Error("Theme variant cannot define both `palette` and `seeds`")
+  }
+
+  if (variant.palette) {
+    return {
+      compact: true,
+      neutral: variant.palette.neutral,
+      ink: variant.palette.ink,
+      primary: variant.palette.primary,
+      accent: variant.palette.accent ?? variant.palette.info,
+      success: variant.palette.success,
+      warning: variant.palette.warning,
+      error: variant.palette.error,
+      info: variant.palette.info,
+      interactive: variant.palette.interactive ?? variant.palette.primary,
+      diffAdd: variant.palette.diffAdd,
+      diffDelete: variant.palette.diffDelete,
+    }
+  }
+
+  if (variant.seeds) {
+    return {
+      compact: false,
+      neutral: variant.seeds.neutral,
+      ink: undefined,
+      primary: variant.seeds.primary,
+      accent: variant.seeds.info,
+      success: variant.seeds.success,
+      warning: variant.seeds.warning,
+      error: variant.seeds.error,
+      info: variant.seeds.info,
+      interactive: variant.seeds.interactive,
+      diffAdd: variant.seeds.diffAdd,
+      diffDelete: variant.seeds.diffDelete,
+    }
+  }
+
+  throw new Error("Theme variant requires `palette` or `seeds`")
 }
 
 function generateNeutralAlphaScale(neutralScale: HexColor[], isDark: boolean): HexColor[] {
   const alphas = isDark
-    ? [0.02, 0.04, 0.08, 0.12, 0.16, 0.2, 0.26, 0.36, 0.44, 0.52, 0.72, 0.94]
-    : [0.01, 0.03, 0.06, 0.09, 0.12, 0.15, 0.2, 0.27, 0.46, 0.61, 0.5, 0.87]
+    ? [0.038, 0.066, 0.1, 0.142, 0.19, 0.252, 0.334, 0.446, 0.58, 0.718, 0.854, 0.985]
+    : [0.03, 0.06, 0.1, 0.145, 0.2, 0.265, 0.35, 0.47, 0.61, 0.74, 0.86, 0.97]
 
-  return neutralScale.map((hex, i) => {
-    const baseOklch = hexToOklch(hex)
-    const targetL = isDark ? 0.1 + alphas[i] * 0.8 : 1 - alphas[i] * 0.8
-    return oklchToHex({
-      ...baseOklch,
-      l: baseOklch.l * alphas[i] + targetL * (1 - alphas[i]),
-    })
-  })
+  return alphas.map((alpha) => blend(neutralScale[11], neutralScale[0], alpha))
+}
+
+function getHex(value: ColorValue | undefined): HexColor | undefined {
+  if (!value?.startsWith("#")) return
+  return value as HexColor
 }
 
 export function resolveTheme(theme: DesktopTheme): { light: ResolvedTheme; dark: ResolvedTheme } {

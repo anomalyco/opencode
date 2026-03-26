@@ -1,7 +1,29 @@
 @import "@opencode-ai/ui/styles/tailwind";
 
-:root {
-  a {
-    cursor: default;
+@layer components {
+  [data-component="getting-started"] {
+    container-type: inline-size;
+    container-name: getting-started;
+  }
+
+  [data-component="getting-started-actions"] {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem; /* gap-3 */
+  }
+
+  [data-component="getting-started-actions"] > [data-component="button"] {
+    width: 100%;
+  }
+
+  @container getting-started (min-width: 17rem) {
+    [data-component="getting-started-actions"] {
+      flex-direction: row;
+      align-items: center;
+    }
+
+    [data-component="getting-started-actions"] > [data-component="button"] {
+      width: auto;
+    }
   }
 }

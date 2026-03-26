@@ -3,20 +3,22 @@ import path from "path"
 import type { Tool } from "../../src/tool/tool"
 import { Instance } from "../../src/project/instance"
 import { assertExternalDirectory } from "../../src/tool/external-directory"
-import type { PermissionNext } from "../../src/permission/next"
+import type { Permission } from "../../src/permission"
+import { SessionID, MessageID } from "../../src/session/schema"
 
 const baseCtx: Omit<Tool.Context, "ask"> = {
-  sessionID: "test",
-  messageID: "",
+  sessionID: SessionID.make("ses_test"),
+  messageID: MessageID.make(""),
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),
+  messages: [],
   metadata: () => {},
 }
 
 describe("tool.assertExternalDirectory", () => {
   test("no-ops for empty target", async () => {
-    const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+    const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
     const ctx: Tool.Context = {
       ...baseCtx,
       ask: async (req) => {
@@ -35,7 +37,7 @@ describe("tool.assertExternalDirectory", () => {
   })
 
   test("no-ops for paths inside Instance.directory", async () => {
-    const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+    const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
     const ctx: Tool.Context = {
       ...baseCtx,
       ask: async (req) => {
@@ -54,7 +56,7 @@ describe("tool.assertExternalDirectory", () => {
   })
 
   test("asks with a single canonical glob", async () => {
-    const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+    const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
     const ctx: Tool.Context = {
       ...baseCtx,
       ask: async (req) => {
@@ -64,7 +66,7 @@ describe("tool.assertExternalDirectory", () => {
 
     const directory = "/tmp/project"
     const target = "/tmp/outside/file.txt"
-    const expected = path.join(path.dirname(target), "*")
+    const expected = path.join(path.dirname(target), "*").replaceAll("\\", "/")
 
     await Instance.provide({
       directory,
@@ -80,7 +82,7 @@ describe("tool.assertExternalDirectory", () => {
   })
 
   test("uses target directory when kind=directory", async () => {
-    const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+    const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
     const ctx: Tool.Context = {
       ...baseCtx,
       ask: async (req) => {
@@ -90,7 +92,7 @@ describe("tool.assertExternalDirectory", () => {
 
     const directory = "/tmp/project"
     const target = "/tmp/outside"
-    const expected = path.join(target, "*")
+    const expected = path.join(target, "*").replaceAll("\\", "/")
 
     await Instance.provide({
       directory,
@@ -106,7 +108,7 @@ describe("tool.assertExternalDirectory", () => {
   })
 
   test("skips prompting when bypass=true", async () => {
-    const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+    const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
     const ctx: Tool.Context = {
       ...baseCtx,
       ask: async (req) => {

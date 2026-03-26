@@ -1,19 +1,26 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import path from "path"
 import { ReadTool } from "../../src/tool/read"
 import { Instance } from "../../src/project/instance"
+import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
-import { PermissionNext } from "../../src/permission/next"
+import { Permission } from "../../src/permission"
 import { Agent } from "../../src/agent/agent"
+import { SessionID, MessageID } from "../../src/session/schema"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
+afterEach(async () => {
+  await Instance.disposeAll()
+})
+
 const ctx = {
-  sessionID: "test",
-  messageID: "",
+  sessionID: SessionID.make("ses_test"),
+  messageID: MessageID.make(""),
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),
+  messages: [],
   metadata: () => {},
   ask: async () => {},
 }
@@ -62,17 +69,43 @@ describe("tool.read external_directory permission", () => {
       directory: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
-        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
         const testCtx = {
           ...ctx,
-          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+          ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
           },
         }
         await read.execute({ filePath: path.join(outerTmp.path, "secret.txt") }, testCtx)
         const extDirReq = requests.find((r) => r.permission === "external_directory")
         expect(extDirReq).toBeDefined()
-        expect(extDirReq!.patterns.some((p) => p.includes(outerTmp.path))).toBe(true)
+        expect(extDirReq!.patterns.some((p) => p.includes(outerTmp.path.replaceAll("\\", "/")))).toBe(true)
+      },
+    })
+  })
+
+  test("asks for directory-scoped external_directory permission when reading external directory", async () => {
+    await using outerTmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "external", "a.txt"), "a")
+      },
+    })
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        await read.execute({ filePath: path.join(outerTmp.path, "external") }, testCtx)
+        const extDirReq = requests.find((r) => r.permission === "external_directory")
+        expect(extDirReq).toBeDefined()
+        expect(extDirReq!.patterns).toContain(path.join(outerTmp.path, "external", "*").replaceAll("\\", "/"))
       },
     })
   })
@@ -83,10 +116,10 @@ describe("tool.read external_directory permission", () => {
       directory: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
-        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
         const testCtx = {
           ...ctx,
-          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+          ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
           },
         }
@@ -109,10 +142,10 @@ describe("tool.read external_directory permission", () => {
       directory: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
-        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
         const testCtx = {
           ...ctx,
-          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+          ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
           },
         }
@@ -147,14 +180,14 @@ describe("tool.read env file permissions", () => {
           let askedForEnv = false
           const ctxWithPermissions = {
             ...ctx,
-            ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+            ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
               for (const pattern of req.patterns) {
-                const rule = PermissionNext.evaluate(req.permission, pattern, agent.permission)
+                const rule = Permission.evaluate(req.permission, pattern, agent.permission)
                 if (rule.action === "ask" && req.permission === "read") {
                   askedForEnv = true
                 }
                 if (rule.action === "deny") {
-                  throw new PermissionNext.DeniedError(agent.permission)
+                  throw new Permission.DeniedError({ ruleset: agent.permission })
                 }
               }
             },
@@ -172,8 +205,10 @@ describe("tool.read truncation", () => {
   test("truncates large file by bytes and sets truncated metadata", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
-        const content = await Bun.file(path.join(FIXTURES_DIR, "models-api.json")).text()
-        await Bun.write(path.join(dir, "large.json"), content)
+        const base = await Filesystem.readText(path.join(FIXTURES_DIR, "models-api.json"))
+        const target = 60 * 1024
+        const content = base.length >= target ? base : base.repeat(Math.ceil(target / base.length))
+        await Filesystem.write(path.join(dir, "large.json"), content)
       },
     })
     await Instance.provide({
@@ -182,8 +217,8 @@ describe("tool.read truncation", () => {
         const read = await ReadTool.init()
         const result = await read.execute({ filePath: path.join(tmp.path, "large.json") }, ctx)
         expect(result.metadata.truncated).toBe(true)
-        expect(result.output).toContain("Output truncated at")
-        expect(result.output).toContain("bytes")
+        expect(result.output).toContain("Output capped at")
+        expect(result.output).toContain("Use offset=")
       },
     })
   })
@@ -201,7 +236,8 @@ describe("tool.read truncation", () => {
         const read = await ReadTool.init()
         const result = await read.execute({ filePath: path.join(tmp.path, "many-lines.txt"), limit: 10 }, ctx)
         expect(result.metadata.truncated).toBe(true)
-        expect(result.output).toContain("File has more lines")
+        expect(result.output).toContain("Showing lines 1-10 of 100")
+        expect(result.output).toContain("Use offset=11")
         expect(result.output).toContain("line0")
         expect(result.output).toContain("line9")
         expect(result.output).not.toContain("line10")
@@ -229,7 +265,7 @@ describe("tool.read truncation", () => {
   test("respects offset parameter", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
-        const lines = Array.from({ length: 20 }, (_, i) => `line${i}`).join("\n")
+        const lines = Array.from({ length: 20 }, (_, i) => `line${i + 1}`).join("\n")
         await Bun.write(path.join(dir, "offset.txt"), lines)
       },
     })
@@ -238,10 +274,85 @@ describe("tool.read truncation", () => {
       fn: async () => {
         const read = await ReadTool.init()
         const result = await read.execute({ filePath: path.join(tmp.path, "offset.txt"), offset: 10, limit: 5 }, ctx)
+        expect(result.output).toContain("10: line10")
+        expect(result.output).toContain("14: line14")
+        expect(result.output).not.toContain("9: line10")
+        expect(result.output).not.toContain("15: line15")
         expect(result.output).toContain("line10")
         expect(result.output).toContain("line14")
         expect(result.output).not.toContain("line0")
         expect(result.output).not.toContain("line15")
+      },
+    })
+  })
+
+  test("throws when offset is beyond end of file", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const lines = Array.from({ length: 3 }, (_, i) => `line${i + 1}`).join("\n")
+        await Bun.write(path.join(dir, "short.txt"), lines)
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        await expect(
+          read.execute({ filePath: path.join(tmp.path, "short.txt"), offset: 4, limit: 5 }, ctx),
+        ).rejects.toThrow("Offset 4 is out of range for this file (3 lines)")
+      },
+    })
+  })
+
+  test("allows reading empty file at default offset", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "empty.txt"), "")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: path.join(tmp.path, "empty.txt") }, ctx)
+        expect(result.metadata.truncated).toBe(false)
+        expect(result.output).toContain("End of file - total 0 lines")
+      },
+    })
+  })
+
+  test("throws when offset > 1 for empty file", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "empty.txt"), "")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        await expect(read.execute({ filePath: path.join(tmp.path, "empty.txt"), offset: 2 }, ctx)).rejects.toThrow(
+          "Offset 2 is out of range for this file (0 lines)",
+        )
+      },
+    })
+  })
+
+  test("does not mark final directory page as truncated", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Promise.all(
+          Array.from({ length: 10 }, (_, i) => Bun.write(path.join(dir, "dir", `file-${i + 1}.txt`), `line${i}`)),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: path.join(tmp.path, "dir"), offset: 6, limit: 5 }, ctx)
+        expect(result.metadata.truncated).toBe(false)
+        expect(result.output).not.toContain("Showing 5 of 10 entries")
       },
     })
   })
@@ -258,7 +369,7 @@ describe("tool.read truncation", () => {
       fn: async () => {
         const read = await ReadTool.init()
         const result = await read.execute({ filePath: path.join(tmp.path, "long-line.txt") }, ctx)
-        expect(result.output).toContain("...")
+        expect(result.output).toContain("(line truncated to 2000 chars)")
         expect(result.output.length).toBeLessThan(3000)
       },
     })
@@ -283,6 +394,9 @@ describe("tool.read truncation", () => {
         expect(result.metadata.truncated).toBe(false)
         expect(result.attachments).toBeDefined()
         expect(result.attachments?.length).toBe(1)
+        expect(result.attachments?.[0]).not.toHaveProperty("id")
+        expect(result.attachments?.[0]).not.toHaveProperty("sessionID")
+        expect(result.attachments?.[0]).not.toHaveProperty("messageID")
       },
     })
   })
@@ -297,6 +411,98 @@ describe("tool.read truncation", () => {
         expect(result.attachments).toBeDefined()
         expect(result.attachments?.length).toBe(1)
         expect(result.attachments?.[0].type).toBe("file")
+        expect(result.attachments?.[0]).not.toHaveProperty("id")
+        expect(result.attachments?.[0]).not.toHaveProperty("sessionID")
+        expect(result.attachments?.[0]).not.toHaveProperty("messageID")
+      },
+    })
+  })
+
+  test(".fbs files (FlatBuffers schema) are read as text, not images", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        // FlatBuffers schema content
+        const fbsContent = `namespace MyGame;
+
+table Monster {
+  pos:Vec3;
+  name:string;
+  inventory:[ubyte];
+}
+
+root_type Monster;`
+        await Bun.write(path.join(dir, "schema.fbs"), fbsContent)
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: path.join(tmp.path, "schema.fbs") }, ctx)
+        // Should be read as text, not as image
+        expect(result.attachments).toBeUndefined()
+        expect(result.output).toContain("namespace MyGame")
+        expect(result.output).toContain("table Monster")
+      },
+    })
+  })
+})
+
+describe("tool.read loaded instructions", () => {
+  test("loads AGENTS.md from parent directory and includes in metadata", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "subdir", "AGENTS.md"), "# Test Instructions\nDo something special.")
+        await Bun.write(path.join(dir, "subdir", "nested", "test.txt"), "test content")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: path.join(tmp.path, "subdir", "nested", "test.txt") }, ctx)
+        expect(result.output).toContain("test content")
+        expect(result.output).toContain("system-reminder")
+        expect(result.output).toContain("Test Instructions")
+        expect(result.metadata.loaded).toBeDefined()
+        expect(result.metadata.loaded).toContain(path.join(tmp.path, "subdir", "AGENTS.md"))
+      },
+    })
+  })
+})
+
+describe("tool.read binary detection", () => {
+  test("rejects text extension files with null bytes", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const bytes = Buffer.from([0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x00, 0x77, 0x6f, 0x72, 0x6c, 0x64])
+        await Bun.write(path.join(dir, "null-byte.txt"), bytes)
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        await expect(read.execute({ filePath: path.join(tmp.path, "null-byte.txt") }, ctx)).rejects.toThrow(
+          "Cannot read binary file",
+        )
+      },
+    })
+  })
+
+  test("rejects known binary extensions", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "module.wasm"), "not really wasm")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        await expect(read.execute({ filePath: path.join(tmp.path, "module.wasm") }, ctx)).rejects.toThrow(
+          "Cannot read binary file",
+        )
       },
     })
   })

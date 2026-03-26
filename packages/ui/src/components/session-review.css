@@ -1,25 +1,29 @@
 [data-component="session-review"] {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0px;
   height: 100%;
-  overflow-y: auto;
-  scrollbar-width: none;
-  contain: strict;
-  &::-webkit-scrollbar {
-    display: none;
+
+  [data-slot="session-review-scroll"] {
+    flex: 1 1 auto;
+    min-height: 0;
   }
 
-  /* [data-slot="session-review-container"] { */
-  /*   height: 100%; */
-  /* } */
+  .scroll-view__viewport {
+    display: flex;
+    flex-direction: column;
+  }
+
+  [data-slot="session-review-container"] {
+    flex: 1 1 auto;
+    padding-right: 0;
+  }
 
   [data-slot="session-review-header"] {
-    position: sticky;
-    top: 0;
-    z-index: 20;
+    z-index: 120;
     background-color: var(--background-stronger);
-    height: 32px;
+    height: 40px;
+    padding-bottom: 8px;
     flex-shrink: 0;
     display: flex;
     justify-content: space-between;
@@ -38,20 +42,31 @@
   [data-slot="session-review-actions"] {
     display: flex;
     align-items: center;
-    column-gap: 16px;
-    padding-right: 1px;
+    column-gap: 12px;
   }
 
-  [data-component="sticky-accordion-header"] {
-    top: 40px;
+  [data-slot="session-review-actions"] [data-component="radio-group"] {
+    [data-slot="radio-group-wrapper"],
+    [data-slot="radio-group-indicator"],
+    [data-slot="radio-group-item-control"] {
+      border-radius: 6px;
+    }
 
-    &[data-expanded]::before {
-      top: -40px;
+    [data-slot="radio-group-item-input"]:not([data-checked], [data-disabled])
+      + [data-slot="radio-group-item-label"]:hover
+      [data-slot="radio-group-item-control"] {
+      border-radius: 4px;
     }
   }
 
-  [data-slot="accordion-trigger"] {
-    background-color: var(--background-stronger) !important;
+  [data-component="sticky-accordion-header"] {
+    --sticky-accordion-top: 0px;
+  }
+
+  [data-slot="session-review-accordion-item"][data-selected]
+    [data-slot="accordion-header"]
+    [data-slot="accordion-trigger"] {
+    background-color: var(--surface-base-active);
   }
 
   [data-slot="accordion-item"] {
@@ -70,6 +85,12 @@
     user-select: text;
   }
 
+  [data-slot="session-review-accordion-content"] {
+    position: relative;
+    z-index: 0;
+    overflow: hidden;
+  }
+
   [data-slot="session-review-trigger-content"] {
     display: flex;
     align-items: center;
@@ -82,12 +103,13 @@
     flex-grow: 1;
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 12px;
     min-width: 0;
   }
 
   [data-slot="session-review-file-name-container"] {
     display: flex;
+    align-items: center;
     flex-grow: 1;
     min-width: 0;
   }
@@ -103,7 +125,10 @@
 
   [data-slot="session-review-filename"] {
     color: var(--text-strong);
-    flex-shrink: 0;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   [data-slot="session-review-view-button"] {
@@ -118,6 +143,8 @@
     cursor: pointer;
     border-radius: 4px;
     opacity: 0;
+    will-change: opacity;
+    transform: translateZ(0);
     transition: opacity 0.15s ease;
 
     &:hover {
@@ -136,5 +163,75 @@
     gap: 16px;
     align-items: center;
     justify-content: flex-end;
+  }
+
+  [data-slot="session-review-diff-chevron"] {
+    display: inline-flex;
+    color: var(--icon-weaker);
+    transform: rotate(-90deg);
+    transition: transform 0.15s ease;
+  }
+
+  [data-slot="accordion-item"][data-expanded] [data-slot="session-review-diff-chevron"] {
+    transform: rotate(0deg);
+  }
+
+  [data-slot="session-review-change-group"] {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  [data-slot="session-review-change"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-medium);
+  }
+
+  [data-slot="session-review-change"][data-type="added"] {
+    color: var(--icon-diff-add-base);
+  }
+
+  [data-slot="session-review-change"][data-type="removed"] {
+    color: var(--icon-diff-delete-base);
+  }
+
+  [data-slot="session-review-change"][data-type="modified"] {
+    color: var(--icon-diff-modified-base);
+  }
+
+  [data-slot="session-review-diff-wrapper"] {
+    position: relative;
+    overflow: hidden;
+    z-index: 0;
+    --line-comment-z: 5;
+    --line-comment-popover-z: 30;
+    --line-comment-open-z: 6;
+  }
+
+  [data-slot="session-review-large-diff"] {
+    padding: 12px;
+    background: var(--background-stronger);
+  }
+
+  [data-slot="session-review-large-diff-title"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-strong);
+    margin-bottom: 4px;
+  }
+
+  [data-slot="session-review-large-diff-meta"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    color: var(--text-weak);
+    word-break: break-word;
+  }
+
+  [data-slot="session-review-large-diff-actions"] {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
   }
 }

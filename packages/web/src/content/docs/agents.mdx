@@ -21,7 +21,7 @@ There are two types of agents in OpenCode; primary agents and subagents.
 
 ### Primary agents
 
-Primary agents are the main assistants you interact with directly. You can cycle through them using the **Tab** key, or your configured `switch_agent` keybind. These agents handle your main conversation and can access all configured tools.
+Primary agents are the main assistants you interact with directly. You can cycle through them using the **Tab** key, or your configured `switch_agent` keybind. These agents handle your main conversation. Tool access is configured via permissions — for example, Build has all tools enabled while Plan is restricted.
 
 :::tip
 You can use the **Tab** key to switch between primary agents during a session.
@@ -46,7 +46,7 @@ OpenCode comes with two built-in primary agents and two built-in subagents.
 
 ---
 
-### Build
+### Use build
 
 _Mode_: `primary`
 
@@ -54,7 +54,7 @@ Build is the **default** primary agent with all tools enabled. This is the stand
 
 ---
 
-### Plan
+### Use plan
 
 _Mode_: `primary`
 
@@ -68,19 +68,43 @@ This agent is useful when you want the LLM to analyze code, suggest changes, or 
 
 ---
 
-### General
+### Use general
 
 _Mode_: `subagent`
 
-A general-purpose agent for researching complex questions, searching for code, and executing multi-step tasks. Use when searching for keywords or files and you're not confident you'll find the right match in the first few tries.
+A general-purpose agent for researching complex questions and executing multi-step tasks. Has full tool access (except todo), so it can make file changes when needed. Use this to run multiple units of work in parallel.
 
 ---
 
-### Explore
+### Use explore
 
 _Mode_: `subagent`
 
-A fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns, search code for keywords, or answer questions about the codebase.
+A fast, read-only agent for exploring codebases. Cannot modify files. Use this when you need to quickly find files by patterns, search code for keywords, or answer questions about the codebase.
+
+---
+
+### Use compaction
+
+_Mode_: `primary`
+
+Hidden system agent that compacts long context into a smaller summary. It runs automatically when needed and is not selectable in the UI.
+
+---
+
+### Use title
+
+_Mode_: `primary`
+
+Hidden system agent that generates short session titles. It runs automatically and is not selectable in the UI.
+
+---
+
+### Use summary
+
+_Mode_: `primary`
+
+Hidden system agent that creates session summaries. It runs automatically and is not selectable in the UI.
 
 ---
 
@@ -96,11 +120,14 @@ A fast agent specialized for exploring codebases. Use this when you need to quic
      @general help me search for this function
      ```
 
-3. **Navigation between sessions**: When subagents create their own child sessions, you can navigate between the parent session and all child sessions using:
-   - **\<Leader>+Right** (or your configured `session_child_cycle` keybind) to cycle forward through parent → child1 → child2 → ... → parent
-   - **\<Leader>+Left** (or your configured `session_child_cycle_reverse` keybind) to cycle backward through parent ← child1 ← child2 ← ... ← parent
+3. **Navigation between sessions**: When subagents create child sessions, use `session_child_first` (default: **\<Leader>+Down**) to enter the first child session from the parent.
 
-   This allows you to seamlessly switch between the main conversation and specialized subagent work.
+4. Once you are in a child session, use:
+   - `session_child_cycle` (default: **Right**) to cycle to the next child session
+   - `session_child_cycle_reverse` (default: **Left**) to cycle to the previous child session
+   - `session_parent` (default: **Up**) to return to the parent session
+
+   This lets you switch between the main conversation and specialized subagent work.
 
 ---
 
@@ -157,10 +184,10 @@ Configure agents in your `opencode.json` config file:
 
 You can also define agents using markdown files. Place them in:
 
-- Global: `~/.config/opencode/agent/`
-- Per-project: `.opencode/agent/`
+- Global: `~/.config/opencode/agents/`
+- Per-project: `.opencode/agents/`
 
-```markdown title="~/.config/opencode/agent/review.md"
+```markdown title="~/.config/opencode/agents/review.md"
 ---
 description: Reviews code for quality and best practices
 mode: subagent
@@ -269,13 +296,17 @@ If this is not set, the agent will continue to iterate until the model chooses t
     "quick-thinker": {
       "description": "Fast reasoning with limited iterations",
       "prompt": "You are a quick thinker. Solve problems with minimal steps.",
-      "maxSteps": 5
+      "steps": 5
     }
   }
 }
 ```
 
 When the limit is reached, the agent receives a special system prompt instructing it to respond with a summarization of its work and recommended remaining tasks.
+
+:::caution
+The legacy `maxSteps` field is deprecated. Use `steps` instead.
+:::
 
 ---
 
@@ -335,9 +366,11 @@ The model ID in your OpenCode config uses the format `provider/model-id`. For ex
 
 ---
 
-### Tools
+### Tools (deprecated)
 
-Control which tools are available in this agent with the `tools` config. You can enable or disable specific tools by setting them to `true` or `false`.
+`tools` is **deprecated**. Prefer the agent's [`permission`](#permissions) field for new configs, updates and more fine-grained control.
+
+Allows you to control which tools are available in this agent. You can enable or disable specific tools by setting them to `true` or `false`. In an agent's `tools` config, `true` is equivalent to `{"*": "allow"}` permission and `false` is equivalent to `{"*": "deny"}` permission.
 
 ```json title="opencode.json" {3-6,9-12}
 {
@@ -361,7 +394,7 @@ Control which tools are available in this agent with the `tools` config. You can
 The agent-specific config overrides the global config.
 :::
 
-You can also use wildcards to control multiple tools at once. For example, to disable all tools from an MCP server:
+You can also use wildcards in legacy `tools` entries to control multiple tools at once. For example, to disable all tools from an MCP server:
 
 ```json title="opencode.json"
 {
@@ -419,7 +452,7 @@ You can override these permissions per agent.
 
 You can also set permissions in Markdown agents.
 
-```markdown title="~/.config/opencode/agent/review.md"
+```markdown title="~/.config/opencode/agents/review.md"
 ---
 description: Code review without edits
 mode: subagent
@@ -568,6 +601,45 @@ Users can always invoke any subagent directly via the `@` autocomplete menu, eve
 
 ---
 
+### Color
+
+Customize the agent's visual appearance in the UI with the `color` option. This affects how the agent appears in the interface.
+
+Use a valid hex color (e.g., `#FF5733`) or theme color: `primary`, `secondary`, `accent`, `success`, `warning`, `error`, `info`.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "creative": {
+      "color": "#ff6b6b"
+    },
+    "code-reviewer": {
+      "color": "accent"
+    }
+  }
+}
+```
+
+---
+
+### Top P
+
+Control response diversity with the `top_p` option. Alternative to temperature for controlling randomness.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "brainstorm": {
+      "top_p": 0.9
+    }
+  }
+}
+```
+
+Values range from 0.0 to 1.0. Lower values are more focused, higher values more diverse.
+
+---
+
 ### Additional
 
 Any other options you specify in your agent configuration will be **passed through directly** to the provider as model options. This allows you to use provider-specific features and parameters.
@@ -627,7 +699,7 @@ Here are some common use cases for different agents.
 
 ## Examples
 
-Here are some examples agents you might find useful.
+Here are some example agents you might find useful.
 
 :::tip
 Do you have an agent you'd like to share? [Submit a PR](https://github.com/anomalyco/opencode).
@@ -637,7 +709,7 @@ Do you have an agent you'd like to share? [Submit a PR](https://github.com/anoma
 
 ### Documentation agent
 
-```markdown title="~/.config/opencode/agent/docs-writer.md"
+```markdown title="~/.config/opencode/agents/docs-writer.md"
 ---
 description: Writes and maintains project documentation
 mode: subagent
@@ -659,7 +731,7 @@ Focus on:
 
 ### Security auditor
 
-```markdown title="~/.config/opencode/agent/security-auditor.md"
+```markdown title="~/.config/opencode/agents/security-auditor.md"
 ---
 description: Performs security audits and identifies vulnerabilities
 mode: subagent

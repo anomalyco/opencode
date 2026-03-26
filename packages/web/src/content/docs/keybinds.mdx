@@ -3,11 +3,11 @@ title: Keybinds
 description: Customize your keybinds.
 ---
 
-OpenCode has a list of keybinds that you can customize through the OpenCode config.
+OpenCode has a list of keybinds that you can customize through `tui.json`.
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -28,11 +28,14 @@ OpenCode has a list of keybinds that you can customize through the OpenCode conf
     "session_unshare": "none",
     "session_interrupt": "escape",
     "session_compact": "<leader>c",
-    "session_child_cycle": "<leader>right",
-    "session_child_cycle_reverse": "<leader>left",
-    "session_parent": "<leader>up",
-    "messages_page_up": "pageup",
-    "messages_page_down": "pagedown",
+    "session_child_first": "<leader>down",
+    "session_child_cycle": "right",
+    "session_child_cycle_reverse": "left",
+    "session_parent": "up",
+    "messages_page_up": "pageup,ctrl+alt+b",
+    "messages_page_down": "pagedown,ctrl+alt+f",
+    "messages_line_up": "ctrl+alt+y",
+    "messages_line_down": "ctrl+alt+e",
     "messages_half_page_up": "ctrl+alt+u",
     "messages_half_page_down": "ctrl+alt+d",
     "messages_first": "ctrl+g,home",
@@ -95,7 +98,8 @@ OpenCode has a list of keybinds that you can customize through the OpenCode conf
     "history_next": "down",
     "terminal_suspend": "ctrl+z",
     "terminal_title_toggle": "none",
-    "tips_toggle": "<leader>h"
+    "tips_toggle": "<leader>h",
+    "display_thinking": "none"
   }
 }
 ```
@@ -110,15 +114,17 @@ By default, `ctrl+x` is the leader key and most actions require you to first pre
 
 You don't need to use a leader key for your keybinds but we recommend doing so.
 
+Some navigation keybinds intentionally do not use the leader key by default. For subagent sessions, the defaults are `session_child_first` = `\<leader>down`, `session_child_cycle` = `right`, `session_child_cycle_reverse` = `left`, and `session_parent` = `up`.
+
 ---
 
 ## Disable keybind
 
-You can disable a keybind by adding the key to your config with a value of "none".
+You can disable a keybind by adding the key to `tui.json` with a value of "none".
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
     "session_compact": "none"
   }

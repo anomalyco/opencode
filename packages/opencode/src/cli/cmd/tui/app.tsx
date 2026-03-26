@@ -1,10 +1,12 @@
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
-import { TextAttributes } from "@opentui/core"
+import { Selection } from "@tui/util/selection"
+import { MouseButton, TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
-import { Installation } from "@/installation"
+import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGuard } from "./win32"
 import { Flag } from "@/flag/flag"
+import semver from "semver"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
@@ -18,6 +20,7 @@ import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
+import { DialogWorkspaceList } from "@tui/component/dialog-workspace-list"
 import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
@@ -26,6 +29,7 @@ import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
+import { DialogConfirm } from "./ui/dialog-confirm"
 import { ToastProvider, useToast } from "./ui/toast"
 import { ExitProvider, useExit } from "./context/exit"
 import { Session as SessionApi } from "@/session"
@@ -36,6 +40,8 @@ import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
+import { TuiConfigProvider } from "./context/tui-config"
+import { TuiConfig } from "@/config/tui"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -98,20 +104,31 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
 }
 
 import type { EventSource } from "./context/sdk"
+import { Installation } from "@/installation"
 
 export function tui(input: {
   url: string
   args: Args
+  config: TuiConfig.Info
+  onSnapshot?: () => Promise<string[]>
   directory?: string
   fetch?: typeof fetch
+  headers?: RequestInit["headers"]
   events?: EventSource
-  onExit?: () => Promise<void>
 }) {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
+    const unguard = win32InstallCtrlCGuard()
+    win32DisableProcessedInput()
+
     const mode = await getTerminalBackgroundColor()
+
+    // Re-clear after getTerminalBackgroundColor() — setRawMode(false) restores
+    // the original console mode which re-enables ENABLE_PROCESSED_INPUT.
+    win32DisableProcessedInput()
+
     const onExit = async () => {
-      await input.onExit?.()
+      unguard?.()
       resolve()
     }
 
@@ -126,34 +143,37 @@ export function tui(input: {
                 <KVProvider>
                   <ToastProvider>
                     <RouteProvider>
-                      <SDKProvider
-                        url={input.url}
-                        directory={input.directory}
-                        fetch={input.fetch}
-                        events={input.events}
-                      >
-                        <SyncProvider>
-                          <ThemeProvider mode={mode}>
-                            <LocalProvider>
-                              <KeybindProvider>
-                                <PromptStashProvider>
-                                  <DialogProvider>
-                                    <CommandProvider>
-                                      <FrecencyProvider>
-                                        <PromptHistoryProvider>
-                                          <PromptRefProvider>
-                                            <App />
-                                          </PromptRefProvider>
-                                        </PromptHistoryProvider>
-                                      </FrecencyProvider>
-                                    </CommandProvider>
-                                  </DialogProvider>
-                                </PromptStashProvider>
-                              </KeybindProvider>
-                            </LocalProvider>
-                          </ThemeProvider>
-                        </SyncProvider>
-                      </SDKProvider>
+                      <TuiConfigProvider config={input.config}>
+                        <SDKProvider
+                          url={input.url}
+                          directory={input.directory}
+                          fetch={input.fetch}
+                          headers={input.headers}
+                          events={input.events}
+                        >
+                          <SyncProvider>
+                            <ThemeProvider mode={mode}>
+                              <LocalProvider>
+                                <KeybindProvider>
+                                  <PromptStashProvider>
+                                    <DialogProvider>
+                                      <CommandProvider>
+                                        <FrecencyProvider>
+                                          <PromptHistoryProvider>
+                                            <PromptRefProvider>
+                                              <App onSnapshot={input.onSnapshot} />
+                                            </PromptRefProvider>
+                                          </PromptHistoryProvider>
+                                        </FrecencyProvider>
+                                      </CommandProvider>
+                                    </DialogProvider>
+                                  </PromptStashProvider>
+                                </KeybindProvider>
+                              </LocalProvider>
+                            </ThemeProvider>
+                          </SyncProvider>
+                        </SDKProvider>
+                      </TuiConfigProvider>
                     </RouteProvider>
                   </ToastProvider>
                 </KVProvider>
@@ -166,7 +186,9 @@ export function tui(input: {
         targetFps: 60,
         gatherStats: false,
         exitOnCtrlC: false,
-        useKittyKeyboard: {},
+        useKittyKeyboard: { events: process.platform === "win32" },
+        autoFocus: false,
+        openConsoleOnError: false,
         consoleOptions: {
           keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
           onCopySelection: (text) => {
@@ -180,7 +202,7 @@ export function tui(input: {
   })
 }
 
-function App() {
+function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const route = useRoute()
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
@@ -191,23 +213,48 @@ function App() {
   const command = useCommandDialog()
   const sdk = useSDK()
   const toast = useToast()
-  const { theme, mode, setMode } = useTheme()
+  const { theme, mode, setMode, locked, lock, unlock } = useTheme()
   const sync = useSync()
   const exit = useExit()
   const promptRef = usePromptRef()
+
+  useKeyboard((evt) => {
+    if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+    if (!renderer.getSelection()) return
+
+    // Windows Terminal-like behavior:
+    // - Ctrl+C copies and dismisses selection
+    // - Esc dismisses selection
+    // - Most other key input dismisses selection and is passed through
+    if (evt.ctrl && evt.name === "c") {
+      if (!Selection.copy(renderer, toast)) {
+        renderer.clearSelection()
+        return
+      }
+
+      evt.preventDefault()
+      evt.stopPropagation()
+      return
+    }
+
+    if (evt.name === "escape") {
+      renderer.clearSelection()
+      evt.preventDefault()
+      evt.stopPropagation()
+      return
+    }
+
+    renderer.clearSelection()
+  })
 
   // Wire up console copy-to-clipboard via opentui's onCopySelection callback
   renderer.console.onCopySelection = async (text: string) => {
     if (!text || text.length === 0) return
 
-    const base64 = Buffer.from(text).toString("base64")
-    const osc52 = `\x1b]52;c;${base64}\x07`
-    const finalOsc52 = process.env["TMUX"] ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
-    // @ts-expect-error writeOut is not in type definitions
-    renderer.writeOut(finalOsc52)
     await Clipboard.copy(text)
       .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
       .catch(toast.error)
+
     renderer.clearSelection()
   }
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
@@ -252,7 +299,8 @@ function App() {
           })
         local.model.set({ providerID, modelID }, { recent: true })
       }
-      if (args.sessionID) {
+      // Handle --session without --fork immediately (fork is handled in createEffect below)
+      if (args.sessionID && !args.fork) {
         route.navigate({
           type: "session",
           sessionID: args.sessionID,
@@ -270,8 +318,34 @@ function App() {
       .find((x) => x.parentID === undefined)?.id
     if (match) {
       continued = true
-      route.navigate({ type: "session", sessionID: match })
+      if (args.fork) {
+        sdk.client.session.fork({ sessionID: match }).then((result) => {
+          if (result.data?.id) {
+            route.navigate({ type: "session", sessionID: result.data.id })
+          } else {
+            toast.show({ message: "Failed to fork session", variant: "error" })
+          }
+        })
+      } else {
+        route.navigate({ type: "session", sessionID: match })
+      }
     }
+  })
+
+  // Handle --session with --fork: wait for sync to be fully complete before forking
+  // (session list loads in non-blocking phase for --session, so we must wait for "complete"
+  // to avoid a race where reconcile overwrites the newly forked session)
+  let forked = false
+  createEffect(() => {
+    if (forked || sync.status !== "complete" || !args.sessionID || !args.fork) return
+    forked = true
+    sdk.client.session.fork({ sessionID: args.sessionID }).then((result) => {
+      if (result.data?.id) {
+        route.navigate({ type: "session", sessionID: result.data.id })
+      } else {
+        toast.show({ message: "Failed to fork session", variant: "error" })
+      }
+    })
   })
 
   createEffect(
@@ -293,23 +367,50 @@ function App() {
       keybind: "session_list",
       category: "Session",
       suggested: sync.data.session.length > 0,
+      slash: {
+        name: "sessions",
+        aliases: ["resume", "continue"],
+      },
       onSelect: () => {
         dialog.replace(() => <DialogSessionList />)
       },
     },
+    ...(Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
+      ? [
+          {
+            title: "Manage workspaces",
+            value: "workspace.list",
+            category: "Workspace",
+            suggested: true,
+            slash: {
+              name: "workspaces",
+            },
+            onSelect: () => {
+              dialog.replace(() => <DialogWorkspaceList />)
+            },
+          },
+        ]
+      : []),
     {
       title: "New session",
       suggested: route.data.type === "session",
       value: "session.new",
       keybind: "session_new",
       category: "Session",
+      slash: {
+        name: "new",
+        aliases: ["clear"],
+      },
       onSelect: () => {
         const current = promptRef.current
         // Don't require focus - if there's any text, preserve it
         const currentPrompt = current?.current?.input ? current.current : undefined
+        const workspaceID =
+          route.data.type === "session" ? sync.session.get(route.data.sessionID)?.workspaceID : undefined
         route.navigate({
           type: "home",
           initialPrompt: currentPrompt,
+          workspaceID,
         })
         dialog.clear()
       },
@@ -320,26 +421,29 @@ function App() {
       keybind: "model_list",
       suggested: true,
       category: "Agent",
+      slash: {
+        name: "models",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogModel />)
       },
     },
     {
       title: "Model cycle",
-      disabled: true,
       value: "model.cycle_recent",
       keybind: "model_cycle_recent",
       category: "Agent",
+      hidden: true,
       onSelect: () => {
         local.model.cycle(1)
       },
     },
     {
       title: "Model cycle reverse",
-      disabled: true,
       value: "model.cycle_recent_reverse",
       keybind: "model_cycle_recent_reverse",
       category: "Agent",
+      hidden: true,
       onSelect: () => {
         local.model.cycle(-1)
       },
@@ -349,6 +453,7 @@ function App() {
       value: "model.cycle_favorite",
       keybind: "model_cycle_favorite",
       category: "Agent",
+      hidden: true,
       onSelect: () => {
         local.model.cycleFavorite(1)
       },
@@ -358,6 +463,7 @@ function App() {
       value: "model.cycle_favorite_reverse",
       keybind: "model_cycle_favorite_reverse",
       category: "Agent",
+      hidden: true,
       onSelect: () => {
         local.model.cycleFavorite(-1)
       },
@@ -367,6 +473,9 @@ function App() {
       value: "agent.list",
       keybind: "agent_list",
       category: "Agent",
+      slash: {
+        name: "agents",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogAgent />)
       },
@@ -375,6 +484,9 @@ function App() {
       title: "Toggle MCPs",
       value: "mcp.list",
       category: "Agent",
+      slash: {
+        name: "mcps",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogMcp />)
       },
@@ -384,7 +496,7 @@ function App() {
       value: "agent.cycle",
       keybind: "agent_cycle",
       category: "Agent",
-      disabled: true,
+      hidden: true,
       onSelect: () => {
         local.agent.move(1)
       },
@@ -394,6 +506,7 @@ function App() {
       value: "variant.cycle",
       keybind: "variant_cycle",
       category: "Agent",
+      hidden: true,
       onSelect: () => {
         local.model.variant.cycle()
       },
@@ -403,7 +516,7 @@ function App() {
       value: "agent.cycle.reverse",
       keybind: "agent_cycle_reverse",
       category: "Agent",
-      disabled: true,
+      hidden: true,
       onSelect: () => {
         local.agent.move(-1)
       },
@@ -412,6 +525,9 @@ function App() {
       title: "Connect provider",
       value: "provider.connect",
       suggested: !connected(),
+      slash: {
+        name: "connect",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogProviderList />)
       },
@@ -421,6 +537,9 @@ function App() {
       title: "View status",
       keybind: "status_view",
       value: "opencode.status",
+      slash: {
+        name: "status",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogStatus />)
       },
@@ -430,13 +549,16 @@ function App() {
       title: "Switch theme",
       value: "theme.switch",
       keybind: "theme_list",
+      slash: {
+        name: "themes",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogThemeList />)
       },
       category: "System",
     },
     {
-      title: "Toggle appearance",
+      title: "Toggle Theme Mode",
       value: "theme.switch_mode",
       onSelect: (dialog) => {
         setMode(mode() === "dark" ? "light" : "dark")
@@ -445,8 +567,21 @@ function App() {
       category: "System",
     },
     {
+      title: locked() ? "Unlock Theme Mode" : "Lock Theme Mode",
+      value: "theme.mode.lock",
+      onSelect: (dialog) => {
+        if (locked()) unlock()
+        else lock()
+        dialog.clear()
+      },
+      category: "System",
+    },
+    {
       title: "Help",
       value: "help.show",
+      slash: {
+        name: "help",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogHelp />)
       },
@@ -462,17 +597,12 @@ function App() {
       category: "System",
     },
     {
-      title: "Open WebUI",
-      value: "webui.open",
-      onSelect: () => {
-        open(sdk.url).catch(() => {})
-        dialog.clear()
-      },
-      category: "System",
-    },
-    {
       title: "Exit the app",
       value: "app.exit",
+      slash: {
+        name: "exit",
+        aliases: ["quit", "q"],
+      },
       onSelect: () => exit(),
       category: "System",
     },
@@ -498,11 +628,11 @@ function App() {
       title: "Write heap snapshot",
       category: "System",
       value: "app.heap_snapshot",
-      onSelect: (dialog) => {
-        const path = writeHeapSnapshot()
+      onSelect: async (dialog) => {
+        const files = await props.onSnapshot?.()
         toast.show({
           variant: "info",
-          message: `Heap snapshot written to ${path}`,
+          message: `Heap snapshot written to ${files?.join(", ")}`,
           duration: 5000,
         })
         dialog.clear()
@@ -513,6 +643,7 @@ function App() {
       value: "terminal.suspend",
       keybind: "terminal_suspend",
       category: "System",
+      hidden: true,
       onSelect: () => {
         process.once("SIGCONT", () => {
           renderer.resume()
@@ -538,21 +669,26 @@ function App() {
         dialog.clear()
       },
     },
+    {
+      title: kv.get("animations_enabled", true) ? "Disable animations" : "Enable animations",
+      value: "app.toggle.animations",
+      category: "System",
+      onSelect: (dialog) => {
+        kv.set("animations_enabled", !kv.get("animations_enabled", true))
+        dialog.clear()
+      },
+    },
+    {
+      title: kv.get("diff_wrap_mode", "word") === "word" ? "Disable diff wrapping" : "Enable diff wrapping",
+      value: "app.toggle.diffwrap",
+      category: "System",
+      onSelect: (dialog) => {
+        const current = kv.get("diff_wrap_mode", "word")
+        kv.set("diff_wrap_mode", current === "word" ? "none" : "word")
+        dialog.clear()
+      },
+    },
   ])
-
-  createEffect(() => {
-    const currentModel = local.model.current()
-    if (!currentModel) return
-    if (currentModel.providerID === "openrouter" && !kv.get("openrouter_warning", false)) {
-      untrack(() => {
-        DialogAlert.show(
-          dialog,
-          "Warning",
-          "While openrouter is a convenient way to access LLMs your request will often be routed to subpar providers that do not work well in our testing.\n\nFor reliable access to models check out OpenCode Zen\nhttps://opencode.ai/zen",
-        ).then(() => kv.set("openrouter_warning", true))
-      })
-    }
-  })
 
   sdk.event.on(TuiEvent.CommandExecute.type, (evt) => {
     command.trigger(evt.properties.command)
@@ -574,7 +710,7 @@ function App() {
     })
   })
 
-  sdk.event.on(SessionApi.Event.Deleted.type, (evt) => {
+  sdk.event.on("session.deleted", (evt) => {
     if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
       route.navigate({ type: "home" })
       toast.show({
@@ -584,7 +720,7 @@ function App() {
     }
   })
 
-  sdk.event.on(SessionApi.Event.Error.type, (evt) => {
+  sdk.event.on("session.error", (evt) => {
     const error = evt.properties.error
     if (error && typeof error === "object" && error.name === "MessageAbortedError") return
     const message = (() => {
@@ -606,13 +742,51 @@ function App() {
     })
   })
 
-  sdk.event.on(Installation.Event.UpdateAvailable.type, (evt) => {
+  sdk.event.on("installation.update-available", async (evt) => {
+    const version = evt.properties.version
+
+    const skipped = kv.get("skipped_version")
+    if (skipped && !semver.gt(version, skipped)) return
+
+    const choice = await DialogConfirm.show(
+      dialog,
+      `Update Available`,
+      `A new release v${version} is available. Would you like to update now?`,
+      "skip",
+    )
+
+    if (choice === false) {
+      kv.set("skipped_version", version)
+      return
+    }
+
+    if (choice !== true) return
+
     toast.show({
       variant: "info",
-      title: "Update Available",
-      message: `OpenCode v${evt.properties.version} is available. Run 'opencode upgrade' to update manually.`,
-      duration: 10000,
+      message: `Updating to v${version}...`,
+      duration: 30000,
     })
+
+    const result = await sdk.client.global.upgrade({ target: version })
+
+    if (result.error || !result.data?.success) {
+      toast.show({
+        variant: "error",
+        title: "Update Failed",
+        message: "Update failed",
+        duration: 10000,
+      })
+      return
+    }
+
+    await DialogAlert.show(
+      dialog,
+      "Update Complete",
+      `Successfully updated to OpenCode v${result.data.version}. Please restart the application.`,
+    )
+
+    exit()
   })
 
   return (
@@ -620,24 +794,15 @@ function App() {
       width={dimensions().width}
       height={dimensions().height}
       backgroundColor={theme.background}
-      onMouseUp={async () => {
-        if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) {
-          renderer.clearSelection()
-          return
-        }
-        const text = renderer.getSelection()?.getSelectedText()
-        if (text && text.length > 0) {
-          const base64 = Buffer.from(text).toString("base64")
-          const osc52 = `\x1b]52;c;${base64}\x07`
-          const finalOsc52 = process.env["TMUX"] ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
-          /* @ts-expect-error */
-          renderer.writeOut(finalOsc52)
-          await Clipboard.copy(text)
-            .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
-            .catch(toast.error)
-          renderer.clearSelection()
-        }
+      onMouseDown={(evt) => {
+        if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
+        if (evt.button !== MouseButton.RIGHT) return
+
+        if (!Selection.copy(renderer, toast)) return
+        evt.preventDefault()
+        evt.stopPropagation()
       }}
+      onMouseUp={Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? undefined : () => Selection.copy(renderer, toast)}
     >
       <Switch>
         <Match when={route.data.type === "home"}>
@@ -663,7 +828,8 @@ function ErrorComponent(props: {
   const handleExit = async () => {
     renderer.setTerminalTitle("")
     renderer.destroy()
-    props.onExit()
+    win32FlushInputBuffer()
+    await props.onExit()
   }
 
   useKeyboard((evt) => {

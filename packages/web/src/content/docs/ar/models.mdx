@@ -1,0 +1,222 @@
+---
+title: النماذج
+description: تهيئة مزوّد LLM والنموذج.
+---
+
+يستخدم OpenCode كلاً من [AI SDK](https://ai-sdk.dev/) و[Models.dev](https://models.dev) لدعم **أكثر من 75 مزوّداً لنماذج LLM**، كما يدعم تشغيل النماذج محلياً.
+
+---
+
+## المزوّدون
+
+أكثر المزوّدين شيوعاً مُحمَّلون مسبقاً افتراضياً. إذا أضفت بيانات اعتماد أحد المزوّدين عبر الأمر `/connect` فستكون متاحة عند تشغيل OpenCode.
+
+تعرّف على المزيد حول [المزوّدين](/docs/providers).
+
+---
+
+## اختر نموذجاً
+
+بعد تهيئة المزوّد يمكنك اختيار النموذج الذي تريده بكتابة:
+
+```bash frame="none"
+/models
+```
+
+---
+
+## النماذج الموصى بها
+
+هناك الكثير من النماذج المتاحة، وتظهر نماذج جديدة كل أسبوع.
+
+:::tip
+ننصح باستخدام أحد النماذج التي نوصي بها.
+:::
+
+لكن القليل منها فقط يكون جيداً في كلٍ من توليد الشيفرة واستدعاء الأدوات.
+
+فيما يلي عدة نماذج تعمل جيداً مع OpenCode، دون ترتيب معيّن. (هذه ليست قائمة شاملة وقد لا تكون محدَّثة دائماً):
+
+- GPT 5.2
+- GPT 5.1 Codex
+- Claude Opus 4.5
+- Claude Sonnet 4.5
+- Minimax M2.1
+- Gemini 3 Pro
+
+---
+
+## تعيين الافتراضي
+
+لتعيين أحد هذه النماذج كنموذج افتراضي، يمكنك ضبط المفتاح `model` في ملف إعدادات OpenCode.
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "lmstudio/google/gemma-3n-e4b"
+}
+```
+
+المعرّف الكامل هنا يكون بالشكل `provider_id/model_id`. على سبيل المثال، إذا كنت تستخدم [OpenCode Zen](/docs/zen) فستستخدم `opencode/gpt-5.1-codex` لنموذج GPT 5.1 Codex.
+
+إذا كنت قد هيّأت [مزوّداً مخصّصاً](/docs/providers#custom)، فإن `provider_id` هو المفتاح الموجود ضمن قسم `provider` في إعداداتك، و`model_id` هو المفتاح الموجود ضمن `provider.models`.
+
+---
+
+## إعداد النماذج
+
+يمكنك ضبط خيارات النموذج على مستوى عام عبر ملف الإعدادات.
+
+```jsonc title="opencode.jsonc" {7-12,19-24}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-5": {
+          "options": {
+            "reasoningEffort": "high",
+            "textVerbosity": "low",
+            "reasoningSummary": "auto",
+            "include": ["reasoning.encrypted_content"],
+          },
+        },
+      },
+    },
+    "anthropic": {
+      "models": {
+        "claude-sonnet-4-5-20250929": {
+          "options": {
+            "thinking": {
+              "type": "enabled",
+              "budgetTokens": 16000,
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+هنا نقوم بضبط إعدادات عامة لنموذجين مدمجين: `gpt-5` عند الوصول إليه عبر مزوّد `openai`، و`claude-sonnet-4-20250514` عند الوصول إليه عبر مزوّد `anthropic`.
+يمكن العثور على أسماء المزوّدين والنماذج المدمجة على [Models.dev](https://models.dev).
+
+يمكنك أيضاً ضبط هذه الخيارات لأي وكلاء تستخدمهم. تتجاوز إعدادات الوكيل أي خيارات عامة هنا. [اعرف المزيد](/docs/agents/#additional).
+
+كما يمكنك تعريف متغيّرات مخصّصة تُوسّع المتغيّرات المدمجة. تتيح لك المتغيّرات ضبط إعدادات مختلفة للنموذج نفسه دون إنشاء إدخالات مكرّرة:
+
+```jsonc title="opencode.jsonc" {6-21}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "opencode": {
+      "models": {
+        "gpt-5": {
+          "variants": {
+            "high": {
+              "reasoningEffort": "high",
+              "textVerbosity": "low",
+              "reasoningSummary": "auto",
+            },
+            "low": {
+              "reasoningEffort": "low",
+              "textVerbosity": "low",
+              "reasoningSummary": "auto",
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+---
+
+## المتغيّرات
+
+تدعم العديد من النماذج عدة متغيّرات بإعدادات مختلفة. يأتي OpenCode مع متغيّرات افتراضية مدمجة للمزوّدين الشائعين.
+
+### المتغيّرات المدمجة
+
+يأتي OpenCode مع متغيّرات افتراضية لعدد كبير من المزوّدين:
+
+**Anthropic**:
+
+- `high` - ميزانية تفكير مرتفعة (الافتراضي)
+- `max` - أقصى ميزانية تفكير
+
+**OpenAI**:
+
+تختلف حسب النموذج، لكن بشكل عام:
+
+- `none` - بدون استدلال
+- `minimal` - أقل جهد للاستدلال
+- `low` - جهد استدلال منخفض
+- `medium` - جهد استدلال متوسط
+- `high` - جهد استدلال مرتفع
+- `xhigh` - جهد استدلال مرتفع جداً
+
+**Google**:
+
+- `low` - جهد/ميزانية رموز أقل
+- `high` - جهد/ميزانية رموز أعلى
+
+:::tip
+هذه القائمة ليست شاملة. لدى العديد من المزوّدين الآخرين إعدادات افتراضية مدمجة أيضاً.
+:::
+
+### متغيّرات مخصّصة
+
+يمكنك تجاوز المتغيّرات الموجودة أو إضافة متغيّراتك الخاصة:
+
+```jsonc title="opencode.jsonc" {7-18}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-5": {
+          "variants": {
+            "thinking": {
+              "reasoningEffort": "high",
+              "textVerbosity": "low",
+            },
+            "fast": {
+              "disabled": true,
+            },
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+### التبديل بين المتغيّرات
+
+استخدم اختصار لوحة المفاتيح `variant_cycle` للتبديل بسرعة بين المتغيّرات. [اعرف المزيد](/docs/keybinds).
+
+---
+
+## تحميل النماذج
+
+عند بدء تشغيل OpenCode، يتحقق من النماذج وفق ترتيب الأولوية التالي:
+
+1. خيار CLI `--model` أو `-m`. الصيغة هي نفسها الموجودة في ملف الإعدادات: `provider_id/model_id`.
+
+2. قائمة النماذج في إعدادات OpenCode.
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "model": "anthropic/claude-sonnet-4-20250514"
+   }
+   ```
+
+   الصيغة هنا هي `provider/model`.
+
+3. آخر نموذج تم استخدامه.
+
+4. أول نموذج وفق أولوية داخلية.
