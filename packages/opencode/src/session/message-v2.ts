@@ -34,7 +34,12 @@ export namespace MessageV2 {
   export function isRealUserMessage(msg: { info: { role: string }; parts: readonly unknown[] }) {
     return (
       msg.info.role === "user" &&
-      !msg.parts.every((part) => typeof part === "object" && part !== null && "synthetic" in part && part.synthetic)
+      msg.parts.some((part) => {
+        if (typeof part !== "object" || part === null || !("type" in part)) return false
+        if (part.type === "compaction" || part.type === "subtask") return false
+        if ("synthetic" in part && part.synthetic) return false
+        return true
+      })
     )
   }
 

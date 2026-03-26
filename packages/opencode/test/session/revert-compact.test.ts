@@ -349,4 +349,61 @@ describe("revert + compact workflow", () => {
       },
     })
   })
+
+  test("uses latest real user for revert anchor when compaction message is selected", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const sessionID = session.id
+
+        const userMsg = await Session.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID,
+          agent: "default",
+          model: {
+            providerID: ProviderID.make("openai"),
+            modelID: ModelID.make("gpt-4"),
+          },
+          time: {
+            created: Date.now(),
+          },
+        })
+
+        await Session.updatePart({
+          id: PartID.ascending(),
+          messageID: userMsg.id,
+          sessionID,
+          type: "text",
+          text: "hello",
+        })
+
+        await SessionCompaction.create({
+          sessionID,
+          agent: "default",
+          model: {
+            providerID: ProviderID.make("openai"),
+            modelID: ModelID.make("gpt-4"),
+          },
+          auto: true,
+        })
+
+        const messages = await Session.messages({ sessionID })
+        const compaction = messages.findLast((msg) => msg.parts.some((part) => part.type === "compaction"))
+        expect(compaction).toBeDefined()
+
+        await SessionRevert.revert({
+          sessionID,
+          messageID: compaction!.info.id,
+        })
+
+        const sessionInfo = await Session.get(sessionID)
+        expect(sessionInfo.revert?.messageID).toBe(userMsg.id)
+
+        await Session.remove(sessionID)
+      },
+    })
+  })
 })

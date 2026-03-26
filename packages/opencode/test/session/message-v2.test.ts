@@ -137,6 +137,30 @@ describe("session.message-v2.toModelMessage", () => {
       parts: [],
     }
 
+    const compactionUser: MessageV2.WithParts = {
+      info: userInfo("m-compaction"),
+      parts: [
+        {
+          ...basePart("m-compaction", "p-compaction"),
+          type: "compaction",
+          auto: true,
+        } as MessageV2.Part,
+      ],
+    }
+
+    const subtaskUser: MessageV2.WithParts = {
+      info: userInfo("m-subtask"),
+      parts: [
+        {
+          ...basePart("m-subtask", "p-subtask"),
+          type: "subtask",
+          agent: "general",
+          description: "run task",
+          prompt: "do thing",
+        } as MessageV2.Part,
+      ],
+    }
+
     const assistant: MessageV2.WithParts = {
       info: assistantInfo("m-assistant", "m-real"),
       parts: [
@@ -151,6 +175,8 @@ describe("session.message-v2.toModelMessage", () => {
     expect(MessageV2.isRealUserMessage(realUser)).toBe(true)
     expect(MessageV2.isRealUserMessage(syntheticUser)).toBe(false)
     expect(MessageV2.isRealUserMessage(emptyUser)).toBe(false)
+    expect(MessageV2.isRealUserMessage(compactionUser)).toBe(false)
+    expect(MessageV2.isRealUserMessage(subtaskUser)).toBe(false)
     expect(MessageV2.isRealUserMessage(assistant)).toBe(false)
   })
 
