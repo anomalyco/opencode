@@ -10,12 +10,13 @@
   max-width: 320px;
   max-height: calc(100vh - 1rem);
   border-radius: 8px;
-  background-color: var(--surface-raised-stronger-non-alpha);
+  background-color: rgb(12 12 14 / 0.34);
   pointer-events: auto;
-
-  border: 1px solid color-mix(in oklch, var(--border-base) 50%, transparent);
+  border: 1px solid rgb(255 255 255 / 0.1);
   background-clip: padding-box;
-  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(40px) saturate(150%);
+  -webkit-backdrop-filter: blur(40px) saturate(150%);
+  box-shadow: var(--shadow-lg-border-base);
 
   transform-origin: var(--kb-hovercard-content-transform-origin);
 
