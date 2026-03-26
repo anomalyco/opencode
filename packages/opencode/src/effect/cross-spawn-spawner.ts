@@ -229,7 +229,7 @@ export const make = Effect.gen(function* () {
           evaluate: () => proc.stdin!,
           onError: (err) => toPlatformError("fromWritable(stdin)", toError(err), command),
           endOnDone: cfg.endOnDone,
-          encoding: cfg.encoding,
+          encoding: cfg.encoding === "utf-16le" ? "utf16le" : cfg.encoding,
         })
       }
       if (Stream.isStream(cfg.stream)) return Effect.as(Effect.forkScoped(Stream.run(cfg.stream, sink)), sink)
