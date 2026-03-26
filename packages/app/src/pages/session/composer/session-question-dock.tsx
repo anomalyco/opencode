@@ -1,5 +1,6 @@
-import { For, Show, createMemo, onCleanup, onMount, type Component } from "solid-js"
+import { For, Show, createEffect, createMemo, onCleanup, onMount, type Component } from "solid-js"
 import { createStore } from "solid-js/store"
+import { useMutation } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
 import { DockPrompt } from "@opencode-ai/ui/dock-prompt"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -11,7 +12,7 @@ import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 import { usePlatform } from "@/context/platform"
 import type { ImageAttachmentPart } from "@/context/prompt"
-import { ACCEPTED_IMAGE_TYPES } from "@/components/prompt-input/attachments"
+import { ACCEPTED_IMAGE_TYPES } from "@/constants/file-picker"
 import { PromptImageAttachments } from "@/components/prompt-input/image-attachments"
 import { uuid } from "@/utils/uuid"
 import {
@@ -204,36 +205,42 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     showToast({ title: language.t("common.requestFailed"), description: message })
   }
 
-  const reply = async (answers: QuestionAnswer[]) => {
-    if (store.sending) return
-
-    props.onSubmit()
-    setStore("sending", true)
-    try {
-      await sdk.client.question.reply({ requestID: props.request.id, answers })
+  const replyMutation = useMutation(() => ({
+    mutationFn: (answers: QuestionAnswer[]) => sdk.client.question.reply({ requestID: props.request.id, answers }),
+    onMutate: () => {
+      props.onSubmit()
+    },
+    onSuccess: () => {
       replied = true
       questionCache.delete(props.request.id)
-    } catch (err) {
-      fail(err)
-    } finally {
-      setStore("sending", false)
-    }
+    },
+    onError: fail,
+  }))
+
+  const rejectMutation = useMutation(() => ({
+    mutationFn: () => sdk.client.question.reject({ requestID: props.request.id }),
+    onMutate: () => {
+      props.onSubmit()
+    },
+    onSuccess: () => {
+      replied = true
+      questionCache.delete(props.request.id)
+    },
+    onError: fail,
+  }))
+
+  const sending = createMemo(() => replyMutation.isPending || rejectMutation.isPending)
+
+  createEffect(() => setStore("sending", sending()))
+
+  const reply = async (answers: QuestionAnswer[]) => {
+    if (sending()) return
+    await replyMutation.mutateAsync(answers)
   }
 
   const reject = async () => {
-    if (store.sending) return
-
-    props.onSubmit()
-    setStore("sending", true)
-    try {
-      await sdk.client.question.reject({ requestID: props.request.id })
-      replied = true
-      questionCache.delete(props.request.id)
-    } catch (err) {
-      fail(err)
-    } finally {
-      setStore("sending", false)
-    }
+    if (sending()) return
+    await rejectMutation.mutateAsync()
   }
 
   const submit = () => void reply(questionReply(questions(), store.answers, store.images))
@@ -253,7 +260,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }
 
   const customToggle = () => {
-    if (store.sending) return
+    if (sending()) return
 
     if (!multi()) {
       setStore("customOn", store.tab, true)
@@ -279,14 +286,14 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }
 
   const customOpen = () => {
-    if (store.sending) return
+    if (sending()) return
     if (!on()) setStore("customOn", store.tab, true)
     setStore("editing", true)
     customUpdate(input(), true)
   }
 
   const selectOption = (optIndex: number) => {
-    if (store.sending) return
+    if (sending()) return
 
     if (optIndex === options().length) {
       customOpen()
@@ -362,7 +369,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }
 
   const next = () => {
-    if (store.sending) return
+    if (sending()) return
     if (store.editing) commitCustom()
 
     if (store.tab >= total() - 1) {
@@ -376,7 +383,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }
 
   const back = () => {
-    if (store.sending) return
+    if (sending()) return
     if (store.tab <= 0) return
     setStore("tab", store.tab - 1)
     setStore("editing", false)
@@ -384,7 +391,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }
 
   const jump = (tab: number) => {
-    if (store.sending) return
+    if (sending()) return
     setStore("tab", tab)
     setStore("editing", false)
     setStore("focusedOption", -1)
@@ -421,16 +428,16 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
       }
       footer={
         <>
-          <Button variant="ghost" size="large" disabled={store.sending} onClick={reject}>
+          <Button variant="ghost" size="large" disabled={sending()} onClick={reject}>
             {language.t("ui.common.dismiss")}
           </Button>
           <div data-slot="question-footer-actions">
             <Show when={store.tab > 0}>
-              <Button variant="secondary" size="large" disabled={store.sending} onClick={back}>
+              <Button variant="secondary" size="large" disabled={sending()} onClick={back}>
                 {language.t("ui.common.back")}
               </Button>
             </Show>
-            <Button variant={last() ? "primary" : "secondary"} size="large" disabled={store.sending} onClick={next}>
+            <Button variant={last() ? "primary" : "secondary"} size="large" disabled={sending()} onClick={next}>
               {last() ? language.t("ui.common.submit") : language.t("ui.common.next")}
             </Button>
           </div>
@@ -453,7 +460,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                 data-focused={focused()}
                 role={multi() ? "checkbox" : "radio"}
                 aria-checked={picked()}
-                disabled={store.sending}
+                disabled={sending()}
                 onClick={() => selectOption(i())}
               >
                 <span data-slot="question-option-check" aria-hidden="true">
@@ -541,7 +548,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
             role={multi() ? "checkbox" : "radio"}
             aria-checked={on()}
             onMouseDown={(e) => {
-              if (store.sending) {
+              if (sending()) {
                 e.preventDefault()
                 return
               }

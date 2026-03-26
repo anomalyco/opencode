@@ -127,7 +127,10 @@
   [data-slot="session-review-filename"] {
     font-family: var(--font-family-mono);
     color: var(--text-strong);
-    flex-shrink: 0;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   [data-slot="session-review-view-button"] {

@@ -15,7 +15,7 @@ import { useLanguage } from "@/context/language"
 import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
-import { agentColor } from "@/utils/agent"
+import { messageAgentColor } from "@/utils/agent"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
 import { hasProjectPermissions } from "./helpers"
 
@@ -107,7 +107,7 @@ const SessionRow = (props: {
 }): JSX.Element => (
   <A
     href={`/${props.slug}/session/${props.session.id}`}
-    class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${props.mobile ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
+    class={`flex items-center gap-1 min-w-0 w-full text-left focus:outline-none ${props.dense ? "py-0.5" : "py-1"}`}
     onPointerDown={props.warmPress}
     onPointerEnter={props.warmHover}
     onPointerLeave={props.cancelHoverPrefetch}
@@ -168,34 +168,49 @@ const SessionHoverPreview = (props: {
   messageLabel: (message: Message) => string | undefined
   onMessageSelect: (message: Message) => void
   trigger: JSX.Element
-}): JSX.Element => (
-  <HoverCard
-    openDelay={1000}
-    closeDelay={props.sidebarHovering() ? 600 : 0}
-    placement="right-start"
-    gutter={16}
-    shift={-2}
-    trigger={props.trigger}
-    open={props.hoverSession() === props.session.id}
-    onOpenChange={(open) => props.setHoverSession(open ? props.session.id : undefined)}
-  >
-    <Show
-      when={props.hoverReady()}
-      fallback={<div class="text-12-regular text-text-weak">{props.language.t("session.messages.loading")}</div>}
+}): JSX.Element => {
+  let ref: HTMLDivElement | undefined
+
+  return (
+    <HoverCard
+      openDelay={1000}
+      closeDelay={props.sidebarHovering() ? 600 : 0}
+      placement="right-start"
+      gutter={16}
+      shift={-2}
+      trigger={
+        <div ref={ref} class="min-w-0 w-full">
+          {props.trigger}
+        </div>
+      }
+      open={props.hoverSession() === props.session.id}
+      onOpenChange={(open) => {
+        if (!open) {
+          props.setHoverSession(undefined)
+          return
+        }
+        if (!ref?.matches(":hover")) return
+        props.setHoverSession(props.session.id)
+      }}
     >
-      <div class="overflow-y-auto overflow-x-hidden max-h-72 h-full">
-        <MessageNav
-          messages={props.hoverMessages() ?? []}
-          current={undefined}
-          getLabel={props.messageLabel}
-          onMessageSelect={props.onMessageSelect}
-          size="normal"
-          class="w-60"
-        />
-      </div>
-    </Show>
-  </HoverCard>
-)
+      <Show
+        when={props.hoverReady()}
+        fallback={<div class="text-12-regular text-text-weak">{props.language.t("session.messages.loading")}</div>}
+      >
+        <div class="overflow-y-auto overflow-x-hidden max-h-72 h-full">
+          <MessageNav
+            messages={props.hoverMessages() ?? []}
+            current={undefined}
+            getLabel={props.messageLabel}
+            onMessageSelect={props.onMessageSelect}
+            size="normal"
+            class="w-60"
+          />
+        </div>
+      </Show>
+    </HoverCard>
+  )
+}
 
 export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const params = useParams()
@@ -215,25 +230,23 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   })
   const isWorking = createMemo(() => {
     if (hasPermissions()) return false
+    const pending = (sessionStore.message[props.session.id] ?? []).findLast(
+      (message) =>
+        message.role === "assistant" &&
+        typeof (message as { time?: { completed?: unknown } }).time?.completed !== "number",
+    )
     const status = sessionStore.session_status[props.session.id]
-    return status?.type === "busy" || status?.type === "retry"
+    return (
+      pending !== undefined ||
+      status?.type === "busy" ||
+      status?.type === "retry" ||
+      (status !== undefined && status.type !== "idle")
+    )
   })
   const isActive = createMemo(() => props.session.id === params.id)
 
   const tint = createMemo(() => {
-    const messages = sessionStore.message[props.session.id]
-    if (!messages) return undefined
-    let user: Message | undefined
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const message = messages[i]
-      if (message.role !== "user") continue
-      user = message
-      break
-    }
-    if (!user?.agent) return undefined
-
-    const agent = sessionStore.agent.find((a) => a.name === user.agent)
-    return agentColor(user.agent, agent?.color)
+    return messageAgentColor(sessionStore.message[props.session.id], sessionStore.agent)
   })
 
   const hoverMessages = createMemo(() =>
@@ -313,8 +326,9 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
     <div
       data-session-id={props.session.id}
       classList={{
-        "group/session relative w-full rounded-lg cursor-default transition-colors pl-2 pr-3": true,
-        "hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[[data-expanded]]:bg-surface-raised-base-hover": !isActive(),
+        "group/session relative w-full min-w-0 rounded-lg cursor-default transition-colors pl-2 pr-3": true,
+        "hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[[data-expanded]]:bg-surface-raised-base-hover":
+          !isActive(),
         "bg-surface-raised-base-hover": isActive(),
       }}
     >
@@ -323,8 +337,8 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
           class="absolute top-1/2 -translate-y-1/2 w-[4px] rounded-full"
           style={{
             "background-color": tint() ?? "var(--icon-interactive-base)",
-            "height": "calc(var(--spacing) * 7)",
-            "left": "calc(var(--spacing) * 1)"
+            height: "calc(var(--spacing) * 7)",
+            left: "calc(var(--spacing) * 1)",
           }}
         />
       </Show>
@@ -350,9 +364,9 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
           setHoverSession={props.setHoverSession}
           messageLabel={messageLabel}
           onMessageSelect={(message) => {
-            if (!isActive())
+            if (!isActive()) {
               layout.pendingMessage.set(`${base64Encode(props.session.directory)}/${props.session.id}`, message.id)
-
+            }
             navigate(`${props.slug}/session/${props.session.id}#message-${message.id}`)
           }}
           trigger={item}
@@ -360,12 +374,12 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       </Show>
 
       <div
-        class={`absolute ${props.dense ? "top-0.5 right-0.5" : "top-1 right-1"} flex items-center gap-0.5 transition-opacity`}
+        class="shrink-0 overflow-hidden transition-[width,opacity]"
         classList={{
-          "opacity-100 pointer-events-auto": !!props.mobile,
-          "opacity-0 pointer-events-none": !props.mobile,
-          "group-hover/session:opacity-100 group-hover/session:pointer-events-auto": true,
-          "group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto": true,
+          "w-6 opacity-100 pointer-events-auto": !!props.mobile,
+          "w-0 opacity-0 pointer-events-none": !props.mobile,
+          "group-hover/session:w-6 group-hover/session:opacity-100 group-hover/session:pointer-events-auto": true,
+          "group-focus-within/session:w-6 group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto": true,
         }}
       >
         <Tooltip value={language.t("common.archive")} placement="top">
@@ -402,7 +416,7 @@ export const NewSessionItem = (props: {
     <A
       href={`/${props.slug}/session`}
       end
-      class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none ${props.dense ? "py-0.5" : "py-1"}`}
+      class={`flex items-center gap-1 min-w-0 w-full text-left focus:outline-none ${props.dense ? "py-0.5" : "py-1"}`}
       onClick={() => {
         props.setHoverSession(undefined)
         if (layout.sidebar.opened()) return
@@ -421,11 +435,11 @@ export const NewSessionItem = (props: {
   )
 
   return (
-    <div class="group/session relative w-full rounded-lg cursor-default transition-colors pl-2 pr-3 hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active">
+    <div class="group/session relative w-full min-w-0 rounded-lg cursor-default transition-colors pl-2 pr-3 hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active">
       <Show
         when={!tooltip()}
         fallback={
-          <Tooltip placement={props.mobile ? "bottom" : "right"} value={label} gutter={10}>
+          <Tooltip placement={props.mobile ? "bottom" : "right"} value={label} gutter={10} class="min-w-0 w-full">
             {item}
           </Tooltip>
         }
@@ -449,9 +463,7 @@ export const SessionSkeleton = (props: { count?: number }): JSX.Element => {
 
 export const SessionGroupHeader = (props: { label: string }): JSX.Element => (
   <div class="px-4 pt-3 pb-1 first:pt-1 flex justify-end">
-    <span class="text-[11px] font-medium uppercase tracking-wider text-text-weak opacity-60">
-      {props.label}
-    </span>
+    <span class="text-[11px] font-medium uppercase tracking-wider text-text-weak opacity-60">{props.label}</span>
   </div>
 )
 
@@ -472,12 +484,7 @@ export const SessionSearchBar = (props: {
         style={{ "font-size": "13px" }}
       />
       <Show when={props.value()}>
-        <IconButton
-          icon="close-small"
-          variant="ghost"
-          class="size-5 rounded"
-          onClick={() => props.onInput("")}
-        />
+        <IconButton icon="close-small" variant="ghost" class="size-5 rounded" onClick={() => props.onInput("")} />
       </Show>
     </div>
   </div>

@@ -136,13 +136,14 @@ export function SessionTodoDock(props: {
           }}
         >
           <span
-            class="text-14-regular text-text-strong cursor-default inline-flex items-baseline shrink-0 whitespace-nowrap overflow-visible"
+            class="text-14-regular text-text-strong cursor-default inline-flex items-baseline shrink-0 overflow-visible"
             aria-label={label()}
             style={{
               "--tool-motion-odometer-ms": "600ms",
               "--tool-motion-mask": "18%",
               "--tool-motion-mask-height": "0px",
               "--tool-motion-spring-ms": "560ms",
+              "white-space": "pre",
               opacity: `${Math.max(0, Math.min(1, 1 - shut()))}`,
             }}
           >

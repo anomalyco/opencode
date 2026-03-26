@@ -1,5 +1,7 @@
 export const dict: Record<string, string> = {
   "ui.sessionReview.title": "Session changes",
+  "ui.sessionReview.title.git": "Git changes",
+  "ui.sessionReview.title.branch": "Branch changes",
   "ui.sessionReview.title.lastTurn": "Last turn changes",
   "ui.sessionReview.diffStyle.unified": "Unified",
   "ui.sessionReview.diffStyle.split": "Split",
@@ -68,7 +70,7 @@ export const dict: Record<string, string> = {
   "ui.messagePart.option.typeOwnAnswer": "Type your own answer",
   "ui.messagePart.review.title": "Review your answers",
   "ui.messagePart.questions.dismissed": "Questions dismissed",
-  "ui.messagePart.compaction": "History compacted",
+  "ui.messagePart.compaction": "Session compacted",
   "ui.messagePart.context.read.one": "{{count}} read",
   "ui.messagePart.context.read.other": "{{count}} reads",
   "ui.messagePart.context.search.one": "{{count}} search",

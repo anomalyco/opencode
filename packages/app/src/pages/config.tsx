@@ -79,6 +79,7 @@ type ProviderCfg = NonNullable<Config["provider"]>[string]
 
 type CustomState = FormState & {
   mode: "create" | "edit"
+  saving: boolean
   deleting: boolean
   secret: boolean
 }

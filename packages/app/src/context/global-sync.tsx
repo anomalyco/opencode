@@ -83,6 +83,8 @@ function createGlobalSync() {
 
   let active = true
   let projectWritten = false
+  let bootedAt = 0
+  let bootingRoot = false
 
   onCleanup(() => {
     active = false
@@ -265,6 +267,11 @@ function createGlobalSync() {
       const sdk = sdkFor(directory)
       await bootstrapDirectory({
         directory,
+        global: {
+          config: globalStore.config,
+          project: globalStore.project,
+          provider: globalStore.provider,
+        },
         sdk,
         store: child[0],
         setStore: child[1],
@@ -285,15 +292,20 @@ function createGlobalSync() {
   const unsub = globalSDK.event.listen((e) => {
     const directory = e.name
     const event = e.details
+    const recent = bootingRoot || Date.now() - bootedAt < 1500
 
     if (directory === "global") {
       applyGlobalEvent({
         event,
         project: globalStore.project,
-        refresh: queue.refresh,
+        refresh: () => {
+          if (recent) return
+          queue.refresh()
+        },
         setGlobalProject: setProjects,
       })
       if (event.type === "server.connected" || event.type === "global.disposed") {
+        if (recent) return
         for (const directory of Object.keys(children.children)) {
           queue.push(directory)
         }
@@ -332,17 +344,19 @@ function createGlobalSync() {
   })
 
   async function bootstrap() {
-    await bootstrapGlobal({
-      globalSDK: globalSDK.client,
-      connectErrorTitle: language.t("dialog.server.add.error"),
-      connectErrorDescription: language.t("error.globalSync.connectFailed", {
-        url: globalSDK.url,
-      }),
-      requestFailedTitle: language.t("common.requestFailed"),
-      translate: language.t,
-      formatMoreCount: (count) => language.t("common.moreCountSuffix", { count }),
-      setGlobalStore: setBootStore,
-    })
+    bootingRoot = true
+    try {
+      await bootstrapGlobal({
+        globalSDK: globalSDK.client,
+        requestFailedTitle: language.t("common.requestFailed"),
+        translate: language.t,
+        formatMoreCount: (count) => language.t("common.moreCountSuffix", { count }),
+        setGlobalStore: setBootStore,
+      })
+      bootedAt = Date.now()
+    } finally {
+      bootingRoot = false
+    }
   }
 
   createEffect(
@@ -407,6 +421,7 @@ function createGlobalSync() {
       return globalStore.error
     },
     child: children.child,
+    peek: children.peek,
     bootstrap,
     updateConfig,
     project: projectApi,

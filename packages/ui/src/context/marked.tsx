@@ -539,7 +539,11 @@ async function highlightCodeBlocks(html: string): Promise<string> {
   const matches = [...html.matchAll(codeBlockRegex)]
   if (matches.length === 0) return html
 
-  const highlighter = await getSharedHighlighter({ themes: ["OpenCode"], langs: [] })
+  const highlighter = await getSharedHighlighter({
+    themes: ["OpenCode"],
+    langs: [],
+    preferredHighlighter: "shiki-wasm",
+  })
 
   let result = html
   for (const match of matches) {
@@ -594,7 +598,11 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
       }),
       markedShiki({
         async highlight(code, lang) {
-          const highlighter = await getSharedHighlighter({ themes: ["OpenCode"], langs: [] })
+          const highlighter = await getSharedHighlighter({
+            themes: ["OpenCode"],
+            langs: [],
+            preferredHighlighter: "shiki-wasm",
+          })
           if (!(lang in bundledLanguages)) {
             lang = "text"
           }

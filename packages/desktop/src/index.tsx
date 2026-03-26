@@ -1,9 +1,14 @@
 // @refresh reload
 
 import {
+  ACCEPTED_FILE_EXTENSIONS,
+  filePickerFilters,
   AppBaseProviders,
   AppInterface,
   handleNotificationClick,
+  loadLocaleDict,
+  normalizeLocale,
+  type Locale,
   type Platform,
   PlatformProvider,
   ServerConnection,
@@ -192,6 +197,7 @@ const createPlatform = (): Platform => {
         directory: false,
         multiple: opts?.multiple ?? false,
         title: opts?.title ?? t("desktop.dialog.chooseFile"),
+        filters: filePickerFilters(opts?.extensions ?? ACCEPTED_FILE_EXTENSIONS),
       })
       return handleWslPicker(result)
     },
@@ -601,6 +607,17 @@ void listenForDragDrop()
 
 render(() => {
   const platform = createPlatform()
+  const loadLocale = async () => {
+    const current = await platform.storage?.("opencode.global.dat").getItem("language")
+    const legacy = current ? undefined : await platform.storage?.().getItem("language.v1")
+    const raw = current ?? legacy
+    if (!raw) return
+    const locale = raw.match(/"locale"\s*:\s*"([^"]+)"/)?.[1]
+    if (!locale) return
+    const next = normalizeLocale(locale)
+    if (next !== "en") await loadLocaleDict(next)
+    return next satisfies Locale
+  }
 
   // Fetch sidecar credentials from Rust (available immediately, before health check)
   const [sidecar] = createResource(() => commands.awaitInitialization(new Channel<InitStep>() as any))
@@ -611,6 +628,7 @@ render(() => {
       if (url) return ServerConnection.key({ type: "http", http: { url } })
     }),
   )
+  const [locale] = createResource(loadLocale)
 
   // Build the sidecar server connection once credentials arrive
   const servers = () => {
@@ -685,8 +703,8 @@ render(() => {
 
   return (
     <PlatformProvider value={platform}>
-      <AppBaseProviders>
-        <Show when={!defaultServer.loading && !sidecar.loading}>
+      <AppBaseProviders locale={locale.latest}>
+        <Show when={!defaultServer.loading && !sidecar.loading && !locale.loading}>
           {(_) => {
             return (
               <>

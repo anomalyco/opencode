@@ -1,54 +1,59 @@
-import { createEffect, createMemo, Show, type ParentProps } from "solid-js"
-import { createStore } from "solid-js/store"
-import { useNavigate, useParams } from "@solidjs/router"
+import { DataProvider } from "@opencode-ai/ui/context"
+import { showToast } from "@opencode-ai/ui/toast"
+import { base64Encode } from "@opencode-ai/util/encode"
+import { useLocation, useNavigate, useParams } from "@solidjs/router"
+import { createEffect, createMemo, type ParentProps, Show } from "solid-js"
+import { useLanguage } from "@/context/language"
+import { LocalProvider } from "@/context/local"
 import { SDKProvider } from "@/context/sdk"
 import { SyncProvider, useSync } from "@/context/sync"
-import { LocalProvider } from "@/context/local"
-
-import { DataProvider } from "@opencode-ai/ui/context"
 import { decode64 } from "@/utils/base64"
-import { showToast } from "@opencode-ai/ui/toast"
-import { useLanguage } from "@/context/language"
 
 function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
-  const params = useParams()
+  const location = useLocation()
   const navigate = useNavigate()
   const sync = useSync()
+  const slug = createMemo(() => base64Encode(props.directory))
+
+  createEffect(() => {
+    const next = sync.data.path.directory
+    if (!next || next === props.directory) return
+    const path = location.pathname.slice(slug().length + 1)
+    navigate(`/${base64Encode(next)}${path}${location.search}${location.hash}`, { replace: true })
+  })
 
   return (
     <DataProvider
       data={sync.data}
       directory={props.directory}
-      onNavigateToSession={(sessionID: string) => navigate(`/${params.dir}/session/${sessionID}`)}
-      onSessionHref={(sessionID: string) => `/${params.dir}/session/${sessionID}`}
+      onNavigateToSession={(sessionID: string) => navigate(`/${slug()}/session/${sessionID}`)}
+      onSessionHref={(sessionID: string) => `/${slug()}/session/${sessionID}`}
     >
       <LocalProvider>{props.children}</LocalProvider>
     </DataProvider>
   )
 }
 
-function DirectoryProviders(props: ParentProps<{ directory: string }>) {
-  return (
-    <SDKProvider directory={() => props.directory}>
-      <SyncProvider>
-        <DirectoryDataProvider directory={props.directory}>{props.children}</DirectoryDataProvider>
-      </SyncProvider>
-    </SDKProvider>
-  )
-}
-
 export default function Layout(props: ParentProps) {
   const params = useParams()
-  const navigate = useNavigate()
   const language = useLanguage()
-  const [state, setState] = createStore({ invalid: "" })
-  const directory = createMemo(() => decode64(params.dir) ?? "")
+  const navigate = useNavigate()
+  let invalid = ""
+
+  const resolved = createMemo(() => {
+    if (!params.dir) return ""
+    return decode64(params.dir) ?? ""
+  })
 
   createEffect(() => {
-    if (!params.dir) return
-    if (directory()) return
-    if (state.invalid === params.dir) return
-    setState("invalid", params.dir)
+    const dir = params.dir
+    if (!dir) return
+    if (resolved()) {
+      invalid = ""
+      return
+    }
+    if (invalid === dir) return
+    invalid = dir
     showToast({
       variant: "error",
       title: language.t("common.requestFailed"),
@@ -58,8 +63,14 @@ export default function Layout(props: ParentProps) {
   })
 
   return (
-    <Show when={directory()}>
-      <DirectoryProviders directory={directory()}>{props.children}</DirectoryProviders>
+    <Show when={resolved()} keyed>
+      {(resolved) => (
+        <SDKProvider directory={() => resolved}>
+          <SyncProvider>
+            <DirectoryDataProvider directory={resolved}>{props.children}</DirectoryDataProvider>
+          </SyncProvider>
+        </SDKProvider>
+      )}
     </Show>
   )
 }

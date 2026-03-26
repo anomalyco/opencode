@@ -62,11 +62,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     if (!id) return
     return sync.session.get(id)
   }
-  const hasReview = () => {
-    const id = params.id
-    if (!id) return false
-    return Math.max(info()?.summary?.files ?? 0, (sync.data.session_diff[id] ?? []).length) > 0
-  }
+  const hasReview = () => !!params.id
   const normalizeTab = (tab: string) => {
     if (!tab.startsWith("file://")) return tab
     return file.tab(tab)
@@ -418,7 +414,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         keywords: kw("command.model.choose", "command.model.choose.description"),
         keybind: "mod+'",
         slash: "model",
-        onSelect: () => dialog.show(() => <DialogSelectModel />),
+        onSelect: () => dialog.show(() => <DialogSelectModel model={local.model} />),
       }),
       mcpCommand({
         id: "mcp.toggle",

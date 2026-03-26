@@ -110,6 +110,13 @@ function withFallback<T>(read: () => T | undefined, fallback: T) {
   return createMemo(() => read() ?? fallback)
 }
 
+let font: Promise<typeof import("@opencode-ai/ui/font-loader")> | undefined
+
+function loadFont() {
+  font ??= import("@opencode-ai/ui/font-loader")
+  return font
+}
+
 export const { use: useSettings, provider: SettingsProvider } = createSimpleContext({
   name: "Settings",
   init: () => {
@@ -117,7 +124,11 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
 
     createEffect(() => {
       if (typeof document === "undefined") return
-      document.documentElement.style.setProperty("--font-family-mono", monoFontFamily(store.appearance?.font))
+      const id = store.appearance?.font ?? defaultSettings.appearance.font
+      if (id !== defaultSettings.appearance.font) {
+        void loadFont().then((x) => x.ensureMonoFont(id))
+      }
+      document.documentElement.style.setProperty("--font-family-mono", monoFontFamily(id))
     })
 
     createEffect(() => {

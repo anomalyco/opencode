@@ -85,7 +85,7 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
   return fallback
 }
 
-const hidden = new Set(["todowrite", "todoread"])
+const hidden = new Set(["todowrite"])
 
 const builtin = new Set([
   "apply_patch",
@@ -223,6 +223,7 @@ export function SessionTurn(
   props: ParentProps<{
     sessionID: string
     messageID: string
+    messages?: MessageType[]
     actions?: UserActions
     showReasoningSummaries?: boolean
     showCustomHookParts?: boolean
@@ -249,7 +250,7 @@ export function SessionTurn(
   const emptyDiffs: FileDiff[] = []
   const idle = { type: "idle" as const }
 
-  const allMessages = createMemo(() => list(data.store.message?.[props.sessionID], emptyMessages))
+  const allMessages = createMemo(() => props.messages ?? list(data.store.message?.[props.sessionID], emptyMessages))
 
   const messageIndex = createMemo(() => {
     const messages = allMessages() ?? emptyMessages

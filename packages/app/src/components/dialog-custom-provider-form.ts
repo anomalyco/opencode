@@ -35,7 +35,6 @@ export type FormState = {
   apiKey: string
   models: ModelRow[]
   headers: HeaderRow[]
-  saving: boolean
   err: {
     providerID?: string
     name?: string

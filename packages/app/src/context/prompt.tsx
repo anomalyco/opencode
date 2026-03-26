@@ -1,10 +1,10 @@
-import { createStore, type SetStoreFunction } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { batch, createMemo, createRoot, onCleanup } from "solid-js"
+import { checksum } from "@opencode-ai/util/encode"
 import { useParams } from "@solidjs/router"
+import { batch, createMemo, createRoot, getOwner, onCleanup } from "solid-js"
+import { createStore, type SetStoreFunction } from "solid-js/store"
 import type { FileSelection } from "@/context/file"
 import { Persist, persisted } from "@/utils/persist"
-import { checksum } from "@opencode-ai/util/encode"
 
 interface PartBase {
   content: string
@@ -120,36 +120,15 @@ function isCommentItem(item: ContextItem | (ContextItem & { key: string })) {
   return item.type === "file" && !!item.comment?.trim()
 }
 
-function createPromptActions(
-  setStore: SetStoreFunction<{
-    prompt: Prompt
-    cursor?: number
-    context: {
-      items: (ContextItem & { key: string })[]
-    }
-  }>,
-) {
-  return {
-    set(prompt: Prompt, cursorPosition?: number) {
-      const next = clonePrompt(prompt)
-      batch(() => {
-        setStore("prompt", next)
-        if (cursorPosition !== undefined) setStore("cursor", cursorPosition)
-      })
-    },
-    reset() {
-      batch(() => {
-        setStore("prompt", clonePrompt(DEFAULT_PROMPT))
-        setStore("cursor", 0)
-      })
-    },
-  }
-}
-
 const WORKSPACE_KEY = "__workspace__"
 const MAX_PROMPT_SESSIONS = 20
 
 type PromptSession = ReturnType<typeof createPromptSession>
+
+type Scope = {
+  dir: string
+  id?: string
+}
 
 type PromptCacheEntry = {
   value: PromptSession
@@ -175,9 +154,6 @@ function createPromptSession(dir: string, id: string | undefined) {
       },
     }),
   )
-
-  const actions = createPromptActions(setStore)
-
   return {
     ready,
     current: createMemo(() => store.prompt),
@@ -262,6 +238,7 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
       }
     }
 
+    const owner = getOwner()
     const load = (dir: string, id: string | undefined) => {
       const key = `${dir}:${id ?? WORKSPACE_KEY}`
       const existing = cache.get(key)
@@ -271,27 +248,21 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
         return existing.value
       }
 
-      const entry = createRoot((dispose) => ({
-        value: createPromptSession(dir, id),
-        dispose,
-      }))
+      const entry = createRoot(
+        (dispose) => ({
+          value: createPromptSession(dir, id),
+          dispose,
+        }),
+        owner,
+      )
 
       cache.set(key, entry)
       prune()
       return entry.value
     }
 
-    const session = createMemo(() => {
-      console.log("[DEBUG PromptProvider session memo] params", {
-        dir: params.dir,
-        id: params.id,
-      })
-      const result = load(params.dir!, params.id)
-      console.log("[DEBUG PromptProvider session memo] result", {
-        sessionKey: `${params.dir}:${params.id ?? WORKSPACE_KEY}`,
-      })
-      return result
-    })
+    const session = createMemo(() => load(params.dir!, params.id))
+    const pick = (scope?: Scope) => (scope ? load(scope.dir, scope.id) : session())
 
     return {
       ready: () => session().ready(),
@@ -307,8 +278,8 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
           session().context.updateComment(path, commentID, next),
         replaceComments: (items: FileContextItem[]) => session().context.replaceComments(items),
       },
-      set: (prompt: Prompt, cursorPosition?: number) => session().set(prompt, cursorPosition),
-      reset: () => session().reset(),
+      set: (prompt: Prompt, cursorPosition?: number, scope?: Scope) => pick(scope).set(prompt, cursorPosition),
+      reset: (scope?: Scope) => pick(scope).reset(),
     }
   },
 })
