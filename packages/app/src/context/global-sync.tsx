@@ -15,7 +15,7 @@ import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
 import type { InitError } from "../pages/error"
 import { useGlobalSDK } from "./global-sdk"
-import { bootstrapDirectory, bootstrapGlobal } from "./global-sync/bootstrap"
+import { bootstrapDirectory, bootstrapGlobal, clearProviderRev } from "./global-sync/bootstrap"
 import { createChildStoreManager } from "./global-sync/child-store"
 import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./global-sync/event-reducer"
 import { createRefreshQueue } from "./global-sync/queue"
@@ -154,6 +154,7 @@ function createGlobalSync() {
       queue.clear(directory)
       sessionMeta.delete(directory)
       sdkCache.delete(directory)
+      clearProviderRev(directory)
       clearSessionPrefetchDirectory(directory)
     },
     translate: language.t,
@@ -252,6 +253,7 @@ function createGlobalSync() {
         directory,
         global: {
           config: globalStore.config,
+          path: globalStore.path,
           project: globalStore.project,
           provider: globalStore.provider,
         },
@@ -311,7 +313,10 @@ function createGlobalSync() {
       loadLsp: () => {
         sdkFor(directory)
           .lsp.status()
-          .then((x) => setStore("lsp", x.data ?? []))
+          .then((x) => {
+            setStore("lsp", x.data ?? [])
+            setStore("lsp_ready", true)
+          })
       },
     })
   })
