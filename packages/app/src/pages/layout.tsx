@@ -3691,8 +3691,18 @@ export default function Layout(props: ParentProps) {
                   <>
                     <div class="shrink-0 py-4 px-3">
                       <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-                        <Button size="large" icon="plus-small" class="w-full" onClick={() => createWorkspace(p())}>
-                          {language.t("workspace.new")}
+                        <Button
+                          size="large"
+                          icon="new-session"
+                          variant="ghost"
+                          class="w-full border border-border-weak-base"
+                          onClick={() => {
+                            const dir = worktree()
+                            if (!dir) return
+                            navigateWithSidebarReset(`/${base64Encode(dir)}/session`)
+                          }}
+                        >
+                          {language.t("command.session.new")}
                         </Button>
                         <IconButton
                           icon="archive"
