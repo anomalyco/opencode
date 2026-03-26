@@ -19,6 +19,11 @@ import { ModelID, ProviderID } from "@/provider/schema"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
+  const RESUME_FINISH = ["tool-calls", "unknown"]
+  const PAUSE_ERROR = [
+    "The user rejected permission to use this specific tool call",
+    "The user dismissed this question",
+  ]
 
   export const Event = {
     Compacted: BusEvent.define(
@@ -113,6 +118,18 @@ export namespace SessionCompaction {
     overflow?: boolean
   }) {
     const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
+    const resume = (() => {
+      const match = input.messages.findLast((msg) => msg.info.role === "assistant" && msg.info.id < input.parentID)
+      if (!match || match.info.role !== "assistant") return false
+      if (match.info.error) return false
+      if (match.info.finish && !RESUME_FINISH.includes(match.info.finish)) return false
+      return !match.parts.some((part) => {
+        if (part.type !== "tool") return false
+        const state = part.state
+        if (state.status !== "error") return false
+        return PAUSE_ERROR.some((text) => state.error.startsWith(text))
+      })
+    })()
 
     let messages = input.messages
     let replay: MessageV2.WithParts | undefined
@@ -240,7 +257,7 @@ When constructing the summary, try to stick to this template:
       return "stop"
     }
 
-    if (result === "continue" && input.auto) {
+    if (result === "continue" && input.auto && (replay || resume)) {
       if (replay) {
         const original = replay.info as MessageV2.User
         const replayMsg = await Session.updateMessage({
