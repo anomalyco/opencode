@@ -150,7 +150,8 @@ export const SessionReview = (props: SessionReviewProps) => {
   const opened = () => store.opened
 
   const open = () => props.open ?? store.open
-  const files = createMemo(() => props.diffs.map((diff) => diff.file))
+  const safeDiffs = () => (Array.isArray(props.diffs) ? props.diffs : [])
+  const files = createMemo(() => safeDiffs().map((diff) => diff.file))
   const diffStyle = () => props.diffStyle ?? (props.split ? "split" : "unified")
   const hasDiffs = () => files().length > 0
 
@@ -281,7 +282,7 @@ export const SessionReview = (props: SessionReviewProps) => {
           <Show when={hasDiffs()} fallback={props.empty}>
             <div class="pb-6">
               <Accordion multiple value={open()} onChange={handleChange}>
-                <For each={props.diffs}>
+                <For each={safeDiffs()}>
                   {(diff) => {
                     let wrapper: HTMLDivElement | undefined
                     const file = diff.file

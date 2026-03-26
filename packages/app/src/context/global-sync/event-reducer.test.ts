@@ -517,6 +517,75 @@ describe("applyDirectoryEvent", () => {
     expect(cacheStore.value).toEqual({ branch: "feature/test", default_branch: "main" })
   })
 
+  test("session.diff stores array diffs in session_diff", () => {
+    const [store, setStore] = createStore(baseState())
+
+    applyDirectoryEvent({
+      event: {
+        type: "session.diff",
+        properties: {
+          sessionID: "ses_1",
+          diff: [{ file: "a.txt", before: "", after: "hello", additions: 1, deletions: 0, status: "added" }],
+        },
+      },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    expect(Array.isArray(store.session_diff.ses_1)).toBe(true)
+    expect(store.session_diff.ses_1?.length).toBe(1)
+    expect(store.session_diff.ses_1?.[0]?.file).toBe("a.txt")
+  })
+
+  test("session.diff handles undefined diff gracefully", () => {
+    const [store, setStore] = createStore(baseState())
+
+    applyDirectoryEvent({
+      event: {
+        type: "session.diff",
+        properties: {
+          sessionID: "ses_1",
+          diff: undefined,
+        },
+      },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    const result = store.session_diff.ses_1
+    expect(Array.isArray(result)).toBe(true)
+    expect(result?.length).toBe(0)
+  })
+
+  test("session.diff handles non-array diff gracefully", () => {
+    const [store, setStore] = createStore(baseState())
+
+    applyDirectoryEvent({
+      event: {
+        type: "session.diff",
+        properties: {
+          sessionID: "ses_1",
+          diff: { file: "a.txt" } as any,
+        },
+      },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    const result = store.session_diff.ses_1
+    expect(Array.isArray(result)).toBe(true)
+    expect(result?.length).toBe(0)
+  })
+
   test("routes disposal and lsp events to side-effect handlers", () => {
     const [store, setStore] = createStore(baseState())
     const pushes: string[] = []
