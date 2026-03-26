@@ -35,7 +35,7 @@ jobs:
 
       - name: Submit SignPath signing request
         id: submit_signpath_signing_request
-        uses: signpath/github-action-submit-signing-request@v1
+        uses: signpath/github-action-submit-signing-request@ced31329c0317e779dad2eec2a7c3bb46ea1343e # v1
         with:
           api-token: ${{ secrets.SIGNPATH_API_KEY }}
           organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}

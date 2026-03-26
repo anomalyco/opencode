@@ -9,6 +9,6 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Send nicely-formatted embed to Discord
-        uses: SethCohen/github-releases-to-discord@v1
+        uses: SethCohen/github-releases-to-discord@b96a33520f8ad5e6dcdecee6f1212bdf88b16550 # v1
         with:
           webhook_url: ${{ secrets.DISCORD_WEBHOOK }}
