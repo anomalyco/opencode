@@ -65,13 +65,14 @@ render(() => {
         <Font />
         <div class="flex flex-col items-center gap-11">
           <Splash class="w-20 h-25 opacity-15" />
+          <span class="text-lg font-semibold text-text-strong tracking-tight">CoBuilder</span>
           <div class="w-60 flex flex-col items-center gap-4" aria-live="polite">
             <span class="w-full overflow-hidden text-center text-ellipsis whitespace-nowrap text-text-strong text-14-normal">
               {status()}
             </span>
             <Progress
               value={value()}
-              class="w-20 [&_[data-slot='progress-track']]:h-1 [&_[data-slot='progress-track']]:border-0 [&_[data-slot='progress-track']]:rounded-none [&_[data-slot='progress-track']]:bg-surface-weak [&_[data-slot='progress-fill']]:rounded-none [&_[data-slot='progress-fill']]:bg-icon-warning-base"
+              class="w-20 [&_[data-slot='progress-track']]:h-1 [&_[data-slot='progress-track']]:border-0 [&_[data-slot='progress-track']]:rounded-none [&_[data-slot='progress-track']]:bg-surface-weak [&_[data-slot='progress-fill']]:rounded-none [&_[data-slot='progress-fill']]:bg-accent-base"
               aria-label="Database migration progress"
               getValueLabel={({ value }) => `${Math.round(value)}%`}
             />
