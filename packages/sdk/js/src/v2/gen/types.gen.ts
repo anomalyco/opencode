@@ -638,18 +638,25 @@ export type EventQuestionRejected = {
   }
 }
 
-export type EventSessionCompacted = {
-  type: "session.compacted"
-  properties: {
-    sessionID: string
-  }
-}
-
 export type EventFileWatcherUpdated = {
   type: "file.watcher.updated"
   properties: {
     file: string
     event: "add" | "change" | "unlink"
+  }
+}
+
+export type EventVcsBranchUpdated = {
+  type: "vcs.branch.updated"
+  properties: {
+    branch?: string
+  }
+}
+
+export type EventSessionCompacted = {
+  type: "session.compacted"
+  properties: {
+    sessionID: string
   }
 }
 
@@ -854,13 +861,6 @@ export type EventSessionError = {
   }
 }
 
-export type EventVcsBranchUpdated = {
-  type: "vcs.branch.updated"
-  properties: {
-    branch?: string
-  }
-}
-
 export type Pty = {
   id: string
   title: string
@@ -936,8 +936,9 @@ export type Event =
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
-  | EventSessionCompacted
   | EventFileWatcherUpdated
+  | EventVcsBranchUpdated
+  | EventSessionCompacted
   | EventTodoUpdated
   | EventTuiPromptAppend
   | EventTuiCommandExecute
@@ -951,7 +952,6 @@ export type Event =
   | EventSessionDeleted
   | EventSessionDiff
   | EventSessionError
-  | EventVcsBranchUpdated
   | EventPtyCreated
   | EventPtyUpdated
   | EventPtyExited
@@ -1866,6 +1866,36 @@ export type BadRequestError = {
   success: false
 }
 
+export type HostedUser = {
+  id: string
+  email: string
+  role: "admin" | "member"
+  disabled: boolean
+  time: {
+    created: number
+    updated: number
+    last_login?: number
+  }
+}
+
+export type HostedMe = {
+  enabled: boolean
+  user?: HostedUser
+}
+
+export type HostedWorkspace = {
+  id: string
+  name: string
+  path: string
+  project_id: string
+  enabled: boolean
+  created_by: string
+  time: {
+    created: number
+    updated: number
+  }
+}
+
 export type OAuth = {
   type: "oauth"
   refresh: string
@@ -2304,6 +2334,192 @@ export type GlobalDisposeResponses = {
 
 export type GlobalDisposeResponse = GlobalDisposeResponses[keyof GlobalDisposeResponses]
 
+export type UserMeData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/user/me"
+}
+
+export type UserMeResponses = {
+  /**
+   * Hosted auth status
+   */
+  200: HostedMe
+}
+
+export type UserMeResponse = UserMeResponses[keyof UserMeResponses]
+
+export type UserLoginData = {
+  body?: {
+    email: string
+    password: string
+  }
+  path?: never
+  query?: never
+  url: "/user/login"
+}
+
+export type UserLoginResponses = {
+  /**
+   * Logged in user
+   */
+  200: HostedUser
+}
+
+export type UserLoginResponse = UserLoginResponses[keyof UserLoginResponses]
+
+export type UserLogoutData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/user/logout"
+}
+
+export type UserLogoutResponses = {
+  /**
+   * Logged out
+   */
+  200: boolean
+}
+
+export type UserLogoutResponse = UserLogoutResponses[keyof UserLogoutResponses]
+
+export type UserListData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/user"
+}
+
+export type UserListResponses = {
+  /**
+   * Hosted users
+   */
+  200: Array<HostedUser>
+}
+
+export type UserListResponse = UserListResponses[keyof UserListResponses]
+
+export type UserCreateData = {
+  body?: {
+    email: string
+    password: string
+    role?: "admin" | "member"
+  }
+  path?: never
+  query?: never
+  url: "/user"
+}
+
+export type UserCreateResponses = {
+  /**
+   * Created hosted user
+   */
+  200: HostedUser
+}
+
+export type UserCreateResponse = UserCreateResponses[keyof UserCreateResponses]
+
+export type UserUpdateData = {
+  body?: {
+    role?: "admin" | "member"
+    disabled?: boolean
+  }
+  path: {
+    userID: string
+  }
+  query?: never
+  url: "/user/{userID}"
+}
+
+export type UserUpdateResponses = {
+  /**
+   * Updated hosted user
+   */
+  200: HostedUser
+}
+
+export type UserUpdateResponse = UserUpdateResponses[keyof UserUpdateResponses]
+
+export type WorkspaceListData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/workspace"
+}
+
+export type WorkspaceListResponses = {
+  /**
+   * Hosted workspaces
+   */
+  200: Array<HostedWorkspace>
+}
+
+export type WorkspaceListResponse = WorkspaceListResponses[keyof WorkspaceListResponses]
+
+export type WorkspaceCreateData = {
+  body?: {
+    name?: string
+    path: string
+  }
+  path?: never
+  query?: never
+  url: "/workspace"
+}
+
+export type WorkspaceCreateResponses = {
+  /**
+   * Created hosted workspace
+   */
+  200: HostedWorkspace
+}
+
+export type WorkspaceCreateResponse = WorkspaceCreateResponses[keyof WorkspaceCreateResponses]
+
+export type WorkspaceUpdateData = {
+  body?: {
+    name?: string
+    enabled?: boolean
+  }
+  path: {
+    workspaceID: string
+  }
+  query?: never
+  url: "/workspace/{workspaceID}"
+}
+
+export type WorkspaceUpdateResponses = {
+  /**
+   * Updated hosted workspace
+   */
+  200: HostedWorkspace
+}
+
+export type WorkspaceUpdateResponse = WorkspaceUpdateResponses[keyof WorkspaceUpdateResponses]
+
+export type FsListData = {
+  body?: never
+  path?: never
+  query?: {
+    path?: string
+  }
+  url: "/fs/list"
+}
+
+export type FsListResponses = {
+  /**
+   * Directory entries
+   */
+  200: Array<{
+    name: string
+    path: string
+    type: "directory" | "file"
+  }>
+}
+
+export type FsListResponse = FsListResponses[keyof FsListResponses]
+
 export type AuthRemoveData = {
   body?: never
   path: {
@@ -2363,6 +2579,7 @@ export type ProjectListData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/project"
 }
@@ -2381,6 +2598,7 @@ export type ProjectCurrentData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/project/current"
 }
@@ -2414,6 +2632,7 @@ export type ProjectUpdateData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/project/{projectID}"
 }
@@ -2445,6 +2664,7 @@ export type PtyListData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/pty"
 }
@@ -2471,6 +2691,7 @@ export type PtyCreateData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/pty"
 }
@@ -2500,6 +2721,7 @@ export type PtyRemoveData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/pty/{ptyID}"
 }
@@ -2529,6 +2751,7 @@ export type PtyGetData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/pty/{ptyID}"
 }
@@ -2564,6 +2787,7 @@ export type PtyUpdateData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/pty/{ptyID}"
 }
@@ -2593,6 +2817,7 @@ export type PtyConnectData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/pty/{ptyID}/connect"
 }
@@ -2620,6 +2845,7 @@ export type ConfigGetData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/config"
 }
@@ -2638,6 +2864,7 @@ export type ConfigUpdateData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/config"
 }
@@ -2665,6 +2892,7 @@ export type ConfigProvidersData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/config/providers"
 }
@@ -2688,6 +2916,7 @@ export type PluginPennylaneHealthData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/plugin/pennylane/health"
 }
@@ -2698,7 +2927,23 @@ export type PluginPennylaneHealthResponses = {
    */
   200: {
     healthy: boolean
+    configured: boolean
+    code:
+      | "ok"
+      | "not_configured"
+      | "bin_not_found"
+      | "auth_error"
+      | "api_error"
+      | "timeout"
+      | "invalid_response"
+      | "spawn_error"
+    message?: string
     error?: string
+    hint?: string
+    details?: {
+      [key: string]: string
+    }
+    latency_ms?: number
   }
 }
 
@@ -2709,6 +2954,7 @@ export type ToolIdsData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/experimental/tool/ids"
 }
@@ -2736,6 +2982,7 @@ export type ToolListData = {
   path?: never
   query: {
     directory?: string
+    workspaceID?: string
     provider: string
     model: string
   }
@@ -2765,6 +3012,7 @@ export type WorktreeRemoveData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/experimental/worktree"
 }
@@ -2792,6 +3040,7 @@ export type WorktreeListData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/experimental/worktree"
 }
@@ -2810,6 +3059,7 @@ export type WorktreeCreateData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/experimental/worktree"
 }
@@ -2837,6 +3087,7 @@ export type WorktreeResetData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/experimental/worktree/reset"
 }
@@ -2864,6 +3115,7 @@ export type ExperimentalResourceListData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/experimental/resource"
 }
@@ -2888,6 +3140,7 @@ export type SessionListData = {
      * Filter sessions by project directory
      */
     directory?: string
+    workspaceID?: string
     /**
      * Only return root sessions (no parentID)
      */
@@ -2926,6 +3179,7 @@ export type SessionCreateData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/session"
 }
@@ -2953,6 +3207,7 @@ export type SessionStatusData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/session/status"
 }
@@ -2984,6 +3239,7 @@ export type SessionDeleteData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/session/{sessionID}"
 }
@@ -3017,6 +3273,7 @@ export type SessionGetData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/session/{sessionID}"
 }
@@ -3055,6 +3312,7 @@ export type SessionUpdateData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/session/{sessionID}"
 }
@@ -3088,6 +3346,7 @@ export type SessionChildrenData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/session/{sessionID}/children"
 }
@@ -3121,6 +3380,7 @@ export type SessionFamilyData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/session/{sessionID}/family"
 }
@@ -3157,6 +3417,7 @@ export type SessionTodoData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/session/{sessionID}/todo"
 }
@@ -3197,6 +3458,7 @@ export type SessionInitData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/session/{sessionID}/init"
 }
@@ -3232,6 +3494,7 @@ export type SessionForkData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/session/{sessionID}/fork"
 }
@@ -3252,6 +3515,7 @@ export type SessionVersionData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/session/{sessionID}/version"
 }
@@ -3285,6 +3549,7 @@ export type SessionSelectData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/session/{sessionID}/select"
 }
@@ -3318,6 +3583,7 @@ export type SessionAbortData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/session/{sessionID}/abort"
 }
@@ -3351,6 +3617,7 @@ export type SessionUnshareData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/session/{sessionID}/share"
 }
@@ -3384,6 +3651,7 @@ export type SessionShareData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/session/{sessionID}/share"
 }
@@ -3417,6 +3685,7 @@ export type SessionDiffData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
     messageID?: string
   }
   url: "/session/{sessionID}/diff"
@@ -3445,6 +3714,7 @@ export type SessionSummarizeData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/session/{sessionID}/summarize"
 }
@@ -3481,6 +3751,7 @@ export type SessionMessagesData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
     limit?: number
   }
   url: "/session/{sessionID}/message"
@@ -3538,6 +3809,7 @@ export type SessionPromptData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/session/{sessionID}/message"
 }
@@ -3581,6 +3853,7 @@ export type SessionMessageData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/session/{sessionID}/message/{messageID}"
 }
@@ -3628,6 +3901,7 @@ export type PartDeleteData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/session/{sessionID}/message/{messageID}/part/{partID}"
 }
@@ -3672,6 +3946,7 @@ export type PartUpdateData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/session/{sessionID}/message/{messageID}/part/{partID}"
 }
@@ -3725,6 +4000,7 @@ export type SessionPromptAsyncData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/session/{sessionID}/prompt_async"
 }
@@ -3776,6 +4052,7 @@ export type SessionCommandData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/session/{sessionID}/command"
 }
@@ -3822,6 +4099,7 @@ export type SessionShellData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/session/{sessionID}/shell"
 }
@@ -3858,6 +4136,7 @@ export type SessionRevertData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/session/{sessionID}/revert"
 }
@@ -3891,6 +4170,7 @@ export type SessionUnrevertData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/session/{sessionID}/unrevert"
 }
@@ -3927,6 +4207,7 @@ export type PermissionRespondData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/session/{sessionID}/permissions/{permissionID}"
 }
@@ -3963,6 +4244,7 @@ export type PermissionReplyData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/permission/{requestID}/reply"
 }
@@ -3994,6 +4276,7 @@ export type PermissionListData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/permission"
 }
@@ -4012,6 +4295,7 @@ export type QuestionListData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/question"
 }
@@ -4037,6 +4321,7 @@ export type QuestionReplyData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/question/{requestID}/reply"
 }
@@ -4070,6 +4355,7 @@ export type QuestionRejectData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/question/{requestID}/reject"
 }
@@ -4101,6 +4387,7 @@ export type ProviderListData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/provider"
 }
@@ -4185,6 +4472,7 @@ export type ProviderAuthData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/provider/auth"
 }
@@ -4215,6 +4503,7 @@ export type ProviderOauthAuthorizeData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/provider/{providerID}/oauth/authorize"
 }
@@ -4256,6 +4545,7 @@ export type ProviderOauthCallbackData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/provider/{providerID}/oauth/callback"
 }
@@ -4283,6 +4573,7 @@ export type FindTextData = {
   path?: never
   query: {
     directory?: string
+    workspaceID?: string
     pattern: string
   }
   url: "/find"
@@ -4318,6 +4609,7 @@ export type FindFilesData = {
   path?: never
   query: {
     directory?: string
+    workspaceID?: string
     query: string
     dirs?: "true" | "false"
     type?: "file" | "directory"
@@ -4340,6 +4632,7 @@ export type FindSymbolsData = {
   path?: never
   query: {
     directory?: string
+    workspaceID?: string
     query: string
   }
   url: "/find/symbol"
@@ -4359,6 +4652,7 @@ export type FileListData = {
   path?: never
   query: {
     directory?: string
+    workspaceID?: string
     path: string
   }
   url: "/file"
@@ -4378,6 +4672,7 @@ export type FileReadData = {
   path?: never
   query: {
     directory?: string
+    workspaceID?: string
     path: string
   }
   url: "/file/content"
@@ -4397,6 +4692,7 @@ export type FileStatusData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/file/status"
 }
@@ -4417,6 +4713,7 @@ export type FileMkdirData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/file/mkdir"
 }
@@ -4437,6 +4734,7 @@ export type FileUploadData = {
   path?: never
   query: {
     directory?: string
+    workspaceID?: string
     path: string
   }
   url: "/file/upload"
@@ -4458,6 +4756,7 @@ export type McpStatusData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/mcp"
 }
@@ -4481,6 +4780,7 @@ export type McpAddData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/mcp"
 }
@@ -4512,6 +4812,7 @@ export type McpAuthRemoveData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/mcp/{name}/auth"
 }
@@ -4543,6 +4844,7 @@ export type McpAuthStartData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/mcp/{name}/auth"
 }
@@ -4586,6 +4888,7 @@ export type McpAuthCallbackData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/mcp/{name}/auth/callback"
 }
@@ -4619,6 +4922,7 @@ export type McpAuthAuthenticateData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/mcp/{name}/auth/authenticate"
 }
@@ -4652,6 +4956,7 @@ export type McpConnectData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/mcp/{name}/connect"
 }
@@ -4672,6 +4977,7 @@ export type McpDisconnectData = {
   }
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/mcp/{name}/disconnect"
 }
@@ -4692,6 +4998,7 @@ export type TuiAppendPromptData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/tui/append-prompt"
 }
@@ -4719,6 +5026,7 @@ export type TuiOpenHelpData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/tui/open-help"
 }
@@ -4737,6 +5045,7 @@ export type TuiOpenSessionsData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/tui/open-sessions"
 }
@@ -4755,6 +5064,7 @@ export type TuiOpenThemesData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/tui/open-themes"
 }
@@ -4773,6 +5083,7 @@ export type TuiOpenModelsData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/tui/open-models"
 }
@@ -4791,6 +5102,7 @@ export type TuiSubmitPromptData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/tui/submit-prompt"
 }
@@ -4809,6 +5121,7 @@ export type TuiClearPromptData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/tui/clear-prompt"
 }
@@ -4829,6 +5142,7 @@ export type TuiExecuteCommandData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/tui/execute-command"
 }
@@ -4864,6 +5178,7 @@ export type TuiShowToastData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/tui/show-toast"
 }
@@ -4882,6 +5197,7 @@ export type TuiPublishData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/tui/publish"
 }
@@ -4914,6 +5230,7 @@ export type TuiSelectSessionData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/tui/select-session"
 }
@@ -4945,6 +5262,7 @@ export type TuiControlNextData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/tui/control/next"
 }
@@ -4966,6 +5284,7 @@ export type TuiControlResponseData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/tui/control/response"
 }
@@ -4984,6 +5303,7 @@ export type InstanceDisposeData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/instance/dispose"
 }
@@ -5002,6 +5322,7 @@ export type PathGetData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/path"
 }
@@ -5020,6 +5341,7 @@ export type VcsGetData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/vcs"
 }
@@ -5038,6 +5360,7 @@ export type CommandListData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/command"
 }
@@ -5075,6 +5398,7 @@ export type AppLogData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/log"
 }
@@ -5102,6 +5426,7 @@ export type AppAgentsData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/agent"
 }
@@ -5120,6 +5445,7 @@ export type AppSkillsData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/skill"
 }
@@ -5143,6 +5469,7 @@ export type LspStatusData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/lsp"
 }
@@ -5161,6 +5488,7 @@ export type FormatterStatusData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/formatter"
 }
@@ -5179,6 +5507,7 @@ export type EventSubscribeData = {
   path?: never
   query?: {
     directory?: string
+    workspaceID?: string
   }
   url: "/event"
 }
