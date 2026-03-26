@@ -955,3 +955,141 @@ describe("session.message-v2.fromError", () => {
     expect(result.name).toBe("MessageAbortedError")
   })
 })
+
+describe("session.message-v2 empty parts filtering", () => {
+  test("filters out empty text parts when converting to model messages", () => {
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo("m-user"),
+        parts: [
+          {
+            ...basePart("m-user", "p1"),
+            type: "text",
+            text: "",
+          },
+          {
+            ...basePart("m-user", "p2"),
+            type: "text",
+            text: "hello",
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = MessageV2.toModelMessages(input, model)
+
+    expect(result).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "hello" }],
+      },
+    ])
+  })
+
+  test("filters out whitespace-only text parts", () => {
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo("m-assistant", "m-user"),
+        parts: [
+          {
+            ...basePart("m-assistant", "p1"),
+            type: "text",
+            text: "   ",
+          },
+          {
+            ...basePart("m-assistant", "p2"),
+            type: "text",
+            text: "actual content",
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = MessageV2.toModelMessages(input, model)
+
+    expect(result).toStrictEqual([
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "actual content" }],
+      },
+    ])
+  })
+
+  test("filters out empty reasoning parts", () => {
+    const reasoningModel: Provider.Model = {
+      ...model,
+      capabilities: {
+        ...model.capabilities,
+        reasoning: true,
+      },
+    }
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo("m-assistant", "m-user"),
+        parts: [
+          {
+            ...basePart("m-assistant", "p1"),
+            type: "reasoning",
+            text: "",
+            time: { start: 0, end: 100 },
+          },
+          {
+            ...basePart("m-assistant", "p2"),
+            type: "text",
+            text: "response",
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = MessageV2.toModelMessages(input, reasoningModel)
+
+    expect(result).toStrictEqual([
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "response" }],
+      },
+    ])
+  })
+
+  test("preserves non-text parts even when text is empty", () => {
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo("m-assistant", "m-user"),
+        parts: [
+          {
+            ...basePart("m-assistant", "p1"),
+            type: "text",
+            text: "",
+          },
+          {
+            ...basePart("m-assistant", "p2"),
+            type: "tool",
+            tool: "test_tool",
+            callID: "call_1",
+            state: {
+              status: "completed",
+              time: { started: 0, completed: 100 },
+              output: "result",
+              input: {},
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = MessageV2.toModelMessages(input, model)
+
+    // AI SDK creates 2 messages: assistant with tool-call + tool-result message
+    expect(result.length).toBe(2)
+    expect(result[0].role).toBe("assistant")
+    expect(result[1].role).toBe("tool")
+
+    // First message should have tool-call, no empty text
+    const assistantContent = result[0].content as any[]
+    expect(Array.isArray(assistantContent)).toBe(true)
+    expect(assistantContent.some((c) => c.type === "tool-call")).toBe(true)
+    expect(assistantContent.every((c) => c.type !== "text" || (c.text && c.text.trim() !== ""))).toBe(true)
+  })
+})

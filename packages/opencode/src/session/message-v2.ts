@@ -560,6 +560,10 @@ export namespace MessageV2 {
       )
       for (const row of partRows) {
         const next = part(row)
+        // Filter out empty text/reasoning parts (database corruption recovery)
+        if (next.type === "text" || next.type === "reasoning") {
+          if (!next.text || next.text.trim().length === 0) continue
+        }
         const list = partByMessage.get(row.message_id)
         if (list) list.push(next)
         else partByMessage.set(row.message_id, [next])
@@ -644,7 +648,7 @@ export namespace MessageV2 {
         }
         result.push(userMessage)
         for (const part of msg.parts) {
-          if (part.type === "text" && !part.ignored)
+          if (part.type === "text" && !part.ignored && part.text.trim())
             userMessage.parts.push({
               type: "text",
               text: part.text,
@@ -700,7 +704,7 @@ export namespace MessageV2 {
           parts: [],
         }
         for (const part of msg.parts) {
-          if (part.type === "text")
+          if (part.type === "text" && part.text.trim())
             assistantMessage.parts.push({
               type: "text",
               text: part.text,
@@ -763,7 +767,7 @@ export namespace MessageV2 {
                 ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
               })
           }
-          if (part.type === "reasoning") {
+          if (part.type === "reasoning" && part.text.trim()) {
             assistantMessage.parts.push({
               type: "reasoning",
               text: part.text,
