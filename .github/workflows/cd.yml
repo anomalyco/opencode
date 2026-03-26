@@ -29,7 +29,7 @@ jobs:
           TAG=$(git tag --sort=-v:refname | grep -E '^cb-v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)
           echo "tag=${TAG:-cb-v0.0.0}" >> "$GITHUB_OUTPUT"
 
-      - name: Determine next version
+      - name: Determine next version and generate release notes
         id: next_version
         run: |
           TAG="${{ steps.latest_tag.outputs.tag }}"
@@ -39,14 +39,16 @@ jobs:
           PATCH=$(echo "$VERSION" | cut -d. -f3)
 
           if git rev-parse "$TAG" >/dev/null 2>&1; then
-            COMMITS=$(git log "${TAG}..HEAD" --pretty=format:"%s")
+            COMMITS=$(git log "${TAG}..HEAD" --pretty=format:"%s|||%H|||%an")
           else
-            COMMITS=$(git log --pretty=format:"%s")
+            COMMITS=$(git log --pretty=format:"%s|||%H|||%an")
           fi
 
-          if echo "$COMMITS" | grep -qE '^.+(\(.+\))?!:|^BREAKING CHANGE'; then
+          # Determine bump level
+          SUBJECTS=$(echo "$COMMITS" | cut -d'|' -f1)
+          if echo "$SUBJECTS" | grep -qE '^.+(\(.+\))?!:|^BREAKING CHANGE'; then
             MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
-          elif echo "$COMMITS" | grep -qE '^feat(\(.+\))?:'; then
+          elif echo "$SUBJECTS" | grep -qE '^feat(\(.+\))?:'; then
             MINOR=$((MINOR + 1)); PATCH=0
           else
             PATCH=$((PATCH + 1))
@@ -57,6 +59,38 @@ jobs:
           echo "tag=${NEXT_TAG}" >> "$GITHUB_OUTPUT"
           echo "display=${NEXT_DISPLAY}" >> "$GITHUB_OUTPUT"
           echo "semver=${MAJOR}.${MINOR}.${PATCH}" >> "$GITHUB_OUTPUT"
+          echo "prev_tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+          # Build categorized release notes from commits
+          FEATURES=""
+          FIXES=""
+          CI_CHORE=""
+          BREAKING=""
+
+          while IFS='|||' read -r subject hash author; do
+            [[ -z "$subject" ]] && continue
+            SHORT="${hash:0:7}"
+            LINE="- ${subject} (\`${SHORT}\`)"
+            if echo "$subject" | grep -qE '^.+(\(.+\))?!:|^BREAKING CHANGE'; then
+              BREAKING="${BREAKING}"$'\n'"${LINE}"
+            elif echo "$subject" | grep -qE '^feat(\(.+\))?:'; then
+              FEATURES="${FEATURES}"$'\n'"${LINE}"
+            elif echo "$subject" | grep -qE '^fix(\(.+\))?:'; then
+              FIXES="${FIXES}"$'\n'"${LINE}"
+            else
+              CI_CHORE="${CI_CHORE}"$'\n'"${LINE}"
+            fi
+          done <<< "$COMMITS"
+
+          NOTES="## What's Changed"$'\n'
+          [[ -n "$BREAKING" ]] && NOTES+=$'\n'"### ⚠️ Breaking Changes"$'\n'"${BREAKING}"$'\n'
+          [[ -n "$FEATURES" ]] && NOTES+=$'\n'"### ✨ Features"$'\n'"${FEATURES}"$'\n'
+          [[ -n "$FIXES" ]]    && NOTES+=$'\n'"### 🐛 Bug Fixes"$'\n'"${FIXES}"$'\n'
+          [[ -n "$CI_CHORE" ]] && NOTES+=$'\n'"### 🔧 Maintenance"$'\n'"${CI_CHORE}"$'\n'
+          NOTES+=$'\n'"**Full Changelog**: https://github.com/CobuilderLabs/opencode/compare/${TAG}...${NEXT_TAG}"
+
+          # Write notes to file (avoids shell escaping issues)
+          echo "$NOTES" > /tmp/release-notes.md
           echo "Next release: ${NEXT_TAG}"
 
       - name: Update package version
@@ -84,11 +118,11 @@ jobs:
         run: |
           gh release create "${{ steps.next_version.outputs.tag }}" \
             --title "CoBuilder ${{ steps.next_version.outputs.display }}" \
-            --generate-notes \
+            --notes-file /tmp/release-notes.md \
             --latest \
             packages/opencode/dist/*.tar.gz \
             packages/opencode/dist/*.zip 2>/dev/null || \
           gh release create "${{ steps.next_version.outputs.tag }}" \
             --title "CoBuilder ${{ steps.next_version.outputs.display }}" \
-            --generate-notes \
+            --notes-file /tmp/release-notes.md \
             --latest
