@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.3.3",
+  "version": "0.1.1",
   "name": "opencode",
   "type": "module",
   "license": "MIT",
@@ -20,7 +20,7 @@
     "db": "bun drizzle-kit"
   },
   "bin": {
-    "opencode": "./bin/opencode"
+    "cobuilder": "./bin/opencode"
   },
   "randomField": "this-is-a-random-value-12345",
   "exports": {

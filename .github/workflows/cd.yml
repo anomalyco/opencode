@@ -16,10 +16,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.11"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
       - name: Get latest CoBuilder tag
         id: latest_tag
         run: |
-          # Only consider our own cb-vX.Y.Z tags, ignoring upstream inherited tags
           TAG=$(git tag --sort=-v:refname | grep -E '^cb-v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)
           echo "tag=${TAG:-cb-v0.0.0}" >> "$GITHUB_OUTPUT"
 
@@ -32,14 +38,12 @@ jobs:
           MINOR=$(echo "$VERSION" | cut -d. -f2)
           PATCH=$(echo "$VERSION" | cut -d. -f3)
 
-          # Collect commit subjects since last tag
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             COMMITS=$(git log "${TAG}..HEAD" --pretty=format:"%s")
           else
             COMMITS=$(git log --pretty=format:"%s")
           fi
 
-          # Determine bump level from conventional commits
           if echo "$COMMITS" | grep -qE '^.+(\(.+\))?!:|^BREAKING CHANGE'; then
             MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
           elif echo "$COMMITS" | grep -qE '^feat(\(.+\))?:'; then
@@ -52,12 +56,38 @@ jobs:
           NEXT_DISPLAY="v${MAJOR}.${MINOR}.${PATCH}"
           echo "tag=${NEXT_TAG}" >> "$GITHUB_OUTPUT"
           echo "display=${NEXT_DISPLAY}" >> "$GITHUB_OUTPUT"
+          echo "semver=${MAJOR}.${MINOR}.${PATCH}" >> "$GITHUB_OUTPUT"
           echo "Next release: ${NEXT_TAG}"
 
-      - name: Create GitHub release
+      - name: Update package version
+        run: |
+          cd packages/opencode
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.version = '${{ steps.next_version.outputs.semver }}';
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+
+      - name: Build binaries
+        env:
+          OPENCODE_RELEASE: "1"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: CobuilderLabs/opencode
+        run: |
+          cd packages/opencode
+          bun run build
+
+      - name: Create GitHub release with binaries
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          gh release create "${{ steps.next_version.outputs.tag }}" \
+            --title "CoBuilder ${{ steps.next_version.outputs.display }}" \
+            --generate-notes \
+            --latest \
+            packages/opencode/dist/*.tar.gz \
+            packages/opencode/dist/*.zip 2>/dev/null || \
           gh release create "${{ steps.next_version.outputs.tag }}" \
             --title "CoBuilder ${{ steps.next_version.outputs.display }}" \
             --generate-notes \
