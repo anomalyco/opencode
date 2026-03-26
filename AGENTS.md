@@ -1,3 +1,4 @@
+- Common commands are in the root `Makefile` — use `make <target>` (see `CLAUDE.md` for the full table).
 - To regenerate the JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
 - ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE.
 - The default branch in this repo is `dev`.

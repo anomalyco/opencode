@@ -1,0 +1,59 @@
+FROM oven/bun:1.3.8 AS base
+
+WORKDIR /app
+
+ARG VITE_OPENCODE_LICENSE_URL
+ENV VITE_OPENCODE_LICENSE_URL=${VITE_OPENCODE_LICENSE_URL} \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONUNBUFFERED=1 \
+    VIRTUAL_ENV=/opt/numeral/python \
+    PATH=/opt/numeral/python/bin:/app/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+COPY docker/runtime/ /tmp/runtime/
+
+RUN apt-get update \
+ && xargs -a /tmp/runtime/apt-packages.txt apt-get install -y --no-install-recommends \
+ && if [ -x /usr/bin/fdfind ] && [ ! -e /usr/local/bin/fd ]; then ln -s /usr/bin/fdfind /usr/local/bin/fd; fi \
+ && python3 -m venv "$VIRTUAL_ENV" \
+ && "$VIRTUAL_ENV/bin/pip" install --no-cache-dir --upgrade pip \
+ && "$VIRTUAL_ENV/bin/pip" install --no-cache-dir -r /tmp/runtime/python-data.txt \
+ && rm -rf /var/lib/apt/lists/*
+
+# 1. Copy only dependency manifests → cached unless lockfile changes
+COPY package.json bun.lock* bunfig.toml* turbo.json* ./
+COPY docker/runtime/ docker/runtime/
+COPY packages/app/package.json packages/app/package.json
+COPY packages/opencode/package.json packages/opencode/package.json
+COPY packages/ui/package.json packages/ui/package.json
+COPY packages/sdk/js/package.json packages/sdk/js/package.json
+COPY packages/enterprise/package.json packages/enterprise/package.json
+COPY packages/desktop/package.json packages/desktop/package.json
+COPY packages/slack/package.json packages/slack/package.json
+COPY packages/plugin/package.json packages/plugin/package.json
+COPY packages/script/package.json packages/script/package.json
+COPY packages/function/package.json packages/function/package.json
+COPY packages/util/package.json packages/util/package.json
+COPY packages/web/package.json packages/web/package.json
+COPY packages/console/app/package.json packages/console/app/package.json
+COPY packages/console/core/package.json packages/console/core/package.json
+COPY packages/console/function/package.json packages/console/function/package.json
+COPY packages/console/mail/package.json packages/console/mail/package.json
+COPY packages/console/resource/package.json packages/console/resource/package.json
+COPY patches/ patches/
+
+RUN bun install --frozen-lockfile
+
+# ── dev target: deps installed, source mounted at runtime ────────
+FROM base AS dev
+COPY . .
+# Managed config (highest priority, overrides user/project settings)
+COPY docker/managed/ /etc/opencode/
+EXPOSE 4096 5174
+
+# ── prod target: full build baked in ─────────────────────────────
+FROM base AS prod
+COPY . .
+# Managed config (highest priority, overrides user/project settings)
+COPY docker/managed/ /etc/opencode/
+RUN bun --cwd packages/app build
+EXPOSE 4096

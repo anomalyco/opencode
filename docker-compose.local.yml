@@ -1,0 +1,88 @@
+services:
+  # ── Production-like (full build in container) ──────────────────
+  # Usage: make up
+  numeral:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+      target: prod
+      args:
+        VITE_OPENCODE_LICENSE_URL: ${VITE_OPENCODE_LICENSE_URL}
+    restart: unless-stopped
+    ports:
+      - "4096:4096"
+    environment:
+      OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD}
+      OPENCODE_SERVER_USERNAME: ${OPENCODE_SERVER_USERNAME:-opencode}
+      OPENCODE_SANDBOX_PREINSTALLED: "true"
+      OPENCODE_DISABLE_LSP_DOWNLOAD: "true"
+      OPENCODE_DISABLE_EXTERNAL_SKILLS: "true"
+      OPENCODE_DISABLE_PROJECT_CONFIG: "true"
+      OPENCODE_WEB_DIST: /app/packages/app/dist
+      XDG_DATA_HOME: /data/share
+      XDG_CONFIG_HOME: /data/config
+      XDG_STATE_HOME: /data/state
+      XDG_CACHE_HOME: /data/cache
+    working_dir: /workspace
+    command:
+      - bun
+      - --preload
+      - /app/packages/opencode/node_modules/@opentui/solid/scripts/preload.ts
+      - /app/packages/opencode/src/index.ts
+      - serve
+      - --hostname
+      - "0.0.0.0"
+      - --port
+      - "4096"
+    volumes:
+      - numeral-data:/data
+      - ${CUSTOMER_WORKSPACE}:/workspace
+
+  # ── Fast dev (source mounted, no rebuild needed) ───────────────
+  # Usage: make dev-up
+  numeral-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+      args:
+        VITE_OPENCODE_LICENSE_URL: ${VITE_OPENCODE_LICENSE_URL}
+      target: dev
+    restart: unless-stopped
+    ports:
+      - "4096:4096"
+      - "5174:5174"
+    environment:
+      OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD}
+      OPENCODE_SERVER_USERNAME: ${OPENCODE_SERVER_USERNAME:-opencode}
+      OPENCODE_SANDBOX_PREINSTALLED: "true"
+      OPENCODE_DISABLE_LSP_DOWNLOAD: "true"
+      OPENCODE_DISABLE_EXTERNAL_SKILLS: "true"
+      OPENCODE_DISABLE_PROJECT_CONFIG: "true"
+      XDG_DATA_HOME: /data/share
+      XDG_CONFIG_HOME: /data/config
+      XDG_STATE_HOME: /data/state
+      XDG_CACHE_HOME: /data/cache
+    working_dir: /workspace
+    command:
+      - bun
+      - --preload
+      - /app/packages/opencode/node_modules/@opentui/solid/scripts/preload.ts
+      - /app/packages/opencode/src/index.ts
+      - serve
+      - --hostname
+      - "0.0.0.0"
+      - --port
+      - "4096"
+    volumes:
+      - numeral-data:/data
+      - ${CUSTOMER_WORKSPACE}:/workspace
+      # Mount source for live changes — no rebuild needed
+      - .:/app
+      # Keep node_modules from the image (don't overwrite with host)
+      - /app/node_modules
+      - /app/packages/app/node_modules
+      - /app/packages/opencode/node_modules
+      - /app/packages/ui/node_modules
+
+volumes:
+  numeral-data:
