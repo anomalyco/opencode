@@ -2,6 +2,8 @@
 
 > 基于 [OpenCode](https://github.com/anomalyco/opencode) 的桌面应用定制版本
 
+简体中文 | [English](README.en.md)
+
 这是一个针对 OpenCode **Desktop** 应用进行深度 UI 优化和功能增强的个人定制版本。在保持 OpenCode 核心功能的基础上，大幅改进了用户界面交互体验和使用效率。`opencode` 的核心基本没有动/改善 (作者能力所限)。
 
 
