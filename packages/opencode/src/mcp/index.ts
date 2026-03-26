@@ -17,7 +17,7 @@ import z from "zod/v4"
 import { Instance } from "../project/instance"
 import { Installation } from "../installation"
 import { withTimeout } from "@/util/timeout"
-import { McpOAuthProvider } from "./oauth-provider"
+import { McpOAuthProvider,normalizedOAuthFetch } from "./oauth-provider"
 import { McpOAuthCallback } from "./oauth-callback"
 import { McpAuth } from "./auth"
 import { BusEvent } from "../bus/bus-event"
@@ -151,7 +151,7 @@ export namespace MCP {
   // Store transports for OAuth servers to allow finishing auth
   type TransportWithAuth = StreamableHTTPClientTransport | SSEClientTransport
   const pendingOAuthTransports = new Map<string, TransportWithAuth>()
-
+  // console.log(pendingOAuthTransports);
   // Prompt cache types
   type PromptInfo = Awaited<ReturnType<MCPClient["listPrompts"]>>["prompts"][number]
 
@@ -364,6 +364,7 @@ export namespace MCP {
           name: "StreamableHTTP",
           transport: new StreamableHTTPClientTransport(new URL(mcp.url), {
             authProvider,
+            fetch: normalizedOAuthFetch,
             requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
           }),
         },
@@ -371,6 +372,7 @@ export namespace MCP {
           name: "SSE",
           transport: new SSEClientTransport(new URL(mcp.url), {
             authProvider,
+            fetch: normalizedOAuthFetch,
             requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
           }),
         },
@@ -418,6 +420,11 @@ export namespace MCP {
               }).catch((e) => log.debug("failed to show toast", { error: e }))
             } else {
               // Store transport for later finishAuth call
+              if (pendingOAuthTransports.has(key)) {
+                log.info("oauth flow already in progress, skipping", { key })
+                status = { status: "needs_auth" as const }
+                break
+              }
               pendingOAuthTransports.set(key, transport)
               status = { status: "needs_auth" as const }
               // Show toast for needs_auth
@@ -749,7 +756,8 @@ export namespace MCP {
   export async function startAuth(mcpName: string): Promise<{ authorizationUrl: string }> {
     const cfg = await Config.get()
     const mcpConfig = cfg.mcp?.[mcpName]
-
+    await McpAuth.clearOAuthState(mcpName)
+    await McpAuth.clearCodeVerifier(mcpName)
     if (!mcpConfig) {
       throw new Error(`MCP server not found: ${mcpName}`)
     }
@@ -798,20 +806,22 @@ export namespace MCP {
     // Create transport with auth provider
     const transport = new StreamableHTTPClientTransport(new URL(mcpConfig.url), {
       authProvider,
+      fetch: normalizedOAuthFetch,
     })
+    // console.log("TRANSPORT AUTH PROVIDER:", (transport as any)._authProvider)
+    pendingOAuthTransports.set(mcpName, transport)
 
-    // Try to connect - this will trigger the OAuth flow
     try {
       const client = new Client({
         name: "opencode",
         version: Installation.VERSION,
       })
       await client.connect(transport)
-      // If we get here, we're already authenticated
+      // If we get here, we're already authenticated — remove from pending
+      pendingOAuthTransports.delete(mcpName)
       return { authorizationUrl: "" }
     } catch (error) {
-      if (error instanceof UnauthorizedError && capturedUrl) {
-        // Store transport for finishAuth
+      if (capturedUrl) {
         pendingOAuthTransports.set(mcpName, transport)
         return { authorizationUrl: capturedUrl.toString() }
       }
@@ -894,36 +904,52 @@ export namespace MCP {
    */
   export async function finishAuth(mcpName: string, authorizationCode: string): Promise<Status> {
     const transport = pendingOAuthTransports.get(mcpName)
-
+  
     if (!transport) {
       throw new Error(`No pending OAuth flow for MCP server: ${mcpName}`)
     }
-
+  
     try {
-      // Call finishAuth on the transport
+      const entry = await McpAuth.get(mcpName)
+      if (!entry?.codeVerifier) {
+        throw new Error("Missing code_verifier for OAuth flow")
+      }
+  
+      // Ensure the transport uses the persisted code verifier for PKCE.
+      // The SDK may have a different in-memory verifier — we override it here
+      // to guarantee the verifier matches the challenge sent to the auth server.
+      const authProvider = (transport as any)._authProvider
+      if (!authProvider) {
+        throw new Error("Missing authProvider on transport")
+      }
+      authProvider.codeVerifier = async () => entry.codeVerifier!
+  
+      // Exchange the authorization code for tokens.
+      // saveTokens() is called internally — tokens are on disk after this.
       await transport.finishAuth(authorizationCode)
-
-      // Clear the code verifier after successful auth
       await McpAuth.clearCodeVerifier(mcpName)
-
-      // Now try to reconnect
+  
+      // Delete BEFORE calling add() so that create() inside add() does not
+      // see a stale pending transport, catch UnauthorizedError, and re-register
+      // it — which would overwrite our entry and set status back to needs_auth.
+      pendingOAuthTransports.delete(mcpName)
+  
+      // Reconnect using a fresh transport via add(). Tokens are already on disk
+      // so McpOAuthProvider.tokens() will return them and no second OAuth flow fires.
       const cfg = await Config.get()
       const mcpConfig = cfg.mcp?.[mcpName]
-
-      if (!mcpConfig) {
-        throw new Error(`MCP server not found: ${mcpName}`)
+  
+      if (!mcpConfig || !isMcpConfigured(mcpConfig)) {
+        throw new Error(`MCP server ${mcpName} not found or misconfigured`)
       }
-
-      if (!isMcpConfigured(mcpConfig)) {
-        throw new Error(`MCP server ${mcpName} is disabled or missing configuration`)
-      }
-
-      // Re-add the MCP server to establish connection
-      pendingOAuthTransports.delete(mcpName)
+  
       const result = await add(mcpName, mcpConfig)
-
       const statusRecord = result.status as Record<string, Status>
-      return statusRecord[mcpName] ?? { status: "failed", error: "Unknown error after auth" }
+  
+      return statusRecord[mcpName] ?? {
+        status: "failed",
+        error: "Unknown error after auth",
+      }
     } catch (error) {
       log.error("failed to finish oauth", { mcpName, error })
       return {
