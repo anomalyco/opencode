@@ -61,23 +61,34 @@ else
 fi
 
 # ── Fetch latest release that has the expected asset ─────────────────────────
-# Each CD run creates a release before uploading binaries, so "latest" may
-# temporarily have no assets. Walk recent releases to find one that does.
+# Use the GitHub API to inspect each release's asset list directly — HTTP
+# probing is unreliable because GitHub uses varying redirect codes.
+# Walk up to 10 recent non-draft releases until one has the expected asset.
 step "Fetching latest release…"
 
-RELEASES=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases?per_page=10" \
-  | grep '"tag_name"' | sed 's/.*"tag_name": *"\(.*\)".*/\1/')
+RELEASES_JSON=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases?per_page=10")
 
-if [[ -z "$RELEASES" ]]; then
+if [[ -z "$RELEASES_JSON" ]]; then
   error "Could not fetch releases. Check your internet connection."
 fi
 
 LATEST=""
 DOWNLOAD_URL=""
-for TAG in $RELEASES; do
-  URL="https://github.com/${REPO}/releases/download/${TAG}/${ASSET}"
-  STATUS=$(curl -o /dev/null -sI -w "%{http_code}" "$URL")
-  if [[ "$STATUS" == "200" || "$STATUS" == "302" ]]; then
+
+# Extract tag names in order (newest first)
+TAGS=$(echo "$RELEASES_JSON" | grep '"tag_name"' | sed 's/.*"tag_name": *"\(.*\)".*/\1/')
+
+for TAG in $TAGS; do
+  # Query the specific release and look for our asset in browser_download_url entries
+  RELEASE_JSON=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/tags/${TAG}" 2>/dev/null)
+  # Skip drafts
+  IS_DRAFT=$(echo "$RELEASE_JSON" | grep '"draft"' | head -1 | grep -o 'true' || true)
+  [[ "$IS_DRAFT" == "true" ]] && continue
+  # Check if the expected asset is listed
+  URL=$(echo "$RELEASE_JSON" | grep '"browser_download_url"' \
+    | sed 's/.*"browser_download_url": *"\(.*\)".*/\1/' \
+    | grep "/${ASSET}$" | head -1)
+  if [[ -n "$URL" ]]; then
     LATEST="$TAG"
     DOWNLOAD_URL="$URL"
     break
