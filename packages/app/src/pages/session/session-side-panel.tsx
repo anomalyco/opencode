@@ -1,5 +1,6 @@
 import { For, Match, Show, Switch, createMemo, createSignal, onCleanup, type JSX, type ValidComponent } from "solid-js"
 import { Tabs } from "@opencode-ai/ui/tabs"
+import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
@@ -325,11 +326,23 @@ export function SessionSidePanel(props: {
               class="h-full flex flex-col overflow-hidden group/filetree"
               classList={{ "border-l border-border-weak-base": props.reviewOpen }}
             >
+              {/* Upload zone at top of file tree panel */}
+              <div class="shrink-0 border-b border-border-weak-base px-3 py-2.5">
+                <button
+                  class="w-full flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border-base px-3 py-2.5 text-13-medium text-text-dimmed bg-surface-base/50 transition-all duration-150 hover:border-interactive-base hover:text-interactive-base hover:bg-interactive-base/8 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+                  disabled={uploading() || props.readOnly}
+                  onClick={() => uploadInput?.click()}
+                  aria-label={props.language.t("session.files.upload")}
+                >
+                  <Icon name="cloud-upload" size="small" class="shrink-0" />
+                  <span>{uploading() ? props.language.t("common.loading") + props.language.t("common.loading.ellipsis") : props.language.t("session.files.upload")}</span>
+                </button>
+              </div>
               <Tabs
                 variant="pill"
                 value={props.fileTreeTab()}
                 onChange={props.setFileTreeTabValue}
-                class="h-full"
+                class="flex-1 min-h-0"
                 data-scope="filetree"
               >
                 <Tabs.List>
@@ -342,16 +355,6 @@ export function SessionSidePanel(props: {
                   <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
                     {props.language.t("session.files.all")}
                   </Tabs.Trigger>
-                  <Tooltip value={props.language.t("session.files.upload")} placement="bottom">
-                    <IconButton
-                      icon="cloud-upload"
-                      variant="ghost"
-                      iconSize="small"
-                      disabled={uploading() || props.readOnly}
-                      onClick={() => uploadInput?.click()}
-                      aria-label={props.language.t("session.files.upload")}
-                    />
-                  </Tooltip>
                 </Tabs.List>
                 <Tabs.Content value="changes" class="bg-background-base px-3 py-0">
                   <Switch>
