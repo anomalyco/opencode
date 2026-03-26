@@ -13,10 +13,20 @@ import { decode64 } from "@/utils/base64"
 
 function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
   const location = useLocation()
+  const layout = useLayout()
   const navigate = useNavigate()
   const params = useParams()
   const sync = useSync()
   const slug = createMemo(() => base64Encode(props.directory))
+
+  createEffect(
+    on(
+      () => sync.data.path.worktree,
+      (directory) => {
+        syncProject(directory, layout.projects.open)
+      },
+    ),
+  )
 
   createEffect(() => {
     const next = sync.data.path.directory
@@ -46,7 +56,6 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
 export default function Layout(props: ParentProps) {
   const params = useParams()
   const language = useLanguage()
-  const layout = useLayout()
   const navigate = useNavigate()
   let invalid = ""
 
@@ -71,12 +80,6 @@ export default function Layout(props: ParentProps) {
     })
     navigate("/", { replace: true })
   })
-
-  createEffect(
-    on(resolved, (directory) => {
-      syncProject(directory, layout.projects.open)
-    }),
-  )
 
   return (
     <Show when={resolved()} keyed>
