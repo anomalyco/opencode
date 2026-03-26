@@ -1,7 +1,8 @@
-import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node"
+import { NodeFileSystem, NodePath } from "@effect/platform-node"
+import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import { Effect, Layer, ServiceMap, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import { makeRunPromise } from "@/effect/run-service"
+import { makeRuntime } from "@/effect/run-service"
 
 export namespace Git {
   const cfg = [
@@ -258,12 +259,12 @@ export namespace Git {
   )
 
   export const defaultLayer = layer.pipe(
-    Layer.provide(NodeChildProcessSpawner.layer),
+    Layer.provide(CrossSpawnSpawner.layer),
     Layer.provide(NodeFileSystem.layer),
     Layer.provide(NodePath.layer),
   )
 
-  const runPromise = makeRunPromise(Service, defaultLayer)
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export function run(args: string[], opts: Options) {
     return runPromise((git) => git.run(args, opts))
