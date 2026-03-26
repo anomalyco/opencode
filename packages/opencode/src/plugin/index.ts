@@ -14,7 +14,13 @@ import { Effect, Layer, ServiceMap, Stream } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { errorMessage } from "@/util/error"
-import { getDefaultPlugin, isDeprecatedPlugin, parsePluginSpecifier, resolvePluginTarget } from "./shared"
+import {
+  getDefaultPlugin,
+  isDeprecatedPlugin,
+  parsePluginSpecifier,
+  resolvePluginEntrypoint,
+  resolvePluginTarget,
+} from "./shared"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -103,9 +109,21 @@ export namespace Plugin {
     const target = await resolvePlugin(spec)
     if (!target) return
 
-    const mod = await import(target).catch((err) => {
+    const entry = await resolvePluginEntrypoint(spec, target, "server").catch((err) => {
       const message = errorMessage(err)
-      log.error("failed to load plugin", { path: spec, error: message })
+      log.error("failed to resolve plugin server entry", { path: spec, target, error: message })
+      Bus.publish(Session.Event.Error, {
+        error: new NamedError.Unknown({
+          message: `Failed to load plugin ${spec}: ${message}`,
+        }).toObject(),
+      })
+      return
+    })
+    if (!entry) return
+
+    const mod = await import(entry).catch((err) => {
+      const message = errorMessage(err)
+      log.error("failed to load plugin", { path: spec, target: entry, error: message })
       Bus.publish(Session.Event.Error, {
         error: new NamedError.Unknown({
           message: `Failed to load plugin ${spec}: ${message}`,

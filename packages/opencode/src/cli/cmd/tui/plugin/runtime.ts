@@ -22,6 +22,7 @@ import {
   isDeprecatedPlugin,
   pluginSource,
   readPluginId,
+  resolvePluginEntrypoint,
   resolvePluginId,
   resolvePluginTarget,
   type PluginSource,
@@ -199,14 +200,20 @@ async function loadExternalPlugin(
   const source = pluginSource(spec)
   const root = resolveRoot(source === "file" ? spec : target)
   const install_theme = createThemeInstaller(meta, root, spec)
-  const mod = await import(target)
+  const entry = await resolvePluginEntrypoint(spec, target, "tui").catch((error) => {
+    fail("failed to resolve tui plugin entry", { path: spec, target, retry, error })
+    return
+  })
+  if (!entry) return
+
+  const mod = await import(entry)
     .then((raw) => {
       const mod = getDefaultPlugin(raw) as TuiPluginModule | undefined
       if (!mod?.tui) throw new TypeError(`Plugin ${spec} must default export an object with tui()`)
       return mod
     })
     .catch((error) => {
-      fail("failed to load tui plugin", { path: spec, target, retry, error })
+      fail("failed to load tui plugin", { path: spec, target: entry, retry, error })
       return
     })
   if (!mod) return

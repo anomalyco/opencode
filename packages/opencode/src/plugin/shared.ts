@@ -19,9 +19,51 @@ export function parsePluginSpecifier(spec: string) {
 }
 
 export type PluginSource = "file" | "npm"
+export type PluginKind = "server" | "tui"
 
 export function pluginSource(spec: string): PluginSource {
   return spec.startsWith("file://") ? "file" : "npm"
+}
+
+function hasEntrypoint(json: Record<string, unknown>, kind: PluginKind) {
+  if (!isRecord(json.exports)) return false
+  return `./${kind}` in json.exports
+}
+
+function readEntrypointName(source: PluginSource, spec: string, json: Record<string, unknown>) {
+  if (source === "npm") return parsePluginSpecifier(spec).pkg
+  if (typeof json.name !== "string") return
+  const value = json.name.trim()
+  if (!value) return
+  return value
+}
+
+function readEntrypointPath(file: string) {
+  if (file.startsWith("file://")) return fileURLToPath(file)
+  if (path.isAbsolute(file) || /^[A-Za-z]:[\\/]/.test(file)) return file
+  throw new TypeError(`Plugin entry "${file}" is not a file path`)
+}
+
+export async function resolvePluginEntrypoint(spec: string, target: string, kind: PluginKind) {
+  const source = pluginSource(spec)
+  const pkg = await readPluginPackage(target).catch(() => undefined)
+  if (!pkg) return target
+  if (!hasEntrypoint(pkg.json, kind)) return target
+
+  const name = readEntrypointName(source, spec, pkg.json)
+  if (!name) {
+    throw new TypeError(`Plugin package ${pkg.pkg} must define package.json name to export ./${kind}`)
+  }
+
+  const ref = pathToFileURL(pkg.pkg).href
+  const entry = import.meta.resolve!(`${name}/${kind}`, ref)
+  const root = Filesystem.resolve(pkg.dir)
+  const next = Filesystem.resolve(readEntrypointPath(entry))
+  if (!Filesystem.contains(root, next)) {
+    throw new Error(`Plugin ${spec} resolved ${kind} entry outside plugin directory`)
+  }
+
+  return pathToFileURL(next).href
 }
 
 export function isPathPluginSpec(spec: string) {
