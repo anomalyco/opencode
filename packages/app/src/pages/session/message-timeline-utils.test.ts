@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { itemStyle, virtualize } from "./message-timeline-utils"
+import { captureScroll, itemStyle, restoreScroll, virtualize } from "./message-timeline-utils"
 
 describe("message timeline helpers", () => {
   test("keeps virtualization off while a turn is still working", () => {
@@ -20,6 +20,44 @@ describe("message timeline helpers", () => {
         working: false,
       }),
     ).toBe(true)
+  })
+
+  test("captures bottom gap for later restoration", () => {
+    expect(
+      captureScroll({
+        scrollTop: 780,
+        scrollHeight: 1000,
+        clientHeight: 200,
+      }),
+    ).toEqual({
+      top: 780,
+      gap: 20,
+      bottom: false,
+    })
+  })
+
+  test("restores bottom distance after content height changes", () => {
+    expect(
+      restoreScroll({
+        top: 780,
+        gap: 0,
+        bottom: true,
+        scrollHeight: 1600,
+        clientHeight: 200,
+      }),
+    ).toBe(1400)
+  })
+
+  test("restores prior top when not anchored to bottom", () => {
+    expect(
+      restoreScroll({
+        top: 320,
+        gap: 480,
+        bottom: false,
+        scrollHeight: 1600,
+        clientHeight: 200,
+      }),
+    ).toBe(320)
   })
 
   test("keeps centered item layout without intrinsic size shortcuts", () => {

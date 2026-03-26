@@ -28,7 +28,7 @@ import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
-import { itemStyle, virtualize } from "@/pages/session/message-timeline-utils"
+import { captureScroll, itemStyle, restoreScroll, virtualize } from "@/pages/session/message-timeline-utils"
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
 import { Virtualizer, type VirtualizerHandle } from "virtua/solid"
 import { messageAgentColor } from "@/utils/agent"
@@ -235,6 +235,8 @@ export function MessageTimeline(props: {
   anchor: (id: string) => string
 }) {
   let touchGesture: number | undefined
+  let restoreA: number | undefined
+  let restoreB: number | undefined
 
   const navigate = useNavigate()
   const globalSDK = useGlobalSDK()
@@ -283,6 +285,45 @@ export function MessageTimeline(props: {
     }),
   )
   createEffect(() => props.onVirtualizedChange?.(shouldVirtualize()))
+  createEffect(
+    on(
+      shouldVirtualize,
+      (next, prev) => {
+        if (prev === undefined || next === prev) return
+
+        const root = props.scrollRef()
+        if (!root) return
+
+        const state = captureScroll({
+          scrollTop: root.scrollTop,
+          scrollHeight: root.scrollHeight,
+          clientHeight: root.clientHeight,
+        })
+
+        if (restoreA !== undefined) cancelAnimationFrame(restoreA)
+        if (restoreB !== undefined) cancelAnimationFrame(restoreB)
+
+        restoreA = requestAnimationFrame(() => {
+          restoreA = undefined
+          restoreB = requestAnimationFrame(() => {
+            restoreB = undefined
+
+            const nextRoot = props.scrollRef()
+            if (!nextRoot) return
+
+            const top = restoreScroll({
+              ...state,
+              scrollHeight: nextRoot.scrollHeight,
+              clientHeight: nextRoot.clientHeight,
+            })
+            if (Math.abs(nextRoot.scrollTop - top) > 1) nextRoot.scrollTop = top
+            props.onScheduleScrollState(nextRoot)
+          })
+        })
+      },
+      { defer: true },
+    ),
+  )
   const tint = createMemo(() => messageAgentColor(sessionMessages(), sync.data.agent))
 
   const [timeoutDone, setTimeoutDone] = createSignal(true)
@@ -591,6 +632,11 @@ export function MessageTimeline(props: {
       </Dialog>
     )
   }
+
+  onCleanup(() => {
+    if (restoreA !== undefined) cancelAnimationFrame(restoreA)
+    if (restoreB !== undefined) cancelAnimationFrame(restoreB)
+  })
 
   return (
     <Show
