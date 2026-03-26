@@ -6,7 +6,7 @@ Practical reference for new and migrated Effect code in `packages/opencode`.
 
 Use `InstanceState` (from `src/effect/instance-state.ts`) for services that need per-directory state, per-instance cleanup, or project-bound background work. InstanceState uses a `ScopedCache` keyed by directory, so each open project gets its own copy of the state that is automatically cleaned up on disposal.
 
-Use `makeRunPromise` (from `src/effect/run-service.ts`) to create a per-service `ManagedRuntime` that lazily initializes and shares layers via a global `memoMap`.
+Use `makeRuntime` (from `src/effect/run-service.ts`) to create a per-service `ManagedRuntime` that lazily initializes and shares layers via a global `memoMap`. Returns `{ runPromise, runFork, runCallback }`.
 
 - Global services (no per-directory state): Account, Auth, Installation, Truncate
 - Instance-scoped (per-directory state via InstanceState): File, FileTime, FileWatcher, Format, Permission, Question, Skill, Snapshot, Vcs, ProviderAuth
@@ -46,7 +46,7 @@ export namespace Foo {
   export const defaultLayer = layer.pipe(Layer.provide(FooDep.layer))
 
   // Per-service runtime (inside the namespace)
-  const runPromise = makeRunPromise(Service, defaultLayer)
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   // Async facade functions
   export async function get(id: FooID) {
@@ -79,28 +79,40 @@ See `Auth.ZodInfo` for the canonical example.
 
 The `InstanceState.make` init callback receives a `Scope`, so you can use `Effect.acquireRelease`, `Effect.addFinalizer`, and `Effect.forkScoped` inside it. Resources acquired this way are automatically cleaned up when the instance is disposed or invalidated by `ScopedCache`. This makes it the right place for:
 
-- **Subscriptions**: Use `Effect.acquireRelease` to subscribe and auto-unsubscribe:
+- **Subscriptions**: Yield `Bus.Service` at the layer level, then use `Stream` + `forkScoped` inside the init closure. The fiber is automatically interrupted when the instance scope closes:
 
 ```ts
+const bus = yield * Bus.Service
+
 const cache =
   yield *
   InstanceState.make<State>(
     Effect.fn("Foo.state")(function* (ctx) {
       // ... load state ...
 
-      yield* Effect.acquireRelease(
-        Effect.sync(() =>
-          Bus.subscribeAll((event) => {
+      yield* bus.subscribeAll().pipe(
+        Stream.runForEach((event) =>
+          Effect.sync(() => {
             /* handle */
           }),
         ),
-        (unsub) => Effect.sync(unsub),
+        Effect.forkScoped,
       )
 
       return {
         /* state */
       }
     }),
+  )
+```
+
+- **Resource cleanup**: Use `Effect.acquireRelease` or `Effect.addFinalizer` for resources that need teardown (native watchers, process handles, etc.):
+
+```ts
+yield *
+  Effect.acquireRelease(
+    Effect.sync(() => nativeAddon.watch(dir)),
+    (watcher) => Effect.sync(() => watcher.close()),
   )
 ```
 
@@ -165,7 +177,7 @@ Still open and likely worth migrating:
 - [x] `ToolRegistry`
 - [ ] `Pty`
 - [x] `Worktree`
-- [ ] `Bus`
+- [x] `Bus`
 - [x] `Command`
 - [ ] `Config`
 - [ ] `Session`
@@ -175,4 +187,4 @@ Still open and likely worth migrating:
 - [ ] `Provider`
 - [x] `Project`
 - [ ] `LSP`
-- [ ] `MCP`
+- [x] `MCP`

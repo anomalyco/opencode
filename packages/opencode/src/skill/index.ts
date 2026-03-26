@@ -7,7 +7,7 @@ import { NamedError } from "@opencode-ai/util/error"
 import type { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRunPromise } from "@/effect/run-service"
+import { makeRuntime } from "@/effect/run-service"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 import { Permission } from "@/permission"
@@ -54,11 +54,6 @@ export namespace Skill {
   type State = {
     skills: Record<string, Info>
     dirs: Set<string>
-    task?: Promise<void>
-  }
-
-  type Cache = State & {
-    ensure: () => Promise<void>
   }
 
   export interface Interface {
@@ -116,66 +111,47 @@ export namespace Skill {
       })
   }
 
-  // TODO: Migrate to Effect
-  const create = (discovery: Discovery.Interface, directory: string, worktree: string): Cache => {
-    const state: State = {
-      skills: {},
-      dirs: new Set<string>(),
+  async function loadSkills(state: State, discovery: Discovery.Interface, directory: string, worktree: string) {
+    if (!Flag.OPENCODE_DISABLE_EXTERNAL_SKILLS) {
+      for (const dir of EXTERNAL_DIRS) {
+        const root = path.join(Global.Path.home, dir)
+        if (!(await Filesystem.isDir(root))) continue
+        await scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
+      }
+
+      for await (const root of Filesystem.up({
+        targets: EXTERNAL_DIRS,
+        start: directory,
+        stop: worktree,
+      })) {
+        await scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
+      }
     }
 
-    const load = async () => {
-      if (!Flag.OPENCODE_DISABLE_EXTERNAL_SKILLS) {
-        for (const dir of EXTERNAL_DIRS) {
-          const root = path.join(Global.Path.home, dir)
-          if (!(await Filesystem.isDir(root))) continue
-          await scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
-        }
+    for (const dir of await Config.directories()) {
+      await scan(state, dir, OPENCODE_SKILL_PATTERN)
+    }
 
-        for await (const root of Filesystem.up({
-          targets: EXTERNAL_DIRS,
-          start: directory,
-          stop: worktree,
-        })) {
-          await scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
-        }
+    const cfg = await Config.get()
+    for (const item of cfg.skills?.paths ?? []) {
+      const expanded = item.startsWith("~/") ? path.join(os.homedir(), item.slice(2)) : item
+      const dir = path.isAbsolute(expanded) ? expanded : path.join(directory, expanded)
+      if (!(await Filesystem.isDir(dir))) {
+        log.warn("skill path not found", { path: dir })
+        continue
       }
 
-      for (const dir of await Config.directories()) {
-        await scan(state, dir, OPENCODE_SKILL_PATTERN)
-      }
+      await scan(state, dir, SKILL_PATTERN)
+    }
 
-      const cfg = await Config.get()
-      for (const item of cfg.skills?.paths ?? []) {
-        const expanded = item.startsWith("~/") ? path.join(os.homedir(), item.slice(2)) : item
-        const dir = path.isAbsolute(expanded) ? expanded : path.join(directory, expanded)
-        if (!(await Filesystem.isDir(dir))) {
-          log.warn("skill path not found", { path: dir })
-          continue
-        }
-
+    for (const url of cfg.skills?.urls ?? []) {
+      for (const dir of await Effect.runPromise(discovery.pull(url))) {
+        state.dirs.add(dir)
         await scan(state, dir, SKILL_PATTERN)
       }
-
-      for (const url of cfg.skills?.urls ?? []) {
-        for (const dir of await Effect.runPromise(discovery.pull(url))) {
-          state.dirs.add(dir)
-          await scan(state, dir, SKILL_PATTERN)
-        }
-      }
-
-      log.info("init", { count: Object.keys(state.skills).length })
     }
 
-    const ensure = () => {
-      if (state.task) return state.task
-      state.task = load().catch((err) => {
-        state.task = undefined
-        throw err
-      })
-      return state.task
-    }
-
-    return { ...state, ensure }
+    log.info("init", { count: Object.keys(state.skills).length })
   }
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Skill") {}
@@ -185,33 +161,33 @@ export namespace Skill {
     Effect.gen(function* () {
       const discovery = yield* Discovery.Service
       const state = yield* InstanceState.make(
-        Effect.fn("Skill.state")((ctx) => Effect.sync(() => create(discovery, ctx.directory, ctx.worktree))),
+        Effect.fn("Skill.state")((ctx) =>
+          Effect.gen(function* () {
+            const s: State = { skills: {}, dirs: new Set() }
+            yield* Effect.promise(() => loadSkills(s, discovery, ctx.directory, ctx.worktree))
+            return s
+          }),
+        ),
       )
 
-      const ensure = Effect.fn("Skill.ensure")(function* () {
-        const cache = yield* InstanceState.get(state)
-        yield* Effect.promise(() => cache.ensure())
-        return cache
-      })
-
       const get = Effect.fn("Skill.get")(function* (name: string) {
-        const cache = yield* ensure()
-        return cache.skills[name]
+        const s = yield* InstanceState.get(state)
+        return s.skills[name]
       })
 
       const all = Effect.fn("Skill.all")(function* () {
-        const cache = yield* ensure()
-        return Object.values(cache.skills)
+        const s = yield* InstanceState.get(state)
+        return Object.values(s.skills)
       })
 
       const dirs = Effect.fn("Skill.dirs")(function* () {
-        const cache = yield* ensure()
-        return Array.from(cache.dirs)
+        const s = yield* InstanceState.get(state)
+        return Array.from(s.dirs)
       })
 
       const available = Effect.fn("Skill.available")(function* (agent?: Agent.Info) {
-        const cache = yield* ensure()
-        const list = Object.values(cache.skills).toSorted((a, b) => a.name.localeCompare(b.name))
+        const s = yield* InstanceState.get(state)
+        const list = Object.values(s.skills).toSorted((a, b) => a.name.localeCompare(b.name))
         if (!agent) return list
         return list.filter((skill) => Permission.evaluate("skill", skill.name, agent.permission).action !== "deny")
       })
@@ -242,7 +218,7 @@ export namespace Skill {
     return ["## Available Skills", ...list.map((skill) => `- **${skill.name}**: ${skill.description}`)].join("\n")
   }
 
-  const runPromise = makeRunPromise(Service, defaultLayer)
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export async function get(name: string) {
     return runPromise((skill) => skill.get(name))

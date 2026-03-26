@@ -980,6 +980,20 @@ const CSS_CONTROLS: CSSControl[] = [
 
   // --- Reasoning part ---
   {
+    key: "reasoning-md-font-size",
+    label: "Reasoning font size",
+    group: "Reasoning Part",
+    type: "range",
+    initial: "14",
+    selector: '[data-component="reasoning-part"] [data-component="markdown"]',
+    property: "font-size",
+    min: "10",
+    max: "22",
+    step: "1",
+    unit: "px",
+    source: { file: MP, anchor: '[data-component="reasoning-part"]', prop: "font-size", format: px },
+  },
+  {
     key: "reasoning-md-margin-top",
     label: "Reasoning markdown margin-top",
     group: "Reasoning Part",
@@ -1068,13 +1082,21 @@ function Playground() {
   let previewRef: HTMLDivElement | undefined
   let pick: HTMLInputElement | undefined
 
+  const sample = (ctrl: CSSControl) => {
+    if (!ctrl.group.startsWith("Markdown")) return ctrl.selector
+    return ctrl.selector.replace(
+      '[data-component="markdown"]',
+      '[data-component="text-part"] [data-component="markdown"]',
+    )
+  }
+
   /** Read computed styles from the DOM to seed slider defaults */
   const readDefaults = () => {
     const root = previewRef
     if (!root) return
     const next: Record<string, string> = {}
     for (const ctrl of CSS_CONTROLS) {
-      const el = root.querySelector(ctrl.selector) as HTMLElement | null
+      const el = (root.querySelector(sample(ctrl)) ?? root.querySelector(ctrl.selector)) as HTMLElement | null
       if (!el) continue
       const styles = getComputedStyle(el)
       // Use bracket access — getPropertyValue doesn't resolve shorthands
@@ -1425,9 +1447,14 @@ function Playground() {
       }
       setApplyResult(lines.join("\n"))
 
-      if (ok > 0) {
-        // Clear overrides — values are now in source CSS, Vite will HMR.
-        resetCss()
+      if (ok === edits.length) {
+        batch(() => {
+          for (const ctrl of controls) {
+            setDefaults(ctrl.key, css[ctrl.key]!)
+            setCss(ctrl.key, undefined as any)
+          }
+        })
+        updateStyle()
         // Wait for Vite HMR then re-read computed defaults
         setTimeout(readDefaults, 500)
       }
