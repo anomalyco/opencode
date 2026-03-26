@@ -189,6 +189,22 @@ export function formatPromptTooLargeError(files: { filename: string; content: st
   return `PROMPT_TOO_LARGE: The prompt exceeds the model's context limit.${fileDetails}`
 }
 
+export function branchState(input: {
+  before: string
+  expect: string
+  current: string
+  head: string
+  status: string
+}) {
+  const uncommitted = input.status.trim().length > 0
+  return {
+    branch: input.current,
+    dirty: uncommitted || input.head !== input.before,
+    uncommittedChanges: uncommitted,
+    switched: input.current !== input.expect,
+  }
+}
+
 export const GithubCommand = cmd({
   command: "github",
   describe: "manage GitHub agent",
@@ -650,18 +666,13 @@ export const GithubRunCommand = cmd({
           const issueData = await fetchIssue()
           const dataPrompt = buildPromptDataForIssue(issueData)
           const response = await chat(`${userPrompt}\n\n${dataPrompt}`, promptFiles)
-          const { dirty, uncommittedChanges, switched } = await branchIsDirty(head, branch)
-          if (switched) {
-            // Agent switched branches (likely created its own branch/PR).
-            // Don't push the stale infrastructure branch — just comment.
-            await createComment(`${response}${footer({ image: true })}`)
-            await removeReaction(commentType)
-          } else if (dirty) {
+          const state = await branchIsDirty(head, branch)
+          if (state.dirty) {
             const summary = await summarize(response)
-            await pushToNewBranch(summary, branch, uncommittedChanges, false)
+            await pushToNewBranch(summary, state.branch, state.uncommittedChanges, false)
             const pr = await createPR(
               repoData.data.default_branch,
-              branch,
+              state.branch,
               summary,
               `${response}\n\nCloses #${issueId}${footer({ image: true })}`,
             )
@@ -1172,22 +1183,19 @@ export const GithubRunCommand = cmd({
         // Detect if the agent switched branches during chat (e.g. created
         // its own branch, committed, and possibly pushed/created a PR).
         const current = await gitText(["rev-parse", "--abbrev-ref", "HEAD"])
-        if (current !== expectedBranch) {
-          console.log(`Branch changed during chat: expected ${expectedBranch}, now on ${current}`)
-          return { dirty: true, uncommittedChanges: false, switched: true }
-        }
-
         const ret = await gitStatus(["status", "--porcelain"])
-        const status = ret.stdout.toString().trim()
-        if (status.length > 0) {
-          return { dirty: true, uncommittedChanges: true, switched: false }
-        }
         const head = await gitText(["rev-parse", "HEAD"])
-        return {
-          dirty: head !== originalHead,
-          uncommittedChanges: false,
-          switched: false,
+        const state = branchState({
+          before: originalHead,
+          expect: expectedBranch,
+          current,
+          head,
+          status: ret.stdout.toString(),
+        })
+        if (state.switched) {
+          console.log(`Branch changed during chat: expected ${expectedBranch}, now on ${state.branch}`)
         }
+        return state
       }
 
       // Verify commits exist between base ref and a branch using rev-list.

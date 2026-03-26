@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test"
-import { extractResponseText, formatPromptTooLargeError } from "../../src/cli/cmd/github"
+import { branchState, extractResponseText, formatPromptTooLargeError } from "../../src/cli/cmd/github"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { SessionID, MessageID, PartID } from "../../src/session/schema"
 
@@ -194,5 +194,58 @@ describe("formatPromptTooLargeError", () => {
     expect(result).toInclude("img1.png (3 KB)")
     expect(result).toInclude("img2.jpg (6 KB)")
     expect(result).toInclude("img3.gif (9 KB)")
+  })
+})
+
+describe("branchState", () => {
+  test("uses the current custom branch after the agent switches and commits", () => {
+    expect(
+      branchState({
+        before: "base",
+        expect: "opencode/issue19070-20260326",
+        current: "1758-no-rename-extension",
+        head: "custom",
+        status: "",
+      }),
+    ).toEqual({
+      branch: "1758-no-rename-extension",
+      dirty: true,
+      uncommittedChanges: false,
+      switched: true,
+    })
+  })
+
+  test("stays clean when the agent only switches branches without changes", () => {
+    expect(
+      branchState({
+        before: "base",
+        expect: "opencode/issue19070-20260326",
+        current: "1758-no-rename-extension",
+        head: "base",
+        status: "",
+      }),
+    ).toEqual({
+      branch: "1758-no-rename-extension",
+      dirty: false,
+      uncommittedChanges: false,
+      switched: true,
+    })
+  })
+
+  test("marks uncommitted changes on the expected branch", () => {
+    expect(
+      branchState({
+        before: "base",
+        expect: "opencode/issue19070-20260326",
+        current: "opencode/issue19070-20260326",
+        head: "base",
+        status: " M github.ts\n",
+      }),
+    ).toEqual({
+      branch: "opencode/issue19070-20260326",
+      dirty: true,
+      uncommittedChanges: true,
+      switched: false,
+    })
   })
 })
