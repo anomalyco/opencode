@@ -128,38 +128,39 @@ export namespace LLM {
             ...input.messages,
           ]
 
-    const params = await Plugin.trigger(
-      "chat.params",
-      {
-        sessionID: input.sessionID,
-        agent: input.agent,
-        model: input.model,
-        provider,
-        message: input.user,
-      },
-      {
-        temperature: input.model.capabilities.temperature
-          ? (input.agent.temperature ?? ProviderTransform.temperature(input.model))
-          : undefined,
-        topP: input.agent.topP ?? ProviderTransform.topP(input.model),
-        topK: ProviderTransform.topK(input.model),
-        options,
-      },
-    )
-
-    const { headers } = await Plugin.trigger(
-      "chat.headers",
-      {
-        sessionID: input.sessionID,
-        agent: input.agent,
-        model: input.model,
-        provider,
-        message: input.user,
-      },
-      {
-        headers: {},
-      },
-    )
+    const [params, { headers }] = await Promise.all([
+      Plugin.trigger(
+        "chat.params",
+        {
+          sessionID: input.sessionID,
+          agent: input.agent,
+          model: input.model,
+          provider,
+          message: input.user,
+        },
+        {
+          temperature: input.model.capabilities.temperature
+            ? (input.agent.temperature ?? ProviderTransform.temperature(input.model))
+            : undefined,
+          topP: input.agent.topP ?? ProviderTransform.topP(input.model),
+          topK: ProviderTransform.topK(input.model),
+          options,
+        },
+      ),
+      Plugin.trigger(
+        "chat.headers",
+        {
+          sessionID: input.sessionID,
+          agent: input.agent,
+          model: input.model,
+          provider,
+          message: input.user,
+        },
+        {
+          headers: {},
+        },
+      ),
+    ])
 
     const maxOutputTokens =
       isOpenaiOauth || provider.id.includes("github-copilot")

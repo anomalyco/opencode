@@ -84,7 +84,7 @@ export namespace Bus {
         return Effect.gen(function* () {
           const state = yield* InstanceState.get(cache)
           const payload: Payload = { type: def.type, properties }
-          log.info("publishing", { type: def.type })
+          log.debug("publishing", { type: def.type })
 
           const ps = state.typed.get(def.type)
           if (ps) yield* PubSub.publish(ps, payload)

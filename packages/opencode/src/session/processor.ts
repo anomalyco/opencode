@@ -84,7 +84,7 @@ export namespace SessionProcessor {
                     const part = reasoningMap[value.id]
                     part.text += value.text
                     if (value.providerMetadata) part.metadata = value.providerMetadata
-                    await Session.updatePartDelta({
+                    Session.updatePartDelta({
                       sessionID: part.sessionID,
                       messageID: part.messageID,
                       partID: part.id,
@@ -307,7 +307,7 @@ export namespace SessionProcessor {
                   if (currentText) {
                     currentText.text += value.text
                     if (value.providerMetadata) currentText.metadata = value.providerMetadata
-                    await Session.updatePartDelta({
+                    Session.updatePartDelta({
                       sessionID: currentText.sessionID,
                       messageID: currentText.messageID,
                       partID: currentText.id,
