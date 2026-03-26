@@ -33,7 +33,7 @@ export type UsageInfo = {
   cacheWrite1hTokens?: number
 }
 
-export type ProviderHelper = (input: { reqModel: string; providerModel: string }) => {
+export type ProviderHelper = (input: { reqModel: string; providerModel: string; adjustCacheUsage?: boolean }) => {
   format: ZenData.Format
   modifyUrl: (providerApi: string, isStream?: boolean) => string
   modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => void

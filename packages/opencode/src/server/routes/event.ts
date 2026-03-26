@@ -6,7 +6,6 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { lazy } from "../../util/lazy"
 import { AsyncQueue } from "../../util/queue"
-import { Instance } from "@/project/instance"
 
 const log = Log.create({ service: "server" })
 
@@ -53,13 +52,6 @@ export const EventRoutes = lazy(() =>
           )
         }, 10_000)
 
-        const unsub = Bus.subscribeAll((event) => {
-          q.push(JSON.stringify(event))
-          if (event.type === Bus.InstanceDisposed.type) {
-            stop()
-          }
-        })
-
         const stop = () => {
           if (done) return
           done = true
@@ -68,6 +60,13 @@ export const EventRoutes = lazy(() =>
           q.push(null)
           log.info("event disconnected")
         }
+
+        const unsub = Bus.subscribeAll((event) => {
+          q.push(JSON.stringify(event))
+          if (event.type === Bus.InstanceDisposed.type) {
+            stop()
+          }
+        })
 
         stream.onAbort(stop)
 
