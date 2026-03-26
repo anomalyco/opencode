@@ -643,7 +643,7 @@ export namespace File {
           log.info("search", { query, kind })
 
           const result = cache
-          const preferHidden = query.startsWith(".") || query.includes("/.")
+          const preferHidden = query.startsWith(".") || query.includes("/.") || query.includes("\\.")
 
           if (!query) {
             if (kind === "file") return result.files.slice(0, limit)
@@ -652,9 +652,19 @@ export namespace File {
 
           const items =
             kind === "file" ? result.files : kind === "directory" ? result.dirs : [...result.files, ...result.dirs]
+          const key = query.replaceAll("\\", "/")
 
           const searchLimit = kind === "directory" && !preferHidden ? limit * 20 : limit
-          const sorted = fuzzysort.go(query, items, { limit: searchLimit }).map((item) => item.target)
+          const sorted = fuzzysort
+            .go(
+              key,
+              items.map((item) => ({
+                item,
+                key: item.replaceAll("\\", "/"),
+              })),
+              { key: "key", limit: searchLimit },
+            )
+            .map((item) => item.obj.item)
           const output = kind === "directory" ? sortHiddenLast(sorted, preferHidden).slice(0, limit) : sorted
 
           log.info("search", { query, kind, results: output.length })

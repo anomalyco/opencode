@@ -739,6 +739,20 @@ describe("file/index Filesystem patterns", () => {
       })
     })
 
+    test("backslash query matches nested files", async () => {
+      await using tmp = await setupSearchableRepo()
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          await File.init()
+
+          const result = await File.search({ query: "src\\main.ts", type: "file" })
+          expect(result.some((file) => file.replaceAll("\\", "/") === "src/main.ts")).toBe(true)
+        },
+      })
+    })
+
     test("type filter returns only files", async () => {
       await using tmp = await setupSearchableRepo()
 
