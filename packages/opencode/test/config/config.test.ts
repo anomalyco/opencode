@@ -251,7 +251,7 @@ test("resolves env templates in account config with account token", async () => 
   const originalToken = Account.token
   const originalControlToken = process.env["OPENCODE_CONSOLE_TOKEN"]
 
-  Account.active = mock(() => ({
+  Account.active = mock(async () => ({
     id: AccountID.make("account-1"),
     email: "user@example.com",
     url: "https://control.example.com",
@@ -1400,7 +1400,6 @@ test("permission config preserves key order", async () => {
             external_directory: "ask",
             read: "allow",
             todowrite: "allow",
-            todoread: "allow",
             "thoughts_*": "allow",
             "reasoning_model_*": "allow",
             "tools_*": "allow",
@@ -1421,7 +1420,6 @@ test("permission config preserves key order", async () => {
         "external_directory",
         "read",
         "todowrite",
-        "todoread",
         "thoughts_*",
         "reasoning_model_*",
         "tools_*",

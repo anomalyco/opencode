@@ -4,6 +4,7 @@ import { MessageV2 } from "../../src/session/message-v2"
 import type { Provider } from "../../src/provider/provider"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { SessionID, MessageID, PartID } from "../../src/session/schema"
+import { Question } from "../../src/question"
 
 const sessionID = SessionID.make("session")
 const providerID = ProviderID.make("test")
@@ -914,5 +915,43 @@ describe("session.message-v2.fromError", () => {
         message: "123",
       },
     })
+  })
+
+  test("serializes tagged errors with their message", () => {
+    const result = MessageV2.fromError(new Question.RejectedError(), { providerID })
+
+    expect(result).toStrictEqual({
+      name: "UnknownError",
+      data: {
+        message: "The user dismissed this question",
+      },
+    })
+  })
+
+  test("classifies ZlibError from fetch as retryable APIError", () => {
+    const zlibError = new Error(
+      'ZlibError fetching "https://opencode.cloudflare.dev/anthropic/messages". For more information, pass `verbose: true` in the second argument to fetch()',
+    )
+    ;(zlibError as any).code = "ZlibError"
+    ;(zlibError as any).errno = 0
+    ;(zlibError as any).path = ""
+
+    const result = MessageV2.fromError(zlibError, { providerID })
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
+    expect((result as MessageV2.APIError).data.message).toInclude("decompression")
+  })
+
+  test("classifies ZlibError as AbortedError when abort context is provided", () => {
+    const zlibError = new Error(
+      'ZlibError fetching "https://opencode.cloudflare.dev/anthropic/messages". For more information, pass `verbose: true` in the second argument to fetch()',
+    )
+    ;(zlibError as any).code = "ZlibError"
+    ;(zlibError as any).errno = 0
+
+    const result = MessageV2.fromError(zlibError, { providerID, aborted: true })
+
+    expect(result.name).toBe("MessageAbortedError")
   })
 })

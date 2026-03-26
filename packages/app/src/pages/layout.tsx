@@ -2,6 +2,7 @@ import {
   batch,
   createEffect,
   createMemo,
+  createResource,
   For,
   on,
   onCleanup,
@@ -48,21 +49,16 @@ import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { Binary } from "@opencode-ai/util/binary"
 import { retry } from "@opencode-ai/util/retry"
-import { playSound, soundSrc } from "@/utils/sound"
+import { playSoundById } from "@/utils/sound"
 import { createAim } from "@/utils/aim"
 import { setNavigate } from "@/utils/notification-click"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { setSessionHandoff } from "@/pages/session/handoff"
 
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
-import { DialogSelectProvider } from "@/components/dialog-select-provider"
-import { DialogSelectServer } from "@/components/dialog-select-server"
-import { DialogSettings } from "@/components/dialog-settings"
+import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis, getDraggableId } from "@/utils/solid-dnd"
-import { DialogSelectDirectory } from "@/components/dialog-select-directory"
-import { DialogEditProject } from "@/components/dialog-edit-project"
 import { DebugBar } from "@/components/debug-bar"
 import { Titlebar } from "@/components/titlebar"
 import { useServer } from "@/context/server"
@@ -109,6 +105,8 @@ export default function Layout(props: ParentProps) {
   const pageReady = createMemo(() => ready())
 
   let scrollContainerRef: HTMLDivElement | undefined
+  let dialogRun = 0
+  let dialogDead = false
 
   const params = useParams()
   const globalSDK = useGlobalSDK()
@@ -128,7 +126,17 @@ export default function Layout(props: ParentProps) {
   const theme = useTheme()
   const language = useLanguage()
   const initialDirectory = decode64(params.dir)
-  const availableThemeEntries = createMemo(() => Object.entries(theme.themes()))
+  const route = createMemo(() => {
+    const slug = params.dir
+    if (!slug) return { slug, dir: "" }
+    const dir = decode64(slug)
+    if (!dir) return { slug, dir: "" }
+    return {
+      slug,
+      dir: globalSync.peek(dir, { bootstrap: false })[0].path.directory || dir,
+    }
+  })
+  const availableThemeEntries = createMemo(() => theme.ids().map((id) => [id, theme.themes()[id]] as const))
   const colorSchemeOrder: ColorScheme[] = ["system", "light", "dark"]
   const colorSchemeKey: Record<ColorScheme, "theme.scheme.system" | "theme.scheme.light" | "theme.scheme.dark"> = {
     system: "theme.scheme.system",
@@ -136,7 +144,7 @@ export default function Layout(props: ParentProps) {
     dark: "theme.scheme.dark",
   }
   const colorSchemeLabel = (scheme: ColorScheme) => language.t(colorSchemeKey[scheme])
-  const currentDir = createMemo(() => decode64(params.dir) ?? "")
+  const currentDir = createMemo(() => route().dir)
 
   const [state, setState] = createStore({
     autoselect: !initialDirectory,
@@ -190,6 +198,8 @@ export default function Layout(props: ParentProps) {
   })
 
   onCleanup(() => {
+    dialogDead = true
+    dialogRun += 1
     if (navLeave.current !== undefined) clearTimeout(navLeave.current)
     clearTimeout(sortNowTimeout)
     if (sortNowInterval) clearInterval(sortNowInterval)
@@ -200,13 +210,22 @@ export default function Layout(props: ParentProps) {
 
   onMount(() => {
     const stop = () => setState("sizing", false)
+    const blur = () => reset()
+    const hide = () => {
+      if (document.visibilityState !== "hidden") return
+      reset()
+    }
     window.addEventListener("pointerup", stop)
     window.addEventListener("pointercancel", stop)
     window.addEventListener("blur", stop)
+    window.addEventListener("blur", blur)
+    document.addEventListener("visibilitychange", hide)
     onCleanup(() => {
       window.removeEventListener("pointerup", stop)
       window.removeEventListener("pointercancel", stop)
       window.removeEventListener("blur", stop)
+      window.removeEventListener("blur", blur)
+      document.removeEventListener("visibilitychange", hide)
     })
   })
 
@@ -224,6 +243,12 @@ export default function Layout(props: ParentProps) {
     if (navLeave.current === undefined) return
     clearTimeout(navLeave.current)
     navLeave.current = undefined
+  }
+
+  const reset = () => {
+    disarm()
+    setState("hoverSession", undefined)
+    setHoverProject(undefined)
   }
 
   const arm = () => {
@@ -277,16 +302,6 @@ export default function Layout(props: ParentProps) {
     setHoverProject(undefined)
   })
 
-  const autoselecting = createMemo(() => {
-    if (params.dir) return false
-    if (!state.autoselect) return false
-    if (!pageReady()) return true
-    if (!layoutReady()) return true
-    const list = layout.projects.list()
-    if (list.length > 0) return true
-    return !!server.projects.last()
-  })
-
   createEffect(() => {
     if (!state.autoselect) return
     const dir = params.dir
@@ -304,8 +319,7 @@ export default function Layout(props: ParentProps) {
 
   const clearSidebarHoverState = () => {
     if (layout.sidebar.opened()) return
-    setState("hoverSession", undefined)
-    setHoverProject(undefined)
+    reset()
   }
 
   const navigateWithSidebarReset = (href: string) => {
@@ -321,10 +335,9 @@ export default function Layout(props: ParentProps) {
     const nextIndex = currentIndex === -1 ? 0 : (currentIndex + direction + ids.length) % ids.length
     const nextThemeId = ids[nextIndex]
     theme.setTheme(nextThemeId)
-    const nextTheme = theme.themes()[nextThemeId]
     showToast({
       title: language.t("toast.theme.title"),
-      description: nextTheme?.name ?? nextThemeId,
+      description: theme.name(nextThemeId),
     })
   }
 
@@ -479,7 +492,7 @@ export default function Layout(props: ParentProps) {
 
         if (e.details.type === "permission.asked") {
           if (settings.sounds.permissionsEnabled()) {
-            playSound(soundSrc(settings.sounds.permissions()))
+            void playSoundById(settings.sounds.permissions())
           }
           if (settings.notifications.permissions()) {
             void platform.notify(title, description, href)
@@ -493,8 +506,8 @@ export default function Layout(props: ParentProps) {
         }
 
         const currentSession = params.id
-        if (directory === currentDir() && props.sessionID === currentSession) return
-        if (directory === currentDir() && session?.parentID === currentSession) return
+        if (workspaceKey(directory) === workspaceKey(currentDir()) && props.sessionID === currentSession) return
+        if (workspaceKey(directory) === workspaceKey(currentDir()) && session?.parentID === currentSession) return
 
         dismissSessionAlert(sessionKey)
 
@@ -552,13 +565,14 @@ export default function Layout(props: ParentProps) {
   const currentProject = createMemo(() => {
     const directory = currentDir()
     if (!directory) return
+    const key = workspaceKey(directory)
 
     const projects = layout.projects.list()
 
-    const sandbox = projects.find((p) => p.sandboxes?.includes(directory))
+    const sandbox = projects.find((p) => p.sandboxes?.some((item) => workspaceKey(item) === key))
     if (sandbox) return sandbox
 
-    const direct = projects.find((p) => p.worktree === directory)
+    const direct = projects.find((p) => workspaceKey(p.worktree) === key)
     if (direct) return direct
 
     const [child] = globalSync.child(directory, { bootstrap: false })
@@ -572,33 +586,23 @@ export default function Layout(props: ParentProps) {
     return projects.find((p) => p.worktree === root)
   })
 
-  createEffect(
-    on(
-      () => ({ ready: pageReady(), layoutReady: layoutReady(), dir: params.dir, list: layout.projects.list() }),
-      (value) => {
-        if (!value.ready) return
-        if (!value.layoutReady) return
-        if (!state.autoselect) return
-        if (value.dir) return
+  const [autoselecting] = createResource(async () => {
+    await ready.promise
+    await layout.ready.promise
+    if (!untrack(() => state.autoselect)) return
 
-        const last = server.projects.last()
+    const list = layout.projects.list()
+    const last = server.projects.last()
 
-        if (value.list.length === 0) {
-          if (!last) return
-          setState("autoselect", false)
-          openProject(last, false)
-          navigateToProject(last)
-          return
-        }
-
-        const next = value.list.find((project) => project.worktree === last) ?? value.list[0]
-        if (!next) return
-        setState("autoselect", false)
-        openProject(next.worktree, false)
-        navigateToProject(next.worktree)
-      },
-    ),
-  )
+    if (list.length === 0) {
+      if (!last) return
+      await openProject(last, true)
+    } else {
+      const next = list.find((project) => project.worktree === last) ?? list[0]
+      if (!next) return
+      await openProject(next.worktree, true)
+    }
+  })
 
   const workspaceName = (directory: string, projectId?: string, branch?: string) => {
     const key = workspaceKey(directory)
@@ -638,7 +642,7 @@ export default function Layout(props: ParentProps) {
     const activeDir = currentDir()
     return workspaceIds(project).filter((directory) => {
       const expanded = store.workspaceExpanded[directory] ?? directory === project.worktree
-      const active = directory === activeDir
+      const active = workspaceKey(directory) === workspaceKey(activeDir)
       return expanded || active
     })
   })
@@ -649,7 +653,11 @@ export default function Layout(props: ParentProps) {
     const projects = layout.projects.list()
     for (const [directory, expanded] of Object.entries(store.workspaceExpanded)) {
       if (!expanded) continue
-      const project = projects.find((item) => item.worktree === directory || item.sandboxes?.includes(directory))
+      const key = workspaceKey(directory)
+      const project = projects.find(
+        (item) =>
+          workspaceKey(item.worktree) === key || item.sandboxes?.some((sandbox) => workspaceKey(sandbox) === key),
+      )
       if (!project) continue
       if (project.vcs === "git" && layout.sidebar.workspaces(project.worktree)()) continue
       setStore("workspaceExpanded", directory, false)
@@ -701,7 +709,7 @@ export default function Layout(props: ParentProps) {
       seen: lru,
       keep: sessionID,
       limit: PREFETCH_MAX_SESSIONS_PER_DIR,
-      preserve: directory === params.dir && params.id ? [params.id] : undefined,
+      preserve: params.id && workspaceKey(directory) === workspaceKey(currentDir()) ? [params.id] : undefined,
     })
   }
 
@@ -714,7 +722,7 @@ export default function Layout(props: ParentProps) {
   })
 
   createEffect(() => {
-    params.dir
+    route()
     globalSDK.url
 
     prefetchToken.value += 1
@@ -940,6 +948,28 @@ export default function Layout(props: ParentProps) {
     navigateToSession(session)
   }
 
+  function navigateProjectByOffset(offset: number) {
+    const projects = layout.projects.list()
+    if (projects.length === 0) return
+
+    const current = currentProject()?.worktree
+    const fallback = currentDir() ? projectRoot(currentDir()) : undefined
+    const active = current ?? fallback
+    const index = active ? projects.findIndex((project) => project.worktree === active) : -1
+
+    const target =
+      index === -1
+        ? offset > 0
+          ? projects[0]
+          : projects[projects.length - 1]
+        : projects[(index + offset + projects.length) % projects.length]
+    if (!target) return
+
+    // warm up child store to prevent flicker
+    globalSync.child(target.worktree)
+    openProject(target.worktree)
+  }
+
   function navigateSessionByUnseen(offset: number) {
     const sessions = currentSessions()
     if (sessions.length === 0) return
@@ -1005,6 +1035,20 @@ export default function Layout(props: ParentProps) {
         category: language.t("command.category.project"),
         keybind: "mod+o",
         onSelect: () => chooseProject(),
+      },
+      {
+        id: "project.previous",
+        title: language.t("command.project.previous"),
+        category: language.t("command.category.project"),
+        keybind: "mod+alt+arrowup",
+        onSelect: () => navigateProjectByOffset(-1),
+      },
+      {
+        id: "project.next",
+        title: language.t("command.project.next"),
+        category: language.t("command.category.project"),
+        keybind: "mod+alt+arrowdown",
+        onSelect: () => navigateProjectByOffset(1),
       },
       {
         id: "provider.connect",
@@ -1108,10 +1152,10 @@ export default function Layout(props: ParentProps) {
       },
     ]
 
-    for (const [id, definition] of availableThemeEntries()) {
+    for (const [id] of availableThemeEntries()) {
       commands.push({
         id: `theme.set.${id}`,
-        title: language.t("command.theme.set", { theme: definition.name ?? id }),
+        title: language.t("command.theme.set", { theme: theme.name(id) }),
         category: language.t("command.category.theme"),
         onSelect: () => theme.commitPreview(),
         onHighlight: () => {
@@ -1162,25 +1206,41 @@ export default function Layout(props: ParentProps) {
   })
 
   function connectProvider() {
-    dialog.show(() => <DialogSelectProvider />)
+    const run = ++dialogRun
+    void import("@/components/dialog-select-provider").then((x) => {
+      if (dialogDead || dialogRun !== run) return
+      dialog.show(() => <x.DialogSelectProvider />)
+    })
   }
 
   function openServer() {
-    dialog.show(() => <DialogSelectServer />)
+    const run = ++dialogRun
+    void import("@/components/dialog-select-server").then((x) => {
+      if (dialogDead || dialogRun !== run) return
+      dialog.show(() => <x.DialogSelectServer />)
+    })
   }
 
   function openSettings() {
-    dialog.show(() => <DialogSettings />)
+    const run = ++dialogRun
+    void import("@/components/dialog-settings").then((x) => {
+      if (dialogDead || dialogRun !== run) return
+      dialog.show(() => <x.DialogSettings />)
+    })
   }
 
   function projectRoot(directory: string) {
+    const key = workspaceKey(directory)
     const project = layout.projects
       .list()
-      .find((item) => item.worktree === directory || item.sandboxes?.includes(directory))
+      .find(
+        (item) =>
+          workspaceKey(item.worktree) === key || item.sandboxes?.some((sandbox) => workspaceKey(sandbox) === key),
+      )
     if (project) return project.worktree
 
     const known = Object.entries(store.workspaceOrder).find(
-      ([root, dirs]) => root === directory || dirs.includes(directory),
+      ([root, dirs]) => workspaceKey(root) === key || dirs.some((item) => workspaceKey(item) === key),
     )
     if (known) return known[0]
 
@@ -1194,13 +1254,6 @@ export default function Layout(props: ParentProps) {
 
   function activeProjectRoot(directory: string) {
     return currentProject()?.worktree ?? projectRoot(directory)
-  }
-
-  function touchProjectRoute() {
-    const root = currentProject()?.worktree
-    if (!root) return
-    if (server.projects.last() !== root) server.projects.touch(root)
-    return root
   }
 
   function rememberSessionRoute(directory: string, id: string, root = activeProjectRoot(directory)) {
@@ -1311,7 +1364,7 @@ export default function Layout(props: ParentProps) {
 
   function openProject(directory: string, navigate = true) {
     layout.projects.open(directory)
-    if (navigate) navigateToProject(directory)
+    if (navigate) return navigateToProject(directory)
   }
 
   const handleDeepLinks = (urls: string[]) => {
@@ -1366,8 +1419,9 @@ export default function Layout(props: ParentProps) {
 
   function closeProject(directory: string) {
     const list = layout.projects.list()
-    const index = list.findIndex((x) => x.worktree === directory)
-    const active = currentProject()?.worktree === directory
+    const key = workspaceKey(directory)
+    const index = list.findIndex((x) => workspaceKey(x.worktree) === key)
+    const active = workspaceKey(currentProject()?.worktree ?? "") === key
     if (index === -1) return
     const next = list[index + 1]
 
@@ -1399,7 +1453,13 @@ export default function Layout(props: ParentProps) {
     layout.sidebar.toggleWorkspaces(project.worktree)
   }
 
-  const showEditProjectDialog = (project: LocalProject) => dialog.show(() => <DialogEditProject project={project} />)
+  const showEditProjectDialog = (project: LocalProject) => {
+    const run = ++dialogRun
+    void import("@/components/dialog-edit-project").then((x) => {
+      if (dialogDead || dialogRun !== run) return
+      dialog.show(() => <x.DialogEditProject project={project} />)
+    })
+  }
 
   async function chooseProject() {
     function resolve(result: string | string[] | null) {
@@ -1420,10 +1480,14 @@ export default function Layout(props: ParentProps) {
       })
       resolve(result)
     } else {
-      dialog.show(
-        () => <DialogSelectDirectory multiple={true} onSelect={resolve} />,
-        () => resolve(null),
-      )
+      const run = ++dialogRun
+      void import("@/components/dialog-select-directory").then((x) => {
+        if (dialogDead || dialogRun !== run) return
+        dialog.show(
+          () => <x.DialogSelectDirectory multiple={true} onSelect={resolve} />,
+          () => resolve(null),
+        )
+      })
     }
   }
 
@@ -1702,38 +1766,51 @@ export default function Layout(props: ParentProps) {
   const activeRoute = {
     session: "",
     sessionProject: "",
+    directory: "",
   }
 
   createEffect(
     on(
-      () => [pageReady(), params.dir, params.id, currentProject()?.worktree] as const,
-      ([ready, dir, id]) => {
-        if (!ready || !dir) {
+      () => {
+        return [pageReady(), route().slug, params.id, currentProject()?.worktree, currentDir()] as const
+      },
+      ([ready, slug, id, root, dir]) => {
+        if (!ready || !slug || !dir) {
           activeRoute.session = ""
           activeRoute.sessionProject = ""
+          activeRoute.directory = ""
           return
         }
-
-        const directory = decode64(dir)
-        if (!directory) return
-
-        const root = touchProjectRoute() ?? activeProjectRoot(directory)
 
         if (!id) {
           activeRoute.session = ""
           activeRoute.sessionProject = ""
+          activeRoute.directory = ""
           return
         }
 
-        const session = `${dir}/${id}`
-        if (session !== activeRoute.session) {
+        const session = `${slug}/${id}`
+
+        if (!root) {
           activeRoute.session = session
-          activeRoute.sessionProject = syncSessionRoute(directory, id, root)
+          activeRoute.directory = dir
+          activeRoute.sessionProject = ""
+          return
+        }
+
+        if (server.projects.last() !== root) server.projects.touch(root)
+
+        const changed = session !== activeRoute.session || dir !== activeRoute.directory
+        if (changed) {
+          activeRoute.session = session
+          activeRoute.directory = dir
+          activeRoute.sessionProject = syncSessionRoute(dir, id, root)
           return
         }
 
         if (root === activeRoute.sessionProject) return
-        activeRoute.sessionProject = rememberSessionRoute(directory, id, root)
+        activeRoute.directory = dir
+        activeRoute.sessionProject = rememberSessionRoute(dir, id, root)
       },
     ),
   )
@@ -1742,6 +1819,9 @@ export default function Layout(props: ParentProps) {
     const sidebarWidth = layout.sidebar.opened() ? layout.sidebar.width() : 48
     document.documentElement.style.setProperty("--dialog-left-margin", `${sidebarWidth}px`)
   })
+
+  const side = createMemo(() => Math.max(layout.sidebar.width(), 244))
+  const panel = createMemo(() => Math.max(side() - 64, 0))
 
   const loadedSessionDirs = new Set<string>()
 
@@ -1797,8 +1877,13 @@ export default function Layout(props: ParentProps) {
     const local = project.worktree
     const dirs = [local, ...(project.sandboxes ?? [])]
     const active = currentProject()
-    const directory = active?.worktree === project.worktree ? currentDir() : undefined
-    const extra = directory && directory !== local && !dirs.includes(directory) ? directory : undefined
+    const directory = workspaceKey(active?.worktree ?? "") === workspaceKey(project.worktree) ? currentDir() : undefined
+    const extra =
+      directory &&
+      workspaceKey(directory) !== workspaceKey(local) &&
+      !dirs.some((item) => workspaceKey(item) === workspaceKey(directory))
+        ? directory
+        : undefined
     const pending = extra ? WorktreeState.get(extra)?.status === "pending" : false
 
     const ordered = effectiveWorkspaceOrder(local, dirs, store.workspaceOrder[project.worktree])
@@ -1921,6 +2006,7 @@ export default function Layout(props: ParentProps) {
 
   const projectSidebarCtx: ProjectSidebarContext = {
     currentDir,
+    currentProject,
     sidebarOpened: () => layout.sidebar.opened(),
     sidebarHovering,
     hoverProject: () => state.hoverProject,
@@ -1928,6 +2014,10 @@ export default function Layout(props: ParentProps) {
     onProjectMouseEnter: (worktree, event) => aim.enter(worktree, event),
     onProjectMouseLeave: (worktree) => aim.leave(worktree),
     onProjectFocus: (worktree) => aim.activate(worktree),
+    onHoverOpenChanged: (worktree, hoverOpen) => {
+      if (!hoverOpen && state.hoverProject && state.hoverProject !== worktree) return
+      setState("hoverProject", hoverOpen ? worktree : undefined)
+    },
     navigateToProject,
     openSidebar: () => layout.sidebar.open(),
     closeProject,
@@ -1959,6 +2049,7 @@ export default function Layout(props: ParentProps) {
     const merged = createMemo(() => panelProps.mobile || (panelProps.merged ?? layout.sidebar.opened()))
     const hover = createMemo(() => !panelProps.mobile && panelProps.merged === false && !layout.sidebar.opened())
     const popover = createMemo(() => !!panelProps.mobile || panelProps.merged === false || layout.sidebar.opened())
+    const empty = createMemo(() => !params.dir && layout.projects.list().length === 0)
     const projectName = createMemo(() => {
       const item = project()
       if (!item) return ""
@@ -2008,10 +2099,29 @@ export default function Layout(props: ParentProps) {
           "max-w-full overflow-hidden": panelProps.mobile,
         }}
         style={{
-          width: panelProps.mobile ? undefined : `${Math.max(Math.max(layout.sidebar.width(), 244) - 64, 0)}px`,
+          width: panelProps.mobile ? undefined : `${panel()}px`,
         }}
       >
-        <Show when={project()}>
+        <Show
+          when={project()}
+          fallback={
+            <Show when={empty()}>
+              <div class="flex-1 min-h-0 -mt-4 flex items-center justify-center px-6 pb-64 text-center">
+                <div class="mt-8 flex max-w-60 flex-col items-center gap-6 text-center">
+                  <div class="flex flex-col gap-3">
+                    <div class="text-14-medium text-text-strong">{language.t("sidebar.empty.title")}</div>
+                    <div class="text-14-regular text-text-base" style={{ "line-height": "var(--line-height-normal)" }}>
+                      {language.t("sidebar.empty.description")}
+                    </div>
+                  </div>
+                  <Button size="large" icon="folder-add-left" onClick={chooseProject}>
+                    {language.t("command.project.open")}
+                  </Button>
+                </div>
+              </div>
+            </Show>
+          }
+        >
           <>
             <div class="shrink-0 pl-1 py-1">
               <div class="group/project flex items-start justify-between gap-2 py-2 pl-2 pr-0">
@@ -2052,9 +2162,11 @@ export default function Layout(props: ParentProps) {
                     variant="ghost"
                     data-action="project-menu"
                     data-project={slug()}
-                    class="shrink-0 size-6 rounded-md data-[expanded]:bg-surface-base-active"
+                    class="shrink-0 size-6 rounded-md transition-opacity data-[expanded]:bg-surface-base-active"
                     classList={{
-                      "opacity-0 group-hover/project:opacity-100 data-[expanded]:opacity-100": !panelProps.mobile,
+                      "opacity-100": panelProps.mobile || merged(),
+                      "opacity-0 group-hover/project:opacity-100 group-focus-within/project:opacity-100 data-[expanded]:opacity-100":
+                        !panelProps.mobile && !merged(),
                     }}
                     aria-label={language.t("common.moreOptions")}
                   />
@@ -2260,13 +2372,7 @@ export default function Layout(props: ParentProps) {
       helpLabel={() => language.t("sidebar.help")}
       onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
       renderPanel={() =>
-        mobile ? (
-          <SidebarPanel project={currentProject} mobile />
-        ) : (
-          <Show when={currentProject()}>
-            <SidebarPanel project={currentProject} merged />
-          </Show>
-        )
+        mobile ? <SidebarPanel project={currentProject} mobile /> : <SidebarPanel project={currentProject} merged />
       }
     />
   )
@@ -2285,7 +2391,7 @@ export default function Layout(props: ParentProps) {
                 "absolute inset-y-0 left-0": true,
                 "z-10": true,
               }}
-              style={{ width: `${Math.max(layout.sidebar.width(), 244)}px` }}
+              style={{ width: `${side()}px` }}
               ref={(el) => {
                 setState("nav", el)
               }}
@@ -2300,25 +2406,28 @@ export default function Layout(props: ParentProps) {
               }}
             >
               <div class="@container w-full h-full contain-strict">{sidebarContent()}</div>
-              <Show when={layout.sidebar.opened()}>
-                <div onPointerDown={() => setState("sizing", true)}>
-                  <ResizeHandle
-                    direction="horizontal"
-                    size={layout.sidebar.width()}
-                    min={244}
-                    max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
-                    collapseThreshold={244}
-                    onResize={(w) => {
-                      setState("sizing", true)
-                      if (sizet !== undefined) clearTimeout(sizet)
-                      sizet = window.setTimeout(() => setState("sizing", false), 120)
-                      layout.sidebar.resize(w)
-                    }}
-                    onCollapse={layout.sidebar.close}
-                  />
-                </div>
-              </Show>
             </nav>
+
+            <Show when={layout.sidebar.opened()}>
+              <div
+                class="hidden xl:block absolute inset-y-0 z-30 w-0 overflow-visible"
+                style={{ left: `${side()}px` }}
+                onPointerDown={() => setState("sizing", true)}
+              >
+                <ResizeHandle
+                  direction="horizontal"
+                  size={layout.sidebar.width()}
+                  min={244}
+                  max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
+                  onResize={(w) => {
+                    setState("sizing", true)
+                    if (sizet !== undefined) clearTimeout(sizet)
+                    sizet = window.setTimeout(() => setState("sizing", false), 120)
+                    layout.sidebar.resize(w)
+                  }}
+                />
+              </div>
+            </Show>
 
             <div
               class="hidden xl:block pointer-events-none absolute top-0 right-0 z-0 border-t border-border-weaker-base"
@@ -2359,7 +2468,7 @@ export default function Layout(props: ParentProps) {
                   !state.sizing,
               }}
               style={{
-                "--main-left": layout.sidebar.opened() ? `${Math.max(layout.sidebar.width(), 244)}px` : "4rem",
+                "--main-left": layout.sidebar.opened() ? `${side()}px` : "4rem",
               }}
             >
               <main
@@ -2367,7 +2476,7 @@ export default function Layout(props: ParentProps) {
                   "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base bg-background-base xl:border-l xl:rounded-tl-[12px]": true,
                 }}
               >
-                <Show when={!autoselecting()} fallback={<div class="size-full" />}>
+                <Show when={!autoselecting.loading} fallback={<div class="size-full" />}>
                   {props.children}
                 </Show>
               </main>
@@ -2406,7 +2515,7 @@ export default function Layout(props: ParentProps) {
                 "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
                 "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
               }}
-              style={{ left: `calc(4rem + ${Math.max(Math.max(layout.sidebar.width(), 244) - 64, 0)}px)` }}
+              style={{ left: `calc(4rem + ${panel()}px)` }}
             >
               <div class="h-full w-px" style={{ "box-shadow": "var(--shadow-sidebar-overlay)" }} />
             </div>

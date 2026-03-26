@@ -366,9 +366,11 @@ The model ID in your OpenCode config uses the format `provider/model-id`. For ex
 
 ---
 
-### Tools
+### Tools (deprecated)
 
-Control which tools are available in this agent with the `tools` config. You can enable or disable specific tools by setting them to `true` or `false`.
+`tools` is **deprecated**. Prefer the agent's [`permission`](#permissions) field for new configs, updates and more fine-grained control.
+
+Allows you to control which tools are available in this agent. You can enable or disable specific tools by setting them to `true` or `false`. In an agent's `tools` config, `true` is equivalent to `{"*": "allow"}` permission and `false` is equivalent to `{"*": "deny"}` permission.
 
 ```json title="opencode.json" {3-6,9-12}
 {
@@ -392,7 +394,7 @@ Control which tools are available in this agent with the `tools` config. You can
 The agent-specific config overrides the global config.
 :::
 
-You can also use wildcards to control multiple tools at once. For example, to disable all tools from an MCP server:
+You can also use wildcards in legacy `tools` entries to control multiple tools at once. For example, to disable all tools from an MCP server:
 
 ```json title="opencode.json"
 {

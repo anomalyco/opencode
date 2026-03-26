@@ -57,11 +57,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     if (!id) return
     return sync.session.get(id)
   }
-  const hasReview = () => {
-    const id = params.id
-    if (!id) return false
-    return Math.max(info()?.summary?.files ?? 0, (sync.data.session_diff[id] ?? []).length) > 0
-  }
+  const hasReview = () => !!params.id
   const normalizeTab = (tab: string) => {
     if (!tab.startsWith("file://")) return tab
     return file.tab(tab)
@@ -232,7 +228,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         id: "file.open",
         title: language.t("command.file.open"),
         description: language.t("palette.search.placeholder"),
-        keybind: "mod+p",
+        keybind: "mod+k,mod+p",
         slash: "open",
         onSelect: () => dialog.show(() => <DialogSelectFile onOpenFile={showAllFiles} />),
       }),
@@ -310,7 +306,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         id: "message.previous",
         title: language.t("command.message.previous"),
         description: language.t("command.message.previous.description"),
-        keybind: "mod+arrowup",
+        keybind: "mod+alt+[",
         disabled: !params.id,
         onSelect: () => navigateMessageByOffset(-1),
       }),
@@ -318,7 +314,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         id: "message.next",
         title: language.t("command.message.next"),
         description: language.t("command.message.next.description"),
-        keybind: "mod+arrowdown",
+        keybind: "mod+alt+]",
         disabled: !params.id,
         onSelect: () => navigateMessageByOffset(1),
       }),

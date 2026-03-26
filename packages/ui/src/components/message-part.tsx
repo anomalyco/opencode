@@ -311,11 +311,6 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
         icon: "checklist",
         title: i18n.t("ui.tool.todos"),
       }
-    case "todoread":
-      return {
-        icon: "checklist",
-        title: i18n.t("ui.tool.todos.read"),
-      }
     case "question":
       return {
         icon: "bubble-5",
@@ -358,7 +353,7 @@ function sessionLink(id: string | undefined, path: string, href?: (id: string) =
 }
 
 const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
-const HIDDEN_TOOLS = new Set(["todowrite", "todoread"])
+const HIDDEN_TOOLS = new Set(["todowrite"])
 
 function list<T>(value: T[] | undefined | null, fallback: T[]) {
   if (Array.isArray(value)) return value
@@ -1211,7 +1206,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const data = useData()
   const i18n = useI18n()
   const part = () => props.part as ToolPart
-  if (part().tool === "todowrite" || part().tool === "todoread") return null
+  if (part().tool === "todowrite") return null
 
   const hideQuestion = createMemo(
     () => part().tool === "question" && (part().state.status === "pending" || part().state.status === "running"),
