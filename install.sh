@@ -60,44 +60,19 @@ else
   ASSET="${PKG_NAME}.zip"
 fi
 
-# ── Fetch latest release that has the expected asset ─────────────────────────
-# Use the GitHub API to inspect each release's asset list directly — HTTP
-# probing is unreliable because GitHub uses varying redirect codes.
-# Walk up to 10 recent non-draft releases until one has the expected asset.
+# ── Fetch latest release ─────────────────────────────────────────────────────
+# The CD pipeline publishes releases only after all binaries are uploaded
+# (draft → publish), so /releases/latest always has assets.
 step "Fetching latest release…"
 
-RELEASES_JSON=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases?per_page=10")
-
-if [[ -z "$RELEASES_JSON" ]]; then
-  error "Could not fetch releases. Check your internet connection."
-fi
-
-LATEST=""
-DOWNLOAD_URL=""
-
-# Extract tag names in order (newest first)
-TAGS=$(echo "$RELEASES_JSON" | grep '"tag_name"' | sed 's/.*"tag_name": *"\(.*\)".*/\1/')
-
-for TAG in $TAGS; do
-  # Query the specific release and look for our asset in browser_download_url entries
-  RELEASE_JSON=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/tags/${TAG}" 2>/dev/null)
-  # Skip drafts
-  IS_DRAFT=$(echo "$RELEASE_JSON" | grep '"draft"' | head -1 | grep -o 'true' || true)
-  [[ "$IS_DRAFT" == "true" ]] && continue
-  # Check if the expected asset is listed
-  URL=$(echo "$RELEASE_JSON" | grep '"browser_download_url"' \
-    | sed 's/.*"browser_download_url": *"\(.*\)".*/\1/' \
-    | grep "/${ASSET}$" | head -1)
-  if [[ -n "$URL" ]]; then
-    LATEST="$TAG"
-    DOWNLOAD_URL="$URL"
-    break
-  fi
-done
+LATEST=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
+  | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"\(.*\)".*/\1/')
 
 if [[ -z "$LATEST" ]]; then
-  error "No release found with asset ${ASSET}. Try again in a few minutes while the build completes."
+  error "Could not determine latest release. Check your internet connection."
 fi
+
+DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${LATEST}/${ASSET}"
 
 info "Latest release: ${LATEST}"
 
