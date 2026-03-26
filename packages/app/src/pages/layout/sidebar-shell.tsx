@@ -93,19 +93,21 @@ export const SidebarContent = (props: {
           </DragDropProvider>
         </div>
         <div class="shrink-0 w-full pt-3 pb-6 flex flex-col items-center gap-2">
-          <For each={props.pluginItems() || []}>
-            {(item) => (
-              <Tooltip placement={placement()} value={item.label}>
-                <IconButton
-                  icon={getIconName(item.icon)}
-                  variant="ghost"
-                  size="large"
-                  onClick={() => props.onOpenPluginItem(item.href)}
-                  aria-label={item.label}
-                />
-              </Tooltip>
-            )}
-          </For>
+          <div class="flex max-h-40 w-full flex-col items-center gap-2 overflow-y-auto no-scrollbar">
+            <For each={props.pluginItems() || []}>
+              {(item) => (
+                <Tooltip placement={placement()} value={item.label}>
+                  <IconButton
+                    icon={getIconName(item.icon)}
+                    variant="ghost"
+                    size="large"
+                    onClick={() => props.onOpenPluginItem(item.href)}
+                    aria-label={item.label}
+                  />
+                </Tooltip>
+              )}
+            </For>
+          </div>
           <TooltipKeybind placement={placement()} title={props.settingsLabel()} keybind={props.settingsKeybind() ?? ""}>
             <IconButton
               icon="settings-gear"

@@ -2476,6 +2476,8 @@ export default function Layout(props: ParentProps) {
               <button
                 type="button"
                 aria-label={language.t("common.dismiss")}
+                aria-hidden={!layout.mobileSidebar.opened()}
+                tabIndex={layout.mobileSidebar.opened() ? 0 : -1}
                 classList={{
                   "fixed inset-x-0 top-10 bottom-0 z-40 transition-opacity duration-200": true,
                   "opacity-100 pointer-events-auto": layout.mobileSidebar.opened(),
