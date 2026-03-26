@@ -16,22 +16,23 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Get latest tag
+      - name: Get latest CoBuilder tag
         id: latest_tag
         run: |
-          TAG=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)
-          echo "tag=${TAG:-v0.0.0}" >> "$GITHUB_OUTPUT"
+          # Only consider our own cb-vX.Y.Z tags, ignoring upstream inherited tags
+          TAG=$(git tag --sort=-v:refname | grep -E '^cb-v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)
+          echo "tag=${TAG:-cb-v0.0.0}" >> "$GITHUB_OUTPUT"
 
       - name: Determine next version
         id: next_version
         run: |
           TAG="${{ steps.latest_tag.outputs.tag }}"
-          VERSION="${TAG#v}"
+          VERSION="${TAG#cb-v}"
           MAJOR=$(echo "$VERSION" | cut -d. -f1)
           MINOR=$(echo "$VERSION" | cut -d. -f2)
           PATCH=$(echo "$VERSION" | cut -d. -f3)
 
-          # Collect commit subjects since last tag (or all commits if no tag)
+          # Collect commit subjects since last tag
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             COMMITS=$(git log "${TAG}..HEAD" --pretty=format:"%s")
           else
@@ -47,15 +48,17 @@ jobs:
             PATCH=$((PATCH + 1))
           fi
 
-          NEXT="v${MAJOR}.${MINOR}.${PATCH}"
-          echo "version=${NEXT}" >> "$GITHUB_OUTPUT"
-          echo "Next release: ${NEXT}"
+          NEXT_TAG="cb-v${MAJOR}.${MINOR}.${PATCH}"
+          NEXT_DISPLAY="v${MAJOR}.${MINOR}.${PATCH}"
+          echo "tag=${NEXT_TAG}" >> "$GITHUB_OUTPUT"
+          echo "display=${NEXT_DISPLAY}" >> "$GITHUB_OUTPUT"
+          echo "Next release: ${NEXT_TAG}"
 
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${{ steps.next_version.outputs.version }}" \
-            --title "Release ${{ steps.next_version.outputs.version }}" \
+          gh release create "${{ steps.next_version.outputs.tag }}" \
+            --title "CoBuilder ${{ steps.next_version.outputs.display }}" \
             --generate-notes \
             --latest
