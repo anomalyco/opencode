@@ -12,7 +12,8 @@
     Nose at row 7, cols 4–5
 
     Main:  #c08055  (warm fawn)
-    Dark:  #5a2808  (eyes, nose)
+    Cream: #e8c4a0  (inner face patch, rows 4–7)
+    Dark:  #5a2808  (eyes col 3 & 6, nose cols 4–5)
   -->
 
   <!-- ROW 0 — ear tips (cols 2, 7) -->
@@ -45,47 +46,47 @@
   <rect x="202" y="82" width="24" height="24" fill="#c08055"/>
   <rect x="226" y="82" width="24" height="24" fill="#c08055"/>
 
-  <!-- ROW 4 — head + eyes (cols 0–9, dark at cols 3 & 7) -->
+  <!-- ROW 4 — eyes on cream background (eyes at cols 3 & 6, cream cols 4–5) -->
   <rect x="10"  y="106" width="24" height="24" fill="#c08055"/>
   <rect x="34"  y="106" width="24" height="24" fill="#c08055"/>
   <rect x="58"  y="106" width="24" height="24" fill="#c08055"/>
   <rect x="82"  y="106" width="24" height="24" fill="#5a2808"/>
-  <rect x="106" y="106" width="24" height="24" fill="#c08055"/>
-  <rect x="130" y="106" width="24" height="24" fill="#c08055"/>
-  <rect x="154" y="106" width="24" height="24" fill="#c08055"/>
-  <rect x="178" y="106" width="24" height="24" fill="#5a2808"/>
+  <rect x="106" y="106" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="130" y="106" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="154" y="106" width="24" height="24" fill="#5a2808"/>
+  <rect x="178" y="106" width="24" height="24" fill="#c08055"/>
   <rect x="202" y="106" width="24" height="24" fill="#c08055"/>
   <rect x="226" y="106" width="24" height="24" fill="#c08055"/>
 
-  <!-- ROW 5 — full head (cols 0–9) -->
+  <!-- ROW 5 — cream face patch (cols 2–7) -->
   <rect x="10"  y="130" width="24" height="24" fill="#c08055"/>
   <rect x="34"  y="130" width="24" height="24" fill="#c08055"/>
-  <rect x="58"  y="130" width="24" height="24" fill="#c08055"/>
-  <rect x="82"  y="130" width="24" height="24" fill="#c08055"/>
-  <rect x="106" y="130" width="24" height="24" fill="#c08055"/>
-  <rect x="130" y="130" width="24" height="24" fill="#c08055"/>
-  <rect x="154" y="130" width="24" height="24" fill="#c08055"/>
-  <rect x="178" y="130" width="24" height="24" fill="#c08055"/>
+  <rect x="58"  y="130" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="82"  y="130" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="106" y="130" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="130" y="130" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="154" y="130" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="178" y="130" width="24" height="24" fill="#e8c4a0"/>
   <rect x="202" y="130" width="24" height="24" fill="#c08055"/>
   <rect x="226" y="130" width="24" height="24" fill="#c08055"/>
 
-  <!-- ROW 6 — slightly narrower (cols 1–8) -->
+  <!-- ROW 6 — cream face narrows (cols 2–7) -->
   <rect x="34"  y="154" width="24" height="24" fill="#c08055"/>
-  <rect x="58"  y="154" width="24" height="24" fill="#c08055"/>
-  <rect x="82"  y="154" width="24" height="24" fill="#c08055"/>
-  <rect x="106" y="154" width="24" height="24" fill="#c08055"/>
-  <rect x="130" y="154" width="24" height="24" fill="#c08055"/>
-  <rect x="154" y="154" width="24" height="24" fill="#c08055"/>
-  <rect x="178" y="154" width="24" height="24" fill="#c08055"/>
+  <rect x="58"  y="154" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="82"  y="154" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="106" y="154" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="130" y="154" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="154" y="154" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="178" y="154" width="24" height="24" fill="#e8c4a0"/>
   <rect x="202" y="154" width="24" height="24" fill="#c08055"/>
 
-  <!-- ROW 7 — snout (cols 1–8), nose dark at cols 4–5 -->
+  <!-- ROW 7 — snout + nose (cream col 3 & 6, dark nose cols 4–5) -->
   <rect x="34"  y="178" width="24" height="24" fill="#c08055"/>
   <rect x="58"  y="178" width="24" height="24" fill="#c08055"/>
-  <rect x="82"  y="178" width="24" height="24" fill="#c08055"/>
+  <rect x="82"  y="178" width="24" height="24" fill="#e8c4a0"/>
   <rect x="106" y="178" width="24" height="24" fill="#5a2808"/>
   <rect x="130" y="178" width="24" height="24" fill="#5a2808"/>
-  <rect x="154" y="178" width="24" height="24" fill="#c08055"/>
+  <rect x="154" y="178" width="24" height="24" fill="#e8c4a0"/>
   <rect x="178" y="178" width="24" height="24" fill="#c08055"/>
   <rect x="202" y="178" width="24" height="24" fill="#c08055"/>
 
