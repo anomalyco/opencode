@@ -67,9 +67,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const hasTodoWritePermission = agent.permission.some((rule) => rule.permission === "todowrite")
 
       const session = await iife(async () => {
-        if (params.task_id) {
-          const found = await Session.get(SessionID.make(params.task_id)).catch(() => {})
-          if (found) return found
+        const id = params.task_id ? SessionID.zod.safeParse(params.task_id) : undefined
+        const found = id?.success ? await Session.get(id.data).catch(() => undefined) : undefined
+
+        if (found) {
+          return found
         }
 
         return await Session.create({
