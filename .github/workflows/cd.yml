@@ -125,14 +125,14 @@ jobs:
           "
 
       # Create release BEFORE build so build.ts can upload assets to it via gh release upload
-      - name: Create GitHub release
+      - name: Create GitHub release (draft)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "${{ steps.next_version.outputs.tag }}" \
             --title "CoBuilder ${{ steps.next_version.outputs.display }}" \
             --notes-file /tmp/release-notes.md \
-            --latest
+            --draft
 
       - name: Build and upload binaries
         env:
@@ -145,6 +145,15 @@ jobs:
         run: |
           cd packages/opencode
           bun run build
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit "${{ steps.next_version.outputs.tag }}" \
+            --draft=false \
+            --latest \
+            --repo CobuilderLabs/opencode
 
   desktop-linux:
     name: Desktop (Linux)
