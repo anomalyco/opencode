@@ -617,6 +617,15 @@ function ListButton(props: {
   )
 }
 
+function Wait(props: { text: string }) {
+  return (
+    <div class="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center">
+      <Spinner class="size-4 text-icon-weak-base" />
+      <div class="text-13-regular text-text-weak">{props.text}</div>
+    </div>
+  )
+}
+
 function Tree(props: {
   list: TreeNode[]
   root?: string
@@ -1435,6 +1444,12 @@ export default function ConfigPage() {
   const globalSync = useGlobalSync()
   const server = useServer()
   const [query] = useSearchParams<{ section?: string; pick?: string }>()
+  const cache = new Map<string, string>()
+  const pending = new Map<string, Promise<string>>()
+  const trees = new Map<string, TreeNode[]>()
+  const treePending = new Map<string, Promise<TreeNode[]>>()
+  let openRun = 0
+  let jumpRun = 0
   let skillsList: HTMLDivElement | undefined
   const [state, setState] = createStore({
     section: "agents-md" as Section,
@@ -1466,11 +1481,6 @@ export default function ConfigPage() {
     list.forEach((key) => setState(key, (value) => value + 1))
   }
 
-  const mode = createMemo(() => state.section)
-  const skillMode = createMemo(() => mode() === "skills")
-  const agentMode = createMemo(() => mode() === "agents")
-  const clawMode = createMemo(() => mode() === "claws")
-
   const [workspace] = createResource(
     () => state.workspaceRev,
     async () => {
@@ -1480,25 +1490,23 @@ export default function ConfigPage() {
   )
 
   const [rawSkills] = createResource(
-    () => (skillMode() ? state.skillRev : -1),
-    async (rev) => {
-      if (rev === -1) return []
+    () => state.skillRev,
+    async () => {
       const resp = await globalSDK.client.app.skills({}, { throwOnError: true })
       return resp.data ?? []
     },
   )
 
   const [loaded] = createResource(
-    () => (agentMode() ? state.agentRev : -1),
-    async (rev) => {
-      if (rev === -1) return [] as Agent[]
+    () => state.agentRev,
+    async () => {
       const resp = await globalSDK.client.app.agents({}, { throwOnError: true })
       return resp.data ?? []
     },
   )
 
   const [openclaw] = createResource(
-    () => (clawMode() ? state.clawRev : -1),
+    () => (state.section === "claws" ? state.clawRev : -1),
     async (rev) => {
       if (rev === -1) return undefined
       if (!platform.getOpenclawConfig) return undefined
@@ -1628,27 +1636,24 @@ export default function ConfigPage() {
   }
 
   const [diskClaude] = createResource(
-    () => (skillMode() ? ([state.skillRev, claudeRoot()] as const) : ([-1, undefined] as const)),
-    async ([rev, root]) => {
-      if (rev === -1) return [] as SkillItem[]
+    () => [state.skillRev, claudeRoot()] as const,
+    async ([, root]) => {
       if (!root) return [] as SkillItem[]
       return scan(root, { source: "external", group: "claude", origin: ".claude" })
     },
   )
 
   const [diskOpenCode] = createResource(
-    () => (skillMode() ? ([state.skillRev, space()?.skillsRoot] as const) : ([-1, undefined] as const)),
-    async ([rev, root]) => {
-      if (rev === -1) return [] as SkillItem[]
+    () => [state.skillRev, space()?.skillsRoot] as const,
+    async ([, root]) => {
       if (!root) return [] as SkillItem[]
       return scan(root, { source: "opencode", group: "opencode", origin: ".opencode" })
     },
   )
 
   const [diskProject] = createResource(
-    () => (skillMode() ? ([state.skillRev, opened()] as const) : ([-1, []] as const)),
-    async ([rev, list]) => {
-      if (rev === -1) return [] as SkillItem[]
+    () => [state.skillRev, opened()] as const,
+    async ([, list]) => {
       return Promise.all(
         list.map(async (item) => {
           const label = item.name ?? name(item.worktree)
@@ -1873,10 +1878,15 @@ export default function ConfigPage() {
     return map
   })
 
-  const selectedDoc = createMemo(() => {
-    const item = docs().get(state.pick)
+  const currentDoc = createMemo(() => {
+    if (state.section === "agents-md") return agentsMd().find((item) => item.id === state.doc)
+    if (state.section === "agents") return agents().find((item) => item.id === state.doc)
+    if (state.section === "plugins") return pluginDocs().find((item) => item.id === state.doc)
+    if (state.section !== "skills") return
+
+    const item = skillDocs().find((item) => item.id === state.doc)
     if (item) return item
-    if (state.pick !== state.skillPath || !state.skillPath) return
+    if (state.doc !== state.skillPath || !state.skillPath) return
     return {
       id: `skill:${state.skillPath}`,
       label: state.skillTitle.trim() || name(dir(state.skillPath)),
@@ -1888,17 +1898,18 @@ export default function ConfigPage() {
       group: "opencode" as const,
     }
   })
+  const currentPlugin = createMemo(() => plugins().find((item) => item.id === state.doc))
+  const currentAgent = createMemo(() => agents().find((item) => item.id === state.doc))
+  const currentSkill = createMemo(() => skillDocs().find((item) => item.id === state.doc))
   const selectedProvider = createMemo(() =>
     providers().find((item) => item.id === state.pick.replace(/^provider:/, "")),
   )
   const selectedPlugin = createMemo(() => plugins().find((item) => item.id === state.pick))
-  const selectedAgent = createMemo(() => agents().find((item) => item.id === state.pick))
-  const selectedSkill = createMemo(() => skillDocs().find((item) => item.id === state.pick))
   const selectedClaw = createMemo(() => claws().find((item) => item.id === state.pick))
   const selectedCustom = createMemo(() =>
     providers().find((item) => item.id === state.pick.replace(/^provider:/, "") && item.custom),
   )
-  const dirty = createMemo(() => !!selectedDoc() && state.doc === state.pick && state.text !== state.saved)
+  const dirty = createMemo(() => !!currentDoc() && state.doc === state.pick && state.text !== state.saved)
   const clawDirty = createMemo(() => {
     const cfg = openclaw()
     if (!cfg || state.section !== "claws") return false
@@ -1910,10 +1921,18 @@ export default function ConfigPage() {
   })
 
   const currentSkillRoot = createMemo(() => {
-    const item = selectedSkill()
+    const item = currentSkill()
     if (!item) return undefined
     return dir(item.path)
   })
+  const agentWait = createMemo(() => state.section === "agents" && loaded.loading && agents().length === 0)
+  const skillWait = createMemo(
+    () =>
+      state.section === "skills" &&
+      state.pick !== SKILL_NEW &&
+      (rawSkills.loading || diskClaude.loading || diskOpenCode.loading || diskProject.loading) &&
+      skillDocs().length === 0,
+  )
 
   async function walk(root: string, depth = 0): Promise<TreeNode[]> {
     if (!platform.listConfigDirectory) return []
@@ -1937,7 +1956,41 @@ export default function ConfigPage() {
       .catch(() => [])
   }
 
-  const [tree] = createResource(currentSkillRoot, async (root) => walk(root))
+  function loadDoc(item: DocItem) {
+    const hit = item.content ?? cache.get(item.path)
+    if (hit !== undefined) return Promise.resolve(hit)
+    const prev = pending.get(item.path)
+    if (prev) return prev
+    const next = ((platform.readConfigFile?.(item.path).catch(() => "") as Promise<string | null | undefined>) ??
+      Promise.resolve("")).then((text) => {
+      const value = text ?? ""
+      cache.set(item.path, value)
+      return value
+    })
+    pending.set(item.path, next)
+    void next.finally(() => {
+      pending.delete(item.path)
+    })
+    return next
+  }
+
+  function loadTree(root: string) {
+    const hit = trees.get(root)
+    if (hit) return Promise.resolve(hit)
+    const prev = treePending.get(root)
+    if (prev) return prev
+    const next = walk(root).then((list) => {
+      trees.set(root, list)
+      return list
+    })
+    treePending.set(root, next)
+    void next.finally(() => {
+      treePending.delete(root)
+    })
+    return next
+  }
+
+  const [tree] = createResource(currentSkillRoot, async (root) => loadTree(root))
   const treeOpen = (path: string) => !state.treeClosed[path]
   const toggleTree = (path: string) => setState("treeClosed", path, (value) => !value)
   const groupOpen = (key: string) => !!state.treeClosed[`skill-group:${key}`]
@@ -1987,6 +2040,39 @@ export default function ConfigPage() {
     return plugins().map((item) => item.id)
   }
 
+  async function jump(section: Section) {
+    const run = ++jumpRun
+    const list = picks(section)
+    const next = list[0] ?? ""
+    if (list.includes(state.pick)) {
+      setState("section", section)
+      return
+    }
+    const item = docs().get(next)
+    const root = section === "skills" && item ? dir(item.path) : undefined
+    const text = item ? item.content ?? cache.get(item.path) : undefined
+    const tree = root ? trees.get(root) : undefined
+    if (item && (text === undefined || (root && !tree))) {
+      const values = await Promise.all([loadDoc(item), root ? loadTree(root) : Promise.resolve(undefined)])
+      if (jumpRun !== run) return
+      batch(() => {
+        setState("section", section)
+        setState("pick", next)
+        setState({ doc: item.id, busy: false, text: values[0], saved: values[0] })
+      })
+      return
+    }
+    batch(() => {
+      setState("section", section)
+      setState("pick", next)
+      if (item && text !== undefined) {
+        setState({ doc: item.id, busy: false, text, saved: text })
+      }
+    })
+    if (!item || text !== undefined) return
+    void open(item)
+  }
+
   createEffect(
     on(
       () => [
@@ -2001,6 +2087,10 @@ export default function ConfigPage() {
       () => {
         const list = picks(state.section)
         if (list.includes(state.pick)) return
+        if (list.length === 0 && (agentWait() || skillWait())) {
+          setState("pick", "")
+          return
+        }
         const next = list[0] ?? ""
         setState("pick", next)
         const item = docs().get(next)
@@ -2037,18 +2127,30 @@ export default function ConfigPage() {
   )
 
   async function open(item: DocItem) {
-    setState({ pick: item.id, doc: item.id, busy: true, text: "", saved: "" })
-    const text = item.content ?? (await platform.readConfigFile?.(item.path).catch(() => "")) ?? ""
-    if (state.pick !== item.id) return
+    const run = ++openRun
+    setState("pick", item.id)
+    const cached = item.content ?? cache.get(item.path)
+    if (cached !== undefined) {
+      setState({ doc: item.id, busy: false, text: cached, saved: cached })
+      return
+    }
+    const timeout = setTimeout(() => {
+      if (openRun !== run) return
+      setState("busy", true)
+    }, 120)
+    const text = await loadDoc(item)
+    clearTimeout(timeout)
+    if (openRun !== run || state.pick !== item.id) return
     setState({ doc: item.id, busy: false, text, saved: text })
   }
 
   async function save() {
-    const item = selectedDoc()
+    const item = currentDoc()
     if (!item?.editable || !platform.writeConfigFile) return
     await platform
       .writeConfigFile(item.path, state.text)
       .then(() => {
+        cache.set(item.path, state.text)
         setState("saved", state.text)
         showToast({ title: t("common.save"), description: item.label })
       })
@@ -2172,13 +2274,13 @@ export default function ConfigPage() {
   }
 
   function openFolder() {
-    const item = selectedDoc()
+    const item = currentDoc()
     if (!item || !platform.openInFinder) return
     void platform.openInFinder(dir(item.path))
   }
 
   function copyPath() {
-    const item = selectedDoc()
+    const item = currentDoc()
     if (!item?.path) return
     void navigator.clipboard.writeText(item.path).then(
       () => {
@@ -2309,6 +2411,7 @@ export default function ConfigPage() {
       .createConfigFile(path, text)
       .then(async () => {
         const meta = skillMeta(text, path)
+        cache.set(path, text)
         setState("skillPath", path)
         setState("skillNote", meta.description)
         setState("skillWarn", meta.warn ?? "")
@@ -2513,34 +2616,34 @@ export default function ConfigPage() {
                 <SectionButton
                   current={state.section === "agents-md"}
                   title="AGENTS.md"
-                  onClick={() => setState("section", "agents-md")}
+                  onClick={() => jump("agents-md")}
                 />
                 <SectionButton
                   current={state.section === "providers"}
                   title={t("config.providers.title")}
-                  onClick={() => setState("section", "providers")}
+                  onClick={() => jump("providers")}
                 />
                 <SectionButton
                   current={state.section === "agents"}
                   title={t("config.agents.title")}
-                  onClick={() => setState("section", "agents")}
+                  onClick={() => jump("agents")}
                 />
                 {clawsEnabled() && (
                   <SectionButton
                     current={state.section === "claws"}
                     title={t("config.claws.title")}
-                    onClick={() => setState("section", "claws")}
+                    onClick={() => jump("claws")}
                   />
                 )}
                 <SectionButton
                   current={state.section === "skills"}
                   title={t("config.skills.title")}
-                  onClick={() => setState("section", "skills")}
+                  onClick={() => jump("skills")}
                 />
                 <SectionButton
                   current={state.section === "plugins"}
                   title={t("config.plugins.title")}
-                  onClick={() => setState("section", "plugins")}
+                  onClick={() => jump("plugins")}
                 />
               </div>
             </div>
@@ -2737,23 +2840,28 @@ export default function ConfigPage() {
                     </Match>
 
                     <Match when={state.section === "agents"}>
-                      <For each={agents()}>
-                        {(item) => {
-                          return (
-                            <ListButton
-                              active={state.pick === item.id}
-                              title={item.label}
-                              note={
-                                loadedMap().get(item.label)?.description ||
-                                loadedMap().get(item.label)?.mode ||
-                                item.note
-                              }
-                              meta={short(item.path, space()?.agentsRoot)}
-                              onClick={() => void open(item)}
-                            />
-                          )
-                        }}
-                      </For>
+                      <Show
+                        when={!agentWait()}
+                        fallback={<Wait text={`${t("common.loading")}${t("common.loading.ellipsis")}`} />}
+                      >
+                        <For each={agents()}>
+                          {(item) => {
+                            return (
+                              <ListButton
+                                active={state.pick === item.id}
+                                title={item.label}
+                                note={
+                                  loadedMap().get(item.label)?.description ||
+                                  loadedMap().get(item.label)?.mode ||
+                                  item.note
+                                }
+                                meta={short(item.path, space()?.agentsRoot)}
+                                onClick={() => void open(item)}
+                              />
+                            )
+                          }}
+                        </For>
+                      </Show>
                     </Match>
 
                     <Match when={state.section === "claws" && clawsEnabled()}>
@@ -2776,172 +2884,177 @@ export default function ConfigPage() {
                     </Match>
 
                     <Match when={state.section === "skills"}>
-                      <div class="flex flex-col gap-3">
-                        <Show when={skillOpenCode().length > 0}>
-                          <div class="flex flex-col">
-                            <div class="flex items-center justify-between gap-3 px-1">
-                              <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
-                                {t("config.skills.group.opencode")}
+                      <Show
+                        when={!skillWait()}
+                        fallback={<Wait text={`${t("common.loading")}${t("common.loading.ellipsis")}`} />}
+                      >
+                        <div class="flex flex-col gap-3">
+                          <Show when={skillOpenCode().length > 0}>
+                            <div class="flex flex-col">
+                              <div class="flex items-center justify-between gap-3 px-1">
+                                <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                                  {t("config.skills.group.opencode")}
+                                </div>
+                                <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                                  {skillOpenCode().length}
+                                </div>
                               </div>
-                              <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
-                                {skillOpenCode().length}
-                              </div>
-                            </div>
-                            <For each={skillOpenCode()}>
-                              {(item) => (
-                                <ListButton
-                                  active={state.pick === item.id}
-                                  title={item.label}
-                                  meta={short(item.path, space()?.skillsRoot)}
-                                  warn={!!item.warn}
-                                  tone={item.warn ? "danger" : undefined}
-                                  extra={
-                                    <Show when={item.warn}>
-                                      <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-danger-base">
-                                        {t("config.skills.badge.needsMetadata")}
-                                      </span>
-                                    </Show>
-                                  }
-                                  onClick={() => void open(item)}
-                                />
-                              )}
-                            </For>
-                          </div>
-                        </Show>
-
-                        <Show when={skillClaude().length > 0}>
-                          <div class="flex flex-col">
-                            <div class="flex items-center justify-between gap-3 px-1">
-                              <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
-                                {t("config.skills.group.claude")}
-                              </div>
-                              <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
-                                {skillClaude().length}
-                              </div>
-                            </div>
-                            <For each={skillClaude()}>
-                              {(item) => (
-                                <ListButton
-                                  active={state.pick === item.id}
-                                  title={item.label}
-                                  meta={item.path}
-                                  warn={!!item.warn}
-                                  tone={item.warn ? "danger" : undefined}
-                                  extra={
-                                    <Show when={item.warn}>
-                                      <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-danger-base">
-                                        {t("config.skills.badge.needsMetadata")}
-                                      </span>
-                                    </Show>
-                                  }
-                                  onClick={() => void open(item)}
-                                />
-                              )}
-                            </For>
-                          </div>
-                        </Show>
-
-                        <Show when={skillExternal().length > 0}>
-                          <div class="flex flex-col">
-                            <div class="flex items-center justify-between gap-3 px-1">
-                              <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
-                                {t("config.skills.group.external")}
-                              </div>
-                              <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
-                                {skillExternal().length}
-                              </div>
-                            </div>
-                            <For each={skillExternal()}>
-                              {(item) => (
-                                <ListButton
-                                  active={state.pick === item.id}
-                                  title={item.label}
-                                  meta={item.origin ? `${item.origin} · ${item.path}` : item.path}
-                                  warn={!!item.warn}
-                                  tone={item.warn ? "danger" : undefined}
-                                  extra={
-                                    <Show when={item.warn}>
-                                      <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-danger-base">
-                                        {t("config.skills.badge.needsMetadata")}
-                                      </span>
-                                    </Show>
-                                  }
-                                  onClick={() => void open(item)}
-                                />
-                              )}
-                            </For>
-                          </div>
-                        </Show>
-
-                        <Show when={skillProject().length > 0}>
-                          <div class="flex flex-col">
-                            <div class="flex items-center justify-between gap-3 px-1">
-                              <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
-                                {t("config.skills.group.project")}
-                              </div>
-                              <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
-                                {skillProject().length}
-                              </div>
-                            </div>
-                            <div class="mt-2 flex flex-col gap-3">
-                              <For each={projectSkills()}>
-                                {(group) => (
-                                  <div class="flex flex-col rounded-xl border border-border-weak-base bg-background-base/70">
-                                    <button
-                                      type="button"
-                                      class="flex items-center justify-between gap-3 border-b border-border-weak-base px-3 py-2 text-left"
-                                      onClick={() => keepSkillsScroll(() => toggleGroup(group.path ?? group.label))}
-                                    >
-                                      <div class="flex min-w-0 items-start gap-2">
-                                        <div class="mt-0.5 text-text-weak">
-                                          <Icon
-                                            name={
-                                              groupOpen(group.path ?? group.label) ? "chevron-down" : "chevron-right"
-                                            }
-                                            size="small"
-                                          />
-                                        </div>
-                                        <div class="min-w-0">
-                                          <div class="truncate text-12-medium text-text-strong">{group.label}</div>
-                                          <Show when={group.path}>
-                                            <div class="mt-1 break-all font-mono text-[11px] leading-5 text-text-weak">
-                                              {group.path}
-                                            </div>
-                                          </Show>
-                                        </div>
-                                      </div>
-                                      <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
-                                        {group.items.length}
-                                      </div>
-                                    </button>
-                                    <Show when={groupOpen(group.path ?? group.label)}>
-                                      <For each={group.items}>
-                                        {(item) => (
-                                          <ListButton
-                                            active={state.pick === item.id}
-                                            title={item.label}
-                                            meta={item.origin ? `${item.origin} · ${item.path}` : item.path}
-                                            warn={!!item.warn}
-                                            tone={item.warn ? "danger" : undefined}
-                                            extra={
-                                              <Show when={item.warn}>
-                                                <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-danger-base">
-                                                  {t("config.skills.badge.needsMetadata")}
-                                                </span>
-                                              </Show>
-                                            }
-                                            onClick={() => keepSkillsScroll(() => void open(item))}
-                                          />
-                                        )}
-                                      </For>
-                                    </Show>
-                                  </div>
+                              <For each={skillOpenCode()}>
+                                {(item) => (
+                                  <ListButton
+                                    active={state.pick === item.id}
+                                    title={item.label}
+                                    meta={short(item.path, space()?.skillsRoot)}
+                                    warn={!!item.warn}
+                                    tone={item.warn ? "danger" : undefined}
+                                    extra={
+                                      <Show when={item.warn}>
+                                        <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-danger-base">
+                                          {t("config.skills.badge.needsMetadata")}
+                                        </span>
+                                      </Show>
+                                    }
+                                    onClick={() => void open(item)}
+                                  />
                                 )}
                               </For>
                             </div>
-                          </div>
-                        </Show>
-                      </div>
+                          </Show>
+
+                          <Show when={skillClaude().length > 0}>
+                            <div class="flex flex-col">
+                              <div class="flex items-center justify-between gap-3 px-1">
+                                <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                                  {t("config.skills.group.claude")}
+                                </div>
+                                <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                                  {skillClaude().length}
+                                </div>
+                              </div>
+                              <For each={skillClaude()}>
+                                {(item) => (
+                                  <ListButton
+                                    active={state.pick === item.id}
+                                    title={item.label}
+                                    meta={item.path}
+                                    warn={!!item.warn}
+                                    tone={item.warn ? "danger" : undefined}
+                                    extra={
+                                      <Show when={item.warn}>
+                                        <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-danger-base">
+                                          {t("config.skills.badge.needsMetadata")}
+                                        </span>
+                                      </Show>
+                                    }
+                                    onClick={() => void open(item)}
+                                  />
+                                )}
+                              </For>
+                            </div>
+                          </Show>
+
+                          <Show when={skillExternal().length > 0}>
+                            <div class="flex flex-col">
+                              <div class="flex items-center justify-between gap-3 px-1">
+                                <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                                  {t("config.skills.group.external")}
+                                </div>
+                                <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                                  {skillExternal().length}
+                                </div>
+                              </div>
+                              <For each={skillExternal()}>
+                                {(item) => (
+                                  <ListButton
+                                    active={state.pick === item.id}
+                                    title={item.label}
+                                    meta={item.origin ? `${item.origin} · ${item.path}` : item.path}
+                                    warn={!!item.warn}
+                                    tone={item.warn ? "danger" : undefined}
+                                    extra={
+                                      <Show when={item.warn}>
+                                        <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-danger-base">
+                                          {t("config.skills.badge.needsMetadata")}
+                                        </span>
+                                      </Show>
+                                    }
+                                    onClick={() => void open(item)}
+                                  />
+                                )}
+                              </For>
+                            </div>
+                          </Show>
+
+                          <Show when={skillProject().length > 0}>
+                            <div class="flex flex-col">
+                              <div class="flex items-center justify-between gap-3 px-1">
+                                <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                                  {t("config.skills.group.project")}
+                                </div>
+                                <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                                  {skillProject().length}
+                                </div>
+                              </div>
+                              <div class="mt-2 flex flex-col gap-3">
+                                <For each={projectSkills()}>
+                                  {(group) => (
+                                    <div class="flex flex-col rounded-xl border border-border-weak-base bg-background-base/70">
+                                      <button
+                                        type="button"
+                                        class="flex items-center justify-between gap-3 border-b border-border-weak-base px-3 py-2 text-left"
+                                        onClick={() => keepSkillsScroll(() => toggleGroup(group.path ?? group.label))}
+                                      >
+                                        <div class="flex min-w-0 items-start gap-2">
+                                          <div class="mt-0.5 text-text-weak">
+                                            <Icon
+                                              name={
+                                                groupOpen(group.path ?? group.label) ? "chevron-down" : "chevron-right"
+                                              }
+                                              size="small"
+                                            />
+                                          </div>
+                                          <div class="min-w-0">
+                                            <div class="truncate text-12-medium text-text-strong">{group.label}</div>
+                                            <Show when={group.path}>
+                                              <div class="mt-1 break-all font-mono text-[11px] leading-5 text-text-weak">
+                                                {group.path}
+                                              </div>
+                                            </Show>
+                                          </div>
+                                        </div>
+                                        <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                                          {group.items.length}
+                                        </div>
+                                      </button>
+                                      <Show when={groupOpen(group.path ?? group.label)}>
+                                        <For each={group.items}>
+                                          {(item) => (
+                                            <ListButton
+                                              active={state.pick === item.id}
+                                              title={item.label}
+                                              meta={item.origin ? `${item.origin} · ${item.path}` : item.path}
+                                              warn={!!item.warn}
+                                              tone={item.warn ? "danger" : undefined}
+                                              extra={
+                                                <Show when={item.warn}>
+                                                  <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-danger-base">
+                                                    {t("config.skills.badge.needsMetadata")}
+                                                  </span>
+                                                </Show>
+                                              }
+                                              onClick={() => keepSkillsScroll(() => void open(item))}
+                                            />
+                                          )}
+                                        </For>
+                                      </Show>
+                                    </div>
+                                  )}
+                                </For>
+                              </div>
+                            </div>
+                          </Show>
+                        </div>
+                      </Show>
                     </Match>
 
                     <Match when={state.section === "plugins"}>
@@ -3055,18 +3168,18 @@ export default function ConfigPage() {
                   }
                 >
                   <Editor
-                    item={selectedDoc()}
+                    item={currentDoc()}
                     text={state.text}
                     dirty={dirty()}
                     busy={state.busy}
                     onInput={(value) => setState("text", value)}
                     onSave={() => void save()}
                     onReload={() => void reload()}
-                    onOpenFolder={selectedDoc() ? openFolder : undefined}
+                    onOpenFolder={currentDoc() ? openFolder : undefined}
                     extra={
                       <Toggle
-                        checked={!!selectedPlugin()?.enabled}
-                        onChange={(value) => selectedPlugin() && togglePlugin(selectedPlugin()!, value)}
+                        checked={!!currentPlugin()?.enabled}
+                        onChange={(value) => currentPlugin() && togglePlugin(currentPlugin()!, value)}
                       >
                         {t("config.provider.badge.enabled")}
                       </Toggle>
@@ -3078,74 +3191,88 @@ export default function ConfigPage() {
 
               <Match when={state.section === "skills"}>
                 <Show
-                  when={state.pick === SKILL_NEW}
+                  when={skillWait()}
                   fallback={
-                    <Editor
-                      item={selectedDoc()}
-                      text={state.text}
-                      dirty={dirty()}
-                      busy={state.busy}
-                      tree={tree()}
-                      treeRoot={currentSkillRoot()}
-                      treeBusy={tree.loading}
-                      treeOpen={treeOpen}
-                      onTreeToggle={toggleTree}
-                      onInput={(value) => setState("text", value)}
-                      onSave={() => void save()}
-                      onReload={() => void reload()}
-                      onOpenFolder={selectedDoc() ? openFolder : undefined}
-                      onCopyPath={selectedDoc() ? copyPath : undefined}
-                      warn={selectedDoc()?.warn}
-                      empty={t("config.skills.empty")}
-                      markdown
-                    />
+                    <Show
+                      when={state.pick === SKILL_NEW}
+                      fallback={
+                        <Editor
+                          item={currentDoc()}
+                          text={state.text}
+                          dirty={dirty()}
+                          busy={state.busy}
+                          tree={tree()}
+                          treeRoot={currentSkillRoot()}
+                          treeBusy={tree.loading}
+                          treeOpen={treeOpen}
+                          onTreeToggle={toggleTree}
+                          onInput={(value) => setState("text", value)}
+                          onSave={() => void save()}
+                          onReload={() => void reload()}
+                          onOpenFolder={currentDoc() ? openFolder : undefined}
+                          onCopyPath={currentDoc() ? copyPath : undefined}
+                          warn={currentDoc()?.warn}
+                          empty={t("config.skills.empty")}
+                          markdown
+                        />
+                      }
+                    >
+                      <SkillCreator
+                        root={space()?.skillsRoot}
+                        title={state.skillTitle}
+                        text={state.text}
+                        busy={state.skillSaving}
+                        err={state.skillErr || undefined}
+                        onTitle={setSkillTitle}
+                        onInput={(value) => setState("text", value)}
+                        onSave={() => void saveSkill()}
+                      />
+                    </Show>
                   }
                 >
-                  <SkillCreator
-                    root={space()?.skillsRoot}
-                    title={state.skillTitle}
-                    text={state.text}
-                    busy={state.skillSaving}
-                    err={state.skillErr || undefined}
-                    onTitle={setSkillTitle}
-                    onInput={(value) => setState("text", value)}
-                    onSave={() => void saveSkill()}
-                  />
+                  <Wait text={`${t("common.loading")}${t("common.loading.ellipsis")}`} />
                 </Show>
               </Match>
 
               <Match when={state.section === "agents"}>
-                <Editor
-                  item={selectedDoc()}
-                  text={state.text}
-                  dirty={dirty()}
-                  busy={state.busy}
-                  onInput={(value) => setState("text", value)}
-                  onSave={() => void save()}
-                  onReload={() => void reload()}
-                  onOpenFolder={selectedDoc() ? openFolder : undefined}
-                  extra={
-                    <Show when={selectedAgent()}>
-                      <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
-                        {loadedMap().get(selectedAgent()!.label)?.mode ?? t("config.agents.badge.agent")}
-                      </span>
-                    </Show>
+                <Show
+                  when={!agentWait()}
+                  fallback={
+                    <Wait text={`${t("common.loading")}${t("common.loading.ellipsis")}`} />
                   }
-                  empty={t("config.agents.empty")}
-                  markdown
-                />
+                >
+                  <Editor
+                    item={currentDoc()}
+                    text={state.text}
+                    dirty={dirty()}
+                    busy={state.busy}
+                    onInput={(value) => setState("text", value)}
+                    onSave={() => void save()}
+                    onReload={() => void reload()}
+                    onOpenFolder={currentDoc() ? openFolder : undefined}
+                    extra={
+                      <Show when={currentAgent()}>
+                        <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                          {loadedMap().get(currentAgent()!.label)?.mode ?? t("config.agents.badge.agent")}
+                        </span>
+                      </Show>
+                    }
+                    empty={t("config.agents.empty")}
+                    markdown
+                  />
+                </Show>
               </Match>
 
               <Match when={state.section === "agents-md"}>
                 <Editor
-                  item={selectedDoc()}
+                  item={currentDoc()}
                   text={state.text}
                   dirty={dirty()}
                   busy={state.busy}
                   onInput={(value) => setState("text", value)}
                   onSave={() => void save()}
                   onReload={() => void reload()}
-                  onOpenFolder={selectedDoc() ? openFolder : undefined}
+                  onOpenFolder={currentDoc() ? openFolder : undefined}
                   empty={t("config.agentsMd.empty")}
                   markdown
                 />
