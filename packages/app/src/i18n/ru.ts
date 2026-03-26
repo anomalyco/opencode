@@ -808,8 +808,6 @@ export const dict = {
   "settings.permissions.tool.skill.description": "Загрузка навыка по имени",
   "settings.permissions.tool.lsp.title": "LSP",
   "settings.permissions.tool.lsp.description": "Запросы к языковому серверу",
-  "settings.permissions.tool.todoread.title": "Todo Read",
-  "settings.permissions.tool.todoread.description": "Чтение списка задач",
   "settings.permissions.tool.todowrite.title": "Todo Write",
   "settings.permissions.tool.todowrite.description": "Обновление списка задач",
   "settings.permissions.tool.webfetch.title": "Web Fetch",

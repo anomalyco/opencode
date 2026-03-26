@@ -626,6 +626,8 @@ export const dict = {
     "该计划主要面向国际用户设计，模型部署在美国、欧盟和新加坡，以确保全球范围内的稳定访问体验。定价和使用额度可能会根据早期用户的使用情况和反馈持续调整与优化。",
   "workspace.lite.promo.subscribe": "订阅 Go",
   "workspace.lite.promo.subscribing": "正在重定向...",
+  "workspace.lite.promo.otherMethods": "其他付款方式",
+  "workspace.lite.promo.selectMethod": "选择付款方式",
 
   "download.title": "OpenCode | 下载",
   "download.meta.description": "下载适用于 macOS, Windows, 和 Linux 的 OpenCode",

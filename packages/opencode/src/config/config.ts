@@ -177,7 +177,7 @@ export namespace Config {
       log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
     }
 
-    const active = Account.active()
+    const active = await Account.active()
     if (active?.active_org_id) {
       try {
         const [config, token] = await Promise.all([
@@ -673,7 +673,6 @@ export namespace Config {
           task: PermissionRule.optional(),
           external_directory: PermissionRule.optional(),
           todowrite: PermissionAction.optional(),
-          todoread: PermissionAction.optional(),
           question: PermissionAction.optional(),
           webfetch: PermissionAction.optional(),
           websearch: PermissionAction.optional(),

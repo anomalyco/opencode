@@ -796,8 +796,6 @@ export const dict = {
   "settings.permissions.tool.skill.description": "โหลดทักษะตามชื่อ",
   "settings.permissions.tool.lsp.title": "LSP",
   "settings.permissions.tool.lsp.description": "เรียกใช้การสืบค้นเซิร์ฟเวอร์ภาษา",
-  "settings.permissions.tool.todoread.title": "อ่านรายการงาน",
-  "settings.permissions.tool.todoread.description": "อ่านรายการงาน",
   "settings.permissions.tool.todowrite.title": "เขียนรายการงาน",
   "settings.permissions.tool.todowrite.description": "อัปเดตรายการงาน",
   "settings.permissions.tool.webfetch.title": "ดึงข้อมูลจากเว็บ",

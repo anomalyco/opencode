@@ -1,21 +1,22 @@
-import { runPromiseInstance } from "@/effect/runtime"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { Config } from "@/config/config"
-import { InstanceContext } from "@/effect/instance-context"
+import { InstanceState } from "@/effect/instance-state"
+import { makeRuntime } from "@/effect/run-service"
 import { ProjectID } from "@/project/schema"
+import { Instance } from "@/project/instance"
 import { MessageID, SessionID } from "@/session/schema"
 import { PermissionTable } from "@/session/session.sql"
 import { Database, eq } from "@/storage/db"
-import { fn } from "@/util/fn"
 import { Log } from "@/util/log"
 import { Wildcard } from "@/util/wildcard"
 import { Deferred, Effect, Layer, Schema, ServiceMap } from "effect"
 import os from "os"
 import z from "zod"
+import { evaluate as evalRule } from "./evaluate"
 import { PermissionID } from "./schema"
 
-export namespace PermissionNext {
+export namespace Permission {
   const log = Log.create({ service: "permission" })
 
   export const Action = z.enum(["allow", "deny", "ask"]).meta({
@@ -124,28 +125,46 @@ export namespace PermissionNext {
     deferred: Deferred.Deferred<void, RejectedError | CorrectedError>
   }
 
-  export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
-    const rules = rulesets.flat()
-    log.info("evaluate", { permission, pattern, ruleset: rules })
-    const match = rules.findLast(
-      (rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern),
-    )
-    return match ?? { action: "ask", permission, pattern: "*" }
+  interface State {
+    pending: Map<PermissionID, PendingEntry>
+    approved: Ruleset
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/PermissionNext") {}
+  export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
+    log.info("evaluate", { permission, pattern, ruleset: rulesets.flat() })
+    return evalRule(permission, pattern, ...rulesets)
+  }
+
+  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Permission") {}
 
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const { project } = yield* InstanceContext
-      const row = Database.use((db) =>
-        db.select().from(PermissionTable).where(eq(PermissionTable.project_id, project.id)).get(),
+      const state = yield* InstanceState.make<State>(
+        Effect.fn("Permission.state")(function* (ctx) {
+          const row = Database.use((db) =>
+            db.select().from(PermissionTable).where(eq(PermissionTable.project_id, ctx.project.id)).get(),
+          )
+          const state = {
+            pending: new Map<PermissionID, PendingEntry>(),
+            approved: row?.data ?? [],
+          }
+
+          yield* Effect.addFinalizer(() =>
+            Effect.gen(function* () {
+              for (const item of state.pending.values()) {
+                yield* Deferred.fail(item.deferred, new RejectedError())
+              }
+              state.pending.clear()
+            }),
+          )
+
+          return state
+        }),
       )
-      const pending = new Map<PermissionID, PendingEntry>()
-      const approved: Ruleset = row?.data ?? []
 
       const ask = Effect.fn("Permission.ask")(function* (input: z.infer<typeof AskInput>) {
+        const { approved, pending } = yield* InstanceState.get(state)
         const { ruleset, ...request } = input
         let needsAsk = false
 
@@ -182,6 +201,7 @@ export namespace PermissionNext {
       })
 
       const reply = Effect.fn("Permission.reply")(function* (input: z.infer<typeof ReplyInput>) {
+        const { approved, pending } = yield* InstanceState.get(state)
         const existing = pending.get(input.requestID)
         if (!existing) return
 
@@ -239,6 +259,7 @@ export namespace PermissionNext {
       })
 
       const list = Effect.fn("Permission.list")(function* () {
+        const pending = (yield* InstanceState.get(state)).pending
         return Array.from(pending.values(), (item) => item.info)
       })
 
@@ -272,14 +293,6 @@ export namespace PermissionNext {
     return rulesets.flat()
   }
 
-  export const ask = fn(AskInput, async (input) => runPromiseInstance(Service.use((svc) => svc.ask(input))))
-
-  export const reply = fn(ReplyInput, async (input) => runPromiseInstance(Service.use((svc) => svc.reply(input))))
-
-  export async function list() {
-    return runPromiseInstance(Service.use((svc) => svc.list()))
-  }
-
   const EDIT_TOOLS = ["edit", "write", "apply_patch", "multiedit"]
 
   export function disabled(tools: string[], ruleset: Ruleset): Set<string> {
@@ -291,5 +304,19 @@ export namespace PermissionNext {
       if (rule.pattern === "*" && rule.action === "deny") result.add(tool)
     }
     return result
+  }
+
+  export const { runPromise } = makeRuntime(Service, layer)
+
+  export async function ask(input: z.infer<typeof AskInput>) {
+    return runPromise((s) => s.ask(input))
+  }
+
+  export async function reply(input: z.infer<typeof ReplyInput>) {
+    return runPromise((s) => s.reply(input))
+  }
+
+  export async function list() {
+    return runPromise((s) => s.list())
   }
 }

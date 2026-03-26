@@ -645,6 +645,8 @@ export const dict = {
     "이 플랜은 주로 글로벌 사용자를 위해 설계되었으며, 안정적인 글로벌 액세스를 위해 미국, EU 및 싱가포르에 모델이 호스팅되어 있습니다. 가격 및 사용 한도는 초기 사용을 통해 학습하고 피드백을 수집함에 따라 변경될 수 있습니다.",
   "workspace.lite.promo.subscribe": "Go 구독하기",
   "workspace.lite.promo.subscribing": "리디렉션 중...",
+  "workspace.lite.promo.otherMethods": "기타 결제 수단",
+  "workspace.lite.promo.selectMethod": "결제 수단 선택",
 
   "download.title": "OpenCode | 다운로드",
   "download.meta.description": "macOS, Windows, Linux용 OpenCode 다운로드",

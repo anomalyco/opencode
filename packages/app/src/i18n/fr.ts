@@ -741,8 +741,6 @@ export const dict = {
   "settings.permissions.tool.skill.description": "Charger une compétence par son nom",
   "settings.permissions.tool.lsp.title": "LSP",
   "settings.permissions.tool.lsp.description": "Exécuter des requêtes de serveur de langage",
-  "settings.permissions.tool.todoread.title": "Lire Todo",
-  "settings.permissions.tool.todoread.description": "Lire la liste de tâches",
   "settings.permissions.tool.todowrite.title": "Écrire Todo",
   "settings.permissions.tool.todowrite.description": "Mettre à jour la liste de tâches",
   "settings.permissions.tool.webfetch.title": "Récupération Web",
