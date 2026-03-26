@@ -326,7 +326,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
     <div
       data-session-id={props.session.id}
       classList={{
-        "group/session relative w-full min-w-0 rounded-lg cursor-default transition-colors pl-2 pr-3": true,
+        "group/session relative flex items-center w-full min-w-0 rounded-lg cursor-default transition-colors pl-2 pr-3": true,
         "hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[[data-expanded]]:bg-surface-raised-base-hover":
           !isActive(),
         "bg-surface-raised-base-hover": isActive(),
@@ -342,36 +342,38 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
           }}
         />
       </Show>
-      <Show
-        when={hoverEnabled()}
-        fallback={
-          <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={10}>
-            {item}
-          </Tooltip>
-        }
-      >
-        <SessionHoverPreview
-          mobile={props.mobile}
-          nav={props.nav}
-          hoverSession={props.hoverSession}
-          session={props.session}
-          sidebarHovering={props.sidebarHovering}
-          hoverReady={hoverReady}
-          hoverMessages={hoverMessages}
-          language={language}
-          isActive={isActive}
-          slug={props.slug}
-          setHoverSession={props.setHoverSession}
-          messageLabel={messageLabel}
-          onMessageSelect={(message) => {
-            if (!isActive()) {
-              layout.pendingMessage.set(`${base64Encode(props.session.directory)}/${props.session.id}`, message.id)
-            }
-            navigate(`${props.slug}/session/${props.session.id}#message-${message.id}`)
-          }}
-          trigger={item}
-        />
-      </Show>
+      <div class="min-w-0 grow">
+        <Show
+          when={hoverEnabled()}
+          fallback={
+            <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={10}>
+              {item}
+            </Tooltip>
+          }
+        >
+          <SessionHoverPreview
+            mobile={props.mobile}
+            nav={props.nav}
+            hoverSession={props.hoverSession}
+            session={props.session}
+            sidebarHovering={props.sidebarHovering}
+            hoverReady={hoverReady}
+            hoverMessages={hoverMessages}
+            language={language}
+            isActive={isActive}
+            slug={props.slug}
+            setHoverSession={props.setHoverSession}
+            messageLabel={messageLabel}
+            onMessageSelect={(message) => {
+              if (!isActive()) {
+                layout.pendingMessage.set(`${base64Encode(props.session.directory)}/${props.session.id}`, message.id)
+              }
+              navigate(`${props.slug}/session/${props.session.id}#message-${message.id}`)
+            }}
+            trigger={item}
+          />
+        </Show>
+      </div>
 
       <div
         class="shrink-0 overflow-hidden transition-[width,opacity]"
