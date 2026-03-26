@@ -2,7 +2,6 @@
   <img src="assets/logo.svg" alt="CoBuilder logo" width="320" />
 </p>
 
-<h2 align="center">CoBuilder</h2>
 <p align="center">The open source AI coding agent — built for teams and enterprise.</p>
 
 <p align="center">
