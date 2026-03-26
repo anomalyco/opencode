@@ -10,6 +10,7 @@ import { GlobalBus } from "@/bus/global"
 import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
 import { Flag } from "@/flag/flag"
 import { setTimeout as sleep } from "node:timers/promises"
+import { writeHeapSnapshot } from "node:v8"
 
 await Log.init({
   print: process.argv.includes("--print-logs"),
@@ -116,6 +117,10 @@ export const rpc = {
       headers: Object.fromEntries(response.headers.entries()),
       body,
     }
+  },
+  snapshot() {
+    const result = writeHeapSnapshot("server.heapsnapshot")
+    return result
   },
   async server(input: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
     if (server) await server.stop(true)

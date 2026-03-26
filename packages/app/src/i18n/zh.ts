@@ -795,8 +795,6 @@ export const dict = {
   "settings.permissions.tool.skill.description": "按名称加载技能",
   "settings.permissions.tool.lsp.title": "LSP",
   "settings.permissions.tool.lsp.description": "运行语言服务器查询",
-  "settings.permissions.tool.todoread.title": "读取待办",
-  "settings.permissions.tool.todoread.description": "读取待办列表",
   "settings.permissions.tool.todowrite.title": "更新待办",
   "settings.permissions.tool.todowrite.description": "更新待办列表",
   "settings.permissions.tool.webfetch.title": "网页获取",
