@@ -495,6 +495,10 @@ export const dict = {
   "home.recentProjects": "最近项目",
   "home.empty.title": "没有最近项目",
   "home.empty.description": "通过打开本地项目开始使用",
+  "home.gettingStarted.title": "开始使用",
+  "home.gettingStarted.step1": "打开一个项目文件夹开始",
+  "home.gettingStarted.step2": "输入消息开始一个会话",
+  "home.gettingStarted.step3": "使用斜杠命令如 /help 获取更多选项",
 
   "session.tab.session": "会话",
   "session.tab.review": "审查",
@@ -855,6 +859,9 @@ export const dict = {
 
   "app.server.unreachable": "无法连接到 {{server}}",
   "app.server.retrying": "正在自动重试...",
+  "app.server.retryElapsed": "重试中... {{seconds}}秒",
+  "app.server.hint.serve": "尝试运行: cobuilder serve",
+  "app.server.hint.url": "检查服务器是否在 {{url}} 运行",
   "app.server.otherServers": "其他服务器",
   "dialog.server.add.usernamePlaceholder": "用户名",
   "dialog.server.add.passwordPlaceholder": "密码",

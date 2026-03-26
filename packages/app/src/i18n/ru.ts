@@ -869,6 +869,9 @@ export const dict = {
 
   "app.server.unreachable": "Не удалось связаться с {{server}}",
   "app.server.retrying": "Автоматическая повторная попытка...",
+  "app.server.retryElapsed": "Retrying... {{seconds}}s",
+  "app.server.hint.serve": "Try running: cobuilder serve",
+  "app.server.hint.url": "Check that the server is running at {{url}}",
   "app.server.otherServers": "Другие серверы",
   "dialog.server.add.usernamePlaceholder": "имя пользователя",
   "dialog.server.add.passwordPlaceholder": "пароль",

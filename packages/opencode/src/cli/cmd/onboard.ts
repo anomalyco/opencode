@@ -28,6 +28,8 @@ export const OnboardCommand = cmd({
   async handler() {
     prompts.intro(UI.logo() + "\n  Welcome to CoBuilder — let's get you set up")
 
+    prompts.log.step("Step 1 of 4 — Choose your provider")
+
     // Step 1: Provider selection
     const providerChoice = await prompts.select({
       message: "Which provider would you like to use?",
@@ -223,7 +225,7 @@ async function setupApiKeyProvider(providerId: string) {
 }
 
 async function setupSecurity() {
-  prompts.log.step("Security modules — configure which are active")
+  prompts.log.step("Step 2 of 4 — Security modules")
 
   const selected = await prompts.multiselect({
     message: "Which security modules should be enabled?",
@@ -267,7 +269,7 @@ async function setupSecurity() {
 }
 
 async function setupWorkflows() {
-  prompts.log.step("Workflow plugins — install methodology tooling (optional)")
+  prompts.log.step("Step 3 of 4 — Workflow plugins (optional)")
 
   const selected = await prompts.multiselect({
     message: "Which workflow plugins would you like to install?",
@@ -317,7 +319,7 @@ async function setupRecommendedTools() {
     return
   }
 
-  prompts.log.step("Recommended tools — extend CoBuilder with community extensions")
+  prompts.log.step("Step 4 of 4 — Recommended tools (optional)")
 
   const selected = await prompts.multiselect({
     message: "Which recommended tools would you like to install?",

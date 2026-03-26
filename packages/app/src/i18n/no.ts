@@ -497,6 +497,10 @@ export const dict = {
   "home.recentProjects": "Nylige prosjekter",
   "home.empty.title": "Ingen nylige prosjekter",
   "home.empty.description": "Kom i gang ved å åpne et lokalt prosjekt",
+  "home.gettingStarted.title": "Kom i gang",
+  "home.gettingStarted.step1": "Apne en prosjektmappe for a begynne",
+  "home.gettingStarted.step2": "Start en sesjon ved a skrive en melding",
+  "home.gettingStarted.step3": "Bruk skrastrek-kommandoer som /help for flere valg",
 
   "session.tab.session": "Sesjon",
   "session.tab.review": "Gjennomgang",
@@ -867,6 +871,9 @@ export const dict = {
 
   "app.server.unreachable": "Kunne ikke nå {{server}}",
   "app.server.retrying": "Prøver på nytt automatisk...",
+  "app.server.retryElapsed": "Prover pa nytt... {{seconds}}s",
+  "app.server.hint.serve": "Prov a kjore: cobuilder serve",
+  "app.server.hint.url": "Sjekk at serveren kjorer pa {{url}}",
   "app.server.otherServers": "Andre servere",
   "dialog.server.add.usernamePlaceholder": "brukernavn",
   "dialog.server.add.passwordPlaceholder": "passord",

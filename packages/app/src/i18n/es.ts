@@ -497,6 +497,10 @@ export const dict = {
   "home.recentProjects": "Proyectos recientes",
   "home.empty.title": "Sin proyectos recientes",
   "home.empty.description": "Empieza abriendo un proyecto local",
+  "home.gettingStarted.title": "Primeros pasos",
+  "home.gettingStarted.step1": "Abre una carpeta de proyecto para comenzar",
+  "home.gettingStarted.step2": "Inicia una sesion escribiendo un mensaje",
+  "home.gettingStarted.step3": "Usa comandos con barra como /help para mas opciones",
 
   "session.tab.session": "Sesión",
   "session.tab.review": "Revisión",
@@ -873,6 +877,9 @@ export const dict = {
 
   "app.server.unreachable": "No se pudo conectar con {{server}}",
   "app.server.retrying": "Reintentando automáticamente...",
+  "app.server.retryElapsed": "Reintentando... {{seconds}}s",
+  "app.server.hint.serve": "Intenta ejecutar: cobuilder serve",
+  "app.server.hint.url": "Verifica que el servidor esté corriendo en {{url}}",
   "app.server.otherServers": "Otros servidores",
   "dialog.server.add.usernamePlaceholder": "usuario",
   "dialog.server.add.passwordPlaceholder": "contraseña",

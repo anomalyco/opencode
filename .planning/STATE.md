@@ -1,8 +1,23 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+current_phase: 4
+status: in_progress
+stopped_at: Phase 4 Plan 1 complete — 04-01-SUMMARY.md written, branch feat/phase4-ui-ux-polish-ii
+last_updated: "2026-03-26T22:35:00.000Z"
+progress:
+  total_phases: 3
+  completed_phases: 3
+  total_plans: 10
+  completed_plans: 10
+---
+
 # CoBuilder — Project State
 
 **Last updated:** 2026-03-26
-**Current phase:** Phase 3 — UI/UX Polish
-**Stopped at:** Phase 3 Plan 3 complete — 03-03-SUMMARY.md written, branch feat/phase3-ui-ux-polish
+**Current phase:** 4
+**Stopped at:** Phase 4 Plan 1 complete — 04-01-SUMMARY.md written, branch feat/phase4-ui-ux-polish-ii
 
 ## Project Reference
 
@@ -17,7 +32,8 @@ See: `.planning/PROJECT.md` (updated 2026-03-26)
 |-------|------|--------|
 | 1 | Modular Security System | ✅ Complete — PR #10 open |
 | 2 | Workflow Plugin System | ✅ Complete |
-| 3 | UI/UX Polish | 🔄 In progress — Plan 3 complete |
+| 3 | UI/UX Polish | ✅ Complete |
+| 4 | UI/UX Polish II | 🔄 In progress — Plan 3 complete |
 
 ## What's Shipped (Phase 0 — already in main)
 
@@ -57,3 +73,7 @@ See: `.planning/PROJECT.md` (updated 2026-03-26)
 | 2026-03-26 | No-provider banner above SessionComposerRegion (UX-05) | banner placed above, not instead of, composer so structure is preserved |
 | 2026-03-26 | Inline SVG spinner for composer loading (UX-06) | avoids unknown UI component dependency; animate-spin Tailwind class |
 | 2026-03-26 | group+group-hover drag handle on SortableTab (UX-09) | opacity-0/group-hover:opacity-40 for unobtrusive progressive disclosure |
+| 2026-03-26 | Background update download replaces confirm-dialog+exit flow (UX2-03) | Silent download + persistent badge + natural quit is non-disruptive |
+| 2026-03-26 | Pre-existing es.ts duplicate keys and app.tsx HttpBase type error deferred (04-02) | Out-of-scope pre-existing issues; not caused by this plan |
+| 2026-03-26 | current.http.url (string) used instead of current.http (HttpBase) in serverUrl memo (04-01) | HttpBase is not assignable to i18n string interpolation — .url property required |
+| 2026-03-26 | All 17 locale files updated with new i18n keys (04-01) | parity.test.ts covers all locales — partial update would break CI |

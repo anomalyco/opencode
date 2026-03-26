@@ -311,6 +311,9 @@ export const dict = {
 
   "app.server.unreachable": "Could not reach {{server}}",
   "app.server.retrying": "Retrying automatically...",
+  "app.server.retryElapsed": "Retrying... {{seconds}}s",
+  "app.server.hint.serve": "Try running: cobuilder serve",
+  "app.server.hint.url": "Check that the server is running at {{url}}",
   "app.server.otherServers": "Other servers",
 
   "dialog.server.title": "Servers",
@@ -518,6 +521,10 @@ export const dict = {
   "home.recentProjects": "Recent projects",
   "home.empty.title": "No recent projects",
   "home.empty.description": "Get started by opening a local project",
+  "home.gettingStarted.title": "Getting started",
+  "home.gettingStarted.step1": "Open a project folder to begin",
+  "home.gettingStarted.step2": "Start a session by typing a message",
+  "home.gettingStarted.step3": "Use slash commands like /help for more options",
 
   "session.tab.session": "Session",
   "session.tab.review": "Review",

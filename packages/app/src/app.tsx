@@ -255,8 +255,18 @@ function ConnectionError(props: { onRetry?: () => void; onServerSelected?: (key:
   const name = createMemo(() => server.name || server.key)
   const serverToken = "\u0000server\u0000"
   const unreachable = createMemo(() => language.t("app.server.unreachable", { server: serverToken }).split(serverToken))
+  const [elapsedSeconds, setElapsedSeconds] = createSignal(0)
 
-  const timer = setInterval(() => props.onRetry?.(), 1000)
+  const serverUrl = createMemo(() => {
+    const current = server.list.find((s) => ServerConnection.key(s) === server.key)
+    if (!current) return undefined
+    return "http" in current ? current.http.url : undefined
+  })
+
+  const timer = setInterval(() => {
+    setElapsedSeconds((s) => s + 1)
+    props.onRetry?.()
+  }, 1000)
   onCleanup(() => clearInterval(timer))
 
   return (
@@ -268,7 +278,17 @@ function ConnectionError(props: { onRetry?: () => void; onServerSelected?: (key:
           <span class="text-text-strong font-medium">{name()}</span>
           {unreachable()[1]}
         </p>
-        <p class="mt-1 text-12-regular text-text-weak">{language.t("app.server.retrying")}</p>
+        <p class="mt-1 text-12-regular text-text-weak">
+          {language.t("app.server.retryElapsed", { seconds: String(elapsedSeconds()) })}
+        </p>
+        <div class="mt-3 flex flex-col gap-1 text-12-regular text-text-weak">
+          <Show when={!serverUrl()}>
+            <p>{language.t("app.server.hint.serve")}</p>
+          </Show>
+          <Show when={serverUrl()}>
+            <p>{language.t("app.server.hint.url", { url: serverUrl()! })}</p>
+          </Show>
+        </div>
       </div>
       <Show when={others().length > 0}>
         <div class="flex flex-col gap-2 w-full max-w-sm">

@@ -8,7 +8,7 @@
 - [ ] **Phase 1: Modular Security System** — Configurable security modules via opencode.json
 - [ ] **Phase 2: Workflow Plugin System** — Installable methodology plugins (GSD, Ralph, GStack)
 - [x] **Phase 3: UI/UX Polish** — Fix 13 identified UI/UX issues across TUI, Web app, and Electron shell (completed 2026-03-26)
-- [ ] **Phase 4: UI/UX Polish II** — First-run guidance, connection error UX, update flow, onboarding progress
+- [x] **Phase 4: UI/UX Polish II** — First-run guidance, connection error UX, update flow, onboarding progress (completed 2026-03-26)
 
 ---
 

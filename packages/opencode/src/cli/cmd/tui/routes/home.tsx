@@ -118,6 +118,21 @@ export function Home() {
             workspaceID={route.workspaceID}
           />
         </box>
+        <Show when={isFirstTimeUser()}>
+          <box width="100%" maxWidth={75} paddingTop={1} flexShrink={0}>
+            <box flexDirection="column" gap={0}>
+              <text fg={theme.textMuted}>
+                <span style={{ fg: theme.primary }}>{">"}</span> Type a message to start a new session
+              </text>
+              <text fg={theme.textMuted}>
+                <span style={{ fg: theme.primary }}>{">"}</span> Press <span style={{ fg: theme.text }}>Ctrl+X</span> to open the command palette
+              </text>
+              <text fg={theme.textMuted}>
+                <span style={{ fg: theme.primary }}>{">"}</span> Run <span style={{ fg: theme.text }}>/help</span> for all available commands
+              </text>
+            </box>
+          </box>
+        </Show>
         <box height={4} minHeight={0} width="100%" maxWidth={75} alignItems="center" paddingTop={3} flexShrink={1}>
           <Show when={showTips()}>
             <Tips />
