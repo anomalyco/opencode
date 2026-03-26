@@ -13,6 +13,7 @@ import {
   clickMenuItem,
   confirmDialog,
   openSidebar,
+  openProjectMenu,
   openWorkspaceMenu,
   resolveSlug,
   setWorkspacesEnabled,
@@ -20,13 +21,7 @@ import {
   waitDir,
   waitSlug,
 } from "../actions"
-import {
-  dropdownMenuContentSelector,
-  inlineInputSelector,
-  promptSelector,
-  sessionItemSelector,
-  workspaceItemSelector,
-} from "../selectors"
+import { inlineInputSelector, promptSelector, sessionItemSelector, workspaceItemSelector } from "../selectors"
 import { createSdk, dirSlug } from "../utils"
 
 type WorkspaceWindow = Window & {
@@ -172,14 +167,7 @@ test("non-git projects keep workspace mode disabled", async ({ page, withProject
       const trigger = page.locator('[data-action="project-menu"]').first()
       if ((await trigger.count()) === 0) return
 
-      await expect(trigger).toBeVisible()
-
-      const menu = page.locator(dropdownMenuContentSelector).first()
-      for (const _ of [0, 1, 2]) {
-        await trigger.click({ force: true })
-        if (await menu.isVisible().catch(() => false)) break
-      }
-      await expect(menu).toBeVisible()
+      const menu = await openProjectMenu(page, nonGitSlug)
 
       const toggle = menu.locator('[data-action="project-workspaces-toggle"]').first()
 

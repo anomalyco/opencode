@@ -1,5 +1,5 @@
 import { createStore, produce } from "solid-js/store"
-import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
+import { batch, createEffect, createMemo, on, onCleanup, onMount, type Accessor } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSync } from "./global-sync"
@@ -474,11 +474,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       return globalSync.peek(decoded, { bootstrap: false })[0].path.directory || decoded
     })
 
-    createEffect(() => {
-      const dir = routeDir()
-      if (!dir) return
-      openProject(dir)
-    })
+    createEffect(
+      on(routeDir, (dir) => {
+        if (!dir) return
+        openProject(dir)
+      }),
+    )
 
     createEffect(() => {
       const projects = server.projects.list()
