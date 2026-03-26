@@ -21,12 +21,24 @@ export const PlanExitTool = Tool.define("plan_exit", {
   parameters: z.object({}),
   async execute(_params, ctx) {
     const session = await Session.get(ctx.sessionID)
-    const plan = path.relative(Instance.worktree, Session.plan(session))
+    const abs = Session.plan(session)
+    const plan = path.relative(Instance.worktree, abs)
+    const content = await Bun.file(abs)
+      .text()
+      .catch(() => "")
+    if (!content.trim()) {
+      return {
+        title: "Plan file is empty",
+        output: `The plan file at ${plan} is empty or does not exist. You must write your plan to this file before calling plan_exit. Use the write tool to create the plan file first.`,
+        metadata: {},
+      }
+    }
+    const preview = `\n\n---\n\n${content}`
     const answers = await Question.ask({
       sessionID: ctx.sessionID,
       questions: [
         {
-          question: `Plan at ${plan} is complete. Would you like to switch to the build agent and start implementing?`,
+          question: `Plan at \`${plan}\` is complete. Would you like to switch to the build agent and start implementing?${preview}`,
           header: "Build Agent",
           custom: false,
           options: [
