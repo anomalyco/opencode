@@ -87,7 +87,9 @@ function createGlobalSync() {
   const setProjects = (next: Project[] | ((draft: Project[]) => void)) => {
     projectWritten = true
     if (typeof next === "function") {
-      setGlobalStore("project", produce(next))
+      const list = untrack(() => globalStore.project.map(sanitizeProject))
+      next(list)
+      setGlobalStore("project", list)
       cacheProjects()
       return
     }

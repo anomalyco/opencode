@@ -28,7 +28,10 @@ export function normalizeProviderList(input: ProviderListResponse): ProviderList
 
 export function sanitizeProject(project: Project) {
   return {
-    ...project,
+    id: project.id,
+    worktree: project.worktree,
+    vcs: project.vcs,
+    name: project.name,
     sandboxes: [...project.sandboxes],
     commands: project.commands
       ? {

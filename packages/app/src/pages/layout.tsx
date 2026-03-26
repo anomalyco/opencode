@@ -1986,16 +1986,12 @@ export default function Layout(props: ParentProps) {
     setStore("activeWorkspace", id)
   }
 
-  function handleWorkspaceDragOver(event: DragEvent) {
+  function handleWorkspaceDragEnd(event: DragEvent) {
     const { draggable, droppable } = event
-    if (!draggable || !droppable) return
-
-    const project = sidebarProject()
-    if (!project) return
-    reorderWorkspaces(project, draggable.id.toString(), droppable.id.toString())
-  }
-
-  function handleWorkspaceDragEnd() {
+    if (draggable && droppable) {
+      const project = sidebarProject()
+      if (project) reorderWorkspaces(project, draggable.id.toString(), droppable.id.toString())
+    }
     setStore("activeWorkspace", undefined)
   }
 
@@ -2340,7 +2336,6 @@ export default function Layout(props: ParentProps) {
                     <DragDropProvider
                       onDragStart={handleWorkspaceDragStart}
                       onDragEnd={handleWorkspaceDragEnd}
-                      onDragOver={handleWorkspaceDragOver}
                       collisionDetector={closestCenter}
                     >
                       <DragDropSensors />

@@ -373,86 +373,92 @@ export const SortableWorkspace = (props: {
     globalSync.child(props.directory, { bootstrap: true })
   })
 
-  return (
-    <div
-      // @ts-ignore
-      use:sortable
-      classList={{
-        "opacity-30": sortable.isActiveDraggable,
-        "opacity-50 pointer-events-none": busy(),
-      }}
-    >
-      <Collapsible variant="ghost" open={open()} class="shrink-0" onOpenChange={openWrapper}>
-        <div class="py-1">
-          <div
-            class="group/workspace relative"
-            data-component="workspace-item"
-            data-workspace={base64Encode(props.directory)}
-          >
-            <div class="flex items-center gap-1">
-              <Show
-                when={workspaceEditActive()}
-                fallback={
-                  <Collapsible.Trigger
-                    class={`flex items-center justify-between w-full pl-2 py-1.5 rounded-md hover:bg-surface-raised-base-hover transition-[padding] duration-200 ${
-                      menu.open ? "pr-16" : "pr-2"
-                    } group-hover/workspace:pr-16 group-focus-within/workspace:pr-16`}
-                    data-action="workspace-toggle"
-                    data-workspace={base64Encode(props.directory)}
-                  >
-                    {header()}
-                  </Collapsible.Trigger>
-                }
-              >
-                <div
-                  class={`flex items-center justify-between w-full pl-2 py-1.5 rounded-md transition-[padding] duration-200 ${
+  const item = () => (
+    <Collapsible variant="ghost" open={open()} class="shrink-0" onOpenChange={openWrapper}>
+      <div class="py-1">
+        <div
+          class="group/workspace relative"
+          data-component="workspace-item"
+          data-workspace={base64Encode(props.directory)}
+        >
+          <div class="flex items-center gap-1">
+            <Show
+              when={workspaceEditActive()}
+              fallback={
+                <Collapsible.Trigger
+                  class={`flex items-center justify-between w-full pl-2 py-1.5 rounded-md hover:bg-surface-raised-base-hover transition-[padding] duration-200 ${
                     menu.open ? "pr-16" : "pr-2"
                   } group-hover/workspace:pr-16 group-focus-within/workspace:pr-16`}
+                  data-action="workspace-toggle"
+                  data-workspace={base64Encode(props.directory)}
                 >
                   {header()}
-                </div>
-              </Show>
-              <WorkspaceActions
-                directory={props.directory}
-                local={local}
-                busy={busy}
-                menuOpen={() => menu.open}
-                pendingRename={() => menu.pendingRename}
-                setMenuOpen={(open) => setMenu("open", open)}
-                setPendingRename={(value) => setMenu("pendingRename", value)}
-                sidebarHovering={props.ctx.sidebarHovering}
-                touch={touch}
-                language={language}
-                workspaceValue={workspaceValue}
-                openEditor={props.ctx.openEditor}
-                showResetWorkspaceDialog={props.ctx.showResetWorkspaceDialog}
-                showDeleteWorkspaceDialog={props.ctx.showDeleteWorkspaceDialog}
-                root={props.project.worktree}
-                setHoverSession={props.ctx.setHoverSession}
-                clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
-                navigateToNewSession={() => navigate(`/${slug()}/session`)}
-              />
-            </div>
+                </Collapsible.Trigger>
+              }
+            >
+              <div
+                class={`flex items-center justify-between w-full pl-2 py-1.5 rounded-md transition-[padding] duration-200 ${
+                  menu.open ? "pr-16" : "pr-2"
+                } group-hover/workspace:pr-16 group-focus-within/workspace:pr-16`}
+              >
+                {header()}
+              </div>
+            </Show>
+            <WorkspaceActions
+              directory={props.directory}
+              local={local}
+              busy={busy}
+              menuOpen={() => menu.open}
+              pendingRename={() => menu.pendingRename}
+              setMenuOpen={(open) => setMenu("open", open)}
+              setPendingRename={(value) => setMenu("pendingRename", value)}
+              sidebarHovering={props.ctx.sidebarHovering}
+              touch={touch}
+              language={language}
+              workspaceValue={workspaceValue}
+              openEditor={props.ctx.openEditor}
+              showResetWorkspaceDialog={props.ctx.showResetWorkspaceDialog}
+              showDeleteWorkspaceDialog={props.ctx.showDeleteWorkspaceDialog}
+              root={props.project.worktree}
+              setHoverSession={props.ctx.setHoverSession}
+              clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
+              navigateToNewSession={() => navigate(`/${slug()}/session`)}
+            />
           </div>
         </div>
+      </div>
 
-        <Collapsible.Content>
-          <WorkspaceSessionList
-            slug={slug}
-            mobile={props.mobile}
-            popover={props.popover}
-            ctx={props.ctx}
-            showNew={showNew}
-            loading={loading}
-            sessions={sessions}
-            children={children}
-            hasMore={hasMore}
-            loadMore={loadMore}
-            language={language}
-          />
-        </Collapsible.Content>
-      </Collapsible>
-    </div>
+      <Collapsible.Content>
+        <WorkspaceSessionList
+          slug={slug}
+          mobile={props.mobile}
+          popover={props.popover}
+          ctx={props.ctx}
+          showNew={showNew}
+          loading={loading}
+          sessions={sessions}
+          children={children}
+          hasMore={hasMore}
+          loadMore={loadMore}
+          language={language}
+        />
+      </Collapsible.Content>
+    </Collapsible>
+  )
+
+  return (
+    <Show when={!local()} fallback={<div classList={{ "opacity-50 pointer-events-none": busy() }}>{item()}</div>}>
+      <div
+        // @ts-ignore
+        use:sortable
+        classList={{
+          "opacity-30": sortable.isActiveDraggable,
+          "opacity-50 pointer-events-none": busy(),
+        }}
+      >
+        {item()}
+      </div>
+    </Show>
   )
 }
 
