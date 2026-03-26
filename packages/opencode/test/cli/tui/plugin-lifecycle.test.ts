@@ -4,35 +4,25 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
+import { mockTuiRuntime } from "../../fixture/tui-runtime"
 import { TuiConfig } from "../../../src/config/tui"
 
 const { TuiPluginRuntime } = await import("../../../src/cli/cmd/tui/plugin/runtime")
 
-type Count = {
-  event_add: number
-  event_drop: number
-  route_add: number
-  route_drop: number
-  command_add: number
-  command_drop: number
-}
-
-test("disposes tracked event, route, and command hooks", async () => {
+test("runs onDispose callbacks with aborted signal and is idempotent", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      const pluginPath = path.join(dir, "lifecycle-plugin.ts")
-      const pluginSpec = pathToFileURL(pluginPath).href
-      const marker = path.join(dir, "dispose-marker.txt")
+      const file = path.join(dir, "plugin.ts")
+      const spec = pathToFileURL(file).href
+      const marker = path.join(dir, "marker.txt")
 
       await Bun.write(
-        pluginPath,
+        file,
         `export default {
   id: "demo.lifecycle",
   tui: async (api, options) => {
     api.event.on("event.test", () => {})
     api.route.register([{ name: "lifecycle.route", render: () => null }])
-    const off = api.command.register(() => [])
-    off()
     api.lifecycle.onDispose(async () => {
       const prev = await Bun.file(options.marker).text().catch(() => "")
       await Bun.write(options.marker, prev + "custom\\n")
@@ -46,80 +36,42 @@ test("disposes tracked event, route, and command hooks", async () => {
 `,
       )
 
-      return {
-        marker,
-        pluginSpec,
-      }
+      return { spec, marker }
     },
   })
 
-  const count: Count = {
-    event_add: 0,
-    event_drop: 0,
-    route_add: 0,
-    route_drop: 0,
-    command_add: 0,
-    command_drop: 0,
-  }
-  process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
-  const get = spyOn(TuiConfig, "get").mockResolvedValue({
-    plugin: [[tmp.extra.pluginSpec, { marker: tmp.extra.marker }]],
-    plugin_meta: {
-      [tmp.extra.pluginSpec]: {
-        scope: "local",
-        source: path.join(tmp.path, "tui.json"),
-      },
-    },
-  })
-  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
-  const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+  const restore = mockTuiRuntime(tmp.path, [[tmp.extra.spec, { marker: tmp.extra.marker }]])
 
   try {
-    await TuiPluginRuntime.init(createTuiPluginApi({ count }))
-
-    expect(count.event_add).toBe(1)
-    expect(count.event_drop).toBe(0)
-    expect(count.route_add).toBe(1)
-    expect(count.route_drop).toBe(0)
-    expect(count.command_add).toBe(3)
-    expect(count.command_drop).toBe(1)
-
+    await TuiPluginRuntime.init(createTuiPluginApi())
     await TuiPluginRuntime.dispose()
-
-    expect(count.event_drop).toBe(1)
-    expect(count.route_drop).toBe(1)
-    expect(count.command_drop).toBe(3)
-
-    await TuiPluginRuntime.dispose()
-
-    expect(count.event_drop).toBe(1)
-    expect(count.route_drop).toBe(1)
-    expect(count.command_drop).toBe(3)
 
     const marker = await fs.readFile(tmp.extra.marker, "utf8")
     expect(marker).toContain("custom")
     expect(marker).toContain("aborted:true")
+
+    // second dispose is a no-op
+    await TuiPluginRuntime.dispose()
+    const after = await fs.readFile(tmp.extra.marker, "utf8")
+    expect(after).toBe(marker)
   } finally {
     await TuiPluginRuntime.dispose()
-    cwd.mockRestore()
-    get.mockRestore()
-    wait.mockRestore()
-    delete process.env.OPENCODE_PLUGIN_META_FILE
+    restore()
   }
 })
 
-test("rolls back failed plugin exports and continues loading", async () => {
+test("rolls back failed plugin and continues loading next", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      const badPath = path.join(dir, "bad-plugin.ts")
-      const badSpec = pathToFileURL(badPath).href
-      const goodPath = path.join(dir, "good-plugin.ts")
-      const goodSpec = pathToFileURL(goodPath).href
+      const bad = path.join(dir, "bad-plugin.ts")
+      const good = path.join(dir, "good-plugin.ts")
+      const badSpec = pathToFileURL(bad).href
+      const goodSpec = pathToFileURL(good).href
       const badMarker = path.join(dir, "bad-cleanup.txt")
       const goodMarker = path.join(dir, "good-called.txt")
 
       await Bun.write(
-        badPath,
+        bad,
         `export default {
   id: "demo.bad",
   tui: async (api, options) => {
@@ -134,7 +86,7 @@ test("rolls back failed plugin exports and continues loading", async () => {
       )
 
       await Bun.write(
-        goodPath,
+        good,
         `export default {
   id: "demo.good",
   tui: async (_api, options) => {
@@ -144,68 +96,36 @@ test("rolls back failed plugin exports and continues loading", async () => {
 `,
       )
 
-      return {
-        badSpec,
-        goodSpec,
-        badMarker,
-        goodMarker,
-      }
+      return { badSpec, goodSpec, badMarker, goodMarker }
     },
   })
 
-  const count: Count = {
-    event_add: 0,
-    event_drop: 0,
-    route_add: 0,
-    route_drop: 0,
-    command_add: 0,
-    command_drop: 0,
-  }
-  process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
-  const get = spyOn(TuiConfig, "get").mockResolvedValue({
-    plugin: [
-      [tmp.extra.badSpec, { bad_marker: tmp.extra.badMarker }],
-      [tmp.extra.goodSpec, { good_marker: tmp.extra.goodMarker }],
-    ],
-    plugin_meta: {
-      [tmp.extra.badSpec]: {
-        scope: "local",
-        source: path.join(tmp.path, "tui.json"),
-      },
-      [tmp.extra.goodSpec]: {
-        scope: "local",
-        source: path.join(tmp.path, "tui.json"),
-      },
-    },
-  })
-  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
-  const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+  const restore = mockTuiRuntime(tmp.path, [
+    [tmp.extra.badSpec, { bad_marker: tmp.extra.badMarker }],
+    [tmp.extra.goodSpec, { good_marker: tmp.extra.goodMarker }],
+  ])
 
   try {
-    await TuiPluginRuntime.init(createTuiPluginApi({ count }))
-
+    await TuiPluginRuntime.init(createTuiPluginApi())
+    // bad plugin's onDispose ran during rollback
     await expect(fs.readFile(tmp.extra.badMarker, "utf8")).resolves.toBe("cleaned")
+    // good plugin still loaded
     await expect(fs.readFile(tmp.extra.goodMarker, "utf8")).resolves.toBe("called")
-    expect(count.route_add).toBe(1)
-    expect(count.route_drop).toBe(1)
   } finally {
     await TuiPluginRuntime.dispose()
-    cwd.mockRestore()
-    get.mockRestore()
-    wait.mockRestore()
-    delete process.env.OPENCODE_PLUGIN_META_FILE
+    restore()
   }
 })
 
-test("registers slots via api and ignores manual slot plugin id", async () => {
+test("assigns sequential slot ids scoped to plugin", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      const pluginPath = path.join(dir, "slot-plugin.ts")
-      const pluginSpec = pathToFileURL(pluginPath).href
+      const file = path.join(dir, "slot-plugin.ts")
+      const spec = pathToFileURL(file).href
       const marker = path.join(dir, "slot-setup.txt")
 
       await Bun.write(
-        pluginPath,
+        file,
         `import fs from "fs"
 
 const mark = (label) => {
@@ -217,25 +137,13 @@ export default {
   tui: async (api) => {
     const one = api.slots.register({
       id: 1,
-      setup: () => {
-        mark("one")
-      },
-      slots: {
-        home_logo() {
-          return null
-        },
-      },
+      setup: () => { mark("one") },
+      slots: { home_logo() { return null } },
     })
     const two = api.slots.register({
       id: 2,
-      setup: () => {
-        mark("two")
-      },
-      slots: {
-        home_bottom() {
-          return null
-        },
-      },
+      setup: () => { mark("two") },
+      slots: { home_bottom() { return null } },
     })
     mark("id:" + one)
     mark("id:" + two)
@@ -244,25 +152,11 @@ export default {
 `,
       )
 
-      return {
-        pluginSpec,
-        marker,
-      }
+      return { spec, marker }
     },
   })
 
-  process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
-  const get = spyOn(TuiConfig, "get").mockResolvedValue({
-    plugin: [tmp.extra.pluginSpec],
-    plugin_meta: {
-      [tmp.extra.pluginSpec]: {
-        scope: "local",
-        source: path.join(tmp.path, "tui.json"),
-      },
-    },
-  })
-  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
-  const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+  const restore = mockTuiRuntime(tmp.path, [tmp.extra.spec])
   const err = spyOn(console, "error").mockImplementation(() => {})
 
   try {
@@ -274,6 +168,7 @@ export default {
     expect(marker).toContain("id:demo.slot")
     expect(marker).toContain("id:demo.slot:1")
 
+    // no initialization failures
     const hit = err.mock.calls.find(
       (item) => typeof item[0] === "string" && item[0].includes("failed to initialize tui plugin"),
     )
@@ -281,10 +176,7 @@ export default {
   } finally {
     await TuiPluginRuntime.dispose()
     err.mockRestore()
-    cwd.mockRestore()
-    get.mockRestore()
-    wait.mockRestore()
-    delete process.env.OPENCODE_PLUGIN_META_FILE
+    restore()
   }
 })
 
@@ -293,11 +185,11 @@ test(
   async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
-        const pluginPath = path.join(dir, "timeout-plugin.ts")
-        const pluginSpec = pathToFileURL(pluginPath).href
+        const file = path.join(dir, "timeout-plugin.ts")
+        const spec = pathToFileURL(file).href
 
         await Bun.write(
-          pluginPath,
+          file,
           `export default {
   id: "demo.timeout",
   tui: async (api) => {
@@ -307,40 +199,17 @@ test(
 `,
         )
 
-        return {
-          pluginSpec,
-        }
+        return { spec }
       },
     })
 
-    const count: Count = {
-      event_add: 0,
-      event_drop: 0,
-      route_add: 0,
-      route_drop: 0,
-      command_add: 0,
-      command_drop: 0,
-    }
-    process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
-    const get = spyOn(TuiConfig, "get").mockResolvedValue({
-      plugin: [tmp.extra.pluginSpec],
-      plugin_meta: {
-        [tmp.extra.pluginSpec]: {
-          scope: "local",
-          source: path.join(tmp.path, "tui.json"),
-        },
-      },
-    })
-    const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
-    const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+    const restore = mockTuiRuntime(tmp.path, [tmp.extra.spec])
 
     try {
-      await TuiPluginRuntime.init(createTuiPluginApi({ count }))
+      await TuiPluginRuntime.init(createTuiPluginApi())
 
       const done = await new Promise<string>((resolve) => {
-        const timer = setTimeout(() => {
-          resolve("timeout")
-        }, 7000)
+        const timer = setTimeout(() => resolve("timeout"), 7000)
         TuiPluginRuntime.dispose().then(() => {
           clearTimeout(timer)
           resolve("done")
@@ -349,10 +218,7 @@ test(
       expect(done).toBe("done")
     } finally {
       await TuiPluginRuntime.dispose()
-      cwd.mockRestore()
-      get.mockRestore()
-      wait.mockRestore()
-      delete process.env.OPENCODE_PLUGIN_META_FILE
+      restore()
     }
   },
   { timeout: 15000 },

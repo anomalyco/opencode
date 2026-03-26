@@ -417,6 +417,82 @@ export default {
   }
 }
 
+test("continues loading when a plugin is missing config metadata", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const bad = path.join(dir, "missing-meta-plugin.ts")
+      const good = path.join(dir, "next-plugin.ts")
+      const bare = path.join(dir, "plain-plugin.ts")
+      const badSpec = pathToFileURL(bad).href
+      const goodSpec = pathToFileURL(good).href
+      const bareSpec = pathToFileURL(bare).href
+      const goodMarker = path.join(dir, "next-called.txt")
+      const bareMarker = path.join(dir, "plain-called.txt")
+
+      for (const [file, id] of [
+        [bad, "demo.missing-meta"],
+        [good, "demo.next"],
+      ] as const) {
+        await Bun.write(
+          file,
+          `export default {
+  id: "${id}",
+  tui: async (_api, options) => {
+    if (!options?.marker) return
+    await Bun.write(options.marker, "called")
+  },
+}
+`,
+        )
+      }
+
+      await Bun.write(
+        bare,
+        `export default {
+  id: "demo.plain",
+  tui: async (_api, options) => {
+    await Bun.write(${JSON.stringify(bareMarker)}, options === undefined ? "undefined" : "value")
+  },
+}
+`,
+      )
+
+      return { badSpec, goodSpec, bareSpec, goodMarker, bareMarker }
+    },
+  })
+
+  process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
+  const get = spyOn(TuiConfig, "get").mockResolvedValue({
+    plugin: [
+      [tmp.extra.badSpec, { marker: path.join(tmp.path, "bad.txt") }],
+      [tmp.extra.goodSpec, { marker: tmp.extra.goodMarker }],
+      tmp.extra.bareSpec,
+    ],
+    plugin_meta: {
+      [tmp.extra.goodSpec]: { scope: "local", source: path.join(tmp.path, "tui.json") },
+      [tmp.extra.bareSpec]: { scope: "local", source: path.join(tmp.path, "tui.json") },
+    },
+  })
+  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+
+  try {
+    await TuiPluginRuntime.init(createTuiPluginApi())
+    // bad plugin was skipped (no metadata entry)
+    await expect(fs.readFile(path.join(tmp.path, "bad.txt"), "utf8")).rejects.toThrow()
+    // good plugin loaded fine
+    await expect(fs.readFile(tmp.extra.goodMarker, "utf8")).resolves.toBe("called")
+    // bare string spec gets undefined options
+    await expect(fs.readFile(tmp.extra.bareMarker, "utf8")).resolves.toBe("undefined")
+  } finally {
+    await TuiPluginRuntime.dispose()
+    cwd.mockRestore()
+    get.mockRestore()
+    wait.mockRestore()
+    delete process.env.OPENCODE_PLUGIN_META_FILE
+  }
+})
+
 describe("tui.plugin.loader", () => {
   let data: Data
 
