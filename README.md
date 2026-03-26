@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="packages/opencode/src/cli/ui/logo.svg" alt="CoBuilder logo" width="180" />
+  <img src="assets/logo.svg" alt="CoBuilder logo" width="320" />
 </p>
 
 <h2 align="center">CoBuilder</h2>
