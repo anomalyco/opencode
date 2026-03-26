@@ -20,9 +20,11 @@ import { Instance } from "@/project/instance"
 import {
   getDefaultPlugin,
   isDeprecatedPlugin,
+  pluginSource,
   readPluginId,
   resolvePluginId,
   resolvePluginTarget,
+  type PluginSource,
 } from "@/plugin/shared"
 import { PluginMeta } from "@/plugin/meta"
 import { addTheme, hasTheme } from "../context/theme"
@@ -38,6 +40,7 @@ type PluginLoad = {
   spec: string
   target: string
   retry: boolean
+  source: PluginSource | "internal"
   id: string
   module: TuiPluginModule
   install_theme: TuiTheme["install"]
@@ -193,7 +196,8 @@ async function loadExternalPlugin(
     return
   }
 
-  const root = resolveRoot(spec.startsWith("file://") ? spec : target)
+  const source = pluginSource(spec)
+  const root = resolveRoot(source === "file" ? spec : target)
   const install_theme = createThemeInstaller(meta, root, spec)
   const mod = await import(target)
     .then((raw) => {
@@ -207,7 +211,7 @@ async function loadExternalPlugin(
     })
   if (!mod) return
 
-  const id = await resolvePluginId(spec, target, readPluginId(mod.id, spec)).catch((error) => {
+  const id = await resolvePluginId(source, spec, target, readPluginId(mod.id, spec)).catch((error) => {
     fail("failed to load tui plugin", { path: spec, target, retry, error })
     return
   })
@@ -218,6 +222,7 @@ async function loadExternalPlugin(
     spec,
     target,
     retry,
+    source,
     id,
     module: mod,
     install_theme,
@@ -225,6 +230,7 @@ async function loadExternalPlugin(
 }
 
 function createMeta(
+  source: PluginLoad["source"],
   spec: string,
   target: string,
   meta: { state: PluginMeta.State; entry: PluginMeta.Entry } | undefined,
@@ -237,13 +243,11 @@ function createMeta(
     }
   }
 
-  const source = spec.startsWith("internal:") ? "internal" : "npm"
-  const kind = source === "npm" && spec.startsWith("file://") ? "file" : source
   const now = Date.now()
   return {
-    state: kind === "internal" ? "same" : "first",
+    state: source === "internal" ? "same" : "first",
     id: id ?? spec,
-    source: kind,
+    source,
     spec,
     target,
     first_time: now,
@@ -262,6 +266,7 @@ function loadInternalPlugin(item: InternalTuiPlugin): PluginLoad {
     spec,
     target,
     retry: false,
+    source: "internal",
     id: item.id,
     module: item,
     install_theme: createThemeInstaller(
@@ -630,7 +635,7 @@ export namespace TuiPluginRuntime {
         for (const item of INTERNAL_TUI_PLUGINS) {
           log.info("loading internal tui plugin", { id: item.id })
           const entry = loadInternalPlugin(item)
-          const meta = createMeta(entry.spec, entry.target, undefined, entry.id)
+          const meta = createMeta(entry.source, entry.spec, entry.target, undefined, entry.id)
           for (const plugin of collectPluginEntries(entry, meta)) {
             addPluginEntry(next, plugin)
           }
@@ -645,7 +650,7 @@ export namespace TuiPluginRuntime {
             const item = plugins[i]
             if (!item) continue
             const spec = Config.pluginSpecifier(item)
-            if (!spec.startsWith("file://")) continue
+            if (pluginSource(spec) !== "file") continue
             deps.wait ??= TuiConfig.waitForDependencies().catch((error) => {
               log.warn("failed waiting for tui plugin dependencies", { error })
             })
@@ -682,7 +687,7 @@ export namespace TuiPluginRuntime {
             })
           }
 
-          const row = createMeta(entry.spec, entry.target, hit, entry.id)
+          const row = createMeta(entry.source, entry.spec, entry.target, hit, entry.id)
           for (const plugin of collectPluginEntries(entry, row)) {
             addPluginEntry(next, plugin)
           }

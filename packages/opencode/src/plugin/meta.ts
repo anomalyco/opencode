@@ -6,7 +6,7 @@ import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
 import { Flock } from "@/util/flock"
 
-import { parsePluginSpecifier } from "./shared"
+import { parsePluginSpecifier, pluginSource } from "./shared"
 
 export namespace PluginMeta {
   type Source = "file" | "npm"
@@ -46,11 +46,6 @@ export namespace PluginMeta {
     return `plugin-meta:${file}`
   }
 
-  function sourceKind(spec: string): Source {
-    if (spec.startsWith("file://")) return "file"
-    return "npm"
-  }
-
   function fileTarget(spec: string, target: string) {
     if (spec.startsWith("file://")) return fileURLToPath(spec)
     if (target.startsWith("file://")) return fileURLToPath(target)
@@ -81,7 +76,7 @@ export namespace PluginMeta {
   async function entryCore(item: Touch): Promise<Core> {
     const spec = item.spec
     const target = item.target
-    const source = sourceKind(spec)
+    const source = pluginSource(spec)
     if (source === "file") {
       const file = fileTarget(spec, target)
       return {

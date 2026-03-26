@@ -18,6 +18,12 @@ export function parsePluginSpecifier(spec: string) {
   return { pkg, version }
 }
 
+export type PluginSource = "file" | "npm"
+
+export function pluginSource(spec: string): PluginSource {
+  return spec.startsWith("file://") ? "file" : "npm"
+}
+
 export function isPathPluginSpec(spec: string) {
   return spec.startsWith("file://") || spec.startsWith(".") || path.isAbsolute(spec) || /^[A-Za-z]:[\\/]/.test(spec)
 }
@@ -61,8 +67,8 @@ export function readPluginId(id: unknown, spec: string) {
   return value
 }
 
-export async function resolvePluginId(spec: string, target: string, id: string | undefined) {
-  if (spec.startsWith("file://")) {
+export async function resolvePluginId(source: PluginSource, spec: string, target: string, id: string | undefined) {
+  if (source === "file") {
     if (id) return id
     throw new TypeError(`Path plugin ${spec} must export id`)
   }
