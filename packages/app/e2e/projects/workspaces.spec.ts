@@ -20,7 +20,13 @@ import {
   waitDir,
   waitSlug,
 } from "../actions"
-import { dropdownMenuContentSelector, inlineInputSelector, workspaceItemSelector } from "../selectors"
+import {
+  dropdownMenuContentSelector,
+  inlineInputSelector,
+  promptSelector,
+  sessionItemSelector,
+  workspaceItemSelector,
+} from "../selectors"
 import { createSdk, dirSlug } from "../utils"
 
 type WorkspaceWindow = Window & {
@@ -137,7 +143,8 @@ test("non-git projects keep workspace mode disabled", async ({ page, withProject
   await fs.writeFile(path.join(nonGit, "README.md"), "# e2e nongit\n")
 
   try {
-    await withProject(async () => {
+    await withProject(async (project) => {
+      const sdk = createSdk(nonGit)
       await page.goto(`/${nonGitSlug}/session`)
 
       await expect.poll(() => slugFromUrl(page.url()), { timeout: 30_000 }).not.toBe("")
@@ -146,8 +153,15 @@ test("non-git projects keep workspace mode disabled", async ({ page, withProject
       expect(path.basename(activeDir)).toContain("opencode-e2e-project-nongit-")
 
       await openSidebar(page)
+      await expect(page.locator(promptSelector)).toBeVisible()
+      await expect(page.getByRole("button", { name: "New session" })).toBeVisible()
       await expect(page.getByRole("button", { name: "New workspace" })).toHaveCount(0)
       await expect(page.locator('[data-component="workspace-item"]')).toHaveCount(0)
+
+      const session = await sdk.session.create({ title: `nongit ${Date.now()}` }).then((x) => x.data)
+      if (!session?.id) throw new Error("Non-git session create did not return an id")
+      project.trackSession(session.id, nonGit)
+      await expect(page.locator(sessionItemSelector(session.id)).first()).toBeVisible()
 
       await expect
         .poll(async () => {
@@ -160,9 +174,11 @@ test("non-git projects keep workspace mode disabled", async ({ page, withProject
 
       await expect(trigger).toBeVisible()
 
-      await trigger.click({ force: true })
-
       const menu = page.locator(dropdownMenuContentSelector).first()
+      for (const _ of [0, 1, 2]) {
+        await trigger.click({ force: true })
+        if (await menu.isVisible().catch(() => false)) break
+      }
       await expect(menu).toBeVisible()
 
       const toggle = menu.locator('[data-action="project-workspaces-toggle"]').first()

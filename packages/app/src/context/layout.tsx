@@ -1,5 +1,6 @@
 import { createStore, produce } from "solid-js/store"
 import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
+import { useParams } from "@solidjs/router"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSync } from "./global-sync"
 import { useGlobalSDK } from "./global-sdk"
@@ -377,6 +378,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     const [colors, setColors] = createStore<Record<string, AvatarColorKey>>({})
     const colorRequested = new Map<string, AvatarColorKey>()
+    const params = useParams()
 
     function pickAvailableColor(used: Set<string>): AvatarColorKey {
       const available = AVATAR_COLOR_KEYS.filter((c) => !used.has(c))
@@ -456,6 +458,27 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
       return directory
     }
+
+    const openProject = (directory: string) => {
+      const root = rootFor(directory)
+      if (server.projects.list().find((x) => x.worktree === root)) return
+      globalSync.project.loadSessions(root)
+      server.projects.open(root)
+    }
+
+    const routeDir = createMemo(() => {
+      const dir = params.dir
+      if (!dir) return ""
+      const decoded = decode64(dir)
+      if (!decoded) return ""
+      return globalSync.peek(decoded, { bootstrap: false })[0].path.directory || decoded
+    })
+
+    createEffect(() => {
+      const dir = routeDir()
+      if (!dir) return
+      openProject(dir)
+    })
 
     createEffect(() => {
       const projects = server.projects.list()
@@ -566,10 +589,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       projects: {
         list,
         open(directory: string) {
-          const root = rootFor(directory)
-          if (server.projects.list().find((x) => x.worktree === root)) return
-          globalSync.project.loadSessions(root)
-          server.projects.open(root)
+          openProject(directory)
         },
         close(directory: string) {
           server.projects.close(directory)
