@@ -7,7 +7,7 @@ Technical reference for the current TUI plugin system.
 - TUI plugin config lives in `tui.json`.
 - Author package entrypoint is `@opencode-ai/plugin/tui`.
 - Internal plugins load inside the CLI app the same way external TUI plugins do.
-- Package plugins can be installed with `opencode plug <module>`.
+- Package plugins can be installed with `opencode plugin <module>`.
 
 ## TUI config
 
@@ -103,8 +103,8 @@ Example:
 }
 ```
 
-- `opencode plug <module>` resolves and installs the package first, then reads `oc-plugin`, then patches config.
-- Alias: `opencode plugin <module>`.
+- `opencode plugin <module>` resolves and installs the package first, then reads `oc-plugin`, then patches config.
+- Alias: `opencode plug <module>`.
 - `-g` / `--global` writes into the global config dir.
 - Local installs write into `<git worktree>/.opencode` when inside a git repo, otherwise `<cwd>/.opencode`.
 - Without `--force`, an already-configured npm package name is a no-op.
@@ -180,7 +180,7 @@ Command behavior:
 - `ui.dialog` exposes the host dialog stack:
   - `replace(render, onClose?)`
   - `clear()`
-  - `setSize("medium" | "large")`
+  - `setSize("medium" | "large" | "xlarge")`
   - readonly `size`, `depth`, `open`
 
 ### Keybinds

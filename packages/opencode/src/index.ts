@@ -34,7 +34,7 @@ import { Global } from "./global"
 import { JsonMigration } from "./storage/json-migration"
 import { Database } from "./storage/db"
 import { errorMessage } from "./util/error"
-import { PlugCommand } from "./cli/cmd/plug"
+import { PluginCommand } from "./cli/cmd/plug"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -153,7 +153,7 @@ const cli = yargs(hideBin(process.argv))
   .command(GithubCommand)
   .command(PrCommand)
   .command(SessionCommand)
-  .command(PlugCommand)
+  .command(PluginCommand)
   .command(DbCommand)
   .fail((msg, err) => {
     if (

@@ -307,9 +307,9 @@ export function createPlugTask(input: PlugInput, dep: PlugDeps = defaultPlugDeps
   }
 }
 
-export const PlugCommand = cmd({
-  command: "plug <module>",
-  aliases: ["plugin"],
+export const PluginCommand = cmd({
+  command: "plugin <module>",
+  aliases: ["plug"],
   describe: "install plugin and update config",
   builder: (yargs: Argv) => {
     return yargs
