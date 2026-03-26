@@ -45,3 +45,35 @@ The team will send a response indicating the next steps in handling your report.
 ## Escalation
 
 If you do not receive an acknowledgement of your report within 6 business days, you may send an email to security@anoma.ly
+
+---
+
+# CoBuilder Security Layers
+
+CoBuilder extends OpenCode with a defense-in-depth security module. To report CoBuilder-specific vulnerabilities, email **security@cobuilder.dev**. We commit to acknowledging reports within **48 hours**.
+
+## Supported Versions
+
+| Version | Supported |
+| ------- | --------- |
+| main    | Yes       |
+
+## Security Layers Implemented
+
+**SSRF Protection** (`src/security/ssrf.ts`)
+Validates all provider URLs before network requests. Blocks cloud metadata endpoints (AWS IMDSv1, GCP metadata), private IP ranges (RFC 1918), and loopback addresses in production. Localhost is explicitly allowed for 9Router.
+
+**Prompt Injection Scanning** (`src/security/prompt-injection.ts`)
+Scans text for override patterns, data exfiltration attempts, shell injection sequences, and known jailbreak markers before passing to AI providers.
+
+**Path Traversal Prevention** (`src/security/path.ts`)
+Canonicalizes file paths and enforces base-directory confinement. Strips NUL bytes and rejects any resolved path that escapes the declared base.
+
+**Token Bucket Rate Limiting** (`src/security/rate-limiter.ts`)
+Per-key cost-aware rate limiter with configurable token refill and automatic stale-entry cleanup.
+
+**Merkle-Chained Audit Log** (`src/security/audit.ts`)
+Append-only event log where each entry includes a SHA-256 hash chained from the previous entry, providing tamper-evident logging.
+
+**HTTP Security Headers** (`src/security/headers.ts`)
+All HTTP responses include: Content-Security-Policy, X-Frame-Options (DENY), X-Content-Type-Options (nosniff), Referrer-Policy, Permissions-Policy, and Strict-Transport-Security (HSTS).
