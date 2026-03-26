@@ -6,10 +6,13 @@ import { InstanceBootstrap } from "@/project/bootstrap"
 import { Rpc } from "@/util/rpc"
 import { upgrade } from "@/cli/upgrade"
 import { Config } from "@/config/config"
+import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
-import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
+import type { Event } from "@opencode-ai/sdk/v2"
 import { Flag } from "@/flag/flag"
 import { setTimeout as sleep } from "node:timers/promises"
+import { writeHeapSnapshot } from "node:v8"
+import { WorkspaceID } from "@/control-plane/schema"
 
 await Log.init({
   print: process.argv.includes("--print-logs"),
@@ -49,39 +52,49 @@ const startEventStream = (input: { directory: string; workspaceID?: string }) =>
   eventStream.abort = abort
   const signal = abort.signal
 
-  const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const request = new Request(input, init)
-    const auth = getAuthorizationHeader()
-    if (auth) request.headers.set("Authorization", auth)
-    return Server.Default().fetch(request)
-  }) as typeof globalThis.fetch
-
-  const sdk = createOpencodeClient({
-    baseUrl: "http://opencode.internal",
-    directory: input.directory,
-    experimental_workspaceID: input.workspaceID,
-    fetch: fetchFn,
-    signal,
-  })
-
   ;(async () => {
     while (!signal.aborted) {
-      const events = await Promise.resolve(
-        sdk.event.subscribe(
-          {},
-          {
-            signal,
-          },
-        ),
-      ).catch(() => undefined)
+      const shouldReconnect = await Instance.provide({
+        directory: input.directory,
+        init: InstanceBootstrap,
+        fn: () =>
+          new Promise<boolean>((resolve) => {
+            Rpc.emit("event", {
+              type: "server.connected",
+              properties: {},
+            } satisfies Event)
 
-      if (!events) {
-        await sleep(250)
-        continue
-      }
+            let settled = false
+            const settle = (value: boolean) => {
+              if (settled) return
+              settled = true
+              signal.removeEventListener("abort", onAbort)
+              unsub()
+              resolve(value)
+            }
 
-      for await (const event of events.stream) {
-        Rpc.emit("event", event as Event)
+            const unsub = Bus.subscribeAll((event) => {
+              Rpc.emit("event", event as Event)
+              if (event.type === Bus.InstanceDisposed.type) {
+                settle(true)
+              }
+            })
+
+            const onAbort = () => {
+              settle(false)
+            }
+
+            signal.addEventListener("abort", onAbort, { once: true })
+          }),
+      }).catch((error) => {
+        Log.Default.error("event stream subscribe error", {
+          error: error instanceof Error ? error.message : error,
+        })
+        return false
+      })
+
+      if (!shouldReconnect || signal.aborted) {
+        break
       }
 
       if (!signal.aborted) {
@@ -117,6 +130,10 @@ export const rpc = {
       body,
     }
   },
+  snapshot() {
+    const result = writeHeapSnapshot("server.heapsnapshot")
+    return result
+  },
   async server(input: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
     if (server) await server.stop(true)
     server = await Server.listen(input)
@@ -132,8 +149,7 @@ export const rpc = {
     })
   },
   async reload() {
-    Config.global.reset()
-    await Instance.disposeAll()
+    await Config.invalidate(true)
   },
   async setWorkspace(input: { workspaceID?: string }) {
     startEventStream({ directory: process.cwd(), workspaceID: input.workspaceID })

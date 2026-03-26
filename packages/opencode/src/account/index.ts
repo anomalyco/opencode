@@ -1,7 +1,7 @@
 import { Clock, Duration, Effect, Layer, Option, Schema, SchemaGetter, ServiceMap } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 
-import { makeRunPromise } from "@/effect/run-service"
+import { makeRuntime } from "@/effect/run-service"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { AccountRepo, type AccountRow } from "./repo"
 import {
@@ -379,7 +379,7 @@ export namespace Account {
 
   export const defaultLayer = layer.pipe(Layer.provide(AccountRepo.layer), Layer.provide(FetchHttpClient.layer))
 
-  export const runPromise = makeRunPromise(Service, defaultLayer)
+  export const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export async function active(): Promise<Info | undefined> {
     return Option.getOrUndefined(await runPromise((service) => service.active()))

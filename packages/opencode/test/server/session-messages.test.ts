@@ -117,3 +117,16 @@ describe("session messages endpoint", () => {
     })
   })
 })
+
+describe("session.prompt_async error handling", () => {
+  test("prompt_async route has error handler for detached prompt call", async () => {
+    const src = await Bun.file(path.join(import.meta.dir, "../../src/server/routes/session.ts")).text()
+    const start = src.indexOf('"/:sessionID/prompt_async"')
+    const end = src.indexOf('"/:sessionID/command"', start)
+    expect(start).toBeGreaterThan(-1)
+    expect(end).toBeGreaterThan(start)
+    const route = src.slice(start, end)
+    expect(route).toContain(".catch(")
+    expect(route).toContain("Bus.publish(Session.Event.Error")
+  })
+})

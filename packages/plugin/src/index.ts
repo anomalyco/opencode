@@ -129,6 +129,7 @@ export type AuthOuathResult = { url: string; instructions: string } & (
                 access: string
                 expires: number
                 accountId?: string
+                enterpriseUrl?: string
               }
             | { key: string }
           ))
@@ -149,6 +150,7 @@ export type AuthOuathResult = { url: string; instructions: string } & (
                 access: string
                 expires: number
                 accountId?: string
+                enterpriseUrl?: string
               }
             | { key: string }
           ))
