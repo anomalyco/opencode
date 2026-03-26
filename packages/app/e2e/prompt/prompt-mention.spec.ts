@@ -2,6 +2,7 @@ import { test, expect } from "../fixtures"
 import { promptSelector } from "../selectors"
 
 test("smoke @mention inserts file pill token", async ({ page, gotoSession }) => {
+  test.slow() // Windows CI is slower under load; triple default assertion timeouts
   await gotoSession()
 
   await page.locator(promptSelector).click()

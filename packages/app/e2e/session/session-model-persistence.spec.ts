@@ -220,20 +220,7 @@ async function createWorkspace(page: Page, root: string, seen: string[]) {
 
 async function waitWorkspace(page: Page, slug: string) {
   await openSidebar(page)
-  await expect
-    .poll(
-      async () => {
-        const item = page.locator(workspaceItemSelector(slug)).first()
-        try {
-          await item.hover({ timeout: 500 })
-          return true
-        } catch {
-          return false
-        }
-      },
-      { timeout: 60_000 },
-    )
-    .toBe(true)
+  await expect(page.locator(workspaceItemSelector(slug)).first()).toBeVisible({ timeout: 60_000 })
 }
 
 async function newWorkspaceSession(page: Page, slug: string) {
@@ -289,6 +276,7 @@ test("session model and variant restore per session without leaking into new ses
 })
 
 test("session model restore across workspaces", async ({ page, withProject }) => {
+  test.slow() // workspace creation is heavier on Windows CI
   await page.setViewportSize({ width: 1440, height: 900 })
 
   await withProject(async ({ directory: root, slug, gotoSession, trackDirectory, trackSession }) => {
