@@ -98,4 +98,64 @@ describe("tool.webfetch", () => {
       },
     )
   })
+
+  test("strips navigation chrome and extracts article content", async () => {
+    const html = `<html><body>
+    <nav><a href="/home">Home</a><a href="/about">About</a></nav>
+    <article><h1>Article Title</h1><p>Article body text.</p></article>
+    <footer><a href="/contact">Contact</a></footer>
+  </body></html>`
+    await withFetch(
+      async () => new Response(html, { status: 200, headers: { "content-type": "text/html; charset=utf-8" } }),
+      async () => {
+        await Instance.provide({
+          directory: projectRoot,
+          fn: async () => {
+            const webfetch = await WebFetchTool.init()
+            const result = await webfetch.execute({ url: "https://example.com/article", format: "markdown" }, ctx)
+            expect(result.output).toContain("Article Title")
+            expect(result.output).toContain("Article body text")
+            expect(result.output).not.toContain("/home")
+            expect(result.output).not.toContain("/contact")
+          },
+        })
+      },
+    )
+  })
+
+  test("caches url responses and avoids duplicate fetches", async () => {
+    const html = `<html><body><article><p>Cached content</p></article></body></html>`
+    let fetchCount = 0
+    await withFetch(
+      async () => { fetchCount++; return new Response(html, { status: 200, headers: { "content-type": "text/html" } }) },
+      async () => {
+        await Instance.provide({
+          directory: projectRoot,
+          fn: async () => {
+            const webfetch = await WebFetchTool.init()
+            await webfetch.execute({ url: "https://example.com/cache-test", format: "markdown" }, ctx)
+            await webfetch.execute({ url: "https://example.com/cache-test", format: "markdown" }, ctx)
+            expect(fetchCount).toBe(1)
+          },
+        })
+      },
+    )
+  })
+
+  test("falls back to full conversion when readability finds no article", async () => {
+    const html = `<html><body><div><p>Sparse page with no clear article structure</p></div></body></html>`
+    await withFetch(
+      async () => new Response(html, { status: 200, headers: { "content-type": "text/html" } }),
+      async () => {
+        await Instance.provide({
+          directory: projectRoot,
+          fn: async () => {
+            const webfetch = await WebFetchTool.init()
+            const result = await webfetch.execute({ url: "https://example.com/sparse", format: "markdown" }, ctx)
+            expect(result.output).toContain("Sparse page with no clear article structure")
+          },
+        })
+      },
+    )
+  })
 })

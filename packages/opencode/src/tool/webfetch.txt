@@ -11,3 +11,4 @@ Usage notes:
   - Format options: "markdown" (default), "text", or "html"
   - This tool is read-only and does not modify any files
   - Results may be summarized if the content is very large
+  - For web research tasks, prefer delegating to @haiku which runs this tool cost-efficiently
