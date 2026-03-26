@@ -1,5 +1,7 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="CoBuilder logo" width="320" />
+  <img src="assets/logo.svg" alt="CoBuilder logo" width="280" />
+  &nbsp;&nbsp;&nbsp;
+  <img src="assets/mascot.svg" alt="Jindo" width="100" />
 </p>
 
 <p align="center">The open source AI coding agent — built for teams and enterprise.</p>
