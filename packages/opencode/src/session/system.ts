@@ -58,6 +58,11 @@ export namespace SystemPrompt {
     ]
   }
 
+  export async function memory(projectDir: string): Promise<string> {
+    const { buildMemoryContext } = await import("../memory")
+    return buildMemoryContext(projectDir)
+  }
+
   export async function skills(agent: Agent.Info) {
     if (Permission.disabled(["skill"], agent.permission).has("skill")) return
 
