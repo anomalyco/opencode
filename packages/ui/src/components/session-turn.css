@@ -85,10 +85,6 @@
     flex-direction: column;
     align-self: stretch;
     gap: 12px;
-
-    > :first-child > [data-component="markdown"]:first-child {
-      margin-top: 0;
-    }
   }
 
   [data-slot="session-turn-diffs"] {
@@ -229,4 +225,8 @@
   [data-slot="session-turn-diff-view"]::-webkit-scrollbar {
     display: none;
   }
+}
+
+[data-slot="session-turn-list"] {
+  gap: 48px;
 }

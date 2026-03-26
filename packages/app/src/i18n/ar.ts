@@ -722,8 +722,6 @@ export const dict = {
   "settings.permissions.tool.skill.description": "تحميل مهارة بالاسم",
   "settings.permissions.tool.lsp.title": "LSP",
   "settings.permissions.tool.lsp.description": "تشغيل استعلامات خادم اللغة",
-  "settings.permissions.tool.todoread.title": "قراءة المهام",
-  "settings.permissions.tool.todoread.description": "قراءة قائمة المهام",
   "settings.permissions.tool.todowrite.title": "كتابة المهام",
   "settings.permissions.tool.todowrite.description": "تحديث قائمة المهام",
   "settings.permissions.tool.webfetch.title": "جلب الويب",

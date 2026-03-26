@@ -11,10 +11,11 @@ import { Log } from "../util/log"
 import { Slug } from "@opencode-ai/util/slug"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
+import { Git } from "@/git"
 import { Effect, FileSystem, Layer, Path, Scope, ServiceMap, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
-import { makeRunPromise } from "@/effect/run-service"
+import { makeRuntime } from "@/effect/run-service"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 
 export namespace Worktree {
@@ -504,56 +505,24 @@ export namespace Worktree {
 
         const worktreePath = entry.path
 
-        const remoteList = yield* git(["remote"], { cwd: Instance.worktree })
-        if (remoteList.code !== 0) {
-          throw new ResetFailedError({ message: remoteList.stderr || remoteList.text || "Failed to list git remotes" })
-        }
-
-        const remotes = remoteList.text
-          .split("\n")
-          .map((l) => l.trim())
-          .filter(Boolean)
-        const remote = remotes.includes("origin")
-          ? "origin"
-          : remotes.length === 1
-            ? remotes[0]
-            : remotes.includes("upstream")
-              ? "upstream"
-              : ""
-
-        const remoteHead = remote
-          ? yield* git(["symbolic-ref", `refs/remotes/${remote}/HEAD`], { cwd: Instance.worktree })
-          : { code: 1, text: "", stderr: "" }
-
-        const remoteRef = remoteHead.code === 0 ? remoteHead.text.trim() : ""
-        const remoteTarget = remoteRef ? remoteRef.replace(/^refs\/remotes\//, "") : ""
-        const remoteBranch =
-          remote && remoteTarget.startsWith(`${remote}/`) ? remoteTarget.slice(`${remote}/`.length) : ""
-
-        const [mainCheck, masterCheck] = yield* Effect.all(
-          [
-            git(["show-ref", "--verify", "--quiet", "refs/heads/main"], { cwd: Instance.worktree }),
-            git(["show-ref", "--verify", "--quiet", "refs/heads/master"], { cwd: Instance.worktree }),
-          ],
-          { concurrency: 2 },
-        )
-        const localBranch = mainCheck.code === 0 ? "main" : masterCheck.code === 0 ? "master" : ""
-
-        const target = remoteBranch ? `${remote}/${remoteBranch}` : localBranch
-        if (!target) {
+        const base = yield* Effect.promise(() => Git.defaultBranch(Instance.worktree))
+        if (!base) {
           throw new ResetFailedError({ message: "Default branch not found" })
         }
 
-        if (remoteBranch) {
+        const sep = base.ref.indexOf("/")
+        if (base.ref !== base.name && sep > 0) {
+          const remote = base.ref.slice(0, sep)
+          const branch = base.ref.slice(sep + 1)
           yield* gitExpect(
-            ["fetch", remote, remoteBranch],
+            ["fetch", remote, branch],
             { cwd: Instance.worktree },
-            (r) => new ResetFailedError({ message: r.stderr || r.text || `Failed to fetch ${target}` }),
+            (r) => new ResetFailedError({ message: r.stderr || r.text || `Failed to fetch ${base.ref}` }),
           )
         }
 
         yield* gitExpect(
-          ["reset", "--hard", target],
+          ["reset", "--hard", base.ref],
           { cwd: worktreePath },
           (r) => new ResetFailedError({ message: r.stderr || r.text || "Failed to reset worktree to target" }),
         )
@@ -607,7 +576,7 @@ export namespace Worktree {
     Layer.provide(NodeFileSystem.layer),
     Layer.provide(NodePath.layer),
   )
-  const runPromise = makeRunPromise(Service, defaultLayer)
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export async function makeWorktreeInfo(name?: string) {
     return runPromise((svc) => svc.makeWorktreeInfo(name))

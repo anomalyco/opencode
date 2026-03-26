@@ -535,6 +535,8 @@ export const dict = {
   "session.review.noVcs.createGit.action": "Create Git repository",
   "session.review.noSnapshot": "Snapshot tracking is disabled in config, so session changes are unavailable",
   "session.review.noChanges": "No changes",
+  "session.review.noUncommittedChanges": "No uncommitted changes yet",
+  "session.review.noBranchChanges": "No branch changes yet",
 
   "session.files.selectToOpen": "Select a file to open",
   "session.files.all": "All files",
@@ -900,8 +902,6 @@ export const dict = {
   "settings.permissions.tool.skill.description": "Load a skill by name",
   "settings.permissions.tool.lsp.title": "LSP",
   "settings.permissions.tool.lsp.description": "Run language server queries",
-  "settings.permissions.tool.todoread.title": "Todo Read",
-  "settings.permissions.tool.todoread.description": "Read the todo list",
   "settings.permissions.tool.todowrite.title": "Todo Write",
   "settings.permissions.tool.todowrite.description": "Update the todo list",
   "settings.permissions.tool.webfetch.title": "Web Fetch",
