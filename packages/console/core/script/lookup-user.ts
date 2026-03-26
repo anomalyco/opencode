@@ -14,6 +14,7 @@ import { KeyTable } from "../src/schema/key.sql.js"
 import { BlackData } from "../src/black.js"
 import { centsToMicroCents } from "../src/util/price.js"
 import { getWeekBounds } from "../src/util/date.js"
+import { ModelTable } from "../src/schema/model.sql.js"
 
 // get input from command line
 const identifier = process.argv[2]
@@ -178,9 +179,8 @@ async function printWorkspace(workspaceID: string) {
             balance: `$${(row.balance / 100000000).toFixed(2)}`,
             reload: row.reload ? "yes" : "no",
             customerID: row.customerID,
-            liteSubscriptionID: row.liteSubscriptionID,
-            blackSubscriptionID: row.blackSubscriptionID,
-            blackSubscription: row.blackSubscriptionID
+            GO: row.liteSubscriptionID,
+            Black: row.blackSubscriptionID
               ? [
                   `Black ${row.blackSubscription.enrichment!.plan}`,
                   row.blackSubscription.enrichment!.seats > 1
@@ -223,6 +223,50 @@ async function printWorkspace(workspaceID: string) {
       ),
   )
 
+  await printTable("28-Day Usage", (tx) =>
+    tx
+      .select({
+        date: sql<string>`DATE(${UsageTable.timeCreated})`.as("date"),
+        requests: sql<number>`COUNT(*)`.as("requests"),
+        inputTokens: sql<number>`SUM(${UsageTable.inputTokens})`.as("input_tokens"),
+        outputTokens: sql<number>`SUM(${UsageTable.outputTokens})`.as("output_tokens"),
+        reasoningTokens: sql<number>`SUM(${UsageTable.reasoningTokens})`.as("reasoning_tokens"),
+        cacheReadTokens: sql<number>`SUM(${UsageTable.cacheReadTokens})`.as("cache_read_tokens"),
+        cacheWrite5mTokens: sql<number>`SUM(${UsageTable.cacheWrite5mTokens})`.as("cache_write_5m_tokens"),
+        cacheWrite1hTokens: sql<number>`SUM(${UsageTable.cacheWrite1hTokens})`.as("cache_write_1h_tokens"),
+        cost: sql<number>`SUM(${UsageTable.cost})`.as("cost"),
+      })
+      .from(UsageTable)
+      .where(
+        and(
+          eq(UsageTable.workspaceID, workspace.id),
+          sql`${UsageTable.timeCreated} >= DATE_SUB(NOW(), INTERVAL 28 DAY)`,
+        ),
+      )
+      .groupBy(sql`DATE(${UsageTable.timeCreated})`)
+      .orderBy(sql`DATE(${UsageTable.timeCreated}) DESC`)
+      .then((rows) => {
+        const totalCost = rows.reduce((sum, r) => sum + Number(r.cost), 0)
+        const mapped = rows.map((row) => ({
+          ...row,
+          cost: `$${(Number(row.cost) / 100000000).toFixed(2)}`,
+        }))
+        if (mapped.length > 0) {
+          mapped.push({
+            date: "TOTAL",
+            requests: null as any,
+            inputTokens: null as any,
+            outputTokens: null as any,
+            reasoningTokens: null as any,
+            cacheReadTokens: null as any,
+            cacheWrite5mTokens: null as any,
+            cacheWrite1hTokens: null as any,
+            cost: `$${(totalCost / 100000000).toFixed(2)}`,
+          })
+        }
+        return mapped
+      }),
+  )
   /*
   await printTable("Usage", (tx) =>
     tx
@@ -246,6 +290,22 @@ async function printWorkspace(workspaceID: string) {
         rows.map((row) => ({
           ...row,
           cost: `$${(row.cost / 100000000).toFixed(2)}`,
+        })),
+      ),
+  )
+  await printTable("Disabled Models", (tx) =>
+    tx
+      .select({
+        model: ModelTable.model,
+        timeCreated: ModelTable.timeCreated,
+      })
+      .from(ModelTable)
+      .where(eq(ModelTable.workspaceID, workspace.id))
+      .orderBy(sql`${ModelTable.timeCreated} DESC`)
+      .then((rows) =>
+        rows.map((row) => ({
+          model: row.model,
+          timeCreated: formatDate(row.timeCreated),
         })),
       ),
   )
