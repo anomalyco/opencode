@@ -1,6 +1,8 @@
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { createMemo, For, Show, createSignal } from "solid-js"
 
+const id = "internal:sidebar-files"
+
 function View(props: { api: TuiPluginApi; session_id: string }) {
   const [open, setOpen] = createSignal(true)
   const theme = () => props.api.theme.current
@@ -53,5 +55,6 @@ const tui: TuiPlugin = async (api) => {
 }
 
 export default {
+  id,
   tui,
 }

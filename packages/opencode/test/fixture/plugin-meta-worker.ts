@@ -2,6 +2,7 @@ type Msg = {
   file: string
   spec: string
   target: string
+  id: string
 }
 
 const raw = process.argv[2]
@@ -16,9 +17,10 @@ const msg = Object.fromEntries(Object.entries(value))
 if (typeof msg.file !== "string" || typeof msg.spec !== "string" || typeof msg.target !== "string") {
   throw new Error("Invalid worker payload")
 }
+if (typeof msg.id !== "string") throw new Error("Invalid worker payload")
 
 process.env.OPENCODE_PLUGIN_META_FILE = msg.file
 
 const { PluginMeta } = await import("../../src/plugin/meta")
 
-await PluginMeta.touch(msg.spec, msg.target)
+await PluginMeta.touch(msg.spec, msg.target, msg.id)

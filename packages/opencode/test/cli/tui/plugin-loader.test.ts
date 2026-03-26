@@ -86,6 +86,7 @@ async function load(): Promise<Data> {
 }
 
 export default {
+  id: "demo.local",
   tui: async (api, options) => {
     if (!options?.marker) return
     const cfg_theme = api.tuiConfig.theme
@@ -168,6 +169,7 @@ export default {
       await Bun.write(
         invalidPluginPath,
         `export default {
+  id: "demo.invalid",
   tui: async (api, options) => {
     if (!options?.marker) return
     const before = api.theme.has(options.theme_name)
@@ -192,6 +194,7 @@ export default {
       await Bun.write(
         preloadedPluginPath,
         `export default {
+  id: "demo.preloaded",
   tui: async (api, options) => {
     if (!options?.marker) return
     const before = api.theme.has(options.theme_name)
@@ -214,6 +217,7 @@ export default {
       await Bun.write(
         globalPluginPath,
         `export default {
+  id: "demo.global",
   tui: async (api, options) => {
     if (!options?.marker) return
     await api.theme.install(options.theme_path)

@@ -2,6 +2,8 @@ import type { TuiPlugin } from "@opencode-ai/plugin/tui"
 import { createMemo, Show } from "solid-js"
 import { Tips } from "./tips-view"
 
+const id = "internal:home-tips"
+
 function View(props: { show: boolean }) {
   return (
     <box height={4} minHeight={0} width="100%" maxWidth={75} alignItems="center" paddingTop={3} flexShrink={1}>
@@ -42,5 +44,6 @@ const tui: TuiPlugin = async (api) => {
 }
 
 export default {
+  id,
   tui,
 }

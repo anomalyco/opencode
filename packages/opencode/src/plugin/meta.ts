@@ -12,7 +12,7 @@ export namespace PluginMeta {
   type Source = "file" | "npm"
 
   export type Entry = {
-    name: string
+    id: string
     source: Source
     spec: string
     target: string
@@ -31,14 +31,12 @@ export namespace PluginMeta {
   export type Touch = {
     spec: string
     target: string
+    id: string
   }
 
   type Store = Record<string, Entry>
   type Core = Omit<Entry, "first_time" | "last_time" | "time_changed" | "load_count" | "fingerprint">
-  type Row = Touch & {
-    id: string
-    core: Core
-  }
+  type Row = Touch & { core: Core }
 
   function storePath() {
     return Flag.OPENCODE_PLUGIN_META_FILE ?? path.join(Global.Path.state, "plugin-meta.json")
@@ -51,16 +49,6 @@ export namespace PluginMeta {
   function sourceKind(spec: string): Source {
     if (spec.startsWith("file://")) return "file"
     return "npm"
-  }
-
-  function entryKey(spec: string) {
-    if (spec.startsWith("file://")) return `file:${fileURLToPath(spec)}`
-    return `npm:${parsePluginSpecifier(spec).pkg}`
-  }
-
-  function entryName(spec: string) {
-    if (spec.startsWith("file://")) return path.parse(fileURLToPath(spec)).name
-    return parsePluginSpecifier(spec).pkg
   }
 
   function fileTarget(spec: string, target: string) {
@@ -90,12 +78,14 @@ export namespace PluginMeta {
       .catch(() => undefined)
   }
 
-  async function entryCore(spec: string, target: string): Promise<Core> {
+  async function entryCore(item: Touch): Promise<Core> {
+    const spec = item.spec
+    const target = item.target
     const source = sourceKind(spec)
     if (source === "file") {
       const file = fileTarget(spec, target)
       return {
-        name: entryName(spec),
+        id: item.id,
         source,
         spec,
         target,
@@ -104,7 +94,7 @@ export namespace PluginMeta {
     }
 
     return {
-      name: entryName(spec),
+      id: item.id,
       source,
       spec,
       target,
@@ -125,8 +115,7 @@ export namespace PluginMeta {
   async function row(item: Touch): Promise<Row> {
     return {
       ...item,
-      id: entryKey(item.spec),
-      core: await entryCore(item.spec, item.target),
+      core: await entryCore(item),
     }
   }
 
@@ -166,8 +155,8 @@ export namespace PluginMeta {
     })
   }
 
-  export async function touch(spec: string, target: string): Promise<{ state: State; entry: Entry }> {
-    return touchMany([{ spec, target }]).then((item) => {
+  export async function touch(spec: string, target: string, id: string): Promise<{ state: State; entry: Entry }> {
+    return touchMany([{ spec, target, id }]).then((item) => {
       const hit = item[0]
       if (hit) return hit
       throw new Error("Failed to touch plugin metadata.")

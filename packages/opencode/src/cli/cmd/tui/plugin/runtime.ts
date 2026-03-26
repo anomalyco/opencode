@@ -17,7 +17,13 @@ import { Log } from "@/util/log"
 import { errorData, errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
 import { Instance } from "@/project/instance"
-import { getDefaultPlugin, isDeprecatedPlugin, resolvePluginTarget } from "@/plugin/shared"
+import {
+  getDefaultPlugin,
+  isDeprecatedPlugin,
+  readPluginId,
+  resolvePluginId,
+  resolvePluginTarget,
+} from "@/plugin/shared"
 import { PluginMeta } from "@/plugin/meta"
 import { addTheme, hasTheme } from "../context/theme"
 import { Global } from "@/global"
@@ -32,7 +38,8 @@ type PluginLoad = {
   spec: string
   target: string
   retry: boolean
-  exports: Record<string, unknown>
+  id: string
+  module: TuiPluginModule
   install_theme: TuiTheme["install"]
 }
 
@@ -177,30 +184,42 @@ async function loadExternalPlugin(
   })
   if (!target) return
 
-  const root = resolveRoot(spec.startsWith("file://") ? spec : target)
-  const meta = config.plugin_meta?.[Config.getPluginName(item)]
+  const meta = config.plugin_meta?.[spec]
   if (!meta) {
     log.warn("missing tui plugin metadata", {
       path: spec,
       retry,
-      name: Config.getPluginName(item),
     })
     return
   }
 
+  const root = resolveRoot(spec.startsWith("file://") ? spec : target)
   const install_theme = createThemeInstaller(meta, root, spec)
-  const exports = await import(target).catch((error) => {
+  const mod = await import(target)
+    .then((raw) => {
+      const mod = getDefaultPlugin(raw) as TuiPluginModule | undefined
+      if (!mod?.tui) throw new TypeError(`Plugin ${spec} must default export an object with tui()`)
+      return mod
+    })
+    .catch((error) => {
+      fail("failed to load tui plugin", { path: spec, target, retry, error })
+      return
+    })
+  if (!mod) return
+
+  const id = await resolvePluginId(spec, target, readPluginId(mod.id, spec)).catch((error) => {
     fail("failed to load tui plugin", { path: spec, target, retry, error })
     return
   })
-  if (!exports) return
+  if (!id) return
 
   return {
     item,
     spec,
     target,
     retry,
-    exports,
+    id,
+    module: mod,
     install_theme,
   }
 }
@@ -209,7 +228,7 @@ function createMeta(
   spec: string,
   target: string,
   meta: { state: PluginMeta.State; entry: PluginMeta.Entry } | undefined,
-  name?: string,
+  id?: string,
 ): TuiPluginMeta {
   if (meta) {
     return {
@@ -223,7 +242,7 @@ function createMeta(
   const now = Date.now()
   return {
     state: kind === "internal" ? "same" : "first",
-    name: name ?? spec,
+    id: id ?? spec,
     source: kind,
     spec,
     target,
@@ -236,27 +255,27 @@ function createMeta(
 }
 
 function loadInternalPlugin(item: InternalTuiPlugin): PluginLoad {
-  const spec = `internal:${item.name}`
-  const target = item.root ?? spec
-  const root = item.root ? resolveRoot(item.root) : process.cwd()
+  const spec = item.id
+  const target = spec
 
   return {
     spec,
     target,
     retry: false,
-    exports: { default: item.module },
+    id: item.id,
+    module: item,
     install_theme: createThemeInstaller(
       {
         scope: "global",
         source: target,
       },
-      root,
+      process.cwd(),
       spec,
     ),
   }
 }
 
-function createPluginScope(load: PluginLoad, name: string) {
+function createPluginScope(load: PluginLoad, id: string) {
   const ctrl = new AbortController()
   let list: { key: symbol; fn: TuiDispose }[] = []
   let done = false
@@ -302,7 +321,7 @@ function createPluginScope(load: PluginLoad, name: string) {
       if (left <= 0) {
         fail("timed out cleaning up tui plugin", {
           path: load.spec,
-          name,
+          id,
           timeout: DISPOSE_TIMEOUT_MS,
         })
         break
@@ -313,7 +332,7 @@ function createPluginScope(load: PluginLoad, name: string) {
       if (out.type === "timeout") {
         fail("timed out cleaning up tui plugin", {
           path: load.spec,
-          name,
+          id,
           timeout: DISPOSE_TIMEOUT_MS,
         })
         break
@@ -322,7 +341,7 @@ function createPluginScope(load: PluginLoad, name: string) {
       if (out.type === "error") {
         fail("failed to clean up tui plugin", {
           path: load.spec,
-          name,
+          id,
           error: out.error,
         })
       }
@@ -334,27 +353,6 @@ function createPluginScope(load: PluginLoad, name: string) {
     track,
     dispose,
   }
-}
-
-function defaultPluginId(meta: TuiPluginMeta) {
-  if (meta.source === "internal") return `internal:${meta.name}`
-  return meta.name
-}
-
-function readPluginId(mod: TuiPluginModule, load: PluginLoad) {
-  if (mod.id === undefined) return
-  if (typeof mod.id !== "string") {
-    log.warn("ignoring invalid tui plugin id", {
-      path: load.spec,
-      type: typeof mod.id,
-    })
-    return
-  }
-  const id = mod.id.trim()
-  if (id) return id
-  log.warn("ignoring empty tui plugin id", {
-    path: load.spec,
-  })
 }
 
 function readPluginEnabledMap(value: unknown) {
@@ -374,7 +372,6 @@ function writePluginEnabledState(api: Api, id: string, enabled: boolean) {
 function listPluginStatus(state: RuntimeState): TuiPluginStatus[] {
   return state.plugins.map((plugin) => ({
     id: plugin.id,
-    name: plugin.meta.name,
     source: plugin.meta.source,
     spec: plugin.meta.spec,
     target: plugin.meta.target,
@@ -522,15 +519,15 @@ function pluginApi(runtime: RuntimeState, load: PluginLoad, scope: PluginScope, 
 
 function collectPluginEntries(load: PluginLoad, meta: TuiPluginMeta) {
   // TUI stays default-only so plugin ids, lifecycle, and errors remain stable.
-  const mod = getDefaultPlugin(load.exports) as TuiPluginModule | undefined
-  if (!mod?.tui) return []
+  const plugin = load.module.tui
+  if (!plugin) return []
   const options = load.item ? Config.pluginOptions(load.item) : undefined
   return [
     {
-      id: readPluginId(mod, load) ?? defaultPluginId(meta),
+      id: load.id,
       load,
       meta,
-      plugin: mod.tui,
+      plugin,
       options,
       enabled: true,
     },
@@ -631,9 +628,9 @@ export namespace TuiPluginRuntime {
         const deps: { wait?: Promise<void> } = {}
 
         for (const item of INTERNAL_TUI_PLUGINS) {
-          log.info("loading internal tui plugin", { name: item.name })
+          log.info("loading internal tui plugin", { id: item.id })
           const entry = loadInternalPlugin(item)
-          const meta = createMeta(entry.spec, entry.target, undefined, item.name)
+          const meta = createMeta(entry.spec, entry.target, undefined, entry.id)
           for (const plugin of collectPluginEntries(entry, meta)) {
             addPluginEntry(next, plugin)
           }
@@ -659,12 +656,16 @@ export namespace TuiPluginRuntime {
           ready.push(entry)
         }
 
-        const meta = await PluginMeta.touchMany(ready.map((item) => ({ spec: item.spec, target: item.target }))).catch(
-          (error) => {
-            log.warn("failed to track tui plugins", { error })
-            return undefined
-          },
-        )
+        const meta = await PluginMeta.touchMany(
+          ready.map((item) => ({
+            spec: item.spec,
+            target: item.target,
+            id: item.id,
+          })),
+        ).catch((error) => {
+          log.warn("failed to track tui plugins", { error })
+          return undefined
+        })
 
         for (let i = 0; i < ready.length; i++) {
           const entry = ready[i]
@@ -681,7 +682,7 @@ export namespace TuiPluginRuntime {
             })
           }
 
-          const row = createMeta(entry.spec, entry.target, hit)
+          const row = createMeta(entry.spec, entry.target, hit, entry.id)
           for (const plugin of collectPluginEntries(entry, row)) {
             addPluginEntry(next, plugin)
           }

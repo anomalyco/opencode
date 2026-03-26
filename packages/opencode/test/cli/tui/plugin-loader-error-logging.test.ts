@@ -22,6 +22,7 @@ test("logs useful details when a tui plugin import fails", async () => {
         `import "./missing-module.ts"
 
 export default {
+  id: "demo.bad-import",
   tui: async () => {},
 }
 `,
@@ -31,11 +32,10 @@ export default {
   })
 
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
-  const name = path.parse(new URL(tmp.extra.spec).pathname).name
   const get = spyOn(TuiConfig, "get").mockResolvedValue({
     plugin: [tmp.extra.spec],
     plugin_meta: {
-      [name]: {
+      [tmp.extra.spec]: {
         scope: "local",
         source: path.join(tmp.path, "tui.json"),
       },

@@ -2,6 +2,8 @@ import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { createMemo } from "solid-js"
 
+const id = "internal:sidebar-context"
+
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
@@ -54,5 +56,6 @@ const tui: TuiPlugin = async (api) => {
 }
 
 export default {
+  id,
   tui,
 }

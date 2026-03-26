@@ -11,7 +11,7 @@ const { PluginMeta } = await import("../../src/plugin/meta")
 const root = path.join(import.meta.dir, "../..")
 const worker = path.join(import.meta.dir, "../fixture/plugin-meta-worker.ts")
 
-function run(input: { file: string; spec: string; target: string }) {
+function run(input: { file: string; spec: string; target: string; id: string }) {
   return Process.run([process.execPath, worker, JSON.stringify(input)], {
     cwd: root,
     nothrow: true,
@@ -40,12 +40,13 @@ describe("plugin.meta", () => {
     const file = process.env.OPENCODE_PLUGIN_META_FILE!
     const spec = pathToFileURL(tmp.extra.file).href
 
-    const one = await PluginMeta.touch(spec, spec)
+    const one = await PluginMeta.touch(spec, spec, "demo.file")
     expect(one.state).toBe("first")
     expect(one.entry.source).toBe("file")
+    expect(one.entry.id).toBe("demo.file")
     expect(one.entry.modified).toBeDefined()
 
-    const two = await PluginMeta.touch(spec, spec)
+    const two = await PluginMeta.touch(spec, spec, "demo.file")
     expect(two.state).toBe("same")
     expect(two.entry.load_count).toBe(2)
 
@@ -53,7 +54,7 @@ describe("plugin.meta", () => {
     const stamp = new Date(Date.now() + 10_000)
     await fs.utimes(tmp.extra.file, stamp, stamp)
 
-    const three = await PluginMeta.touch(spec, spec)
+    const three = await PluginMeta.touch(spec, spec, "demo.file")
     expect(three.state).toBe("updated")
     expect(three.entry.load_count).toBe(3)
     expect((three.entry.modified ?? 0) > (one.entry.modified ?? 0)).toBe(true)
@@ -61,7 +62,8 @@ describe("plugin.meta", () => {
     const all = await PluginMeta.list()
     expect(Object.values(all).some((item) => item.spec === spec && item.source === "file")).toBe(true)
     const saved = await map<{ spec: string; load_count: number }>(file)
-    expect(Object.values(saved).some((item) => item.spec === spec && item.load_count === 3)).toBe(true)
+    expect(saved["demo.file"]?.spec).toBe(spec)
+    expect(saved["demo.file"]?.load_count).toBe(3)
   })
 
   test("tracks npm plugin versions", async () => {
@@ -78,7 +80,7 @@ describe("plugin.meta", () => {
     process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "state", "plugin-meta.json")
     const file = process.env.OPENCODE_PLUGIN_META_FILE!
 
-    const one = await PluginMeta.touch("acme-plugin@latest", tmp.extra.mod)
+    const one = await PluginMeta.touch("acme-plugin@latest", tmp.extra.mod, "acme-plugin")
     expect(one.state).toBe("first")
     expect(one.entry.source).toBe("npm")
     expect(one.entry.requested).toBe("latest")
@@ -86,15 +88,15 @@ describe("plugin.meta", () => {
 
     await Bun.write(tmp.extra.pkg, JSON.stringify({ name: "acme-plugin", version: "1.1.0" }, null, 2))
 
-    const two = await PluginMeta.touch("acme-plugin@latest", tmp.extra.mod)
+    const two = await PluginMeta.touch("acme-plugin@latest", tmp.extra.mod, "acme-plugin")
     expect(two.state).toBe("updated")
     expect(two.entry.version).toBe("1.1.0")
     expect(two.entry.load_count).toBe(2)
 
     const all = await PluginMeta.list()
-    expect(Object.values(all).some((item) => item.name === "acme-plugin" && item.version === "1.1.0")).toBe(true)
-    const saved = await map<{ name: string; version?: string }>(file)
-    expect(Object.values(saved).some((item) => item.name === "acme-plugin" && item.version === "1.1.0")).toBe(true)
+    expect(Object.values(all).some((item) => item.id === "acme-plugin" && item.version === "1.1.0")).toBe(true)
+    const saved = await map<{ id: string; version?: string }>(file)
+    expect(Object.values(saved).some((item) => item.id === "acme-plugin" && item.version === "1.1.0")).toBe(true)
   })
 
   test("serializes concurrent metadata updates across processes", async () => {
@@ -117,6 +119,7 @@ describe("plugin.meta", () => {
           file,
           spec,
           target: spec,
+          id: "demo.file",
         }),
       ),
     )

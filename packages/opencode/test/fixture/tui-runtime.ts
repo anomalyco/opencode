@@ -4,20 +4,13 @@ import { TuiConfig } from "../../src/config/tui"
 
 type PluginSpec = string | [string, Record<string, unknown>]
 
-function name(spec: string) {
-  if (spec.startsWith("file://")) {
-    return path.parse(new URL(spec).pathname).name
-  }
-  return path.parse(spec).name
-}
-
 export function mockTuiRuntime(dir: string, plugin: PluginSpec[]) {
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(dir, "plugin-meta.json")
   const meta = Object.fromEntries(
     plugin.map((item) => {
       const spec = Array.isArray(item) ? item[0] : item
       return [
-        name(spec),
+        spec,
         {
           scope: "local" as const,
           source: path.join(dir, "tui.json"),

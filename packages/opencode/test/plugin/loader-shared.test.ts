@@ -157,19 +157,34 @@ describe("plugin.loader.shared", () => {
   test("resolves npm plugin specs with explicit and default versions", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
-        const file = path.join(dir, "plugin.ts")
-        await Bun.write(file, ["export default async () => {", "  return {}", "}", ""].join("\n"))
+        const acme = path.join(dir, "node_modules", "acme-plugin")
+        const scope = path.join(dir, "node_modules", "scope-plugin")
+        await fs.mkdir(acme, { recursive: true })
+        await fs.mkdir(scope, { recursive: true })
+        await Bun.write(
+          path.join(acme, "package.json"),
+          JSON.stringify({ name: "acme-plugin", type: "module", main: "./index.js" }, null, 2),
+        )
+        await Bun.write(path.join(acme, "index.js"), "export default { server: async () => ({}) }\n")
+        await Bun.write(
+          path.join(scope, "package.json"),
+          JSON.stringify({ name: "scope-plugin", type: "module", main: "./index.js" }, null, 2),
+        )
+        await Bun.write(path.join(scope, "index.js"), "export default { server: async () => ({}) }\n")
 
         await Bun.write(
           path.join(dir, "opencode.json"),
           JSON.stringify({ plugin: ["acme-plugin", "scope-plugin@2.3.4"] }, null, 2),
         )
 
-        return { file }
+        return { acme, scope }
       },
     })
 
-    const install = spyOn(BunProc, "install").mockImplementation(async () => pathToFileURL(tmp.extra.file).href)
+    const install = spyOn(BunProc, "install").mockImplementation(async (pkg) => {
+      if (pkg === "acme-plugin") return tmp.extra.acme
+      return tmp.extra.scope
+    })
 
     try {
       await load(tmp.path)
@@ -237,7 +252,15 @@ describe("plugin.loader.shared", () => {
         const file = pathToFileURL(path.join(dir, "throws.ts")).href
         await Bun.write(
           path.join(dir, "throws.ts"),
-          ["export default async () => {", '  throw new Error("explode")', "}", ""].join("\n"),
+          [
+            "export default {",
+            '  id: "demo.throws",',
+            "  server: async () => {",
+            '    throw new Error("explode")',
+            "  },",
+            "}",
+            "",
+          ].join("\n"),
         )
 
         await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ plugin: [file] }, null, 2))
@@ -257,9 +280,7 @@ describe("plugin.loader.shared", () => {
         const file = pathToFileURL(path.join(dir, "invalid.ts")).href
         await Bun.write(
           path.join(dir, "invalid.ts"),
-          ["export default async () => {", "  return {}", "}", 'export const meta = { name: "invalid" }', ""].join(
-            "\n",
-          ),
+          ["export default {", '  id: "demo.invalid",', "  nope: true,", "}", ""].join("\n"),
         )
 
         await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ plugin: [file] }, null, 2))
@@ -297,6 +318,7 @@ describe("plugin.loader.shared", () => {
           file,
           [
             "const plugin = {",
+            '  id: "demo.object",',
             "  server: async () => {",
             `    await Bun.write(${JSON.stringify(mark)}, \"called\")`,
             "    return {}",
@@ -329,6 +351,7 @@ describe("plugin.loader.shared", () => {
           file,
           [
             "const plugin = {",
+            '  id: "demo.options",',
             "  server: async (_input, options) => {",
             `    await Bun.write(${JSON.stringify(mark)}, JSON.stringify(options ?? null))`,
             "    return {}",
@@ -363,9 +386,12 @@ describe("plugin.loader.shared", () => {
         await Bun.write(
           file,
           [
-            "export default async () => {",
-            `  await Bun.write(${JSON.stringify(mark)}, \"called\")`,
-            "  return {}",
+            "export default {",
+            '  id: "demo.pure",',
+            "  server: async () => {",
+            `    await Bun.write(${JSON.stringify(mark)}, \"called\")`,
+            "    return {}",
+            "  },",
             "}",
             "",
           ].join("\n"),

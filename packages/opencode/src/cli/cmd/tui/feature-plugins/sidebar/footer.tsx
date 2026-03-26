@@ -2,6 +2,8 @@ import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { createMemo, Show } from "solid-js"
 import { Global } from "@/global"
 
+const id = "internal:sidebar-footer"
+
 function View(props: { api: TuiPluginApi }) {
   const theme = () => props.api.theme.current
   const has = createMemo(() =>
@@ -84,5 +86,6 @@ const tui: TuiPlugin = async (api) => {
 }
 
 export default {
+  id,
   tui,
 }

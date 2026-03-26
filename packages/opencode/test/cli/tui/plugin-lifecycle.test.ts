@@ -27,6 +27,7 @@ test("disposes tracked event, route, and command hooks", async () => {
       await Bun.write(
         pluginPath,
         `export default {
+  id: "demo.lifecycle",
   tui: async (api, options) => {
     api.event.on("event.test", () => {})
     api.route.register([{ name: "lifecycle.route", render: () => null }])
@@ -61,11 +62,10 @@ test("disposes tracked event, route, and command hooks", async () => {
     command_drop: 0,
   }
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
-  const name = path.parse(new URL(tmp.extra.pluginSpec).pathname).name
   const get = spyOn(TuiConfig, "get").mockResolvedValue({
     plugin: [[tmp.extra.pluginSpec, { marker: tmp.extra.marker }]],
     plugin_meta: {
-      [name]: {
+      [tmp.extra.pluginSpec]: {
         scope: "local",
         source: path.join(tmp.path, "tui.json"),
       },
@@ -121,6 +121,7 @@ test("rolls back failed plugin exports and continues loading", async () => {
       await Bun.write(
         badPath,
         `export default {
+  id: "demo.bad",
   tui: async (api, options) => {
     api.route.register([{ name: "bad.route", render: () => null }])
     api.lifecycle.onDispose(async () => {
@@ -135,6 +136,7 @@ test("rolls back failed plugin exports and continues loading", async () => {
       await Bun.write(
         goodPath,
         `export default {
+  id: "demo.good",
   tui: async (_api, options) => {
     await Bun.write(options.good_marker, "called")
   },
@@ -160,19 +162,17 @@ test("rolls back failed plugin exports and continues loading", async () => {
     command_drop: 0,
   }
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
-  const badName = path.parse(new URL(tmp.extra.badSpec).pathname).name
-  const goodName = path.parse(new URL(tmp.extra.goodSpec).pathname).name
   const get = spyOn(TuiConfig, "get").mockResolvedValue({
     plugin: [
       [tmp.extra.badSpec, { bad_marker: tmp.extra.badMarker }],
       [tmp.extra.goodSpec, { good_marker: tmp.extra.goodMarker }],
     ],
     plugin_meta: {
-      [badName]: {
+      [tmp.extra.badSpec]: {
         scope: "local",
         source: path.join(tmp.path, "tui.json"),
       },
-      [goodName]: {
+      [tmp.extra.goodSpec]: {
         scope: "local",
         source: path.join(tmp.path, "tui.json"),
       },
@@ -213,6 +213,7 @@ const mark = (label) => {
 }
 
 export default {
+  id: "demo.slot",
   tui: async (api) => {
     const one = api.slots.register({
       id: 1,
@@ -251,11 +252,10 @@ export default {
   })
 
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
-  const name = path.parse(new URL(tmp.extra.pluginSpec).pathname).name
   const get = spyOn(TuiConfig, "get").mockResolvedValue({
     plugin: [tmp.extra.pluginSpec],
     plugin_meta: {
-      [name]: {
+      [tmp.extra.pluginSpec]: {
         scope: "local",
         source: path.join(tmp.path, "tui.json"),
       },
@@ -271,8 +271,8 @@ export default {
     const marker = await fs.readFile(tmp.extra.marker, "utf8")
     expect(marker).toContain("one")
     expect(marker).toContain("two")
-    expect(marker).toContain(`id:${name}`)
-    expect(marker).toContain(`id:${name}:1`)
+    expect(marker).toContain("id:demo.slot")
+    expect(marker).toContain("id:demo.slot:1")
 
     const hit = err.mock.calls.find(
       (item) => typeof item[0] === "string" && item[0].includes("failed to initialize tui plugin"),
@@ -299,6 +299,7 @@ test(
         await Bun.write(
           pluginPath,
           `export default {
+  id: "demo.timeout",
   tui: async (api) => {
     api.lifecycle.onDispose(() => new Promise(() => {}))
   },
@@ -321,11 +322,10 @@ test(
       command_drop: 0,
     }
     process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
-    const name = path.parse(new URL(tmp.extra.pluginSpec).pathname).name
     const get = spyOn(TuiConfig, "get").mockResolvedValue({
       plugin: [tmp.extra.pluginSpec],
       plugin_meta: {
-        [name]: {
+        [tmp.extra.pluginSpec]: {
           scope: "local",
           source: path.join(tmp.path, "tui.json"),
         },

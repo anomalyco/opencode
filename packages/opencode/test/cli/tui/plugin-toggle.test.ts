@@ -39,14 +39,13 @@ test("toggles plugin runtime state by exported id", async () => {
   })
 
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
-  const name = path.parse(new URL(tmp.extra.spec).pathname).name
   const get = spyOn(TuiConfig, "get").mockResolvedValue({
     plugin: [[tmp.extra.spec, { marker: tmp.extra.marker }]],
     plugin_enabled: {
       "demo.toggle": false,
     },
     plugin_meta: {
-      [name]: {
+      [tmp.extra.spec]: {
         scope: "local",
         source: path.join(tmp.path, "tui.json"),
       },
@@ -62,7 +61,6 @@ test("toggles plugin runtime state by exported id", async () => {
     await expect(fs.readFile(tmp.extra.marker, "utf8")).rejects.toThrow()
     expect(TuiPluginRuntime.list().find((item) => item.id === "demo.toggle")).toEqual({
       id: "demo.toggle",
-      name: name,
       source: "file",
       spec: tmp.extra.spec,
       target: tmp.extra.spec,
@@ -118,14 +116,13 @@ test("kv plugin_enabled overrides tui config on startup", async () => {
   })
 
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
-  const name = path.parse(new URL(tmp.extra.spec).pathname).name
   const get = spyOn(TuiConfig, "get").mockResolvedValue({
     plugin: [[tmp.extra.spec, { marker: tmp.extra.marker }]],
     plugin_enabled: {
       "demo.startup": false,
     },
     plugin_meta: {
-      [name]: {
+      [tmp.extra.spec]: {
         scope: "local",
         source: path.join(tmp.path, "tui.json"),
       },
@@ -144,7 +141,6 @@ test("kv plugin_enabled overrides tui config on startup", async () => {
     await expect(fs.readFile(tmp.extra.marker, "utf8")).resolves.toBe("on")
     expect(TuiPluginRuntime.list().find((item) => item.id === "demo.startup")).toEqual({
       id: "demo.startup",
-      name: name,
       source: "file",
       spec: tmp.extra.spec,
       target: tmp.extra.spec,

@@ -16,7 +16,7 @@ function state(api: TuiPluginApi, item: TuiPluginStatus) {
 
 function row(api: TuiPluginApi, item: TuiPluginStatus): DialogSelectOption<string> {
   return {
-    title: item.name,
+    title: item.id,
     value: item.id,
     category: item.source === "internal" ? "Internal" : "External",
     description: item.source === "internal" ? "Built-in" : item.spec,
@@ -35,7 +35,7 @@ function View(props: { api: TuiPluginApi }) {
         const x = a.source === "internal" ? 1 : 0
         const y = b.source === "internal" ? 1 : 0
         if (x !== y) return x - y
-        return a.name.localeCompare(b.name)
+        return a.id.localeCompare(b.id)
       })
       .map((item) => row(props.api, item)),
   )
@@ -51,7 +51,7 @@ function View(props: { api: TuiPluginApi }) {
         if (!ok) {
           props.api.ui.toast({
             variant: "error",
-            message: `Failed to update plugin ${item.name}`,
+            message: `Failed to update plugin ${item.id}`,
           })
         }
         setList(props.api.plugins.list())

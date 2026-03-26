@@ -2,6 +2,8 @@ import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { createMemo, For, Show, createSignal } from "solid-js"
 import { TodoItem } from "../../component/todo-item"
 
+const id = "internal:sidebar-todo"
+
 function View(props: { api: TuiPluginApi; session_id: string }) {
   const [open, setOpen] = createSignal(true)
   const theme = () => props.api.theme.current
@@ -39,5 +41,6 @@ const tui: TuiPlugin = async (api) => {
 }
 
 export default {
+  id,
   tui,
 }

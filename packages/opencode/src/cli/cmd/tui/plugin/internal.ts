@@ -6,45 +6,20 @@ import SidebarTodo from "../feature-plugins/sidebar/todo"
 import SidebarFiles from "../feature-plugins/sidebar/files"
 import SidebarFooter from "../feature-plugins/sidebar/footer"
 import PluginManager from "../feature-plugins/system/plugins"
-import type { TuiPluginModule } from "@opencode-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
 
-export type InternalTuiPlugin = {
-  name: string
-  module: TuiPluginModule
-  root?: string
+export type InternalTuiPlugin = TuiPluginModule & {
+  id: string
+  tui: TuiPlugin
 }
 
 export const INTERNAL_TUI_PLUGINS: InternalTuiPlugin[] = [
-  {
-    name: "home-tips",
-    module: HomeTips,
-  },
-  {
-    name: "sidebar-content-context",
-    module: SidebarContext,
-  },
-  {
-    name: "sidebar-content-mcp",
-    module: SidebarMcp,
-  },
-  {
-    name: "sidebar-content-lsp",
-    module: SidebarLsp,
-  },
-  {
-    name: "sidebar-content-todo",
-    module: SidebarTodo,
-  },
-  {
-    name: "sidebar-content-files",
-    module: SidebarFiles,
-  },
-  {
-    name: "sidebar-footer",
-    module: SidebarFooter,
-  },
-  {
-    name: "plugin-manager",
-    module: PluginManager,
-  },
+  HomeTips,
+  SidebarContext,
+  SidebarMcp,
+  SidebarLsp,
+  SidebarTodo,
+  SidebarFiles,
+  SidebarFooter,
+  PluginManager,
 ]

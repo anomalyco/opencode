@@ -477,7 +477,7 @@ test("loads managed tui config and gives it highest precedence", async () => {
       expect(config.theme).toBe("managed-theme")
       expect(config.plugin).toEqual(["shared-plugin@2.0.0"])
       expect(config.plugin_meta).toEqual({
-        "shared-plugin": {
+        "shared-plugin@2.0.0": {
           scope: "global",
           source: path.join(managedConfigDir, "tui.json"),
         },
@@ -540,7 +540,7 @@ test("supports tuple plugin specs with options in tui.json", async () => {
       const config = await TuiConfig.get()
       expect(config.plugin).toEqual([["acme-plugin@1.2.3", { enabled: true, label: "demo" }]])
       expect(config.plugin_meta).toEqual({
-        "acme-plugin": {
+        "acme-plugin@1.2.3": {
           scope: "local",
           source: path.join(tmp.path, "tui.json"),
         },
@@ -579,11 +579,11 @@ test("deduplicates tuple plugin specs by name with higher precedence winning", a
         ["second-plugin@3.0.0", { source: "project" }],
       ])
       expect(config.plugin_meta).toEqual({
-        "acme-plugin": {
+        "acme-plugin@2.0.0": {
           scope: "local",
           source: path.join(tmp.path, "tui.json"),
         },
-        "second-plugin": {
+        "second-plugin@3.0.0": {
           scope: "local",
           source: path.join(tmp.path, "tui.json"),
         },
@@ -616,11 +616,11 @@ test("tracks global and local plugin metadata in merged tui config", async () =>
       const config = await TuiConfig.get()
       expect(config.plugin).toEqual(["global-plugin@1.0.0", "local-plugin@2.0.0"])
       expect(config.plugin_meta).toEqual({
-        "global-plugin": {
+        "global-plugin@1.0.0": {
           scope: "global",
           source: path.join(Global.Path.config, "tui.json"),
         },
-        "local-plugin": {
+        "local-plugin@2.0.0": {
           scope: "local",
           source: path.join(tmp.path, "tui.json"),
         },
@@ -636,7 +636,7 @@ test("merges plugin_enabled flags across config layers", async () => {
         path.join(Global.Path.config, "tui.json"),
         JSON.stringify({
           plugin_enabled: {
-            "internal:sidebar-title": false,
+            "internal:sidebar-context": false,
             "demo.plugin": true,
           },
         }),
@@ -658,7 +658,7 @@ test("merges plugin_enabled flags across config layers", async () => {
     fn: async () => {
       const config = await TuiConfig.get()
       expect(config.plugin_enabled).toEqual({
-        "internal:sidebar-title": false,
+        "internal:sidebar-context": false,
         "demo.plugin": false,
         "local.plugin": true,
       })

@@ -10,6 +10,7 @@ import { Flag } from "@/flag/flag"
 import { Log } from "@/util/log"
 import { isRecord } from "@/util/record"
 import { Global } from "@/global"
+import { parsePluginSpecifier } from "@/plugin/shared"
 
 export namespace TuiConfig {
   const log = Log.create({ service: "tui.config" })
@@ -44,7 +45,8 @@ export namespace TuiConfig {
     const seen = new Set<string>()
     const result: PluginEntry[] = []
     for (const item of list.toReversed()) {
-      const name = Config.getPluginName(item.item)
+      const spec = Config.pluginSpecifier(item.item)
+      const name = spec.startsWith("file://") ? spec : parsePluginSpecifier(spec).pkg
       if (seen.has(name)) continue
       seen.add(name)
       result.push(item)
@@ -149,7 +151,7 @@ export namespace TuiConfig {
     acc.result.keybinds = Config.Keybinds.parse(acc.result.keybinds ?? {})
     acc.result.plugin = merged.map((item) => item.item)
     acc.result.plugin_meta = merged.length
-      ? Object.fromEntries(merged.map((item) => [Config.getPluginName(item.item), item.meta]))
+      ? Object.fromEntries(merged.map((item) => [Config.pluginSpecifier(item.item), item.meta]))
       : undefined
 
     const deps: Promise<void>[] = []
@@ -201,7 +203,7 @@ export namespace TuiConfig {
     const data = parsed.data
     if (data.plugin) {
       for (let i = 0; i < data.plugin.length; i++) {
-        data.plugin[i] = Config.resolvePluginSpec(data.plugin[i], configFilepath)
+        data.plugin[i] = await Config.resolvePluginSpec(data.plugin[i], configFilepath)
       }
     }
 

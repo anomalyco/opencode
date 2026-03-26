@@ -14,12 +14,12 @@ test("skips external tui plugins in pure mode", async () => {
       const file = path.join(dir, "plugin.ts")
       const spec = pathToFileURL(file).href
       const marker = path.join(dir, "called.txt")
-      const name = path.parse(file).name
       const meta = path.join(dir, "plugin-meta.json")
 
       await Bun.write(
         file,
         `export default {
+  id: "demo.pure",
   tui: async (_api, options) => {
     if (!options?.marker) return
     await Bun.write(options.marker, "called")
@@ -28,7 +28,7 @@ test("skips external tui plugins in pure mode", async () => {
 `,
       )
 
-      return { spec, marker, name, meta }
+      return { spec, marker, meta }
     },
   })
 
@@ -40,7 +40,7 @@ test("skips external tui plugins in pure mode", async () => {
   const get = spyOn(TuiConfig, "get").mockResolvedValue({
     plugin: [[tmp.extra.spec, { marker: tmp.extra.marker }]],
     plugin_meta: {
-      [tmp.extra.name]: {
+      [tmp.extra.spec]: {
         scope: "local",
         source: path.join(tmp.path, "tui.json"),
       },

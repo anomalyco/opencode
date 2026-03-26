@@ -124,13 +124,11 @@ export namespace Plugin {
 
   async function applyPlugin(load: Loaded, input: PluginInput, hooks: Hooks[]) {
     const plugin = getDefaultPlugin(load.mod) as PluginModule | undefined
-    // A v1 default export must win so server plugins do not mix two loading models.
     if (plugin?.server) {
       hooks.push(await plugin.server(input, Config.pluginOptions(load.item)))
       return
     }
 
-    // v0 stays as the fallback for existing server plugins that enumerate exports.
     for (const server of getLegacyPlugins(load.mod)) {
       hooks.push(await server(input, Config.pluginOptions(load.item)))
     }

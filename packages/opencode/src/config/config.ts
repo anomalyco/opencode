@@ -42,6 +42,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { Duration, Effect, Layer, Option, ServiceMap } from "effect"
 import { Flock } from "@/util/flock"
+import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "@/plugin/shared"
 
 export namespace Config {
   const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
@@ -353,44 +354,36 @@ export namespace Config {
     return Array.isArray(plugin) ? plugin[1] : undefined
   }
 
-  export function resolvePluginSpec(plugin: PluginSpec, configFilepath: string): PluginSpec {
+  export async function resolvePluginSpec(plugin: PluginSpec, configFilepath: string): Promise<PluginSpec> {
     const spec = pluginSpecifier(plugin)
+    if (!isPathPluginSpec(spec)) return plugin
+    if (spec.startsWith("file://")) {
+      const resolved = await resolvePathPluginTarget(spec).catch(() => spec)
+      if (Array.isArray(plugin)) return [resolved, plugin[1]]
+      return resolved
+    }
+    if (path.isAbsolute(spec) || /^[A-Za-z]:[\\/]/.test(spec)) {
+      const base = pathToFileURL(spec).href
+      const resolved = await resolvePathPluginTarget(base).catch(() => base)
+      if (Array.isArray(plugin)) return [resolved, plugin[1]]
+      return resolved
+    }
     try {
-      const resolved = import.meta.resolve!(spec, configFilepath)
+      const base = import.meta.resolve!(spec, configFilepath)
+      const resolved = await resolvePathPluginTarget(base).catch(() => base)
       if (Array.isArray(plugin)) return [resolved, plugin[1]]
       return resolved
     } catch {
       try {
         const require = createRequire(configFilepath)
-        const resolved = pathToFileURL(require.resolve(spec)).href
+        const base = pathToFileURL(require.resolve(spec)).href
+        const resolved = await resolvePathPluginTarget(base).catch(() => base)
         if (Array.isArray(plugin)) return [resolved, plugin[1]]
         return resolved
       } catch {
         return plugin
       }
     }
-  }
-
-  /**
-   * Extracts a canonical plugin name from a plugin specifier.
-   * - For file:// URLs: extracts filename without extension
-   * - For npm packages: extracts package name without version
-   *
-   * @example
-   * getPluginName("file:///path/to/plugin/foo.js") // "foo"
-   * getPluginName("oh-my-opencode@2.4.3") // "oh-my-opencode"
-   * getPluginName("@scope/pkg@1.0.0") // "@scope/pkg"
-   */
-  export function getPluginName(plugin: PluginSpec): string {
-    const spec = pluginSpecifier(plugin)
-    if (spec.startsWith("file://")) {
-      return path.parse(new URL(spec).pathname).name
-    }
-    const lastAt = spec.lastIndexOf("@")
-    if (lastAt > 0) {
-      return spec.substring(0, lastAt)
-    }
-    return spec
   }
 
   /**
@@ -405,16 +398,12 @@ export namespace Config {
    * we reverse, deduplicate (keeping first occurrence), then restore order.
    */
   export function deduplicatePlugins(plugins: PluginSpec[]): PluginSpec[] {
-    // seenNames: canonical plugin names for duplicate detection
-    // e.g., "oh-my-opencode", "@scope/pkg"
     const seenNames = new Set<string>()
-
-    // uniqueSpecifiers: full plugin specifiers to return
-    // e.g., "oh-my-opencode@2.4.3", ["file:///path/to/plugin.js", { ... }]
     const uniqueSpecifiers: PluginSpec[] = []
 
     for (const specifier of plugins.toReversed()) {
-      const name = getPluginName(specifier)
+      const spec = pluginSpecifier(specifier)
+      const name = spec.startsWith("file://") ? spec : parsePluginSpecifier(spec).pkg
       if (!seenNames.has(name)) {
         seenNames.add(name)
         uniqueSpecifiers.push(specifier)
@@ -1242,8 +1231,9 @@ export namespace Config {
             }
             const data = parsed.data
             if (data.plugin && isFile) {
-              for (let i = 0; i < data.plugin.length; i++) {
-                data.plugin[i] = resolvePluginSpec(data.plugin[i], options.path)
+              const list = data.plugin
+              for (let i = 0; i < list.length; i++) {
+                list[i] = yield* Effect.promise(() => resolvePluginSpec(list[i], options.path))
               }
             }
             return data

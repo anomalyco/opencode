@@ -19,6 +19,7 @@ test("api.client tracks runtime client rebinds", async () => {
       await Bun.write(
         pluginPath,
         `export default {
+  id: "demo.rebind",
   tui: async (api, options) => {
     const one = api.client.global
     const one_scoped = api.scopedClient(options.workspace_id)

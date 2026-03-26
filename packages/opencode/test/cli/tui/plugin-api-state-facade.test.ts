@@ -18,6 +18,7 @@ test("exposes expanded plugin state facade", async () => {
       await Bun.write(
         pluginPath,
         `export default {
+  id: "demo.state",
   tui: async (api, options) => {
     const row = {
       path_directory: api.state.path.directory,

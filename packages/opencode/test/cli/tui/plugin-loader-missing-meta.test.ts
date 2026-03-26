@@ -24,6 +24,7 @@ test("continues loading tui plugins when a plugin is missing config metadata", a
       await Bun.write(
         badPluginPath,
         `export default {
+  id: "demo.missing-meta",
   tui: async (_api, options) => {
     if (!options?.marker) return
     await Bun.write(options.marker, "called")
@@ -35,6 +36,7 @@ test("continues loading tui plugins when a plugin is missing config metadata", a
       await Bun.write(
         nextPluginPath,
         `export default {
+  id: "demo.next",
   tui: async (_api, options) => {
     if (!options?.marker) return
     await Bun.write(options.marker, "called")
@@ -46,6 +48,7 @@ test("continues loading tui plugins when a plugin is missing config metadata", a
       await Bun.write(
         plainPluginPath,
         `export default {
+  id: "demo.plain",
   tui: async (_api, options) => {
     await Bun.write(${JSON.stringify(plainMarker)}, options === undefined ? "undefined" : options === null ? "null" : "value")
   },
@@ -65,8 +68,6 @@ test("continues loading tui plugins when a plugin is missing config metadata", a
   })
 
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
-  const next = path.parse(new URL(tmp.extra.nextSpec).pathname).name
-  const plain = path.parse(new URL(tmp.extra.plainSpec).pathname).name
   const get = spyOn(TuiConfig, "get").mockResolvedValue({
     plugin: [
       [tmp.extra.badSpec, { marker: tmp.extra.badMarker }],
@@ -74,11 +75,11 @@ test("continues loading tui plugins when a plugin is missing config metadata", a
       tmp.extra.plainSpec,
     ],
     plugin_meta: {
-      [next]: {
+      [tmp.extra.nextSpec]: {
         scope: "local",
         source: path.join(tmp.path, "tui.json"),
       },
-      [plain]: {
+      [tmp.extra.plainSpec]: {
         scope: "local",
         source: path.join(tmp.path, "tui.json"),
       },

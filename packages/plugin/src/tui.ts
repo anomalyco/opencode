@@ -319,7 +319,7 @@ export type TuiLifecycle = {
 export type TuiPluginState = "first" | "updated" | "same"
 
 export type TuiPluginEntry = {
-  name: string
+  id: string
   source: "file" | "npm" | "internal"
   spec: string
   target: string
@@ -339,7 +339,6 @@ export type TuiPluginMeta = TuiPluginEntry & {
 
 export type TuiPluginStatus = {
   id: string
-  name: string
   source: TuiPluginEntry["source"]
   spec: string
   target: string
