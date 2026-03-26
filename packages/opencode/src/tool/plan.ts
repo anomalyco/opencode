@@ -7,6 +7,8 @@ import { MessageV2 } from "../session/message-v2"
 import { Identifier } from "../id/id"
 import { Provider } from "../provider/provider"
 import { Instance } from "../project/instance"
+import { persistPlanArtifacts } from "../session/plan-persist"
+import { canFinalize } from "../session/plan-guard"
 import EXIT_DESCRIPTION from "./plan-exit.txt"
 import ENTER_DESCRIPTION from "./plan-enter.txt"
 
@@ -17,30 +19,38 @@ async function getLastModel(sessionID: string) {
   return Provider.defaultModel()
 }
 
+async function questionRounds(sessionID: string) {
+  let total = 0
+  for await (const item of MessageV2.stream(sessionID)) {
+    if (item.info.role !== "assistant") continue
+    if (item.info.agent !== "plan") continue
+    const has = item.parts.some((part) => part.type === "tool" && part.tool === "question")
+    if (has) total += 1
+  }
+  return total
+}
+
 export const PlanExitTool = Tool.define("plan_exit", {
   description: EXIT_DESCRIPTION,
   parameters: z.object({}),
   async execute(_params, ctx) {
     const session = await Session.get(ctx.sessionID)
-    const plan = path.relative(Instance.worktree, Session.plan(session))
-    const answers = await Question.ask({
+    const absolute = Session.plan(session)
+    const relative = path.relative(Instance.worktree, absolute)
+    const markdown = await Bun.file(absolute).text()
+    const guard = canFinalize(markdown)
+    if (!guard.ok) {
+      const list = guard.missing.length ? ` Missing sections: ${guard.missing.join(", ")}.` : ""
+      const confirm = guard.confirmed ? "" : " Add a 'Confirmed Understanding' section before finalizing."
+      throw new Error("Plan is not ready for finalize." + list + confirm)
+    }
+    const rounds = await questionRounds(ctx.sessionID)
+    const { artifact, jsonPath } = await persistPlanArtifacts({
       sessionID: ctx.sessionID,
-      questions: [
-        {
-          question: `Plan at ${plan} is complete. Would you like to switch to the build agent and start implementing?`,
-          header: "Build Agent",
-          custom: false,
-          options: [
-            { label: "Yes", description: "Switch to build agent and start implementing the plan" },
-            { label: "No", description: "Stay with plan agent to continue refining the plan" },
-          ],
-        },
-      ],
-      tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
+      planPath: absolute,
+      agent: "plan",
+      questionRounds: rounds,
     })
-
-    const answer = answers[0]?.[0]
-    if (answer === "No") throw new Question.RejectedError()
 
     const model = await getLastModel(ctx.sessionID)
 
@@ -60,14 +70,21 @@ export const PlanExitTool = Tool.define("plan_exit", {
       messageID: userMsg.id,
       sessionID: ctx.sessionID,
       type: "text",
-      text: `The plan at ${plan} has been approved, you can now edit files. Execute the plan`,
+      text: [
+        `The plan artifacts are ready at ${relative} and ${path.relative(Instance.worktree, jsonPath)}.`,
+        `Plan completeness score: ${artifact.metadata.completeness_score}.`,
+        "Switch to build mode and execute the approved plan.",
+      ].join("\n"),
       synthetic: true,
     } satisfies MessageV2.TextPart)
 
     return {
       title: "Switching to build agent",
-      output: "User approved switching to build agent. Wait for further instructions.",
-      metadata: {},
+      output: "Plan finalized and build agent selected automatically.",
+      metadata: {
+        planPath: relative,
+        jsonPath: path.relative(Instance.worktree, jsonPath),
+      },
     }
   },
 })

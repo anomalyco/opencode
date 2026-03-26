@@ -435,4 +435,47 @@ describe("acp.agent event subscription", () => {
       },
     })
   })
+
+  test("plan tool completion updates ACP session mode", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+        ;(agent as any).sessionManager.setMode(sessionId, "plan")
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "message.part.updated",
+            properties: {
+              sessionID: sessionId,
+              messageID: "msg_plan_exit",
+              part: {
+                callID: "call_plan_exit",
+                tool: "plan_exit",
+                type: "tool",
+                state: {
+                  status: "completed",
+                  title: "Switching to build agent",
+                  input: {},
+                  output: "ok",
+                  metadata: {},
+                },
+              },
+            },
+          },
+        } as any)
+
+        await new Promise((r) => setTimeout(r, 20))
+
+        expect((agent as any).sessionManager.get(sessionId).modeId).toBe("build")
+
+        stop()
+      },
+    })
+  })
 })

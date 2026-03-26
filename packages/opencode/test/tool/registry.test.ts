@@ -119,4 +119,42 @@ describe("tool.registry", () => {
       },
     })
   })
+
+  test("includes plan tools for desktop client", async () => {
+    await using tmp = await tmpdir()
+    const old = process.env.OPENCODE_CLIENT
+    process.env.OPENCODE_CLIENT = "desktop"
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const ids = await ToolRegistry.ids()
+          expect(ids).toContain("plan_enter")
+          expect(ids).toContain("plan_exit")
+        },
+      })
+    } finally {
+      if (old === undefined) delete process.env.OPENCODE_CLIENT
+      else process.env.OPENCODE_CLIENT = old
+    }
+  })
+
+  test("does not include plan tools for acp client", async () => {
+    await using tmp = await tmpdir()
+    const old = process.env.OPENCODE_CLIENT
+    process.env.OPENCODE_CLIENT = "acp"
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const ids = await ToolRegistry.ids()
+          expect(ids).not.toContain("plan_enter")
+          expect(ids).not.toContain("plan_exit")
+        },
+      })
+    } finally {
+      if (old === undefined) delete process.env.OPENCODE_CLIENT
+      else process.env.OPENCODE_CLIENT = old
+    }
+  })
 })

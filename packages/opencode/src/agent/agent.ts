@@ -104,10 +104,29 @@ export namespace Agent {
             edit: {
               "*": "deny",
               [path.join(".opencode", "plans", "*.md")]: "allow",
+              [path.join(".opencode", "plans", "*.json")]: "allow",
               [path.relative(Instance.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
+              [path.relative(Instance.worktree, path.join(Global.Path.data, path.join("plans", "*.json")))]: "allow",
             },
           }),
           user,
+        ),
+        mode: "primary",
+        native: true,
+      },
+      ask: {
+        name: "ask",
+        description: "Conversation mode. No tool calls are allowed.",
+        options: {},
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            "*": "deny",
+            external_directory: {
+              "*": "deny",
+              [Truncate.GLOB]: "allow",
+            },
+          }),
         ),
         mode: "primary",
         native: true,

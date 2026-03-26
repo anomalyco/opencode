@@ -19,12 +19,30 @@ test("returns default native agents when no config", async () => {
       const agents = await Agent.list()
       const names = agents.map((a) => a.name)
       expect(names).toContain("build")
+      expect(names).toContain("ask")
       expect(names).toContain("plan")
       expect(names).toContain("general")
       expect(names).toContain("explore")
       expect(names).toContain("compaction")
       expect(names).toContain("title")
       expect(names).toContain("summary")
+    },
+  })
+})
+
+test("ask agent denies all tool permissions", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const ask = await Agent.get("ask")
+      expect(ask).toBeDefined()
+      expect(ask?.mode).toBe("primary")
+      expect(evalPerm(ask, "bash")).toBe("deny")
+      expect(evalPerm(ask, "read")).toBe("deny")
+      expect(evalPerm(ask, "edit")).toBe("deny")
+      expect(evalPerm(ask, "question")).toBe("deny")
+      expect(evalPerm(ask, "plan_exit")).toBe("deny")
     },
   })
 })
@@ -54,7 +72,9 @@ test("plan agent denies edits except .opencode/plans/*", async () => {
       // Wildcard is denied
       expect(evalPerm(plan, "edit")).toBe("deny")
       // But specific path is allowed
-      expect(PermissionNext.evaluate("edit", ".opencode/plans/foo.md", plan!.permission).action).toBe("allow")
+      expect(PermissionNext.evaluate("edit", path.join(".opencode", "plans", "foo.md"), plan!.permission).action).toBe(
+        "allow",
+      )
     },
   })
 })
@@ -661,6 +681,7 @@ test("defaultAgent throws when all primary agents are disabled", async () => {
     config: {
       agent: {
         build: { disable: true },
+        ask: { disable: true },
         plan: { disable: true },
       },
     },

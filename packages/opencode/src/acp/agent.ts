@@ -51,6 +51,12 @@ const DEFAULT_VARIANT_VALUE = "default"
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
 
+  function modeFromTool(tool: string) {
+    if (tool === "plan_enter") return "plan"
+    if (tool === "plan_exit") return "build"
+    return
+  }
+
   async function getContextLimit(
     sdk: OpencodeClient,
     providerID: string,
@@ -326,6 +332,11 @@ export namespace ACP {
                 return
 
               case "completed": {
+                const mode = modeFromTool(part.tool)
+                if (mode) {
+                  this.sessionManager.setMode(sessionId, mode)
+                }
+
                 const kind = toToolKind(part.tool)
                 const content: ToolCallContent[] = [
                   {
@@ -838,6 +849,11 @@ export namespace ACP {
                 })
               break
             case "completed":
+              const mode = modeFromTool(part.tool)
+              if (mode) {
+                this.sessionManager.setMode(sessionId, mode)
+              }
+
               const kind = toToolKind(part.tool)
               const content: ToolCallContent[] = [
                 {
