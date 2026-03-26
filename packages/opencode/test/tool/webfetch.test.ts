@@ -102,7 +102,7 @@ describe("tool.webfetch", () => {
   test("strips navigation chrome and extracts article content", async () => {
     const html = `<html><body>
     <nav><a href="/home">Home</a><a href="/about">About</a></nav>
-    <article><h1>Article Title</h1><p>Article body text.</p></article>
+    <article><h1>Article Title</h1><p>Article body text with enough content for Readability to identify it as the main article. The extraction algorithm requires a minimum amount of text to reliably score and extract the primary content block from the surrounding navigation chrome and footer elements.</p></article>
     <footer><a href="/contact">Contact</a></footer>
   </body></html>`
     await withFetch(
