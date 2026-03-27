@@ -33,13 +33,14 @@ export const WorktreeAdaptor: Adaptor = {
     await Worktree.remove({ directory: config.directory })
   },
   async fetch(info, input: RequestInfo | URL, init?: RequestInit) {
+    const { Server } = await import("../../server/server")
+
     const config = Config.parse(info)
-    const { WorkspaceServer } = await import("../workspace-server/server")
     const url = input instanceof Request || input instanceof URL ? input : new URL(input, "http://opencode.internal")
     const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
     headers.set("x-opencode-directory", config.directory)
 
     const request = new Request(url, { ...init, headers })
-    return WorkspaceServer.App().fetch(request)
+    return Server.Default().fetch(request)
   },
 }
