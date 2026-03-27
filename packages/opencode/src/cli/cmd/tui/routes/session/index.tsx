@@ -228,15 +228,19 @@ export function Session() {
   const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
 
-  const wide = createMemo(() => dimensions().width > 120)
+  const SIDEBAR_WIDTH = 42
+  const SIDEBAR_GAP = 4
+  const DOCKED_SIDEBAR_MIN_WIDTH = 110
+  const wide = createMemo(() => dimensions().width >= DOCKED_SIDEBAR_MIN_WIDTH)
   const sidebarVisible = createMemo(() => {
     if (session()?.parentID) return false
     if (sidebarOpen()) return true
     if (sidebar() === "auto" && wide()) return true
     return false
   })
+  const dockedSidebar = createMemo(() => sidebarVisible() && wide())
   const showTimestamps = createMemo(() => timestamps() === "show")
-  const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
+  const contentWidth = createMemo(() => dimensions().width - (dockedSidebar() ? SIDEBAR_WIDTH : 0) - SIDEBAR_GAP)
   const providers = createMemo(() => Model.index(sync.data.provider))
 
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
@@ -1107,7 +1111,16 @@ export function Session() {
         }}
       >
         <box flexDirection="row" flexGrow={1} minHeight={0}>
-          <box flexGrow={1} minHeight={0} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
+          <box
+            flexGrow={1}
+            flexShrink={1}
+            width={contentWidth()}
+            minHeight={0}
+            paddingBottom={1}
+            paddingLeft={2}
+            paddingRight={2}
+            gap={1}
+          >
             <Show when={session()}>
               <scrollbox
                 ref={(r) => (scroll = r)}
