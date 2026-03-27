@@ -896,7 +896,8 @@ export function MessageTimeline(props: {
             </Show>
             <div
               role="log"
-              class="flex flex-col gap-12 items-start justify-start pb-16 transition-[margin]"
+              data-slot="session-turn-list"
+              class="flex flex-col items-start justify-start pb-16 transition-[margin]"
               classList={{
                 "w-full": true,
                 "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
@@ -923,7 +924,15 @@ export function MessageTimeline(props: {
                 {(messageID) => {
                   const active = createMemo(() => activeMessageID() === messageID)
                   const comments = createMemo(() => messageComments(sync.data.part[messageID] ?? []), [], {
-                    equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+                    equals: (a, b) =>
+                      a.length === b.length &&
+                      a.every(
+                        (c, i) =>
+                          c.path === b[i].path &&
+                          c.comment === b[i].comment &&
+                          c.selection?.startLine === b[i].selection?.startLine &&
+                          c.selection?.endLine === b[i].selection?.endLine,
+                      ),
                   })
                   const commentCount = createMemo(() => comments().length)
                   return (
@@ -934,7 +943,10 @@ export function MessageTimeline(props: {
                         "min-w-0 w-full max-w-full": true,
                         "md:max-w-200 2xl:max-w-[1000px]": props.centered,
                       }}
-                      style={{ "content-visibility": "auto", "contain-intrinsic-size": "auto 500px" }}
+                      style={{
+                        "content-visibility": active() ? undefined : "auto",
+                        "contain-intrinsic-size": active() ? undefined : "auto 500px",
+                      }}
                     >
                       <Show when={commentCount() > 0}>
                         <div class="w-full px-4 md:px-5 pb-2">
@@ -979,6 +991,7 @@ export function MessageTimeline(props: {
                       <SessionTurn
                         sessionID={sessionID() ?? ""}
                         messageID={messageID}
+                        messages={sessionMessages()}
                         actions={props.actions}
                         active={active()}
                         status={active() ? sessionStatus() : undefined}

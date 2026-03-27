@@ -1,5 +1,23 @@
-go through each PR merged since the last tag
+---
+model: opencode/kimi-k2.5
+---
 
-for each PR spawn a subagent to summarize what the PR was about. focus on user facing changes. if it was entirely internal or code related you can ignore it. also skip docs updates. each subagent should append its summary to UPCOMING_CHANGELOG.md
+create UPCOMING_CHANGELOG.md
 
-once that is done, read UPCOMING_CHANGELOG.md and group it into sections for better readability. make sure all PR references are preserved
+it should have sections
+
+```
+## TUI
+
+## Desktop
+
+## Core
+
+## Misc
+```
+
+fetch the latest github release for this repository to determine the last release version.
+
+find each PR that was merged since the last release
+
+for each PR spawn a subagent to summarize what the PR was about. focus on user facing changes. if it was entirely internal or code related you can ignore it. also skip docs updates. each subagent should append its summary to UPCOMING_CHANGELOG.md into the appropriate section.

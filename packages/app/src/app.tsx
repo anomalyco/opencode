@@ -6,7 +6,7 @@ import { MarkedProvider } from "@opencode-ai/ui/context/marked"
 import { File } from "@opencode-ai/ui/file"
 import { Font } from "@opencode-ai/ui/font"
 import { Splash } from "@opencode-ai/ui/logo"
-import { ThemeProvider } from "@opencode-ai/ui/theme"
+import { ThemeProvider } from "@opencode-ai/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
 import { type BaseRouterProps, Navigate, Route, Router } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
@@ -32,12 +32,11 @@ import { FileProvider } from "@/context/file"
 import { GlobalSDKProvider } from "@/context/global-sdk"
 import { GlobalSyncProvider } from "@/context/global-sync"
 import { HighlightsProvider } from "@/context/highlights"
-import { LanguageProvider, useLanguage } from "@/context/language"
+import { LanguageProvider, type Locale, useLanguage } from "@/context/language"
 import { LayoutProvider } from "@/context/layout"
 import { ModelsProvider } from "@/context/models"
 import { NotificationProvider } from "@/context/notification"
 import { PermissionProvider } from "@/context/permission"
-import { usePlatform } from "@/context/platform"
 import { PromptProvider } from "@/context/prompt"
 import { ServerConnection, ServerProvider, serverName, useServer } from "@/context/server"
 import { SettingsProvider } from "@/context/settings"
@@ -75,11 +74,6 @@ declare global {
       setTitlebar?: (theme: { mode: "light" | "dark" }) => Promise<void>
     }
   }
-}
-
-function MarkedProviderWithNativeParser(props: ParentProps) {
-  const platform = usePlatform()
-  return <MarkedProvider nativeParser={platform.parseMarkdown}>{props.children}</MarkedProvider>
 }
 
 function QueryProvider(props: ParentProps) {
@@ -130,7 +124,7 @@ function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
   )
 }
 
-export function AppBaseProviders(props: ParentProps) {
+export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
   return (
     <MetaProvider>
       <Font />
@@ -139,14 +133,14 @@ export function AppBaseProviders(props: ParentProps) {
           void window.api?.setTitlebar?.({ mode })
         }}
       >
-        <LanguageProvider>
+        <LanguageProvider locale={props.locale}>
           <UiI18nBridge>
             <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
               <QueryProvider>
                 <DialogProvider>
-                  <MarkedProviderWithNativeParser>
+                  <MarkedProvider>
                     <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
-                  </MarkedProviderWithNativeParser>
+                  </MarkedProvider>
                 </DialogProvider>
               </QueryProvider>
             </ErrorBoundary>

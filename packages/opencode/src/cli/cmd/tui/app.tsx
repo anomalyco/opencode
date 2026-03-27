@@ -110,6 +110,7 @@ export function tui(input: {
   url: string
   args: Args
   config: TuiConfig.Info
+  onSnapshot?: () => Promise<string[]>
   directory?: string
   fetch?: typeof fetch
   headers?: RequestInit["headers"]
@@ -160,7 +161,7 @@ export function tui(input: {
                                         <FrecencyProvider>
                                           <PromptHistoryProvider>
                                             <PromptRefProvider>
-                                              <App />
+                                              <App onSnapshot={input.onSnapshot} />
                                             </PromptRefProvider>
                                           </PromptHistoryProvider>
                                         </FrecencyProvider>
@@ -185,7 +186,7 @@ export function tui(input: {
         targetFps: 60,
         gatherStats: false,
         exitOnCtrlC: false,
-        useKittyKeyboard: {},
+        useKittyKeyboard: { events: process.platform === "win32" },
         autoFocus: false,
         openConsoleOnError: false,
         consoleOptions: {
@@ -201,7 +202,7 @@ export function tui(input: {
   })
 }
 
-function App() {
+function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const route = useRoute()
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
@@ -627,11 +628,11 @@ function App() {
       title: "Write heap snapshot",
       category: "System",
       value: "app.heap_snapshot",
-      onSelect: (dialog) => {
-        const path = writeHeapSnapshot()
+      onSelect: async (dialog) => {
+        const files = await props.onSnapshot?.()
         toast.show({
           variant: "info",
-          message: `Heap snapshot written to ${path}`,
+          message: `Heap snapshot written to ${files?.join(", ")}`,
           duration: 5000,
         })
         dialog.clear()
@@ -709,7 +710,7 @@ function App() {
     })
   })
 
-  sdk.event.on(SessionApi.Event.Deleted.type, (evt) => {
+  sdk.event.on("session.deleted", (evt) => {
     if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
       route.navigate({ type: "home" })
       toast.show({
@@ -719,7 +720,7 @@ function App() {
     }
   })
 
-  sdk.event.on(SessionApi.Event.Error.type, (evt) => {
+  sdk.event.on("session.error", (evt) => {
     const error = evt.properties.error
     if (error && typeof error === "object" && error.name === "MessageAbortedError") return
     const message = (() => {

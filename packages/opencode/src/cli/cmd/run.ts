@@ -682,7 +682,7 @@ export async function resolveSession(input: {
   }
   sdk: Pick<OpencodeClient, "session">
   title?: string
-  rules: PermissionNext.Ruleset
+  rules: Permission.Ruleset
 }) {
   const baseID = input.args.continue
     ? (await input.sdk.session.list()).data?.find((s) => !s.parentID)?.id
