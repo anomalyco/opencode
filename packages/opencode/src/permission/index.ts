@@ -15,7 +15,6 @@ import os from "os"
 import z from "zod"
 import { evaluate as evalRule } from "./evaluate"
 import { PermissionID } from "./schema"
-import { Flag } from "@/flag/flag"
 
 export namespace Permission {
   const log = Log.create({ service: "permission" })
@@ -182,12 +181,6 @@ export namespace Permission {
         }
 
         if (!needsAsk) return
-
-        // --autopilot: auto-approve without prompting
-        if (Flag.COBUILDER_AUTOPILOT) {
-          log.info("autopilot: auto-approving permission", { permission: request.permission, patterns: request.patterns })
-          return
-        }
 
         const id = request.id ?? PermissionID.ascending()
         const info: Request = {

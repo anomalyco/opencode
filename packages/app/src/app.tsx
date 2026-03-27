@@ -13,7 +13,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { type Duration, Effect } from "effect"
 import {
   type Component,
-  createEffect,
   createMemo,
   createResource,
   createSignal,
@@ -40,6 +39,7 @@ import { LayoutProvider } from "@/context/layout"
 import { ModelsProvider } from "@/context/models"
 import { NotificationProvider } from "@/context/notification"
 import { PermissionProvider } from "@/context/permission"
+import { usePlatform } from "@/context/platform"
 import { PromptProvider } from "@/context/prompt"
 import { ServerConnection, ServerProvider, serverName, useServer } from "@/context/server"
 import { SettingsProvider } from "@/context/settings"
@@ -69,7 +69,7 @@ function UiI18nBridge(props: ParentProps) {
 
 declare global {
   interface Window {
-    __COBUILDER__?: {
+    __OPENCODE__?: {
       updaterEnabled?: boolean
       deepLinks?: string[]
       wsl?: boolean
@@ -78,6 +78,11 @@ declare global {
       setTitlebar?: (theme: { mode: "light" | "dark" }) => Promise<void>
     }
   }
+}
+
+function MarkedProviderWithNativeParser(props: ParentProps) {
+  const platform = usePlatform()
+  return <MarkedProvider nativeParser={platform.parseMarkdown}>{props.children}</MarkedProvider>
 }
 
 function QueryProvider(props: ParentProps) {
@@ -123,18 +128,13 @@ function OnboardingCheck() {
 
   onMount(() => {
     if (wasOnboardingShown()) return
-    // Use a reactive createEffect that fires when provider data is first loaded
-    // from the server — avoids the 800ms setTimeout race condition where the
-    // check runs before sync has populated provider data.
-    let checked = false
-    createEffect(() => {
+    // Give sync a moment to populate connected providers
+    setTimeout(() => {
       const connected = globalSync.data.provider.connected
-      if (checked) return
-      checked = true
       if (connected.length === 0) {
         dialog.show(() => <DialogOnboarding />)
       }
-    })
+    }, 800)
   })
 
   return null
@@ -166,9 +166,9 @@ export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
             <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
               <QueryProvider>
                 <DialogProvider>
-                  <MarkedProvider>
+                  <MarkedProviderWithNativeParser>
                     <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
-                  </MarkedProvider>
+                  </MarkedProviderWithNativeParser>
                 </DialogProvider>
               </QueryProvider>
             </ErrorBoundary>
@@ -249,18 +249,8 @@ function ConnectionError(props: { onRetry?: () => void; onServerSelected?: (key:
   const name = createMemo(() => server.name || server.key)
   const serverToken = "\u0000server\u0000"
   const unreachable = createMemo(() => language.t("app.server.unreachable", { server: serverToken }).split(serverToken))
-  const [elapsedSeconds, setElapsedSeconds] = createSignal(0)
 
-  const serverUrl = createMemo(() => {
-    const current = server.list.find((s) => ServerConnection.key(s) === server.key)
-    if (!current) return undefined
-    return "http" in current ? current.http.url : undefined
-  })
-
-  const timer = setInterval(() => {
-    setElapsedSeconds((s) => s + 1)
-    props.onRetry?.()
-  }, 1000)
+  const timer = setInterval(() => props.onRetry?.(), 1000)
   onCleanup(() => clearInterval(timer))
 
   return (
@@ -272,17 +262,7 @@ function ConnectionError(props: { onRetry?: () => void; onServerSelected?: (key:
           <span class="text-text-strong font-medium">{name()}</span>
           {unreachable()[1]}
         </p>
-        <p class="mt-1 text-12-regular text-text-weak">
-          {language.t("app.server.retryElapsed", { seconds: String(elapsedSeconds()) })}
-        </p>
-        <div class="mt-3 flex flex-col gap-1 text-12-regular text-text-weak">
-          <Show when={!serverUrl()}>
-            <p>{language.t("app.server.hint.serve")}</p>
-          </Show>
-          <Show when={serverUrl()}>
-            <p>{language.t("app.server.hint.url", { url: serverUrl()! })}</p>
-          </Show>
-        </div>
+        <p class="mt-1 text-12-regular text-text-weak">{language.t("app.server.retrying")}</p>
       </div>
       <Show when={others().length > 0}>
         <div class="flex flex-col gap-2 w-full max-w-sm">

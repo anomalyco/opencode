@@ -122,23 +122,11 @@ export default function Home() {
           </div>
         </Match>
         <Match when={true}>
-          <div class="mt-20 mx-auto flex flex-col items-center gap-6 max-w-sm">
+          <div class="mt-30 mx-auto flex flex-col items-center gap-3">
+            <Icon name="folder-add-left" size="large" />
             <div class="flex flex-col gap-1 items-center justify-center">
-              <div class="text-16-medium text-text-strong">{language.t("home.gettingStarted.title")}</div>
-            </div>
-            <div class="flex flex-col gap-3 w-full">
-              <div class="flex items-start gap-3 px-3">
-                <div class="flex items-center justify-center size-6 rounded-full bg-surface-raised-base text-12-medium text-text-strong shrink-0 mt-0.5">1</div>
-                <div class="text-14-regular text-text-base">{language.t("home.gettingStarted.step1")}</div>
-              </div>
-              <div class="flex items-start gap-3 px-3">
-                <div class="flex items-center justify-center size-6 rounded-full bg-surface-raised-base text-12-medium text-text-strong shrink-0 mt-0.5">2</div>
-                <div class="text-14-regular text-text-base">{language.t("home.gettingStarted.step2")}</div>
-              </div>
-              <div class="flex items-start gap-3 px-3">
-                <div class="flex items-center justify-center size-6 rounded-full bg-surface-raised-base text-12-medium text-text-strong shrink-0 mt-0.5">3</div>
-                <div class="text-14-regular text-text-base">{language.t("home.gettingStarted.step3")}</div>
-              </div>
+              <div class="text-14-medium text-text-strong">{language.t("home.empty.title")}</div>
+              <div class="text-12-regular text-text-weak">{language.t("home.empty.description")}</div>
             </div>
             <Button class="px-3 mt-1" onClick={chooseProject}>
               {language.t("command.project.open")}

@@ -161,11 +161,9 @@ export namespace LSP {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const config = yield* Config.Service
-
       const state = yield* InstanceState.make<State>(
         Effect.fn("LSP.state")(function* () {
-          const cfg = yield* config.get()
+          const cfg = yield* Effect.promise(() => Config.get())
 
           const servers: Record<string, LSPServer.Info> = {}
 
@@ -506,9 +504,7 @@ export namespace LSP {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer))
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
+  const { runPromise } = makeRuntime(Service, layer)
 
   export const init = async () => runPromise((svc) => svc.init())
 

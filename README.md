@@ -2,7 +2,7 @@
   <img src="assets/logo.svg" alt="CoBuilder" width="420" />
 </p>
 
-<p align="center">The open source AI coding agent — built for teams and enterprise.</p>
+<p align="center"><strong>The open source AI agent — build software, automate workflows, and ship faster.</strong></p>
 
 <p align="center">
   <a href="https://github.com/CobuilderLabs/opencode/releases/latest"><img alt="Latest Release" src="https://img.shields.io/github/v/release/CobuilderLabs/opencode?filter=cb-v*&style=flat-square&label=release&color=0f6" /></a>
@@ -13,47 +13,50 @@
 
 ---
 
-CoBuilder is a fork of [opencode](https://github.com/anomalyco/opencode) that adds what teams actually need in production: **security hardening**, **cross-session AI memory**, **crash recovery**, and **guided provider onboarding** — while staying fully open source and provider-agnostic.
+## What is CoBuilder?
+
+CoBuilder is an **AI agent** — not just a coding assistant. It can build software, create automations, plan projects, generate content, and execute multi-step tasks end-to-end, all from your terminal or browser.
+
+It runs locally, works with any AI provider, and is built for teams that need reliability, security, and control.
+
+CoBuilder is a fork of [opencode](https://github.com/anomalyco/opencode) with enterprise-grade additions: **security hardening**, **cross-session AI memory**, **crash recovery**, and **guided provider onboarding**.
 
 ---
 
-## Download
+## Why CoBuilder?
 
-Pre-built binaries are available for every major platform — [**latest release →**](https://github.com/CobuilderLabs/opencode/releases/latest)
-
-| Platform | Download |
-|----------|---------|
-| macOS (Apple Silicon) | [`cobuilder-darwin-arm64.zip`](https://github.com/CobuilderLabs/opencode/releases/latest/download/cobuilder-darwin-arm64.zip) |
-| macOS (Intel) | [`cobuilder-darwin-x64.zip`](https://github.com/CobuilderLabs/opencode/releases/latest/download/cobuilder-darwin-x64.zip) |
-| Windows (x64) | [`cobuilder-windows-x64.zip`](https://github.com/CobuilderLabs/opencode/releases/latest/download/cobuilder-windows-x64.zip) |
-| Windows (ARM64) | [`cobuilder-windows-arm64.zip`](https://github.com/CobuilderLabs/opencode/releases/latest/download/cobuilder-windows-arm64.zip) |
-| Linux (x64) | [`cobuilder-linux-x64.tar.gz`](https://github.com/CobuilderLabs/opencode/releases/latest/download/cobuilder-linux-x64.tar.gz) |
-| Linux (ARM64) | [`cobuilder-linux-arm64.tar.gz`](https://github.com/CobuilderLabs/opencode/releases/latest/download/cobuilder-linux-arm64.tar.gz) |
-
-> **Desktop App (BETA)** — Windows and Linux installers available on the [latest release →](https://github.com/CobuilderLabs/opencode/releases/latest) macOS coming soon.
+|                                                  | CoBuilder | Plain coding assistants |
+| ------------------------------------------------ | --------- | ----------------------- |
+| Builds beyond code (automations, plans, content) | ✅        | ❌                      |
+| Remembers context across sessions                | ✅        | ❌                      |
+| Recovers from crashes automatically              | ✅        | ❌                      |
+| SSRF + prompt injection protection               | ✅        | ❌                      |
+| Tamper-proof audit log                           | ✅        | ❌                      |
+| Works with any AI provider                       | ✅        | Varies                  |
+| Fully local — no cloud, no data sent out         | ✅        | Rarely                  |
+| Open source                                      | ✅        | Rarely                  |
 
 ---
 
-## Installation
+## Quick Start
+
+**1. Install**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/CobuilderLabs/opencode/main/install.sh | bash
 ```
 
-The installer detects your OS and architecture, downloads the right pre-built binary, places it in `~/.local/bin/`, and launches interactive onboarding. No Node.js, no npm, no dependencies.
-
-**Install to a custom path:**
-```bash
-COBUILDER_INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/CobuilderLabs/opencode/main/install.sh | bash
-```
+No Node.js, no npm, no dependencies. The installer picks the right binary for your OS and places it in `~/.local/bin/`.
 
 > **Windows:** Run in Git Bash or WSL.
 
----
+**2. Connect an AI provider**
 
-## Getting Started
+```bash
+cobuilder onboard
+```
 
-When you run `cobuilder onboard` for the first time (or after install), you'll be walked through connecting an AI provider:
+You'll be walked through a guided setup:
 
 ```
   ┌─────────────────────────────────────────┐
@@ -69,95 +72,109 @@ When you run `cobuilder onboard` for the first time (or after install), you'll b
      Google     — Gemini models via API key
 ```
 
-Select a provider, enter your API key (or URL for local proxies), and you're done. Run `cobuilder onboard` again at any time to add more providers.
+Select a provider, paste your API key (or URL for local proxies), and you're done. Run `cobuilder onboard` anytime to add more.
 
-Once configured, start coding:
+**3. Start building**
 
 ```bash
-cobuilder          # open the TUI
-cobuilder run "explain this codebase"  # non-interactive
-cobuilder web      # open in browser
+cobuilder                              # open the terminal UI
+cobuilder run "scaffold a REST API"    # run a task non-interactively
+cobuilder web                          # open in browser
+```
+
+---
+
+## Download
+
+Pre-built binaries for every platform — [**latest release →**](https://github.com/CobuilderLabs/opencode/releases/latest)
+
+| Platform              | Download                                                                                                                          |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| macOS (Apple Silicon) | [`cobuilder-darwin-arm64.zip`](https://github.com/CobuilderLabs/opencode/releases/latest/download/cobuilder-darwin-arm64.zip)     |
+| macOS (Intel)         | [`cobuilder-darwin-x64.zip`](https://github.com/CobuilderLabs/opencode/releases/latest/download/cobuilder-darwin-x64.zip)         |
+| Windows (x64)         | [`cobuilder-windows-x64.zip`](https://github.com/CobuilderLabs/opencode/releases/latest/download/cobuilder-windows-x64.zip)       |
+| Windows (ARM64)       | [`cobuilder-windows-arm64.zip`](https://github.com/CobuilderLabs/opencode/releases/latest/download/cobuilder-windows-arm64.zip)   |
+| Linux (x64)           | [`cobuilder-linux-x64.tar.gz`](https://github.com/CobuilderLabs/opencode/releases/latest/download/cobuilder-linux-x64.tar.gz)     |
+| Linux (ARM64)         | [`cobuilder-linux-arm64.tar.gz`](https://github.com/CobuilderLabs/opencode/releases/latest/download/cobuilder-linux-arm64.tar.gz) |
+
+> **Desktop App (BETA)** — Windows and Linux installers on the [latest release →](https://github.com/CobuilderLabs/opencode/releases/latest). macOS coming soon.
+
+**Install to a custom path:**
+
+```bash
+COBUILDER_INSTALL_DIR=/usr/local/bin curl -fsSL https://raw.githubusercontent.com/CobuilderLabs/opencode/main/install.sh | bash
+```
+
+---
+
+## Features
+
+### Cross-session memory
+
+CoBuilder summarizes what happened at the end of each session — files touched, commands run, decisions made — and stores it in a local full-text search index. On your next session, it searches that history for relevant context and quietly injects it into the system prompt. Your agent remembers your project without you re-explaining it every time.
+
+### Crash recovery
+
+If the CoBuilder server exits unexpectedly, the next launch detects the interrupted session and offers to resume exactly where you left off. No work is lost.
+
+```bash
+cobuilder --continue          # resume the last session
+cobuilder -s <session-id>     # resume a specific session
+```
+
+The session ID is shown when you exit: `cobuilder -s ses_xxx`.
+
+### Terminal-first interface
+
+Full terminal UI with syntax-highlighted output, streaming responses, and keyboard-driven navigation. Press `Tab` to switch between the `build` agent (full file access) and `plan` agent (read-only analysis). Press `/` to open the command palette.
+
+### LSP integration
+
+Language server diagnostics — errors, warnings, type information — flow directly into the AI's context. The agent sees the same problems your editor sees, in real time.
+
+### Client/server architecture
+
+`cobuilder serve` starts a local API server. The TUI and web UI are both clients, so you can run CoBuilder on a remote machine and drive it from your laptop, a browser, or a custom client.
+
+### MCP support
+
+Connect any [Model Context Protocol](https://modelcontextprotocol.io) server to extend CoBuilder with external tools, data sources, or APIs.
+
+```bash
+cobuilder mcp    # manage MCP connections
 ```
 
 ---
 
 ## AI Providers
 
-CoBuilder works with any of the following out of the box. You are never locked in to one.
+CoBuilder works with any of the following. You are never locked in to one.
 
-**[9Router](https://github.com/decolua/9router)** — a local OpenAI-compatible proxy that runs on your machine and routes requests to any model backend. No data leaves your machine. Ideal for air-gapped or regulated environments. During onboarding, CoBuilder connects to your 9Router instance, fetches the available models, and lets you pick which ones to activate.
-
-**Anthropic** — Claude 3.5 Sonnet, Claude 3 Haiku, Claude Opus. Best-in-class reasoning and code generation. Requires an Anthropic API key.
-
-**OpenAI** — GPT-4o, o1, o3-mini and the full OpenAI model lineup. Requires an OpenAI API key.
-
-**OpenRouter** — a single API key that routes to 200+ models from Anthropic, OpenAI, Meta, Mistral, and others. Good for teams that want to compare models or manage cost centrally.
-
-**GitHub Copilot** — Use your existing Copilot Individual, Business, or Enterprise subscription. No API key needed — CoBuilder authenticates via GitHub's Device Code OAuth flow. Supports both GitHub.com and GitHub Enterprise (GHE) deployments. All requests are covered by your Copilot subscription at no additional cost.
-
-**Google** — Gemini 2.0 Flash, Gemini 2.5 Pro. Requires a Google AI API key.
-
-**Custom endpoint** — any server that speaks the OpenAI API format works. Point CoBuilder at it via 9Router or configure it directly in `opencode.json`.
-
----
-
-## Features
-
-### Terminal-first interface
-
-CoBuilder opens a full terminal UI with syntax-highlighted output, streaming responses, and keyboard-driven navigation. Switch between the `build` agent (full file access) and the `plan` agent (read-only analysis) with `Tab`. Press `/` to open the command palette.
-
-### Cross-session memory
-
-At the end of each session, CoBuilder summarizes what happened — files touched, commands run, decisions made — and stores it in a local full-text search index. On your next session, it searches that history for relevant context and quietly injects it into the system prompt. Your agent remembers your project's history without you having to re-explain it.
-
-### Crash recovery
-
-If the CoBuilder server exits unexpectedly, the next launch detects the interrupted session and offers to resume it exactly where it left off. No work is lost. This uses a checkpoint written at each user turn — lightweight, fast, and stored locally.
-
-You can also resume sessions manually:
-
-```bash
-# Resume the last session
-cobuilder --continue
-
-# Resume a specific session by ID
-cobuilder -s <session-id>
-```
-
-The session ID is shown when you exit the TUI: `cobuilder -s ses_xxx`.
-
-### LSP integration
-
-Language server diagnostics (errors, warnings, type information) flow directly into the AI's context window. The agent sees the same problems your editor sees, in real time.
-
-### Client/server architecture
-
-`cobuilder serve` starts a local API server. The TUI and web UI are both clients — meaning you can run CoBuilder on a remote machine and drive it from your laptop, a browser, or a custom client.
-
-### MCP support
-
-Connect any [Model Context Protocol](https://modelcontextprotocol.io) server to extend CoBuilder with external tools, data sources, or APIs. Use `cobuilder mcp` to manage connections.
+| Provider            | Description                                                                                                                                    |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| **9Router**         | Local OpenAI-compatible proxy. No data leaves your machine. Ideal for air-gapped or regulated environments.                                    |
+| **Anthropic**       | Claude 3.5 Sonnet, Claude 3 Haiku, Claude Opus. Best-in-class reasoning and code generation.                                                   |
+| **OpenAI**          | GPT-4o, o1, o3-mini, and the full OpenAI model lineup.                                                                                         |
+| **OpenRouter**      | A single API key routing to 200+ models. Good for teams comparing models or managing cost centrally.                                           |
+| **GitHub Copilot**  | Uses your existing Copilot subscription via GitHub's Device Code OAuth flow. No additional API key. Supports GitHub.com and GitHub Enterprise. |
+| **Google**          | Gemini 2.0 Flash and Gemini 2.5 Pro.                                                                                                           |
+| **Custom endpoint** | Any server that speaks the OpenAI API format works — configure via 9Router or directly in `opencode.json`.                                     |
 
 ---
 
 ## Security
 
-CoBuilder is designed to be safe to run in team and enterprise environments. Here's what's built in.
+CoBuilder is designed to be safe in team and enterprise environments.
 
-**SSRF protection** — When you configure a custom provider URL, CoBuilder validates it before making any network requests. It rejects URLs that point to cloud instance metadata endpoints (AWS `169.254.169.254`, GCP, Azure equivalents), private RFC-1918 address ranges, and localhost — unless you've explicitly allowed them. This prevents a misconfigured or malicious provider URL from being used to exfiltrate internal infrastructure data.
-
-**Prompt injection detection** — Content pulled from files, web pages, or external tools is scanned for patterns commonly used in prompt injection attacks: instructions that try to override the system prompt, commands that attempt to exfiltrate data, jailbreak templates, and shell injection sequences. Detections are logged before any content reaches the model.
-
-**Path traversal prevention** — Every file path is canonicalized and checked against the allowed base directory before the file is read or written. Paths containing `../` sequences, symlink escapes, or null bytes are rejected outright. The agent cannot be tricked into reading files outside the project.
-
-**Audit log** — All sensitive operations — file writes, shell commands, provider calls — are recorded in an append-only log. Each entry is SHA-256 chained to the previous one, so the log cannot be silently tampered with or truncated.
-
-**Rate limiting** — In server mode, per-client token-bucket rate limiting prevents any single client from overwhelming the server or burning through API quota unexpectedly.
-
-**Security headers** — All HTTP responses from `cobuilder serve` and `cobuilder web` include `Content-Security-Policy`, `Strict-Transport-Security`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: no-referrer`.
-
-**Supply chain** — Every pull request runs TruffleHog (verified secret scanning), CodeQL static analysis, and a dependency audit. No secrets can be merged accidentally, and known-vulnerable packages are flagged before they ship.
+| Protection                     | What it does                                                                                                                                                                       |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **SSRF protection**            | Validates provider URLs before any network request. Rejects cloud metadata endpoints (AWS, GCP, Azure), private RFC-1918 ranges, and localhost unless explicitly allowed.          |
+| **Prompt injection detection** | Scans file/tool content for patterns that try to override the system prompt, exfiltrate data, or execute shell injection. Detections are logged before reaching the model.         |
+| **Path traversal prevention**  | Every file path is canonicalized and checked against the allowed base directory. Paths with `../`, symlink escapes, or null bytes are rejected.                                    |
+| **Audit log**                  | All sensitive operations (file writes, shell commands, provider calls) are recorded in a SHA-256 chained append-only log that cannot be silently tampered with.                    |
+| **Rate limiting**              | Per-client token-bucket rate limiting in server mode prevents API quota from being burned unexpectedly.                                                                            |
+| **Security headers**           | All HTTP responses include `Content-Security-Policy`, `Strict-Transport-Security`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: no-referrer`. |
+| **Supply chain**               | Every PR runs TruffleHog (secret scanning), CodeQL static analysis, and a dependency audit.                                                                                        |
 
 To report a vulnerability, email **security@cobuilder.dev**. We acknowledge within 48 hours. See [SECURITY.md](SECURITY.md) for the full disclosure policy.
 
@@ -169,11 +186,11 @@ To report a vulnerability, email **security@cobuilder.dev**. We acknowledge with
 
 **Data stays local.** Sessions, cross-session memory, checkpoints, and audit logs are all stored in SQLite on the local filesystem. Nothing is sent to a CoBuilder service or cloud.
 
-**No registry dependency.** Pre-built binaries are published directly to GitHub Releases. You can mirror them internally and point your install script there. Alternatively, build from source — it's a single `bun run build` command.
+**No registry dependency.** Pre-built binaries are published directly to GitHub Releases. Mirror them internally and point your install script there, or build from source with a single `bun run build`.
 
 **Bring your own provider contracts.** If your company has negotiated API pricing with Anthropic, OpenAI, or others, CoBuilder works with those keys directly. No middleman.
 
-**Crash resilience.** The checkpoint system means an unexpected server restart doesn't lose in-progress sessions. Engineers pick up where they left off.
+**Crash resilience.** The checkpoint system means an unexpected server restart doesn't lose in-progress sessions.
 
 For custom deployments, enterprise support, or procurement questions, open an issue or reach out directly.
 
@@ -193,12 +210,13 @@ Config lives at `~/.config/opencode/opencode.json`. The `cobuilder onboard` comm
 
   // Provider credentials and models (populated by onboard)
   "provider": {
-    "anthropic": {}
-  }
+    "anthropic": {},
+  },
 }
 ```
 
 **9Router example:**
+
 ```jsonc
 {
   "model": "9router/llama-3.1-70b",
@@ -208,13 +226,13 @@ Config lives at `~/.config/opencode/opencode.json`. The `cobuilder onboard` comm
       "name": "9Router",
       "options": {
         "baseURL": "http://localhost:20123/v1",
-        "apiKey": "9router"
+        "apiKey": "9router",
       },
       "models": {
-        "llama-3.1-70b": { "name": "llama-3.1-70b" }
-      }
-    }
-  }
+        "llama-3.1-70b": { "name": "llama-3.1-70b" },
+      },
+    },
+  },
 }
 ```
 
@@ -222,11 +240,11 @@ Config lives at `~/.config/opencode/opencode.json`. The `cobuilder onboard` comm
 
 ## Platform Support
 
-Pre-built binaries are available for every major platform. The install script picks the right one automatically.
-
-- **Linux** — x64 and arm64, glibc and musl (Alpine/Docker), with AVX2-free baseline variants
-- **macOS** — Apple Silicon (arm64) and Intel (x64)
-- **Windows** — x64 and arm64
+| Platform | Architectures                                                               |
+| -------- | --------------------------------------------------------------------------- |
+| Linux    | x64, arm64 (glibc and musl/Alpine/Docker, with AVX2-free baseline variants) |
+| macOS    | Apple Silicon (arm64), Intel (x64)                                          |
+| Windows  | x64, arm64                                                                  |
 
 ---
 
@@ -250,6 +268,7 @@ cd packages/opencode && bun run build --single
 ```
 
 **Project layout:**
+
 ```
 packages/
   opencode/        CLI + server (TypeScript/Bun)
@@ -265,9 +284,10 @@ packages/
 ```
 
 **Tests and type checking:**
+
 ```bash
-bun test                 # unit tests
-bun run typecheck        # TypeScript
+bun test             # unit tests
+bun run typecheck    # TypeScript
 ```
 
 ---

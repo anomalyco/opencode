@@ -13,6 +13,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 
 import FileTree from "@/components/file-tree"
 import { SessionContextUsage } from "@/components/session-context-usage"
+import { DialogSelectFile } from "@/components/dialog-select-file"
 import { SessionContextTab, SortableTab, FileVisual } from "@/components/session"
 import { useCommand } from "@/context/command"
 import { useFile, type SelectedLineRange } from "@/context/file"
@@ -292,11 +293,9 @@ export function SessionSidePanel(props: {
                             variant="ghost"
                             iconSize="large"
                             class="!rounded-md"
-                            onClick={() => {
-                              void import("@/components/dialog-select-file").then((x) => {
-                                dialog.show(() => <x.DialogSelectFile mode="files" onOpenFile={showAllFiles} />)
-                              })
-                            }}
+                            onClick={() =>
+                              dialog.show(() => <DialogSelectFile mode="files" onOpenFile={showAllFiles} />)
+                            }
                             aria-label={language.t("command.file.open")}
                           />
                         </TooltipKeybind>

@@ -1,8 +1,6 @@
-// SEC-04: No external call sites found as of 2026-03-26. Guard is in module itself.
 import fs from "fs/promises"
 import path from "path"
 import { Global } from "../global"
-import { Config } from "../config/config"
 
 export interface AuditEntry {
   timestamp: string
@@ -23,9 +21,6 @@ export class AuditLog {
   constructor(private readonly filePath: string) {}
 
   async log(event: { type: string; data: Record<string, unknown> }): Promise<void> {
-    const cfg = await Config.get()
-    if (cfg.security?.auditLog?.enabled === false) return
-
     await fs.mkdir(path.dirname(this.filePath), { recursive: true })
 
     let prevHash = ""

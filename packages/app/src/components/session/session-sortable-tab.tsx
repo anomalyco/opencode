@@ -39,20 +39,7 @@ export function SortableTab(props: { tab: string; onTabClose: (tab: string) => v
     return <FileVisual path={value} />
   })
   return (
-    <div use:sortable class="group h-full flex items-center" classList={{ "opacity-0": sortable.isActiveDraggable }}>
-      <span
-        class="shrink-0 opacity-0 group-hover:opacity-40 hover:!opacity-70 cursor-grab active:cursor-grabbing px-0.5 text-text-weak"
-        aria-hidden="true"
-      >
-        <svg class="size-3" viewBox="0 0 16 16" fill="currentColor">
-          <circle cx="5" cy="3" r="1.5" />
-          <circle cx="11" cy="3" r="1.5" />
-          <circle cx="5" cy="8" r="1.5" />
-          <circle cx="11" cy="8" r="1.5" />
-          <circle cx="5" cy="13" r="1.5" />
-          <circle cx="11" cy="13" r="1.5" />
-        </svg>
-      </span>
+    <div use:sortable class="h-full flex items-center" classList={{ "opacity-0": sortable.isActiveDraggable }}>
       <div class="relative">
         <Tabs.Trigger
           value={props.tab}

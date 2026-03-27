@@ -20,7 +20,7 @@
     "db": "bun drizzle-kit"
   },
   "bin": {
-    "cobuilder": "./bin/cobuilder"
+    "cobuilder": "./bin/opencode"
   },
   "randomField": "this-is-a-random-value-12345",
   "exports": {
@@ -136,8 +136,6 @@
     "opencode-poe-auth": "0.0.1",
     "opentui-spinner": "0.0.6",
     "partial-json": "0.1.7",
-    "react": "18.2.0",
-    "react-dom": "18.2.0",
     "remeda": "catalog:",
     "semver": "^7.6.3",
     "solid-js": "catalog:",

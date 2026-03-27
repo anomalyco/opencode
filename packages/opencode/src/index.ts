@@ -14,6 +14,7 @@ import { Installation } from "./installation"
 import { NamedError } from "@opencode-ai/util/error"
 import { FormatError } from "./cli/error"
 import { ServeCommand } from "./cli/cmd/serve"
+import { WorkspaceServeCommand } from "./cli/cmd/workspace-serve"
 import { Filesystem } from "./util/filesystem"
 import { DebugCommand } from "./cli/cmd/debug"
 import { StatsCommand } from "./cli/cmd/stats"
@@ -30,8 +31,6 @@ import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
 import { DbCommand } from "./cli/cmd/db"
 import { OnboardCommand } from "./cli/cmd/onboard"
-import { WorkflowCommand } from "./cli/cmd/workflow"
-import { SkillsCommand } from "./cli/cmd/skills"
 import path from "path"
 import { Global } from "./global"
 import { JsonMigration } from "./storage/json-migration"
@@ -71,12 +70,7 @@ let cli = yargs(hideBin(process.argv))
     type: "string",
     choices: ["DEBUG", "INFO", "WARN", "ERROR"],
   })
-  .option("autopilot", {
-    describe: "auto-approve all permission requests without prompting",
-    type: "boolean",
-  })
   .middleware(async (opts) => {
-    if (opts.autopilot) process.env.COBUILDER_AUTOPILOT = "1"
     await Log.init({
       print: process.argv.includes("--print-logs"),
       dev: Installation.isLocal(),
@@ -158,8 +152,10 @@ let cli = yargs(hideBin(process.argv))
   .command(SessionCommand)
   .command(DbCommand)
   .command(OnboardCommand)
-  .command(WorkflowCommand)
-  .command(SkillsCommand)
+
+if (Installation.isLocal()) {
+  cli = cli.command(WorkspaceServeCommand)
+}
 
 cli = cli
   .fail((msg, err) => {

@@ -46,23 +46,7 @@ info "Platform: ${PLATFORM}-${ARCH}"
 # Primary path: download pre-built binary — no bun required at runtime
 # bun is only needed as a dev tool for contributors
 
-# ── Build asset name ─────────────────────────────────────────────────────────
-# Asset naming: cobuilder-<platform>-<arch>.tar.gz (linux) or .zip (others)
-PKG_NAME="cobuilder-${PLATFORM}-${ARCH}"
-
-if [[ "$PLATFORM" == "linux" ]]; then
-  # Detect musl
-  if ldd --version 2>&1 | grep -qi musl || [[ -f /etc/alpine-release ]]; then
-    PKG_NAME="cobuilder-${PLATFORM}-${ARCH}-musl"
-  fi
-  ASSET="${PKG_NAME}.tar.gz"
-else
-  ASSET="${PKG_NAME}.zip"
-fi
-
 # ── Fetch latest release ─────────────────────────────────────────────────────
-# The CD pipeline publishes releases only after all binaries are uploaded
-# (draft → publish), so /releases/latest always has assets.
 step "Fetching latest release…"
 
 LATEST=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
@@ -72,9 +56,23 @@ if [[ -z "$LATEST" ]]; then
   error "Could not determine latest release. Check your internet connection."
 fi
 
-DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${LATEST}/${ASSET}"
-
 info "Latest release: ${LATEST}"
+
+# ── Build asset name ─────────────────────────────────────────────────────────
+# Asset naming: opencode-<platform>-<arch>.tar.gz (linux) or .zip (others)
+PKG_NAME="opencode-${PLATFORM}-${ARCH}"
+
+if [[ "$PLATFORM" == "linux" ]]; then
+  # Detect musl
+  if ldd --version 2>&1 | grep -qi musl || [[ -f /etc/alpine-release ]]; then
+    PKG_NAME="opencode-${PLATFORM}-${ARCH}-musl"
+  fi
+  ASSET="${PKG_NAME}.tar.gz"
+else
+  ASSET="${PKG_NAME}.zip"
+fi
+
+DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${LATEST}/${ASSET}"
 
 # ── Download ─────────────────────────────────────────────────────────────────
 step "Downloading ${ASSET}…"
@@ -128,15 +126,4 @@ echo -e "  ${bold}${green}CoBuilder installed successfully!${reset}"
 echo ""
 
 # ── Onboard ──────────────────────────────────────────────────────────────────
-# When piped via `curl | bash`, stdin is not a TTY — re-attach to /dev/tty
-# so interactive prompts (arrow keys etc.) work seamlessly.
-if [ -t 0 ]; then
-  "$COBUILDER_BIN" onboard
-elif (stty </dev/tty) 2>/dev/null; then
-  "$COBUILDER_BIN" onboard </dev/tty
-else
-  echo ""
-  echo -e "  ${bold}Run this to complete setup:${reset}"
-  echo -e "  ${bold}${green}cobuilder onboard${reset}"
-  echo ""
-fi
+"$COBUILDER_BIN" onboard

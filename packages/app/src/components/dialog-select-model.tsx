@@ -10,6 +10,8 @@ import { Tag } from "@opencode-ai/ui/tag"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { DialogSelectProvider } from "./dialog-select-provider"
+import { DialogManageModels } from "./dialog-manage-models"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
 
@@ -105,16 +107,12 @@ export function ModelSelectorPopover(props: {
 
   const handleManage = () => {
     setStore("open", false)
-    void import("./dialog-manage-models").then((x) => {
-      dialog.show(() => <x.DialogManageModels />)
-    })
+    dialog.show(() => <DialogManageModels />)
   }
 
   const handleConnectProvider = () => {
     setStore("open", false)
-    void import("./dialog-select-provider").then((x) => {
-      dialog.show(() => <x.DialogSelectProvider />)
-    })
+    dialog.show(() => <DialogSelectProvider />)
   }
   const language = useLanguage()
 
@@ -195,29 +193,26 @@ export const DialogSelectModel: Component<{ provider?: string; model?: ModelStat
   const dialog = useDialog()
   const language = useLanguage()
 
-  const provider = () => {
-    void import("./dialog-select-provider").then((x) => {
-      dialog.show(() => <x.DialogSelectProvider />)
-    })
-  }
-
-  const manage = () => {
-    void import("./dialog-manage-models").then((x) => {
-      dialog.show(() => <x.DialogManageModels />)
-    })
-  }
-
   return (
     <Dialog
       title={language.t("dialog.model.select.title")}
       action={
-        <Button class="h-7 -my-1 text-14-medium" icon="plus-small" tabIndex={-1} onClick={provider}>
+        <Button
+          class="h-7 -my-1 text-14-medium"
+          icon="plus-small"
+          tabIndex={-1}
+          onClick={() => dialog.show(() => <DialogSelectProvider />)}
+        >
           {language.t("command.provider.connect")}
         </Button>
       }
     >
       <ModelList provider={props.provider} model={props.model} onSelect={() => dialog.close()} />
-      <Button variant="ghost" class="ml-3 mt-5 mb-6 text-text-base self-start" onClick={manage}>
+      <Button
+        variant="ghost"
+        class="ml-3 mt-5 mb-6 text-text-base self-start"
+        onClick={() => dialog.show(() => <DialogManageModels />)}
+      >
         {language.t("dialog.model.manage")}
       </Button>
     </Dialog>

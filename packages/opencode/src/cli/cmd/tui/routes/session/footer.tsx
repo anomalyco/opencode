@@ -1,4 +1,4 @@
-import { createEffect, createMemo, Match, Show, Switch } from "solid-js"
+import { createMemo, Match, onCleanup, onMount, Show, Switch } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useSync } from "../../context/sync"
 import { useDirectory } from "../../context/directory"
@@ -24,9 +24,29 @@ export function Footer() {
     welcome: false,
   })
 
-  // Show /connect hint persistently when no provider is connected
-  createEffect(() => {
-    setStore("welcome", !connected())
+  onMount(() => {
+    // Track all timeouts to ensure proper cleanup
+    const timeouts: ReturnType<typeof setTimeout>[] = []
+
+    function tick() {
+      if (connected()) return
+      if (!store.welcome) {
+        setStore("welcome", true)
+        timeouts.push(setTimeout(() => tick(), 5000))
+        return
+      }
+
+      if (store.welcome) {
+        setStore("welcome", false)
+        timeouts.push(setTimeout(() => tick(), 10_000))
+        return
+      }
+    }
+    timeouts.push(setTimeout(() => tick(), 10_000))
+
+    onCleanup(() => {
+      timeouts.forEach(clearTimeout)
+    })
   })
 
   return (

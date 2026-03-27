@@ -1,0 +1,235 @@
+name: close-stale-prs
+
+on:
+  workflow_dispatch:
+    inputs:
+      dryRun:
+        description: "Log actions without closing PRs"
+        type: boolean
+        default: false
+  schedule:
+    - cron: "0 6 * * *"
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  close-stale-prs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Close inactive PRs
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const DAYS_INACTIVE = 60
+            const MAX_RETRIES = 3
+
+            // Adaptive delay: fast for small batches, slower for large to respect
+            // GitHub's 80 content-generating requests/minute limit
+            const SMALL_BATCH_THRESHOLD = 10
+            const SMALL_BATCH_DELAY_MS = 1000  // 1s for daily operations (≤10 PRs)
+            const LARGE_BATCH_DELAY_MS = 2000  // 2s for backlog (>10 PRs) = ~30 ops/min, well under 80 limit
+
+            const startTime = Date.now()
+            const cutoff = new Date(Date.now() - DAYS_INACTIVE * 24 * 60 * 60 * 1000)
+            const { owner, repo } = context.repo
+            const dryRun = context.payload.inputs?.dryRun === "true"
+
+            core.info(`Dry run mode: ${dryRun}`)
+            core.info(`Cutoff date: ${cutoff.toISOString()}`)
+
+            function sleep(ms) {
+              return new Promise(resolve => setTimeout(resolve, ms))
+            }
+
+            async function withRetry(fn, description = 'API call') {
+              let lastError
+              for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+                try {
+                  const result = await fn()
+                  return result
+                } catch (error) {
+                  lastError = error
+                  const isRateLimited = error.status === 403 &&
+                    (error.message?.includes('rate limit') || error.message?.includes('secondary'))
+
+                  if (!isRateLimited) {
+                    throw error
+                  }
+
+                  // Parse retry-after header, default to 60 seconds
+                  const retryAfter = error.response?.headers?.['retry-after']
+                    ? parseInt(error.response.headers['retry-after'])
+                    : 60
+
+                  // Exponential backoff: retryAfter * 2^attempt
+                  const backoffMs = retryAfter * 1000 * Math.pow(2, attempt)
+
+                  core.warning(`${description}: Rate limited (attempt ${attempt + 1}/${MAX_RETRIES}). Waiting ${backoffMs / 1000}s before retry...`)
+
+                  await sleep(backoffMs)
+                }
+              }
+              core.error(`${description}: Max retries (${MAX_RETRIES}) exceeded`)
+              throw lastError
+            }
+
+            const query = `
+              query($owner: String!, $repo: String!, $cursor: String) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequests(first: 100, states: OPEN, after: $cursor) {
+                    pageInfo {
+                      hasNextPage
+                      endCursor
+                    }
+                    nodes {
+                      number
+                      title
+                      author {
+                        login
+                      }
+                      createdAt
+                      commits(last: 1) {
+                        nodes {
+                          commit {
+                            committedDate
+                          }
+                        }
+                      }
+                      comments(last: 1) {
+                        nodes {
+                          createdAt
+                        }
+                      }
+                      reviews(last: 1) {
+                        nodes {
+                          createdAt
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `
+
+            const allPrs = []
+            let cursor = null
+            let hasNextPage = true
+            let pageCount = 0
+
+            while (hasNextPage) {
+              pageCount++
+              core.info(`Fetching page ${pageCount} of open PRs...`)
+
+              const result = await withRetry(
+                () => github.graphql(query, { owner, repo, cursor }),
+                `GraphQL page ${pageCount}`
+              )
+
+              allPrs.push(...result.repository.pullRequests.nodes)
+              hasNextPage = result.repository.pullRequests.pageInfo.hasNextPage
+              cursor = result.repository.pullRequests.pageInfo.endCursor
+
+              core.info(`Page ${pageCount}: fetched ${result.repository.pullRequests.nodes.length} PRs (total: ${allPrs.length})`)
+
+              // Delay between pagination requests (use small batch delay for reads)
+              if (hasNextPage) {
+                await sleep(SMALL_BATCH_DELAY_MS)
+              }
+            }
+
+            core.info(`Found ${allPrs.length} open pull requests`)
+
+            const stalePrs = allPrs.filter((pr) => {
+              const dates = [
+                new Date(pr.createdAt),
+                pr.commits.nodes[0] ? new Date(pr.commits.nodes[0].commit.committedDate) : null,
+                pr.comments.nodes[0] ? new Date(pr.comments.nodes[0].createdAt) : null,
+                pr.reviews.nodes[0] ? new Date(pr.reviews.nodes[0].createdAt) : null,
+              ].filter((d) => d !== null)
+
+              const lastActivity = dates.sort((a, b) => b.getTime() - a.getTime())[0]
+
+              if (!lastActivity || lastActivity > cutoff) {
+                core.info(`PR #${pr.number} is fresh (last activity: ${lastActivity?.toISOString() || "unknown"})`)
+                return false
+              }
+
+              core.info(`PR #${pr.number} is STALE (last activity: ${lastActivity.toISOString()})`)
+              return true
+            })
+
+            if (!stalePrs.length) {
+              core.info("No stale pull requests found.")
+              return
+            }
+
+            core.info(`Found ${stalePrs.length} stale pull requests`)
+
+            // ============================================
+            // Close stale PRs
+            // ============================================
+            const requestDelayMs = stalePrs.length > SMALL_BATCH_THRESHOLD
+              ? LARGE_BATCH_DELAY_MS
+              : SMALL_BATCH_DELAY_MS
+
+            core.info(`Using ${requestDelayMs}ms delay between operations (${stalePrs.length > SMALL_BATCH_THRESHOLD ? 'large' : 'small'} batch mode)`)
+
+            let closedCount = 0
+            let skippedCount = 0
+
+            for (const pr of stalePrs) {
+              const issue_number = pr.number
+              const closeComment = `Closing this pull request because it has had no updates for more than ${DAYS_INACTIVE} days. If you plan to continue working on it, feel free to reopen or open a new PR.`
+
+              if (dryRun) {
+                core.info(`[dry-run] Would close PR #${issue_number} from ${pr.author?.login || 'unknown'}: ${pr.title}`)
+                continue
+              }
+
+              try {
+                // Add comment
+                await withRetry(
+                  () => github.rest.issues.createComment({
+                    owner,
+                    repo,
+                    issue_number,
+                    body: closeComment,
+                  }),
+                  `Comment on PR #${issue_number}`
+                )
+
+                // Close PR
+                await withRetry(
+                  () => github.rest.pulls.update({
+                    owner,
+                    repo,
+                    pull_number: issue_number,
+                    state: "closed",
+                  }),
+                  `Close PR #${issue_number}`
+                )
+
+                closedCount++
+                core.info(`Closed PR #${issue_number} from ${pr.author?.login || 'unknown'}: ${pr.title}`)
+
+                // Delay before processing next PR
+                await sleep(requestDelayMs)
+              } catch (error) {
+                skippedCount++
+                core.error(`Failed to close PR #${issue_number}: ${error.message}`)
+              }
+            }
+
+            const elapsed = Math.round((Date.now() - startTime) / 1000)
+            core.info(`\n========== Summary ==========`)
+            core.info(`Total open PRs found: ${allPrs.length}`)
+            core.info(`Stale PRs identified: ${stalePrs.length}`)
+            core.info(`PRs closed: ${closedCount}`)
+            core.info(`PRs skipped (errors): ${skippedCount}`)
+            core.info(`Elapsed time: ${elapsed}s`)
+            core.info(`=============================`)

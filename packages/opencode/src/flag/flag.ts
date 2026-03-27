@@ -76,9 +76,6 @@ export namespace Flag {
   export const OPENCODE_SKIP_MIGRATIONS = truthy("OPENCODE_SKIP_MIGRATIONS")
   export const OPENCODE_STRICT_CONFIG_DEPS = truthy("OPENCODE_STRICT_CONFIG_DEPS")
 
-  // CoBuilder-specific flags
-  export declare const COBUILDER_AUTOPILOT: boolean
-
   function number(key: string) {
     const value = process.env[key]
     if (!value) return undefined
@@ -126,17 +123,6 @@ Object.defineProperty(Flag, "OPENCODE_CONFIG_DIR", {
 Object.defineProperty(Flag, "OPENCODE_CLIENT", {
   get() {
     return process.env["OPENCODE_CLIENT"] ?? "cli"
-  },
-  enumerable: true,
-  configurable: false,
-})
-
-// Dynamic getter for COBUILDER_AUTOPILOT
-// Must be evaluated at access time so --autopilot CLI flag can set the env var at runtime
-Object.defineProperty(Flag, "COBUILDER_AUTOPILOT", {
-  get() {
-    const value = process.env["COBUILDER_AUTOPILOT"]?.toLowerCase()
-    return value === "true" || value === "1"
   },
   enumerable: true,
   configurable: false,

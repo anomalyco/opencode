@@ -4,7 +4,6 @@ import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { PromptInput } from "@/components/prompt-input"
 import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
-import { useSync } from "@/context/sync"
 import { getSessionHandoff, setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionKey } from "@/pages/session/session-layout"
 import { SessionPermissionDock } from "@/pages/session/composer/session-permission-dock"
@@ -45,18 +44,7 @@ export function SessionComposerRegion(props: {
 }) {
   const prompt = usePrompt()
   const language = useLanguage()
-  const sync = useSync()
   const route = useSessionKey()
-
-  const working = createMemo(() => {
-    const id = route.params.id
-    if (!id) return false
-    const status = sync.data.session_status[id] ?? { type: "idle" }
-    if (status.type !== "idle") return true
-    return (sync.data.message[id] ?? []).some(
-      (item) => item.role === "assistant" && typeof item.time.completed !== "number",
-    )
-  })
 
   const handoffPrompt = createMemo(() => getSessionHandoff(route.sessionKey())?.prompt)
 
@@ -188,12 +176,8 @@ export function SessionComposerRegion(props: {
                     </div>
                   )}
                 </Show>
-                <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none flex items-start gap-2">
-                  <svg class="animate-spin size-4 shrink-0 mt-0.5 opacity-60" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  <span>{handoffPrompt() || language.t("prompt.loading")}</span>
+                <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
+                  {handoffPrompt() || language.t("prompt.loading")}
                 </div>
               </>
             }
@@ -262,33 +246,6 @@ export function SessionComposerRegion(props: {
                 onAbort={props.followup?.onAbort}
                 onSubmit={props.onSubmit}
               />
-              <div
-                data-component="session-hud"
-                class="flex items-center gap-3 px-1 pt-1.5 text-[11px] text-text-weak select-none pointer-events-none"
-                aria-hidden="true"
-              >
-                <Show
-                  when={working()}
-                  fallback={
-                    <>
-                      <span class="opacity-40">
-                        <kbd class="font-sans">/</kbd>
-                        <span class="ml-1 opacity-75">{language.t("prompt.hud.commands")}</span>
-                      </span>
-                      <span class="opacity-25">·</span>
-                      <span class="opacity-40">
-                        <kbd class="font-sans">@</kbd>
-                        <span class="ml-1 opacity-75">{language.t("prompt.hud.mention")}</span>
-                      </span>
-                    </>
-                  }
-                >
-                  <span class="opacity-60">
-                    <kbd class="font-sans">Esc</kbd>
-                    <span class="ml-1 opacity-75">{language.t("prompt.hud.stop")}</span>
-                  </span>
-                </Show>
-              </div>
             </div>
           </Show>
         </Show>

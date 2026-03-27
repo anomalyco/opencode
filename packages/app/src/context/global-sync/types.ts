@@ -38,7 +38,6 @@ export type State = {
   project: string
   projectMeta: ProjectMeta | undefined
   icon: string | undefined
-  provider_ready: boolean
   provider: ProviderListResponse
   config: Config
   path: Path
@@ -59,11 +58,9 @@ export type State = {
   question: {
     [sessionID: string]: QuestionRequest[]
   }
-  mcp_ready: boolean
   mcp: {
     [name: string]: McpStatus
   }
-  lsp_ready: boolean
   lsp: LspStatus[]
   vcs: VcsInfo | undefined
   limit: number

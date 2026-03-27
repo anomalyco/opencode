@@ -253,7 +253,7 @@ export function Session() {
         `${logo[3] ?? ""}`,
         ``,
         `  ${weak("Session")}${UI.Style.TEXT_NORMAL_BOLD}${title}${UI.Style.TEXT_NORMAL}`,
-        `  ${weak("Continue")}${UI.Style.TEXT_NORMAL_BOLD}cobuilder -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
+        `  ${weak("Continue")}${UI.Style.TEXT_NORMAL_BOLD}opencode -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
         ``,
       ].join("\n"),
     )
@@ -2272,9 +2272,7 @@ function input(input: Record<string, any>, omit?: string[]): string {
     return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
   })
   if (primitives.length === 0) return ""
-  const [, firstValue] = primitives[0]
-  const str = String(firstValue)
-  return str.length > 60 ? str.slice(0, 57) + "…" : str
+  return `[${primitives.map(([key, value]) => `${key}=${value}`).join(", ")}]`
 }
 
 function filetype(input?: string) {

@@ -33,7 +33,6 @@ export interface Settings {
   appearance: {
     fontSize: number
     font: string
-    uiFont: string
   }
   keybinds: Record<string, string>
   permissions: {
@@ -41,53 +40,6 @@ export interface Settings {
   }
   notifications: NotificationSettings
   sounds: SoundSettings
-  onboarding?: {
-    completedFirstSession?: boolean
-    dismissedCoachMarks?: string[]
-  }
-}
-
-export const monoDefault = "IBM Plex Mono"
-export const sansDefault = "Inter"
-
-const monoFallback =
-  'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
-const sansFallback = 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
-
-const monoBase = `"${monoDefault}", "IBM Plex Mono Fallback", ${monoFallback}`
-const sansBase = `"${sansDefault}", "Inter Fallback", ${sansFallback}`
-const monoKey = "ibm-plex-mono"
-
-function input(font: string | undefined, key?: string) {
-  if (!font || font === key || !font.trim()) return ""
-  return font
-}
-
-function family(font: string) {
-  if (/^[\w-]+$/.test(font)) return font
-  return `"${font.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`
-}
-
-function stack(font: string | undefined, base: string, key?: string) {
-  const value = input(font, key).trim()
-  if (!value) return base
-  return `${family(value)}, ${base}`
-}
-
-export function monoInput(font: string | undefined) {
-  return input(font, monoKey)
-}
-
-export function sansInput(font: string | undefined) {
-  return input(font)
-}
-
-export function monoFontFamily(font: string | undefined) {
-  return stack(font, monoBase, monoKey)
-}
-
-export function sansFontFamily(font: string | undefined) {
-  return stack(font, sansBase)
 }
 
 const defaultSettings: Settings = {
@@ -97,15 +49,14 @@ const defaultSettings: Settings = {
     followup: "steer",
     showReasoningSummaries: false,
     shellToolPartsExpanded: true,
-    editToolPartsExpanded: true,
+    editToolPartsExpanded: false,
   },
   updates: {
     startup: true,
   },
   appearance: {
     fontSize: 14,
-    font: "",
-    uiFont: "",
+    font: "ibm-plex-mono",
   },
   keybinds: {},
   permissions: {
@@ -126,8 +77,38 @@ const defaultSettings: Settings = {
   },
 }
 
+const monoFallback =
+  'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+
+const monoFonts: Record<string, string> = {
+  "ibm-plex-mono": `"IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  "cascadia-code": `"Cascadia Code Nerd Font", "Cascadia Code NF", "Cascadia Mono NF", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  "fira-code": `"Fira Code Nerd Font", "FiraMono Nerd Font", "FiraMono Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  hack: `"Hack Nerd Font", "Hack Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  inconsolata: `"Inconsolata Nerd Font", "Inconsolata Nerd Font Mono","IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  "intel-one-mono": `"Intel One Mono Nerd Font", "IntoneMono Nerd Font", "IntoneMono Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  iosevka: `"Iosevka Nerd Font", "Iosevka Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  "jetbrains-mono": `"JetBrains Mono Nerd Font", "JetBrainsMono Nerd Font Mono", "JetBrainsMonoNL Nerd Font", "JetBrainsMonoNL Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  "meslo-lgs": `"Meslo LGS Nerd Font", "MesloLGS Nerd Font", "MesloLGM Nerd Font", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  "roboto-mono": `"Roboto Mono Nerd Font", "RobotoMono Nerd Font", "RobotoMono Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  "source-code-pro": `"Source Code Pro Nerd Font", "SauceCodePro Nerd Font", "SauceCodePro Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  "ubuntu-mono": `"Ubuntu Mono Nerd Font", "UbuntuMono Nerd Font", "UbuntuMono Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  "geist-mono": `"GeistMono Nerd Font", "GeistMono Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+}
+
+export function monoFontFamily(font: string | undefined) {
+  return monoFonts[font ?? defaultSettings.appearance.font] ?? monoFonts[defaultSettings.appearance.font]
+}
+
 function withFallback<T>(read: () => T | undefined, fallback: T) {
   return createMemo(() => read() ?? fallback)
+}
+
+let font: Promise<typeof import("@opencode-ai/ui/font-loader")> | undefined
+
+function loadFont() {
+  font ??= import("@opencode-ai/ui/font-loader")
+  return font
 }
 
 export const { use: useSettings, provider: SettingsProvider } = createSimpleContext({
@@ -137,9 +118,11 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
 
     createEffect(() => {
       if (typeof document === "undefined") return
-      const root = document.documentElement
-      root.style.setProperty("--font-family-mono", monoFontFamily(store.appearance?.font))
-      root.style.setProperty("--font-family-sans", sansFontFamily(store.appearance?.uiFont))
+      const id = store.appearance?.font ?? defaultSettings.appearance.font
+      if (id !== defaultSettings.appearance.font) {
+        void loadFont().then((x) => x.ensureMonoFont(id))
+      }
+      document.documentElement.style.setProperty("--font-family-mono", monoFontFamily(id))
     })
 
     return {
@@ -195,11 +178,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         },
         font: withFallback(() => store.appearance?.font, defaultSettings.appearance.font),
         setFont(value: string) {
-          setStore("appearance", "font", value.trim() ? value : "")
-        },
-        uiFont: withFallback(() => store.appearance?.uiFont, defaultSettings.appearance.uiFont),
-        setUIFont(value: string) {
-          setStore("appearance", "uiFont", value.trim() ? value : "")
+          setStore("appearance", "font", value)
         },
       },
       keybinds: {
@@ -266,18 +245,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         errors: withFallback(() => store.sounds?.errors, defaultSettings.sounds.errors),
         setErrors(value: string) {
           setStore("sounds", "errors", value)
-        },
-      },
-      onboarding: {
-        completedFirstSession: createMemo(() => store.onboarding?.completedFirstSession ?? false),
-        setCompletedFirstSession(value: boolean) {
-          setStore("onboarding", "completedFirstSession", value)
-        },
-        isDismissed(id: string) {
-          return createMemo(() => (store.onboarding?.dismissedCoachMarks ?? []).includes(id))
-        },
-        dismiss(id: string) {
-          setStore("onboarding", "dismissedCoachMarks", (prev) => [...(prev ?? []), id])
         },
       },
     }

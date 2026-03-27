@@ -1,0 +1,54 @@
+name: sign-cli
+
+on:
+  push:
+    branches:
+      - brendan/desktop-signpath
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  sign-cli:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    if: github.repository == 'anomalyco/opencode'
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-tags: true
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Build
+        run: |
+          ./packages/opencode/script/build.ts
+
+      - name: Upload unsigned Windows CLI
+        id: upload_unsigned_windows_cli
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-opencode-windows-cli
+          path: packages/opencode/dist/opencode-windows-x64/bin/opencode.exe
+          if-no-files-found: error
+
+      - name: Submit SignPath signing request
+        id: submit_signpath_signing_request
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_KEY }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ secrets.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ secrets.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ secrets.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.upload_unsigned_windows_cli.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed-opencode-cli
+
+      - name: Upload signed Windows CLI
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-opencode-windows-cli
+          path: signed-opencode-cli/*.exe
+          if-no-files-found: error

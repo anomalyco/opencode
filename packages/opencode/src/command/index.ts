@@ -75,12 +75,8 @@ export namespace Command {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const config = yield* Config.Service
-      const mcp = yield* MCP.Service
-      const skill = yield* Skill.Service
-
       const init = Effect.fn("Command.state")(function* (ctx) {
-        const cfg = yield* config.get()
+        const cfg = yield* Effect.promise(() => Config.get())
         const commands: Record<string, Info> = {}
 
         commands[Default.INIT] = {
@@ -118,7 +114,7 @@ export namespace Command {
           }
         }
 
-        for (const [name, prompt] of Object.entries(yield* mcp.prompts())) {
+        for (const [name, prompt] of Object.entries(yield* Effect.promise(() => MCP.prompts()))) {
           commands[name] = {
             name,
             source: "mcp",
@@ -143,14 +139,14 @@ export namespace Command {
           }
         }
 
-        for (const item of yield* skill.all()) {
-          if (commands[item.name]) continue
-          commands[item.name] = {
-            name: item.name,
-            description: item.description,
+        for (const skill of yield* Effect.promise(() => Skill.all())) {
+          if (commands[skill.name]) continue
+          commands[skill.name] = {
+            name: skill.name,
+            description: skill.description,
             source: "skill",
             get template() {
-              return item.content
+              return skill.content
             },
             hints: [],
           }
@@ -177,13 +173,7 @@ export namespace Command {
     }),
   )
 
-  export const defaultLayer = layer.pipe(
-    Layer.provide(Config.defaultLayer),
-    Layer.provide(MCP.defaultLayer),
-    Layer.provide(Skill.defaultLayer),
-  )
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
+  const { runPromise } = makeRuntime(Service, layer)
 
   export async function get(name: string) {
     return runPromise((svc) => svc.get(name))

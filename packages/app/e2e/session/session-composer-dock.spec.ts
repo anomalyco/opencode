@@ -93,7 +93,7 @@ async function todoDock(page: any, sessionID: string) {
 
   const write = async (driver: ComposerDriverState | undefined) => {
     await page.evaluate(
-      (input: { event: string; sessionID: string; driver: ComposerDriverState | undefined }) => {
+      (input) => {
         const win = window as ComposerWindow
         const composer = win.__opencode_e2e?.composer
         if (!composer?.enabled) throw new Error("Composer e2e driver is not enabled")
@@ -118,7 +118,7 @@ async function todoDock(page: any, sessionID: string) {
   }
 
   const read = () =>
-    page.evaluate((sessionID: string) => {
+    page.evaluate((sessionID) => {
       const win = window as ComposerWindow
       return win.__opencode_e2e?.composer?.sessions?.[sessionID]?.probe ?? null
     }, sessionID) as Promise<ComposerProbeState | null>
@@ -186,8 +186,6 @@ async function withMockPermission<T>(
   opts: { child?: any } | undefined,
   fn: (state: { resolved: () => Promise<void> }) => Promise<T>,
 ) {
-  const listUrl = /\/permission(?:\?.*)?$/
-  const replyUrls = [/\/session\/[^/]+\/permissions\/[^/?]+(?:\?.*)?$/, /\/permission\/[^/]+\/reply(?:\?.*)?$/]
   let pending = [
     {
       ...request,
@@ -206,8 +204,7 @@ async function withMockPermission<T>(
 
   const reply = async (route: any) => {
     const url = new URL(route.request().url())
-    const parts = url.pathname.split("/").filter(Boolean)
-    const id = parts.at(-1) === "reply" ? parts.at(-2) : parts.at(-1)
+    const id = url.pathname.split("/").pop()
     pending = pending.filter((item) => item.id !== id)
     await route.fulfill({
       status: 200,
@@ -216,10 +213,8 @@ async function withMockPermission<T>(
     })
   }
 
-  await page.route(listUrl, list)
-  for (const item of replyUrls) {
-    await page.route(item, reply)
-  }
+  await page.route("**/permission", list)
+  await page.route("**/session/*/permissions/*", reply)
 
   const sessionList = opts?.child
     ? async (route: any) => {
@@ -247,10 +242,8 @@ async function withMockPermission<T>(
   try {
     return await fn(state)
   } finally {
-    await page.unroute(listUrl, list)
-    for (const item of replyUrls) {
-      await page.unroute(item, reply)
-    }
+    await page.unroute("**/permission", list)
+    await page.unroute("**/session/*/permissions/*", reply)
     if (sessionList) await page.unroute("**/session?*", sessionList)
   }
 }

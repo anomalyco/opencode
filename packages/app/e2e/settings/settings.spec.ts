@@ -2,7 +2,7 @@ import { test, expect, settingsKey } from "../fixtures"
 import { closeDialog, openSettings } from "../actions"
 import {
   settingsColorSchemeSelector,
-  settingsCodeFontSelector,
+  settingsFontSelector,
   settingsLanguageSelectSelector,
   settingsNotificationsAgentSelector,
   settingsNotificationsErrorsSelector,
@@ -12,7 +12,6 @@ import {
   settingsSoundsErrorsSelector,
   settingsSoundsPermissionsSelector,
   settingsThemeSelector,
-  settingsUIFontSelector,
   settingsUpdatesStartupSelector,
 } from "../selectors"
 
@@ -153,199 +152,39 @@ test("legacy oc-1 theme migrates to oc-2", async ({ page, gotoSession }) => {
     .toBeNull()
 })
 
-test("typing a code font with spaces persists and updates CSS variable", async ({ page, gotoSession }) => {
+test("changing font persists in localStorage and updates CSS variable", async ({ page, gotoSession }) => {
   await gotoSession()
 
   const dialog = await openSettings(page)
-  const input = dialog.locator(settingsCodeFontSelector)
-  await expect(input).toBeVisible()
-  await expect(input).toHaveAttribute("placeholder", "IBM Plex Mono")
+  const select = dialog.locator(settingsFontSelector)
+  await expect(select).toBeVisible()
 
-  const initialFontFamily = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim(),
-  )
-  const initialUIFamily = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans").trim(),
-  )
+  const initialFontFamily = await page.evaluate(() => {
+    return getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono")
+  })
   expect(initialFontFamily).toContain("IBM Plex Mono")
 
-  const next = "Test Mono"
+  await select.locator('[data-slot="select-select-trigger"]').click()
 
-  await input.click()
-  await input.clear()
-  await input.pressSequentially(next)
-  await expect(input).toHaveValue(next)
+  const items = page.locator('[data-slot="select-select-item"]')
+  await items.nth(2).click()
 
-  await expect
-    .poll(async () => {
-      return await page.evaluate((key) => {
-        const raw = localStorage.getItem(key)
-        return raw ? JSON.parse(raw) : null
-      }, settingsKey)
-    })
-    .toMatchObject({
-      appearance: {
-        font: next,
-      },
-    })
+  await page.waitForTimeout(100)
 
-  const newFontFamily = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim(),
-  )
-  const newUIFamily = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans").trim(),
-  )
-  expect(newFontFamily).toContain(next)
+  const stored = await page.evaluate((key) => {
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : null
+  }, settingsKey)
+
+  expect(stored?.appearance?.font).not.toBe("ibm-plex-mono")
+
+  const newFontFamily = await page.evaluate(() => {
+    return getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono")
+  })
   expect(newFontFamily).not.toBe(initialFontFamily)
-  expect(newUIFamily).toBe(initialUIFamily)
 })
 
-test("typing a UI font with spaces persists and updates CSS variable", async ({ page, gotoSession }) => {
-  await gotoSession()
-
-  const dialog = await openSettings(page)
-  const input = dialog.locator(settingsUIFontSelector)
-  await expect(input).toBeVisible()
-  await expect(input).toHaveAttribute("placeholder", "Inter")
-
-  const initialFontFamily = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans").trim(),
-  )
-  const initialCodeFamily = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim(),
-  )
-  expect(initialFontFamily).toContain("Inter")
-
-  const next = "Test Sans"
-
-  await input.click()
-  await input.clear()
-  await input.pressSequentially(next)
-  await expect(input).toHaveValue(next)
-
-  await expect
-    .poll(async () => {
-      return await page.evaluate((key) => {
-        const raw = localStorage.getItem(key)
-        return raw ? JSON.parse(raw) : null
-      }, settingsKey)
-    })
-    .toMatchObject({
-      appearance: {
-        uiFont: next,
-      },
-    })
-
-  const newFontFamily = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans").trim(),
-  )
-  const newCodeFamily = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim(),
-  )
-  expect(newFontFamily).toContain(next)
-  expect(newFontFamily).not.toBe(initialFontFamily)
-  expect(newCodeFamily).toBe(initialCodeFamily)
-})
-
-test("clearing the code font field restores the default placeholder and stack", async ({ page, gotoSession }) => {
-  await gotoSession()
-
-  const dialog = await openSettings(page)
-  const input = dialog.locator(settingsCodeFontSelector)
-  await expect(input).toBeVisible()
-
-  await input.click()
-  await input.clear()
-  await input.pressSequentially("Reset Mono")
-
-  await expect
-    .poll(async () => {
-      return await page.evaluate((key) => {
-        const raw = localStorage.getItem(key)
-        return raw ? JSON.parse(raw) : null
-      }, settingsKey)
-    })
-    .toMatchObject({
-      appearance: {
-        font: "Reset Mono",
-      },
-    })
-
-  await input.clear()
-  await input.press("Space")
-  await expect(input).toHaveValue("")
-  await expect(input).toHaveAttribute("placeholder", "IBM Plex Mono")
-
-  await expect
-    .poll(async () => {
-      return await page.evaluate((key) => {
-        const raw = localStorage.getItem(key)
-        return raw ? JSON.parse(raw) : null
-      }, settingsKey)
-    })
-    .toMatchObject({
-      appearance: {
-        font: "",
-      },
-    })
-
-  const fontFamily = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim(),
-  )
-  expect(fontFamily).toContain("IBM Plex Mono")
-  expect(fontFamily).not.toContain("Reset Mono")
-})
-
-test("clearing the UI font field restores the default placeholder and stack", async ({ page, gotoSession }) => {
-  await gotoSession()
-
-  const dialog = await openSettings(page)
-  const input = dialog.locator(settingsUIFontSelector)
-  await expect(input).toBeVisible()
-
-  await input.click()
-  await input.clear()
-  await input.pressSequentially("Reset Sans")
-
-  await expect
-    .poll(async () => {
-      return await page.evaluate((key) => {
-        const raw = localStorage.getItem(key)
-        return raw ? JSON.parse(raw) : null
-      }, settingsKey)
-    })
-    .toMatchObject({
-      appearance: {
-        uiFont: "Reset Sans",
-      },
-    })
-
-  await input.clear()
-  await input.press("Space")
-  await expect(input).toHaveValue("")
-  await expect(input).toHaveAttribute("placeholder", "Inter")
-
-  await expect
-    .poll(async () => {
-      return await page.evaluate((key) => {
-        const raw = localStorage.getItem(key)
-        return raw ? JSON.parse(raw) : null
-      }, settingsKey)
-    })
-    .toMatchObject({
-      appearance: {
-        uiFont: "",
-      },
-    })
-
-  const fontFamily = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans").trim(),
-  )
-  expect(fontFamily).toContain("Inter")
-  expect(fontFamily).not.toContain("Reset Sans")
-})
-
-test("color scheme, code font, and UI font rehydrate after reload", async ({ page, gotoSession }) => {
+test("color scheme and font rehydrate after reload", async ({ page, gotoSession }) => {
   await gotoSession()
 
   const dialog = await openSettings(page)
@@ -356,35 +195,31 @@ test("color scheme, code font, and UI font rehydrate after reload", async ({ pag
   await page.locator('[data-slot="select-select-item"]').filter({ hasText: "Dark" }).click()
   await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "dark")
 
-  const code = dialog.locator(settingsCodeFontSelector)
-  const ui = dialog.locator(settingsUIFontSelector)
-  await expect(code).toBeVisible()
-  await expect(ui).toBeVisible()
+  const fontSelect = dialog.locator(settingsFontSelector)
+  await expect(fontSelect).toBeVisible()
 
-  const initialMono = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim(),
-  )
-  const initialSans = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans").trim(),
-  )
+  const initialFontFamily = await page.evaluate(() => {
+    return getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim()
+  })
 
   const initialSettings = await page.evaluate((key) => {
     const raw = localStorage.getItem(key)
     return raw ? JSON.parse(raw) : null
   }, settingsKey)
 
-  const mono = initialSettings?.appearance?.font === "Reload Mono" ? "Reload Mono 2" : "Reload Mono"
-  const sans = initialSettings?.appearance?.uiFont === "Reload Sans" ? "Reload Sans 2" : "Reload Sans"
+  const currentFont =
+    (await fontSelect.locator('[data-slot="select-select-trigger-value"]').textContent())?.trim() ?? ""
+  await fontSelect.locator('[data-slot="select-select-trigger"]').click()
 
-  await code.click()
-  await code.clear()
-  await code.pressSequentially(mono)
-  await expect(code).toHaveValue(mono)
+  const fontItems = page.locator('[data-slot="select-select-item"]')
+  expect(await fontItems.count()).toBeGreaterThan(1)
 
-  await ui.click()
-  await ui.clear()
-  await ui.pressSequentially(sans)
-  await expect(ui).toHaveValue(sans)
+  if (currentFont) {
+    await fontItems.filter({ hasNotText: currentFont }).first().click()
+  }
+  if (!currentFont) {
+    await fontItems.nth(1).click()
+  }
 
   await expect
     .poll(async () => {
@@ -395,8 +230,7 @@ test("color scheme, code font, and UI font rehydrate after reload", async ({ pag
     })
     .toMatchObject({
       appearance: {
-        font: mono,
-        uiFont: sans,
+        font: expect.any(String),
       },
     })
 
@@ -405,18 +239,11 @@ test("color scheme, code font, and UI font rehydrate after reload", async ({ pag
     return raw ? JSON.parse(raw) : null
   }, settingsKey)
 
-  const updatedMono = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim(),
-  )
-  const updatedSans = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans").trim(),
-  )
-  expect(updatedMono).toContain(mono)
-  expect(updatedMono).not.toBe(initialMono)
-  expect(updatedSans).toContain(sans)
-  expect(updatedSans).not.toBe(initialSans)
-  expect(updatedSettings?.appearance?.font).toBe(mono)
-  expect(updatedSettings?.appearance?.uiFont).toBe(sans)
+  const updatedFontFamily = await page.evaluate(() => {
+    return getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim()
+  })
+  expect(updatedFontFamily).not.toBe(initialFontFamily)
+  expect(updatedSettings?.appearance?.font).not.toBe(initialSettings?.appearance?.font)
 
   await closeDialog(page, dialog)
   await page.reload()
@@ -432,8 +259,7 @@ test("color scheme, code font, and UI font rehydrate after reload", async ({ pag
     })
     .toMatchObject({
       appearance: {
-        font: mono,
-        uiFont: sans,
+        font: updatedSettings?.appearance?.font,
       },
     })
 
@@ -444,32 +270,17 @@ test("color scheme, code font, and UI font rehydrate after reload", async ({ pag
 
   await expect
     .poll(async () => {
-      return await page.evaluate(() =>
-        getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim(),
-      )
+      return await page.evaluate(() => {
+        return getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim()
+      })
     })
-    .toContain(mono)
+    .not.toBe(initialFontFamily)
 
-  await expect
-    .poll(async () => {
-      return await page.evaluate(() =>
-        getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans").trim(),
-      )
-    })
-    .toContain(sans)
-
-  const rehydratedMono = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim(),
-  )
-  const rehydratedSans = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans").trim(),
-  )
-  expect(rehydratedMono).toContain(mono)
-  expect(rehydratedMono).not.toBe(initialMono)
-  expect(rehydratedSans).toContain(sans)
-  expect(rehydratedSans).not.toBe(initialSans)
-  expect(rehydratedSettings?.appearance?.font).toBe(mono)
-  expect(rehydratedSettings?.appearance?.uiFont).toBe(sans)
+  const rehydratedFontFamily = await page.evaluate(() => {
+    return getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim()
+  })
+  expect(rehydratedFontFamily).not.toBe(initialFontFamily)
+  expect(rehydratedSettings?.appearance?.font).toBe(updatedSettings?.appearance?.font)
 })
 
 test("toggling notification agent switch updates localStorage", async ({ page, gotoSession }) => {

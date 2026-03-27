@@ -24,7 +24,7 @@ interface RemovalTargets {
 
 export const UninstallCommand = {
   command: "uninstall",
-  describe: "uninstall cobuilder and remove all related files",
+  describe: "uninstall opencode and remove all related files",
   builder: (yargs: Argv) =>
     yargs
       .option("keep-config", {
@@ -55,7 +55,7 @@ export const UninstallCommand = {
     UI.empty()
     UI.println(UI.logo("  "))
     UI.empty()
-    prompts.intro("Uninstall CoBuilder")
+    prompts.intro("Uninstall OpenCode")
 
     const method = await Installation.method()
     prompts.log.info(`Installation method: ${method}`)
@@ -133,9 +133,9 @@ async function showRemovalSummary(targets: RemovalTargets, method: Installation.
       pnpm: "pnpm uninstall -g opencode-ai",
       bun: "bun remove -g opencode-ai",
       yarn: "yarn global remove opencode-ai",
-      brew: "brew uninstall cobuilder",
-      choco: "choco uninstall cobuilder",
-      scoop: "scoop uninstall cobuilder",
+      brew: "brew uninstall opencode",
+      choco: "choco uninstall opencode",
+      scoop: "scoop uninstall opencode",
     }
     prompts.log.info(`  ✓ Package: ${cmds[method] || method}`)
   }
@@ -185,14 +185,14 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
       bun: ["bun", "remove", "-g", "opencode-ai"],
       yarn: ["yarn", "global", "remove", "opencode-ai"],
       brew: ["brew", "uninstall", "opencode"],
-      choco: ["choco", "uninstall", "cobuilder"],
+      choco: ["choco", "uninstall", "opencode"],
       scoop: ["scoop", "uninstall", "opencode"],
     }
 
     const cmd = cmds[method]
     if (cmd) {
       spinner.start(`Running ${cmd.join(" ")}...`)
-      const result = await Process.run(method === "choco" ? ["choco", "uninstall", "cobuilder", "-y", "-r"] : cmd, {
+      const result = await Process.run(method === "choco" ? ["choco", "uninstall", "opencode", "-y", "-r"] : cmd, {
         nothrow: true,
       })
       if (result.code !== 0) {
@@ -229,7 +229,7 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
   }
 
   UI.empty()
-  prompts.log.success("Thank you for using CoBuilder!")
+  prompts.log.success("Thank you for using OpenCode!")
 }
 
 async function getShellConfigFile(): Promise<string | null> {

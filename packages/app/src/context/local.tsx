@@ -390,18 +390,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     if (modelEnabled()) {
-      const probe = Symbol("model-probe")
-
-      modelProbe.bind(probe, {
-        setAgent: agent.set,
-        setModel: model.set,
-        setVariant: model.variant.set,
-      })
-
       createEffect(() => {
         const agent = result.agent.current()
         const model = result.model.current()
-        modelProbe.set(probe, {
+        modelProbe.set({
           dir: sdk.directory,
           sessionID: id(),
           last: store.last,
@@ -419,20 +411,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           pick: scope(),
           base: undefined,
           current: store.current,
-          variants: result.model.variant.list(),
-          models: result.model
-            .list()
-            .filter((item) => result.model.visible({ providerID: item.provider.id, modelID: item.id }))
-            .map((item) => ({
-              providerID: item.provider.id,
-              modelID: item.id,
-              name: item.name,
-            })),
-          agents: result.agent.list().map((item) => ({ name: item.name })),
         })
       })
 
-      onCleanup(() => modelProbe.clear(probe))
+      onCleanup(() => modelProbe.clear())
     }
 
     return result

@@ -252,8 +252,10 @@ export namespace ProviderTransform {
     })
   }
 
-  function isClaudeModel(model: Provider.Model) {
-    return (
+  export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
+    msgs = unsupportedParts(msgs, model)
+    msgs = normalizeMessages(msgs, model, options)
+    if (
       (model.providerID === "anthropic" ||
         model.api.id.includes("anthropic") ||
         model.api.id.includes("claude") ||
@@ -261,23 +263,8 @@ export namespace ProviderTransform {
         model.id.includes("claude") ||
         model.api.npm === "@ai-sdk/anthropic") &&
       model.api.npm !== "@ai-sdk/gateway"
-    )
-  }
-
-  // Claude does not support assistant message prefill — the conversation must end
-  // with a user message. Strip any trailing assistant messages before sending.
-  function stripTrailingAssistant(msgs: ModelMessage[]): ModelMessage[] {
-    let i = msgs.length - 1
-    while (i >= 0 && msgs[i].role === "assistant") i--
-    return i < msgs.length - 1 ? msgs.slice(0, i + 1) : msgs
-  }
-
-  export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
-    msgs = unsupportedParts(msgs, model)
-    msgs = normalizeMessages(msgs, model, options)
-    if (isClaudeModel(model)) {
+    ) {
       msgs = applyCaching(msgs, model)
-      msgs = stripTrailingAssistant(msgs)
     }
 
     // Remap providerOptions keys from stored providerID to expected SDK key

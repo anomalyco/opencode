@@ -5,7 +5,7 @@ import { useFileComponent } from "../context/file"
 
 import { Binary } from "@opencode-ai/util/binary"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, ParentProps, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, on, ParentProps, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { AssistantParts, Message, MessageDivider, PART_MAPPING, type UserActions } from "./message-part"
@@ -243,7 +243,7 @@ export function SessionTurn(
   })
   const edited = createMemo(() => diffs().length)
   const [state, setState] = createStore({
-    open: true,
+    open: false,
     expanded: [] as string[],
   })
   const open = () => state.open
@@ -341,23 +341,6 @@ export function SessionTurn(
     if (end < start) return undefined
     return end - start
   })
-  const turnUsage = createMemo(() => {
-    const msgs = assistantMessages()
-    if (!msgs.length) return undefined
-    let input = 0
-    let output = 0
-    let cost = 0
-    for (const msg of msgs) {
-      if (typeof msg.tokens?.input === "number") input += msg.tokens.input
-      if (typeof msg.tokens?.output === "number") output += msg.tokens.output
-      if (typeof msg.cost === "number") cost += msg.cost
-    }
-    if (input === 0 && output === 0) return undefined
-    return { input, output, cost }
-  })
-
-  const fmt = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n))
-
   const assistantDerived = createMemo(() => {
     let visible = 0
     let tail: "text" | "other" | undefined
@@ -385,35 +368,6 @@ export function SessionTurn(
     if (status().type === "retry") return false
     if (showReasoningSummaries()) return assistantVisible() === 0
     return true
-  })
-
-  const [tokSec, setTokSec] = createSignal<number | undefined>(undefined)
-  let startMs = 0
-  let startTokens = 0
-  let ticker: ReturnType<typeof setInterval> | undefined
-
-  createEffect(
-    on(working, (active) => {
-      if (active) {
-        startMs = Date.now()
-        startTokens = turnUsage()?.output ?? 0
-        setTokSec(undefined)
-        ticker = setInterval(() => {
-          const elapsed = (Date.now() - startMs) / 1000
-          if (elapsed < 0.5) return
-          const out = (turnUsage()?.output ?? 0) - startTokens
-          setTokSec(Math.round(out / elapsed))
-        }, 1000)
-      } else {
-        if (ticker !== undefined) clearInterval(ticker)
-        ticker = undefined
-        setTokSec(undefined)
-      }
-    }),
-  )
-
-  onCleanup(() => {
-    if (ticker !== undefined) clearInterval(ticker)
   })
 
   const autoScroll = createAutoScroll({
@@ -470,11 +424,6 @@ export function SessionTurn(
                       duration={700}
                     />
                   </Show>
-                </div>
-              </Show>
-              <Show when={working() && (tokSec() ?? 0) > 0}>
-                <div data-slot="session-turn-toksec" class="px-4 md:px-5 pt-0.5 pb-0 text-[11px] text-text-weakest select-none tabular-nums">
-                  ~{tokSec()} tok/s
                 </div>
               </Show>
               <SessionRetry status={status()} show={active()} />
@@ -575,19 +524,6 @@ export function SessionTurn(
                     </Collapsible.Content>
                   </Collapsible>
                 </div>
-              </Show>
-              <Show when={!working() && turnUsage()}>
-                {(usage) => (
-                  <div data-slot="session-turn-usage" class="px-4 md:px-5 pt-1 pb-0.5 flex items-center gap-2 text-[11px] text-text-weak opacity-60 select-none">
-                    <span>↑ {fmt(usage().input)}</span>
-                    <span>↓ {fmt(usage().output)}</span>
-                    <span class="text-text-weakest">tokens</span>
-                    <Show when={usage().cost > 0}>
-                      <span class="opacity-70">·</span>
-                      <span>~${usage().cost.toFixed(4)}</span>
-                    </Show>
-                  </div>
-                )}
               </Show>
               <Show when={error()}>
                 <Card variant="error" class="error-card">

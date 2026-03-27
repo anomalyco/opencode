@@ -263,60 +263,25 @@ const WorkspaceSessionList = (props: {
       <SessionSkeleton />
     </Show>
     <For each={props.sessions()}>
-      {(session) => {
-        const childIDs = createMemo(() => props.children().get(session.id) ?? [])
-        const childSessions = createMemo(() =>
-          childIDs()
-            .map((id) => props.sessions().find((s) => s.id === id))
-            .filter((s): s is Session => !!s),
-        )
-        return (
-          <>
-            <SessionItem
-              session={session}
-              list={props.sessions()}
-              navList={props.ctx.navList}
-              slug={props.slug()}
-              mobile={props.mobile}
-              popover={props.popover}
-              children={props.children()}
-              sidebarExpanded={props.ctx.sidebarExpanded}
-              sidebarHovering={props.ctx.sidebarHovering}
-              nav={props.ctx.nav}
-              hoverSession={props.ctx.hoverSession}
-              setHoverSession={props.ctx.setHoverSession}
-              clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
-              prefetchSession={props.ctx.prefetchSession}
-              archiveSession={props.ctx.archiveSession}
-            />
-            <Show when={childSessions().length > 0}>
-              <div class="flex flex-col gap-0.5 pl-3 border-l border-border-weak-base ml-4 mb-0.5">
-                <For each={childSessions()}>
-                  {(child) => (
-                    <SessionItem
-                      session={child}
-                      list={props.sessions()}
-                      navList={props.ctx.navList}
-                      slug={props.slug()}
-                      mobile={props.mobile}
-                      popover={props.popover}
-                      children={props.children()}
-                      sidebarExpanded={props.ctx.sidebarExpanded}
-                      sidebarHovering={props.ctx.sidebarHovering}
-                      nav={props.ctx.nav}
-                      hoverSession={props.ctx.hoverSession}
-                      setHoverSession={props.ctx.setHoverSession}
-                      clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
-                      prefetchSession={props.ctx.prefetchSession}
-                      archiveSession={props.ctx.archiveSession}
-                    />
-                  )}
-                </For>
-              </div>
-            </Show>
-          </>
-        )
-      }}
+      {(session) => (
+        <SessionItem
+          session={session}
+          list={props.sessions()}
+          navList={props.ctx.navList}
+          slug={props.slug()}
+          mobile={props.mobile}
+          popover={props.popover}
+          children={props.children()}
+          sidebarExpanded={props.ctx.sidebarExpanded}
+          sidebarHovering={props.ctx.sidebarHovering}
+          nav={props.ctx.nav}
+          hoverSession={props.ctx.hoverSession}
+          setHoverSession={props.ctx.setHoverSession}
+          clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
+          prefetchSession={props.ctx.prefetchSession}
+          archiveSession={props.ctx.archiveSession}
+        />
+      )}
     </For>
     <Show when={props.hasMore()}>
       <div class="relative w-full py-1">

@@ -16,6 +16,9 @@ import { useKV } from "../context/kv"
 import { useCommandDialog } from "../component/dialog-command"
 import { useLocal } from "../context/local"
 
+// TODO: what is the best way to do this?
+let once = false
+
 export function Home() {
   const sync = useSync()
   const kv = useKV()
@@ -35,8 +38,8 @@ export function Home() {
   const isFirstTimeUser = createMemo(() => sync.data.session.length === 0)
   const tipsHidden = createMemo(() => kv.get("tips_hidden", false))
   const showTips = createMemo(() => {
-    // Show tips to first-time users to help them get started
-    if (isFirstTimeUser()) return true
+    // Don't show tips for first-time users
+    if (isFirstTimeUser()) return false
     return !tipsHidden()
   })
 
@@ -76,10 +79,13 @@ export function Home() {
   const args = useArgs()
   const local = useLocal()
   onMount(() => {
+    if (once) return
     if (route.initialPrompt) {
       prompt.set(route.initialPrompt)
+      once = true
     } else if (args.prompt) {
       prompt.set({ input: args.prompt, parts: [] })
+      once = true
     }
   })
 
@@ -118,21 +124,6 @@ export function Home() {
             workspaceID={route.workspaceID}
           />
         </box>
-        <Show when={isFirstTimeUser()}>
-          <box width="100%" maxWidth={75} paddingTop={1} flexShrink={0}>
-            <box flexDirection="column" gap={0}>
-              <text fg={theme.textMuted}>
-                <span style={{ fg: theme.primary }}>{">"}</span> Type a message to start a new session
-              </text>
-              <text fg={theme.textMuted}>
-                <span style={{ fg: theme.primary }}>{">"}</span> Press <span style={{ fg: theme.text }}>Ctrl+X</span> to open the command palette
-              </text>
-              <text fg={theme.textMuted}>
-                <span style={{ fg: theme.primary }}>{">"}</span> Run <span style={{ fg: theme.text }}>/help</span> for all available commands
-              </text>
-            </box>
-          </box>
-        </Show>
         <box height={4} minHeight={0} width="100%" maxWidth={75} alignItems="center" paddingTop={3} flexShrink={1}>
           <Show when={showTips()}>
             <Tips />

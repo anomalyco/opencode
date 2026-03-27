@@ -35,14 +35,12 @@ export namespace Format {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const config = yield* Config.Service
-
       const state = yield* InstanceState.make(
         Effect.fn("Format.state")(function* (_ctx) {
           const enabled: Record<string, boolean> = {}
           const formatters: Record<string, Formatter.Info> = {}
 
-          const cfg = yield* config.get()
+          const cfg = yield* Effect.promise(() => Config.get())
 
           if (cfg.formatter !== false) {
             for (const item of Object.values(Formatter)) {
@@ -169,9 +167,7 @@ export namespace Format {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer))
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
+  const { runPromise } = makeRuntime(Service, layer)
 
   export async function init() {
     return runPromise((s) => s.init())

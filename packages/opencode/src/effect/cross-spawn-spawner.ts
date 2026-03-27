@@ -1,6 +1,5 @@
 import type * as Arr from "effect/Array"
-import { NodeFileSystem, NodeSink, NodeStream } from "@effect/platform-node"
-import * as NodePath from "@effect/platform-node/NodePath"
+import { NodeSink, NodeStream } from "@effect/platform-node"
 import * as Deferred from "effect/Deferred"
 import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
@@ -475,5 +474,3 @@ export const layer: Layer.Layer<ChildProcessSpawner, never, FileSystem.FileSyste
   ChildProcessSpawner,
   make,
 )
-
-export const defaultLayer = layer.pipe(Layer.provide(NodeFileSystem.layer), Layer.provide(NodePath.layer))

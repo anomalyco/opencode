@@ -1,3 +1,4 @@
+import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Effect, Layer, Schema, ServiceMap, Stream } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
@@ -141,8 +142,8 @@ export namespace Installation {
         )
 
         const getBrewFormula = Effect.fnUntraced(function* () {
-          // const tapFormula = yield* text(["brew", "list", "--formula", "anomalyco/tap/opencode"])
-          // if (tapFormula.includes("opencode")) return "anomalyco/tap/opencode"
+          const tapFormula = yield* text(["brew", "list", "--formula", "anomalyco/tap/opencode"])
+          if (tapFormula.includes("opencode")) return "anomalyco/tap/opencode"
           const coreFormula = yield* text(["brew", "list", "--formula", "opencode"])
           if (coreFormula.includes("opencode")) return "opencode"
           return "opencode"
@@ -257,12 +258,12 @@ export namespace Installation {
           }
 
           const response = yield* httpOk.execute(
-            HttpClientRequest.get("https://api.github.com/repos/CobuilderLabs/opencode/releases/latest").pipe(
+            HttpClientRequest.get("https://api.github.com/repos/anomalyco/opencode/releases/latest").pipe(
               HttpClientRequest.acceptJson,
             ),
           )
           const data = yield* HttpClientResponse.schemaBodyJson(GitHubRelease)(response)
-          return data.tag_name.replace(/^cb-v/, "").replace(/^v/, "")
+          return data.tag_name.replace(/^v/, "")
         }, Effect.orDie)
 
         const upgradeImpl = Effect.fn("Installation.upgrade")(function* (m: Method, target: string) {
@@ -283,23 +284,22 @@ export namespace Installation {
             case "brew": {
               const formula = yield* getBrewFormula()
               const env = { HOMEBREW_NO_AUTO_UPDATE: "1" }
-              // Tap support commented out until CobuilderLabs has its own Homebrew tap
-              // if (formula.includes("/")) {
-              //   const tap = yield* run(["brew", "tap", "anomalyco/tap"], { env })
-              //   if (tap.code !== 0) {
-              //     result = tap
-              //     break
-              //   }
-              //   const repo = yield* text(["brew", "--repo", "anomalyco/tap"])
-              //   const dir = repo.trim()
-              //   if (dir) {
-              //     const pull = yield* run(["git", "pull", "--ff-only"], { cwd: dir, env })
-              //     if (pull.code !== 0) {
-              //       result = pull
-              //       break
-              //     }
-              //   }
-              // }
+              if (formula.includes("/")) {
+                const tap = yield* run(["brew", "tap", "anomalyco/tap"], { env })
+                if (tap.code !== 0) {
+                  result = tap
+                  break
+                }
+                const repo = yield* text(["brew", "--repo", "anomalyco/tap"])
+                const dir = repo.trim()
+                if (dir) {
+                  const pull = yield* run(["git", "pull", "--ff-only"], { cwd: dir, env })
+                  if (pull.code !== 0) {
+                    result = pull
+                    break
+                  }
+                }
+              }
               result = yield* run(["brew", "upgrade", formula], { env })
               break
             }
@@ -341,7 +341,9 @@ export namespace Installation {
 
   export const defaultLayer = layer.pipe(
     Layer.provide(FetchHttpClient.layer),
-    Layer.provide(CrossSpawnSpawner.defaultLayer),
+    Layer.provide(CrossSpawnSpawner.layer),
+    Layer.provide(NodeFileSystem.layer),
+    Layer.provide(NodePath.layer),
   )
 
   const { runPromise } = makeRuntime(Service, defaultLayer)

@@ -27,6 +27,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ModelSelectorPopover } from "@/components/dialog-select-model"
+import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
 import { useProviders } from "@/hooks/use-providers"
 import { useCommand } from "@/context/command"
 import { Persist, persisted } from "@/utils/persist"
@@ -50,7 +51,6 @@ import {
 } from "./prompt-input/history"
 import { createPromptSubmit, type FollowupDraft } from "./prompt-input/submit"
 import { PromptPopover, type AtOption, type SlashCommand } from "./prompt-input/slash-popover"
-import { HistorySearchPopover } from "./prompt-input/history-search"
 import { PromptContextItems } from "./prompt-input/context-items"
 import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
@@ -273,7 +273,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: "image" | "@mention" | null
     mode: "normal" | "shell"
     applyingHistory: boolean
-    historySearch: boolean
   }>({
     popover: null,
     historyIndex: -1,
@@ -282,7 +281,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: null,
     mode: "normal",
     applyingHistory: false,
-    historySearch: false,
   })
 
   const buttonsSpring = useSpring(() => (store.mode === "normal" ? 1 : 0), { visualDuration: 0.2, bounce: 0 })
@@ -1224,12 +1222,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
-    if (event.key === "ArrowUp" && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey) {
-      event.preventDefault()
-      setStore("historySearch", true)
-      return
-    }
-
     if (event.key === "ArrowUp" || event.key === "ArrowDown") {
       if (event.altKey || event.ctrlKey || event.metaKey) return
       const { collapsed } = getCaretState()
@@ -1270,22 +1262,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   return (
     <div class="relative size-full _max-h-[320px] flex flex-col gap-0">
-      <HistorySearchPopover
-        open={store.historySearch}
-        entries={history.entries}
-        onSelect={(text) => {
-          setEditorText(text)
-          focusEditorEnd()
-          setStore("historySearch", false)
-          resetHistoryNavigation(true)
-        }}
-        onClose={() => {
-          setStore("historySearch", false)
-          requestAnimationFrame(() => editorRef.focus())
-        }}
-      />
       <PromptPopover
-        popover={store.historySearch ? null : store.popover}
+        popover={store.popover}
         setSlashPopoverRef={(el) => (slashPopoverRef = el)}
         atFlat={atFlat()}
         atActive={atActive() ?? undefined}
@@ -1516,11 +1494,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           size="normal"
                           class="min-w-0 max-w-[320px] text-13-regular text-text-base group"
                           style={control()}
-                          onClick={() => {
-                            void import("@/components/dialog-select-model-unpaid").then((x) => {
-                              dialog.show(() => <x.DialogSelectModelUnpaid model={local.model} />)
-                            })
-                          }}
+                          onClick={() => dialog.show(() => <DialogSelectModelUnpaid model={local.model} />)}
                         >
                           <Show when={local.model.current()?.provider?.id}>
                             <ProviderIcon

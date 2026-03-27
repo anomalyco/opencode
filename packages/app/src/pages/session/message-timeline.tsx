@@ -575,24 +575,10 @@ export function MessageTimeline(props: {
           }}
         >
           <button
-            class="pointer-events-auto flex items-center justify-center rounded-full bg-background-base border border-border-base shadow-sm text-text-base hover:bg-background-stronger transition-colors"
-            classList={{
-              "size-8": !(working() && activeMessageID()),
-              "h-8 px-3 gap-1.5 text-[11px] font-medium": !!(working() && activeMessageID()),
-            }}
-            onClick={() => {
-              const id = activeMessageID()
-              if (working() && id) {
-                document.querySelector(`[data-message="${id}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" })
-              } else {
-                props.onResumeScroll()
-              }
-            }}
+            class="pointer-events-auto size-8 flex items-center justify-center rounded-full bg-background-base border border-border-base shadow-sm text-text-base hover:bg-background-stronger transition-colors"
+            onClick={props.onResumeScroll}
           >
-            <Icon name={working() && activeMessageID() ? "arrow-up" : "arrow-down-to-line"} class="size-3.5" />
-            <Show when={working() && activeMessageID()}>
-              <span>active</span>
-            </Show>
+            <Icon name="arrow-down-to-line" />
           </button>
         </div>
         <ScrollView
@@ -957,10 +943,7 @@ export function MessageTimeline(props: {
                         "min-w-0 w-full max-w-full": true,
                         "md:max-w-200 2xl:max-w-[1000px]": props.centered,
                       }}
-                      style={{
-                        "content-visibility": active() ? undefined : "auto",
-                        "contain-intrinsic-size": active() ? undefined : "auto 500px",
-                      }}
+                      style={{ "content-visibility": "auto", "contain-intrinsic-size": "auto 500px" }}
                     >
                       <Show when={commentCount() > 0}>
                         <div class="w-full px-4 md:px-5 pb-2">

@@ -7,7 +7,7 @@ const channel = (() => {
 })()
 
 const getBase = (): Configuration => ({
-  artifactName: "cobuilder-${os}-${arch}.${ext}",
+  artifactName: "opencode-electron-${os}-${arch}.${ext}",
   directories: {
     output: "dist",
     buildResources: "resources",
@@ -17,7 +17,7 @@ const getBase = (): Configuration => ({
     {
       from: "resources/",
       to: "",
-      filter: ["cobuilder*"],
+      filter: ["opencode-cli*"],
     },
     {
       from: "native/",
@@ -39,7 +39,7 @@ const getBase = (): Configuration => ({
     sign: true,
   },
   protocols: {
-    name: "CoBuilder",
+    name: "OpenCode",
     schemes: ["opencode"],
   },
   win: {
@@ -66,29 +66,29 @@ function getConfig() {
     case "dev": {
       return {
         ...base,
-        appId: "ai.cobuilder.desktop.dev",
-        productName: "CoBuilder Dev",
-        rpm: { packageName: "cobuilder-dev" },
+        appId: "ai.opencode.desktop.dev",
+        productName: "OpenCode Dev",
+        rpm: { packageName: "opencode-dev" },
       }
     }
     case "beta": {
       return {
         ...base,
-        appId: "ai.cobuilder.desktop.beta",
-        productName: "CoBuilder Beta",
-        protocols: { name: "CoBuilder Beta", schemes: ["opencode"] },
-        publish: { provider: "github", owner: "CobuilderLabs", repo: "opencode", channel: "latest" },
-        rpm: { packageName: "cobuilder-beta" },
+        appId: "ai.opencode.desktop.beta",
+        productName: "OpenCode Beta",
+        protocols: { name: "OpenCode Beta", schemes: ["opencode"] },
+        publish: { provider: "github", owner: "anomalyco", repo: "opencode-beta", channel: "latest" },
+        rpm: { packageName: "opencode-beta" },
       }
     }
     case "prod": {
       return {
         ...base,
-        appId: "ai.cobuilder.desktop",
-        productName: "CoBuilder",
-        protocols: { name: "CoBuilder", schemes: ["opencode"] },
-        publish: { provider: "github", owner: "CobuilderLabs", repo: "opencode", channel: "latest" },
-        rpm: { packageName: "cobuilder" },
+        appId: "ai.opencode.desktop",
+        productName: "OpenCode",
+        protocols: { name: "OpenCode", schemes: ["opencode"] },
+        publish: { provider: "github", owner: "anomalyco", repo: "opencode", channel: "latest" },
+        rpm: { packageName: "opencode" },
       }
     }
   }

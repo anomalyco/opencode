@@ -26,11 +26,9 @@ import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@opencode-ai/ui/toast"
-import { checksum } from "@opencode-ai/util/encode"
-import { useSearchParams } from "@solidjs/router"
+import { base64Encode, checksum } from "@opencode-ai/util/encode"
+import { useNavigate, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
-import { CoachMarks } from "@/components/coach-marks"
-import { DialogSelectProvider } from "@/components/dialog-select-provider"
 import { useComments } from "@/context/comments"
 import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
 import { useGlobalSync } from "@/context/global-sync"
@@ -319,6 +317,7 @@ export default function Page() {
   const sync = useSync()
   const dialog = useDialog()
   const language = useLanguage()
+  const navigate = useNavigate()
   const sdk = useSDK()
   const settings = useSettings()
   const prompt = usePrompt()
@@ -713,6 +712,7 @@ export default function Page() {
             return Date.now() - info.at > SESSION_PREFETCH_TTL
           })()
       const todos = untrack(() => sync.data.todo[id] !== undefined || globalSync.data.session_todo[id] !== undefined)
+
       untrack(() => {
         void sync.session.sync(id)
       })
@@ -1556,6 +1556,26 @@ export default function Page() {
   const reverting = createMemo(() => revertMutation.isPending || restoreMutation.isPending)
   const restoring = createMemo(() => (restoreMutation.isPending ? restoreMutation.variables : undefined))
 
+  const fork = (input: { sessionID: string; messageID: string }) => {
+    const value = draft(input.messageID)
+    const dir = base64Encode(sdk.directory)
+    return sdk.client.session
+      .fork(input)
+      .then((result) => {
+        const next = result.data
+        if (!next) {
+          showToast({
+            variant: "error",
+            title: language.t("common.requestFailed"),
+          })
+          return
+        }
+        prompt.set(value, undefined, { dir, id: next.id })
+        navigate(`/${dir}/session/${next.id}`)
+      })
+      .catch(fail)
+  }
+
   const revert = (input: { sessionID: string; messageID: string }) => {
     if (reverting()) return
     return revertMutation.mutateAsync(input)
@@ -1574,7 +1594,7 @@ export default function Page() {
       .map((item) => ({ id: item.id, text: line(item.id) }))
   })
 
-  const actions = { revert }
+  const actions = { fork, revert }
 
   createEffect(() => {
     const sessionID = params.id
@@ -1634,17 +1654,11 @@ export default function Page() {
     consumePendingMessage: layout.pendingMessage.consume,
   })
 
-  createEffect(() => {
-    const title = info()?.title ?? "CoBuilder"
-    document.title = busy(params.id ?? "") ? `⟳ ${title}` : title
-  })
-
   onMount(() => {
     document.addEventListener("keydown", handleKeyDown)
   })
 
   onCleanup(() => {
-    document.title = "CoBuilder"
     document.removeEventListener("keydown", handleKeyDown)
     if (reviewFrame !== undefined) cancelAnimationFrame(reviewFrame)
     if (refreshFrame !== undefined) cancelAnimationFrame(refreshFrame)
@@ -1658,7 +1672,6 @@ export default function Page() {
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
-      <CoachMarks sessionID={params.id} />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
         <Show when={!isDesktop() && !!params.id}>
           <Tabs value={store.mobileTab} class="h-auto">
@@ -1747,23 +1760,6 @@ export default function Page() {
               </Match>
             </Switch>
           </div>
-
-          <Show when={globalSync.data.provider.connected.length === 0 && messagesReady()}>
-            <div class="flex flex-col items-center gap-3 py-8 text-center px-4">
-              <p class="text-sm text-text-weak">
-                {language.t("session.noProvider.message", {
-                  fallback: "No AI provider connected. Connect a provider to start chatting.",
-                })}
-              </p>
-              <button
-                type="button"
-                class="text-sm text-accent-base hover:underline cursor-pointer"
-                onClick={() => dialog.show(() => <DialogSelectProvider />)}
-              >
-                {language.t("session.noProvider.connect", { fallback: "Connect a provider" })}
-              </button>
-            </div>
-          </Show>
 
           <SessionComposerRegion
             state={composer}

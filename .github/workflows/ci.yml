@@ -14,118 +14,51 @@ concurrency:
   group: ci-${{ github.head_ref }}
   cancel-in-progress: true
 
-env:
-  BUN_VERSION: "1.3.11"
-
 jobs:
-  setup:
-    name: Install dependencies
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-      - name: Cache bun dependencies
-        id: cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.bun/install/cache
-            node_modules
-            packages/*/node_modules
-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lockb') }}
-          restore-keys: bun-${{ runner.os }}-
-      - name: Install dependencies
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: bun install --frozen-lockfile
-
   typecheck:
     name: Typecheck
-    needs: setup
     runs-on: ubuntu-latest
-    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: ${{ env.BUN_VERSION }}
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.bun/install/cache
-            node_modules
-            packages/*/node_modules
-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lockb') }}
-          restore-keys: bun-${{ runner.os }}-
+          bun-version: "1.3.11"
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
 
   lint:
     name: Lint
-    needs: setup
     runs-on: ubuntu-latest
-    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: ${{ env.BUN_VERSION }}
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.bun/install/cache
-            node_modules
-            packages/*/node_modules
-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lockb') }}
-          restore-keys: bun-${{ runner.os }}-
+          bun-version: "1.3.11"
       - run: bun install --frozen-lockfile
       - run: bun run --if-present lint
-
-  unit-test:
-    name: Unit Tests
-    needs: setup
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.bun/install/cache
-            node_modules
-            packages/*/node_modules
-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lockb') }}
-          restore-keys: bun-${{ runner.os }}-
-      - run: bun install --frozen-lockfile
-      - run: bun test --timeout 30000
-        continue-on-error: true
 
   audit:
     name: Dependency Audit
     runs-on: ubuntu-latest
-    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: ${{ env.BUN_VERSION }}
-      - run: bun audit --audit-level moderate 2>/dev/null || npm audit --audit-level moderate
-        continue-on-error: true
+          bun-version: "1.3.11"
+      - run: bun install --frozen-lockfile
+      - name: Audit dependencies
+        run: bun audit --audit-level moderate 2>/dev/null || npm audit --audit-level moderate
+        continue-on-error: true  # informational until baseline established
 
   secret-scan:
     name: Secret Scanning
     runs-on: ubuntu-latest
-    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: trufflesecurity/trufflehog@main
+      - name: TruffleHog scan
+        uses: trufflesecurity/trufflehog@main
         with:
           path: ./
           base: ${{ github.event.pull_request.base.sha }}
@@ -135,12 +68,26 @@ jobs:
   sast:
     name: SAST (CodeQL)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     permissions:
       security-events: write
     steps:
       - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v3
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
         with:
           languages: javascript-typescript
-      - uses: github/codeql-action/analyze@v3
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+  unit-test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.11"
+      - run: bun install --frozen-lockfile
+      - name: Run tests
+        run: bun test --timeout 30000
+        continue-on-error: true  # informational until test suite is built out

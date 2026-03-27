@@ -25,8 +25,7 @@
     "text_mode": false,
     "research_before_questions": false,
     "discuss_mode": "discuss",
-    "skip_discuss": false,
-    "_auto_chain_active": false
+    "skip_discuss": false
   },
   "hooks": {
     "context_warnings": true

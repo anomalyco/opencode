@@ -5,17 +5,13 @@ on:
     - cron: "0 6 * * 1" # Every Monday at 6am UTC
   workflow_dispatch: # Allow manual trigger
 
-concurrency:
-  group: sync-upstream
-  cancel-in-progress: true
-
 permissions:
   contents: write
   pull-requests: write
 
 jobs:
   sync:
-    name: Sync upstream/dev → dev → PR to main
+    name: Sync upstream/dev → dev
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,78 +30,38 @@ jobs:
         run: |
           BEHIND=$(git rev-list HEAD..upstream/dev --count)
           echo "behind=${BEHIND}" >> "$GITHUB_OUTPUT"
-          echo "Upstream is ${BEHIND} commits ahead of dev"
+          echo "Upstream is ${BEHIND} commits ahead"
 
-      - name: Merge upstream into dev (protect CoBuilder files)
+      - name: Merge upstream into dev
         if: steps.check.outputs.behind != '0'
         id: merge
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # Attempt merge without committing so we can restore protected files first
-          if git merge upstream/dev --no-commit --no-ff --allow-unrelated-histories; then
-            MERGE_OK=true
-          else
-            MERGE_OK=conflict
-          fi
-
-          # Always restore CoBuilder-owned files regardless of merge outcome.
-          # Prevents upstream from overwriting our branding, CLI, CI, and scripts.
-          PROTECTED=(
-            ".github"
-            "install.sh"
-            "AGENTS.md"
-            ".planning"
-            "packages/opencode/src/cli/cmd/onboard.ts"
-          )
-          for f in "${PROTECTED[@]}"; do
-            git checkout HEAD -- "$f" 2>/dev/null || true
-          done
-
-          git add -A
-
-          if [ "$MERGE_OK" = "true" ]; then
-            git commit -m "chore: sync upstream/dev into dev (CoBuilder files preserved)" || true
+          if git merge upstream/dev --no-edit --allow-unrelated-histories; then
             echo "merged=true" >> "$GITHUB_OUTPUT"
           else
-            git commit -m "chore: sync upstream/dev into dev (conflicts need review)" || true
-            echo "merged=conflict" >> "$GITHUB_OUTPUT"
+            echo "merged=false" >> "$GITHUB_OUTPUT"
+            git merge --abort
           fi
 
       - name: Push updated dev
-        if: steps.check.outputs.behind != '0'
+        if: steps.check.outputs.behind != '0' && steps.merge.outputs.merged == 'true'
         run: git push origin dev
 
-      - name: Open PR from dev → main
-        if: steps.check.outputs.behind != '0'
+      - name: Open PR if merge conflict
+        if: steps.check.outputs.behind != '0' && steps.merge.outputs.merged == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          MERGE_STATUS="${{ steps.merge.outputs.merged }}"
-          DATE=$(date +%Y-%m-%d)
-
-          # Check if a sync PR already exists
-          EXISTING=$(gh pr list --repo "$GITHUB_REPOSITORY" --base main --head dev --json number --jq '.[0].number' 2>/dev/null || echo "")
-
-          if [ -n "$EXISTING" ]; then
-            echo "PR #$EXISTING from dev → main already open, dev branch updated."
-            exit 0
-          fi
-
-          if [ "$MERGE_STATUS" = "true" ]; then
-            TITLE="chore: sync upstream ${DATE} — upstream fixes merged into dev"
-            BODY="Upstream [anomalyco/opencode](https://github.com/anomalyco/opencode) has new commits. They have been merged into \`dev\` with CoBuilder-owned files preserved (.github/, install.sh, AGENTS.md, onboard.ts, .planning/).
-
-          **Review this PR** to confirm no upstream changes broke CoBuilder customizations before merging to \`main\`."
-          else
-            TITLE="chore: sync upstream ${DATE} — conflicts in dev need review"
-            BODY="Upstream [anomalyco/opencode](https://github.com/anomalyco/opencode) has new commits that had merge conflicts. CoBuilder-owned files have been preserved but **remaining conflicts need manual review** before merging to \`main\`."
-          fi
-
+          BRANCH="sync/upstream-$(date +%Y%m%d)"
+          git checkout -b "$BRANCH"
+          git merge upstream/dev --no-edit --allow-unrelated-histories || true
+          git add -A
+          git commit -m "chore: sync upstream/dev (conflicts need resolution)" || true
+          git push origin "$BRANCH"
           gh pr create \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "$TITLE" \
-            --body "$BODY" \
-            --base main \
-            --head dev
+            --title "chore: sync upstream dev (manual conflict resolution needed)" \
+            --body "Upstream anomalyco/opencode has new commits that conflict with our \`dev\` branch. Please resolve conflicts and merge this PR." \
+            --base dev \
+            --head "$BRANCH"

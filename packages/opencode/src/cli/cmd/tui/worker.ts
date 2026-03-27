@@ -12,6 +12,7 @@ import type { Event } from "@opencode-ai/sdk/v2"
 import { Flag } from "@/flag/flag"
 import { setTimeout as sleep } from "node:timers/promises"
 import { writeHeapSnapshot } from "node:v8"
+import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { WorkspaceID } from "@/control-plane/schema"
 
 await Log.init({
@@ -52,39 +53,45 @@ const startEventStream = (input: { directory: string; workspaceID?: string }) =>
   eventStream.abort = abort
   const signal = abort.signal
 
+  const workspaceID = input.workspaceID ? WorkspaceID.make(input.workspaceID) : undefined
+
   ;(async () => {
     while (!signal.aborted) {
-      const shouldReconnect = await Instance.provide({
-        directory: input.directory,
-        init: InstanceBootstrap,
+      const shouldReconnect = await WorkspaceContext.provide({
+        workspaceID,
         fn: () =>
-          new Promise<boolean>((resolve) => {
-            Rpc.emit("event", {
-              type: "server.connected",
-              properties: {},
-            } satisfies Event)
+          Instance.provide({
+            directory: input.directory,
+            init: InstanceBootstrap,
+            fn: () =>
+              new Promise<boolean>((resolve) => {
+                Rpc.emit("event", {
+                  type: "server.connected",
+                  properties: {},
+                } satisfies Event)
 
-            let settled = false
-            const settle = (value: boolean) => {
-              if (settled) return
-              settled = true
-              signal.removeEventListener("abort", onAbort)
-              unsub()
-              resolve(value)
-            }
+                let settled = false
+                const settle = (value: boolean) => {
+                  if (settled) return
+                  settled = true
+                  signal.removeEventListener("abort", onAbort)
+                  unsub()
+                  resolve(value)
+                }
 
-            const unsub = Bus.subscribeAll((event) => {
-              Rpc.emit("event", event as Event)
-              if (event.type === Bus.InstanceDisposed.type) {
-                settle(true)
-              }
-            })
+                const unsub = Bus.subscribeAll((event) => {
+                  Rpc.emit("event", event as Event)
+                  if (event.type === Bus.InstanceDisposed.type) {
+                    settle(true)
+                  }
+                })
 
-            const onAbort = () => {
-              settle(false)
-            }
+                const onAbort = () => {
+                  settle(false)
+                }
 
-            signal.addEventListener("abort", onAbort, { once: true })
+                signal.addEventListener("abort", onAbort, { once: true })
+              }),
           }),
       }).catch((error) => {
         Log.Default.error("event stream subscribe error", {
@@ -149,7 +156,8 @@ export const rpc = {
     })
   },
   async reload() {
-    await Config.invalidate(true)
+    Config.global.reset()
+    await Instance.disposeAll()
   },
   async setWorkspace(input: { workspaceID?: string }) {
     startEventStream({ directory: process.cwd(), workspaceID: input.workspaceID })
@@ -167,6 +175,6 @@ Rpc.listen(rpc)
 function getAuthorizationHeader(): string | undefined {
   const password = Flag.OPENCODE_SERVER_PASSWORD
   if (!password) return undefined
-  const username = Flag.OPENCODE_SERVER_USERNAME ?? "cobuilder"
+  const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
   return `Basic ${btoa(`${username}:${password}`)}`
 }

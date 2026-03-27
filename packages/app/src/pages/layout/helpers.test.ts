@@ -91,10 +91,10 @@ describe("layout deep links", () => {
 
   test("drains global deep links once", () => {
     const target = {
-      __COBUILDER__: {
+      __OPENCODE__: {
         deepLinks: ["opencode://open-project?directory=/a"],
       },
-    } as unknown as Window & { __COBUILDER__?: { deepLinks?: string[] } }
+    } as unknown as Window & { __OPENCODE__?: { deepLinks?: string[] } }
 
     expect(drainPendingDeepLinks(target)).toEqual(["opencode://open-project?directory=/a"])
     expect(drainPendingDeepLinks(target)).toEqual([])

@@ -19,12 +19,9 @@ interface MockClientState {
 const clientStates = new Map<string, MockClientState>()
 let lastCreatedClientName: string | undefined
 let connectShouldFail = false
-let connectShouldHang = false
 let connectError = "Mock transport cannot connect"
 // Tracks how many Client instances were created (detects leaks)
 let clientCreateCount = 0
-// Tracks how many times transport.close() is called across all mock transports
-let transportCloseCount = 0
 
 function getOrCreateClientState(name?: string): MockClientState {
   const key = name ?? "default"
@@ -47,41 +44,32 @@ function getOrCreateClientState(name?: string): MockClientState {
   return state
 }
 
-// Mock transport that succeeds or fails based on connectShouldFail / connectShouldHang
+// Mock transport that succeeds or fails based on connectShouldFail
 class MockStdioTransport {
   stderr: null = null
   pid = 12345
   constructor(_opts: any) {}
   async start() {
-    if (connectShouldHang) return new Promise<void>(() => {}) // never resolves
     if (connectShouldFail) throw new Error(connectError)
   }
-  async close() {
-    transportCloseCount++
-  }
+  async close() {}
 }
 
 class MockStreamableHTTP {
   constructor(_url: URL, _opts?: any) {}
   async start() {
-    if (connectShouldHang) return new Promise<void>(() => {}) // never resolves
     if (connectShouldFail) throw new Error(connectError)
   }
-  async close() {
-    transportCloseCount++
-  }
+  async close() {}
   async finishAuth() {}
 }
 
 class MockSSE {
   constructor(_url: URL, _opts?: any) {}
   async start() {
-    if (connectShouldHang) return new Promise<void>(() => {}) // never resolves
-    if (connectShouldFail) throw new Error(connectError)
+    throw new Error("SSE fallback - not used in these tests")
   }
-  async close() {
-    transportCloseCount++
-  }
+  async close() {}
 }
 
 mock.module("@modelcontextprotocol/sdk/client/stdio.js", () => ({
@@ -157,10 +145,8 @@ beforeEach(() => {
   clientStates.clear()
   lastCreatedClientName = undefined
   connectShouldFail = false
-  connectShouldHang = false
   connectError = "Mock transport cannot connect"
   clientCreateCount = 0
-  transportCloseCount = 0
 })
 
 // Import after mocks
@@ -671,80 +657,4 @@ test(
       expect(keys.length).toBe(2)
     },
   ),
-)
-
-// ========================================================================
-// Test: transport leak — local stdio timeout (#19168)
-// ========================================================================
-
-test(
-  "local stdio transport is closed when connect times out (no process leak)",
-  withInstance({}, async () => {
-    lastCreatedClientName = "hanging-server"
-    getOrCreateClientState("hanging-server")
-    connectShouldHang = true
-
-    const addResult = await MCP.add("hanging-server", {
-      type: "local",
-      command: ["node", "fake.js"],
-      timeout: 100,
-    })
-
-    const serverStatus = (addResult.status as any)["hanging-server"] ?? addResult.status
-    expect(serverStatus.status).toBe("failed")
-    expect(serverStatus.error).toContain("timed out")
-    // Transport must be closed to avoid orphaned child process
-    expect(transportCloseCount).toBeGreaterThanOrEqual(1)
-  }),
-)
-
-// ========================================================================
-// Test: transport leak — remote timeout (#19168)
-// ========================================================================
-
-test(
-  "remote transport is closed when connect times out",
-  withInstance({}, async () => {
-    lastCreatedClientName = "hanging-remote"
-    getOrCreateClientState("hanging-remote")
-    connectShouldHang = true
-
-    const addResult = await MCP.add("hanging-remote", {
-      type: "remote",
-      url: "http://localhost:9999/mcp",
-      timeout: 100,
-      oauth: false,
-    })
-
-    const serverStatus = (addResult.status as any)["hanging-remote"] ?? addResult.status
-    expect(serverStatus.status).toBe("failed")
-    // Transport must be closed to avoid leaked HTTP connections
-    expect(transportCloseCount).toBeGreaterThanOrEqual(1)
-  }),
-)
-
-// ========================================================================
-// Test: transport leak — failed remote transports not closed (#19168)
-// ========================================================================
-
-test(
-  "failed remote transport is closed before trying next transport",
-  withInstance({}, async () => {
-    lastCreatedClientName = "fail-remote"
-    getOrCreateClientState("fail-remote")
-    connectShouldFail = true
-    connectError = "Connection refused"
-
-    const addResult = await MCP.add("fail-remote", {
-      type: "remote",
-      url: "http://localhost:9999/mcp",
-      timeout: 5000,
-      oauth: false,
-    })
-
-    const serverStatus = (addResult.status as any)["fail-remote"] ?? addResult.status
-    expect(serverStatus.status).toBe("failed")
-    // Both StreamableHTTP and SSE transports should be closed
-    expect(transportCloseCount).toBeGreaterThanOrEqual(2)
-  }),
 )
