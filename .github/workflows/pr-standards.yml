@@ -26,18 +26,20 @@ jobs:
               return;
             }
 
-            // Check if author is a team member or bot
+            // Check if author is a bot or repo collaborator with write access
             if (login === 'opencode-agent[bot]') return;
-            const { data: file } = await github.rest.repos.getContent({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              path: '.github/TEAM_MEMBERS',
-              ref: 'dev'
-            });
-            const members = Buffer.from(file.content, 'base64').toString().split('\n').map(l => l.trim()).filter(Boolean);
-            if (members.includes(login)) {
-              console.log(`Skipping: ${login} is a team member`);
-              return;
+            try {
+              const { data: perm } = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username: login,
+              });
+              if (['admin', 'write'].includes(perm.permission)) {
+                console.log(`Skipping: ${login} is a collaborator (${perm.permission})`);
+                return;
+              }
+            } catch (e) {
+              // Not a collaborator — continue with checks
             }
 
             const title = pr.title;
@@ -173,18 +175,20 @@ jobs:
               return;
             }
 
-            // Check if author is a team member or bot
+            // Check if author is a bot or repo collaborator with write access
             if (login === 'opencode-agent[bot]') return;
-            const { data: file } = await github.rest.repos.getContent({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              path: '.github/TEAM_MEMBERS',
-              ref: 'dev'
-            });
-            const members = Buffer.from(file.content, 'base64').toString().split('\n').map(l => l.trim()).filter(Boolean);
-            if (members.includes(login)) {
-              console.log(`Skipping: ${login} is a team member`);
-              return;
+            try {
+              const { data: perm } = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username: login,
+              });
+              if (['admin', 'write'].includes(perm.permission)) {
+                console.log(`Skipping: ${login} is a collaborator (${perm.permission})`);
+                return;
+              }
+            } catch (e) {
+              // Not a collaborator — continue with checks
             }
 
             const body = pr.body || '';
