@@ -1,7 +1,7 @@
 From b7a06e193952a66a8efa07feb4e105f44bf7ea8b Mon Sep 17 00:00:00 2001
 From: Shoubhit Dash <shoubhit2005@gmail.com>
 Date: Fri, 27 Mar 2026 01:13:30 +0530
-Subject: [PATCH 013/127] fix(ui): reduce markdown jank while responses stream
+Subject: [PATCH 013/129] fix(ui): reduce markdown jank while responses stream
  (#19304)
 
 ---

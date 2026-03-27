@@ -1,7 +1,7 @@
 From aad5a9ebc50ed9eb95098fe5dd69aec3460f834d Mon Sep 17 00:00:00 2001
 From: johnnykang101 <johnny.kang101@gmail.com>
 Date: Thu, 26 Mar 2026 15:54:36 -0700
-Subject: [PATCH 028/127] fix(onboard): remove ralph-loop and gstack from
+Subject: [PATCH 028/129] fix(onboard): remove ralph-loop and gstack from
  wizard
 
 Neither repo uses a compatible command structure for CoBuilder skills.

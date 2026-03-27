@@ -1,7 +1,7 @@
 From 5a6da7062f3e196dd7d0c49179c47a701d2826aa Mon Sep 17 00:00:00 2001
 From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
 Date: Thu, 26 Mar 2026 18:00:10 -0700
-Subject: [PATCH 042/127] fix: guard Config.get() in security headers
+Subject: [PATCH 042/129] fix: guard Config.get() in security headers
  middleware against missing instance context (#19)
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8

@@ -1,7 +1,7 @@
 From 4280c5b8234ff0033e0ece0584bbb1fcf67d2e2d Mon Sep 17 00:00:00 2001
 From: johnnykang101 <johnny.kang101@gmail.com>
 Date: Thu, 26 Mar 2026 16:15:46 -0700
-Subject: [PATCH 035/127] fix(cd): add --publish never to electron-builder
+Subject: [PATCH 035/129] fix(cd): add --publish never to electron-builder
  package steps
 
 Prevents electron-builder from auto-publishing in CI (it detects CI env

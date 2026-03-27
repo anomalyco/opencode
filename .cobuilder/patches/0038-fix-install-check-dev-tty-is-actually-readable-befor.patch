@@ -1,7 +1,7 @@
 From bc1b83aa37b6130846da9565a22930612502fffa Mon Sep 17 00:00:00 2001
 From: johnnykang101 <johnny.kang101@gmail.com>
 Date: Thu, 26 Mar 2026 16:21:19 -0700
-Subject: [PATCH 038/127] fix(install): check /dev/tty is actually readable
+Subject: [PATCH 038/129] fix(install): check /dev/tty is actually readable
  before redirecting
 
 /dev/tty may exist as a device node in containers but fail to open.

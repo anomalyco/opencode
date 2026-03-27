@@ -1,7 +1,7 @@
 From 15966ac82f0a1fb983fb79f1247a208ad421344c Mon Sep 17 00:00:00 2001
 From: CoBuilder CEO <ceo@cobuilder.ai>
 Date: Fri, 27 Mar 2026 13:30:09 -0700
-Subject: [PATCH 120/127] fix(tests): update installation tests for cb-v prefix
+Subject: [PATCH 120/129] fix(tests): update installation tests for cb-v prefix
  and fix NUL byte rejection
 
 - Update GitHub release tag_name in tests to use cb-v prefix matching CoBuilder format

@@ -1,7 +1,7 @@
 From 608a6b7fc705483368a1e651700a8a29cf796ed3 Mon Sep 17 00:00:00 2001
 From: johnnykang101 <johnny.kang101@gmail.com>
 Date: Thu, 26 Mar 2026 15:48:29 -0700
-Subject: [PATCH 026/127] fix(workflow): restore gsd alias pointing to
+Subject: [PATCH 026/129] fix(workflow): restore gsd alias pointing to
  CobuilderLabs/gsd-workflow
 
 Repo now exists at https://github.com/CobuilderLabs/gsd-workflow.

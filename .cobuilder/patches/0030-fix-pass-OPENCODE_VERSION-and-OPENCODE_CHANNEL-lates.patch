@@ -1,7 +1,7 @@
 From 93d707c547ab621bb3cb701a503d544efe30d228 Mon Sep 17 00:00:00 2001
 From: johnnykang101 <johnny.kang101@gmail.com>
 Date: Thu, 26 Mar 2026 16:03:38 -0700
-Subject: [PATCH 030/127] fix: pass OPENCODE_VERSION and
+Subject: [PATCH 030/129] fix: pass OPENCODE_VERSION and
  OPENCODE_CHANNEL=latest to build step so binaries show proper semver
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>

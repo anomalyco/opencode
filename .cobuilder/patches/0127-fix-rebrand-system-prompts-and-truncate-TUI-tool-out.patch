@@ -1,7 +1,7 @@
 From 66a80bd64d0a91f983c901df7595f926118087df Mon Sep 17 00:00:00 2001
 From: johnnykang101 <johnny.kang101@gmail.com>
 Date: Fri, 27 Mar 2026 15:46:50 -0700
-Subject: [PATCH 127/127] fix: rebrand system prompts and truncate TUI tool
+Subject: [PATCH 127/129] fix: rebrand system prompts and truncate TUI tool
  output
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8

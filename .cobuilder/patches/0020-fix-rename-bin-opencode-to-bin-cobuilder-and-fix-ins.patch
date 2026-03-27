@@ -1,7 +1,7 @@
 From 8fd7064995954597cdfcdb0bf6e19ac4795cd0d3 Mon Sep 17 00:00:00 2001
 From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
 Date: Thu, 26 Mar 2026 15:18:52 -0700
-Subject: [PATCH 020/127] fix: rename bin/opencode to bin/cobuilder and fix
+Subject: [PATCH 020/129] fix: rename bin/opencode to bin/cobuilder and fix
  install.sh asset names
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8

@@ -1,7 +1,7 @@
 From 37985628d49cf4f40ad6aa6f284d8badff0f8341 Mon Sep 17 00:00:00 2001
 From: johnnykang101 <johnny.kang101@gmail.com>
 Date: Thu, 26 Mar 2026 16:22:40 -0700
-Subject: [PATCH 039/127] fix(install): use redirect test to check /dev/tty
+Subject: [PATCH 039/129] fix(install): use redirect test to check /dev/tty
  accessibility
 
 (exec </dev/tty) leaks bash errors; { true </dev/tty; } 2>/dev/null

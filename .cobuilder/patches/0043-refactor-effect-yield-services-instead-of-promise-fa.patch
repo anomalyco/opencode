@@ -1,7 +1,7 @@
 From 9c6f1edfd7cae5c7cefa8af14e124c0547186c6b Mon Sep 17 00:00:00 2001
 From: Kit Langton <kit.langton@gmail.com>
 Date: Thu, 26 Mar 2026 21:46:38 -0400
-Subject: [PATCH 043/127] refactor(effect): yield services instead of promise
+Subject: [PATCH 043/129] refactor(effect): yield services instead of promise
  facades (#19325)
 
 ---

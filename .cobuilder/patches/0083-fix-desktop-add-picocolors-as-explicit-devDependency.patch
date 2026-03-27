@@ -1,7 +1,7 @@
 From b59acd5cc4fce165cf22034638a7e31a6c4d6b80 Mon Sep 17 00:00:00 2001
 From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
 Date: Fri, 27 Mar 2026 08:36:52 -0700
-Subject: [PATCH 083/127] fix(desktop): add picocolors as explicit
+Subject: [PATCH 083/129] fix(desktop): add picocolors as explicit
  devDependency to resolve Windows electron-vite build failure (#28)
 
 Co-authored-by: CoBuilder CEO <ceo@cobuilder.ai>

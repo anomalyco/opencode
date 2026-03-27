@@ -1,7 +1,7 @@
 From 820b126e3c60a65dc7a73f4551f9559084164648 Mon Sep 17 00:00:00 2001
 From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
 Date: Fri, 27 Mar 2026 08:32:14 -0700
-Subject: [PATCH 081/127] fix: replace OpenCode branding with CoBuilder in TUI
+Subject: [PATCH 081/129] fix: replace OpenCode branding with CoBuilder in TUI
  and fix update check endpoint (#27)
 
 * fix: replace OpenCode branding with CoBuilder in TUI sidebar and update check endpoint

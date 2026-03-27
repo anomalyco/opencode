@@ -1,7 +1,7 @@
 From a35982bed37769a000961e62d3ef71971833114a Mon Sep 17 00:00:00 2001
 From: johnnykang101 <johnny.kang101@gmail.com>
 Date: Thu, 26 Mar 2026 21:08:47 -0700
-Subject: [PATCH 060/127] fix: remove obsolete state block from config.ts,
+Subject: [PATCH 060/129] fix: remove obsolete state block from config.ts,
  preserve CoBuilder workflow path injection, remove missing
  WorkspaceServeCommand
 

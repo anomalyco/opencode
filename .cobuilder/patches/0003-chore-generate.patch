@@ -1,7 +1,7 @@
 From 9f94bdb49634bda90a2804585b8d739228dde876 Mon Sep 17 00:00:00 2001
 From: "opencode-agent[bot]" <opencode-agent[bot]@users.noreply.github.com>
 Date: Thu, 26 Mar 2026 17:08:33 +0000
-Subject: [PATCH 003/127] chore: generate
+Subject: [PATCH 003/129] chore: generate
 
 ---
  packages/opencode/specs/effect-migration.md |  5 +++--

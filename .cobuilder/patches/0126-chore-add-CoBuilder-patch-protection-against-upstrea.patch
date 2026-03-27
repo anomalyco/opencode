@@ -1,7 +1,7 @@
 From e5899b0512ad55eb5c3b6b57a720a82d2a77e078 Mon Sep 17 00:00:00 2001
 From: johnnykang101 <johnny.kang101@gmail.com>
 Date: Fri, 27 Mar 2026 15:41:52 -0700
-Subject: [PATCH 126/127] chore: add CoBuilder patch protection against
+Subject: [PATCH 126/129] chore: add CoBuilder patch protection against
  upstream sync overwrites
 
 - .cobuilder/patches/: 3 patches capturing all CoBuilder-specific features

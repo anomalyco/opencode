@@ -1,7 +1,7 @@
 From d3341fbee7f0ea774b4f21810ae16a843111da2b Mon Sep 17 00:00:00 2001
 From: johnnykang101 <johnny.kang101@gmail.com>
 Date: Thu, 26 Mar 2026 16:09:34 -0700
-Subject: [PATCH 032/127] fix(install): scan recent releases for asset instead
+Subject: [PATCH 032/129] fix(install): scan recent releases for asset instead
  of blindly trusting latest
 
 CD creates the release before uploading binaries, so the "latest" tag

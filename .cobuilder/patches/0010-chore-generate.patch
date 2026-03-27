@@ -1,7 +1,7 @@
 From 590523dcd15e8011c86732f5bbd44f1b64342a12 Mon Sep 17 00:00:00 2001
 From: "opencode-agent[bot]" <opencode-agent[bot]@users.noreply.github.com>
 Date: Thu, 26 Mar 2026 19:03:22 +0000
-Subject: [PATCH 010/127] chore: generate
+Subject: [PATCH 010/129] chore: generate
 
 ---
  packages/app/src/i18n/tr.ts | 1 -

@@ -1,7 +1,7 @@
 From a76740aa744136d34a4507608174eedc4630e028 Mon Sep 17 00:00:00 2001
 From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
 Date: Thu, 26 Mar 2026 20:40:38 -0700
-Subject: [PATCH 049/127] fix: onboard wizard, Claude trailing message fix,
+Subject: [PATCH 049/129] fix: onboard wizard, Claude trailing message fix,
  skills in system prompt (#21)
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8

@@ -1,7 +1,7 @@
 From 790efc5af77f979c29f29bc9709bd56aff54a8c4 Mon Sep 17 00:00:00 2001
 From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
 Date: Fri, 27 Mar 2026 10:30:28 -0700
-Subject: [PATCH 102/127] ci: replace all bun junctions via PowerShell (not
+Subject: [PATCH 102/129] ci: replace all bun junctions via PowerShell (not
  just electron-vite deps)
 
 ---

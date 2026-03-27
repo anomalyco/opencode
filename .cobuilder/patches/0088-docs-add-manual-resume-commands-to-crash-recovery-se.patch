@@ -1,7 +1,7 @@
 From 81610b986687d67f59bc7bcd91dcaace24ae2003 Mon Sep 17 00:00:00 2001
 From: johnnykang101 <johnny.kang101@gmail.com>
 Date: Fri, 27 Mar 2026 09:06:10 -0700
-Subject: [PATCH 088/127] docs: add manual resume commands to crash recovery
+Subject: [PATCH 088/129] docs: add manual resume commands to crash recovery
  section
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>

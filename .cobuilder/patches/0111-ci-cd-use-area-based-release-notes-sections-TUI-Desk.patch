@@ -1,7 +1,7 @@
 From 0af2e276e935541b656c0e116dc513e80a9420bd Mon Sep 17 00:00:00 2001
 From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
 Date: Fri, 27 Mar 2026 12:41:43 -0700
-Subject: [PATCH 111/127] ci(cd): use area-based release notes sections (TUI,
+Subject: [PATCH 111/129] ci(cd): use area-based release notes sections (TUI,
  Desktop, Core, Misc)
 
 ---

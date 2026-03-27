@@ -1,7 +1,7 @@
 From a28d9da2e4c2f77800fc747fad7757b7d2d8888c Mon Sep 17 00:00:00 2001
 From: CoBuilder CEO <ceo@cobuilder.ai>
 Date: Thu, 26 Mar 2026 22:59:43 -0700
-Subject: [PATCH 073/127] fix(cd): use bun x electron-vite on Windows to fix
+Subject: [PATCH 073/129] fix(cd): use bun x electron-vite on Windows to fix
  module resolution
 
 ---

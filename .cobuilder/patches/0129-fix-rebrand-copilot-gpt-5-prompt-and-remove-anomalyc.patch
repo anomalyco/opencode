@@ -1,0 +1,67 @@
+From c574d9a1c78d972d3f4d0d962a7eb324f12242b3 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <johnny.kang101@gmail.com>
+Date: Fri, 27 Mar 2026 15:48:16 -0700
+Subject: [PATCH 129/129] fix: rebrand copilot-gpt-5 prompt and remove
+ anomalyco brew references
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- copilot-gpt-5.txt: "opencode" → "CoBuilder"
+- installation/index.ts: remove anomalyco/tap brew references, check
+  for cobuilder formula instead; tap path updated to CobuilderLabs/tap
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ packages/opencode/src/installation/index.ts          | 12 +++++-------
+ .../opencode/src/session/prompt/copilot-gpt-5.txt    |  2 +-
+ 2 files changed, 6 insertions(+), 8 deletions(-)
+
+diff --git a/packages/opencode/src/installation/index.ts b/packages/opencode/src/installation/index.ts
+index 9a9b026a9..280bfecac 100644
+--- a/packages/opencode/src/installation/index.ts
++++ b/packages/opencode/src/installation/index.ts
+@@ -142,11 +142,9 @@ export namespace Installation {
+         )
+ 
+         const getBrewFormula = Effect.fnUntraced(function* () {
+-          const tapFormula = yield* text(["brew", "list", "--formula", "anomalyco/tap/opencode"])
+-          if (tapFormula.includes("opencode")) return "anomalyco/tap/opencode"
+-          const coreFormula = yield* text(["brew", "list", "--formula", "opencode"])
+-          if (coreFormula.includes("opencode")) return "opencode"
+-          return "opencode"
++          const coreFormula = yield* text(["brew", "list", "--formula", "cobuilder"])
++          if (coreFormula.includes("cobuilder")) return "cobuilder"
++          return "cobuilder"
+         })
+ 
+         const upgradeCurl = Effect.fnUntraced(
+@@ -285,12 +283,12 @@ export namespace Installation {
+               const formula = yield* getBrewFormula()
+               const env = { HOMEBREW_NO_AUTO_UPDATE: "1" }
+               if (formula.includes("/")) {
+-                const tap = yield* run(["brew", "tap", "anomalyco/tap"], { env })
++                const tap = yield* run(["brew", "tap", "CobuilderLabs/tap"], { env })
+                 if (tap.code !== 0) {
+                   result = tap
+                   break
+                 }
+-                const repo = yield* text(["brew", "--repo", "anomalyco/tap"])
++                const repo = yield* text(["brew", "--repo", "CobuilderLabs/tap"])
+                 const dir = repo.trim()
+                 if (dir) {
+                   const pull = yield* run(["git", "pull", "--ff-only"], { cwd: dir, env })
+diff --git a/packages/opencode/src/session/prompt/copilot-gpt-5.txt b/packages/opencode/src/session/prompt/copilot-gpt-5.txt
+index 87cab043b..3ce6b084c 100644
+--- a/packages/opencode/src/session/prompt/copilot-gpt-5.txt
++++ b/packages/opencode/src/session/prompt/copilot-gpt-5.txt
+@@ -1,5 +1,5 @@
+ You are an expert AI programming assistant
+-Your name is opencode
++Your name is CoBuilder
+ Keep your answers short and impersonal.
+ <gptAgentInstructions>
+ You are a highly sophisticated coding agent with expert-level knowledge across programming languages and frameworks.
+-- 
+2.43.0
+

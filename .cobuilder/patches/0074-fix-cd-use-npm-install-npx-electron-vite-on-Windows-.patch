@@ -1,7 +1,7 @@
 From 7526d3a8077f9c07775f3423ec8929a1059241e7 Mon Sep 17 00:00:00 2001
 From: CoBuilder CEO <ceo@cobuilder.ai>
 Date: Thu, 26 Mar 2026 23:00:21 -0700
-Subject: [PATCH 074/127] fix(cd): use npm install + npx electron-vite on
+Subject: [PATCH 074/129] fix(cd): use npm install + npx electron-vite on
  Windows to fix picocolors resolution
 
 ---
