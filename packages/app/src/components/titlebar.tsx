@@ -1,11 +1,11 @@
-import { createEffect, createMemo, Show, untrack } from "solid-js"
+import { createEffect, createMemo, onCleanup, Show, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useLocation, useNavigate } from "@solidjs/router"
+import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Button } from "@opencode-ai/ui/button"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { useTheme } from "@opencode-ai/ui/theme"
+import { useTheme } from "@opencode-ai/ui/theme/context"
 
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
@@ -43,6 +43,7 @@ export function Titlebar() {
   const theme = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
+  const params = useParams()
 
   const mac = createMemo(() => platform.platform === "desktop" && platform.os === "macos")
   const windows = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
@@ -57,6 +58,12 @@ export function Titlebar() {
   })
 
   const path = () => `${location.pathname}${location.search}${location.hash}`
+  const creating = createMemo(() => {
+    if (!params.dir) return false
+    if (params.id) return false
+    const parts = location.pathname.replace(/\/+$/, "").split("/")
+    return parts.at(-1) === "session"
+  })
 
   createEffect(() => {
     const current = path()
@@ -70,6 +77,7 @@ export function Titlebar() {
 
   const canBack = createMemo(() => history.index > 0)
   const canForward = createMemo(() => history.index < history.stack.length - 1)
+  const hasProjects = createMemo(() => layout.projects.list().length > 0)
 
   const back = () => {
     const next = backPath(history)
@@ -154,8 +162,9 @@ export function Titlebar() {
 
   return (
     <header
-      class="h-10 shrink-0 bg-background-base relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-center"
+      class="h-10 shrink-0 bg-background-base relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center"
       style={{ "min-height": minHeight() }}
+      data-tauri-drag-region
       onMouseDown={drag}
       onDblClick={maximize}
     >
@@ -171,9 +180,10 @@ export function Titlebar() {
             <IconButton
               icon="menu"
               variant="ghost"
-              class="size-8 rounded-md"
+              class="titlebar-icon rounded-md"
               onClick={layout.mobileSidebar.toggle}
               aria-label={language.t("sidebar.menu.toggle")}
+              aria-expanded={layout.mobileSidebar.opened()}
             />
           </div>
         </Show>
@@ -182,13 +192,14 @@ export function Titlebar() {
             <IconButton
               icon="menu"
               variant="ghost"
-              class="size-8 rounded-md"
+              class="titlebar-icon rounded-md"
               onClick={layout.mobileSidebar.toggle}
               aria-label={language.t("sidebar.menu.toggle")}
+              aria-expanded={layout.mobileSidebar.opened()}
             />
           </div>
         </Show>
-        <div class="flex items-center gap-3 shrink-0">
+        <div class="flex items-center gap-1 shrink-0">
           <TooltipKeybind
             class={web() ? "hidden xl:flex shrink-0 ml-14" : "hidden xl:flex shrink-0 ml-2"}
             placement="bottom"
@@ -197,66 +208,102 @@ export function Titlebar() {
           >
             <Button
               variant="ghost"
-              class="group/sidebar-toggle size-6 p-0"
+              class="group/sidebar-toggle titlebar-icon w-8 h-6 p-0 box-border"
               onClick={layout.sidebar.toggle}
               aria-label={language.t("command.sidebar.toggle")}
               aria-expanded={layout.sidebar.opened()}
             >
-              <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
-                <Icon
-                  size="small"
-                  name={layout.sidebar.opened() ? "layout-left-full" : "layout-left"}
-                  class="group-hover/sidebar-toggle:hidden"
-                />
-                <Icon size="small" name="layout-left-partial" class="hidden group-hover/sidebar-toggle:inline-block" />
-                <Icon
-                  size="small"
-                  name={layout.sidebar.opened() ? "layout-left" : "layout-left-full"}
-                  class="hidden group-active/sidebar-toggle:inline-block"
-                />
-              </div>
+              <Icon size="small" name={layout.sidebar.opened() ? "sidebar-active" : "sidebar"} />
             </Button>
           </TooltipKeybind>
-          <div class="hidden xl:flex items-center gap-1 shrink-0">
-            <Tooltip placement="bottom" value={language.t("common.goBack")} openDelay={2000}>
-              <Button
-                variant="ghost"
-                icon="arrow-left"
-                class="size-6 p-0"
-                disabled={!canBack()}
-                onClick={back}
-                aria-label={language.t("common.goBack")}
-              />
-            </Tooltip>
-            <Tooltip placement="bottom" value={language.t("common.goForward")} openDelay={2000}>
-              <Button
-                variant="ghost"
-                icon="arrow-right"
-                class="size-6 p-0"
-                disabled={!canForward()}
-                onClick={forward}
-                aria-label={language.t("common.goForward")}
-              />
-            </Tooltip>
+          <div class="hidden xl:flex items-center shrink-0">
+            <Show when={params.dir}>
+              <div
+                class="flex items-center shrink-0 w-8 mr-1"
+                aria-hidden={layout.sidebar.opened() ? "true" : undefined}
+              >
+                <div
+                  class="transition-opacity"
+                  classList={{
+                    "opacity-100 duration-120 ease-out": !layout.sidebar.opened(),
+                    "opacity-0 duration-120 ease-in delay-0 pointer-events-none": layout.sidebar.opened(),
+                  }}
+                >
+                  <TooltipKeybind
+                    placement="bottom"
+                    title={language.t("command.session.new")}
+                    keybind={command.keybind("session.new")}
+                    openDelay={2000}
+                  >
+                    <Button
+                      variant="ghost"
+                      icon={creating() ? "new-session-active" : "new-session"}
+                      class="titlebar-icon w-8 h-6 p-0 box-border"
+                      disabled={layout.sidebar.opened()}
+                      tabIndex={layout.sidebar.opened() ? -1 : undefined}
+                      onClick={() => {
+                        if (!params.dir) return
+                        navigate(`/${params.dir}/session`)
+                      }}
+                      aria-label={language.t("command.session.new")}
+                      aria-current={creating() ? "page" : undefined}
+                    />
+                  </TooltipKeybind>
+                </div>
+              </div>
+            </Show>
+            <Show when={hasProjects()}>
+              <div
+                class="flex items-center gap-0 transition-transform"
+                classList={{
+                  "translate-x-0": !layout.sidebar.opened(),
+                  "-translate-x-[36px]": layout.sidebar.opened(),
+                  "duration-180 ease-out": !layout.sidebar.opened(),
+                  "duration-180 ease-in": layout.sidebar.opened(),
+                }}
+              >
+                <Tooltip placement="bottom" value={language.t("common.goBack")} openDelay={2000}>
+                  <Button
+                    variant="ghost"
+                    icon="chevron-left"
+                    class="titlebar-icon w-6 h-6 p-0 box-border"
+                    disabled={!canBack()}
+                    onClick={back}
+                    aria-label={language.t("common.goBack")}
+                  />
+                </Tooltip>
+                <Tooltip placement="bottom" value={language.t("common.goForward")} openDelay={2000}>
+                  <Button
+                    variant="ghost"
+                    icon="chevron-right"
+                    class="titlebar-icon w-6 h-6 p-0 box-border"
+                    disabled={!canForward()}
+                    onClick={forward}
+                    aria-label={language.t("common.goForward")}
+                  />
+                </Tooltip>
+              </div>
+            </Show>
           </div>
         </div>
         <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
       </div>
 
-      <div class="min-w-0 flex items-center justify-center pointer-events-none lg:absolute lg:inset-0 lg:flex lg:items-center lg:justify-center">
-        <div id="opencode-titlebar-center" class="pointer-events-auto w-full min-w-0 flex justify-center lg:w-fit" />
+      <div class="min-w-0 flex items-center justify-center pointer-events-none">
+        <div id="opencode-titlebar-center" class="pointer-events-auto min-w-0 flex justify-center w-fit max-w-full" />
       </div>
 
       <div
         classList={{
           "flex items-center min-w-0 justify-end": true,
-          "pr-6": !windows(),
+          "pr-2": !windows(),
         }}
+        data-tauri-drag-region
         onMouseDown={drag}
       >
-        <div id="opencode-titlebar-right" class="flex items-center gap-3 shrink-0 justify-end" />
+        <div id="opencode-titlebar-right" class="flex items-center gap-1 shrink-0 justify-end" />
         <Show when={windows()}>
-          <div class="w-6 shrink-0" />
+          {!tauriApi() && <div class="w-36 shrink-0" />}
           <div data-tauri-decorum-tb class="flex flex-row" />
         </Show>
       </div>

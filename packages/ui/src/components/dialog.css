@@ -54,7 +54,7 @@
 
       [data-slot="dialog-header"] {
         display: flex;
-        padding: 20px;
+        padding: 16px 20px;
         justify-content: space-between;
         align-items: center;
         flex-shrink: 0;

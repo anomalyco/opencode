@@ -4,6 +4,7 @@
 // borrowed from https://github.com/skyline69/balatro-mod-manager
 #[cfg(target_os = "linux")]
 fn configure_display_backend() -> Option<String> {
+    use opencode_lib::linux_windowing::{Backend, SessionEnv, select_backend};
     use std::env;
 
     let set_env_if_absent = |key: &str, value: &str| {
@@ -14,45 +15,28 @@ fn configure_display_backend() -> Option<String> {
         }
     };
 
-    let on_wayland = env::var_os("WAYLAND_DISPLAY").is_some()
-        || matches!(
-            env::var("XDG_SESSION_TYPE"),
-            Ok(v) if v.eq_ignore_ascii_case("wayland")
-        );
-    if !on_wayland {
-        return None;
-    }
-
+    let session = SessionEnv::capture();
     let prefer_wayland = opencode_lib::linux_display::read_wayland().unwrap_or(false);
-    let allow_wayland = prefer_wayland
-        || matches!(
-            env::var("OC_ALLOW_WAYLAND"),
-            Ok(v) if matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes")
-        );
-    if allow_wayland {
-        if prefer_wayland {
-            return Some("Wayland session detected; using native Wayland from settings".into());
+    let decision = select_backend(&session, prefer_wayland)?;
+
+    match decision.backend {
+        Backend::X11 => {
+            set_env_if_absent("WINIT_UNIX_BACKEND", "x11");
+            set_env_if_absent("GDK_BACKEND", "x11");
+            set_env_if_absent("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
-        return Some("Wayland session detected; respecting OC_ALLOW_WAYLAND=1".into());
+        Backend::Wayland => {
+            set_env_if_absent("WINIT_UNIX_BACKEND", "wayland");
+            set_env_if_absent("GDK_BACKEND", "wayland");
+            set_env_if_absent("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
+        Backend::Auto => {
+            set_env_if_absent("GDK_BACKEND", "wayland,x11");
+            set_env_if_absent("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
     }
 
-    // Prefer XWayland when available to avoid Wayland protocol errors seen during startup.
-    if env::var_os("DISPLAY").is_some() {
-        set_env_if_absent("WINIT_UNIX_BACKEND", "x11");
-        set_env_if_absent("GDK_BACKEND", "x11");
-        set_env_if_absent("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-        return Some(
-            "Wayland session detected; forcing X11 backend to avoid compositor protocol errors. \
-                Set OC_ALLOW_WAYLAND=1 to keep native Wayland."
-                .into(),
-        );
-    }
-
-    set_env_if_absent("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-    Some(
-        "Wayland session detected without X11; leaving Wayland enabled (set WINIT_UNIX_BACKEND/GDK_BACKEND manually if needed)."
-            .into(),
-    )
+    Some(decision.note)
 }
 
 fn main() {

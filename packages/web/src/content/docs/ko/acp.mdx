@@ -1,12 +1,12 @@
 ---
-title: ACP 지원
-description: ACP 호환 편집기에서 opencode를 사용하세요.
+title: ACP Support
+description: Use OpenCode in any ACP-compatible editor.
 ---
 
-opencode는 [Agent Client Protocol](https://agentclientprotocol.com) 또는 (ACP)을 지원하며, 호환 편집기 및 IDE에서 직접 사용할 수 있습니다.
+OpenCode는 [Agent Client Protocol](https://agentclientprotocol.com)(ACP)을 지원하므로, ACP 호환 편집기와 IDE에서 OpenCode를 직접 사용할 수 있습니다.
 
 :::tip
-ACP를 지원하는 편집기 및 도구 목록의 경우 [ACP 진행 보고서](https://zed.dev/blog/acp-progress-report#available-now)를 확인하십시오.
+ACP를 지원하는 편집기와 tool 목록은 [ACP progress report](https://zed.dev/blog/acp-progress-report#available-now)에서 확인하세요.
 :::
 
 ACP는 코드 편집기와 AI 코딩 에이전트 간의 통신을 표준화하는 개방형 프로토콜입니다.
@@ -15,17 +15,17 @@ ACP는 코드 편집기와 AI 코딩 에이전트 간의 통신을 표준화하�
 
 ## 구성
 
-ACP를 통해 opencode를 사용하려면 `opencode acp` 명령을 실행하려면 편집기를 구성하십시오.
+ACP로 OpenCode를 사용하려면, 편집기에서 `opencode acp` 명령을 실행하도록 config를 설정하세요.
 
-명령은 opencode를 실행하여 JSON-RPC를 통해 편집기와 통신하는 ACP 호환 하위 프로세스로 시작합니다.
+이 명령은 OpenCode를 ACP 호환 subprocess로 시작하며, stdio 기반 JSON-RPC를 통해 편집기와 통신합니다.
 
-아래는 ACP를 지원하는 인기있는 편집기의 예입니다.
+아래는 ACP를 지원하는 주요 편집기 예시입니다.
 
 ---
 
-##### Zed
+### Zed
 
-[Zed](https://zed.dev) 구성 (`~/.config/zed/settings.json`)에 추가 :
+[Zed](https://zed.dev) config(`~/.config/zed/settings.json`)에 다음을 추가하세요.
 
 ```json title="~/.config/zed/settings.json"
 {
@@ -38,9 +38,9 @@ ACP를 통해 opencode를 사용하려면 `opencode acp` 명령을 실행하려�
 }
 ```
 
-그것을 열려면 **Command Palette **에서 `agent: new thread` 동작을 사용하십시오.
+열려면 **Command Palette**에서 `agent: new thread` action을 사용하세요.
 
-`keymap.json`를 편집하여 키보드 단축키도 결합할 수 있습니다.
+`keymap.json`을 수정해 키보드 단축키를 바인딩할 수도 있습니다.
 
 ```json title="keymap.json"
 [
@@ -67,9 +67,9 @@ ACP를 통해 opencode를 사용하려면 `opencode acp` 명령을 실행하려�
 
 ---
 
-#### JetBrains IDEs
+### JetBrains IDEs
 
-[JetBrains IDE]에 추가하십시오 (https://www.jetbrains.com/) [documentation]에 따라 acp.json (https://www.jetbrains.com/help/ai-assistant/acp.html):
+[JetBrains IDE](https://www.jetbrains.com/)에서는 [documentation](https://www.jetbrains.com/help/ai-assistant/acp.html)에 따라 `acp.json`에 다음을 추가하세요.
 
 ```json title="acp.json"
 {
@@ -82,13 +82,13 @@ ACP를 통해 opencode를 사용하려면 `opencode acp` 명령을 실행하려�
 }
 ```
 
-그것을 열려면 AI Chat Agent selector의 새로운 'opencode' 에이전트를 사용하십시오.
+열려면 AI Chat agent selector에서 새 `OpenCode` agent를 선택하세요.
 
 ---
 
-#### Avante.nvim
+### Avante.nvim
 
-[Avante.nvim](https://github.com/yetone/avante.nvim) 구성에 추가하십시오:
+[Avante.nvim](https://github.com/yetone/avante.nvim) config에 다음을 추가하세요.
 
 ```lua
 {
@@ -101,7 +101,7 @@ ACP를 통해 opencode를 사용하려면 `opencode acp` 명령을 실행하려�
 }
 ```
 
-환경 변수를 전달해야 하는 경우:
+환경 변수를 전달해야 한다면 다음과 같이 설정하세요.
 
 ```lua {6-8}
 {
@@ -119,9 +119,9 @@ ACP를 통해 opencode를 사용하려면 `opencode acp` 명령을 실행하려�
 
 ---
 
-#### CodeCompanion.nvim
+### CodeCompanion.nvim
 
-opencode를 [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim)에서 ACP 에이전트로 사용하려면 Neovim config에 다음을 추가하십시오.
+[CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim)에서 OpenCode를 ACP agent로 사용하려면 Neovim config에 다음을 추가하세요.
 
 ```lua
 require("codecompanion").setup({
@@ -136,21 +136,21 @@ require("codecompanion").setup({
 })
 ```
 
-이 구성은 CodeCompanion을 설정하여 채팅을 위한 ACP 에이전트로 opencode를 사용합니다.
+이 config는 chat에서 OpenCode를 ACP agent로 사용하도록 CodeCompanion을 설정합니다.
 
-환경 변수 (`OPENCODE_API_KEY`와 같은)를 전달해야하는 경우, CodeCompanion.nvim 문서에서 [Configuring Adapters: Environment variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)를 참조하십시오.
+환경 변수(`OPENCODE_API_KEY` 등)를 전달해야 한다면 CodeCompanion.nvim documentation의 [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)를 참고하세요.
 
-## 지원 기능
+## 지원
 
-opencode는 터미널과 동일하게 ACP를 통해 작동합니다. 모든 기능은 지원됩니다:
+OpenCode는 ACP를 통해서도 터미널과 동일하게 동작합니다. 다음 기능을 모두 지원합니다.
 
 :::note
 `/undo` 및 `/redo`와 같은 일부 내장 슬래시 명령은 현재 지원되지 않습니다.
 :::
 
-- 내장 도구 (파일 작업, terminal 명령 등)
-- 사용자 정의 도구 및 슬래시 명령
-- opencode config에서 설정된 MCP 서버
-- `AGENTS.md`의 프로젝트 별 규칙
-- 사용자 정의 포맷 및 라이터
-- 에이전트 및 권한 시스템
+- 내장 tool(파일 작업, terminal 명령 등)
+- 사용자 정의 tool과 slash command
+- OpenCode config에 설정한 MCP 서버
+- `AGENTS.md`의 프로젝트별 규칙
+- 사용자 정의 formatter와 linter
+- agent 및 권한 시스템

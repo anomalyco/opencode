@@ -2,11 +2,15 @@ import { describe, expect, test } from "bun:test"
 import { APICallError } from "ai"
 import { MessageV2 } from "../../src/session/message-v2"
 import type { Provider } from "../../src/provider/provider"
+import { ModelID, ProviderID } from "../../src/provider/schema"
+import { SessionID, MessageID, PartID } from "../../src/session/schema"
+import { Question } from "../../src/question"
 
-const sessionID = "session"
+const sessionID = SessionID.make("session")
+const providerID = ProviderID.make("test")
 const model: Provider.Model = {
-  id: "test-model",
-  providerID: "test",
+  id: ModelID.make("test-model"),
+  providerID,
   api: {
     id: "test-model",
     url: "https://example.com",
@@ -60,7 +64,7 @@ function userInfo(id: string): MessageV2.User {
     role: "user",
     time: { created: 0 },
     agent: "user",
-    model: { providerID: "test", modelID: "test" },
+    model: { providerID, modelID: ModelID.make("test") },
     tools: {},
     mode: "",
   } as unknown as MessageV2.User
@@ -97,9 +101,9 @@ function assistantInfo(
 
 function basePart(messageID: string, id: string) {
   return {
-    id,
+    id: PartID.make(id),
     sessionID,
-    messageID,
+    messageID: MessageID.make(messageID),
   }
 }
 
@@ -794,7 +798,7 @@ describe("session.message-v2.fromError", () => {
         code: "context_length_exceeded",
       },
     }
-    const result = MessageV2.fromError(input, { providerID: "test" })
+    const result = MessageV2.fromError(input, { providerID })
 
     expect(result).toStrictEqual({
       name: "ContextOverflowError",
@@ -829,7 +833,7 @@ describe("session.message-v2.fromError", () => {
           message: item.code === "invalid_prompt" ? item.message : undefined,
         },
       }
-      const result = MessageV2.fromError(input, { providerID: "test" })
+      const result = MessageV2.fromError(input, { providerID })
 
       expect(result).toStrictEqual({
         name: "APIError",
@@ -839,35 +843,6 @@ describe("session.message-v2.fromError", () => {
           responseBody: JSON.stringify(input),
         },
       })
-    })
-  })
-
-  test("maps github-copilot 403 to reauth guidance", () => {
-    const error = new APICallError({
-      message: "forbidden",
-      url: "https://api.githubcopilot.com/v1/chat/completions",
-      requestBodyValues: {},
-      statusCode: 403,
-      responseHeaders: { "content-type": "application/json" },
-      responseBody: '{"error":"forbidden"}',
-      isRetryable: false,
-    })
-
-    const result = MessageV2.fromError(error, { providerID: "github-copilot" })
-
-    expect(result).toStrictEqual({
-      name: "APIError",
-      data: {
-        message:
-          "Please reauthenticate with the copilot provider to ensure your credentials work properly with OpenCode.",
-        statusCode: 403,
-        isRetryable: false,
-        responseHeaders: { "content-type": "application/json" },
-        responseBody: '{"error":"forbidden"}',
-        metadata: {
-          url: "https://api.githubcopilot.com/v1/chat/completions",
-        },
-      },
     })
   })
 
@@ -890,9 +865,29 @@ describe("session.message-v2.fromError", () => {
         responseHeaders: { "content-type": "application/json" },
         isRetryable: false,
       })
-      const result = MessageV2.fromError(error, { providerID: "test" })
+      const result = MessageV2.fromError(error, { providerID })
       expect(MessageV2.ContextOverflowError.isInstance(result)).toBe(true)
     })
+  })
+
+  test("detects context overflow from context_length_exceeded code in response body", () => {
+    const error = new APICallError({
+      message: "Request failed",
+      url: "https://example.com",
+      requestBodyValues: {},
+      statusCode: 422,
+      responseHeaders: { "content-type": "application/json" },
+      responseBody: JSON.stringify({
+        error: {
+          message: "Some message",
+          type: "invalid_request_error",
+          code: "context_length_exceeded",
+        },
+      }),
+      isRetryable: false,
+    })
+    const result = MessageV2.fromError(error, { providerID })
+    expect(MessageV2.ContextOverflowError.isInstance(result)).toBe(true)
   })
 
   test("does not classify 429 no body as context overflow", () => {
@@ -905,14 +900,14 @@ describe("session.message-v2.fromError", () => {
         responseHeaders: { "content-type": "application/json" },
         isRetryable: false,
       }),
-      { providerID: "test" },
+      { providerID },
     )
     expect(MessageV2.ContextOverflowError.isInstance(result)).toBe(false)
     expect(MessageV2.APIError.isInstance(result)).toBe(true)
   })
 
   test("serializes unknown inputs", () => {
-    const result = MessageV2.fromError(123, { providerID: "test" })
+    const result = MessageV2.fromError(123, { providerID })
 
     expect(result).toStrictEqual({
       name: "UnknownError",
@@ -920,5 +915,43 @@ describe("session.message-v2.fromError", () => {
         message: "123",
       },
     })
+  })
+
+  test("serializes tagged errors with their message", () => {
+    const result = MessageV2.fromError(new Question.RejectedError(), { providerID })
+
+    expect(result).toStrictEqual({
+      name: "UnknownError",
+      data: {
+        message: "The user dismissed this question",
+      },
+    })
+  })
+
+  test("classifies ZlibError from fetch as retryable APIError", () => {
+    const zlibError = new Error(
+      'ZlibError fetching "https://opencode.cloudflare.dev/anthropic/messages". For more information, pass `verbose: true` in the second argument to fetch()',
+    )
+    ;(zlibError as any).code = "ZlibError"
+    ;(zlibError as any).errno = 0
+    ;(zlibError as any).path = ""
+
+    const result = MessageV2.fromError(zlibError, { providerID })
+
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
+    expect((result as MessageV2.APIError).data.message).toInclude("decompression")
+  })
+
+  test("classifies ZlibError as AbortedError when abort context is provided", () => {
+    const zlibError = new Error(
+      'ZlibError fetching "https://opencode.cloudflare.dev/anthropic/messages". For more information, pass `verbose: true` in the second argument to fetch()',
+    )
+    ;(zlibError as any).code = "ZlibError"
+    ;(zlibError as any).errno = 0
+
+    const result = MessageV2.fromError(zlibError, { providerID, aborted: true })
+
+    expect(result.name).toBe("MessageAbortedError")
   })
 })

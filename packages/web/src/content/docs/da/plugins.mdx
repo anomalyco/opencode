@@ -119,7 +119,7 @@ Plugin-funktionen modtager:
 - `directory`: Den aktuelle arbejdsmappe.
 - `worktree`: Git worktree-stien.
 - `client`: En opencode SDK klient til interaktion med AI.
-- `-: Buns [shell API](https://bun.com/docs/runtime/shell) til udførelse af kommandoer.
+- `$`: Buns [shell API](https://bun.com/docs/runtime/shell) til udførelse af kommandoer.
 
 ---
 
@@ -307,6 +307,10 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 - `execute`: Funktion, der kører, når værktøjet kaldes
 
 Dine tilpassede værktøjer vil være tilgængelige for opencode sammen med indbyggede værktøjer.
+
+:::note
+Hvis et plugin-værktøj bruger samme navn som et indbygget værktøj, har plugin-værktøjet forrang.
+:::
 
 ---
 

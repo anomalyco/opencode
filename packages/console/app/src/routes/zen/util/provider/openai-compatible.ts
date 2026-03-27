@@ -21,7 +21,7 @@ type Usage = {
   }
 }
 
-export const oaCompatHelper: ProviderHelper = () => ({
+export const oaCompatHelper: ProviderHelper = ({ adjustCacheUsage }) => ({
   format: "oa-compat",
   modifyUrl: (providerApi: string) => providerApi + "/chat/completions",
   modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => {
@@ -54,14 +54,18 @@ export const oaCompatHelper: ProviderHelper = () => ({
         usage = json.usage
       },
       retrieve: () => usage,
-      buidlCostChunk: (cost: string) => `data: ${JSON.stringify({ choices: [], cost })}\n\n`,
     }
   },
   normalizeUsage: (usage: Usage) => {
-    const inputTokens = usage.prompt_tokens ?? 0
+    let inputTokens = usage.prompt_tokens ?? 0
     const outputTokens = usage.completion_tokens ?? 0
     const reasoningTokens = usage.completion_tokens_details?.reasoning_tokens ?? undefined
-    const cacheReadTokens = usage.cached_tokens ?? usage.prompt_tokens_details?.cached_tokens ?? undefined
+    let cacheReadTokens = usage.cached_tokens ?? usage.prompt_tokens_details?.cached_tokens ?? undefined
+
+    if (adjustCacheUsage && !cacheReadTokens) {
+      cacheReadTokens = Math.floor(inputTokens * 0.9)
+    }
+
     return {
       inputTokens: inputTokens - (cacheReadTokens ?? 0),
       outputTokens,

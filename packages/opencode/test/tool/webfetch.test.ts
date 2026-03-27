@@ -2,12 +2,13 @@ import { describe, expect, test } from "bun:test"
 import path from "path"
 import { Instance } from "../../src/project/instance"
 import { WebFetchTool } from "../../src/tool/webfetch"
+import { SessionID, MessageID } from "../../src/session/schema"
 
 const projectRoot = path.join(import.meta.dir, "../..")
 
 const ctx = {
-  sessionID: "test",
-  messageID: "message",
+  sessionID: SessionID.make("ses_test"),
+  messageID: MessageID.make("message"),
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),
@@ -46,6 +47,9 @@ describe("tool.webfetch", () => {
             expect(result.attachments?.[0].type).toBe("file")
             expect(result.attachments?.[0].mime).toBe("image/png")
             expect(result.attachments?.[0].url.startsWith("data:image/png;base64,")).toBe(true)
+            expect(result.attachments?.[0]).not.toHaveProperty("id")
+            expect(result.attachments?.[0]).not.toHaveProperty("sessionID")
+            expect(result.attachments?.[0]).not.toHaveProperty("messageID")
           },
         })
       },

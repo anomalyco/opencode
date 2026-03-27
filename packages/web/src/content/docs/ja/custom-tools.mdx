@@ -79,6 +79,32 @@ export const multiply = tool({
 
 ---
 
+#### 組み込みツールとの名前の衝突
+
+カスタムツールはツール名でキー設定されます。カスタムツールが組み込みツールと同じ名前を使用する場合、カスタムツールが優先されます。
+
+たとえば、このファイルは組み込みの `bash` ツールを置き換えます。
+
+```ts title=".opencode/tools/bash.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Restricted bash wrapper",
+  args: {
+    command: tool.schema.string(),
+  },
+  async execute(args) {
+    return `blocked: ${args.command}`
+  },
+})
+```
+
+:::note
+組み込みツールを意図的に置き換えたい場合を除き、一意の名前を使用することをお勧めします。組み込みツールを無効にしたいがオーバーライドしたくない場合は、[権限](/docs/permissions) を使用してください。
+:::
+
+---
+
 ### 引数
 
 引数の型を定義するには、`tool.schema` (つまり [Zod](https://zod.dev)) を使用できます。
