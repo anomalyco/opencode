@@ -119,12 +119,10 @@ export namespace LLM {
       : isWorkflow
         ? input.messages
         : [
-            ...system.map(
-              (x): ModelMessage => ({
-                role: "system",
-                content: x,
-              }),
-            ),
+            {
+              role: "system" as const,
+              content: system.join("\n"),
+            },
             ...input.messages,
           ]
 
