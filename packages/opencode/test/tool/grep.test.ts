@@ -84,6 +84,57 @@ describe("tool.grep", () => {
       },
     })
   })
+
+  test("searches pptx via MarkItDown and combines with text file matches", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "slides.pptx"), Buffer.from([0x50, 0x4b, 0x03, 0x04]))
+        await Bun.write(path.join(dir, "notes.txt"), "keyword in notes")
+
+        const mockCmd = path.join(dir, "mock-markitdown.mjs")
+        await Bun.write(
+          mockCmd,
+          [
+            "const filepath = process.argv[process.argv.length - 1]",
+            "if (!filepath.endsWith('.pptx') && !filepath.endsWith('.docx')) process.exit(2)",
+            "console.log('slide title')",
+            "console.log('keyword in slide')",
+          ].join("\n"),
+        )
+        await Bun.$`chmod +x ${mockCmd}`
+      },
+    })
+
+    const oldCmd = process.env.OPENCODE_MARKITDOWN_CMD
+    process.env.OPENCODE_MARKITDOWN_CMD = `${process.execPath} ${path.join(tmp.path, "mock-markitdown.mjs")}`
+
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const grep = await GrepTool.init()
+          const result = await grep.execute(
+            {
+              pattern: "keyword",
+              path: tmp.path,
+            },
+            ctx,
+          )
+
+          expect(result.output).toContain(path.join(tmp.path, "slides.pptx"))
+          expect(result.output).toContain(path.join(tmp.path, "notes.txt"))
+          expect(result.metadata.matches).toBeGreaterThanOrEqual(2)
+          expect(result.metadata.officeMatches).toBeGreaterThanOrEqual(1)
+        },
+      })
+    } finally {
+      if (oldCmd === undefined) {
+        delete process.env.OPENCODE_MARKITDOWN_CMD
+      } else {
+        process.env.OPENCODE_MARKITDOWN_CMD = oldCmd
+      }
+    }
+  })
 })
 
 describe("CRLF regex handling", () => {

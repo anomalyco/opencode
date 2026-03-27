@@ -4,6 +4,7 @@ import { Tool } from "./tool"
 import { Filesystem } from "../util/filesystem"
 import { Ripgrep } from "../file/ripgrep"
 import { Process } from "../util/process"
+import { convertOfficeToMarkdown, isOfficeDocumentPath } from "../util/markitdown"
 
 import DESCRIPTION from "./grep.txt"
 import { Instance } from "../project/instance"
@@ -11,6 +12,14 @@ import path from "path"
 import { assertExternalDirectory } from "./external-directory"
 
 const MAX_LINE_LENGTH = 2000
+const OFFICE_FILE_SCAN_LIMIT = 20
+
+type Match = {
+  path: string
+  modTime: number
+  lineNum: number
+  lineText: string
+}
 
 export const GrepTool = Tool.define("grep", {
   description: DESCRIPTION,
@@ -79,7 +88,7 @@ export const GrepTool = Tool.define("grep", {
 
     // Handle both Unix (\n) and Windows (\r\n) line endings
     const lines = output.trim().split(/\r?\n/)
-    const matches = []
+    const matches: Match[] = []
 
     for (const line of lines) {
       if (!line) continue
@@ -100,6 +109,14 @@ export const GrepTool = Tool.define("grep", {
         lineText,
       })
     }
+
+    const officeSearch = await findOfficeMatches({
+      searchPath,
+      pattern: params.pattern,
+      include: params.include,
+      abort: ctx.abort,
+    })
+    matches.push(...officeSearch.matches)
 
     matches.sort((a, b) => b.modTime - a.modTime)
 
@@ -144,13 +161,104 @@ export const GrepTool = Tool.define("grep", {
       outputLines.push("(Some paths were inaccessible and skipped)")
     }
 
+    if (officeSearch.filesSkipped > 0) {
+      outputLines.push("")
+      outputLines.push(
+        `(Some office files were skipped after conversion errors: ${officeSearch.filesSkipped}${officeSearch.skipPreview ? `; e.g. ${officeSearch.skipPreview}` : ""})`,
+      )
+    }
+
+    if (officeSearch.filesCapped) {
+      outputLines.push("")
+      outputLines.push(
+        `(Office-file scanning capped at ${OFFICE_FILE_SCAN_LIMIT} files. Narrow the path/include filter for exhaustive results.)`,
+      )
+    }
+
+    if (officeSearch.regexUnsupported) {
+      outputLines.push("")
+      outputLines.push("(Office-file search skipped: pattern is unsupported by JS RegExp)")
+    }
+
     return {
       title: params.pattern,
       metadata: {
         matches: totalMatches,
         truncated,
+        officeMatches: officeSearch.matches.length,
       },
       output: outputLines.join("\n"),
     }
   },
 })
+
+async function findOfficeMatches(input: {
+  searchPath: string
+  pattern: string
+  include?: string
+  abort: AbortSignal
+}) {
+  let matcher: RegExp
+  try {
+    matcher = new RegExp(input.pattern)
+  } catch {
+    return {
+      matches: [] as Match[],
+      filesSkipped: 0,
+      filesCapped: false,
+      skipPreview: "",
+      regexUnsupported: true,
+    }
+  }
+
+  const officeFiles: string[] = []
+  for await (const relativePath of Ripgrep.files({
+    cwd: input.searchPath,
+    glob: input.include ? [input.include] : undefined,
+    signal: input.abort,
+  })) {
+    const absolutePath = path.join(input.searchPath, relativePath)
+    if (!isOfficeDocumentPath(absolutePath)) continue
+    officeFiles.push(absolutePath)
+    if (officeFiles.length >= OFFICE_FILE_SCAN_LIMIT) break
+  }
+
+  const matches: Match[] = []
+  let filesSkipped = 0
+  const skippedPaths: string[] = []
+
+  for (const officePath of officeFiles) {
+    let converted = ""
+    try {
+      converted = await convertOfficeToMarkdown(officePath, { abort: input.abort })
+    } catch {
+      filesSkipped += 1
+      if (skippedPaths.length < 3) skippedPaths.push(officePath)
+      continue
+    }
+
+    const lines = converted.replace(/\r\n/g, "\n").split("\n")
+    const stats = Filesystem.stat(officePath)
+    const modTime = stats?.mtime.getTime() ?? 0
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      matcher.lastIndex = 0
+      if (!matcher.test(line)) continue
+      matches.push({
+        path: officePath,
+        modTime,
+        lineNum: i + 1,
+        lineText: line,
+      })
+    }
+  }
+
+  return {
+    matches,
+    filesSkipped,
+    filesCapped: officeFiles.length >= OFFICE_FILE_SCAN_LIMIT,
+    skipPreview: skippedPaths.join(", "),
+    regexUnsupported: false,
+  }
+}

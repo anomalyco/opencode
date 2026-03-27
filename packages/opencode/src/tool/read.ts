@@ -3,7 +3,6 @@ import { createReadStream } from "fs"
 import * as fs from "fs/promises"
 import * as path from "path"
 import { createInterface } from "readline"
-import { spawn } from "node:child_process"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
 import { FileTime } from "../file/time"
@@ -12,14 +11,13 @@ import { Instance } from "../project/instance"
 import { assertExternalDirectory } from "./external-directory"
 import { InstructionPrompt } from "../session/instruction"
 import { Filesystem } from "../util/filesystem"
+import { convertOfficeToMarkdown, isOfficeDocumentPath } from "../util/markitdown"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
 const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
 const MAX_BYTES = 50 * 1024
 const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
-const MARKITDOWN_TIMEOUT_MS = 30_000
-const MARKITDOWN_EXTENSIONS = new Set([".docx", ".pptx"])
 
 export const ReadTool = Tool.define("read", {
   description: DESCRIPTION,
@@ -144,9 +142,8 @@ export const ReadTool = Tool.define("read", {
       }
     }
 
-    const ext = path.extname(filepath).toLowerCase()
-    if (MARKITDOWN_EXTENSIONS.has(ext)) {
-      const converted = await convertWithMarkItDown(filepath)
+    if (isOfficeDocumentPath(filepath)) {
+      const converted = await convertOfficeToMarkdown(filepath, { abort: ctx.abort })
       const rendered = renderTextOutput(converted, offsetAndLimit(params))
 
       let output = [`<path>${filepath}</path>`, `<type>file</type>`, "<content>"].join("\n")
@@ -331,63 +328,6 @@ function renderTextOutput(text: string, options: { offset: number; limit: number
     preview,
     truncated,
   }
-}
-
-async function convertWithMarkItDown(filepath: string): Promise<string> {
-  const configured = process.env.OPENCODE_MARKITDOWN_CMD?.trim()
-  if (configured) {
-    return runCommand(configured, [filepath])
-  }
-
-  try {
-    return await runCommand("markitdown", [filepath])
-  } catch (error) {
-    if (!isCommandMissing(error)) throw error
-  }
-
-  try {
-    return await runCommand("python3", ["-m", "markitdown", filepath])
-  } catch (error) {
-    if (!isCommandMissing(error)) throw error
-  }
-
-  throw new Error(
-    "Unable to run MarkItDown. Install the 'markitdown' CLI or set OPENCODE_MARKITDOWN_CMD to a working executable.",
-  )
-}
-
-function isCommandMissing(error: unknown): boolean {
-  if (!(error instanceof Error)) return false
-  return /not found|ENOENT|spawn/i.test(error.message)
-}
-
-function runCommand(command: string, args: string[]): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] })
-    const stdout: Buffer[] = []
-    const stderr: Buffer[] = []
-
-    const timer = setTimeout(() => {
-      child.kill("SIGTERM")
-      reject(new Error(`Command timed out after ${MARKITDOWN_TIMEOUT_MS}ms: ${command} ${args.join(" ")}`))
-    }, MARKITDOWN_TIMEOUT_MS)
-
-    child.stdout.on("data", (chunk) => stdout.push(Buffer.from(chunk)))
-    child.stderr.on("data", (chunk) => stderr.push(Buffer.from(chunk)))
-    child.on("error", (error) => {
-      clearTimeout(timer)
-      reject(new Error(`Failed to execute ${command}: ${error.message}`))
-    })
-    child.on("close", (code) => {
-      clearTimeout(timer)
-      if (code === 0) {
-        resolve(Buffer.concat(stdout).toString("utf-8"))
-        return
-      }
-      const err = Buffer.concat(stderr).toString("utf-8").trim()
-      reject(new Error(`Command failed (${code}): ${command} ${args.join(" ")}\n${err}`))
-    })
-  })
 }
 
 async function isBinaryFile(filepath: string, fileSize: number): Promise<boolean> {

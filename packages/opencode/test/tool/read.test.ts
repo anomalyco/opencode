@@ -448,6 +448,59 @@ root_type Monster;`
   })
 })
 
+describe("tool.read office documents", () => {
+  test("reads pptx content through MarkItDown and respects offset/limit", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "deck.pptx"), Buffer.from([0x50, 0x4b, 0x03, 0x04]))
+
+        const mockCmd = path.join(dir, "mock-markitdown.mjs")
+        await Bun.write(
+          mockCmd,
+          [
+            "const filepath = process.argv[process.argv.length - 1]",
+            "if (!filepath.endsWith('.pptx') && !filepath.endsWith('.docx')) process.exit(2)",
+            "console.log('alpha')",
+            "console.log('beta keyword')",
+            "console.log('gamma')",
+          ].join("\n"),
+        )
+        await Bun.$`chmod +x ${mockCmd}`
+      },
+    })
+
+    const oldCmd = process.env.OPENCODE_MARKITDOWN_CMD
+    process.env.OPENCODE_MARKITDOWN_CMD = `${process.execPath} ${path.join(tmp.path, "mock-markitdown.mjs")}`
+
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const read = await ReadTool.init()
+          const result = await read.execute(
+            {
+              filePath: path.join(tmp.path, "deck.pptx"),
+              offset: 2,
+              limit: 2,
+            },
+            ctx,
+          )
+
+          expect(result.output).toContain("2: beta keyword")
+          expect(result.output).toContain("3: gamma")
+          expect(result.output).not.toContain("1: alpha")
+        },
+      })
+    } finally {
+      if (oldCmd === undefined) {
+        delete process.env.OPENCODE_MARKITDOWN_CMD
+      } else {
+        process.env.OPENCODE_MARKITDOWN_CMD = oldCmd
+      }
+    }
+  })
+})
+
 describe("tool.read loaded instructions", () => {
   test("loads AGENTS.md from parent directory and includes in metadata", async () => {
     await using tmp = await tmpdir({
