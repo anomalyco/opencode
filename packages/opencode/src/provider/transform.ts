@@ -133,6 +133,7 @@ export namespace ProviderTransform {
             return part
           })
         }
+        result.push(msg)
 
         // Fix message sequence: tool messages cannot be followed by user messages
         if (msg.role === "tool" && nextMsg?.role === "user") {
