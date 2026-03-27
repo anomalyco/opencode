@@ -41,7 +41,7 @@ import { createGateway } from "@ai-sdk/gateway"
 import { createTogetherAI } from "@ai-sdk/togetherai"
 import { createPerplexity } from "@ai-sdk/perplexity"
 import { createVercel } from "@ai-sdk/vercel"
-import { createGitLab, VERSION as GITLAB_PROVIDER_VERSION } from "@gitlab/gitlab-ai-provider"
+import { createGitLab, VERSION as GITLAB_PROVIDER_VERSION } from "gitlab-ai-provider"
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
@@ -249,7 +249,7 @@ export namespace Provider {
     "@ai-sdk/togetherai": createTogetherAI,
     "@ai-sdk/perplexity": createPerplexity,
     "@ai-sdk/vercel": createVercel,
-    "@gitlab/gitlab-ai-provider": createGitLab,
+    "gitlab-ai-provider": createGitLab,
     // @ts-ignore (TODO: kill this code so we dont have to maintain it)
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
   }
