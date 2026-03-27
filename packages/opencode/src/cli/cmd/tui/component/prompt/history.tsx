@@ -1,10 +1,12 @@
-import path from "path"
+import { ClientDatabase } from "@/storage/db"
+import { ClientPromptHistoryTable } from "@/storage/client-db.schema"
 import { Global } from "@/global"
-import { Filesystem } from "@/util/filesystem"
+import { desc, lt } from "drizzle-orm"
+import { existsSync, readFileSync } from "fs"
+import path from "path"
 import { onMount } from "solid-js"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { createSimpleContext } from "../../context/helper"
-import { appendFile, writeFile } from "fs/promises"
 import type { AgentPart, FilePart, TextPart } from "@opencode-ai/sdk/v2"
 
 export type PromptInfo = {
@@ -30,29 +32,11 @@ const MAX_HISTORY_ENTRIES = 50
 export const { use: usePromptHistory, provider: PromptHistoryProvider } = createSimpleContext({
   name: "PromptHistory",
   init: () => {
-    const historyPath = path.join(Global.Path.state, "prompt-history.jsonl")
-    onMount(async () => {
-      const text = await Filesystem.readText(historyPath).catch(() => "")
-      const lines = text
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => {
-          try {
-            return JSON.parse(line)
-          } catch {
-            return null
-          }
-        })
-        .filter((line): line is PromptInfo => line !== null)
-        .slice(-MAX_HISTORY_ENTRIES)
+    const file = path.join(Global.Path.state, "prompt-history.jsonl")
 
-      setStore("history", lines)
-
-      // Rewrite file with only valid entries to self-heal corruption
-      if (lines.length > 0) {
-        const content = lines.map((line) => JSON.stringify(line)).join("\n") + "\n"
-        writeFile(historyPath, content).catch(() => {})
-      }
+    onMount(() => {
+      seed(file)
+      setStore("history", list())
     })
 
     const [store, setStore] = createStore({
@@ -83,26 +67,81 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
       },
       append(item: PromptInfo) {
         const entry = structuredClone(unwrap(item))
-        let trimmed = false
         setStore(
           produce((draft) => {
             draft.history.push(entry)
             if (draft.history.length > MAX_HISTORY_ENTRIES) {
               draft.history = draft.history.slice(-MAX_HISTORY_ENTRIES)
-              trimmed = true
             }
             draft.index = 0
           }),
         )
-
-        if (trimmed) {
-          const content = store.history.map((line) => JSON.stringify(line)).join("\n") + "\n"
-          writeFile(historyPath, content).catch(() => {})
-          return
-        }
-
-        appendFile(historyPath, JSON.stringify(entry) + "\n").catch(() => {})
+        write(entry)
       },
     }
   },
 })
+
+function seed(file: string) {
+  ClientDatabase.transaction((db) => {
+    const row = db.select({ id: ClientPromptHistoryTable.id }).from(ClientPromptHistoryTable).limit(1).get()
+    if (row) return
+    if (!existsSync(file)) return
+
+    const now = Date.now()
+    const rows = readFileSync(file, "utf-8")
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        try {
+          return JSON.parse(line)
+        } catch {
+          return null
+        }
+      })
+      .filter((item): item is PromptInfo => item !== null)
+      .slice(-MAX_HISTORY_ENTRIES)
+      .map((data) => ({
+        data,
+        time_created: now,
+      }))
+
+    if (rows.length === 0) return
+    db.insert(ClientPromptHistoryTable).values(rows).run()
+  })
+}
+
+function list() {
+  return ClientDatabase.use((db) =>
+    db
+      .select({ data: ClientPromptHistoryTable.data })
+      .from(ClientPromptHistoryTable)
+      .orderBy(desc(ClientPromptHistoryTable.id))
+      .limit(MAX_HISTORY_ENTRIES)
+      .all(),
+  )
+    .reverse()
+    .map((row) => row.data as PromptInfo)
+}
+
+function write(data: PromptInfo) {
+  ClientDatabase.transaction((db) => {
+    db.insert(ClientPromptHistoryTable)
+      .values({
+        data,
+        time_created: Date.now(),
+      })
+      .run()
+
+    const row = db
+      .select({ id: ClientPromptHistoryTable.id })
+      .from(ClientPromptHistoryTable)
+      .orderBy(desc(ClientPromptHistoryTable.id))
+      .offset(MAX_HISTORY_ENTRIES - 1)
+      .limit(1)
+      .get()
+    if (!row) return
+
+    db.delete(ClientPromptHistoryTable).where(lt(ClientPromptHistoryTable.id, row.id)).run()
+  })
+}
