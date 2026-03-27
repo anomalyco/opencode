@@ -727,6 +727,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
           renderer.resume()
         })
 
+        process.stdout.write("\x1b]111\x07")
         renderer.suspend()
         // pid=0 means send the signal to all processes in the process group
         process.kill(0, "SIGTSTP")

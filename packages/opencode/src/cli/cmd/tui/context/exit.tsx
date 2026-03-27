@@ -34,7 +34,8 @@ export const { use: useExit, provider: ExitProvider } = createSimpleContext({
         if (task) return task
         task = (async () => {
           await input.onBeforeExit?.()
-          // Reset window title before destroying renderer
+          // Reset terminal background and window title before destroying renderer
+          process.stdout.write("\x1b]111\x07")
           renderer.setTerminalTitle("")
           renderer.destroy()
           win32FlushInputBuffer()

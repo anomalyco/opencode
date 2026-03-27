@@ -404,6 +404,19 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     createEffect(() => {
       renderer.setBackgroundColor(values().background)
+      const bg = values().background
+      if (bg.a > 0) {
+        const r = Math.round(bg.r * 255)
+          .toString(16)
+          .padStart(2, "0")
+        const g = Math.round(bg.g * 255)
+          .toString(16)
+          .padStart(2, "0")
+        const b = Math.round(bg.b * 255)
+          .toString(16)
+          .padStart(2, "0")
+        process.stdout.write(`\x1b]11;rgb:${r}/${g}/${b}\x07`)
+      }
     })
 
     const syntax = createMemo(() => generateSyntax(values()))
