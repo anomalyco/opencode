@@ -70,7 +70,6 @@ import { Toast, useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv.tsx"
 import { Editor } from "../../util/editor"
 import stripAnsi from "strip-ansi"
-import { Footer } from "./footer.tsx"
 import { usePromptRef } from "../../context/prompt"
 import { useExit } from "../../context/exit"
 import { Filesystem } from "@/util/filesystem"
@@ -1465,6 +1464,8 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
               streaming={true}
               content={props.part.text.trim()}
               conceal={ctx.conceal()}
+              fg={theme.markdownText}
+              bg={theme.background}
             />
           </Match>
           <Match when={!Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
@@ -1667,6 +1668,7 @@ function InlineTool(props: {
 
   const denied = createMemo(
     () =>
+      error()?.includes("QuestionRejectedError") ||
       error()?.includes("rejected permission") ||
       error()?.includes("specified a rule") ||
       error()?.includes("user dismissed"),

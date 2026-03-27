@@ -45,7 +45,7 @@ export namespace ShareNext {
   }> {
     const headers: Record<string, string> = {}
 
-    const active = Account.active()
+    const active = await Account.active()
     if (!active?.active_org_id) {
       const baseUrl = await Config.get().then((x) => x.enterprise?.url ?? "https://opncd.ai")
       return { headers, api: legacyApi, baseUrl }
@@ -66,29 +66,28 @@ export namespace ShareNext {
   export async function init() {
     if (disabled) return
     Bus.subscribe(Session.Event.Updated, async (evt) => {
-      await sync(evt.properties.info.id, [
+      const session = await Session.get(evt.properties.sessionID)
+
+      await sync(session.id, [
         {
           type: "session",
-          data: evt.properties.info,
+          data: session,
         },
       ])
     })
     Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
-      await sync(evt.properties.info.sessionID, [
+      const info = evt.properties.info
+      await sync(info.sessionID, [
         {
           type: "message",
           data: evt.properties.info,
         },
       ])
-      if (evt.properties.info.role === "user") {
-        await sync(evt.properties.info.sessionID, [
+      if (info.role === "user") {
+        await sync(info.sessionID, [
           {
             type: "model",
-            data: [
-              await Provider.getModel(evt.properties.info.model.providerID, evt.properties.info.model.modelID).then(
-                (m) => m,
-              ),
-            ],
+            data: [await Provider.getModel(info.model.providerID, info.model.modelID).then((m) => m)],
           },
         ])
       }

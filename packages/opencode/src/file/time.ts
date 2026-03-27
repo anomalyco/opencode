@@ -1,5 +1,6 @@
 import { DateTime, Effect, Layer, Semaphore, ServiceMap } from "effect"
-import { runPromiseInstance } from "@/effect/runtime"
+import { InstanceState } from "@/effect/instance-state"
+import { makeRuntime } from "@/effect/run-service"
 import { Flag } from "@/flag/flag"
 import type { SessionID } from "@/session/schema"
 import { Filesystem } from "../util/filesystem"
@@ -35,6 +36,11 @@ export namespace FileTime {
     return next
   }
 
+  interface State {
+    reads: Map<SessionID, Map<string, Stamp>>
+    locks: Map<string, Semaphore.Semaphore>
+  }
+
   export interface Interface {
     readonly read: (sessionID: SessionID, file: string) => Effect.Effect<void>
     readonly get: (sessionID: SessionID, file: string) => Effect.Effect<Date | undefined>
@@ -48,30 +54,40 @@ export namespace FileTime {
     Service,
     Effect.gen(function* () {
       const disableCheck = yield* Flag.OPENCODE_DISABLE_FILETIME_CHECK
-      const reads = new Map<SessionID, Map<string, Stamp>>()
-      const locks = new Map<string, Semaphore.Semaphore>()
+      const state = yield* InstanceState.make<State>(
+        Effect.fn("FileTime.state")(() =>
+          Effect.succeed({
+            reads: new Map<SessionID, Map<string, Stamp>>(),
+            locks: new Map<string, Semaphore.Semaphore>(),
+          }),
+        ),
+      )
 
-      const getLock = (filepath: string) => {
+      const getLock = Effect.fn("FileTime.lock")(function* (filepath: string) {
+        const locks = (yield* InstanceState.get(state)).locks
         const lock = locks.get(filepath)
         if (lock) return lock
 
         const next = Semaphore.makeUnsafe(1)
         locks.set(filepath, next)
         return next
-      }
+      })
 
       const read = Effect.fn("FileTime.read")(function* (sessionID: SessionID, file: string) {
+        const reads = (yield* InstanceState.get(state)).reads
         log.info("read", { sessionID, file })
         session(reads, sessionID).set(file, yield* stamp(file))
       })
 
       const get = Effect.fn("FileTime.get")(function* (sessionID: SessionID, file: string) {
+        const reads = (yield* InstanceState.get(state)).reads
         return reads.get(sessionID)?.get(file)?.read
       })
 
       const assert = Effect.fn("FileTime.assert")(function* (sessionID: SessionID, filepath: string) {
         if (disableCheck) return
 
+        const reads = (yield* InstanceState.get(state)).reads
         const time = reads.get(sessionID)?.get(filepath)
         if (!time) throw new Error(`You must read file ${filepath} before overwriting it. Use the Read tool first`)
 
@@ -85,26 +101,28 @@ export namespace FileTime {
       })
 
       const withLock = Effect.fn("FileTime.withLock")(function* <T>(filepath: string, fn: () => Promise<T>) {
-        return yield* Effect.promise(fn).pipe(getLock(filepath).withPermits(1))
+        return yield* Effect.promise(fn).pipe((yield* getLock(filepath)).withPermits(1))
       })
 
       return Service.of({ read, get, assert, withLock })
     }),
-  )
+  ).pipe(Layer.orDie)
+
+  const { runPromise } = makeRuntime(Service, layer)
 
   export function read(sessionID: SessionID, file: string) {
-    return runPromiseInstance(Service.use((s) => s.read(sessionID, file)))
+    return runPromise((s) => s.read(sessionID, file))
   }
 
   export function get(sessionID: SessionID, file: string) {
-    return runPromiseInstance(Service.use((s) => s.get(sessionID, file)))
+    return runPromise((s) => s.get(sessionID, file))
   }
 
   export async function assert(sessionID: SessionID, filepath: string) {
-    return runPromiseInstance(Service.use((s) => s.assert(sessionID, filepath)))
+    return runPromise((s) => s.assert(sessionID, filepath))
   }
 
   export async function withLock<T>(filepath: string, fn: () => Promise<T>): Promise<T> {
-    return runPromiseInstance(Service.use((s) => s.withLock(filepath, fn)))
+    return runPromise((s) => s.withLock(filepath, fn))
   }
 }
