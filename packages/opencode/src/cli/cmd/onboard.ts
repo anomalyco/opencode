@@ -14,6 +14,13 @@ export const OnboardCommand = cmd({
   command: "onboard",
   describe: "interactive setup — choose a provider and model to get started",
   async handler() {
+    // Bun compiled binaries: process.stdin is not instanceof tty.ReadStream,
+    // so @clack/core's instanceof check skips setRawMode. Force it manually.
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(true)
+      process.stdin.resume()
+    }
+
     prompts.intro(UI.logo() + "\n  Welcome to CoBuilder — let's get you set up")
 
     // Step 1: Provider selection
