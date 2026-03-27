@@ -143,10 +143,18 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${{ steps.next_version.outputs.tag }}" \
-            --title "CoBuilder ${{ steps.next_version.outputs.display }}" \
-            --notes-file /tmp/release-notes.md \
-            --draft
+          if gh release view "${{ steps.next_version.outputs.tag }}" --repo CobuilderLabs/opencode > /dev/null 2>&1; then
+            echo "Release ${{ steps.next_version.outputs.tag }} already exists — updating notes and ensuring draft state"
+            gh release edit "${{ steps.next_version.outputs.tag }}" \
+              --notes-file /tmp/release-notes.md \
+              --draft \
+              --repo CobuilderLabs/opencode
+          else
+            gh release create "${{ steps.next_version.outputs.tag }}" \
+              --title "CoBuilder ${{ steps.next_version.outputs.display }}" \
+              --notes-file /tmp/release-notes.md \
+              --draft
+          fi
 
       - name: Build and upload binaries
         env:
