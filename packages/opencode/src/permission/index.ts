@@ -6,6 +6,7 @@ import { ProjectID } from "@/project/schema"
 import { MessageID, SessionID } from "@/session/schema"
 import { PermissionTable } from "@/session/session.sql"
 import { Database, eq } from "@/storage"
+import { Plugin } from "@/plugin"
 import { zod } from "@/util/effect-zod"
 import { Log } from "@/util"
 import { withStatics } from "@/util/schema"
@@ -153,6 +154,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    const plugin = yield* Plugin.Service
     const state = yield* InstanceState.make<State>(
       Effect.fn("Permission.state")(function* (ctx) {
         const row = Database.use((db) =>
@@ -201,6 +203,23 @@ export const layer = Layer.effect(
         ...request,
       })
       log.info("asking", { id, permission: info.permission, patterns: info.patterns })
+
+      const hook = yield* plugin
+        .trigger("permission.ask", info, {
+          status: "ask" as const,
+          message: undefined as string | undefined,
+        })
+        .pipe(
+          Effect.catch((error) => {
+            log.warn("permission.ask hook failed", { error })
+            return Effect.succeed({ status: "ask" as const, message: undefined })
+          }),
+        )
+      if (hook.status === "deny") {
+        if (hook.message) return yield* new CorrectedError({ feedback: hook.message })
+        return yield* new RejectedError()
+      }
+      if (hook.status === "allow") return
 
       const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
       pending.set(id, { info, deferred })
@@ -319,6 +338,6 @@ export function disabled(tools: string[], ruleset: Ruleset): Set<string> {
   return result
 }
 
-export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
+export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Plugin.defaultLayer))
 
 export * as Permission from "."

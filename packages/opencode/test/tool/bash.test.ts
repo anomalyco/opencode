@@ -985,6 +985,51 @@ describe("tool.bash permissions", () => {
     })
   })
 
+  test("includes raw command in metadata", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        await bash.execute({ command: "echo hello", description: "Echo" }, testCtx)
+        const req = requests.find((r) => r.permission === "bash")
+        expect(req).toBeDefined()
+        expect(req!.metadata.command).toBe("echo hello")
+      },
+    })
+  })
+
+  test("metadata.command is the full unparsed command for pipelines", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        const cmd = "git log --oneline | head -5"
+        await bash.execute({ command: cmd, description: "Git log piped" }, testCtx)
+        const req = requests.find((r) => r.permission === "bash")
+        expect(req).toBeDefined()
+        // patterns contains individual parsed subcommands; metadata.command is the original
+        expect(req!.patterns.length).toBeGreaterThan(1)
+        expect(req!.metadata.command).toBe(cmd)
+      },
+    })
+  })
+
   each("always pattern has space before wildcard to not include different commands", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
