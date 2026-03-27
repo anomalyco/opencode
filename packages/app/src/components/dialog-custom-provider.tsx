@@ -324,7 +324,7 @@ export function DialogCustomProvider(props: Props) {
                     variant="ghost"
                     class="mt-1.5"
                     onClick={() => removeModel(i())}
-                    disabled={form.models.length <= 1}
+                    disabled={form.models.length <= 1 && !props.edit}
                     aria-label={language.t("provider.custom.models.remove")}
                   />
                 </div>
@@ -368,7 +368,7 @@ export function DialogCustomProvider(props: Props) {
                     variant="ghost"
                     class="mt-1.5"
                     onClick={() => removeHeader(i())}
-                    disabled={form.headers.length <= 1}
+                    disabled={form.headers.length <= 1 && !props.edit}
                     aria-label={language.t("provider.custom.headers.remove")}
                   />
                 </div>
