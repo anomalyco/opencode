@@ -15,5 +15,4 @@
     "github-triage": false,
     "github-pr-search": false,
   },
-  "plugin": ["file:///home/v1truv1us/repos/opencode/packages/opencode/examples/plugins/adversarial-review.ts"],
 }
