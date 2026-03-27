@@ -9,6 +9,7 @@ import {
 } from "@thisbeyond/solid-dnd"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { getIconName } from "@opencode-ai/ui/icon"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { type LocalProject } from "@/context/layout"
 
@@ -30,6 +31,8 @@ export const SidebarContent = (props: {
   onOpenSettings: () => void
   helpLabel: Accessor<string>
   onOpenHelp: () => void
+  pluginItems: Accessor<{ id: string; label: string; icon: string; href: string }[] | undefined>
+  onOpenPluginItem: (href: string) => void
   renderPanel: () => JSX.Element
 }): JSX.Element => {
   const expanded = createMemo(() => !!props.mobile || props.opened())
@@ -90,6 +93,21 @@ export const SidebarContent = (props: {
           </DragDropProvider>
         </div>
         <div class="shrink-0 w-full pt-3 pb-6 flex flex-col items-center gap-2">
+          <div class="flex max-h-40 w-full flex-col items-center gap-2 overflow-y-auto no-scrollbar">
+            <For each={props.pluginItems() || []}>
+              {(item) => (
+                <Tooltip placement={placement()} value={item.label}>
+                  <IconButton
+                    icon={getIconName(item.icon)}
+                    variant="ghost"
+                    size="large"
+                    onClick={() => props.onOpenPluginItem(item.href)}
+                    aria-label={item.label}
+                  />
+                </Tooltip>
+              )}
+            </For>
+          </div>
           <TooltipKeybind placement={placement()} title={props.settingsLabel()} keybind={props.settingsKeybind() ?? ""}>
             <IconButton
               icon="settings-gear"

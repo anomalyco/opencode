@@ -88,6 +88,20 @@ import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from 
 import { SidebarContent } from "./layout/sidebar-shell"
 
 export default function Layout(props: ParentProps) {
+  const safe = new Set(["http:", "https:", "mailto:"])
+
+  const external = (href: string) => {
+    if (typeof URL.canParse === "function" && !URL.canParse(href)) return
+
+    try {
+      const url = new URL(href)
+      if (!safe.has(url.protocol)) return
+      return url.href
+    } catch {
+      return
+    }
+  }
+
   const [store, setStore, , ready] = persisted(
     Persist.global("layout.page", ["layout.page.v1"]),
     createStore({
@@ -145,6 +159,17 @@ export default function Layout(props: ParentProps) {
   }
   const colorSchemeLabel = (scheme: ColorScheme) => language.t(colorSchemeKey[scheme])
   const currentDir = createMemo(() => route().dir)
+
+  const [pluginItems] = createResource(
+    () => currentDir(),
+    async (directory) => {
+      if (!directory) return []
+      return globalSDK.client.plugin
+        .sidebar({ directory })
+        .then((x) => x.data?.items ?? [])
+        .catch(() => [])
+    },
+  )
 
   const [state, setState] = createStore({
     autoselect: !initialDirectory,
@@ -2073,7 +2098,9 @@ export default function Layout(props: ParentProps) {
     const clearNotifications = () =>
       workspaces()
         .filter((directory) => notification.project.unseenCount(directory) > 0)
-        .forEach((directory) => notification.project.markViewed(directory))
+        .forEach((directory) => {
+          notification.project.markViewed(directory)
+        })
     const workspacesEnabled = createMemo(() => {
       const item = project()
       if (!item) return false
@@ -2371,6 +2398,17 @@ export default function Layout(props: ParentProps) {
       onOpenSettings={openSettings}
       helpLabel={() => language.t("sidebar.help")}
       onOpenHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+      pluginItems={pluginItems}
+      onOpenPluginItem={(href: string) => {
+        if (mobile) layout.mobileSidebar.hide()
+        if (href.startsWith("/")) {
+          navigate(href)
+          return
+        }
+
+        const url = external(href)
+        if (url) platform.openLink(url)
+      }}
       renderPanel={() =>
         mobile ? <SidebarPanel project={currentProject} mobile /> : <SidebarPanel project={currentProject} merged />
       }
@@ -2435,7 +2473,11 @@ export default function Layout(props: ParentProps) {
             />
 
             <div class="xl:hidden">
-              <div
+              <button
+                type="button"
+                aria-label={language.t("common.dismiss")}
+                aria-hidden={!layout.mobileSidebar.opened()}
+                tabIndex={layout.mobileSidebar.opened() ? 0 : -1}
                 classList={{
                   "fixed inset-x-0 top-10 bottom-0 z-40 transition-opacity duration-200": true,
                   "opacity-100 pointer-events-auto": layout.mobileSidebar.opened(),
@@ -2453,7 +2495,6 @@ export default function Layout(props: ParentProps) {
                   "translate-x-0": layout.mobileSidebar.opened(),
                   "-translate-x-full": !layout.mobileSidebar.opened(),
                 }}
-                onClick={(e) => e.stopPropagation()}
               >
                 {sidebarContent(true)}
               </nav>
@@ -2482,29 +2523,29 @@ export default function Layout(props: ParentProps) {
               </main>
             </div>
 
-            <div
-              classList={{
-                "hidden xl:flex absolute inset-y-0 left-16 z-30": true,
-                "opacity-100 translate-x-0 pointer-events-auto": state.peeked && !layout.sidebar.opened(),
-                "opacity-0 -translate-x-2 pointer-events-none": !state.peeked || layout.sidebar.opened(),
-                "transition-[opacity,transform] motion-reduce:transition-none": true,
-                "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
-                "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
-              }}
-              onMouseMove={disarm}
-              onMouseEnter={() => {
-                disarm()
-                aim.reset()
-              }}
-              onPointerDown={disarm}
-              onMouseLeave={() => {
-                arm()
-              }}
-            >
-              <Show when={peekProject()}>
+            <Show when={peekProject() && state.peeked && !layout.sidebar.opened()}>
+              <aside
+                classList={{
+                  "hidden xl:flex absolute inset-y-0 left-16 z-30": true,
+                  "opacity-100 translate-x-0 pointer-events-auto": state.peeked && !layout.sidebar.opened(),
+                  "opacity-0 -translate-x-2 pointer-events-none": !state.peeked || layout.sidebar.opened(),
+                  "transition-[opacity,transform] motion-reduce:transition-none": true,
+                  "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
+                  "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
+                }}
+                onMouseMove={disarm}
+                onMouseEnter={() => {
+                  disarm()
+                  aim.reset()
+                }}
+                onPointerDown={disarm}
+                onMouseLeave={() => {
+                  arm()
+                }}
+              >
                 <SidebarPanel project={peekProject} merged={false} />
-              </Show>
-            </div>
+              </aside>
+            </Show>
 
             <div
               classList={{

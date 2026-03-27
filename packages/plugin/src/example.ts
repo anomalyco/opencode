@@ -1,7 +1,7 @@
 import { Plugin } from "./index.js"
 import { tool } from "./tool.js"
 
-export const ExamplePlugin: Plugin = async (ctx) => {
+export const ExamplePlugin: Plugin = async (_ctx) => {
   return {
     tool: {
       mytool: tool({
@@ -13,6 +13,15 @@ export const ExamplePlugin: Plugin = async (ctx) => {
           return `Hello ${args.foo}!`
         },
       }),
+    },
+    "ui.sidebar": async (_input, output) => {
+      output.items.push({
+        id: "ceo-settings",
+        label: "CEO Settings",
+        icon: "settings-gear",
+        href: "/settings/ceo",
+        order: 0,
+      })
     },
   }
 }
