@@ -265,6 +265,10 @@ jobs:
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
           "
 
+      # DO NOT change to 'bun x electron-vite' — Bun runs electron-vite from
+      # its isolated cache (node_modules/.bun/electron-vite*/) which lacks
+      # picocolors as a peer dep on Windows, causing ERR_MODULE_NOT_FOUND.
+      # npm install + npx is the only approach that resolves deps correctly.
       - name: Install desktop dependencies with npm
         run: cd packages/desktop-electron && npm install --legacy-peer-deps
 
