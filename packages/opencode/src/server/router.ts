@@ -1,10 +1,12 @@
 import type { MiddlewareHandler } from "hono"
-import { Flag } from "../flag/flag"
-import { getAdaptor } from "./adaptors"
-import { WorkspaceID } from "./schema"
-import { Workspace } from "./workspace"
-import { InstanceRoutes } from "../server/instance"
-import { lazy } from "../util/lazy"
+import { getAdaptor } from "@/control-plane/adaptors"
+import { WorkspaceID } from "@/control-plane/schema"
+import { Workspace } from "@/control-plane/workspace"
+import { lazy } from "@/util/lazy"
+import { Filesystem } from "@/util/filesystem"
+import { Instance } from "@/project/instance"
+import { InstanceBootstrap } from "@/project/bootstrap"
+import { InstanceRoutes } from "./instance"
 
 type Rule = { method?: string; path: string; exact?: boolean; action: "local" | "forward" }
 
@@ -25,22 +27,35 @@ function local(method: string, path: string) {
 const routes = lazy(() => InstanceRoutes())
 
 export const WorkspaceRouterMiddleware: MiddlewareHandler = async (c) => {
-  if (!Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
-    return routes().fetch(c.req.raw, c.env)
-  }
+  const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
+  const directory = Filesystem.resolve(
+    (() => {
+      try {
+        return decodeURIComponent(raw)
+      } catch {
+        return raw
+      }
+    })(),
+  )
 
   const url = new URL(c.req.url)
-  const raw = url.searchParams.get("workspace")
+  const workspaceParam = url.searchParams.get("workspace")
 
-  if (!raw) {
-    return routes().fetch(c.req.raw, c.env)
+  // TODO: If session is being routed, force it to lookup the
+  // project/workspace
+
+  // If no workspace is provided we use the "project" workspace
+  if (!workspaceParam) {
+    return Instance.provide({
+      directory,
+      init: InstanceBootstrap,
+      async fn() {
+        return routes().fetch(c.req.raw, c.env)
+      },
+    })
   }
 
-  if (local(c.req.method, url.pathname)) {
-    return routes().fetch(c.req.raw, c.env)
-  }
-
-  const workspaceID = WorkspaceID.make(raw)
+  const workspaceID = WorkspaceID.make(workspaceParam)
   const workspace = await Workspace.get(workspaceID)
   if (!workspace) {
     return new Response(`Workspace not found: ${workspaceID}`, {
@@ -49,6 +64,26 @@ export const WorkspaceRouterMiddleware: MiddlewareHandler = async (c) => {
         "content-type": "text/plain; charset=utf-8",
       },
     })
+  }
+
+  // Handle local workspaces directly so we can pass env to `fetch`,
+  // necessary for websocket upgrades
+  if (workspace.type === "worktree") {
+    return Instance.provide({
+      directory: workspace.directory!,
+      init: InstanceBootstrap,
+      async fn() {
+        return routes().fetch(c.req.raw, c.env)
+      },
+    })
+  }
+
+  // Remote workspaces
+
+  if (local(c.req.method, url.pathname)) {
+    // No instance provided because we are serving cached data; there
+    // is no instance to work with
+    return routes().fetch(c.req.raw, c.env)
   }
 
   const adaptor = await getAdaptor(workspace.type)
