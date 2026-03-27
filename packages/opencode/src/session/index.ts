@@ -26,7 +26,7 @@ import { ProjectID } from "../project/schema"
 import { WorkspaceID } from "../control-plane/schema"
 import { SessionID, MessageID, PartID } from "./schema"
 
-import type { Provider } from "@/provider/provider"
+import { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { PermissionNext } from "@/permission"
 import { Global } from "@/global"
@@ -336,6 +336,19 @@ export namespace Session {
       variant: z.string().optional(),
     }),
     async (input) => {
+      try {
+        await Provider.getModel(input.model.providerID as ProviderID, input.model.modelID as ModelID)
+      } catch (e) {
+        if (e instanceof Provider.ModelNotFoundError) {
+          log.warn("setModel: model not found, proceeding anyway", {
+            sessionID: input.sessionID,
+            model: input.model,
+            suggestions: (e as InstanceType<typeof Provider.ModelNotFoundError>).data.suggestions,
+          })
+        } else {
+          throw e
+        }
+      }
       const row = Database.use((db) => {
         const row = db
           .update(SessionTable)

@@ -1,0 +1,326 @@
+{
+  "round": 3,
+  "totalRounds": 3,
+  "models": [
+    "zai-coding-plan/glm-5",
+    "opencode/nemotron-3-super-free",
+    "openai/gpt-5.4"
+  ],
+  "subject": "Model routing changes: plugin hook documentation, spec doc, and test coverage for chat.message model mutation and subagent inheritance",
+  "startedAt": "2026-03-21T04:35:00.000Z",
+  "rounds": {
+    "1": {
+      "model": "zai-coding-plan/glm-5",
+      "completedAt": "2026-03-21T04:40:00.000Z",
+      "findings": {
+        "critical": [
+          {
+            "reviewer": "devil-advocate",
+            "issue": "Test 3 directly invokes TaskTool.execute() bypassing real code path",
+            "explanation": "Test creates fake assistant message manually and calls TaskTool.execute() directly. The REAL code path in prompt.ts is different. Test tests implementation detail, not integration."
+          },
+          {
+            "reviewer": "edge-case-hunter",
+            "issue": "Template string injection vulnerability in plugin generator",
+            "explanation": "writeModelRewritePlugin uses template literals with unsanitized providerID/modelID - could lead to code injection if values contain special characters"
+          },
+          {
+            "reviewer": "security-reviewer",
+            "issue": "Data exfiltration via custom provider baseURL",
+            "explanation": "Plugins can set provider with arbitrary baseURL, routing user prompts to attacker-controlled endpoints for data exfiltration"
+          },
+          {
+            "reviewer": "security-reviewer",
+            "issue": "No validation of model routing against enabled_providers",
+            "explanation": "Plugin can route to any provider/model without checking enabled_providers policy"
+          },
+          {
+            "reviewer": "scalability-reviewer",
+            "issue": "Sequential plugin execution on every message",
+            "explanation": "chat.message hook fires sequentially for each plugin with await, At 10x volume, slow plugins block message processing"
+          },
+          {
+            "reviewer": "scalability-reviewer",
+            "issue": "Full message stream on every session loop iteration",
+            "explanation": "MessageV2.filterCompacted(MessageV2.stream()) streams entire history on each loop step, causing memory/latency issues at scale"
+          }
+        ],
+        "high": [
+          {
+            "reviewer": "devil-advocate",
+            "issue": "Test 4 never actually tests subagent model override",
+            "explanation": "Only verifies agent config has model pinned, never calls TaskTool to verify override behavior"
+          },
+          {
+            "reviewer": "devil-advocate",
+            "issue": "Model inheritance comes from assistant message, not user message",
+            "explanation": "Documentation claims model from output.message.model affects subagents, but chain is user\u2192assistant\u2192subagent, This two-hop dependency not explicitly documented"
+          },
+          {
+            "reviewer": "edge-case-hunter",
+            "issue": "No test coverage for null/undefined model values",
+            "explanation": "Tests only use valid models. No coverage for null providerID, undefined modelID, empty strings"
+          },
+          {
+            "reviewer": "edge-case-hunter",
+            "issue": "No test coverage for invalid model formats",
+            "explanation": "What happens with malformed provider/model IDs? Special characters? Very long strings?"
+          },
+          {
+            "reviewer": "security-reviewer",
+            "issue": "Plugin can exfiltrate data via arbitrary provider",
+            "explanation": "Even without custom baseURL, routing to unexpected provider could send data to third party"
+          },
+          {
+            "reviewer": "scalability-reviewer",
+            "issue": "N+1 part insertions in database",
+            "explanation": "Each message with 5+ parts results in 6+ sequential database writes. Should batch inserts"
+          },
+          {
+            "reviewer": "scalability-reviewer",
+            "issue": "No model resolution caching",
+            "explanation": "Provider.getModel() does async resolution on every call, no LRU cache for repeated lookups"
+          }
+        ],
+        "medium": [
+          {
+            "reviewer": "devil-advocate",
+            "issue": "noReply:true hides real assistant behavior",
+            "explanation": "All tests use noReply:true skipping assistant response generation. Model routing for assistant never tested end-to-end"
+          },
+          {
+            "reviewer": "devil-advocate",
+            "issue": "bypassAgentCheck:true hides permission issues",
+            "explanation": "Test bypasses permission checks that real TaskTool invocations would go through"
+          },
+          {
+            "reviewer": "edge-case-hunter",
+            "issue": "No coverage for concurrent plugin mutations",
+            "explanation": "Multiple plugins for chat.message - what's execution order? How are conflicts resolved?"
+          },
+          {
+            "reviewer": "simplicity-auditor",
+            "issue": "Spec doc may be over-documented for the scope",
+            "explanation": "216-line spec for ~10 lines of doc changes and 4 tests. Could be more concise"
+          },
+          {
+            "reviewer": "scalability-reviewer",
+            "issue": "Subagent session creation overhead",
+            "explanation": "Each TaskTool.execute creates new session with permission serialization, no pooling/reuse"
+          },
+          {
+            "reviewer": "scalability-reviewer",
+            "issue": "Plugin state initialization on every directory",
+            "explanation": "Instance.state() loads ALL plugins fresh per directory, multiple directories = multiple loads"
+          }
+        ],
+        "low": [
+          {
+            "reviewer": "simplicity-auditor",
+            "issue": "Test 3's fake assistant approach is somewhat complex",
+            "explanation": "Manually creating assistant message to executing TaskTool is clever but adds complexity"
+          },
+          {
+            "reviewer": "security-reviewer",
+            "issue": "No audit logging for model routing changes",
+            "explanation": "Security-relevant mutations to output.message.model not logged for forensic analysis"
+          },
+          {
+            "reviewer": "scalability-reviewer",
+            "issue": "Missing pagination on message lookup",
+            "explanation": "MessageV2.get() retrieves full message with all parts, Consider lazy loading for large messages"
+          }
+        ]
+      }
+    },
+    "2": {
+      "model": "opencode/nemotron-3-super-free",
+      "completedAt": "2026-03-21T04:45:00.000Z",
+      "findings": {
+        "critical": [
+          {
+            "reviewer": "devil-advocate",
+            "issue": "Missing validation of model string - Plugin can set arbitrary invalid model values (e.g., empty string, non-existent provider) leading to runtime errors in downstream LLM calls",
+            "explanation": "No test verifies that invalid models are handled gracefully or cause appropriate fallback/error"
+          },
+          {
+            "reviewer": "devil-advocate",
+            "issue": "Potential race condition if multiple plugins mutate output.message.model asynchronously",
+            "explanation": "The hook interface does not specify whether plugins are called sequentially or in parallel; if parallel, last-write-wins is not guaranteed, leading to non-deterministic model selection"
+          },
+          {
+            "reviewer": "devil-advocate",
+            "issue": "Subagent inheritance test uses artificial setup (fake assistant message + direct TaskTool execution)",
+            "explanation": "Does not validate actual subagent launch flow via agent definitions, which may involve additional configuration merging, environment setup, or different code paths"
+          },
+          {
+            "reviewer": "devil-advocate",
+            "issue": "No test for explicit model pin precedence over inherited model when subagent agent config specifies model",
+            "explanation": "Test 4 mentioned but description vague; need to verify that explicit pin truly overrides and that inheritance is correctly blocked"
+          },
+          {
+            "reviewer": "devil-advocate",
+            "issue": "Missing test for null/undefined model mutation - If plugin sets output.message.model = null or undefined, what is persisted?",
+            "explanation": "Does it revert to default? Could cause storage of invalid values leading to downstream failures"
+          }
+        ],
+        "high": [
+          {
+            "reviewer": "risk-analyzer",
+            "issue": "Unhandled invalid model causes agent crash",
+            "explanation": "If a plugin sets a non-existent or unavailable model and the error is not properly caught, the agent process may crash when attempting to call the provider API"
+          },
+          {
+            "reviewer": "risk-analyzer",
+            "issue": "Unexpected high costs from expensive model selection",
+            "explanation": "A malicious or misconfigured plugin could silently switch to a costly model (e.g., GPT-4 vs. a cheaper alternative), leading to significant unexpected charges"
+          },
+          {
+            "reviewer": "risk-analyzer",
+            "issue": "Authentication failure due to mismatched model API keys",
+            "explanation": "Setting a model that requires different credentials (e.g., switching to a model needing Azure OpenAI keys when only OpenAI keys are set) causes provider API authentication errors"
+          },
+          {
+            "reviewer": "risk-analyzer",
+            "issue": "Incompatible model capabilities causing tool/use errors",
+            "explanation": "A plugin might set a model that lacks required features (e.g., tool use, vision, or JSON mode), causing failures when the agent attempts to use tools or process multimodal inputs"
+          },
+          {
+            "reviewer": "risk-analyzer",
+            "issue": "Non-deterministic model selection from concurrent plugin mutations",
+            "explanation": "If multiple plugins run asynchronously and mutate the model concurrently (without synchronization), the final model used depends on unpredictable execution order"
+          },
+          {
+            "reviewer": "edge-case-hunter",
+            "issue": "[Critical] Plugin returns non-string values (number, boolean, object) for targetProviderID or targetModelID",
+            "explanation": "Trigger: Plugin hook returns invalid types instead of strings. Impact: TypeError when accessing model properties as strings (e.g., in API calls, storage), crashing message processing"
+          },
+          {
+            "reviewer": "edge-case-hunter",
+            "issue": "[Critical] Uncaught exception in plugin hook",
+            "explanation": "Trigger: Plugin hook throws an exception during execution. Impact: Message processing pipeline fails completely, potentially losing the message and disrupting chat flow"
+          },
+          {
+            "reviewer": "edge-case-hunter",
+            "issue": "[Critical] msg.info missing modelID or providerID during inheritance",
+            "explanation": "Trigger: agent.model is null/undefined (inheritance path) AND msg.info lacks modelID/providerID. Impact: Creates invalid model object { modelID: undefined, providerID: undefined } causing downstream errors"
+          }
+        ],
+        "medium": [
+          {
+            "reviewer": "risk-analyzer",
+            "issue": "No test for scenario where plugin does not modify output.message.model",
+            "explanation": "Ensures that original model is preserved and persisted correctly; verifies that hook is non-intrusive by default"
+          },
+          {
+            "reviewer": "risk-analyzer",
+            "issue": "Missing test for model persistence across message edits or updates",
+            "explanation": "If user message is later edited, does the model field remain unchanged? Should be immutable after creation"
+          },
+          {
+            "reviewer": "risk-analyzer",
+            "issue": "No test for interaction with other hooks that may also mutate message (e.g., content modification hooks)",
+            "explanation": "Potential for ordering issues or conflicting mutations"
+          },
+          {
+            "reviewer": "risk-analyzer",
+            "issue": "Missing stress test for performance impact",
+            "explanation": "Each plugin mutation triggers a DB write? Or only at save? Need to verify that model mutation does not cause excessive database operations"
+          },
+          {
+            "reviewer": "simplicity-auditor",
+            "issue": "Test 3 creates excessive test complexity",
+            "explanation": "Building a fake assistant and executing TaskTool for model inheritance testing introduces heavyweight dependencies and slow execution"
+          },
+          {
+            "reviewer": "simplicity-auditor",
+            "issue": "Spec document over-documentation",
+            "explanation": "216-line spec with behavior contract, implementation checklist, and risk mitigation exceeds needs for a focused model mutation feature"
+          },
+          {
+            "reviewer": "simplicity-auditor",
+            "issue": "Test file verbosity",
+            "explanation": "285 lines for 4 tests indicates opportunities to reduce boilerplate through shared test utilities and more focused assertions"
+          }
+        ],
+        "low": [
+          {
+            "reviewer": "devil-advocate",
+            "issue": "Test naming could be more descriptive",
+            "explanation": "e.g., test names do not indicate which specific behavior is being verified (e.g., \"test_plugin_model_rewrite_persists\" vs generic)"
+          },
+          {
+            "reviewer": "devil-advocate",
+            "issue": "Documentation comment mentions \"authoritative model for ... default task subagents launched during this turn\" but does not define what constitutes \"during this turn\"",
+            "explanation": "edge case clarification needed"
+          },
+          {
+            "reviewer": "devil-advocate",
+            "issue": "No test for cross-turn persistence",
+            "explanation": "If conversation continues, does model setting affect future turns? Likely not, but should be confirmed"
+          }
+        ]
+      }
+    },
+    "3": {
+      "model": "openai/gpt-5.4",
+      "completedAt": "2026-03-21T04:50:00.000Z",
+      "findings": {
+        "critical": [
+          {
+            "reviewer": "risk-analyzer",
+            "issue": "Invalid rewritten model is persisted before validation",
+            "explanation": "A plugin can write an unknown or malformed model into history, and failure only appears later during provider resolution."
+          }
+        ],
+        "high": [
+          {
+            "reviewer": "devil-advocate",
+            "issue": "No test proves real assistant execution uses the rewritten model",
+            "explanation": "Current coverage fabricates the parent assistant, so regressions in user->assistant propagation would still pass."
+          },
+          {
+            "reviewer": "devil-advocate",
+            "issue": "Pinned subagent override is still not actually tested",
+            "explanation": "The named override test never launches the child task or inspects child model metadata."
+          },
+          {
+            "reviewer": "edge-case-hunter",
+            "issue": "Null/partial/invalid model rewrites remain untested",
+            "explanation": "No coverage exists for null, undefined, partial objects, or malformed provider/model IDs."
+          },
+          {
+            "reviewer": "security-reviewer",
+            "issue": "Plugin-controlled reroute can exfiltrate prompts to other enabled/custom providers",
+            "explanation": "The docs/spec normalize plugin-driven provider switching without provenance or user confirmation."
+          },
+          {
+            "reviewer": "scalability-reviewer",
+            "issue": "chat.message remains a serialized hot-path hook",
+            "explanation": "Every plugin is awaited before save, so slow routing plugins add latency to every routed turn."
+          }
+        ],
+        "medium": [
+          {
+            "reviewer": "simplicity-auditor",
+            "issue": "Spec and tests overstate confidence relative to what is actually verified",
+            "explanation": "The spec is process-heavy and the white-box TaskTool harness is brittle."
+          },
+          {
+            "reviewer": "scalability-reviewer",
+            "issue": "Subagent-heavy workflows scale session count linearly",
+            "explanation": "Each child task can create a new session and extra writes, increasing storage churn."
+          }
+        ],
+        "low": [
+          {
+            "reviewer": "security-reviewer",
+            "issue": "Generated test plugin source is interpolation-prone",
+            "explanation": "The test helper injects provider/model strings directly into TS source."
+          }
+        ]
+      }
+    }
+  },
+  "reviewComplete": true
+}

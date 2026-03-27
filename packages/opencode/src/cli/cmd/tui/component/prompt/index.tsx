@@ -176,13 +176,17 @@ export function Prompt(props: PromptProps) {
     if (!sessionID) return
     const session = sync.session.get(sessionID)
     const sessionModel = session?.model
+    const sessionVariant = session?.modelVariant
     if (!sessionModel) return
 
-    const modelKey = `${sessionModel.providerID}/${sessionModel.modelID}`
+    const modelKey = `${sessionModel.providerID}/${sessionModel.modelID}/${sessionVariant ?? ""}`
     if (modelKey === lastSessionModelID) return
 
     lastSessionModelID = modelKey
     local.model.set(sessionModel)
+    if (sessionVariant !== undefined && sessionVariant !== null) {
+      local.model.variant.set(sessionVariant)
+    }
   })
 
   command.register(() => {

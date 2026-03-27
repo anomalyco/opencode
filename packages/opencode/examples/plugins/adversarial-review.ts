@@ -43,14 +43,8 @@ function expandHomePath(filePath: string): string {
 const DEFAULT_CONFIG: ResolvedConfig = {
   enabled: true,
   totalRounds: 3,
-  models: [
-    "zai-coding-plan/glm-5",
-    "opencode/nemotron-3-super-free",
-    "openai/gpt-5.4",
-  ],
-  markers: [
-    "ROUND_COMPLETE",
-  ],
+  models: ["zai-coding-plan/glm-5", "opencode/nemotron-3-super-free", "openai/gpt-5.4"],
+  markers: ["ROUND_COMPLETE"],
   logging: {
     enabled: false,
     path: path.join(os.homedir(), ".config", "opencode", "adversarial-review.log"),
@@ -58,18 +52,9 @@ const DEFAULT_CONFIG: ResolvedConfig = {
   },
 }
 
-const CONFIG_FILE_PATH = path.join(
-  os.homedir(),
-  ".config",
-  "opencode",
-  "adversarial-review.json"
-)
+const CONFIG_FILE_PATH = path.join(os.homedir(), ".config", "opencode", "adversarial-review.json")
 
-const STATE_FILE_DIR = path.join(
-  os.homedir(),
-  ".config",
-  "opencode"
-)
+const STATE_FILE_DIR = path.join(os.homedir(), ".config", "opencode")
 
 const STATE_FILE_PATH = path.join(STATE_FILE_DIR, "adversarial-review-state.json")
 
@@ -304,9 +289,7 @@ function normalizeConfig(raw: AdversarialReviewConfig): ResolvedConfig {
     totalRounds: Math.max(
       1,
       Math.min(
-        typeof raw.totalRounds === "number" && raw.totalRounds > 0
-          ? Math.floor(raw.totalRounds)
-          : models.length,
+        typeof raw.totalRounds === "number" && raw.totalRounds > 0 ? Math.floor(raw.totalRounds) : models.length,
         models.length,
       ),
     ),
@@ -448,8 +431,8 @@ export const AdversarialReviewPlugin: Plugin = async ({ client }) => {
     resolvedConfig = { ...DEFAULT_CONFIG }
     logger?.error("plugin.init_config_fallback", { error: String(e) })
     await safeToast(client, {
-      message: "Adversarial review config is invalid; plugin disabled.",
-      variant: "error",
+      message: "Adversarial review config is invalid; running with default settings.",
+      variant: "warning",
     })
   }
 
@@ -509,9 +492,7 @@ export const AdversarialReviewPlugin: Plugin = async ({ client }) => {
       const parsed = parseModelId(roundModel)
       if (!parsed) return
 
-      const previousModel = model
-        ? `${model.providerID}/${model.modelID}`
-        : "default"
+      const previousModel = model ? `${model.providerID}/${model.modelID}` : "default"
 
       message.model = {
         providerID: parsed.providerID,
@@ -548,7 +529,7 @@ export const AdversarialReviewPlugin: Plugin = async ({ client }) => {
 
 async function safeToast(
   client: { tui: { showToast: (opts: { body: { message: string; variant?: string } }) => Promise<void> } },
-  opts: { message: string; variant?: string }
+  opts: { message: string; variant?: string },
 ): Promise<void> {
   try {
     await client.tui.showToast({ body: opts })
@@ -561,7 +542,7 @@ async function handleEvent(
   event: { type: string; [key: string]: unknown },
   state: PersistedState,
   resolvedConfig: ResolvedConfig,
-  client: { tui: { showToast: (opts: { body: { message: string; variant?: string } }) => Promise<void> } }
+  client: { tui: { showToast: (opts: { body: { message: string; variant?: string } }) => Promise<void> } },
 ): Promise<void> {
   // ── session.created / session.updated ──────────────────────────────────
   if (event.type === "session.created" || event.type === "session.updated") {
@@ -650,14 +631,6 @@ async function handleEvent(
 
     // Activation trigger — only if review is not already active
     if (!state.enabled && text.trim().toUpperCase() === "START_ADVERSARIAL_REVIEW") {
-      if (state.enabled && state.currentSessionId && state.currentSessionId !== partSessionId) {
-        await safeToast(client, {
-          message: "Another adversarial review is already active. Finish or reset it first.",
-          variant: "error",
-        })
-        logger?.info("review.trigger.rejected_concurrent", { sessionId: partSessionId })
-        return
-      }
       logger?.info("review.activated_via_trigger", { sessionId: partSessionId })
       state.enabled = true
       state.currentRound = 1
