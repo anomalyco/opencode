@@ -60,7 +60,7 @@ All options live under `experimental.sandbox` in `opencode.json`:
 - **`presets`** — defines custom presets keyed by name. Each preset can specify `mode`, `network`, `protected_roots`, `permission`, `extra_read_roots`, and `extra_write_roots`.
 - **`mode`** — overrides the preset mode (`workspace-write` or `read-only`).
 - **`network`** — overrides the preset network policy (`true` or `false`).
-- **`protected_roots`** — overrides the preset list of write-protected directory basenames (defaults to `.git` and `.opencode`).
+- **`protected_roots`** — overrides the preset list of write-protected workspace-relative paths (defaults to `.git` and `.opencode`).
 - **`extra_read_roots`** — additional absolute paths the sandbox allows reading.
 - **`extra_write_roots`** — additional absolute paths the sandbox allows writing.
 - **`excluded_commands`** — a pre-spawn deny list of command prefixes. Matched commands are blocked before execution on all covered surfaces except LSP launches.
@@ -72,7 +72,7 @@ All options live under `experimental.sandbox` in `opencode.json`:
 
 The following are explicitly **not** sandboxed:
 
-- MCP server processes (local stdio and SSE servers)
+- MCP server processes (local stdio servers and SSE connections)
 - Internal spawn utilities (`util/process.ts`, `cross-spawn-spawner.ts`) not routed through the four surfaces above
 - Domain/proxy-mediated network controls
 - All non-macOS platforms (Linux, Windows, etc.)
