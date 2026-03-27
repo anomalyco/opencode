@@ -38,9 +38,17 @@ impl Deref for MainWindow {
 impl MainWindow {
     pub const LABEL: &str = "main";
 
-    pub fn create_with_path(
+    pub fn create_hidden_with_path(
         app: &AppHandle,
         initial_path: Option<&str>,
+    ) -> Result<Self, tauri::Error> {
+        Self::create(app, initial_path, false)
+    }
+
+    fn create(
+        app: &AppHandle,
+        initial_path: Option<&str>,
+        visible: bool,
     ) -> Result<Self, tauri::Error> {
         if let Some(window) = app.get_webview_window(Self::LABEL) {
             let _ = window.set_focus();
@@ -68,7 +76,7 @@ impl MainWindow {
         .title("OpenCode")
         .decorations(true)
         .zoom_hotkeys_enabled(false)
-        .visible(true)
+        .visible(visible)
         .maximized(true)
         .initialization_script(format!(
             r#"
@@ -142,6 +150,10 @@ impl LoadingWindow {
     pub const LABEL: &str = "loading";
 
     pub fn create(app: &AppHandle) -> Result<Self, tauri::Error> {
+        if let Some(window) = app.get_webview_window(Self::LABEL) {
+            return Ok(Self(window));
+        }
+
         let decorations = use_decorations();
 
         let window_builder = base_window_config(
@@ -149,9 +161,11 @@ impl LoadingWindow {
             app,
             decorations,
         )
+        .title("OpenCode")
+        .zoom_hotkeys_enabled(false)
         .center()
         .resizable(false)
-        .inner_size(640.0, 480.0)
+        .inner_size(720.0, 520.0)
         .visible(true);
 
         Ok(Self(window_builder.build()?))

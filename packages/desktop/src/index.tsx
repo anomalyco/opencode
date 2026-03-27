@@ -31,7 +31,7 @@ import { check, type Update } from "@tauri-apps/plugin-updater"
 import { createEffect, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { render } from "solid-js/web"
 import pkg from "../package.json"
-import { initI18n, t } from "./i18n"
+import { initI18n, startup, t } from "./i18n"
 import { UPDATER_ENABLED } from "./updater"
 import { webviewZoom } from "./webview-zoom"
 import "./styles.css"
@@ -55,10 +55,12 @@ type StartupPhase = "launch" | "backend" | "project" | "session" | "ready"
 const startupReadyEvent = "opencode:startup-interactive"
 
 function startupShell() {
+  if (location.pathname === "/loading") return
   const root = document.getElementById("oc-startup-shell")
+  const app = document.getElementById("root")
   const title = document.getElementById("oc-startup-title")
-  const text = document.getElementById("oc-startup-text")
-  if (!(root instanceof HTMLElement) || !(title instanceof HTMLElement) || !(text instanceof HTMLElement)) return
+  const steps = Array.from(document.querySelectorAll<HTMLElement>(".desktop-startup-step[data-step]"))
+  if (!(root instanceof HTMLElement) || !(app instanceof HTMLElement) || !(title instanceof HTMLElement)) return
 
   const state = {
     hidden: false,
@@ -71,42 +73,57 @@ function startupShell() {
 
   const onReady = () => complete()
   window.addEventListener(startupReadyEvent, onReady, { once: true })
+  const fallback = window.setTimeout(() => {
+    complete()
+  }, 12000)
 
-  const copy: Record<StartupPhase, () => { title: string; text: string }> = {
+  // This shell intentionally lives in the main window, not in styles.css, so we can
+  // keep painting a localized loading state after the native loading window closes.
+  const copy: Record<StartupPhase, () => { title: string }> = {
     launch: () => ({
-      title: t("desktop.startup.title.launch"),
-      text: t("desktop.startup.text.launch"),
+      title: startup().launch,
     }),
     backend: () => ({
-      title: t("desktop.startup.title.backend"),
-      text: t("desktop.startup.text.backend"),
+      title: startup().backend,
     }),
     project: () => ({
-      title: t("desktop.startup.title.project"),
-      text: t("desktop.startup.text.project"),
+      title: startup().project,
     }),
     session: () => ({
-      title: t("desktop.startup.title.session"),
-      text: t("desktop.startup.text.session"),
+      title: startup().session,
     }),
     ready: () => ({
-      title: t("desktop.startup.title.ready"),
-      text: t("desktop.startup.text.ready"),
+      title: startup().ready,
     }),
   }
+
+  const order: StartupPhase[] = ["backend", "project", "session"]
 
   const show = (phase: StartupPhase) => {
     if (state.hidden) return
     root.dataset.phase = phase
     const next = copy[phase]()
     title.textContent = next.title
-    text.textContent = next.text
+    title.dataset.text = next.title
+    const current = order.indexOf(phase)
+    const names = startup()
+    for (const step of steps) {
+      const key = step.dataset.step as "backend" | "project" | "session" | undefined
+      if (!key) continue
+      const label = step.lastElementChild
+      if (label instanceof HTMLElement) label.textContent = names[`${key}_step`]
+      const index = order.indexOf(key)
+      const state = current === -1 ? "done" : index < current ? "done" : index === current ? "current" : "pending"
+      step.dataset.state = state
+    }
   }
 
   const hide = () => {
     if (state.hidden) return
     state.hidden = true
     window.removeEventListener(startupReadyEvent, onReady)
+    window.clearTimeout(fallback)
+    app.classList.add("is-ready")
     root.dataset.phase = "ready"
     root.classList.add("is-hidden")
     root.setAttribute("aria-busy", "false")

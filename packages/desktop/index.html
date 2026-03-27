@@ -14,7 +14,17 @@
     <meta property="og:image" content="/social-share.png" />
     <meta property="twitter:image" content="/social-share.png" />
     <script id="oc-theme-preload-script" src="/oc-theme-preload.js"></script>
+    <script>
+      if (location.pathname === "/loading") document.documentElement.dataset.loadingRoute = "true"
+    </script>
     <style>
+      /*
+       * Keep startup-shell styles inline in index.html.
+       * This screen must paint before the app bundle and before styles.css loads,
+       * otherwise we regress back to a black frame. Duplicating these selectors in
+       * styles.css also makes later-loaded rules override the startup shell and hide
+       * visual tuning changes.
+       */
       html,
       body {
         margin: 0;
@@ -62,6 +72,23 @@
         visibility: hidden;
       }
 
+      #root {
+        opacity: 0;
+        transition: opacity 180ms ease;
+      }
+
+      #root.is-ready {
+        opacity: 1;
+      }
+
+      html[data-loading-route="true"] #oc-startup-shell {
+        display: none;
+      }
+
+      html[data-loading-route="true"] #root {
+        opacity: 1;
+      }
+
       .desktop-startup-shell {
         display: flex;
         width: min(420px, calc(100vw - 48px));
@@ -82,68 +109,80 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 132px;
-        height: 132px;
-      }
-
-      .desktop-startup-ring {
-        position: absolute;
-        inset: 0;
-        border-radius: 999px;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-      }
-
-      @media (prefers-color-scheme: light) {
-        .desktop-startup-ring {
-          border-color: rgba(0, 0, 0, 0.12);
-        }
-      }
-
-      .desktop-startup-ring-a {
-        animation: desktop-startup-spin 7s linear infinite;
-      }
-
-      .desktop-startup-ring-b {
-        inset: 14px;
-        border-color: rgba(218, 126, 27, 0.38);
-        animation: desktop-startup-spin 4.2s linear infinite reverse;
-      }
-
-      .desktop-startup-ring-c {
-        inset: 28px;
-        border-style: dashed;
-        border-color: rgba(218, 126, 27, 0.55);
-        animation: desktop-startup-pulse 1.8s ease-in-out infinite;
+        width: 84px;
+        height: 84px;
       }
 
       .desktop-startup-mark {
         width: 42px;
         height: 52px;
         opacity: 0.94;
-        filter: drop-shadow(0 8px 30px rgba(218, 126, 27, 0.18));
+        filter: drop-shadow(0 10px 24px rgba(218, 126, 27, 0.14));
       }
 
       .desktop-startup-copy {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 0;
       }
 
       .desktop-startup-title {
+        position: relative;
+        display: inline-block;
+        color: rgba(247, 238, 208, 0.1) !important;
         font-size: 18px;
         font-weight: 600;
         letter-spacing: -0.02em;
+        white-space: nowrap;
+        text-shadow: none !important;
       }
 
-      .desktop-startup-text {
-        color: rgba(243, 239, 231, 0.72);
-        font-size: 14px;
-        line-height: 1.5;
+      .desktop-startup-title::after {
+        content: attr(data-text);
+        position: absolute;
+        inset: 0;
+        color: transparent;
+        -webkit-text-fill-color: transparent;
+        background-image: linear-gradient(
+          100deg,
+          rgba(255, 247, 229, 0) 0%,
+          rgba(255, 247, 229, 0) 10%,
+          rgba(255, 247, 229, 0.24) 24%,
+          rgba(255, 247, 229, 0.82) 38%,
+          rgba(255, 255, 255, 1) 50%,
+          rgba(255, 247, 229, 0.82) 62%,
+          rgba(255, 247, 229, 0.24) 76%,
+          rgba(255, 247, 229, 0) 90%,
+          rgba(255, 247, 229, 0) 100%
+        );
+        background-size: 340% 100%;
+        background-position: 140% 50%;
+        -webkit-background-clip: text;
+        background-clip: text;
+        filter: drop-shadow(0 0 10px rgba(255, 247, 229, 0.45));
+        animation: desktop-startup-sheen 1.8s ease-in-out infinite;
+        pointer-events: none;
       }
 
       @media (prefers-color-scheme: light) {
-        .desktop-startup-text {
-          color: rgba(26, 23, 22, 0.7);
+        .desktop-startup-title {
+          color: rgba(62, 49, 25, 0.12) !important;
+        }
+
+        .desktop-startup-title::after {
+          background-image: linear-gradient(
+            100deg,
+            rgba(124, 86, 27, 0) 0%,
+            rgba(124, 86, 27, 0) 10%,
+            rgba(124, 86, 27, 0.12) 24%,
+            rgba(184, 128, 43, 0.7) 38%,
+            rgba(214, 151, 54, 1) 50%,
+            rgba(184, 128, 43, 0.7) 62%,
+            rgba(124, 86, 27, 0.12) 76%,
+            rgba(124, 86, 27, 0) 90%,
+            rgba(124, 86, 27, 0) 100%
+          );
+          filter: drop-shadow(0 0 6px rgba(214, 151, 54, 0.18));
         }
       }
 
@@ -174,11 +213,36 @@
           transform 180ms ease;
       }
 
+      .desktop-startup-step[data-state="current"] {
+        color: #1f1405;
+        border-color: rgba(218, 126, 27, 0.82);
+        background: rgba(218, 126, 27, 0.95);
+        transform: translateY(-1px);
+      }
+
+      .desktop-startup-step[data-state="done"] {
+        color: #08170d;
+        border-color: rgba(84, 181, 112, 0.82);
+        background: rgba(84, 181, 112, 0.95);
+      }
+
       @media (prefers-color-scheme: light) {
         .desktop-startup-step {
           border-color: rgba(0, 0, 0, 0.1);
           background: rgba(0, 0, 0, 0.03);
           color: rgba(26, 23, 22, 0.68);
+        }
+
+        .desktop-startup-step[data-state="current"] {
+          color: #382506;
+          border-color: rgba(218, 126, 27, 0.78);
+          background: rgba(218, 126, 27, 0.3);
+        }
+
+        .desktop-startup-step[data-state="done"] {
+          color: #12331b;
+          border-color: rgba(84, 181, 112, 0.75);
+          background: rgba(84, 181, 112, 0.28);
         }
       }
 
@@ -190,26 +254,21 @@
         transition: background-color 180ms ease;
       }
 
-      @media (prefers-color-scheme: light) {
-        .desktop-startup-dot {
-          background: rgba(0, 0, 0, 0.18);
-        }
+      .desktop-startup-step[data-state="current"] .desktop-startup-dot {
+        background: #5f3606;
+      }
+
+      .desktop-startup-step[data-state="done"] .desktop-startup-dot {
+        background: #12331b;
       }
 
       .desktop-startup[data-phase="backend"] [data-step="backend"],
       .desktop-startup[data-phase="project"] [data-step="project"],
       .desktop-startup[data-phase="session"] [data-step="session"] {
-        color: inherit;
-        border-color: rgba(218, 126, 27, 0.54);
-        background: rgba(218, 126, 27, 0.1);
+        color: #1f1405;
+        border-color: rgba(218, 126, 27, 0.82);
+        background: rgba(218, 126, 27, 0.95);
         transform: translateY(-1px);
-      }
-
-      .desktop-startup[data-phase="backend"] [data-step="backend"] .desktop-startup-dot,
-      .desktop-startup[data-phase="project"] [data-step="project"] .desktop-startup-dot,
-      .desktop-startup[data-phase="session"] [data-step="session"] .desktop-startup-dot,
-      .desktop-startup[data-phase="ready"] .desktop-startup-dot {
-        background: #da7e1b;
       }
 
       .desktop-startup[data-phase="project"] [data-step="backend"],
@@ -218,30 +277,58 @@
       .desktop-startup[data-phase="session"] [data-step="project"],
       .desktop-startup[data-phase="ready"] [data-step="project"],
       .desktop-startup[data-phase="ready"] [data-step="session"] {
-        color: inherit;
-        border-color: rgba(218, 126, 27, 0.4);
+        color: #08170d;
+        border-color: rgba(84, 181, 112, 0.82);
+        background: rgba(84, 181, 112, 0.95);
       }
 
-      @keyframes desktop-startup-spin {
+      .desktop-startup[data-phase="backend"] [data-step="backend"] .desktop-startup-dot,
+      .desktop-startup[data-phase="project"] [data-step="project"] .desktop-startup-dot,
+      .desktop-startup[data-phase="session"] [data-step="session"] .desktop-startup-dot {
+        background: #5f3606;
+      }
+
+      .desktop-startup[data-phase="project"] [data-step="backend"] .desktop-startup-dot,
+      .desktop-startup[data-phase="session"] [data-step="backend"] .desktop-startup-dot,
+      .desktop-startup[data-phase="ready"] [data-step="backend"] .desktop-startup-dot,
+      .desktop-startup[data-phase="session"] [data-step="project"] .desktop-startup-dot,
+      .desktop-startup[data-phase="ready"] [data-step="project"] .desktop-startup-dot,
+      .desktop-startup[data-phase="ready"] [data-step="session"] .desktop-startup-dot {
+        background: #12331b;
+      }
+
+      @media (prefers-color-scheme: light) {
+        .desktop-startup-dot {
+          background: rgba(0, 0, 0, 0.18);
+        }
+
+        .desktop-startup[data-phase="backend"] [data-step="backend"],
+        .desktop-startup[data-phase="project"] [data-step="project"],
+        .desktop-startup[data-phase="session"] [data-step="session"] {
+          color: #382506;
+          border-color: rgba(218, 126, 27, 0.78);
+          background: rgba(218, 126, 27, 0.3);
+        }
+
+        .desktop-startup[data-phase="project"] [data-step="backend"],
+        .desktop-startup[data-phase="session"] [data-step="backend"],
+        .desktop-startup[data-phase="ready"] [data-step="backend"],
+        .desktop-startup[data-phase="session"] [data-step="project"],
+        .desktop-startup[data-phase="ready"] [data-step="project"],
+        .desktop-startup[data-phase="ready"] [data-step="session"] {
+          color: #12331b;
+          border-color: rgba(84, 181, 112, 0.75);
+          background: rgba(84, 181, 112, 0.28);
+        }
+      }
+
+      @keyframes desktop-startup-sheen {
         from {
-          transform: rotate(0deg);
+          background-position: 130% 50%;
         }
 
         to {
-          transform: rotate(360deg);
-        }
-      }
-
-      @keyframes desktop-startup-pulse {
-        0%,
-        100% {
-          opacity: 0.45;
-          transform: scale(0.96);
-        }
-
-        50% {
-          opacity: 1;
-          transform: scale(1.03);
+          background-position: -130% 50%;
         }
       }
     </style>
@@ -251,28 +338,24 @@
     <div id="oc-startup-shell" class="desktop-startup" data-phase="launch" aria-live="polite" aria-busy="true">
       <div class="desktop-startup-shell">
         <div class="desktop-startup-stage" aria-hidden="true">
-          <div class="desktop-startup-ring desktop-startup-ring-a"></div>
-          <div class="desktop-startup-ring desktop-startup-ring-b"></div>
-          <div class="desktop-startup-ring desktop-startup-ring-c"></div>
           <svg class="desktop-startup-mark" viewBox="0 0 80 100" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M60 80H20V40H60V80Z" fill="var(--icon-base)" />
             <path d="M60 20H20V80H60V20ZM80 100H0V0H80V100Z" fill="var(--icon-strong-base)" />
           </svg>
         </div>
         <div class="desktop-startup-copy">
-          <div id="oc-startup-title" class="desktop-startup-title">Opening OpenCode</div>
-          <div id="oc-startup-text" class="desktop-startup-text">Preparing the app for your next action.</div>
+          <div id="oc-startup-title" class="desktop-startup-title" data-text="Opening OpenCode">Opening OpenCode</div>
         </div>
         <div class="desktop-startup-steps" aria-hidden="true">
-          <div class="desktop-startup-step" data-step="backend">
+          <div class="desktop-startup-step" data-step="backend" data-state="pending">
             <span class="desktop-startup-dot"></span>
             <span>Local backend</span>
           </div>
-          <div class="desktop-startup-step" data-step="project">
+          <div class="desktop-startup-step" data-step="project" data-state="pending">
             <span class="desktop-startup-dot"></span>
             <span>Workspace</span>
           </div>
-          <div class="desktop-startup-step" data-step="session">
+          <div class="desktop-startup-step" data-step="session" data-state="pending">
             <span class="desktop-startup-dot"></span>
             <span>Session</span>
           </div>

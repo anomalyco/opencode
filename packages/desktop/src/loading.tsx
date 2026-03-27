@@ -6,26 +6,30 @@ import { Splash } from "@opencode-ai/ui/logo"
 import { Progress } from "@opencode-ai/ui/progress"
 import "./styles.css"
 import { createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
-import { commands, events, InitStep } from "./bindings"
+import { commands, events, type InitStep, type SqliteMigrationProgress } from "./bindings"
 import { Channel } from "@tauri-apps/api/core"
 import { initI18n, t } from "./i18n"
 
 const root = document.getElementById("root")!
-const lines = [
-  t("desktop.loading.status.initial"),
-  t("desktop.loading.status.migrating"),
-  t("desktop.loading.status.waiting"),
-]
 const delays = [3000, 9000]
-
-void initI18n()
 
 render(() => {
   const [step, setStep] = createSignal<InitStep | null>(null)
   const [line, setLine] = createSignal(0)
   const [percent, setPercent] = createSignal(0)
+  const [tick, setTick] = createSignal(0)
+
+  void initI18n().then(() => setTick((x) => x + 1))
 
   const phase = createMemo(() => step()?.phase)
+  const lines = createMemo(() => {
+    tick()
+    return [
+      t("desktop.loading.status.initial"),
+      t("desktop.loading.status.migrating"),
+      t("desktop.loading.status.waiting"),
+    ]
+  })
 
   const value = createMemo(() => {
     if (phase() === "done") return 100
@@ -43,42 +47,37 @@ render(() => {
     const timers = delays.map((ms, i) => setTimeout(() => setLine(i + 1), ms))
 
     const listener = events.sqliteMigrationProgress.listen((e) => {
-      if (e.payload.type === "InProgress") setPercent(Math.max(0, Math.min(100, e.payload.value)))
-      if (e.payload.type === "Done") setPercent(100)
+      const payload = e.payload as SqliteMigrationProgress
+      if (payload.type === "InProgress") setPercent(Math.max(0, Math.min(100, payload.value)))
+      if (payload.type === "Done") setPercent(100)
     })
 
     onCleanup(() => {
-      listener.then((cb) => cb())
+      listener.then((off: () => void) => off())
       timers.forEach(clearTimeout)
     })
   })
 
-  createEffect(() => {
-    if (phase() !== "done") return
-
-    const timer = setTimeout(() => events.loadingWindowComplete.emit(null), 1000)
-    onCleanup(() => clearTimeout(timer))
-  })
-
   const status = createMemo(() => {
+    tick()
     if (phase() === "done") return t("desktop.loading.status.done")
-    if (phase() === "sqlite_waiting") return lines[line()]
+    if (phase() === "sqlite_waiting") return lines()[line()]
     return t("desktop.loading.status.initial")
   })
 
   return (
     <MetaProvider>
-      <div class="w-screen h-screen bg-background-base flex items-center justify-center">
+      <div class="w-screen h-screen bg-background-base flex items-center justify-center p-8 overflow-hidden">
         <Font />
-        <div class="flex flex-col items-center gap-11">
+        <div class="w-full max-w-80 flex flex-col items-center gap-11">
           <Splash class="w-20 h-25 opacity-15" />
-          <div class="w-60 flex flex-col items-center gap-4" aria-live="polite">
-            <span class="w-full overflow-hidden text-center text-ellipsis whitespace-nowrap text-text-strong text-14-normal">
+          <div class="w-full flex flex-col items-center gap-4" aria-live="polite">
+            <span class="w-full text-center text-balance text-text-strong text-14-normal leading-6 min-h-12 flex items-center justify-center">
               {status()}
             </span>
             <Progress
               value={value()}
-              class="w-20 [&_[data-slot='progress-track']]:h-1 [&_[data-slot='progress-track']]:border-0 [&_[data-slot='progress-track']]:rounded-none [&_[data-slot='progress-track']]:bg-surface-weak [&_[data-slot='progress-fill']]:rounded-none [&_[data-slot='progress-fill']]:bg-icon-warning-base"
+              class="w-24 [&_[data-slot='progress-track']]:h-1 [&_[data-slot='progress-track']]:border-0 [&_[data-slot='progress-track']]:rounded-none [&_[data-slot='progress-track']]:bg-surface-weak [&_[data-slot='progress-fill']]:rounded-none [&_[data-slot='progress-fill']]:bg-icon-warning-base"
               aria-label={t("desktop.loading.progressAria")}
               getValueLabel={({ value }) => `${Math.round(value)}%`}
             />

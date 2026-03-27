@@ -71,6 +71,159 @@ const LOCALES: readonly Locale[] = [
   "br",
 ]
 
+const STARTUP = {
+  en: {
+    launch: "Opening OpenCode...",
+    backend: "Starting local backend...",
+    project: "Restoring your workspace...",
+    session: "Restoring your session...",
+    ready: "Almost there...",
+    backend_step: "Local backend",
+    project_step: "Workspace",
+    session_step: "Session",
+  },
+  zh: {
+    launch: "正在打开 OpenCode...",
+    backend: "正在启动本地后端...",
+    project: "正在恢复工作区...",
+    session: "正在恢复会话...",
+    ready: "即将就绪...",
+    backend_step: "本地后端",
+    project_step: "工作区",
+    session_step: "会话",
+  },
+  zht: {
+    launch: "正在開啟 OpenCode...",
+    backend: "正在啟動本機後端...",
+    project: "正在恢復工作區...",
+    session: "正在恢復工作階段...",
+    ready: "即將就緒...",
+    backend_step: "本機後端",
+    project_step: "工作區",
+    session_step: "工作階段",
+  },
+  ko: {
+    launch: "OpenCode 여는 중...",
+    backend: "로컬 백엔드 시작 중...",
+    project: "작업 공간 복원 중...",
+    session: "세션 복원 중...",
+    ready: "거의 완료됨...",
+    backend_step: "로컬 백엔드",
+    project_step: "작업 공간",
+    session_step: "세션",
+  },
+  de: {
+    launch: "OpenCode wird geoffnet...",
+    backend: "Lokales Backend wird gestartet...",
+    project: "Arbeitsbereich wird wiederhergestellt...",
+    session: "Sitzung wird wiederhergestellt...",
+    ready: "Fast fertig...",
+    backend_step: "Lokales Backend",
+    project_step: "Arbeitsbereich",
+    session_step: "Sitzung",
+  },
+  es: {
+    launch: "Abriendo OpenCode...",
+    backend: "Iniciando backend local...",
+    project: "Restaurando tu espacio de trabajo...",
+    session: "Restaurando tu sesion...",
+    ready: "Casi listo...",
+    backend_step: "Backend local",
+    project_step: "Espacio de trabajo",
+    session_step: "Sesion",
+  },
+  fr: {
+    launch: "Ouverture d'OpenCode...",
+    backend: "Demarrage du backend local...",
+    project: "Restauration de votre espace de travail...",
+    session: "Restauration de votre session...",
+    ready: "Presque pret...",
+    backend_step: "Backend local",
+    project_step: "Espace de travail",
+    session_step: "Session",
+  },
+  da: {
+    launch: "Abner OpenCode...",
+    backend: "Starter lokal backend...",
+    project: "Gendanner dit arbejdsomrade...",
+    session: "Gendanner din session...",
+    ready: "Naesten klar...",
+    backend_step: "Lokal backend",
+    project_step: "Arbejdsomrade",
+    session_step: "Session",
+  },
+  ja: {
+    launch: "OpenCode を開いています...",
+    backend: "ローカルバックエンドを起動しています...",
+    project: "ワークスペースを復元しています...",
+    session: "セッションを復元しています...",
+    ready: "まもなく準備完了です...",
+    backend_step: "ローカルバックエンド",
+    project_step: "ワークスペース",
+    session_step: "セッション",
+  },
+  pl: {
+    launch: "Otwieranie OpenCode...",
+    backend: "Uruchamianie lokalnego backendu...",
+    project: "Przywracanie obszaru roboczego...",
+    session: "Przywracanie sesji...",
+    ready: "Prawie gotowe...",
+    backend_step: "Lokalny backend",
+    project_step: "Obszar roboczy",
+    session_step: "Sesja",
+  },
+  ru: {
+    launch: "Открываем OpenCode...",
+    backend: "Запускаем локальный бэкенд...",
+    project: "Восстанавливаем рабочее пространство...",
+    session: "Восстанавливаем сессию...",
+    ready: "Почти готово...",
+    backend_step: "Локальный бэкенд",
+    project_step: "Рабочее пространство",
+    session_step: "Сессия",
+  },
+  ar: {
+    launch: "جارٍ فتح OpenCode...",
+    backend: "جارٍ تشغيل الواجهة الخلفية المحلية...",
+    project: "جارٍ استعادة مساحة العمل...",
+    session: "جارٍ استعادة الجلسة...",
+    ready: "أوشكنا على الانتهاء...",
+    backend_step: "الخلفية المحلية",
+    project_step: "مساحة العمل",
+    session_step: "الجلسة",
+  },
+  no: {
+    launch: "Apner OpenCode...",
+    backend: "Starter lokal backend...",
+    project: "Gjenoppretter arbeidsomradet ditt...",
+    session: "Gjenoppretter okten din...",
+    ready: "Nesten klar...",
+    backend_step: "Lokal backend",
+    project_step: "Arbeidsomrade",
+    session_step: "Okt",
+  },
+  br: {
+    launch: "Abrindo o OpenCode...",
+    backend: "Iniciando backend local...",
+    project: "Restaurando seu workspace...",
+    session: "Restaurando sua sessao...",
+    ready: "Quase pronto...",
+    backend_step: "Backend local",
+    project_step: "Workspace",
+    session_step: "Sessao",
+  },
+  bs: {
+    launch: "Otvaranje OpenCode-a...",
+    backend: "Pokretanje lokalnog backend-a...",
+    project: "Obnavljanje radnog prostora...",
+    session: "Obnavljanje sesije...",
+    ready: "Jos malo...",
+    backend_step: "Lokalni backend",
+    project_step: "Radni prostor",
+    session_step: "Sesija",
+  },
+} satisfies Record<Locale, Record<string, string>>
+
 function detectLocale(): Locale {
   if (typeof navigator !== "object") return "en"
 
@@ -102,6 +255,15 @@ function detectLocale(): Locale {
   }
 
   return "en"
+}
+
+function readLocalLocale() {
+  if (typeof localStorage !== "object") return null
+  try {
+    return pickLocale(parseStored(localStorage.getItem("opencode.global.dat:language")))
+  } catch {
+    return null
+  }
 }
 
 function parseLocale(value: unknown): Locale | null {
@@ -157,7 +319,7 @@ function build(locale: Locale): Dictionary {
 }
 
 const state = {
-  locale: detectLocale(),
+  locale: readLocalLocale() ?? detectLocale(),
   dict: base as Dictionary,
   init: undefined as Promise<Locale> | undefined,
 }
@@ -168,6 +330,10 @@ const translate = i18n.translator(() => state.dict, i18n.resolveTemplate)
 
 export function t(key: keyof Dictionary, params?: Record<string, string | number>) {
   return translate(key, params)
+}
+
+export function startup() {
+  return STARTUP[state.locale] ?? STARTUP.en
 }
 
 export function initI18n(): Promise<Locale> {

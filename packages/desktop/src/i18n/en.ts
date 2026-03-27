@@ -60,17 +60,6 @@ export const dict = {
   "desktop.loading.progressAria": "Database migration progress",
   "desktop.loading.reload.title": "Reloading backend",
   "desktop.loading.reload.message": "Restarting the local backend and refreshing its state.",
-  "desktop.startup.title.launch": "Opening OpenCode",
-  "desktop.startup.text.launch": "Getting the window ready.",
-  "desktop.startup.title.backend": "Starting local backend",
-  "desktop.startup.text.backend": "Connecting the local runtime so your next screen responds immediately.",
-  "desktop.startup.title.project": "Restoring your workspace",
-  "desktop.startup.text.project": "Loading the project you were using most recently.",
-  "desktop.startup.title.session": "Restoring your session",
-  "desktop.startup.text.session": "Preparing the next screen so your first click reacts right away.",
-  "desktop.startup.title.ready": "Almost there",
-  "desktop.startup.text.ready": "Opening your workspace.",
-
   "desktop.server.local": "Local Server",
   "desktop.server.openclaw": "OpenClaw",
 }

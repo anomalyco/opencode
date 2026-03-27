@@ -16,7 +16,6 @@ use futures::{FutureExt, TryFutureExt};
 use serde_json::json;
 use std::{
     env, fs,
-    future::Future,
     net::TcpListener,
     path::PathBuf,
     process::Command,
@@ -1361,10 +1360,7 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             resolve_app_path,
             open_path
         ])
-        .events(tauri_specta::collect_events![
-            LoadingWindowComplete,
-            SqliteMigrationProgress
-        ])
+        .events(tauri_specta::collect_events![SqliteMigrationProgress])
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
 }
 
@@ -1383,9 +1379,6 @@ fn test_export_types() {
     let builder = make_specta_builder();
     export_types(&builder);
 }
-
-#[derive(tauri_specta::Event, serde::Deserialize, specta::Type)]
-struct LoadingWindowComplete;
 
 async fn initialize(app: AppHandle) {
     tracing::info!("Initializing app");
@@ -1430,7 +1423,12 @@ async fn initialize(app: AppHandle) {
         password: Arc::new(Mutex::new(password.clone())),
     });
 
-    let loading_window_complete = event_once_fut::<LoadingWindowComplete>(&app);
+    let loading_window = LoadingWindow::create(&app).expect("Failed to create loading window");
+    let initial_path = app
+        .try_state::<InitialPathState>()
+        .and_then(|s| s.0.lock().ok()?.take());
+    MainWindow::create_hidden_with_path(&app, initial_path.as_deref())
+        .expect("Failed to create main window");
 
     // SQLite migration handling:
     // We only do this if the sqlite db doesn't exist, and we're expecting the sidecar to create it.
@@ -1463,7 +1461,8 @@ async fn initialize(app: AppHandle) {
     });
 
     // The loading task waits for SQLite migration (if needed) then for the sidecar health check.
-    // This is only used to drive the loading window progress - the main window is shown immediately.
+    // The native loading window only covers the pre-webview gap. After that, the main window's
+    // HTML startup shell takes over until the first click can react immediately.
     let loading_task = tokio::spawn({
         async move {
             if let Some(sqlite_done_rx) = sqlite_done {
@@ -1485,52 +1484,20 @@ async fn initialize(app: AppHandle) {
     .map_err(|_| ())
     .shared();
 
-    // Show loading window for SQLite migrations if they take >1s
-    let loading_window = if needs_migration
-        && timeout(Duration::from_secs(1), loading_task.clone())
-            .await
-            .is_err()
-    {
-        tracing::debug!("Loading task timed out, showing loading window");
-        let loading_window = LoadingWindow::create(&app).expect("Failed to create loading window");
-        sleep(Duration::from_secs(1)).await;
-        Some(loading_window)
-    } else {
-        tracing::debug!("Showing main window without loading window");
-        let initial_path = app
-            .try_state::<InitialPathState>()
-            .and_then(|s| s.0.lock().ok()?.take());
-        MainWindow::create_with_path(&app, initial_path.as_deref())
-            .expect("Failed to create main window");
-        None
-    };
-
-    if loading_window.is_none() {
-        let initial_path = app
-            .try_state::<InitialPathState>()
-            .and_then(|s| s.0.lock().ok()?.take());
-        MainWindow::create_with_path(&app, initial_path.as_deref())
-            .expect("Failed to create main window");
-    }
-
     let _ = loading_task.await;
 
     tracing::info!("Loading done, completing initialisation");
     let _ = init_tx.send(InitStep::Done);
 
-    if loading_window.is_some() {
-        loading_window_complete.await;
-        tracing::info!("Loading window completed");
+    tracing::info!("Showing main window after startup loading");
 
-        let initial_path = app
-            .try_state::<InitialPathState>()
-            .and_then(|s| s.0.lock().ok()?.take());
-        MainWindow::create_with_path(&app, initial_path.as_deref())
-            .expect("Failed to create main window");
+    if let Some(window) = app.get_webview_window(MainWindow::LABEL) {
+        let _ = window.show();
+        let _ = window.set_focus();
     }
-    if let Some(loading_window) = loading_window {
-        let _ = loading_window.close();
-    }
+
+    sleep(Duration::from_millis(120)).await;
+    let _ = loading_window.close();
 }
 
 fn setup_app(app: &tauri::AppHandle, init_rx: watch::Receiver<InitStep>) {
@@ -1602,20 +1569,4 @@ fn opencode_db_path() -> Result<PathBuf, &'static str> {
     };
 
     Ok(data_home.join("opencode").join("opencode.db"))
-}
-
-// Creates a `once` listener for the specified event and returns a future that resolves
-// when the listener is fired.
-// Since the future creation and awaiting can be done separately, it's possible to create the listener
-// synchronously before doing something, then awaiting afterwards.
-fn event_once_fut<T: tauri_specta::Event + serde::de::DeserializeOwned>(
-    app: &AppHandle,
-) -> impl Future<Output = ()> {
-    let (tx, rx) = oneshot::channel();
-    T::once(app, |_| {
-        let _ = tx.send(());
-    });
-    async {
-        let _ = rx.await;
-    }
 }
