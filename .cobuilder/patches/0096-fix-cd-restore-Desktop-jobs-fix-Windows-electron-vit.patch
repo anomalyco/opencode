@@ -1,7 +1,7 @@
 From f3cd07604e4452508b2febf99d5fc841d9a7130d Mon Sep 17 00:00:00 2001
 From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
 Date: Fri, 27 Mar 2026 10:04:44 -0700
-Subject: [PATCH 096/129] fix(cd): restore Desktop jobs + fix Windows
+Subject: [PATCH 096/131] fix(cd): restore Desktop jobs + fix Windows
  electron-vite via npm in temp dir (#39)
 
 Upstream sync removed Desktop Windows/Linux jobs and stripped workflow_dispatch,

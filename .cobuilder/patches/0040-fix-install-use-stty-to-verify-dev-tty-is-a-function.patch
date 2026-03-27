@@ -1,7 +1,7 @@
 From c8983bae7a568f13d393f5044596e860c279d2bf Mon Sep 17 00:00:00 2001
 From: johnnykang101 <johnny.kang101@gmail.com>
 Date: Thu, 26 Mar 2026 16:25:55 -0700
-Subject: [PATCH 040/129] fix(install): use stty to verify /dev/tty is a
+Subject: [PATCH 040/131] fix(install): use stty to verify /dev/tty is a
  functional terminal
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8

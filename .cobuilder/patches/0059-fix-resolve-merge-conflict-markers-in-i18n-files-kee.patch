@@ -1,7 +1,7 @@
 From f8b7ef9f458d4915ce2ddbed68b4efdcd79257d2 Mon Sep 17 00:00:00 2001
 From: johnnykang101 <johnny.kang101@gmail.com>
 Date: Thu, 26 Mar 2026 21:04:34 -0700
-Subject: [PATCH 059/129] fix: resolve merge conflict markers in i18n files
+Subject: [PATCH 059/131] fix: resolve merge conflict markers in i18n files
  (keep CoBuilder branding + font options)
 
 ---

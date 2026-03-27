@@ -1,7 +1,7 @@
 From b242a8d8e42839496c7213d020e8cba19a76e111 Mon Sep 17 00:00:00 2001
 From: "opencode-agent[bot]" <opencode-agent[bot]@users.noreply.github.com>
 Date: Fri, 27 Mar 2026 01:47:36 +0000
-Subject: [PATCH 044/129] chore: generate
+Subject: [PATCH 044/131] chore: generate
 
 ---
  packages/opencode/src/config/config.ts  | 632 +++++++++++------------

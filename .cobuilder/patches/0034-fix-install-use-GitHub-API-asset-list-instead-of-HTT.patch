@@ -1,7 +1,7 @@
 From afc900a61d50fa498a4b5b15b294b8f38ba70099 Mon Sep 17 00:00:00 2001
 From: johnnykang101 <johnny.kang101@gmail.com>
 Date: Thu, 26 Mar 2026 16:14:38 -0700
-Subject: [PATCH 034/129] fix(install): use GitHub API asset list instead of
+Subject: [PATCH 034/131] fix(install): use GitHub API asset list instead of
  HTTP probing to find release
 
 HTTP HEAD probing is unreliable (GitHub uses 301/302/other codes).

@@ -1,7 +1,7 @@
 From ea54bf79aa65dc3b90eaa902c13b85b0636fe5aa Mon Sep 17 00:00:00 2001
 From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
 Date: Thu, 26 Mar 2026 20:43:19 -0700
-Subject: [PATCH 054/129] =?UTF-8?q?feat(ux):=20Wave=20A=20=E2=80=94=20ambi?=
+Subject: [PATCH 054/131] =?UTF-8?q?feat(ux):=20Wave=20A=20=E2=80=94=20ambi?=
  =?UTF-8?q?ent=20title=20progress,=20jump-to-active=20scroll,=20streaming?=
  =?UTF-8?q?=20tok/s=20(#23)?=
 MIME-Version: 1.0

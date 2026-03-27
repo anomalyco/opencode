@@ -1,7 +1,7 @@
 From ad3b35067298a0803eef0c306510d37670ec8b18 Mon Sep 17 00:00:00 2001
 From: Adam <2363879+adamdotdevin@users.noreply.github.com>
 Date: Thu, 26 Mar 2026 14:20:30 -0500
-Subject: [PATCH 011/129] fix(app): default shell tool to collapsed
+Subject: [PATCH 011/131] fix(app): default shell tool to collapsed
 
 ---
  packages/app/src/context/settings.tsx | 2 +-

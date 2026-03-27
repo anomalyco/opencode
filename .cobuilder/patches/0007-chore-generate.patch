@@ -1,7 +1,7 @@
 From c333e914eecfe3716ec703e17425af0b908a21f5 Mon Sep 17 00:00:00 2001
 From: "opencode-agent[bot]" <opencode-agent[bot]@users.noreply.github.com>
 Date: Thu, 26 Mar 2026 18:42:59 +0000
-Subject: [PATCH 007/129] chore: generate
+Subject: [PATCH 007/131] chore: generate
 
 ---
  packages/opencode/src/mcp/index.ts           | 65 +++++++++++---------

@@ -1,7 +1,7 @@
 From 79f20f98545507771b7eb26cbee152eb5e80bfd7 Mon Sep 17 00:00:00 2001
 From: CoBuilder CEO <ceo@cobuilder.ai>
 Date: Thu, 26 Mar 2026 22:14:49 -0700
-Subject: [PATCH 064/129] fix(cd): use npm install + npx electron-vite on
+Subject: [PATCH 064/131] fix(cd): use npm install + npx electron-vite on
  Windows to resolve picocolors module not found
 
 ---

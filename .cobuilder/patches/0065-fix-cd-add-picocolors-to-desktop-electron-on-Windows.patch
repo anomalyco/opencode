@@ -1,7 +1,7 @@
 From d84e6e9d0b5f11d464f4ee6990d7668545879149 Mon Sep 17 00:00:00 2001
 From: CoBuilder CEO <ceo@cobuilder.ai>
 Date: Thu, 26 Mar 2026 22:27:30 -0700
-Subject: [PATCH 065/129] fix(cd): add picocolors to desktop-electron on
+Subject: [PATCH 065/131] fix(cd): add picocolors to desktop-electron on
  Windows to fix electron-vite resolution
 
 ---

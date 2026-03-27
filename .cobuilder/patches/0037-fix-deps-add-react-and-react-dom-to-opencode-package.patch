@@ -1,7 +1,7 @@
 From 093013bbc5114de5fd9c8fbcf86638cf807ee50b Mon Sep 17 00:00:00 2001
 From: johnnykang101 <johnny.kang101@gmail.com>
 Date: Thu, 26 Mar 2026 16:19:47 -0700
-Subject: [PATCH 037/129] fix(deps): add react and react-dom to opencode
+Subject: [PATCH 037/131] fix(deps): add react and react-dom to opencode
  package dependencies
 
 TUI (app.tsx) uses React JSX but react was missing from the package

@@ -1,7 +1,7 @@
 From 9a7778ec3229bafb4540dcdaed255160b8765ccc Mon Sep 17 00:00:00 2001
 From: johnnykang101 <johnny.kang101@gmail.com>
 Date: Fri, 27 Mar 2026 15:41:12 -0700
-Subject: [PATCH 123/129] feat: restore CoBuilder-specific features lost in
+Subject: [PATCH 123/131] feat: restore CoBuilder-specific features lost in
  upstream sync
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8

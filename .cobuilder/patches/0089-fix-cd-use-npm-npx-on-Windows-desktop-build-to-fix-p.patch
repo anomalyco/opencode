@@ -1,7 +1,7 @@
 From 26777b810d4537c715b96924131e60911c406e75 Mon Sep 17 00:00:00 2001
 From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
 Date: Fri, 27 Mar 2026 09:16:09 -0700
-Subject: [PATCH 089/129] fix(cd): use npm+npx on Windows desktop build to fix
+Subject: [PATCH 089/131] fix(cd): use npm+npx on Windows desktop build to fix
  picocolors resolution (#33)
 
 Bun runs electron-vite from an isolated .bun cache dir on Windows which

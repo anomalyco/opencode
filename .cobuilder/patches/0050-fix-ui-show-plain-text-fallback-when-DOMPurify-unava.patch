@@ -1,7 +1,7 @@
 From a89c8a4a2bd18d1cc4dc011af0396c9bcc609f84 Mon Sep 17 00:00:00 2001
 From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
 Date: Thu, 26 Mar 2026 20:40:40 -0700
-Subject: [PATCH 050/129] fix(ui): show plain text fallback when DOMPurify
+Subject: [PATCH 050/131] fix(ui): show plain text fallback when DOMPurify
  unavailable or parse pending (#22)
 
 - sanitize() now falls back to escaped plain text instead of empty string

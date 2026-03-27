@@ -1,7 +1,7 @@
 From 2e6ac8ff49eabcb1b62c1bd504338e7449f80c6e Mon Sep 17 00:00:00 2001
 From: Kit Langton <kit.langton@gmail.com>
 Date: Thu, 26 Mar 2026 14:41:00 -0400
-Subject: [PATCH 005/129] fix(mcp): close transport on failed/timed-out
+Subject: [PATCH 005/131] fix(mcp): close transport on failed/timed-out
  connections (#19200)
 
 ---

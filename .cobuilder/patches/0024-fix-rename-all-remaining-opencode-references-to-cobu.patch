@@ -1,7 +1,7 @@
 From 3092881e5c96cfd4dc8d68831d25d3cae73604d4 Mon Sep 17 00:00:00 2001
 From: johnnykang101 <johnny.kang101@gmail.com>
 Date: Thu, 26 Mar 2026 15:44:57 -0700
-Subject: [PATCH 024/129] fix: rename all remaining opencode references to
+Subject: [PATCH 024/131] fix: rename all remaining opencode references to
  cobuilder
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8

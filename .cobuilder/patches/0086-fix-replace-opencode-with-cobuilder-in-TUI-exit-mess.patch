@@ -1,7 +1,7 @@
 From 2316dff1f992e52192a9ca6c4b3f8771a601bf56 Mon Sep 17 00:00:00 2001
 From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
 Date: Fri, 27 Mar 2026 08:58:20 -0700
-Subject: [PATCH 086/129] fix: replace opencode with cobuilder in TUI exit
+Subject: [PATCH 086/131] fix: replace opencode with cobuilder in TUI exit
  message (#31)
 
 Co-authored-by: Claude Sonnet 4.6 <noreply@anthropic.com>

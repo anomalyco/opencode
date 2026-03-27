@@ -1,7 +1,7 @@
 From e7ac8b60bc3702f471fc3bd32958dbb8324c635c Mon Sep 17 00:00:00 2001
 From: CoBuilder CEO <ceo@cobuilder.ai>
 Date: Fri, 27 Mar 2026 13:45:50 -0700
-Subject: [PATCH 121/129] fix(onboard): force stdin raw mode for Bun compiled
+Subject: [PATCH 121/131] fix(onboard): force stdin raw mode for Bun compiled
  binary
 
 Bun's process.stdin is not instanceof tty.ReadStream, so @clack/core's

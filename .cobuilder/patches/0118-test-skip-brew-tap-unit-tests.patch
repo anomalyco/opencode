@@ -1,7 +1,7 @@
 From f96f55c00e0cb2173d233b1537d0747c3ee1d4ac Mon Sep 17 00:00:00 2001
 From: CoBuilder CEO <ceo@cobuilder.ai>
 Date: Fri, 27 Mar 2026 13:11:50 -0700
-Subject: [PATCH 118/129] test: skip brew tap unit tests
+Subject: [PATCH 118/131] test: skip brew tap unit tests
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
 ---

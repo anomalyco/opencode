@@ -1,7 +1,7 @@
 From a9b97d78ee298505eefa02dd4f76a4d398364bb0 Mon Sep 17 00:00:00 2001
 From: johnnykang101 <johnny.kang101@gmail.com>
 Date: Thu, 26 Mar 2026 16:18:33 -0700
-Subject: [PATCH 036/129] =?UTF-8?q?fix(install):=20revert=20to=20simple=20?=
+Subject: [PATCH 036/131] =?UTF-8?q?fix(install):=20revert=20to=20simple=20?=
  =?UTF-8?q?/releases/latest=20=E2=80=94=20draft-release=20CD=20fix=20makes?=
  =?UTF-8?q?=20this=20reliable?=
 MIME-Version: 1.0

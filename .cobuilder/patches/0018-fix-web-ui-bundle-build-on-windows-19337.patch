@@ -1,7 +1,7 @@
 From ef7d1f7efa2e682cf0e3e322009fe84b577bbe02 Mon Sep 17 00:00:00 2001
 From: Luke Parker <10430890+Hona@users.noreply.github.com>
 Date: Fri, 27 Mar 2026 08:14:20 +1000
-Subject: [PATCH 018/129] fix: web ui bundle build on windows (#19337)
+Subject: [PATCH 018/131] fix: web ui bundle build on windows (#19337)
 
 ---
  packages/opencode/script/build.ts | 27 +++++++++++++++++----------

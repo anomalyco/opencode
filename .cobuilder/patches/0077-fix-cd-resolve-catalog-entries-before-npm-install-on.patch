@@ -1,7 +1,7 @@
 From cfc3005cbca4d0c578b5a4a87b83b6c88e6ee04e Mon Sep 17 00:00:00 2001
 From: CoBuilder CEO <ceo@cobuilder.ai>
 Date: Thu, 26 Mar 2026 23:08:30 -0700
-Subject: [PATCH 077/129] fix(cd): resolve catalog: entries before npm install
+Subject: [PATCH 077/131] fix(cd): resolve catalog: entries before npm install
  on Windows desktop build
 
 ---

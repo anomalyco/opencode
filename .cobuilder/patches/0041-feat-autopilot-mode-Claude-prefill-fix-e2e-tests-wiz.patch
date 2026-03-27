@@ -1,7 +1,7 @@
 From 9be9e21f68f080822c6ad765cacc62546734a56e Mon Sep 17 00:00:00 2001
 From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
 Date: Thu, 26 Mar 2026 17:59:41 -0700
-Subject: [PATCH 041/129] feat: autopilot mode, Claude prefill fix, e2e tests,
+Subject: [PATCH 041/131] feat: autopilot mode, Claude prefill fix, e2e tests,
  wizard validation (#18)
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8

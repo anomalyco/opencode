@@ -1,7 +1,7 @@
 From 41f2bec9e09bb784ecda5047cda973532b79ceea Mon Sep 17 00:00:00 2001
 From: CoBuilder CEO <ceo@cobuilder.ai>
 Date: Thu, 26 Mar 2026 22:56:42 -0700
-Subject: [PATCH 072/129] feat(ci): auto-approve PRs from repo collaborators
+Subject: [PATCH 072/131] feat(ci): auto-approve PRs from repo collaborators
  via GitHub App bot
 
 ---

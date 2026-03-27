@@ -1,7 +1,7 @@
 From eea369c8312953c378a1c902474b7f756207f49d Mon Sep 17 00:00:00 2001
 From: CoBuilder CEO <ceo@cobuilder.ai>
 Date: Thu, 26 Mar 2026 22:37:21 -0700
-Subject: [PATCH 068/129] fix(desktop): add picocolors as explicit
+Subject: [PATCH 068/131] fix(desktop): add picocolors as explicit
  devDependency to fix electron-vite module resolution on Windows
 
 ---

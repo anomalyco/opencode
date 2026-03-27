@@ -1,7 +1,7 @@
 From b1254c220dbb4661c26ddb6548f442316181b638 Mon Sep 17 00:00:00 2001
 From: johnnykang101 <johnny.kang101@gmail.com>
 Date: Fri, 27 Mar 2026 09:43:18 -0700
-Subject: [PATCH 093/129] docs: clarify macOS desktop app not yet available
+Subject: [PATCH 093/131] docs: clarify macOS desktop app not yet available
 
 ---
  README.md | 2 +-

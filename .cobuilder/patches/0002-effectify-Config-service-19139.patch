@@ -1,7 +1,7 @@
 From 28f5176ffd499b7572faf01a56d3778248449287 Mon Sep 17 00:00:00 2001
 From: Kit Langton <kit.langton@gmail.com>
 Date: Thu, 26 Mar 2026 13:07:01 -0400
-Subject: [PATCH 002/129] effectify Config service (#19139)
+Subject: [PATCH 002/131] effectify Config service (#19139)
 
 ---
  packages/opencode/AGENTS.md                   |   4 +

@@ -1,7 +1,7 @@
 From c574d9a1c78d972d3f4d0d962a7eb324f12242b3 Mon Sep 17 00:00:00 2001
 From: johnnykang101 <johnny.kang101@gmail.com>
 Date: Fri, 27 Mar 2026 15:48:16 -0700
-Subject: [PATCH 129/129] fix: rebrand copilot-gpt-5 prompt and remove
+Subject: [PATCH 129/131] fix: rebrand copilot-gpt-5 prompt and remove
  anomalyco brew references
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8

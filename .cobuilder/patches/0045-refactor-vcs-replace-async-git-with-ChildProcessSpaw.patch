@@ -1,7 +1,7 @@
 From e96eead32eb28c8b78be9def46cb1688d49468ae Mon Sep 17 00:00:00 2001
 From: Kit Langton <kit.langton@gmail.com>
 Date: Thu, 26 Mar 2026 22:14:46 -0400
-Subject: [PATCH 045/129] refactor(vcs): replace async git() with
+Subject: [PATCH 045/131] refactor(vcs): replace async git() with
  ChildProcessSpawner (#19361)
 
 ---

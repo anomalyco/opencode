@@ -1,7 +1,7 @@
 From 4c1ec1f1fa2d139a41a280e785834b214309f7b0 Mon Sep 17 00:00:00 2001
 From: CoBuilder CEO <ceo@cobuilder.ai>
 Date: Fri, 27 Mar 2026 13:08:35 -0700
-Subject: [PATCH 116/129] fix(upgrade): point upgrade to CobuilderLabs releases
+Subject: [PATCH 116/131] fix(upgrade): point upgrade to CobuilderLabs releases
  + fix auto-merge
 
 - GitHub API now fetches from CobuilderLabs/opencode instead of anomalyco/opencode

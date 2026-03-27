@@ -1,7 +1,7 @@
 From fc84970f6590892ea6a9f1aca8f567ce61c404f0 Mon Sep 17 00:00:00 2001
 From: johnnykang101 <johnny.kang101@gmail.com>
 Date: Thu, 26 Mar 2026 16:00:44 -0700
-Subject: [PATCH 029/129] feat(system-prompt): inject installed command
+Subject: [PATCH 029/131] feat(system-prompt): inject installed command
  packages into AI context
 
 CoBuilder's AI was checking ~/.claude/skills/ when asked about installed

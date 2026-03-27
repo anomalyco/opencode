@@ -1,7 +1,7 @@
 From 16cd513d1637e783f9d34d2e6723bf16e4cf5e09 Mon Sep 17 00:00:00 2001
 From: johnnykang101 <johnny.kang101@gmail.com>
 Date: Thu, 26 Mar 2026 15:40:32 -0700
-Subject: [PATCH 023/129] fix(install): re-attach /dev/tty so onboard works via
+Subject: [PATCH 023/131] fix(install): re-attach /dev/tty so onboard works via
  curl | bash
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8

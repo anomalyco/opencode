@@ -1,7 +1,7 @@
 From 0bada048e8821cd60418a7fc24ea672fbb6c317e Mon Sep 17 00:00:00 2001
 From: CoBuilder CEO <ceo@cobuilder.ai>
 Date: Fri, 27 Mar 2026 13:16:14 -0700
-Subject: [PATCH 119/129] fix(ci): add bun install step to unit and e2e test
+Subject: [PATCH 119/131] fix(ci): add bun install step to unit and e2e test
  jobs
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>

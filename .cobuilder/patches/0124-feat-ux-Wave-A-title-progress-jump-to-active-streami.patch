@@ -1,7 +1,7 @@
 From 11a1bcfb063d5017156493099b3749cbc8802fbe Mon Sep 17 00:00:00 2001
 From: CoBuilder CEO <ceo@cobuilder.ai>
 Date: Thu, 26 Mar 2026 19:37:09 -0700
-Subject: [PATCH 124/129] =?UTF-8?q?feat(ux):=20Wave=20A=20=E2=80=94=20titl?=
+Subject: [PATCH 124/131] =?UTF-8?q?feat(ux):=20Wave=20A=20=E2=80=94=20titl?=
  =?UTF-8?q?e=20progress,=20jump-to-active,=20streaming=20tok/s?=
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
