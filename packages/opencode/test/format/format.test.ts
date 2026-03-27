@@ -4,13 +4,14 @@ import { Effect, Layer } from "effect"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { Format } from "../../src/format"
+import { Config } from "../../src/config/config"
 import * as Formatter from "../../src/format/formatter"
 
 const node = NodeChildProcessSpawner.layer.pipe(
   Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
 )
 
-const it = testEffect(Layer.mergeAll(Format.layer, node))
+const it = testEffect(Layer.mergeAll(Format.layer, node).pipe(Layer.provide(Config.defaultLayer)))
 
 describe("Format", () => {
   it.effect("status() returns built-in formatters when no config overrides", () =>
