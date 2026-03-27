@@ -215,7 +215,7 @@ When constructing the summary, try to stick to this template:
       tools: {},
       system: [],
       messages: [
-        ...MessageV2.toModelMessages(msgs, model, { stripMedia: true }),
+        ...(await MessageV2.toModelMessages(msgs, model, { stripMedia: true })),
         {
           role: "user",
           content: [

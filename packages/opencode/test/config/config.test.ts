@@ -821,9 +821,12 @@ test("dedupes concurrent config dependency installs for the same dir", async () 
   })
   const online = spyOn(Network, "online").mockReturnValue(false)
   const run = spyOn(BunProc, "run").mockImplementation(async (_cmd, opts) => {
-    calls += 1
-    start()
-    await gate
+    const hit = path.normalize(opts?.cwd ?? "") === path.normalize(dir)
+    if (hit) {
+      calls += 1
+      start()
+      await gate
+    }
     const mod = path.join(opts?.cwd ?? "", "node_modules", "@opencode-ai", "plugin")
     await fs.mkdir(mod, { recursive: true })
     await Filesystem.write(
@@ -883,12 +886,16 @@ test("serializes config dependency installs across dirs", async () => {
 
   const online = spyOn(Network, "online").mockReturnValue(false)
   const run = spyOn(BunProc, "run").mockImplementation(async (_cmd, opts) => {
-    calls += 1
-    open += 1
-    peak = Math.max(peak, open)
-    if (calls === 1) {
-      start()
-      await gate
+    const cwd = path.normalize(opts?.cwd ?? "")
+    const hit = cwd === path.normalize(a) || cwd === path.normalize(b)
+    if (hit) {
+      calls += 1
+      open += 1
+      peak = Math.max(peak, open)
+      if (calls === 1) {
+        start()
+        await gate
+      }
     }
     const mod = path.join(opts?.cwd ?? "", "node_modules", "@opencode-ai", "plugin")
     await fs.mkdir(mod, { recursive: true })
@@ -896,7 +903,9 @@ test("serializes config dependency installs across dirs", async () => {
       path.join(mod, "package.json"),
       JSON.stringify({ name: "@opencode-ai/plugin", version: "1.0.0" }),
     )
-    open -= 1
+    if (hit) {
+      open -= 1
+    }
     return {
       code: 0,
       stdout: Buffer.alloc(0),
