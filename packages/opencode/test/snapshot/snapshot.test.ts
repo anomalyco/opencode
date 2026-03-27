@@ -181,7 +181,7 @@ test("symlink handling", async () => {
   })
 })
 
-test("large file handling", async () => {
+test("file under size limit handling", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
     directory: tmp.path,
@@ -192,6 +192,23 @@ test("large file handling", async () => {
       await Filesystem.write(`${tmp.path}/large.txt`, "x".repeat(1024 * 1024))
 
       expect((await Snapshot.patch(before!)).files).toContain(fwd(tmp.path, "large.txt"))
+    },
+  })
+})
+
+test("large added files are skipped", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      await Filesystem.write(`${tmp.path}/huge.txt`, new Uint8Array(2 * 1024 * 1024 + 1))
+
+      expect((await Snapshot.patch(before!)).files).toEqual([])
+      expect(await Snapshot.diff(before!)).toBe("")
+      expect(await Snapshot.track()).toBe(before)
     },
   })
 })

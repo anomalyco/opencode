@@ -132,7 +132,7 @@ export async function handler(
         retry,
         stickyProvider,
       )
-      validateModelSettings(authInfo)
+      validateModelSettings(billingSource, authInfo)
       updateProviderKey(authInfo, providerInfo)
       logger.metric({ provider: providerInfo.id })
 
@@ -340,6 +340,13 @@ export async function handler(
       "error.message": error.message,
       "error.cause": error.cause?.toString(),
     })
+    if (error.message.startsWith("Failed query")) {
+      try {
+        logger.metric({
+          "error.cause2": JSON.stringify(error.cause),
+        })
+      } catch (e) {}
+    }
 
     // Note: both top level "type" and "error.type" fields are used by the @ai-sdk/anthropic client to render the error message.
     if (
@@ -461,12 +468,17 @@ export async function handler(
       ...modelProvider,
       ...zenData.providers[modelProvider.id],
       ...(() => {
-        const format = zenData.providers[modelProvider.id].format
+        const providerProps = zenData.providers[modelProvider.id]
+        const format = providerProps.format
         const providerModel = modelProvider.model
         if (format === "anthropic") return anthropicHelper({ reqModel, providerModel })
         if (format === "google") return googleHelper({ reqModel, providerModel })
         if (format === "openai") return openaiHelper({ reqModel, providerModel })
-        return oaCompatHelper({ reqModel, providerModel })
+        return oaCompatHelper({
+          reqModel,
+          providerModel,
+          adjustCacheUsage: providerProps.adjustCacheUsage,
+        })
       })(),
     }
   }
@@ -756,9 +768,10 @@ export async function handler(
     return "balance"
   }
 
-  function validateModelSettings(authInfo: AuthInfo) {
-    if (!authInfo) return
-    if (authInfo.isDisabled) throw new ModelError(t("zen.api.error.modelDisabled"))
+  function validateModelSettings(billingSource: BillingSource, authInfo: AuthInfo) {
+    if (billingSource === "lite") return
+    if (billingSource === "anonymous") return
+    if (authInfo!.isDisabled) throw new ModelError(t("zen.api.error.modelDisabled"))
   }
 
   function updateProviderKey(authInfo: AuthInfo, providerInfo: ProviderInfo) {
