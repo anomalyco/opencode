@@ -9,6 +9,7 @@ import { Flag } from "@/flag/flag"
 import semver from "semver"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
+import { DialogSelect } from "@tui/ui/dialog-select"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
 import { SyncProvider, useSync } from "@tui/context/sync"
 import { LocalProvider, useLocal } from "@tui/context/local"
@@ -359,6 +360,19 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     ),
   )
 
+  async function authenticate(url: string) {
+    toast.show({ message: "Authenticating...", variant: "info" })
+    const { error } = await sdk.client.auth.wellknown.refresh({ url })
+    if (error) {
+      toast.show({ message: "Authentication failed", variant: "error", duration: 4000 })
+      return false
+    }
+    await sdk.client.instance.dispose()
+    await sync.bootstrap()
+    toast.show({ message: "Authenticated with " + url, variant: "success", duration: 3000 })
+    return true
+  }
+
   const connected = useConnected()
   command.register(() => [
     {
@@ -530,6 +544,45 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
       onSelect: () => {
         dialog.replace(() => <DialogProviderList />)
+      },
+      category: "Provider",
+    },
+    {
+      title: "Re-authenticate",
+      value: "auth.login",
+      slash: {
+        name: "auth",
+      },
+      async onSelect() {
+        const result = await sdk.client.auth.wellknown.list()
+        const urls = result.data
+        if (!urls || urls.length === 0) {
+          toast.show({
+            message: "No well-known auth entries found. Use /auth <url> to add one.",
+            variant: "warning",
+            duration: 4000,
+          })
+          dialog.clear()
+          return
+        }
+        if (urls.length === 1) {
+          await authenticate(urls[0])
+          dialog.clear()
+          return
+        }
+        dialog.replace(() => (
+          <DialogSelect
+            title="Select provider to re-authenticate"
+            options={urls.map((url) => ({
+              title: url,
+              value: url,
+            }))}
+            onSelect={async (option) => {
+              await authenticate(option.value)
+              dialog.clear()
+            }}
+          />
+        ))
       },
       category: "Provider",
     },
