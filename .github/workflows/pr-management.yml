@@ -71,6 +71,20 @@ jobs:
           $COMMENT"
           fi
 
+  enable-auto-merge:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: write
+    steps:
+      - name: Enable auto-merge (squash)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr merge "${{ github.event.pull_request.number }}" \
+            --auto --squash \
+            --repo ${{ github.repository }}
+
   add-contributor-label:
     runs-on: ubuntu-latest
     permissions:
