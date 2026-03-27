@@ -83,6 +83,8 @@
   },
   "devDependencies": {
     "@actions/artifact": "5.0.1",
+    "@opentui/core": "0.1.90",
+    "@opentui/solid": "0.1.90",
     "@tsconfig/bun": "catalog:",
     "@types/mime-types": "3.0.1",
     "@typescript/native-preview": "catalog:",
