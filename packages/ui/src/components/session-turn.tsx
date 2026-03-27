@@ -341,6 +341,21 @@ export function SessionTurn(
     if (end < start) return undefined
     return end - start
   })
+  const turnUsage = createMemo(() => {
+    const msgs = assistantMessages()
+    if (!msgs.length) return undefined
+    let input = 0
+    let output = 0
+    let cost = 0
+    for (const msg of msgs) {
+      if (typeof msg.tokens?.input === "number") input += msg.tokens.input
+      if (typeof msg.tokens?.output === "number") output += msg.tokens.output
+      if (typeof msg.cost === "number") cost += msg.cost
+    }
+    if (input === 0 && output === 0) return undefined
+    return { input, output, cost }
+  })
+
   const assistantDerived = createMemo(() => {
     let visible = 0
     let tail: "text" | "other" | undefined
