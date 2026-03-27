@@ -20,6 +20,7 @@ import { Plugin } from "@/plugin"
 import { Effect, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
+import { SandboxSpawn } from "@/sandbox/spawn"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
@@ -83,6 +84,13 @@ type Chunk = {
 }
 
 export const log = Log.create({ service: "bash-tool" })
+
+function args(shell: string, command: string) {
+  const name = (process.platform === "win32" ? path.win32.basename(shell, ".exe") : path.basename(shell)).toLowerCase()
+  if (name === "zsh") return ["-f", "-c", command]
+  if (name === "bash") return ["--noprofile", "--norc", "-c", command]
+  return ["-c", command]
+}
 
 const resolveWasm = (asset: string) => {
   if (asset.startsWith("file://")) return fileURLToPath(asset)
@@ -281,7 +289,35 @@ const ask = Effect.fn("BashTool.ask")(function* (ctx: Tool.Context, scan: Scan) 
   })
 })
 
-function cmd(shell: string, name: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
+function argv(name: string, command: string) {
+  if (name === "powershell" || name === "pwsh") return ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command]
+  if (name === "zsh") return ["-f", "-c", command]
+  if (name === "bash") return ["--noprofile", "--norc", "-c", command]
+  return ["-c", command]
+}
+
+async function cmd(shell: string, name: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
+  const root = Instance.worktree === "/" ? Instance.directory : Instance.worktree
+  const sandbox = await SandboxSpawn.resolve({
+    cwd,
+    project_root: Instance.directory,
+    worktree_root: root,
+  })
+
+  if (sandbox.active && sandbox.profile) {
+    const wrap = SandboxSpawn.wrap({
+      profile: sandbox.profile,
+      file: shell,
+      args: argv(name, command),
+    })
+    return ChildProcess.make(wrap.file, wrap.args, {
+      cwd,
+      env,
+      stdin: "ignore",
+      detached: process.platform !== "win32",
+    })
+  }
+
   if (process.platform === "win32" && PS.has(name)) {
     return ChildProcess.make(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], {
       cwd,
@@ -442,7 +478,8 @@ export const BashTool = Tool.define(
 
       const code: number | null = yield* Effect.scoped(
         Effect.gen(function* () {
-          const handle = yield* spawner.spawn(cmd(input.shell, input.name, input.command, input.cwd, input.env))
+          const proc = yield* Effect.promise(() => cmd(input.shell, input.name, input.command, input.cwd, input.env))
+          const handle = yield* spawner.spawn(proc)
 
           yield* Effect.forkScoped(
             Stream.runForEach(Stream.decodeText(handle.all), (chunk) => {

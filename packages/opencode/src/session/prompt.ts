@@ -819,15 +819,39 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         "": { args: ["-c", input.command] },
       }
 
-      const args = (invocations[shellName] ?? invocations[""]).args
+      const clean: Record<string, { args: string[] }> = {
+        nu: { args: ["-c", input.command] },
+        fish: { args: ["-c", input.command] },
+        zsh: { args: ["-f", "-c", input.command] },
+        bash: { args: ["--noprofile", "--norc", "-c", input.command] },
+        cmd: { args: ["/c", input.command] },
+        powershell: { args: ["-NoProfile", "-Command", input.command] },
+        pwsh: { args: ["-NoProfile", "-Command", input.command] },
+        "": { args: ["-c", input.command] },
+      }
+
       const cwd = ctx.directory
       const shellEnv = yield* plugin.trigger(
         "shell.env",
         { cwd, sessionID: input.sessionID, callID: part.callID },
         { env: {} },
       )
+      const root = ctx.worktree === "/" ? ctx.directory : ctx.worktree
+      const sandbox = yield* Effect.promise(() =>
+        SandboxSpawn.resolve({
+          cwd,
+          project_root: ctx.directory,
+          worktree_root: root,
+        }),
+      )
+      const args =
+        (sandbox.active ? clean : invocations)[shellName]?.args ?? (sandbox.active ? clean[""] : invocations[""]).args
+      const call =
+        sandbox.active && sandbox.profile
+          ? SandboxSpawn.wrap({ profile: sandbox.profile, file: sh, args })
+          : { file: sh, args }
 
-      const cmd = ChildProcess.make(sh, args, {
+      const cmd = ChildProcess.make(call.file, call.args, {
         cwd,
         extendEnv: true,
         env: { ...shellEnv.env, TERM: "dumb" },

@@ -220,6 +220,22 @@ const InfoSchema = Schema.Struct({
     Schema.Struct({
       disable_paste_summary: Schema.optional(Schema.Boolean),
       batch_tool: Schema.optional(Schema.Boolean).annotate({ description: "Enable the batch tool" }),
+      sandbox: Schema.optional(
+        Schema.Struct({
+          enabled: Schema.optional(Schema.Boolean).annotate({
+            description: "Enable macOS sandboxing for non-interactive shell commands",
+          }),
+          extra_read_roots: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+            description: "Additional read-only roots for macOS sandboxing",
+          }),
+          extra_write_roots: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+            description: "Additional writable roots for macOS sandboxing",
+          }),
+          allow_unsandboxed_retry: Schema.optional(Schema.Boolean).annotate({
+            description: "Allow an explicit unsandboxed retry after a sandbox denial",
+          }),
+        }),
+      ),
       openTelemetry: Schema.optional(Schema.Boolean).annotate({
         description: "Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)",
       }),
@@ -258,7 +274,7 @@ type DeepMutable<T> = T extends readonly [unknown, ...unknown[]]
 
 // The walker emits `z.object({...})` which is non-strict by default. Config
 // historically uses `.strict()` (additionalProperties: false in openapi.json),
-// so layer that on after derivation.  Re-apply the Config ref afterward
+// so layer that on after derivation. Re-apply the Config ref afterward
 // since `.strict()` strips the walker's meta annotation.
 export const Info = (zod(InfoSchema) as unknown as z.ZodObject<any>)
   .strict()

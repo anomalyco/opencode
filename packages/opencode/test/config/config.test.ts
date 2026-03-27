@@ -142,6 +142,31 @@ test("loads JSON config file", async () => {
   })
 })
 
+test("loads experimental sandbox config", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      experimental: {
+        sandbox: {
+          enabled: true,
+          extra_read_roots: ["/tmp/read"],
+          extra_write_roots: ["/tmp/write"],
+          allow_unsandboxed_retry: false,
+        },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await load()
+      expect(config.experimental?.sandbox?.enabled).toBe(true)
+      expect(config.experimental?.sandbox?.extra_read_roots).toEqual(["/tmp/read"])
+      expect(config.experimental?.sandbox?.extra_write_roots).toEqual(["/tmp/write"])
+      expect(config.experimental?.sandbox?.allow_unsandboxed_retry).toBe(false)
+    },
+  })
+})
+
 test("loads formatter boolean config", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
