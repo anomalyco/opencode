@@ -83,10 +83,11 @@ export namespace Snapshot {
 
       const state = yield* InstanceState.make<State>(
         Effect.fn("Snapshot.state")(function* (ctx) {
+          const legacy = path.join(Global.Path.data, "snapshot", ctx.project.id)
           const state = {
             directory: ctx.directory,
             worktree: ctx.worktree,
-            gitdir: path.join(Global.Path.data, "snapshot", ctx.project.id, Hash.fast(ctx.worktree)),
+            gitdir: path.join(legacy, Hash.fast(ctx.worktree)),
             vcs: ctx.project.vcs,
           }
 
@@ -121,6 +122,16 @@ export namespace Snapshot {
           const read = (file: string) => fs.readFileString(file).pipe(Effect.catch(() => Effect.succeed("")))
           const remove = (file: string) => fs.remove(file).pipe(Effect.catch(() => Effect.void))
           const locked = <A, E, R>(fx: Effect.Effect<A, E, R>) => lock(state.gitdir).withPermits(1)(fx)
+
+          // #19437: import tree objects from pre-v1.3.3 flat snapshot layout
+          if (state.gitdir !== legacy) {
+            yield* Effect.gen(function* () {
+              if (!(yield* exists(path.join(legacy, "HEAD")))) return
+              if (!(yield* exists(state.gitdir))) return
+              const result = yield* git(["--git-dir", state.gitdir, "fetch", legacy, "--no-tags"])
+              if (result.code === 0) log.info("migrated legacy snapshot objects", { from: legacy })
+            }).pipe(Effect.catchAll(() => Effect.void))
+          }
 
           const enabled = Effect.fnUntraced(function* () {
             if (state.vcs !== "git") return false
