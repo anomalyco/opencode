@@ -1,8 +1,9 @@
-import { Hono } from "hono"
+import { Hono, type Context } from "hono"
 import { describeRoute, resolver, validator } from "hono-openapi"
 import { streamSSE } from "hono/streaming"
 import z from "zod"
 import { BusEvent } from "@/bus/bus-event"
+import { SyncEvent } from "@/sync"
 import { GlobalBus } from "@/bus/global"
 import { AsyncQueue } from "@/util/queue"
 import { Instance } from "../../project/instance"
@@ -15,6 +16,56 @@ import { errors } from "../error"
 const log = Log.create({ service: "server" })
 
 export const GlobalDisposedEvent = BusEvent.define("global.disposed", z.object({}))
+
+async function streamEvents(c: Context, subscribe: (q: AsyncQueue<string | null>) => () => void) {
+  return streamSSE(c, async (stream) => {
+    const q = new AsyncQueue<string | null>()
+    let done = false
+
+    q.push(
+      JSON.stringify({
+        payload: {
+          type: "server.connected",
+          properties: {},
+        },
+      }),
+    )
+
+    // Send heartbeat every 10s to prevent stalled proxy streams.
+    const heartbeat = setInterval(() => {
+      q.push(
+        JSON.stringify({
+          payload: {
+            type: "server.heartbeat",
+            properties: {},
+          },
+        }),
+      )
+    }, 10_000)
+
+    const stop = () => {
+      if (done) return
+      done = true
+      clearInterval(heartbeat)
+      unsub()
+      q.push(null)
+      log.info("global event disconnected")
+    }
+
+    const unsub = subscribe(q)
+
+    stream.onAbort(stop)
+
+    try {
+      for await (const data of q) {
+        if (data === null) return
+        await stream.writeSSE({ data })
+      }
+    } finally {
+      stop()
+    }
+  })
+}
 
 export const GlobalRoutes = lazy(() =>
   new Hono()
@@ -67,57 +118,62 @@ export const GlobalRoutes = lazy(() =>
       }),
       async (c) => {
         log.info("global event connected")
+        c.header("Cache-Control", "no-cache, no-transform")
         c.header("X-Accel-Buffering", "no")
         c.header("X-Content-Type-Options", "nosniff")
-        return streamSSE(c, async (stream) => {
-          const q = new AsyncQueue<string | null>()
-          let done = false
 
-          q.push(
-            JSON.stringify({
-              payload: {
-                type: "server.connected",
-                properties: {},
-              },
-            }),
-          )
-
-          // Send heartbeat every 10s to prevent stalled proxy streams.
-          const heartbeat = setInterval(() => {
-            q.push(
-              JSON.stringify({
-                payload: {
-                  type: "server.heartbeat",
-                  properties: {},
-                },
-              }),
-            )
-          }, 10_000)
-
+        return streamEvents(c, (q) => {
           async function handler(event: any) {
             q.push(JSON.stringify(event))
           }
           GlobalBus.on("event", handler)
-
-          const stop = () => {
-            if (done) return
-            done = true
-            clearInterval(heartbeat)
-            GlobalBus.off("event", handler)
-            q.push(null)
-            log.info("event disconnected")
-          }
-
-          stream.onAbort(stop)
-
-          try {
-            for await (const data of q) {
-              if (data === null) return
-              await stream.writeSSE({ data })
-            }
-          } finally {
-            stop()
-          }
+          return () => GlobalBus.off("event", handler)
+        })
+      },
+    )
+    .get(
+      "/sync-event",
+      describeRoute({
+        summary: "Subscribe to global sync events",
+        description: "Get global sync events",
+        operationId: "global.sync-event.subscribe",
+        responses: {
+          200: {
+            description: "Event stream",
+            content: {
+              "text/event-stream": {
+                schema: resolver(
+                  z
+                    .object({
+                      payload: SyncEvent.payloads(),
+                    })
+                    .meta({
+                      ref: "SyncEvent",
+                    }),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        log.info("global sync event connected")
+        c.header("Cache-Control", "no-cache, no-transform")
+        c.header("X-Accel-Buffering", "no")
+        c.header("X-Content-Type-Options", "nosniff")
+        return streamEvents(c, (q) => {
+          return SyncEvent.subscribeAll(({ def, event }) => {
+            // TODO: don't pass def, just pass the type (and it should
+            // be versioned)
+            q.push(
+              JSON.stringify({
+                payload: {
+                  ...event,
+                  type: SyncEvent.versionedType(def.type, def.version),
+                },
+              }),
+            )
+          })
         })
       },
     )
@@ -194,6 +250,63 @@ export const GlobalRoutes = lazy(() =>
           },
         })
         return c.json(true)
+      },
+    )
+    .post(
+      "/upgrade",
+      describeRoute({
+        summary: "Upgrade opencode",
+        description: "Upgrade opencode to the specified version or latest if not specified.",
+        operationId: "global.upgrade",
+        responses: {
+          200: {
+            description: "Upgrade result",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.union([
+                    z.object({
+                      success: z.literal(true),
+                      version: z.string(),
+                    }),
+                    z.object({
+                      success: z.literal(false),
+                      error: z.string(),
+                    }),
+                  ]),
+                ),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          target: z.string().optional(),
+        }),
+      ),
+      async (c) => {
+        const method = await Installation.method()
+        if (method === "unknown") {
+          return c.json({ success: false, error: "Unknown installation method" }, 400)
+        }
+        const target = c.req.valid("json").target || (await Installation.latest(method))
+        const result = await Installation.upgrade(method, target)
+          .then(() => ({ success: true as const, version: target }))
+          .catch((e) => ({ success: false as const, error: e instanceof Error ? e.message : String(e) }))
+        if (result.success) {
+          GlobalBus.emit("event", {
+            directory: "global",
+            payload: {
+              type: Installation.Event.Updated.type,
+              properties: { version: target },
+            },
+          })
+          return c.json(result)
+        }
+        return c.json(result, 500)
       },
     ),
 )

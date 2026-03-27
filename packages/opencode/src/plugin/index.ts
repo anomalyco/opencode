@@ -3,7 +3,6 @@ import { Config } from "../config/config"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
 import { createOpencodeClient } from "@opencode-ai/sdk"
-import { Server } from "../server/server"
 import { BunProc } from "../bun"
 import { Flag } from "../flag/flag"
 import { CodexAuthPlugin } from "./codex"
@@ -11,9 +10,10 @@ import { Session } from "../session"
 import { NamedError } from "@opencode-ai/util/error"
 import { CopilotAuthPlugin } from "./copilot"
 import { gitlabAuthPlugin as GitlabAuthPlugin } from "opencode-gitlab-auth"
-import { Effect, Layer, ServiceMap } from "effect"
+import { PoeAuthPlugin } from "opencode-poe-auth"
+import { Effect, Layer, ServiceMap, Stream } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRunPromise } from "@/effect/run-service"
+import { makeRuntime } from "@/effect/run-service"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -44,7 +44,7 @@ export namespace Plugin {
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Plugin") {}
 
   // Built-in plugins that are directly imported (not installed from npm)
-  const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin, GitlabAuthPlugin]
+  const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin, GitlabAuthPlugin, PoeAuthPlugin]
 
   // Old npm package names for plugins that are now built-in — skip if users still have them in config
   const DEPRECATED_PLUGIN_PACKAGES = ["opencode-openai-codex-auth", "opencode-copilot-auth"]
@@ -52,11 +52,15 @@ export namespace Plugin {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
+      const bus = yield* Bus.Service
+
       const cache = yield* InstanceState.make<State>(
         Effect.fn("Plugin.state")(function* (ctx) {
           const hooks: Hooks[] = []
 
           yield* Effect.promise(async () => {
+            const { Server } = await import("../server/server")
+
             const client = createOpencodeClient({
               baseUrl: "http://localhost:4096",
               directory: ctx.directory,
@@ -136,20 +140,24 @@ export namespace Plugin {
 
             // Notify plugins of current config
             for (const hook of hooks) {
-              await (hook as any).config?.(cfg)
+              try {
+                await (hook as any).config?.(cfg)
+              } catch (err) {
+                log.error("plugin config hook failed", { error: err })
+              }
             }
           })
 
-          // Subscribe to bus events, clean up when scope is closed
-          yield* Effect.acquireRelease(
-            Effect.sync(() =>
-              Bus.subscribeAll(async (input) => {
+          // Subscribe to bus events, fiber interrupted when scope closes
+          yield* bus.subscribeAll().pipe(
+            Stream.runForEach((input) =>
+              Effect.sync(() => {
                 for (const hook of hooks) {
-                  hook["event"]?.({ event: input })
+                  hook["event"]?.({ event: input as any })
                 }
               }),
             ),
-            (unsub) => Effect.sync(unsub),
+            Effect.forkScoped,
           )
 
           return { hooks }
@@ -186,7 +194,8 @@ export namespace Plugin {
     }),
   )
 
-  const runPromise = makeRunPromise(Service, layer)
+  const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export async function trigger<
     Name extends TriggerName,
