@@ -748,7 +748,7 @@ describe("session.llm.stream", () => {
           role: "user",
           time: { created: Date.now() },
           agent: agent.name,
-          model: { providerID: ProviderID.make(providerID), modelID: resolved.id },
+          model: { providerID: ProviderID.make("minimax"), modelID: ModelID.make("MiniMax-M2.7") },
         } satisfies MessageV2.User
 
         const stream = await LLM.stream({
