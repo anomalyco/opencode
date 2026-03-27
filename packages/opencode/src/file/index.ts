@@ -935,7 +935,9 @@ export * as File from "."
         const query = input.query.trim()
         const limit = input.limit ?? 100
         const kind = input.type ?? (input.dirs === false ? "file" : "all")
-        const fast = /[./\\]/.test(query)
+        const slash = /[\\/]/.test(query)
+        const dot = query.includes(".")
+        const fast = slash || dot
         log.info("search", { query, kind })
 
         if (query && fast && kind === "file") {
@@ -943,9 +945,16 @@ export * as File from "."
             Fff.files({
               cwd: Instance.directory,
               query,
-              size: limit,
+              size: slash ? limit : Math.max(limit * 5, 100),
             })
-              .then((out) => Array.from(new Set(out.items.map((item) => item.relativePath.replaceAll("\\", "/")))))
+              .then((out) => {
+                const rows = Array.from(new Set(out.items.map((item) => item.relativePath.replaceAll("\\", "/"))))
+                if (slash || !dot) return rows.slice(0, limit)
+                const name = query.toLowerCase()
+                const exact = rows.filter((file) => file.split("/").at(-1)?.toLowerCase() === name)
+                const sort = exact.length ? exact.toSorted((a, b) => a.length - b.length || a.localeCompare(b)) : rows
+                return sort.slice(0, limit)
+              })
               .catch(() => []),
           )
           if (files.length) {
