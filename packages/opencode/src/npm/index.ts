@@ -18,6 +18,7 @@ import { Log } from "../util/log"
 import path from "path"
 import { readdir, rm } from "fs/promises"
 import { Filesystem } from "@/util/filesystem"
+import { Flock } from "@/util/flock"
 
 const { Arborist } = await import("@npmcli/arborist")
 
@@ -98,7 +99,7 @@ export namespace Npm {
   }
 
   export async function install(dir: string) {
-    using _ = await Lock.write(`npm-install:${dir}`)
+    await using _ = await Flock.acquire(`npm-install:${dir}`)
     log.info("checking dependencies", { dir })
 
     const reify = async () => {
