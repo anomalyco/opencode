@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test"
+import { afterAll, describe, expect, mock, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { tmpdir } from "../../fixture/fixture"
@@ -84,6 +84,10 @@ mock.module("@/project/instance", () => ({
 }))
 
 describe("tui thread", () => {
+  afterAll(() => {
+    mock.restore()
+  })
+
   async function call(project?: string) {
     const { TuiThreadCommand } = await import("../../../src/cli/cmd/tui/thread")
     const args: Parameters<NonNullable<typeof TuiThreadCommand.handler>>[0] = {
