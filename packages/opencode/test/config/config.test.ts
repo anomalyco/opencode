@@ -20,6 +20,7 @@ import { pathToFileURL } from "url"
 import { Global } from "../../src/global"
 import { ProjectID } from "../../src/project/schema"
 import { Filesystem } from "../../src/util/filesystem"
+import * as Network from "../../src/util/network"
 import { BunProc } from "../../src/bun"
 
 const emptyAccount = Layer.mock(Account.Service)({
@@ -765,6 +766,20 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
 
   const prev = process.env.OPENCODE_CONFIG_DIR
   process.env.OPENCODE_CONFIG_DIR = tmp.extra
+  const online = spyOn(Network, "online").mockReturnValue(false)
+  const run = spyOn(BunProc, "run").mockImplementation(async (_cmd, opts) => {
+    const mod = path.join(opts?.cwd ?? "", "node_modules", "@opencode-ai", "plugin")
+    await fs.mkdir(mod, { recursive: true })
+    await Filesystem.write(
+      path.join(mod, "package.json"),
+      JSON.stringify({ name: "@opencode-ai/plugin", version: "1.0.0" }),
+    )
+    return {
+      code: 0,
+      stdout: Buffer.alloc(0),
+      stderr: Buffer.alloc(0),
+    }
+  })
 
   try {
     await Instance.provide({
@@ -778,25 +793,43 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
     expect(await Filesystem.exists(path.join(tmp.extra, "package.json"))).toBe(true)
     expect(await Filesystem.exists(path.join(tmp.extra, ".gitignore"))).toBe(true)
   } finally {
+    online.mockRestore()
+    run.mockRestore()
     if (prev === undefined) delete process.env.OPENCODE_CONFIG_DIR
     else process.env.OPENCODE_CONFIG_DIR = prev
   }
 })
 
-test("serializes concurrent config dependency installs", async () => {
+test("dedupes concurrent config dependency installs for the same dir", async () => {
   await using tmp = await tmpdir()
-  const dirs = [path.join(tmp.path, "a"), path.join(tmp.path, "b")]
-  await Promise.all(dirs.map((dir) => fs.mkdir(dir, { recursive: true })))
+  const dir = path.join(tmp.path, "a")
+  await fs.mkdir(dir, { recursive: true })
 
-  const seen: string[] = []
-  let active = 0
-  let max = 0
+  const ticks: number[] = []
+  let calls = 0
+  let start = () => {}
+  let done = () => {}
+  let blocked = () => {}
+  const ready = new Promise<void>((resolve) => {
+    start = resolve
+  })
+  const gate = new Promise<void>((resolve) => {
+    done = resolve
+  })
+  const waiting = new Promise<void>((resolve) => {
+    blocked = resolve
+  })
+  const online = spyOn(Network, "online").mockReturnValue(false)
   const run = spyOn(BunProc, "run").mockImplementation(async (_cmd, opts) => {
-    active++
-    max = Math.max(max, active)
-    seen.push(opts?.cwd ?? "")
-    await new Promise((resolve) => setTimeout(resolve, 25))
-    active--
+    calls += 1
+    start()
+    await gate
+    const mod = path.join(opts?.cwd ?? "", "node_modules", "@opencode-ai", "plugin")
+    await fs.mkdir(mod, { recursive: true })
+    await Filesystem.write(
+      path.join(mod, "package.json"),
+      JSON.stringify({ name: "@opencode-ai/plugin", version: "1.0.0" }),
+    )
     return {
       code: 0,
       stdout: Buffer.alloc(0),
@@ -805,15 +838,85 @@ test("serializes concurrent config dependency installs", async () => {
   })
 
   try {
-    await Promise.all(dirs.map((dir) => Config.installDependencies(dir)))
+    const first = Config.installDependencies(dir)
+    await ready
+    const second = Config.installDependencies(dir, {
+      waitTick: (tick) => {
+        ticks.push(tick.attempt)
+        blocked()
+        blocked = () => {}
+      },
+    })
+    await waiting
+    done()
+    await Promise.all([first, second])
   } finally {
+    online.mockRestore()
     run.mockRestore()
   }
 
-  expect(max).toBe(1)
-  expect(seen.toSorted()).toEqual(dirs.toSorted())
-  expect(await Filesystem.exists(path.join(dirs[0], "package.json"))).toBe(true)
-  expect(await Filesystem.exists(path.join(dirs[1], "package.json"))).toBe(true)
+  expect(calls).toBe(1)
+  expect(ticks.length).toBeGreaterThan(0)
+  expect(await Filesystem.exists(path.join(dir, "package.json"))).toBe(true)
+})
+
+test("serializes config dependency installs across dirs", async () => {
+  if (process.platform !== "win32") return
+
+  await using tmp = await tmpdir()
+  const a = path.join(tmp.path, "a")
+  const b = path.join(tmp.path, "b")
+  await fs.mkdir(a, { recursive: true })
+  await fs.mkdir(b, { recursive: true })
+
+  let calls = 0
+  let open = 0
+  let peak = 0
+  let start = () => {}
+  let done = () => {}
+  const ready = new Promise<void>((resolve) => {
+    start = resolve
+  })
+  const gate = new Promise<void>((resolve) => {
+    done = resolve
+  })
+
+  const online = spyOn(Network, "online").mockReturnValue(false)
+  const run = spyOn(BunProc, "run").mockImplementation(async (_cmd, opts) => {
+    calls += 1
+    open += 1
+    peak = Math.max(peak, open)
+    if (calls === 1) {
+      start()
+      await gate
+    }
+    const mod = path.join(opts?.cwd ?? "", "node_modules", "@opencode-ai", "plugin")
+    await fs.mkdir(mod, { recursive: true })
+    await Filesystem.write(
+      path.join(mod, "package.json"),
+      JSON.stringify({ name: "@opencode-ai/plugin", version: "1.0.0" }),
+    )
+    open -= 1
+    return {
+      code: 0,
+      stdout: Buffer.alloc(0),
+      stderr: Buffer.alloc(0),
+    }
+  })
+
+  try {
+    const first = Config.installDependencies(a)
+    await ready
+    const second = Config.installDependencies(b)
+    done()
+    await Promise.all([first, second])
+  } finally {
+    online.mockRestore()
+    run.mockRestore()
+  }
+
+  expect(calls).toBe(2)
+  expect(peak).toBe(1)
 })
 
 test("resolves scoped npm plugins in config", async () => {
@@ -855,15 +958,7 @@ test("resolves scoped npm plugins in config", async () => {
     fn: async () => {
       const config = await Config.get()
       const pluginEntries = config.plugin ?? []
-
-      const baseUrl = pathToFileURL(path.join(tmp.path, "opencode.json")).href
-      const expected = pathToFileURL(path.join(tmp.path, "node_modules", "@scope", "plugin", "index.js")).href
-
-      expect(pluginEntries.includes(expected)).toBe(true)
-
-      const scopedEntry = pluginEntries.find((entry) => entry === expected)
-      expect(scopedEntry).toBeDefined()
-      expect(scopedEntry?.includes("/node_modules/@scope/plugin/")).toBe(true)
+      expect(pluginEntries).toContain("@scope/plugin")
     },
   })
 })
@@ -1710,27 +1805,43 @@ test("wellknown URL with trailing slash is normalized", async () => {
   }
 })
 
-describe("getPluginName", () => {
-  test("extracts name from file:// URL", () => {
-    expect(Config.getPluginName("file:///path/to/plugin/foo.js")).toBe("foo")
-    expect(Config.getPluginName("file:///path/to/plugin/bar.ts")).toBe("bar")
-    expect(Config.getPluginName("file:///some/path/my-plugin.js")).toBe("my-plugin")
+describe("resolvePluginSpec", () => {
+  test("keeps package specs unchanged", async () => {
+    await using tmp = await tmpdir()
+    const file = path.join(tmp.path, "opencode.json")
+    expect(await Config.resolvePluginSpec("oh-my-opencode@2.4.3", file)).toBe("oh-my-opencode@2.4.3")
+    expect(await Config.resolvePluginSpec("@scope/pkg", file)).toBe("@scope/pkg")
   })
 
-  test("extracts name from npm package with version", () => {
-    expect(Config.getPluginName("oh-my-opencode@2.4.3")).toBe("oh-my-opencode")
-    expect(Config.getPluginName("some-plugin@1.0.0")).toBe("some-plugin")
-    expect(Config.getPluginName("plugin@latest")).toBe("plugin")
+  test("resolves relative file plugin paths to file urls", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Filesystem.write(path.join(dir, "plugin.ts"), "export default {}")
+      },
+    })
+
+    const file = path.join(tmp.path, "opencode.json")
+    const hit = await Config.resolvePluginSpec("./plugin.ts", file)
+    expect(Config.pluginSpecifier(hit)).toBe(pathToFileURL(path.join(tmp.path, "plugin.ts")).href)
   })
 
-  test("extracts name from scoped npm package", () => {
-    expect(Config.getPluginName("@scope/pkg@1.0.0")).toBe("@scope/pkg")
-    expect(Config.getPluginName("@opencode/plugin@2.0.0")).toBe("@opencode/plugin")
-  })
+  test("resolves plugin directory paths to package main files", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const plugin = path.join(dir, "plugin")
+        await fs.mkdir(plugin, { recursive: true })
+        await Filesystem.writeJson(path.join(plugin, "package.json"), {
+          name: "demo-plugin",
+          type: "module",
+          main: "./index.ts",
+        })
+        await Filesystem.write(path.join(plugin, "index.ts"), "export default {}")
+      },
+    })
 
-  test("returns full string for package without version", () => {
-    expect(Config.getPluginName("some-plugin")).toBe("some-plugin")
-    expect(Config.getPluginName("@scope/pkg")).toBe("@scope/pkg")
+    const file = path.join(tmp.path, "opencode.json")
+    const hit = await Config.resolvePluginSpec("./plugin", file)
+    expect(Config.pluginSpecifier(hit)).toBe(pathToFileURL(path.join(tmp.path, "plugin", "index.ts")).href)
   })
 })
 
@@ -1747,13 +1858,20 @@ describe("deduplicatePlugins", () => {
     expect(result.length).toBe(3)
   })
 
-  test("prefers local file over npm package with same name", () => {
+  test("keeps path plugins separate from package plugins", () => {
     const plugins = ["oh-my-opencode@2.4.3", "file:///project/.opencode/plugin/oh-my-opencode.js"]
 
     const result = Config.deduplicatePlugins(plugins)
 
-    expect(result.length).toBe(1)
-    expect(result[0]).toBe("file:///project/.opencode/plugin/oh-my-opencode.js")
+    expect(result).toEqual(plugins)
+  })
+
+  test("deduplicates direct path plugins by exact spec", () => {
+    const plugins = ["file:///project/.opencode/plugin/demo.ts", "file:///project/.opencode/plugin/demo.ts"]
+
+    const result = Config.deduplicatePlugins(plugins)
+
+    expect(result).toEqual(["file:///project/.opencode/plugin/demo.ts"])
   })
 
   test("preserves order of remaining plugins", () => {
@@ -1764,7 +1882,7 @@ describe("deduplicatePlugins", () => {
     expect(result).toEqual(["a-plugin@1.0.0", "b-plugin@1.0.0", "c-plugin@1.0.0"])
   })
 
-  test("local plugin directory overrides global opencode.json plugin", async () => {
+  test("loads auto-discovered local plugins as file urls", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
         const projectDir = path.join(dir, "project")
@@ -1790,9 +1908,8 @@ describe("deduplicatePlugins", () => {
         const config = await Config.get()
         const plugins = config.plugin ?? []
 
-        const myPlugins = plugins.filter((p) => Config.getPluginName(p) === "my-plugin")
-        expect(myPlugins.length).toBe(1)
-        expect(myPlugins[0].startsWith("file://")).toBe(true)
+        expect(plugins.some((p) => Config.pluginSpecifier(p) === "my-plugin@1.0.0")).toBe(true)
+        expect(plugins.some((p) => Config.pluginSpecifier(p).startsWith("file://"))).toBe(true)
       },
     })
   })

@@ -2,10 +2,10 @@ import { useMarked } from "../context/marked"
 import { useI18n } from "../context/i18n"
 import DOMPurify from "dompurify"
 import morphdom from "morphdom"
-import { marked, type Tokens } from "marked"
 import { checksum } from "@opencode-ai/util/encode"
 import { ComponentProps, createEffect, createResource, createSignal, onCleanup, splitProps } from "solid-js"
 import { isServer } from "solid-js/web"
+import { stream } from "./markdown-stream"
 
 type Entry = {
   hash: string
@@ -56,47 +56,6 @@ function escape(text: string) {
 
 function fallback(markdown: string) {
   return escape(markdown).replace(/\r\n?/g, "\n").replace(/\n/g, "<br>")
-}
-
-type Block = {
-  raw: string
-  mode: "full" | "live"
-}
-
-function references(markdown: string) {
-  return /^\[[^\]]+\]:\s+\S+/m.test(markdown) || /^\[\^[^\]]+\]:\s+/m.test(markdown)
-}
-
-function incomplete(raw: string) {
-  const open = raw.match(/^[ \t]{0,3}(`{3,}|~{3,})/)
-  if (!open) return false
-  const mark = open[1]
-  if (!mark) return false
-  const char = mark[0]
-  const size = mark.length
-  const last = raw.trimEnd().split("\n").at(-1)?.trim() ?? ""
-  return !new RegExp(`^[\\t ]{0,3}${char}{${size},}[\\t ]*$`).test(last)
-}
-
-function blocks(markdown: string, streaming: boolean) {
-  if (!streaming || references(markdown)) return [{ raw: markdown, mode: "full" }] satisfies Block[]
-  const tokens = marked.lexer(markdown)
-  const last = tokens.findLast((token) => token.type !== "space")
-  if (!last || last.type !== "code") return [{ raw: markdown, mode: "full" }] satisfies Block[]
-  const code = last as Tokens.Code
-  if (!incomplete(code.raw)) return [{ raw: markdown, mode: "full" }] satisfies Block[]
-  const head = tokens
-    .slice(
-      0,
-      tokens.findLastIndex((token) => token.type !== "space"),
-    )
-    .map((token) => token.raw)
-    .join("")
-  if (!head) return [{ raw: code.raw, mode: "live" }] satisfies Block[]
-  return [
-    { raw: head, mode: "full" },
-    { raw: code.raw, mode: "live" },
-  ] satisfies Block[]
 }
 
 type CopyLabels = {
@@ -251,8 +210,6 @@ function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
     timeouts.set(button, timeout)
   }
 
-  decorate(root, getLabels())
-
   const buttons = Array.from(root.querySelectorAll('[data-slot="markdown-copy-button"]'))
   for (const button of buttons) {
     if (button instanceof HTMLButtonElement) updateLabel(button)
@@ -304,7 +261,7 @@ export function Markdown(
 
       const base = src.key ?? checksum(src.text)
       return Promise.all(
-        blocks(src.text, src.streaming).map(async (block, index) => {
+        stream(src.text, src.streaming).map(async (block, index) => {
           const hash = checksum(block.raw)
           const key = base ? `${base}:${index}:${block.mode}` : hash
 
@@ -316,7 +273,7 @@ export function Markdown(
             }
           }
 
-          const next = await Promise.resolve(marked.parse(block.raw))
+          const next = await Promise.resolve(marked.parse(block.src))
           const safe = sanitize(next)
           if (key && hash) touch(key, { hash, html: safe })
           return safe

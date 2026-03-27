@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For } from "solid-js"
+import { For } from "solid-js"
 import { DEFAULT_THEMES, useTheme } from "@tui/context/theme"
 
 const themeCount = Object.keys(DEFAULT_THEMES).length
