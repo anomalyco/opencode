@@ -1,7 +1,7 @@
-import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Effect, Layer, Schema, ServiceMap, Stream } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { makeRunPromise } from "@/effect/run-service"
+import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+import { makeRuntime } from "@/effect/run-service"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import path from "path"
@@ -15,10 +15,14 @@ declare global {
   const OPENCODE_CHANNEL: string
 }
 
+import semver from "semver"
+
 export namespace Installation {
   const log = Log.create({ service: "installation" })
 
   export type Method = "curl" | "npm" | "yarn" | "pnpm" | "bun" | "brew" | "scoop" | "choco" | "unknown"
+
+  export type ReleaseType = "patch" | "minor" | "major"
 
   export const Event = {
     Updated: BusEvent.define(
@@ -33,6 +37,17 @@ export namespace Installation {
         version: z.string(),
       }),
     ),
+  }
+
+  export function getReleaseType(current: string, latest: string): ReleaseType {
+    const currMajor = semver.major(current)
+    const currMinor = semver.minor(current)
+    const newMajor = semver.major(latest)
+    const newMinor = semver.minor(latest)
+
+    if (newMajor > currMajor) return "major"
+    if (newMinor > currMinor) return "minor"
+    return "patch"
   }
 
   export const Info = z
@@ -325,12 +340,10 @@ export namespace Installation {
 
   export const defaultLayer = layer.pipe(
     Layer.provide(FetchHttpClient.layer),
-    Layer.provide(NodeChildProcessSpawner.layer),
-    Layer.provide(NodeFileSystem.layer),
-    Layer.provide(NodePath.layer),
+    Layer.provide(CrossSpawnSpawner.defaultLayer),
   )
 
-  const runPromise = makeRunPromise(Service, defaultLayer)
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export async function info(): Promise<Info> {
     return runPromise((svc) => svc.info())
