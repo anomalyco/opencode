@@ -50,7 +50,7 @@ function testLayer(
 describe("installation", () => {
   describe("latest", () => {
     test("reads release version from GitHub releases", async () => {
-      const layer = testLayer(() => jsonResponse({ tag_name: "v1.2.3" }))
+      const layer = testLayer(() => jsonResponse({ tag_name: "cb-v1.2.3" }))
 
       const result = await Effect.runPromise(
         Installation.Service.use((svc) => svc.latest("unknown")).pipe(Effect.provide(layer)),
@@ -58,8 +58,8 @@ describe("installation", () => {
       expect(result).toBe("1.2.3")
     })
 
-    test("strips v prefix from GitHub release tag", async () => {
-      const layer = testLayer(() => jsonResponse({ tag_name: "v4.0.0-beta.1" }))
+    test("strips cb-v prefix from GitHub release tag", async () => {
+      const layer = testLayer(() => jsonResponse({ tag_name: "cb-v4.0.0-beta.1" }))
 
       const result = await Effect.runPromise(
         Installation.Service.use((svc) => svc.latest("curl")).pipe(Effect.provide(layer)),
