@@ -314,7 +314,7 @@ function NineRouterMethod(props: NineRouterMethodProps) {
         if (modelIds.length === 0) {
           // Fallback: no models fetched, skip to model dialog after saving URL
           await sdk.client.config.update({
-            body: { provider: { "9router": { options: { baseURL } } } } as any,
+            config: { provider: { "9router": { options: { baseURL } } } } as any,
           })
           await sdk.client.auth.set({ providerID: props.providerID, auth: { type: "api", key: "9router" } })
           await sdk.client.instance.dispose()
@@ -340,7 +340,7 @@ function NineRouterMethod(props: NineRouterMethodProps) {
 
         // Save URL + all models + auth, then refresh
         await sdk.client.config.update({
-          body: {
+          config: {
             provider: {
               "9router": {
                 options: { baseURL },
