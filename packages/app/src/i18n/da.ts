@@ -860,6 +860,9 @@ export const dict = {
 
   "app.server.unreachable": "Kunne ikke nå {{server}}",
   "app.server.retrying": "Prøver igen automatisk...",
+  "app.server.retryElapsed": "Retrying... {{seconds}}s",
+  "app.server.hint.serve": "Try running: cobuilder serve",
+  "app.server.hint.url": "Check that the server is running at {{url}}",
   "app.server.otherServers": "Andre servere",
   "dialog.server.add.usernamePlaceholder": "brugernavn",
   "dialog.server.add.passwordPlaceholder": "adgangskode",

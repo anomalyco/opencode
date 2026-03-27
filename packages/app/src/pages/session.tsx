@@ -29,6 +29,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode, checksum } from "@opencode-ai/util/encode"
 import { useNavigate, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
+import { DialogSelectProvider } from "@/components/dialog-select-provider"
 import { useComments } from "@/context/comments"
 import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
 import { useGlobalSync } from "@/context/global-sync"
@@ -1654,11 +1655,17 @@ export default function Page() {
     consumePendingMessage: layout.pendingMessage.consume,
   })
 
+  createEffect(() => {
+    const title = info()?.title ?? "CoBuilder"
+    document.title = busy(params.id ?? "") ? `⟳ ${title}` : title
+  })
+
   onMount(() => {
     document.addEventListener("keydown", handleKeyDown)
   })
 
   onCleanup(() => {
+    document.title = "CoBuilder"
     document.removeEventListener("keydown", handleKeyDown)
     if (reviewFrame !== undefined) cancelAnimationFrame(reviewFrame)
     if (refreshFrame !== undefined) cancelAnimationFrame(refreshFrame)
@@ -1760,6 +1767,23 @@ export default function Page() {
               </Match>
             </Switch>
           </div>
+
+          <Show when={globalSync.data.provider.connected.length === 0 && messagesReady()}>
+            <div class="flex flex-col items-center gap-3 py-8 text-center px-4">
+              <p class="text-sm text-text-weak">
+                {language.t("session.noProvider.message", {
+                  fallback: "No AI provider connected. Connect a provider to start chatting.",
+                })}
+              </p>
+              <button
+                type="button"
+                class="text-sm text-accent-base hover:underline cursor-pointer"
+                onClick={() => dialog.show(() => <DialogSelectProvider />)}
+              >
+                {language.t("session.noProvider.connect", { fallback: "Connect a provider" })}
+              </button>
+            </div>
+          </Show>
 
           <SessionComposerRegion
             state={composer}

@@ -28,8 +28,6 @@ import { Session } from "@tui/routes/session"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
-import { DialogAlert } from "./ui/dialog-alert"
-import { DialogConfirm } from "./ui/dialog-confirm"
 import { ToastProvider, useToast } from "./ui/toast"
 import { ExitProvider, useExit } from "./context/exit"
 import { Session as SessionApi } from "@/session"
@@ -217,6 +215,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const sync = useSync()
   const exit = useExit()
   const promptRef = usePromptRef()
+  const [pendingUpdate, setPendingUpdate] = createSignal<string | null>(null)
 
   useKeyboard((evt) => {
     if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
@@ -259,23 +258,19 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   }
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
 
-  createEffect(() => {
-    console.log(JSON.stringify(route.data))
-  })
-
   // Update terminal window title based on current route and session
   createEffect(() => {
     if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
 
     if (route.data.type === "home") {
-      renderer.setTerminalTitle("OpenCode")
+      renderer.setTerminalTitle("CoBuilder")
       return
     }
 
     if (route.data.type === "session") {
       const session = sync.session.get(route.data.sessionID)
       if (!session || SessionApi.isDefaultTitle(session.title)) {
-        renderer.setTerminalTitle("OpenCode")
+        renderer.setTerminalTitle("CoBuilder")
         return
       }
 
@@ -748,45 +743,32 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     const skipped = kv.get("skipped_version")
     if (skipped && !semver.gt(version, skipped)) return
 
-    const choice = await DialogConfirm.show(
-      dialog,
-      `Update Available`,
-      `A new release v${version} is available. Would you like to update now?`,
-      "skip",
-    )
-
-    if (choice === false) {
-      kv.set("skipped_version", version)
-      return
-    }
-
-    if (choice !== true) return
-
+    // Download in background — no dialog, no interruption
     toast.show({
       variant: "info",
-      message: `Updating to v${version}...`,
-      duration: 30000,
+      message: `Downloading update v${version}...`,
+      duration: 5000,
     })
 
     const result = await sdk.client.global.upgrade({ target: version })
 
     if (result.error || !result.data?.success) {
       toast.show({
-        variant: "error",
-        title: "Update Failed",
-        message: "Update failed",
-        duration: 10000,
+        variant: "warning",
+        title: "Update failed",
+        message: `Could not download v${version}. Will retry next launch.`,
+        duration: 8000,
       })
       return
     }
 
-    await DialogAlert.show(
-      dialog,
-      "Update Complete",
-      `Successfully updated to OpenCode v${result.data.version}. Please restart the application.`,
-    )
-
-    exit()
+    // Mark update as ready — badge will appear
+    setPendingUpdate(result.data.version)
+    toast.show({
+      variant: "info",
+      message: `Update v${result.data.version} ready — restart to apply`,
+      duration: 10000,
+    })
   })
 
   return (
@@ -804,6 +786,19 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       }}
       onMouseUp={Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? undefined : () => Selection.copy(renderer, toast)}
     >
+      <Show when={pendingUpdate()}>
+        <box
+          flexDirection="row"
+          justifyContent="center"
+          paddingTop={0}
+          paddingBottom={0}
+          flexShrink={0}
+        >
+          <text fg={theme.primary}>
+            {"  Update v"}{pendingUpdate()}{" ready — restart to apply  "}
+          </text>
+        </box>
+      </Show>
       <Switch>
         <Match when={route.data.type === "home"}>
           <Home />
@@ -839,7 +834,7 @@ function ErrorComponent(props: {
   })
   const [copied, setCopied] = createSignal(false)
 
-  const issueURL = new URL("https://github.com/anomalyco/opencode/issues/new?template=bug-report.yml")
+  const issueURL = new URL("https://github.com/CobuilderLabs/opencode/issues/new?template=bug-report.yml")
 
   // Choose safe fallback colors per mode since theme context may not be available
   const isLight = props.mode === "light"

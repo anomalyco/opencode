@@ -66,7 +66,7 @@ export namespace Plugin {
               directory: ctx.directory,
               headers: Flag.OPENCODE_SERVER_PASSWORD
                 ? {
-                    Authorization: `Basic ${Buffer.from(`${Flag.OPENCODE_SERVER_USERNAME ?? "opencode"}:${Flag.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`,
+                    Authorization: `Basic ${Buffer.from(`${Flag.OPENCODE_SERVER_USERNAME ?? "cobuilder"}:${Flag.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`,
                   }
                 : undefined,
               fetch: async (...args) => Server.Default().fetch(...args),

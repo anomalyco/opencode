@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 120" width="420" height="120" shape-rendering="crispEdges">
+  <!--
+    Jindo mascot as logomark — scale 0.42 gives 10px per pixel cell,
+    large enough to read as a dog. No container box. Warm tones throughout.
+  -->
+  <g transform="translate(10,10) scale(0.42)">
+    <!-- ROW 0 — ear tips -->
+    <rect x="58"  y="10" width="24" height="24" fill="#c08055"/>
+    <rect x="178" y="10" width="24" height="24" fill="#c08055"/>
+    <!-- ROW 1 — ears -->
+    <rect x="34"  y="34" width="24" height="24" fill="#c08055"/>
+    <rect x="58"  y="34" width="24" height="24" fill="#c08055"/>
+    <rect x="178" y="34" width="24" height="24" fill="#c08055"/>
+    <rect x="202" y="34" width="24" height="24" fill="#c08055"/>
+    <!-- ROW 2 — ears wider -->
+    <rect x="34"  y="58" width="24" height="24" fill="#c08055"/>
+    <rect x="58"  y="58" width="24" height="24" fill="#c08055"/>
+    <rect x="82"  y="58" width="24" height="24" fill="#c08055"/>
+    <rect x="154" y="58" width="24" height="24" fill="#c08055"/>
+    <rect x="178" y="58" width="24" height="24" fill="#c08055"/>
+    <rect x="202" y="58" width="24" height="24" fill="#c08055"/>
+    <!-- ROW 3 — full head -->
+    <rect x="10"  y="82" width="24" height="24" fill="#c08055"/>
+    <rect x="34"  y="82" width="24" height="24" fill="#c08055"/>
+    <rect x="58"  y="82" width="24" height="24" fill="#c08055"/>
+    <rect x="82"  y="82" width="24" height="24" fill="#c08055"/>
+    <rect x="106" y="82" width="24" height="24" fill="#c08055"/>
+    <rect x="130" y="82" width="24" height="24" fill="#c08055"/>
+    <rect x="154" y="82" width="24" height="24" fill="#c08055"/>
+    <rect x="178" y="82" width="24" height="24" fill="#c08055"/>
+    <rect x="202" y="82" width="24" height="24" fill="#c08055"/>
+    <rect x="226" y="82" width="24" height="24" fill="#c08055"/>
+    <!-- ROW 4 — eyes on cream background -->
+    <rect x="10"  y="106" width="24" height="24" fill="#c08055"/>
+    <rect x="34"  y="106" width="24" height="24" fill="#c08055"/>
+    <rect x="58"  y="106" width="24" height="24" fill="#c08055"/>
+    <rect x="82"  y="106" width="24" height="24" fill="#5a2808"/>
+    <rect x="106" y="106" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="130" y="106" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="154" y="106" width="24" height="24" fill="#5a2808"/>
+    <rect x="178" y="106" width="24" height="24" fill="#c08055"/>
+    <rect x="202" y="106" width="24" height="24" fill="#c08055"/>
+    <rect x="226" y="106" width="24" height="24" fill="#c08055"/>
+    <!-- ROW 5 — cream face patch -->
+    <rect x="10"  y="130" width="24" height="24" fill="#c08055"/>
+    <rect x="34"  y="130" width="24" height="24" fill="#c08055"/>
+    <rect x="58"  y="130" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="82"  y="130" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="106" y="130" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="130" y="130" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="154" y="130" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="178" y="130" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="202" y="130" width="24" height="24" fill="#c08055"/>
+    <rect x="226" y="130" width="24" height="24" fill="#c08055"/>
+    <!-- ROW 6 — cream face narrows -->
+    <rect x="34"  y="154" width="24" height="24" fill="#c08055"/>
+    <rect x="58"  y="154" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="82"  y="154" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="106" y="154" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="130" y="154" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="154" y="154" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="178" y="154" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="202" y="154" width="24" height="24" fill="#c08055"/>
+    <!-- ROW 7 — snout + nose on cream -->
+    <rect x="34"  y="178" width="24" height="24" fill="#c08055"/>
+    <rect x="58"  y="178" width="24" height="24" fill="#c08055"/>
+    <rect x="82"  y="178" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="106" y="178" width="24" height="24" fill="#5a2808"/>
+    <rect x="130" y="178" width="24" height="24" fill="#5a2808"/>
+    <rect x="154" y="178" width="24" height="24" fill="#e8c4a0"/>
+    <rect x="178" y="178" width="24" height="24" fill="#c08055"/>
+    <rect x="202" y="178" width="24" height="24" fill="#c08055"/>
+    <!-- ROW 8 — chin -->
+    <rect x="58"  y="202" width="24" height="24" fill="#c08055"/>
+    <rect x="82"  y="202" width="24" height="24" fill="#c08055"/>
+    <rect x="106" y="202" width="24" height="24" fill="#c08055"/>
+    <rect x="130" y="202" width="24" height="24" fill="#c08055"/>
+    <rect x="154" y="202" width="24" height="24" fill="#c08055"/>
+    <rect x="178" y="202" width="24" height="24" fill="#c08055"/>
+    <!-- ROW 9 — neck stub -->
+    <rect x="82"  y="226" width="24" height="24" fill="#c08055"/>
+    <rect x="106" y="226" width="24" height="24" fill="#c08055"/>
+    <rect x="130" y="226" width="24" height="24" fill="#c08055"/>
+    <rect x="154" y="226" width="24" height="24" fill="#c08055"/>
+  </g>
+
+  <!-- Wordmark — warm palette unified with mascot, no gradient -->
+  <text x="124" y="80" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="46" font-weight="700" letter-spacing="-1" shape-rendering="auto">
+    <tspan fill="#1a0a04">Co</tspan><tspan fill="#c08055">Builder</tspan>
+  </text>
+</svg>

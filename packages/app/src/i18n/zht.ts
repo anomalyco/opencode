@@ -490,6 +490,10 @@ export const dict = {
   "home.recentProjects": "最近專案",
   "home.empty.title": "沒有最近專案",
   "home.empty.description": "透過開啟本地專案開始使用",
+  "home.gettingStarted.title": "開始使用",
+  "home.gettingStarted.step1": "開啟一個專案資料夾開始",
+  "home.gettingStarted.step2": "輸入訊息開始一個會話",
+  "home.gettingStarted.step3": "使用斜線命令如 /help 獲取更多選項",
 
   "session.tab.session": "工作階段",
   "session.tab.review": "審查",
@@ -850,6 +854,9 @@ export const dict = {
 
   "app.server.unreachable": "無法連線至 {{server}}",
   "app.server.retrying": "正在自動重試...",
+  "app.server.retryElapsed": "重試中... {{seconds}}秒",
+  "app.server.hint.serve": "嘗試執行: cobuilder serve",
+  "app.server.hint.url": "檢查伺服器是否在 {{url}} 執行",
   "app.server.otherServers": "其他伺服器",
   "dialog.server.add.usernamePlaceholder": "使用者名稱",
   "dialog.server.add.passwordPlaceholder": "密碼",

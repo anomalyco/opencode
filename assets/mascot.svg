@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 260" width="260" height="260" shape-rendering="crispEdges">
+  <!-- Warm light background matching CobuilderLabs org avatar style -->
+  <rect width="260" height="260" fill="#f3ece6"/>
+
+  <!--
+    Jindo headshot — pixel art, front-facing
+    Grid: 10 cols × 10 rows, 24px per pixel, 10px padding
+    Pixel x = 10 + col*24 | Pixel y = 10 + row*24
+
+    Two pointed ears with U-notch at top (mirrors CobuilderLabs logo shape)
+    Eyes at row 4, cols 3 & 7
+    Nose at row 7, cols 4–5
+
+    Main:  #c08055  (warm fawn)
+    Cream: #e8c4a0  (inner face patch, rows 4–7)
+    Dark:  #5a2808  (eyes col 3 & 6, nose cols 4–5)
+  -->
+
+  <!-- ROW 0 — ear tips (cols 2, 7) -->
+  <rect x="58"  y="10" width="24" height="24" fill="#c08055"/>
+  <rect x="178" y="10" width="24" height="24" fill="#c08055"/>
+
+  <!-- ROW 1 — ears (cols 1–2, 7–8) -->
+  <rect x="34"  y="34" width="24" height="24" fill="#c08055"/>
+  <rect x="58"  y="34" width="24" height="24" fill="#c08055"/>
+  <rect x="178" y="34" width="24" height="24" fill="#c08055"/>
+  <rect x="202" y="34" width="24" height="24" fill="#c08055"/>
+
+  <!-- ROW 2 — ears wider (cols 1–3, 6–8), gap in middle -->
+  <rect x="34"  y="58" width="24" height="24" fill="#c08055"/>
+  <rect x="58"  y="58" width="24" height="24" fill="#c08055"/>
+  <rect x="82"  y="58" width="24" height="24" fill="#c08055"/>
+  <rect x="154" y="58" width="24" height="24" fill="#c08055"/>
+  <rect x="178" y="58" width="24" height="24" fill="#c08055"/>
+  <rect x="202" y="58" width="24" height="24" fill="#c08055"/>
+
+  <!-- ROW 3 — full head width (cols 0–9) -->
+  <rect x="10"  y="82" width="24" height="24" fill="#c08055"/>
+  <rect x="34"  y="82" width="24" height="24" fill="#c08055"/>
+  <rect x="58"  y="82" width="24" height="24" fill="#c08055"/>
+  <rect x="82"  y="82" width="24" height="24" fill="#c08055"/>
+  <rect x="106" y="82" width="24" height="24" fill="#c08055"/>
+  <rect x="130" y="82" width="24" height="24" fill="#c08055"/>
+  <rect x="154" y="82" width="24" height="24" fill="#c08055"/>
+  <rect x="178" y="82" width="24" height="24" fill="#c08055"/>
+  <rect x="202" y="82" width="24" height="24" fill="#c08055"/>
+  <rect x="226" y="82" width="24" height="24" fill="#c08055"/>
+
+  <!-- ROW 4 — eyes on cream background (eyes at cols 3 & 6, cream cols 4–5) -->
+  <rect x="10"  y="106" width="24" height="24" fill="#c08055"/>
+  <rect x="34"  y="106" width="24" height="24" fill="#c08055"/>
+  <rect x="58"  y="106" width="24" height="24" fill="#c08055"/>
+  <rect x="82"  y="106" width="24" height="24" fill="#5a2808"/>
+  <rect x="106" y="106" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="130" y="106" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="154" y="106" width="24" height="24" fill="#5a2808"/>
+  <rect x="178" y="106" width="24" height="24" fill="#c08055"/>
+  <rect x="202" y="106" width="24" height="24" fill="#c08055"/>
+  <rect x="226" y="106" width="24" height="24" fill="#c08055"/>
+
+  <!-- ROW 5 — cream face patch (cols 2–7) -->
+  <rect x="10"  y="130" width="24" height="24" fill="#c08055"/>
+  <rect x="34"  y="130" width="24" height="24" fill="#c08055"/>
+  <rect x="58"  y="130" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="82"  y="130" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="106" y="130" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="130" y="130" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="154" y="130" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="178" y="130" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="202" y="130" width="24" height="24" fill="#c08055"/>
+  <rect x="226" y="130" width="24" height="24" fill="#c08055"/>
+
+  <!-- ROW 6 — cream face narrows (cols 2–7) -->
+  <rect x="34"  y="154" width="24" height="24" fill="#c08055"/>
+  <rect x="58"  y="154" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="82"  y="154" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="106" y="154" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="130" y="154" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="154" y="154" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="178" y="154" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="202" y="154" width="24" height="24" fill="#c08055"/>
+
+  <!-- ROW 7 — snout + nose (cream col 3 & 6, dark nose cols 4–5) -->
+  <rect x="34"  y="178" width="24" height="24" fill="#c08055"/>
+  <rect x="58"  y="178" width="24" height="24" fill="#c08055"/>
+  <rect x="82"  y="178" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="106" y="178" width="24" height="24" fill="#5a2808"/>
+  <rect x="130" y="178" width="24" height="24" fill="#5a2808"/>
+  <rect x="154" y="178" width="24" height="24" fill="#e8c4a0"/>
+  <rect x="178" y="178" width="24" height="24" fill="#c08055"/>
+  <rect x="202" y="178" width="24" height="24" fill="#c08055"/>
+
+  <!-- ROW 8 — chin (cols 2–7) -->
+  <rect x="58"  y="202" width="24" height="24" fill="#c08055"/>
+  <rect x="82"  y="202" width="24" height="24" fill="#c08055"/>
+  <rect x="106" y="202" width="24" height="24" fill="#c08055"/>
+  <rect x="130" y="202" width="24" height="24" fill="#c08055"/>
+  <rect x="154" y="202" width="24" height="24" fill="#c08055"/>
+  <rect x="178" y="202" width="24" height="24" fill="#c08055"/>
+
+  <!-- ROW 9 — neck stub (cols 3–6) -->
+  <rect x="82"  y="226" width="24" height="24" fill="#c08055"/>
+  <rect x="106" y="226" width="24" height="24" fill="#c08055"/>
+  <rect x="130" y="226" width="24" height="24" fill="#c08055"/>
+  <rect x="154" y="226" width="24" height="24" fill="#c08055"/>
+</svg>

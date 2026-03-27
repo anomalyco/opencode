@@ -784,6 +784,9 @@ export const dict = {
 
   "app.server.unreachable": "{{server}}에 연결할 수 없습니다",
   "app.server.retrying": "자동으로 재시도 중...",
+  "app.server.retryElapsed": "Retrying... {{seconds}}s",
+  "app.server.hint.serve": "Try running: cobuilder serve",
+  "app.server.hint.url": "Check that the server is running at {{url}}",
   "app.server.otherServers": "다른 서버",
   "dialog.server.add.usernamePlaceholder": "사용자 이름",
   "dialog.server.add.passwordPlaceholder": "비밀번호",

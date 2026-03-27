@@ -1,0 +1,67 @@
+name: Sync Upstream
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Every Monday at 6am UTC
+  workflow_dispatch: # Allow manual trigger
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    name: Sync upstream/dev → dev
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/anomalyco/opencode.git
+          git fetch upstream dev
+
+      - name: Check for new upstream commits
+        id: check
+        run: |
+          BEHIND=$(git rev-list HEAD..upstream/dev --count)
+          echo "behind=${BEHIND}" >> "$GITHUB_OUTPUT"
+          echo "Upstream is ${BEHIND} commits ahead"
+
+      - name: Merge upstream into dev
+        if: steps.check.outputs.behind != '0'
+        id: merge
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git merge upstream/dev --no-edit --allow-unrelated-histories; then
+            echo "merged=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "merged=false" >> "$GITHUB_OUTPUT"
+            git merge --abort
+          fi
+
+      - name: Push updated dev
+        if: steps.check.outputs.behind != '0' && steps.merge.outputs.merged == 'true'
+        run: git push origin dev
+
+      - name: Open PR if merge conflict
+        if: steps.check.outputs.behind != '0' && steps.merge.outputs.merged == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="sync/upstream-$(date +%Y%m%d)"
+          git checkout -b "$BRANCH"
+          git merge upstream/dev --no-edit --allow-unrelated-histories || true
+          git add -A
+          git commit -m "chore: sync upstream/dev (conflicts need resolution)" || true
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "chore: sync upstream dev (manual conflict resolution needed)" \
+            --body "Upstream anomalyco/opencode has new commits that conflict with our \`dev\` branch. Please resolve conflicts and merge this PR." \
+            --base dev \
+            --head "$BRANCH"

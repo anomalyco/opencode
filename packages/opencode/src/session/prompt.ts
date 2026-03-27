@@ -674,10 +674,14 @@ export namespace SessionPrompt {
 
       // Build system prompt, adding structured output instruction if needed
       const skills = await SystemPrompt.skills(agent)
+      const memoryContext = step === 1 ? await SystemPrompt.memory(session.directory) : ""
+      const installedCommands = step === 1 ? await SystemPrompt.installedCommands() : ""
       const system = [
-        ...(await SystemPrompt.environment(model)),
+        ...(await SystemPrompt.environment(model, agent)),
         ...(skills ? [skills] : []),
+        ...(installedCommands ? [installedCommands] : []),
         ...(await InstructionPrompt.system()),
+        ...(memoryContext ? [memoryContext] : []),
       ]
       const format = lastUser.format ?? { type: "text" }
       if (format.type === "json_schema") {

@@ -72,6 +72,12 @@ export namespace Config {
     if (target.instructions && source.instructions) {
       merged.instructions = Array.from(new Set([...target.instructions, ...source.instructions]))
     }
+    if (target.workflow?.paths && source.workflow?.paths) {
+      merged.workflow = {
+        ...merged.workflow,
+        paths: Array.from(new Set([...target.workflow.paths, ...source.workflow.paths])),
+      }
+    }
     return merged
   }
 
@@ -132,6 +138,14 @@ export namespace Config {
     result.plugin = result.plugin || []
 
     const directories = await ConfigPaths.directories(Instance.directory, Instance.worktree)
+
+    // Inject installed workflow plugin paths into directory scan
+    for (const item of result.workflow?.paths ?? []) {
+      const expanded = item.startsWith("~/")
+        ? path.join(os.homedir(), item.slice(2))
+        : item
+      directories.push(expanded)
+    }
 
     // .opencode directory config overrides (project and global) config sources.
     if (Flag.OPENCODE_CONFIG_DIR) {
@@ -1045,6 +1059,12 @@ export namespace Config {
         .optional()
         .describe("Command configuration, see https://opencode.ai/docs/commands"),
       skills: Skills.optional().describe("Additional skill folder paths"),
+      workflow: z
+        .object({
+          paths: z.array(z.string()).optional().describe("Installed workflow plugin directories"),
+        })
+        .optional()
+        .describe("Workflow plugin configuration"),
       watcher: z
         .object({
           ignore: z.array(z.string()).optional(),
@@ -1205,6 +1225,24 @@ export namespace Config {
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
         })
         .optional(),
+      security: z
+        .object({
+          ssrf: z.object({ enabled: z.boolean().optional() }).optional(),
+          promptInjection: z.object({ enabled: z.boolean().optional() }).optional(),
+          pathTraversal: z.object({ enabled: z.boolean().optional() }).optional(),
+          auditLog: z.object({ enabled: z.boolean().optional() }).optional(),
+          rateLimiting: z
+            .object({
+              enabled: z.boolean().optional(),
+              maxTokens: z.number().int().positive().optional(),
+              refillRate: z.number().int().positive().optional(),
+              refillIntervalMs: z.number().int().positive().optional(),
+            })
+            .optional(),
+          headers: z.object({ enabled: z.boolean().optional() }).optional(),
+        })
+        .optional()
+        .describe("Per-module security configuration. All modules enabled by default."),
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),

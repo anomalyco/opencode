@@ -787,6 +787,9 @@ export const dict = {
 
   "app.server.unreachable": "Nie można połączyć z {{server}}",
   "app.server.retrying": "Ponawianie automatycznie...",
+  "app.server.retryElapsed": "Retrying... {{seconds}}s",
+  "app.server.hint.serve": "Try running: cobuilder serve",
+  "app.server.hint.url": "Check that the server is running at {{url}}",
   "app.server.otherServers": "Inne serwery",
   "dialog.server.add.usernamePlaceholder": "nazwa użytkownika",
   "dialog.server.add.passwordPlaceholder": "hasło",
