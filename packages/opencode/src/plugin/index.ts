@@ -194,7 +194,7 @@ export namespace Plugin {
     }),
   )
 
-  const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
+  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export async function trigger<
