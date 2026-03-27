@@ -3,6 +3,8 @@ import { Flag } from "../flag/flag"
 import { getAdaptor } from "./adaptors"
 import { WorkspaceID } from "./schema"
 import { Workspace } from "./workspace"
+import { InstanceRoutes } from "../server/instance"
+import { lazy } from "../util/lazy"
 
 type Rule = { method?: string; path: string; exact?: boolean; action: "local" | "forward" }
 
@@ -20,16 +22,25 @@ function local(method: string, path: string) {
   return false
 }
 
-async function routeRequest(req: Request) {
-  const url = new URL(req.url)
-  const raw = url.searchParams.get("workspace") || req.headers.get("x-opencode-workspace")
+const routes = lazy(() => InstanceRoutes())
 
-  if (!raw) return
+export const WorkspaceRouterMiddleware: MiddlewareHandler = async (c) => {
+  if (!Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
+    return routes().fetch(c.req.raw, c.env)
+  }
 
-  if (local(req.method, url.pathname)) return
+  const url = new URL(c.req.url)
+  const raw = url.searchParams.get("workspace")
+
+  if (!raw) {
+    return routes().fetch(c.req.raw, c.env)
+  }
+
+  if (local(c.req.method, url.pathname)) {
+    return routes().fetch(c.req.raw, c.env)
+  }
 
   const workspaceID = WorkspaceID.make(raw)
-
   const workspace = await Workspace.get(workspaceID)
   if (!workspace) {
     return new Response(`Workspace not found: ${workspaceID}`, {
@@ -41,27 +52,13 @@ async function routeRequest(req: Request) {
   }
 
   const adaptor = await getAdaptor(workspace.type)
-
-  const headers = new Headers(req.headers)
+  const headers = new Headers(c.req.raw.headers)
   headers.delete("x-opencode-workspace")
 
   return adaptor.fetch(workspace, `${url.pathname}${url.search}`, {
-    method: req.method,
-    body: req.method === "GET" || req.method === "HEAD" ? undefined : await req.arrayBuffer(),
-    signal: req.signal,
+    method: c.req.method,
+    body: c.req.method === "GET" || c.req.method === "HEAD" ? undefined : await c.req.raw.arrayBuffer(),
+    signal: c.req.raw.signal,
     headers,
   })
-}
-
-export const WorkspaceRouterMiddleware: MiddlewareHandler = async (c, next) => {
-  // Only available in development for now
-  if (!Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
-    return next()
-  }
-
-  const response = await routeRequest(c.req.raw)
-  if (response) {
-    return response
-  }
-  return next()
 }
