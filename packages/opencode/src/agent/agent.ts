@@ -323,8 +323,9 @@ export namespace Agent {
     if (isOpenAIProviderID(defaultModel.providerID) && (await Auth.get(defaultModel.providerID))?.type === "oauth") {
       const result = streamObject({
         ...params,
+        messages: params.messages.filter((msg) => msg.role !== "system"),
         providerOptions: ProviderTransform.providerOptions(model, {
-          instructions: SystemPrompt.instructions(),
+          instructions: system.join("\n"),
           store: false,
         }),
         onError: () => {},
