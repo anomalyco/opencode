@@ -196,13 +196,10 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
-      - name: Cache bun dependencies
+      - name: Cache bun download cache
         uses: actions/cache@v4
         with:
-          path: |
-            ~\AppData\Local\bun\install\cache
-            node_modules
-            packages\*\node_modules
+          path: ~\AppData\Local\bun\install\cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
 
