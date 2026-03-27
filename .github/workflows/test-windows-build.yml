@@ -41,33 +41,7 @@ jobs:
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
           "
 
-      # Bun creates directory junctions on Windows which Node.js ESM can't traverse.
-      # Fix: use PowerShell to detect all junctions in node_modules and replace with
-      # real file copies so Node.js resolution works normally.
-      - name: Replace all bun junctions with real copies (Windows fix)
-        shell: pwsh
-        run: |
-          $count = 0
-          function Replace-Junctions([string]$dir) {
-            if (-not (Test-Path $dir)) { return }
-            Get-ChildItem -Path $dir -Force | Where-Object { $_.LinkType -eq 'Junction' } | ForEach-Object {
-              $target = $_.Target
-              $dest = $_.FullName
-              Remove-Item $dest -Force -Recurse -ErrorAction SilentlyContinue
-              Copy-Item -Path $target -Destination $dest -Recurse -Force -ErrorAction SilentlyContinue
-              $script:count++
-            }
-          }
-          # Replace top-level package junctions
-          Replace-Junctions "node_modules"
-          # Replace scoped package junctions (@scope/package)
-          Get-ChildItem "node_modules" -Filter "@*" -Directory -Force -ErrorAction SilentlyContinue | ForEach-Object {
-            Replace-Junctions $_.FullName
-          }
-          Write-Host "Replaced $count junctions with real copies"
-
       - name: Build
-        shell: bash
         run: cd packages/desktop-electron && bun run build
         env:
           OPENCODE_CHANNEL: prod
