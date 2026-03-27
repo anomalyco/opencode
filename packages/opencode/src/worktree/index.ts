@@ -355,6 +355,23 @@ export namespace Worktree {
         )
       }
 
+      function transient(message: string) {
+        const text = message.toLowerCase()
+        return [
+          "permission denied",
+          "access is denied",
+          "device or resource busy",
+          "resource busy",
+          "directory not empty",
+          "failed to remove",
+          "unable to unlink",
+          "cannot unlink",
+          "cannot access the file",
+          "used by another process",
+          "worktree reset left local changes",
+        ].some((item) => text.includes(item))
+      }
+
       const remove = Effect.fn("Worktree.remove")(function* (input: RemoveInput) {
         if (Instance.project.vcs !== "git") {
           throw new NotGitError({ message: "Worktrees are only supported for git projects" })
@@ -511,7 +528,6 @@ export namespace Worktree {
 
         const worktreePath = entry.path
         yield* Effect.promise(() => Instance.disposeDirectory(worktreePath))
-        yield* stopFsmonitor(worktreePath)
 
         const remoteList = yield* git(["remote"], { cwd: Instance.worktree })
         if (remoteList.code !== 0) {
@@ -561,43 +577,61 @@ export namespace Worktree {
           )
         }
 
-        yield* gitExpect(
-          ["reset", "--hard", target],
-          { cwd: worktreePath },
-          (r) => new ResetFailedError({ message: r.stderr || r.text || "Failed to reset worktree to target" }),
-        )
+        const restore = (left: number): Effect.Effect<void, ResetFailedError> =>
+          Effect.gen(function* () {
+            yield* stopFsmonitor(worktreePath)
 
-        const cleanResult = yield* sweep(worktreePath)
-        if (cleanResult.code !== 0) {
-          throw new ResetFailedError({ message: cleanResult.stderr || cleanResult.text || "Failed to clean worktree" })
-        }
+            yield* gitExpect(
+              ["reset", "--hard", target],
+              { cwd: worktreePath },
+              (r) => new ResetFailedError({ message: r.stderr || r.text || "Failed to reset worktree to target" }),
+            )
 
-        yield* gitExpect(
-          ["submodule", "update", "--init", "--recursive", "--force"],
-          { cwd: worktreePath },
-          (r) => new ResetFailedError({ message: r.stderr || r.text || "Failed to update submodules" }),
-        )
+            const cleanResult = yield* sweep(worktreePath)
+            if (cleanResult.code !== 0) {
+              throw new ResetFailedError({
+                message: cleanResult.stderr || cleanResult.text || "Failed to clean worktree",
+              })
+            }
 
-        yield* gitExpect(
-          ["submodule", "foreach", "--recursive", "git", "reset", "--hard"],
-          { cwd: worktreePath },
-          (r) => new ResetFailedError({ message: r.stderr || r.text || "Failed to reset submodules" }),
-        )
+            yield* gitExpect(
+              ["submodule", "update", "--init", "--recursive", "--force"],
+              { cwd: worktreePath },
+              (r) => new ResetFailedError({ message: r.stderr || r.text || "Failed to update submodules" }),
+            )
 
-        yield* gitExpect(
-          ["submodule", "foreach", "--recursive", "git", "clean", "-fdx"],
-          { cwd: worktreePath },
-          (r) => new ResetFailedError({ message: r.stderr || r.text || "Failed to clean submodules" }),
-        )
+            yield* gitExpect(
+              ["submodule", "foreach", "--recursive", "git", "reset", "--hard"],
+              { cwd: worktreePath },
+              (r) => new ResetFailedError({ message: r.stderr || r.text || "Failed to reset submodules" }),
+            )
 
-        const status = yield* git(["status", "--porcelain=v1"], { cwd: worktreePath })
-        if (status.code !== 0) {
-          throw new ResetFailedError({ message: status.stderr || status.text || "Failed to read git status" })
-        }
+            yield* gitExpect(
+              ["submodule", "foreach", "--recursive", "git", "clean", "-fdx"],
+              { cwd: worktreePath },
+              (r) => new ResetFailedError({ message: r.stderr || r.text || "Failed to clean submodules" }),
+            )
 
-        if (status.text.trim()) {
-          throw new ResetFailedError({ message: `Worktree reset left local changes:\n${status.text.trim()}` })
-        }
+            const status = yield* git(["status", "--porcelain=v1"], { cwd: worktreePath })
+            if (status.code !== 0) {
+              throw new ResetFailedError({ message: status.stderr || status.text || "Failed to read git status" })
+            }
+
+            if (status.text.trim()) {
+              throw new ResetFailedError({ message: `Worktree reset left local changes:\n${status.text.trim()}` })
+            }
+          }).pipe(
+            Effect.catchIf(
+              (err): err is InstanceType<typeof ResetFailedError> =>
+                process.platform === "win32" &&
+                left > 1 &&
+                ResetFailedError.isInstance(err) &&
+                transient(err.data.message),
+              () => Effect.sleep(100).pipe(Effect.flatMap(() => restore(left - 1))),
+            ),
+          )
+
+        yield* restore(process.platform === "win32" ? 5 : 1)
 
         yield* runStartScripts(worktreePath, { projectID: Instance.project.id }).pipe(
           Effect.catchCause((cause) => Effect.sync(() => log.error("worktree start task failed", { cause }))),

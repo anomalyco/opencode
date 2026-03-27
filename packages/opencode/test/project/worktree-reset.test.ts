@@ -67,6 +67,66 @@ describe("Worktree.reset", () => {
     expect((await $`git status --porcelain=v1`.cwd(info.directory).quiet().text()).trim()).toBe("")
   })
 
+  test("retries transient clean failures", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const root = tmp.path
+    const file = path.join(root, "README.md")
+    await Bun.write(file, "# reset\n")
+    await $`git add README.md`.cwd(root).quiet()
+    await $`git commit -m "add readme"`.cwd(root).quiet()
+
+    const info = await make(root, `reset-retry-${Date.now().toString(36)}`)
+
+    const readme = path.join(info.directory, "README.md")
+    const extra = path.join(info.directory, `extra-${Date.now().toString(36)}.txt`)
+    const text = await fs.readFile(readme, "utf8")
+    await fs.writeFile(readme, `${text.trimEnd()}\nchange\n`, "utf8")
+    await fs.writeFile(extra, "extra\n", "utf8")
+
+    const real = (await $`which git`.quiet().text()).trim()
+    expect(real).toBeTruthy()
+
+    const bin = path.join(root, "bin")
+    const shim = path.join(bin, "git")
+    const mark = path.join(root, "git-clean-once")
+    await fs.mkdir(bin, { recursive: true })
+    await Bun.write(
+      shim,
+      [
+        "#!/bin/bash",
+        `REAL_GIT=${JSON.stringify(real)}`,
+        `MARK=${JSON.stringify(mark)}`,
+        'if [ "$1" = "-c" ] && [ "$2" = "core.fsmonitor=false" ]; then',
+        "  shift 2",
+        "fi",
+        'if [ "$1" = "clean" ] && [ ! -f "$MARK" ]; then',
+        '  touch "$MARK"',
+        '  echo "warning: failed to remove extra.txt: Permission denied" >&2',
+        "  exit 1",
+        "fi",
+        'exec "$REAL_GIT" "$@"',
+      ].join("\n"),
+    )
+    await fs.chmod(shim, 0o755)
+
+    const prev = process.env.PATH ?? ""
+    process.env.PATH = `${bin}${path.delimiter}${prev}`
+
+    const ok = await (async () => {
+      try {
+        return await withInstance(root, () => Worktree.reset({ directory: info.directory }))
+      } finally {
+        process.env.PATH = prev
+      }
+    })()
+
+    expect(ok).toBe(true)
+    expect(await fs.readFile(readme, "utf8")).toBe(text)
+    expect(await fs.stat(extra).then(() => true).catch(() => false)).toBe(false)
+    expect(await fs.stat(mark).then(() => true).catch(() => false)).toBe(true)
+    expect((await $`git status --porcelain=v1`.cwd(info.directory).quiet().text()).trim()).toBe("")
+  })
+
   wintest("stops fsmonitor before resetting a worktree", async () => {
     await using tmp = await tmpdir({ git: true })
     const root = tmp.path

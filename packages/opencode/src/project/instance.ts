@@ -20,7 +20,11 @@ const disposal = {
   all: undefined as Promise<void> | undefined,
 }
 
-async function cleanup(directory: string, ctx: Shape, task?: Promise<Shape>) {
+async function cleanup(
+  directory: string,
+  ctx: ReturnType<typeof context.use>,
+  task?: Promise<ReturnType<typeof context.use>>,
+) {
   Log.Default.info("disposing instance", { directory })
   await context.provide(ctx, async () => {
     await Promise.all([State.dispose(directory), disposeInstance(directory)])
