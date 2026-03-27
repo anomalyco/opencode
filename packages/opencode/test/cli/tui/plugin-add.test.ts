@@ -8,7 +8,7 @@ import { TuiConfig } from "../../../src/config/tui"
 
 const { TuiPluginRuntime } = await import("../../../src/cli/cmd/tui/plugin/runtime")
 
-test("adds tui plugin at runtime using latest config entry", async () => {
+test("adds tui plugin at runtime from spec", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       const file = path.join(dir, "add-plugin.ts")
@@ -19,9 +19,8 @@ test("adds tui plugin at runtime using latest config entry", async () => {
         file,
         `export default {
   id: "demo.add",
-  tui: async (_api, options) => {
-    if (!options?.marker) return
-    await Bun.write(options.marker, "called")
+  tui: async () => {
+    await Bun.write(${JSON.stringify(marker)}, "called")
   },
 }
 `,
@@ -32,26 +31,15 @@ test("adds tui plugin at runtime using latest config entry", async () => {
   })
 
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
-  let cfg: Awaited<ReturnType<typeof TuiConfig.get>> = {
+  const get = spyOn(TuiConfig, "get").mockResolvedValue({
     plugin: [],
     plugin_meta: undefined,
-  }
-  const get = spyOn(TuiConfig, "get").mockImplementation(async () => cfg)
+  })
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
 
   try {
     await TuiPluginRuntime.init(createTuiPluginApi())
-
-    cfg = {
-      plugin: [[tmp.extra.spec, { marker: tmp.extra.marker }]],
-      plugin_meta: {
-        [tmp.extra.spec]: {
-          scope: "local",
-          source: path.join(tmp.path, "tui.json"),
-        },
-      },
-    }
 
     await expect(TuiPluginRuntime.addPlugin(tmp.extra.spec)).resolves.toBe(true)
     await expect(fs.readFile(tmp.extra.marker, "utf8")).resolves.toBe("called")

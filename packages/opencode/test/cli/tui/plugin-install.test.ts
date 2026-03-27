@@ -22,7 +22,7 @@ test("installs plugin without loading it", async () => {
             name: "demo-install-plugin",
             type: "module",
             main: "./install-plugin.ts",
-            "oc-plugin": ["tui"],
+            "oc-plugin": [["tui", { marker }]],
           },
           null,
           2,

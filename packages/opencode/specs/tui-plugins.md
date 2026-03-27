@@ -291,12 +291,13 @@ Slot notes:
 - `api.plugins.activate(id)` sets `enabled=true`, persists it into KV, and initializes the plugin.
 - `api.plugins.deactivate(id)` sets `enabled=false`, persists it into KV, and disposes the plugin scope.
 - `api.plugins.add(spec)` trims the input and returns `false` for an empty string.
-- `api.plugins.add(spec)` resolves the current `tui.json` entry for that spec when present, otherwise it treats the input as the plugin spec.
-- `api.plugins.add(spec)` refreshes runtime config once when plugin metadata is missing, skips already-loaded specs, then loads and tracks metadata for the resolved spec.
-- `api.plugins.add(spec)` applies merged `plugin_enabled` state (config + KV), only initializes when enabled, and does not persist enable state.
+- `api.plugins.add(spec)` treats the input as the runtime plugin spec and loads it without re-reading `tui.json`.
+- `api.plugins.add(spec)` no-ops when that resolved spec (or resolved plugin id) is already loaded.
+- `api.plugins.add(spec)` assumes enabled and always attempts initialization (it does not consult config/KV enable state).
 - `api.plugins.install(spec, { global? })` runs install -> manifest read -> config patch using the same helper flow as CLI install.
 - `api.plugins.install(...)` returns either `{ ok: false, message, missing? }` or `{ ok: true, dir, tui }`.
 - `api.plugins.install(...)` does not load plugins into the current session. Call `api.plugins.add(spec)` to load after install.
+- For packages that declare a tuple `tui` target in `oc-plugin`, `api.plugins.install(...)` stages those tuple options so a following `api.plugins.add(spec)` uses them.
 - If activation fails, the plugin can remain `enabled=true` and `active=false`.
 - `api.lifecycle.signal` is aborted before cleanup runs.
 - `api.lifecycle.onDispose(fn)` registers cleanup and returns an unregister function.
@@ -327,7 +328,6 @@ Metadata is persisted by plugin id.
 - File plugins that fail initially are retried once after waiting for config dependency installation.
 - Runtime add uses the same external loader path, including the file-plugin retry after dependency wait.
 - Runtime add skips duplicates by resolved spec and returns `true` when the spec is already loaded.
-- Runtime add returns `true` for a loaded-but-disabled plugin when merged enable state resolves to `false`.
 - Runtime install and runtime add are separate operations.
 - Plugin init failure rolls back that plugin's tracked registrations and loading continues.
 - TUI runtime tracks and disposes:

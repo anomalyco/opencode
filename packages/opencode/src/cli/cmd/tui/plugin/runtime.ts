@@ -76,6 +76,13 @@ type RuntimeState = {
   slots: HostSlots
   plugins: PluginEntry[]
   plugins_by_id: Map<string, PluginEntry>
+  pending: Map<
+    string,
+    {
+      item: Config.PluginSpec
+      meta: TuiConfig.PluginMeta
+    }
+  >
 }
 
 const log = Log.create({ service: "tui.plugin" })
@@ -181,8 +188,8 @@ function createThemeInstaller(meta: TuiConfig.PluginMeta, root: string, spec: st
 }
 
 async function loadExternalPlugin(
-  config: TuiConfig.Info,
   item: Config.PluginSpec,
+  meta: TuiConfig.PluginMeta | undefined,
   retry = false,
 ): Promise<PluginLoad | undefined> {
   const spec = Config.pluginSpecifier(item)
@@ -206,12 +213,10 @@ async function loadExternalPlugin(
   }
 
   const target = resolved
-  const meta = config.plugin_meta?.[spec]
   if (!meta) {
     fail("missing tui plugin metadata", {
       path: spec,
       retry,
-      known: Object.keys(config.plugin_meta ?? {}),
     })
     return
   }
@@ -600,8 +605,12 @@ function applyInitialPluginEnabledState(state: RuntimeState, config: TuiConfig.I
   }
 }
 
-async function resolveExternalPlugins(config: TuiConfig.Info, list: Config.PluginSpec[], wait: () => Promise<void>) {
-  const loaded = await Promise.all(list.map((item) => loadExternalPlugin(config, item)))
+async function resolveExternalPlugins(
+  list: Config.PluginSpec[],
+  wait: () => Promise<void>,
+  meta: (item: Config.PluginSpec) => TuiConfig.PluginMeta | undefined,
+) {
+  const loaded = await Promise.all(list.map((item) => loadExternalPlugin(item, meta(item))))
   const ready: PluginLoad[] = []
   let deps: Promise<void> | undefined
 
@@ -616,7 +625,7 @@ async function resolveExternalPlugins(config: TuiConfig.Info, list: Config.Plugi
         log.warn("failed waiting for tui plugin dependencies", { error })
       })
       await deps
-      entry = await loadExternalPlugin(config, item, true)
+      entry = await loadExternalPlugin(item, meta(item), true)
     }
     if (!entry) continue
     ready.push(entry)
@@ -669,9 +678,11 @@ async function addExternalPluginEntries(state: RuntimeState, ready: PluginLoad[]
   return { plugins, ok }
 }
 
-function configPluginItem(config: TuiConfig.Info, spec: string) {
-  const list = config.plugin ?? []
-  return list.find((item) => Config.pluginSpecifier(item) === spec) ?? spec
+function defaultPluginMeta(state: RuntimeState): TuiConfig.PluginMeta {
+  return {
+    scope: "local",
+    source: state.api.state.path.config || path.join(state.directory, ".opencode", "tui.json"),
+  }
 }
 
 function installCause(err: unknown) {
@@ -701,53 +712,29 @@ function installDetail(err: unknown) {
   }
 }
 
-async function runtimeConfig(state: RuntimeState, fresh = false) {
-  if (fresh) {
-    await Instance.reload({
-      directory: state.directory,
-    }).catch((error) => {
-      fail("failed to refresh tui plugin config", {
-        directory: state.directory,
-        error,
-      })
-    })
-  }
-
-  return Instance.provide({
-    directory: state.directory,
-    fn: () => TuiConfig.get(),
-  }).catch((error) => {
-    fail("failed to read tui plugin config", {
-      directory: state.directory,
-      error,
-    })
-    return
-  })
-}
-
 async function addPluginBySpec(state: RuntimeState | undefined, raw: string) {
   if (!state) return false
   const spec = raw.trim()
   if (!spec) return false
 
-  let config = await runtimeConfig(state)
-  if (!config) return false
-  let item = configPluginItem(config, spec)
-  let nextSpec = Config.pluginSpecifier(item)
-  if (!config.plugin_meta?.[nextSpec]) {
-    const fresh = await runtimeConfig(state, true)
-    if (fresh) {
-      config = fresh
-      item = configPluginItem(config, spec)
-      nextSpec = Config.pluginSpecifier(item)
-    }
+  const pending = state.pending.get(spec)
+  const item = pending?.item ?? spec
+  const nextSpec = Config.pluginSpecifier(item)
+  if (state.plugins.some((plugin) => plugin.load.spec === nextSpec)) {
+    state.pending.delete(spec)
+    return true
   }
 
-  if (state.plugins.some((plugin) => plugin.load.spec === nextSpec)) return true
+  const meta = pending?.meta ?? defaultPluginMeta(state)
 
   const ready = await Instance.provide({
     directory: state.directory,
-    fn: () => resolveExternalPlugins(config, [item], () => TuiConfig.waitForDependencies()),
+    fn: () =>
+      resolveExternalPlugins(
+        [item],
+        () => TuiConfig.waitForDependencies(),
+        () => meta,
+      ),
   }).catch((error) => {
     fail("failed to add tui plugin", { path: nextSpec, error })
     return [] as PluginLoad[]
@@ -757,17 +744,24 @@ async function addPluginBySpec(state: RuntimeState | undefined, raw: string) {
     return false
   }
 
-  const out = await addExternalPluginEntries(state, ready)
-  const map = pluginEnabledState(state, config)
+  const first = ready[0]
+  if (!first) {
+    fail("failed to add tui plugin", { path: nextSpec })
+    return false
+  }
+  if (state.plugins_by_id.has(first.id)) {
+    state.pending.delete(spec)
+    return true
+  }
+
+  const out = await addExternalPluginEntries(state, [first])
   let ok = out.ok && out.plugins.length > 0
   for (const plugin of out.plugins) {
-    const enabled = map[plugin.id]
-    if (enabled !== undefined) plugin.enabled = enabled
-    if (!plugin.enabled) continue
     const active = await activatePluginEntry(state, plugin, false)
     if (!active) ok = false
   }
 
+  if (ok) state.pending.delete(spec)
   if (!ok) {
     fail("failed to add tui plugin", { path: nextSpec })
   }
@@ -794,8 +788,8 @@ async function installPluginBySpec(
     }
   }
 
-  const path = state.api.state.path
-  if (!path.directory) {
+  const dir = state.api.state.path
+  if (!dir.directory) {
     return {
       ok: false,
       message: "Paths are still syncing. Try again in a moment.",
@@ -831,9 +825,9 @@ async function installPluginBySpec(
     spec,
     targets: manifest.targets,
     global,
-    vcs: path.worktree && path.worktree !== "/" ? "git" : undefined,
-    worktree: path.worktree,
-    directory: path.directory,
+    vcs: dir.worktree && dir.worktree !== "/" ? "git" : undefined,
+    worktree: dir.worktree,
+    directory: dir.directory,
   })
   if (!patch.ok) {
     if (patch.code === "invalid_json") {
@@ -849,11 +843,22 @@ async function installPluginBySpec(
     }
   }
 
-  const tui = manifest.targets.some((item) => item.kind === "tui")
+  const tui = manifest.targets.find((item) => item.kind === "tui")
+  if (tui) {
+    const file = patch.items.find((item) => item.kind === "tui")?.file
+    state.pending.set(spec, {
+      item: tui.opts ? [spec, tui.opts] : spec,
+      meta: {
+        scope: global ? "global" : "local",
+        source: (file ?? dir.config) || path.join(patch.dir, "tui.json"),
+      },
+    })
+  }
+
   return {
     ok: true,
     dir: patch.dir,
-    tui,
+    tui: Boolean(tui),
   }
 }
 
@@ -921,6 +926,7 @@ export namespace TuiPluginRuntime {
       slots,
       plugins: [],
       plugins_by_id: new Map(),
+      pending: new Map(),
     }
     runtime = next
 
@@ -942,7 +948,11 @@ export namespace TuiPluginRuntime {
           }
         }
 
-        const ready = await resolveExternalPlugins(config, plugins, () => TuiConfig.waitForDependencies())
+        const ready = await resolveExternalPlugins(
+          plugins,
+          () => TuiConfig.waitForDependencies(),
+          (item) => config.plugin_meta?.[Config.pluginSpecifier(item)],
+        )
         await addExternalPluginEntries(next, ready)
 
         applyInitialPluginEnabledState(next, config)
