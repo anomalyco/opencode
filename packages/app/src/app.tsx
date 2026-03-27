@@ -47,8 +47,13 @@ import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 
 const HomeRoute = lazy(() => import("@/pages/home"))
-const Session = lazy(() => import("@/pages/session"))
+const loadSession = () => import("@/pages/session")
+const Session = lazy(loadSession)
 const Loading = () => <div class="size-full" />
+
+if (typeof location === "object" && /\/session(?:\/|$)/.test(location.pathname)) {
+  void loadSession()
+}
 
 const SessionRoute = () => (
   <SessionProviders>
@@ -278,7 +283,11 @@ export function AppInterface(props: {
   disableHealthCheck?: boolean
 }) {
   return (
-    <ServerProvider defaultServer={props.defaultServer} servers={props.servers}>
+    <ServerProvider
+      defaultServer={props.defaultServer}
+      disableHealthCheck={props.disableHealthCheck}
+      servers={props.servers}
+    >
       <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
         <ServerKey>
           <GlobalSDKProvider>
