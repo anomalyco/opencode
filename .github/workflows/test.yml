@@ -44,6 +44,9 @@ jobs:
           git config --global user.email "bot@opencode.ai"
           git config --global user.name "opencode"
 
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
       - name: Run unit tests
         run: bunx turbo test
 
@@ -72,6 +75,9 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.3.11"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
 
       - name: Read Playwright version
         id: playwright-version
