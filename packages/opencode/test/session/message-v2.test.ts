@@ -126,7 +126,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(await Promise.all(await MessageV2.toModelMessages(input, model))).toStrictEqual([
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "hello" }],
@@ -151,7 +151,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(await Promise.all(await MessageV2.toModelMessages(input, model))).toStrictEqual([])
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([])
   })
 
   test("includes synthetic text parts", async () => {
@@ -182,7 +182,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(await Promise.all(await MessageV2.toModelMessages(input, model))).toStrictEqual([
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "hello" }],
@@ -249,7 +249,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(await Promise.all(await MessageV2.toModelMessages(input, model))).toStrictEqual([
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
       {
         role: "user",
         content: [
@@ -319,7 +319,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(await Promise.all(await MessageV2.toModelMessages(input, model))).toStrictEqual([
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
@@ -402,7 +402,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(await Promise.all(await MessageV2.toModelMessages(input, model))).toStrictEqual([
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
@@ -470,7 +470,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(await Promise.all(await MessageV2.toModelMessages(input, model))).toStrictEqual([
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
@@ -537,7 +537,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(await Promise.all(await MessageV2.toModelMessages(input, model))).toStrictEqual([
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
       {
         role: "user",
         content: [{ type: "text", text: "run tool" }],
@@ -590,7 +590,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(await Promise.all(await MessageV2.toModelMessages(input, model))).toStrictEqual([])
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([])
   })
 
   test("includes aborted assistant messages only when they have non-step-start/reasoning content", async () => {
@@ -633,7 +633,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(await Promise.all(await MessageV2.toModelMessages(input, model))).toStrictEqual([
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
       {
         role: "assistant",
         content: [
@@ -669,7 +669,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(await Promise.all(await MessageV2.toModelMessages(input, model))).toStrictEqual([
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
       {
         role: "assistant",
         content: [{ type: "text", text: "first" }],
@@ -696,7 +696,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(await Promise.all(await MessageV2.toModelMessages(input, model))).toStrictEqual([])
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([])
   })
 
   test("converts pending/running tool calls to error results to prevent dangling tool_use", async () => {
@@ -743,7 +743,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    const result = await Promise.all(await MessageV2.toModelMessages(input, model))
+    const result = await MessageV2.toModelMessages(input, model)
 
     expect(result).toStrictEqual([
       {
