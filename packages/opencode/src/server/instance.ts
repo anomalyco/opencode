@@ -3,6 +3,7 @@ import { Hono } from "hono"
 import { proxy } from "hono/proxy"
 import z from "zod"
 import { createHash } from "node:crypto"
+import { Log } from "../util/log"
 import { Format } from "../format"
 import { TuiRoutes } from "./routes/tui"
 import { Instance } from "../project/instance"
@@ -26,6 +27,9 @@ import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
 import { EventRoutes } from "./routes/event"
 import { InstanceBootstrap } from "../project/bootstrap"
+import { errorHandler } from "./middleware"
+
+const log = Log.create({ service: "server" })
 
 const embeddedUIPromise = Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI
   ? Promise.resolve(null)
@@ -40,6 +44,7 @@ const csp = (hash = "") =>
 
 export const InstanceRoutes = (app?: Hono) =>
   (app ?? new Hono())
+    .onError(errorHandler(log))
     .use(async (c, next) => {
       const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
       const directory = Filesystem.resolve(

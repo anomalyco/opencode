@@ -5,21 +5,16 @@ import { compress } from "hono/compress"
 import { cors } from "hono/cors"
 import { basicAuth } from "hono/basic-auth"
 import z from "zod"
-import { iife } from "@/util/iife"
-import { Provider } from "../provider/provider"
-import { NamedError } from "@opencode-ai/util/error"
 import { Auth } from "../auth"
 import { Flag } from "../flag/flag"
 import { ProviderID } from "../provider/schema"
 import { WorkspaceRouterMiddleware } from "../control-plane/workspace-router-middleware"
-import { NotFoundError } from "../storage/db"
-import type { ContentfulStatusCode } from "hono/utils/http-status"
 import { websocket } from "hono/bun"
-import { HTTPException } from "hono/http-exception"
 import { errors } from "./error"
 import { GlobalRoutes } from "./routes/global"
 import { MDNS } from "./mdns"
 import { lazy } from "@/util/lazy"
+import { errorHandler } from "./middleware"
 import { InstanceRoutes } from "./instance"
 import { initProjectors } from "./projectors"
 
@@ -44,25 +39,7 @@ export namespace Server {
   export const ControlPlaneRoutes = (opts?: { cors?: string[] }): Hono => {
     const app = new Hono()
     return app
-      .onError((err, c) => {
-        log.error("failed", {
-          error: err,
-        })
-        if (err instanceof NamedError) {
-          let status: ContentfulStatusCode
-          if (err instanceof NotFoundError) status = 404
-          else if (err instanceof Provider.ModelNotFoundError) status = 400
-          else if (err.name === "ProviderAuthValidationFailed") status = 400
-          else if (err.name.startsWith("Worktree")) status = 400
-          else status = 500
-          return c.json(err.toObject(), { status })
-        }
-        if (err instanceof HTTPException) return err.getResponse()
-        const message = err instanceof Error && err.stack ? err.stack : err.toString()
-        return c.json(new NamedError.Unknown({ message }).toObject(), {
-          status: 500,
-        })
-      })
+      .onError(errorHandler(log))
       .use((c, next) => {
         // Allow CORS preflight requests to succeed without auth.
         // Browser clients sending Authorization headers will preflight with OPTIONS.
