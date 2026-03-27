@@ -128,7 +128,10 @@ export namespace Skill {
       }),
     )
 
-    yield* Effect.forEach(matches, (match) => add(state, match, bus), { discard: true })
+    yield* Effect.forEach(matches, (match) => add(state, match, bus), {
+      concurrency: "unbounded",
+      discard: true,
+    })
   })
 
   const loadSkills = Effect.fnUntraced(function* (
