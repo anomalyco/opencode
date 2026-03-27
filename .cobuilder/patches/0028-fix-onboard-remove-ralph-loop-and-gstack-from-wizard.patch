@@ -1,0 +1,31 @@
+From aad5a9ebc50ed9eb95098fe5dd69aec3460f834d Mon Sep 17 00:00:00 2001
+From: johnnykang101 <johnny.kang101@gmail.com>
+Date: Thu, 26 Mar 2026 15:54:36 -0700
+Subject: [PATCH 028/127] fix(onboard): remove ralph-loop and gstack from
+ wizard
+
+Neither repo uses a compatible command structure for CoBuilder skills.
+Only GSD (CobuilderLabs/gsd-workflow) is installable. Remove the others
+to avoid offering options that would silently fail.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ packages/opencode/src/cli/cmd/onboard.ts | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/packages/opencode/src/cli/cmd/onboard.ts b/packages/opencode/src/cli/cmd/onboard.ts
+index 9add56e78..f819931b8 100644
+--- a/packages/opencode/src/cli/cmd/onboard.ts
++++ b/packages/opencode/src/cli/cmd/onboard.ts
+@@ -275,8 +275,6 @@ async function setupWorkflows() {
+     message: "Which workflow plugins would you like to install?",
+     options: [
+       { value: "gsd", label: "GSD", hint: "Get Shit Done — structured planning and execution methodology" },
+-      { value: "ralph-loop", label: "Ralph Loop", hint: "Continuous iterative development with retrospectives" },
+-      { value: "gstack", label: "GStack", hint: "Full-stack project scaffolding and architecture workflows" },
+     ],
+     initialValues: [],
+     required: false,
+-- 
+2.43.0
+

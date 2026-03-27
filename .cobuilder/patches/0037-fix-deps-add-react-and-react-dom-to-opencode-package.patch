@@ -1,0 +1,57 @@
+From 093013bbc5114de5fd9c8fbcf86638cf807ee50b Mon Sep 17 00:00:00 2001
+From: johnnykang101 <johnny.kang101@gmail.com>
+Date: Thu, 26 Mar 2026 16:19:47 -0700
+Subject: [PATCH 037/127] fix(deps): add react and react-dom to opencode
+ package dependencies
+
+TUI (app.tsx) uses React JSX but react was missing from the package
+dependencies, causing 'Cannot find module react/jsx-dev-runtime' on
+bun run.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ bun.lock                       | 6 ++++--
+ packages/opencode/package.json | 2 ++
+ 2 files changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/bun.lock b/bun.lock
+index 1c122b731..707c65163 100644
+--- a/bun.lock
++++ b/bun.lock
+@@ -297,9 +297,9 @@
+     },
+     "packages/opencode": {
+       "name": "opencode",
+-      "version": "1.3.3",
++      "version": "0.1.1",
+       "bin": {
+-        "opencode": "./bin/opencode",
++        "cobuilder": "./bin/cobuilder",
+       },
+       "dependencies": {
+         "@actions/core": "1.11.1",
+@@ -373,6 +373,8 @@
+         "opencode-poe-auth": "0.0.1",
+         "opentui-spinner": "0.0.6",
+         "partial-json": "0.1.7",
++        "react": "18.2.0",
++        "react-dom": "18.2.0",
+         "remeda": "catalog:",
+         "semver": "^7.6.3",
+         "solid-js": "catalog:",
+diff --git a/packages/opencode/package.json b/packages/opencode/package.json
+index 261261c75..6cf017757 100644
+--- a/packages/opencode/package.json
++++ b/packages/opencode/package.json
+@@ -136,6 +136,8 @@
+     "opencode-poe-auth": "0.0.1",
+     "opentui-spinner": "0.0.6",
+     "partial-json": "0.1.7",
++    "react": "18.2.0",
++    "react-dom": "18.2.0",
+     "remeda": "catalog:",
+     "semver": "^7.6.3",
+     "solid-js": "catalog:",
+-- 
+2.43.0
+

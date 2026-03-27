@@ -1,0 +1,46 @@
+From f3e9bc3247b6bd2f93301dae0558eefa2e728932 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Fri, 27 Mar 2026 09:26:51 -0700
+Subject: [PATCH 090/127] ci: add workflow_run fallback trigger to CD to
+ prevent silent push drops (#34)
+
+When the concurrency queue is full (cancel-in-progress: false allows only
+one queued run), GitHub silently drops additional push triggers. Adding a
+workflow_run trigger on CI completion ensures CD fires reliably even when
+the push event is dropped. The release job skips if CI failed.
+
+Co-authored-by: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ .github/workflows/cd.yml | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/.github/workflows/cd.yml b/.github/workflows/cd.yml
+index d4e90c5f8..f69a3f1f3 100644
+--- a/.github/workflows/cd.yml
++++ b/.github/workflows/cd.yml
+@@ -10,6 +10,12 @@ on:
+       - "assets/**"
+       - "docs/**"
+       - ".github/*.md"
++  # Fallback: fire CD when CI completes on main, in case the push trigger
++  # was silently dropped (GitHub drops extra triggers when concurrency queue is full).
++  workflow_run:
++    workflows: ["CI"]
++    types: [completed]
++    branches: [main]
+ 
+ concurrency:
+   group: cd-main
+@@ -25,6 +31,9 @@ jobs:
+   release:
+     name: Release
+     runs-on: ubuntu-latest
++    if: |
++      github.event_name != 'workflow_run' ||
++      github.event.workflow_run.conclusion == 'success'
+     timeout-minutes: 20
+     outputs:
+       tag: ${{ steps.next_version.outputs.tag }}
+-- 
+2.43.0
+

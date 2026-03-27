@@ -1,0 +1,76 @@
+From 5c9047a7b7733b15746edbf252d42b0ca5f157b4 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Fri, 27 Mar 2026 12:58:44 -0700
+Subject: [PATCH 114/127] ci(test): switch to ubuntu-latest/windows-latest, fix
+ invalid concurrency expression
+
+---
+ .github/workflows/test.yml | 22 +++++++++++-----------
+ 1 file changed, 11 insertions(+), 11 deletions(-)
+
+diff --git a/.github/workflows/test.yml b/.github/workflows/test.yml
+index 9c58be30a..0cfc1168c 100644
+--- a/.github/workflows/test.yml
++++ b/.github/workflows/test.yml
+@@ -8,9 +8,7 @@ on:
+   workflow_dispatch:
+ 
+ concurrency:
+-  # Keep every run on dev so cancelled checks do not pollute the default branch
+-  # commit history. PRs and other branches still share a group and cancel stale runs.
+-  group: ${{ case(github.ref == 'refs/heads/dev', format('{0}-{1}', github.workflow, github.run_id), format('{0}-{1}', github.workflow, github.event.pull_request.number || github.ref)) }}
++  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+   cancel-in-progress: true
+ 
+ permissions:
+@@ -24,9 +22,9 @@ jobs:
+       matrix:
+         settings:
+           - name: linux
+-            host: blacksmith-4vcpu-ubuntu-2404
++            host: ubuntu-latest
+           - name: windows
+-            host: blacksmith-4vcpu-windows-2025
++            host: windows-latest
+     runs-on: ${{ matrix.settings.host }}
+     defaults:
+       run:
+@@ -37,8 +35,9 @@ jobs:
+         with:
+           token: ${{ secrets.GITHUB_TOKEN }}
+ 
+-      - name: Setup Bun
+-        uses: ./.github/actions/setup-bun
++      - uses: oven-sh/setup-bun@v2
++        with:
++          bun-version: "1.3.11"
+ 
+       - name: Configure git identity
+         run: |
+@@ -55,9 +54,9 @@ jobs:
+       matrix:
+         settings:
+           - name: linux
+-            host: blacksmith-4vcpu-ubuntu-2404
++            host: ubuntu-latest
+           - name: windows
+-            host: blacksmith-4vcpu-windows-2025
++            host: windows-latest
+     runs-on: ${{ matrix.settings.host }}
+     env:
+       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
+@@ -70,8 +69,9 @@ jobs:
+         with:
+           token: ${{ secrets.GITHUB_TOKEN }}
+ 
+-      - name: Setup Bun
+-        uses: ./.github/actions/setup-bun
++      - uses: oven-sh/setup-bun@v2
++        with:
++          bun-version: "1.3.11"
+ 
+       - name: Read Playwright version
+         id: playwright-version
+-- 
+2.43.0
+

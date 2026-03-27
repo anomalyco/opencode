@@ -1,0 +1,55 @@
+From ddfbf18a3a069e713ae2eaa3779d3d6ec1703d17 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Fri, 27 Mar 2026 10:40:30 -0700
+Subject: [PATCH 103/127] =?UTF-8?q?ci:=20remove=20all=20junction=20hacks?=
+ =?UTF-8?q?=20=E2=80=94=20use=20default=20PowerShell=20shell=20(was=20the?=
+ =?UTF-8?q?=20fix=20all=20along)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ .github/workflows/test-windows-build.yml | 26 ------------------------
+ 1 file changed, 26 deletions(-)
+
+diff --git a/.github/workflows/test-windows-build.yml b/.github/workflows/test-windows-build.yml
+index b00337d24..ca76b1589 100644
+--- a/.github/workflows/test-windows-build.yml
++++ b/.github/workflows/test-windows-build.yml
+@@ -41,33 +41,7 @@ jobs:
+             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+           "
+ 
+-      # Bun creates directory junctions on Windows which Node.js ESM can't traverse.
+-      # Fix: use PowerShell to detect all junctions in node_modules and replace with
+-      # real file copies so Node.js resolution works normally.
+-      - name: Replace all bun junctions with real copies (Windows fix)
+-        shell: pwsh
+-        run: |
+-          $count = 0
+-          function Replace-Junctions([string]$dir) {
+-            if (-not (Test-Path $dir)) { return }
+-            Get-ChildItem -Path $dir -Force | Where-Object { $_.LinkType -eq 'Junction' } | ForEach-Object {
+-              $target = $_.Target
+-              $dest = $_.FullName
+-              Remove-Item $dest -Force -Recurse -ErrorAction SilentlyContinue
+-              Copy-Item -Path $target -Destination $dest -Recurse -Force -ErrorAction SilentlyContinue
+-              $script:count++
+-            }
+-          }
+-          # Replace top-level package junctions
+-          Replace-Junctions "node_modules"
+-          # Replace scoped package junctions (@scope/package)
+-          Get-ChildItem "node_modules" -Filter "@*" -Directory -Force -ErrorAction SilentlyContinue | ForEach-Object {
+-            Replace-Junctions $_.FullName
+-          }
+-          Write-Host "Replaced $count junctions with real copies"
+-
+       - name: Build
+-        shell: bash
+         run: cd packages/desktop-electron && bun run build
+         env:
+           OPENCODE_CHANNEL: prod
+-- 
+2.43.0
+

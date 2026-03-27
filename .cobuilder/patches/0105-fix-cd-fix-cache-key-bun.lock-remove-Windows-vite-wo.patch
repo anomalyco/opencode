@@ -1,0 +1,47 @@
+From f308f4979dcc03bdd9fda66d61748ef16d3a6248 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Fri, 27 Mar 2026 10:51:21 -0700
+Subject: [PATCH 105/127] fix(cd): fix cache key bun.lock + remove Windows vite
+ workaround (default shell was the fix)
+
+---
+ .github/workflows/cd.yml | 15 +--------------
+ 1 file changed, 1 insertion(+), 14 deletions(-)
+
+diff --git a/.github/workflows/cd.yml b/.github/workflows/cd.yml
+index 5a36cae8f..ad074820b 100644
+--- a/.github/workflows/cd.yml
++++ b/.github/workflows/cd.yml
+@@ -176,7 +176,7 @@ jobs:
+             ~\AppData\Local\bun\install\cache
+             node_modules
+             packages\*\node_modules
+-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lockb') }}
++          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+           restore-keys: bun-${{ runner.os }}-
+ 
+       - name: Install dependencies
+@@ -192,20 +192,7 @@ jobs:
+             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+           "
+ 
+-      # Bun's virtual store uses symlinks on Windows (requires elevated perms), so Node.js
+-      # can't resolve peer deps (vite, picocolors) from electron-vite's bun store path.
+-      # Fix: npm-install vite + its deps into a clean temp dir, copy as real files into
+-      # root node_modules so Node's resolution walk finds them normally.
+-      - name: Install vite peer deps as real files (Windows symlink workaround)
+-        shell: bash
+-        run: |
+-          mkdir -p "$RUNNER_TEMP/peer-deps"
+-          echo '{}' > "$RUNNER_TEMP/peer-deps/package.json"
+-          npm install --prefix "$RUNNER_TEMP/peer-deps" vite picocolors --legacy-peer-deps --silent
+-          cp -r "$RUNNER_TEMP/peer-deps/node_modules/." node_modules/
+-
+       - name: Build
+-        shell: bash
+         run: cd packages/desktop-electron && bun run build
+         env:
+           OPENCODE_CHANNEL: prod
+-- 
+2.43.0
+

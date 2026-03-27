@@ -1,0 +1,94 @@
+From f8b7ef9f458d4915ce2ddbed68b4efdcd79257d2 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <johnny.kang101@gmail.com>
+Date: Thu, 26 Mar 2026 21:04:34 -0700
+Subject: [PATCH 059/127] fix: resolve merge conflict markers in i18n files
+ (keep CoBuilder branding + font options)
+
+---
+ packages/app/src/i18n/en.ts | 10 ----------
+ packages/app/src/i18n/es.ts | 10 ----------
+ 2 files changed, 20 deletions(-)
+
+diff --git a/packages/app/src/i18n/en.ts b/packages/app/src/i18n/en.ts
+index f43e720fe..6b91550c4 100644
+--- a/packages/app/src/i18n/en.ts
++++ b/packages/app/src/i18n/en.ts
+@@ -738,17 +738,11 @@ export const dict = {
+   "settings.general.row.colorScheme.title": "Color scheme",
+   "settings.general.row.colorScheme.description": "Choose whether CoBuilder follows the system, light, or dark theme",
+   "settings.general.row.theme.title": "Theme",
+-<<<<<<< HEAD
+   "settings.general.row.theme.description": "Customise how CoBuilder is themed.",
+   "settings.general.row.font.title": "Font",
+   "settings.general.row.font.description": "Customise the mono font used in code blocks",
+-=======
+-  "settings.general.row.theme.description": "Customise how OpenCode is themed.",
+-  "settings.general.row.font.title": "Code Font",
+-  "settings.general.row.font.description": "Customise the font used in code blocks and terminals",
+   "settings.general.row.uiFont.title": "UI Font",
+   "settings.general.row.uiFont.description": "Customise the font used throughout the interface",
+->>>>>>> upstream/dev
+   "settings.general.row.followup.title": "Follow-up behavior",
+   "settings.general.row.followup.description": "Choose whether follow-up prompts steer immediately or wait in a queue",
+   "settings.general.row.followup.option.queue": "Queue",
+@@ -777,7 +771,6 @@ export const dict = {
+   "settings.updates.action.checkNow": "Check now",
+   "settings.updates.action.checking": "Checking...",
+   "settings.updates.toast.latest.title": "You're up to date",
+-<<<<<<< HEAD
+   "settings.updates.toast.latest.description": "You're running the latest version of CoBuilder.",
+   "font.option.ibmPlexMono": "IBM Plex Mono",
+   "font.option.cascadiaCode": "Cascadia Code",
+@@ -792,9 +785,6 @@ export const dict = {
+   "font.option.sourceCodePro": "Source Code Pro",
+   "font.option.ubuntuMono": "Ubuntu Mono",
+   "font.option.geistMono": "Geist Mono",
+-=======
+-  "settings.updates.toast.latest.description": "You're running the latest version of OpenCode.",
+->>>>>>> upstream/dev
+   "sound.option.none": "None",
+   "sound.option.alert01": "Alert 01",
+   "sound.option.alert02": "Alert 02",
+diff --git a/packages/app/src/i18n/es.ts b/packages/app/src/i18n/es.ts
+index 9cdc6813b..617420233 100644
+--- a/packages/app/src/i18n/es.ts
++++ b/packages/app/src/i18n/es.ts
+@@ -642,17 +642,11 @@ export const dict = {
+   "settings.general.row.colorScheme.title": "Esquema de color",
+   "settings.general.row.colorScheme.description": "Elige si CoBuilder sigue el tema del sistema, claro u oscuro",
+   "settings.general.row.theme.title": "Tema",
+-<<<<<<< HEAD
+   "settings.general.row.theme.description": "Personaliza el tema de CoBuilder.",
+   "settings.general.row.font.title": "Fuente",
+   "settings.general.row.font.description": "Personaliza la fuente monoespaciada usada en bloques de código",
+-=======
+-  "settings.general.row.theme.description": "Personaliza el tema de OpenCode.",
+-  "settings.general.row.font.title": "Fuente de código",
+-  "settings.general.row.font.description": "Personaliza la fuente usada en bloques de código y terminales",
+   "settings.general.row.uiFont.title": "Fuente de la interfaz",
+   "settings.general.row.uiFont.description": "Personaliza la fuente usada en toda la interfaz",
+->>>>>>> upstream/dev
+   "settings.general.row.followup.title": "Comportamiento de seguimiento",
+   "settings.general.row.followup.description":
+     "Elige si los prompts de seguimiento se dirigen inmediatamente o esperan en una cola",
+@@ -683,7 +677,6 @@ export const dict = {
+   "settings.updates.action.checkNow": "Buscar ahora",
+   "settings.updates.action.checking": "Buscando...",
+   "settings.updates.toast.latest.title": "Estás al día",
+-<<<<<<< HEAD
+   "settings.updates.toast.latest.description": "Estás usando la última versión de CoBuilder.",
+   "font.option.ibmPlexMono": "IBM Plex Mono",
+   "font.option.cascadiaCode": "Cascadia Code",
+@@ -698,9 +691,6 @@ export const dict = {
+   "font.option.sourceCodePro": "Source Code Pro",
+   "font.option.ubuntuMono": "Ubuntu Mono",
+   "font.option.geistMono": "Geist Mono",
+-=======
+-  "settings.updates.toast.latest.description": "Estás usando la última versión de OpenCode.",
+->>>>>>> upstream/dev
+   "sound.option.none": "Ninguno",
+   "sound.option.alert01": "Alerta 01",
+   "sound.option.alert02": "Alerta 02",
+-- 
+2.43.0
+

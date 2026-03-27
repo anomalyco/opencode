@@ -1,0 +1,48 @@
+From 4f3067db4a74f216bd99d718cce6fdfee43ecf60 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Fri, 27 Mar 2026 10:16:24 -0700
+Subject: [PATCH 099/127] fix(cd): copy vite peer deps as real files to fix
+ Windows bun symlink issue
+
+---
+ .github/workflows/cd.yml | 22 +++++++++++++---------
+ 1 file changed, 13 insertions(+), 9 deletions(-)
+
+diff --git a/.github/workflows/cd.yml b/.github/workflows/cd.yml
+index 209212cf5..5a36cae8f 100644
+--- a/.github/workflows/cd.yml
++++ b/.github/workflows/cd.yml
+@@ -192,17 +192,21 @@ jobs:
+             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+           "
+ 
+-      # Bun's virtual store (.bun) doesn't resolve peer deps correctly on Windows.
+-      # Install electron-vite + its deps via npm in a clean temp dir (no catalog: entries)
+-      # so Node can resolve picocolors from the flat npm structure.
+-      - name: Build
++      # Bun's virtual store uses symlinks on Windows (requires elevated perms), so Node.js
++      # can't resolve peer deps (vite, picocolors) from electron-vite's bun store path.
++      # Fix: npm-install vite + its deps into a clean temp dir, copy as real files into
++      # root node_modules so Node's resolution walk finds them normally.
++      - name: Install vite peer deps as real files (Windows symlink workaround)
+         shell: bash
+         run: |
+-          mkdir -p "$RUNNER_TEMP/evite"
+-          echo '{}' > "$RUNNER_TEMP/evite/package.json"
+-          npm install --prefix "$RUNNER_TEMP/evite" electron-vite picocolors vite --legacy-peer-deps
+-          cd packages/desktop-electron
+-          node "$RUNNER_TEMP/evite/node_modules/electron-vite/bin/electron-vite.js" build
++          mkdir -p "$RUNNER_TEMP/peer-deps"
++          echo '{}' > "$RUNNER_TEMP/peer-deps/package.json"
++          npm install --prefix "$RUNNER_TEMP/peer-deps" vite picocolors --legacy-peer-deps --silent
++          cp -r "$RUNNER_TEMP/peer-deps/node_modules/." node_modules/
++
++      - name: Build
++        shell: bash
++        run: cd packages/desktop-electron && bun run build
+         env:
+           OPENCODE_CHANNEL: prod
+ 
+-- 
+2.43.0
+

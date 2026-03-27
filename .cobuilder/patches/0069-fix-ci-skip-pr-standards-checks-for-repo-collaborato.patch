@@ -1,0 +1,71 @@
+From ddee779c9923127f2552b3142ee19d387892372f Mon Sep 17 00:00:00 2001
+From: CoBuilder CEO <ceo@cobuilder.ai>
+Date: Thu, 26 Mar 2026 22:40:11 -0700
+Subject: [PATCH 069/127] fix(ci): skip pr-standards checks for repo
+ collaborators with write access
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Replace hardcoded bot name + TEAM_MEMBERS file lookup with a live
+collaborator permission check — anyone with write or admin access
+is automatically skipped.
+---
+ .github/workflows/pr-standards.yml | 30 ++++++++++++------------------
+ 1 file changed, 12 insertions(+), 18 deletions(-)
+
+diff --git a/.github/workflows/pr-standards.yml b/.github/workflows/pr-standards.yml
+index 3a18fc040..ae2eefdc3 100644
+--- a/.github/workflows/pr-standards.yml
++++ b/.github/workflows/pr-standards.yml
+@@ -30,17 +30,14 @@ jobs:
+               return;
+             }
+ 
+-            // Check if author is a team member or bot
+-            if (login === 'opencode-agent[bot]') return;
+-            const { data: file } = await github.rest.repos.getContent({
++            // Skip if author has write access (collaborator, member, or owner)
++            const { data: perm } = await github.rest.repos.getCollaboratorPermissionLevel({
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+-              path: '.github/TEAM_MEMBERS',
+-              ref: 'main'
+-            });
+-            const members = Buffer.from(file.content, 'base64').toString().split('\n').map(l => l.trim()).filter(Boolean);
+-            if (members.includes(login)) {
+-              console.log(`Skipping: ${login} is a team member`);
++              username: login.replace('[bot]', '')
++            }).catch(() => ({ data: { permission: 'none' } }));
++            if (['write', 'admin'].includes(perm.permission)) {
++              console.log(`Skipping: ${login} has write access`);
+               return;
+             }
+ 
+@@ -177,17 +174,14 @@ jobs:
+               return;
+             }
+ 
+-            // Check if author is a team member or bot
+-            if (login === 'opencode-agent[bot]') return;
+-            const { data: file } = await github.rest.repos.getContent({
++            // Skip if author has write access (collaborator, member, or owner)
++            const { data: perm } = await github.rest.repos.getCollaboratorPermissionLevel({
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+-              path: '.github/TEAM_MEMBERS',
+-              ref: 'main'
+-            });
+-            const members = Buffer.from(file.content, 'base64').toString().split('\n').map(l => l.trim()).filter(Boolean);
+-            if (members.includes(login)) {
+-              console.log(`Skipping: ${login} is a team member`);
++              username: login.replace('[bot]', '')
++            }).catch(() => ({ data: { permission: 'none' } }));
++            if (['write', 'admin'].includes(perm.permission)) {
++              console.log(`Skipping: ${login} has write access`);
+               return;
+             }
+ 
+-- 
+2.43.0
+

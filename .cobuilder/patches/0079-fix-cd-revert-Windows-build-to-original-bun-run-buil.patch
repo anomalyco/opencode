@@ -1,0 +1,54 @@
+From da754d196e9f9981ca2803100f8f5cc229168eb4 Mon Sep 17 00:00:00 2001
+From: CoBuilder CEO <ceo@cobuilder.ai>
+Date: Thu, 26 Mar 2026 23:09:53 -0700
+Subject: [PATCH 079/127] =?UTF-8?q?fix(cd):=20revert=20Windows=20build=20t?=
+ =?UTF-8?q?o=20original=20bun=20run=20build=20=E2=80=94=20was=20working=20?=
+ =?UTF-8?q?before=20agent=20modifications?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ .github/workflows/cd.yml | 25 +------------------------
+ 1 file changed, 1 insertion(+), 24 deletions(-)
+
+diff --git a/.github/workflows/cd.yml b/.github/workflows/cd.yml
+index 3be9928ef..27bcf7e89 100644
+--- a/.github/workflows/cd.yml
++++ b/.github/workflows/cd.yml
+@@ -282,31 +282,8 @@ jobs:
+             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+           "
+ 
+-      # npm cannot handle Bun catalog protocol. We resolve catalog entries
+-      # from the root package.json before running npm install + npx electron-vite.
+-      # bun run / bun x cannot be used here - Bun resolves electron-vite from an
+-      # isolated .bun cache path that lacks peer deps (picocolors, vite) on Windows.
+-      - name: Resolve catalog deps and install with npm (Windows)
+-        shell: pwsh
+-        run: |
+-          $catalog = (Get-Content package.json | ConvertFrom-Json).catalog
+-          $pkg = Get-Content packages/desktop-electron/package.json | ConvertFrom-Json
+-          foreach ($section in @("dependencies","devDependencies")) {
+-            $deps = $pkg.$section
+-            if (-not $deps) { continue }
+-            $deps.PSObject.Properties | ForEach-Object {
+-              if ($_.Value -eq "catalog:") {
+-                $resolved = $catalog.($_.Name)
+-                if ($resolved) { $deps.($_.Name) = $resolved }
+-              }
+-            }
+-          }
+-          $pkg | ConvertTo-Json -Depth 10 | Set-Content packages/desktop-electron/package.json
+-          cd packages/desktop-electron
+-          npm install --legacy-peer-deps
+-
+       - name: Build
+-        run: cd packages/desktop-electron && npx electron-vite build
++        run: cd packages/desktop-electron && bun run build
+         env:
+           OPENCODE_CHANNEL: prod
+ 
+-- 
+2.43.0
+

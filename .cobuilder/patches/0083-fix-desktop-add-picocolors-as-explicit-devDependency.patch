@@ -1,0 +1,40 @@
+From b59acd5cc4fce165cf22034638a7e31a6c4d6b80 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Fri, 27 Mar 2026 08:36:52 -0700
+Subject: [PATCH 083/127] fix(desktop): add picocolors as explicit
+ devDependency to resolve Windows electron-vite build failure (#28)
+
+Co-authored-by: CoBuilder CEO <ceo@cobuilder.ai>
+---
+ bun.lock                               | 2 +-
+ packages/desktop-electron/package.json | 1 +
+ 2 files changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/bun.lock b/bun.lock
+index e26fb6b80..bbc5b8a2a 100644
+--- a/bun.lock
++++ b/bun.lock
+@@ -246,7 +246,7 @@
+         "electron": "40.4.1",
+         "electron-builder": "^26",
+         "electron-vite": "^5",
+-        "picocolors": "^1",
++        "picocolors": "*",
+         "typescript": "~5.6.2",
+         "vite": "catalog:",
+       },
+diff --git a/packages/desktop-electron/package.json b/packages/desktop-electron/package.json
+index f5f556a2f..9e99ae3df 100644
+--- a/packages/desktop-electron/package.json
++++ b/packages/desktop-electron/package.json
+@@ -47,6 +47,7 @@
+     "electron": "40.4.1",
+     "electron-builder": "^26",
+     "electron-vite": "^5",
++    "picocolors": "*",
+     "typescript": "~5.6.2",
+     "vite": "catalog:"
+   }
+-- 
+2.43.0
+

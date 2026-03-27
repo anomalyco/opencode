@@ -1,0 +1,27 @@
+From 93d707c547ab621bb3cb701a503d544efe30d228 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <johnny.kang101@gmail.com>
+Date: Thu, 26 Mar 2026 16:03:38 -0700
+Subject: [PATCH 030/127] fix: pass OPENCODE_VERSION and
+ OPENCODE_CHANNEL=latest to build step so binaries show proper semver
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ .github/workflows/cd.yml | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/.github/workflows/cd.yml b/.github/workflows/cd.yml
+index a5d55e2f4..bdb1099ef 100644
+--- a/.github/workflows/cd.yml
++++ b/.github/workflows/cd.yml
+@@ -137,6 +137,8 @@ jobs:
+       - name: Build and upload binaries
+         env:
+           OPENCODE_RELEASE: "1"
++          OPENCODE_VERSION: ${{ steps.next_version.outputs.semver }}
++          OPENCODE_CHANNEL: latest
+           COBUILDER_RELEASE_TAG: ${{ steps.next_version.outputs.tag }}
+           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+           GH_REPO: CobuilderLabs/opencode
+-- 
+2.43.0
+

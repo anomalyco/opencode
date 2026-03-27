@@ -1,0 +1,24 @@
+From 771525270a0c4d1394b3117e5842847a51caf72d Mon Sep 17 00:00:00 2001
+From: Kit Langton <kit.langton@gmail.com>
+Date: Thu, 26 Mar 2026 22:21:17 -0400
+Subject: [PATCH 046/127] fix(opencode): ignore generated models snapshot files
+ (#19362)
+
+---
+ packages/opencode/.gitignore | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/packages/opencode/.gitignore b/packages/opencode/.gitignore
+index 69643b7af..348f05113 100644
+--- a/packages/opencode/.gitignore
++++ b/packages/opencode/.gitignore
+@@ -2,4 +2,5 @@ research
+ dist
+ gen
+ app.log
+-src/provider/models-snapshot.ts
++src/provider/models-snapshot.js
++src/provider/models-snapshot.d.ts
+-- 
+2.43.0
+

@@ -1,0 +1,89 @@
+From 30f9234e72839c1b0e8578219ec8a87c2d354a34 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Fri, 27 Mar 2026 10:17:50 -0700
+Subject: [PATCH 100/127] ci: add test-windows-build workflow for rapid
+ iteration
+
+---
+ .github/workflows/test-windows-build.yml | 69 ++++++++++++++++++++++++
+ 1 file changed, 69 insertions(+)
+ create mode 100644 .github/workflows/test-windows-build.yml
+
+diff --git a/.github/workflows/test-windows-build.yml b/.github/workflows/test-windows-build.yml
+new file mode 100644
+index 000000000..e4546daed
+--- /dev/null
++++ b/.github/workflows/test-windows-build.yml
+@@ -0,0 +1,69 @@
++name: Test Windows Build
++
++on:
++  workflow_dispatch:
++
++env:
++  BUN_VERSION: "1.3.11"
++
++jobs:
++  desktop-windows:
++    name: Desktop (Windows)
++    runs-on: windows-latest
++    timeout-minutes: 20
++    steps:
++      - uses: actions/checkout@v4
++
++      - uses: oven-sh/setup-bun@v2
++        with:
++          bun-version: ${{ env.BUN_VERSION }}
++
++      - name: Cache bun dependencies
++        uses: actions/cache@v4
++        with:
++          path: |
++            ~\AppData\Local\bun\install\cache
++            node_modules
++            packages\*\node_modules
++          key: bun-${{ runner.os }}-${{ hashFiles('bun.lockb') }}
++          restore-keys: bun-${{ runner.os }}-
++
++      - name: Install dependencies
++        run: bun install --frozen-lockfile
++
++      - name: Set desktop version
++        run: |
++          cd packages/desktop-electron
++          node -e "
++            const fs = require('fs');
++            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
++            pkg.version = '0.0.0-test';
++            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
++          "
++
++      # Bun's virtual store uses symlinks on Windows (requires elevated perms), so Node.js
++      # can't resolve peer deps (vite, picocolors) from electron-vite's bun store path.
++      # Fix: npm-install vite + deps into a clean temp dir, copy as real files into
++      # root node_modules so Node's resolution walk finds them normally.
++      - name: Install vite peer deps as real files (Windows symlink workaround)
++        shell: bash
++        run: |
++          mkdir -p "$RUNNER_TEMP/peer-deps"
++          echo '{}' > "$RUNNER_TEMP/peer-deps/package.json"
++          npm install --prefix "$RUNNER_TEMP/peer-deps" vite picocolors --legacy-peer-deps --silent
++          cp -r "$RUNNER_TEMP/peer-deps/node_modules/." node_modules/
++
++      - name: Build
++        shell: bash
++        run: cd packages/desktop-electron && bun run build
++        env:
++          OPENCODE_CHANNEL: prod
++
++      - name: Package (no publish)
++        run: cd packages/desktop-electron && bun run package:win -- --publish never
++        env:
++          OPENCODE_CHANNEL: prod
++
++      - name: List output
++        shell: bash
++        run: ls packages/desktop-electron/dist/*.exe 2>/dev/null && echo "SUCCESS" || echo "No .exe found"
+-- 
+2.43.0
+

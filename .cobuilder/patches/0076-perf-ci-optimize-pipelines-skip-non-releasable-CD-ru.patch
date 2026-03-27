@@ -1,0 +1,325 @@
+From 8eeb29c2952ead7ebd559b39795a40d19fccd996 Mon Sep 17 00:00:00 2001
+From: CoBuilder CEO <ceo@cobuilder.ai>
+Date: Thu, 26 Mar 2026 23:06:41 -0700
+Subject: [PATCH 076/127] =?UTF-8?q?perf(ci):=20optimize=20pipelines=20?=
+ =?UTF-8?q?=E2=80=94=20skip=20non-releasable=20CD=20runs,=20add=20timeouts?=
+ =?UTF-8?q?,=20remove=20dev=20branch=20trigger,=20drop=20edited=20PR=20tri?=
+ =?UTF-8?q?gger?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ .github/workflows/cd.yml           | 31 ++++++++++---
+ .github/workflows/ci.yml           | 73 ++++++++++++++++++++----------
+ .github/workflows/pr-standards.yml |  2 +-
+ 3 files changed, 75 insertions(+), 31 deletions(-)
+
+diff --git a/.github/workflows/cd.yml b/.github/workflows/cd.yml
+index 2e838fa50..af1b7f564 100644
+--- a/.github/workflows/cd.yml
++++ b/.github/workflows/cd.yml
+@@ -17,13 +17,18 @@ concurrency:
+ permissions:
+   contents: write
+ 
++env:
++  BUN_VERSION: "1.3.11"
++
+ jobs:
+   release:
+     name: Release
+     runs-on: ubuntu-latest
++    timeout-minutes: 20
+     outputs:
+       tag: ${{ steps.next_version.outputs.tag }}
+       semver: ${{ steps.next_version.outputs.semver }}
++      skip: ${{ steps.next_version.outputs.skip }}
+     steps:
+       - uses: actions/checkout@v4
+         with:
+@@ -31,7 +36,7 @@ jobs:
+ 
+       - uses: oven-sh/setup-bun@v2
+         with:
+-          bun-version: "1.3.11"
++          bun-version: ${{ env.BUN_VERSION }}
+ 
+       - name: Cache bun dependencies
+         uses: actions/cache@v4
+@@ -69,6 +74,14 @@ jobs:
+ 
+           SUBJECTS=$(echo "$COMMITS" | cut -d'|' -f1)
+ 
++          # Skip release if no feat/fix/breaking commits since last tag
++          if ! echo "$SUBJECTS" | grep -qE '^(feat|fix)(\(.+\))?!?:|^.+(\(.+\))?!:|^BREAKING CHANGE'; then
++            echo "No releasable commits — skipping"
++            echo "skip=true" >> "$GITHUB_OUTPUT"
++            exit 0
++          fi
++          echo "skip=false" >> "$GITHUB_OUTPUT"
++
+           # Determine version bump
+           if echo "$SUBJECTS" | grep -qE '^.+(\(.+\))?!:|^BREAKING CHANGE'; then
+             MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
+@@ -87,7 +100,6 @@ jobs:
+           echo "semver=${MAJOR}.${MINOR}.${PATCH}" >> "$GITHUB_OUTPUT"
+           echo "prev_tag=${TAG}" >> "$GITHUB_OUTPUT"
+ 
+-          # Strip conventional commit prefix and capitalize first letter
+           strip_prefix() {
+             echo "$1" | sed -E 's/^(feat|fix|chore|ci|docs|refactor|perf|test|style|build|revert)(\([^)]+\))?!?:[[:space:]]*//' | sed 's/\(.\)/\u\1/'
+           }
+@@ -111,8 +123,6 @@ jobs:
+               CHANGED="${CHANGED}"$'\n'"- ${CLEAN}"
+             elif echo "$subject" | grep -qE '^(security|sec)(\(.+\))?:'; then
+               SECURITY="${SECURITY}"$'\n'"- ${CLEAN}"
+-            else
+-              CHANGED="${CHANGED}"$'\n'"- ${CLEAN}"
+             fi
+           done <<< "$COMMITS"
+ 
+@@ -129,6 +139,7 @@ jobs:
+           echo "Next release: ${NEXT_TAG}"
+ 
+       - name: Update package version
++        if: steps.next_version.outputs.skip != 'true'
+         run: |
+           cd packages/opencode
+           node -e "
+@@ -138,8 +149,8 @@ jobs:
+             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+           "
+ 
+-      # Create release BEFORE build so build.ts can upload assets to it via gh release upload
+       - name: Create GitHub release (draft)
++        if: steps.next_version.outputs.skip != 'true'
+         env:
+           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+         run: |
+@@ -157,6 +168,7 @@ jobs:
+           fi
+ 
+       - name: Build and upload binaries
++        if: steps.next_version.outputs.skip != 'true'
+         env:
+           OPENCODE_RELEASE: "1"
+           OPENCODE_VERSION: ${{ steps.next_version.outputs.semver }}
+@@ -169,6 +181,7 @@ jobs:
+           bun run build
+ 
+       - name: Publish release
++        if: steps.next_version.outputs.skip != 'true'
+         env:
+           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+         run: |
+@@ -180,13 +193,15 @@ jobs:
+   desktop-linux:
+     name: Desktop (Linux)
+     needs: release
++    if: needs.release.outputs.skip != 'true'
+     runs-on: ubuntu-latest
++    timeout-minutes: 30
+     steps:
+       - uses: actions/checkout@v4
+ 
+       - uses: oven-sh/setup-bun@v2
+         with:
+-          bun-version: "1.3.11"
++          bun-version: ${{ env.BUN_VERSION }}
+ 
+       - name: Cache bun dependencies
+         uses: actions/cache@v4
+@@ -234,13 +249,15 @@ jobs:
+   desktop-windows:
+     name: Desktop (Windows)
+     needs: release
++    if: needs.release.outputs.skip != 'true'
+     runs-on: windows-latest
++    timeout-minutes: 30
+     steps:
+       - uses: actions/checkout@v4
+ 
+       - uses: oven-sh/setup-bun@v2
+         with:
+-          bun-version: "1.3.11"
++          bun-version: ${{ env.BUN_VERSION }}
+ 
+       - name: Cache bun dependencies
+         uses: actions/cache@v4
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 293624958..f10ceb088 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -2,7 +2,7 @@ name: CI
+ 
+ on:
+   pull_request:
+-    branches: [main, dev]
++    branches: [main]
+     paths-ignore:
+       - "**.md"
+       - "**.txt"
+@@ -14,16 +14,21 @@ concurrency:
+   group: ci-${{ github.head_ref }}
+   cancel-in-progress: true
+ 
++env:
++  BUN_VERSION: "1.3.11"
++
+ jobs:
+-  typecheck:
+-    name: Typecheck
++  setup:
++    name: Install dependencies
+     runs-on: ubuntu-latest
++    timeout-minutes: 5
+     steps:
+       - uses: actions/checkout@v4
+       - uses: oven-sh/setup-bun@v2
+         with:
+-          bun-version: "1.3.11"
++          bun-version: ${{ env.BUN_VERSION }}
+       - name: Cache bun dependencies
++        id: cache
+         uses: actions/cache@v4
+         with:
+           path: |
+@@ -32,19 +37,42 @@ jobs:
+             packages/*/node_modules
+           key: bun-${{ runner.os }}-${{ hashFiles('bun.lockb') }}
+           restore-keys: bun-${{ runner.os }}-
++      - name: Install dependencies
++        if: steps.cache.outputs.cache-hit != 'true'
++        run: bun install --frozen-lockfile
++
++  typecheck:
++    name: Typecheck
++    needs: setup
++    runs-on: ubuntu-latest
++    timeout-minutes: 5
++    steps:
++      - uses: actions/checkout@v4
++      - uses: oven-sh/setup-bun@v2
++        with:
++          bun-version: ${{ env.BUN_VERSION }}
++      - uses: actions/cache@v4
++        with:
++          path: |
++            ~/.bun/install/cache
++            node_modules
++            packages/*/node_modules
++          key: bun-${{ runner.os }}-${{ hashFiles('bun.lockb') }}
++          restore-keys: bun-${{ runner.os }}-
+       - run: bun install --frozen-lockfile
+       - run: bun run typecheck
+ 
+   lint:
+     name: Lint
++    needs: setup
+     runs-on: ubuntu-latest
++    timeout-minutes: 5
+     steps:
+       - uses: actions/checkout@v4
+       - uses: oven-sh/setup-bun@v2
+         with:
+-          bun-version: "1.3.11"
+-      - name: Cache bun dependencies
+-        uses: actions/cache@v4
++          bun-version: ${{ env.BUN_VERSION }}
++      - uses: actions/cache@v4
+         with:
+           path: |
+             ~/.bun/install/cache
+@@ -57,14 +85,15 @@ jobs:
+ 
+   unit-test:
+     name: Unit Tests
++    needs: setup
+     runs-on: ubuntu-latest
++    timeout-minutes: 10
+     steps:
+       - uses: actions/checkout@v4
+       - uses: oven-sh/setup-bun@v2
+         with:
+-          bun-version: "1.3.11"
+-      - name: Cache bun dependencies
+-        uses: actions/cache@v4
++          bun-version: ${{ env.BUN_VERSION }}
++      - uses: actions/cache@v4
+         with:
+           path: |
+             ~/.bun/install/cache
+@@ -73,31 +102,30 @@ jobs:
+           key: bun-${{ runner.os }}-${{ hashFiles('bun.lockb') }}
+           restore-keys: bun-${{ runner.os }}-
+       - run: bun install --frozen-lockfile
+-      - name: Run tests
+-        run: bun test --timeout 30000
+-        continue-on-error: true  # informational until test suite is built out
++      - run: bun test --timeout 30000
++        continue-on-error: true
+ 
+   audit:
+     name: Dependency Audit
+     runs-on: ubuntu-latest
++    timeout-minutes: 5
+     steps:
+       - uses: actions/checkout@v4
+       - uses: oven-sh/setup-bun@v2
+         with:
+-          bun-version: "1.3.11"
+-      - name: Audit dependencies
+-        run: bun audit --audit-level moderate 2>/dev/null || npm audit --audit-level moderate
+-        continue-on-error: true  # informational until baseline established
++          bun-version: ${{ env.BUN_VERSION }}
++      - run: bun audit --audit-level moderate 2>/dev/null || npm audit --audit-level moderate
++        continue-on-error: true
+ 
+   secret-scan:
+     name: Secret Scanning
+     runs-on: ubuntu-latest
++    timeout-minutes: 5
+     steps:
+       - uses: actions/checkout@v4
+         with:
+           fetch-depth: 0
+-      - name: TruffleHog scan
+-        uses: trufflesecurity/trufflehog@main
++      - uses: trufflesecurity/trufflehog@main
+         with:
+           path: ./
+           base: ${{ github.event.pull_request.base.sha }}
+@@ -107,13 +135,12 @@ jobs:
+   sast:
+     name: SAST (CodeQL)
+     runs-on: ubuntu-latest
++    timeout-minutes: 15
+     permissions:
+       security-events: write
+     steps:
+       - uses: actions/checkout@v4
+-      - name: Initialize CodeQL
+-        uses: github/codeql-action/init@v3
++      - uses: github/codeql-action/init@v3
+         with:
+           languages: javascript-typescript
+-      - name: Perform CodeQL Analysis
+-        uses: github/codeql-action/analyze@v3
++      - uses: github/codeql-action/analyze@v3
+diff --git a/.github/workflows/pr-standards.yml b/.github/workflows/pr-standards.yml
+index ae2eefdc3..14d308287 100644
+--- a/.github/workflows/pr-standards.yml
++++ b/.github/workflows/pr-standards.yml
+@@ -2,7 +2,7 @@ name: pr-standards
+ 
+ on:
+   pull_request_target:
+-    types: [opened, edited, synchronize]
++    types: [opened, synchronize]
+ 
+ concurrency:
+   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+-- 
+2.43.0
+

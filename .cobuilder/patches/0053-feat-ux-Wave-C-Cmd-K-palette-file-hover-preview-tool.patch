@@ -1,0 +1,482 @@
+From b8ece6ff96194e053263206c36e15c6ea65fd895 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Thu, 26 Mar 2026 20:41:10 -0700
+Subject: [PATCH 053/127] =?UTF-8?q?feat(ux):=20Wave=20C=20=E2=80=94=20Cmd+?=
+ =?UTF-8?q?K=20palette,=20file=20hover=20preview,=20tool=20search,=20coach?=
+ =?UTF-8?q?=20marks=20(#25)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+* feat(ux): Wave C — Cmd+K palette, file hover preview, tool search, coach marks
+
+C.1 - Cmd+K command palette: adds mod+k as an alias for the existing
+  command palette (mod+shift+p remains; both now work)
+
+C.2 - Inline file hover preview: file names in the session review diff
+  list now show a HoverCard with the first 20 lines of the file on
+  hover, using the existing readFile prop wired through SessionReview
+
+C.3 - Tool output search (Cmd+F): Cmd+F / Ctrl+F while a BasicTool
+  block is focused opens an inline search bar; types highlight matches
+  in the tool output via DOM text-node walking + mark elements;
+  Esc closes and clears highlights
+
+C.4 - Post-session onboarding coach marks: after a user's first
+  completed assistant turn, a dismissible coach mark tooltip appears
+  cycling through 3 tips (fork, @mention, model switch); each tip is
+  individually dismissible and persisted in settings.onboarding
+
+* fix(ui): wrap Collapsible in div to satisfy ref/onKeyDown/tabIndex types
+
+CollapsibleProps doesn't include ref, onKeyDown, or tabIndex. Move these
+onto a wrapper div so the DOM ref and keyboard handling still work.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+---------
+
+Co-authored-by: CoBuilder CEO <ceo@cobuilder.ai>
+Co-authored-by: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ packages/app/src/components/coach-marks.tsx   | 121 ++++++++++++++++++
+ packages/app/src/context/command.tsx          |   2 +-
+ packages/app/src/context/settings.tsx         |  16 +++
+ packages/app/src/pages/session.tsx            |   2 +
+ packages/ui/src/components/basic-tool.tsx     | 112 +++++++++++++++-
+ packages/ui/src/components/session-review.tsx |  61 ++++++++-
+ 6 files changed, 309 insertions(+), 5 deletions(-)
+ create mode 100644 packages/app/src/components/coach-marks.tsx
+
+diff --git a/packages/app/src/components/coach-marks.tsx b/packages/app/src/components/coach-marks.tsx
+new file mode 100644
+index 000000000..702e7554b
+--- /dev/null
++++ b/packages/app/src/components/coach-marks.tsx
+@@ -0,0 +1,121 @@
++import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js"
++import { useSettings } from "@/context/settings"
++import { useSync } from "@/context/sync"
++import { useSDK } from "@/context/sdk"
++
++type Mark = {
++  id: string
++  text: string
++  sub: string
++}
++
++const MARKS: Mark[] = [
++  {
++    id: "fork",
++    text: "Fork this session",
++    sub: "Try a different approach without losing your current conversation",
++  },
++  {
++    id: "mention",
++    text: "Use @ to add context",
++    sub: "Mention a file or agent with @ to bring it into the conversation",
++  },
++  {
++    id: "model",
++    text: "Switch models anytime",
++    sub: "Change the model mid-conversation using the model selector below",
++  },
++]
++
++export function CoachMarks(props: { sessionID: string | undefined }) {
++  const settings = useSettings()
++  const sync = useSync()
++  const sdk = useSDK()
++
++  const [active, setActive] = createSignal(0)
++
++  const hasCompleted = createMemo(() => {
++    const id = props.sessionID
++    if (!id) return false
++    const messages = sync.data.message[id] ?? []
++    return messages.some(
++      (m) => m.role === "assistant" && typeof (m as { time?: { completed?: unknown } }).time?.completed === "number",
++    )
++  })
++
++  createEffect(
++    on(hasCompleted, (done) => {
++      if (!done) return
++      if (settings.onboarding.completedFirstSession()) return
++      settings.onboarding.setCompletedFirstSession(true)
++    }),
++  )
++
++  const visible = createMemo(() => {
++    if (!settings.onboarding.completedFirstSession()) return false
++    return active() < MARKS.length
++  })
++
++  const current = createMemo(() => MARKS[active()])
++
++  const dismissed = createMemo(() => {
++    const mark = current()
++    if (!mark) return true
++    return settings.onboarding.isDismissed(mark.id)()
++  })
++
++  const dismiss = () => {
++    const mark = current()
++    if (mark) settings.onboarding.dismiss(mark.id)
++    setActive((a) => a + 1)
++  }
++
++  const dismissAll = () => {
++    MARKS.forEach((m) => settings.onboarding.dismiss(m.id))
++    setActive(MARKS.length)
++  }
++
++  return (
++    <Show when={visible() && !dismissed()}>
++      <div
++        data-component="coach-marks"
++        class="fixed bottom-24 right-6 z-50 w-72 rounded-xl bg-surface-raised-stronger-non-alpha shadow-[var(--shadow-lg-border-base)] p-4 flex flex-col gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300"
++      >
++        <div class="flex items-start justify-between gap-2">
++          <div class="flex flex-col gap-0.5">
++            <span class="text-13-medium text-text-strong">{current()?.text}</span>
++            <span class="text-12-regular text-text-weak leading-[1.5]">{current()?.sub}</span>
++          </div>
++          <button
++            class="shrink-0 size-5 flex items-center justify-center rounded text-text-weak hover:text-text-strong transition-colors"
++            onClick={dismiss}
++            aria-label="Dismiss"
++          >
++            ✕
++          </button>
++        </div>
++        <div class="flex items-center justify-between">
++          <div class="flex gap-1">
++            <For each={MARKS}>
++              {(_, i) => (
++                <div
++                  class="size-1.5 rounded-full transition-colors"
++                  classList={{
++                    "bg-text-interactive-base": i() === active(),
++                    "bg-border-base": i() !== active(),
++                  }}
++                />
++              )}
++            </For>
++          </div>
++          <button
++            class="text-11-regular text-text-weakest hover:text-text-weak transition-colors"
++            onClick={dismissAll}
++          >
++            Don't show again
++          </button>
++        </div>
++      </div>
++    </Show>
++  )
++}
+diff --git a/packages/app/src/context/command.tsx b/packages/app/src/context/command.tsx
+index 65805f40c..92c96f0e4 100644
+--- a/packages/app/src/context/command.tsx
++++ b/packages/app/src/context/command.tsx
+@@ -10,7 +10,7 @@ import { Persist, persisted } from "@/utils/persist"
+ const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
+ 
+ const PALETTE_ID = "command.palette"
+-const DEFAULT_PALETTE_KEYBIND = "mod+shift+p"
++const DEFAULT_PALETTE_KEYBIND = "mod+shift+p,mod+k"
+ const SUGGESTED_PREFIX = "suggested."
+ const EDITABLE_KEYBIND_IDS = new Set(["terminal.toggle", "terminal.new", "file.attach"])
+ 
+diff --git a/packages/app/src/context/settings.tsx b/packages/app/src/context/settings.tsx
+index 0c0124946..cb4b038a5 100644
+--- a/packages/app/src/context/settings.tsx
++++ b/packages/app/src/context/settings.tsx
+@@ -40,6 +40,10 @@ export interface Settings {
+   }
+   notifications: NotificationSettings
+   sounds: SoundSettings
++  onboarding?: {
++    completedFirstSession?: boolean
++    dismissedCoachMarks?: string[]
++  }
+ }
+ 
+ const defaultSettings: Settings = {
+@@ -247,6 +251,18 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
+           setStore("sounds", "errors", value)
+         },
+       },
++      onboarding: {
++        completedFirstSession: createMemo(() => store.onboarding?.completedFirstSession ?? false),
++        setCompletedFirstSession(value: boolean) {
++          setStore("onboarding", "completedFirstSession", value)
++        },
++        isDismissed(id: string) {
++          return createMemo(() => (store.onboarding?.dismissedCoachMarks ?? []).includes(id))
++        },
++        dismiss(id: string) {
++          setStore("onboarding", "dismissedCoachMarks", (prev) => [...(prev ?? []), id])
++        },
++      },
+     }
+   },
+ })
+diff --git a/packages/app/src/pages/session.tsx b/packages/app/src/pages/session.tsx
+index 23f8dd9a4..0f5351176 100644
+--- a/packages/app/src/pages/session.tsx
++++ b/packages/app/src/pages/session.tsx
+@@ -29,6 +29,7 @@ import { showToast } from "@opencode-ai/ui/toast"
+ import { base64Encode, checksum } from "@opencode-ai/util/encode"
+ import { useNavigate, useSearchParams } from "@solidjs/router"
+ import { NewSessionView, SessionHeader } from "@/components/session"
++import { CoachMarks } from "@/components/coach-marks"
+ import { DialogSelectProvider } from "@/components/dialog-select-provider"
+ import { useComments } from "@/context/comments"
+ import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
+@@ -1673,6 +1674,7 @@ export default function Page() {
+   return (
+     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
+       <SessionHeader />
++      <CoachMarks sessionID={params.id} />
+       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
+         <Show when={!isDesktop() && !!params.id}>
+           <Tabs value={store.mobileTab} class="h-auto">
+diff --git a/packages/ui/src/components/basic-tool.tsx b/packages/ui/src/components/basic-tool.tsx
+index a02fe941b..1451f4e64 100644
+--- a/packages/ui/src/components/basic-tool.tsx
++++ b/packages/ui/src/components/basic-tool.tsx
+@@ -1,4 +1,4 @@
+-import { createEffect, For, Match, on, onCleanup, Show, Switch, type JSX } from "solid-js"
++import { createEffect, createSignal, For, Match, on, onCleanup, Show, Switch, type JSX } from "solid-js"
+ import { animate, type AnimationPlaybackControls } from "motion"
+ import { useI18n } from "../context/i18n"
+ import { createStore } from "solid-js/store"
+@@ -47,6 +47,78 @@ export function BasicTool(props: BasicToolProps) {
+   const ready = () => state.ready
+   const pending = () => props.status === "pending" || props.status === "running"
+ 
++  const [searchQuery, setSearchQuery] = createSignal("")
++  const [searchOpen, setSearchOpen] = createSignal(false)
++  let searchRef: HTMLInputElement | undefined
++  let toolRef: HTMLDivElement | undefined
++
++  const openSearch = () => {
++    if (!open()) setState("open", true)
++    setSearchOpen(true)
++    requestAnimationFrame(() => searchRef?.focus())
++  }
++
++  const closeSearch = () => {
++    setSearchOpen(false)
++    setSearchQuery("")
++    clearHighlights()
++  }
++
++  const clearHighlights = () => {
++    toolRef?.querySelectorAll("mark[data-tool-search]").forEach((el) => {
++      const parent = el.parentNode
++      if (!parent) return
++      parent.replaceChild(document.createTextNode(el.textContent ?? ""), el)
++      parent.normalize()
++    })
++  }
++
++  const applyHighlights = (q: string) => {
++    clearHighlights()
++    if (!q || !toolRef) return
++    const content = toolRef.querySelector("[data-slot='collapsible-content'], [data-component='collapsible-content']")
++    if (!content) return
++    const walk = document.createTreeWalker(content, NodeFilter.SHOW_TEXT)
++    const matches: { node: Text; start: number }[] = []
++    let node: Node | null
++    const lower = q.toLowerCase()
++    while ((node = walk.nextNode())) {
++      const text = node.textContent ?? ""
++      let idx = text.toLowerCase().indexOf(lower)
++      while (idx !== -1) {
++        matches.push({ node: node as Text, start: idx })
++        idx = text.toLowerCase().indexOf(lower, idx + 1)
++      }
++    }
++    for (let i = matches.length - 1; i >= 0; i--) {
++      const { node, start } = matches[i]
++      const range = document.createRange()
++      range.setStart(node, start)
++      range.setEnd(node, start + q.length)
++      const mark = document.createElement("mark")
++      mark.setAttribute("data-tool-search", "")
++      mark.style.background = "var(--surface-warning-soft, rgba(250,200,50,0.35))"
++      mark.style.color = "inherit"
++      mark.style.borderRadius = "2px"
++      range.surroundContents(mark)
++      if (i === 0) mark.scrollIntoView({ block: "nearest" })
++    }
++  }
++
++  createEffect(() => {
++    const q = searchQuery()
++    if (!searchOpen()) return
++    applyHighlights(q)
++  })
++
++  const handleToolKeyDown = (e: KeyboardEvent) => {
++    if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "f") {
++      e.preventDefault()
++      e.stopPropagation()
++      openSearch()
++    }
++  }
++
+   let frame: number | undefined
+ 
+   const cancel = () => {
+@@ -122,7 +194,12 @@ export function BasicTool(props: BasicToolProps) {
+   }
+ 
+   return (
+-    <Collapsible open={open()} onOpenChange={handleOpenChange} class="tool-collapsible">
++    <div ref={toolRef} onKeyDown={handleToolKeyDown} tabIndex={-1} class="tool-collapsible-wrapper">
++    <Collapsible
++      open={open()}
++      onOpenChange={handleOpenChange}
++      class="tool-collapsible"
++    >
+       <Collapsible.Trigger>
+         <div data-component="tool-trigger">
+           <div data-slot="basic-tool-tool-trigger-content">
+@@ -189,6 +266,36 @@ export function BasicTool(props: BasicToolProps) {
+           </Show>
+         </div>
+       </Collapsible.Trigger>
++      <Show when={searchOpen()}>
++        <div
++          data-slot="basic-tool-search"
++          class="flex items-center gap-2 px-3 py-1.5 border-t border-border-weak-base bg-background-base"
++        >
++          <input
++            ref={searchRef}
++            placeholder="Search output…"
++            class="flex-1 bg-transparent text-12-regular text-text-strong placeholder:text-text-weakest outline-none"
++            value={searchQuery()}
++            onInput={(e) => setSearchQuery(e.currentTarget.value)}
++            onKeyDown={(e) => {
++              if (e.key === "Escape") { e.preventDefault(); closeSearch() }
++              if (e.key === "f" && (e.metaKey || e.ctrlKey)) { e.preventDefault() }
++            }}
++          />
++          <Show when={searchQuery()}>
++            <span class="text-11-regular text-text-weakest tabular-nums shrink-0">
++              {/* match count provided visually via browser highlight */}
++            </span>
++          </Show>
++          <button
++            class="text-11-regular text-text-weak hover:text-text-strong transition-colors shrink-0"
++            onClick={closeSearch}
++            tabIndex={-1}
++          >
++            ✕
++          </button>
++        </div>
++      </Show>
+       <Show when={props.animated && props.children && !props.hideDetails}>
+         <div
+           ref={contentRef}
+@@ -208,6 +315,7 @@ export function BasicTool(props: BasicToolProps) {
+         </Collapsible.Content>
+       </Show>
+     </Collapsible>
++    </div>
+   )
+ }
+ 
+diff --git a/packages/ui/src/components/session-review.tsx b/packages/ui/src/components/session-review.tsx
+index 83d2980f6..b88955589 100644
+--- a/packages/ui/src/components/session-review.tsx
++++ b/packages/ui/src/components/session-review.tsx
+@@ -13,8 +13,9 @@ import { useFileComponent } from "../context/file"
+ import { useI18n } from "../context/i18n"
+ import { getDirectory, getFilename } from "@opencode-ai/util/path"
+ import { checksum } from "@opencode-ai/util/encode"
+-import { createEffect, createMemo, For, Match, Show, Switch, untrack, type JSX } from "solid-js"
++import { createEffect, createMemo, createResource, For, Match, Show, Switch, untrack, type JSX } from "solid-js"
+ import { onCleanup } from "solid-js"
++import { HoverCard } from "./hover-card"
+ import { createStore } from "solid-js/store"
+ import { type FileContent, type FileDiff } from "@opencode-ai/sdk/v2"
+ import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
+@@ -26,6 +27,62 @@ import { createLineCommentController } from "./line-comment-annotations"
+ 
+ const MAX_DIFF_CHANGED_LINES = 500
+ 
++function FilePreview(props: { file: string; readFile?: (path: string) => Promise<FileContent | undefined> }) {
++  if (!props.readFile) return <span data-slot="session-review-filename">{getFilename(props.file)}</span>
++
++  return (
++    <HoverCard
++      openDelay={300}
++      placement="right-start"
++      gutter={12}
++      trigger={<span data-slot="session-review-filename">{getFilename(props.file)}</span>}
++    >
++      <FilePreviewContent file={props.file} readFile={props.readFile} />
++    </HoverCard>
++  )
++}
++
++function FilePreviewContent(props: { file: string; readFile: (path: string) => Promise<FileContent | undefined> }) {
++  const [content] = createResource(() => props.file, props.readFile)
++  const lines = createMemo(() =>
++    content()
++      ?.content?.split("\n")
++      .slice(0, 20)
++      .map((l, i) => ({ n: i + 1, text: l })) ?? [],
++  )
++
++  return (
++    <div data-component="file-preview-hover" class="w-80 max-h-60 overflow-hidden flex flex-col">
++      <div class="px-3 py-1.5 border-b border-border-weak-base flex items-center gap-1.5">
++        <FileIcon node={{ path: props.file, type: "file" }} class="size-3.5 shrink-0" />
++        <span class="text-11-medium text-text-strong truncate">{props.file}</span>
++      </div>
++      <Show
++        when={content.loading}
++        fallback={
++          <Show
++            when={lines().length > 0}
++            fallback={<div class="px-3 py-2 text-11-regular text-text-weak">No preview available</div>}
++          >
++            <div class="overflow-y-auto no-scrollbar p-2">
++              <For each={lines()}>
++                {(line) => (
++                  <div class="flex gap-2 text-[11px] font-mono leading-[1.6]">
++                    <span class="shrink-0 w-6 text-right text-text-weakest select-none">{line.n}</span>
++                    <span class="text-text-base whitespace-pre truncate">{line.text || " "}</span>
++                  </div>
++                )}
++              </For>
++            </div>
++          </Show>
++        }
++      >
++        <div class="px-3 py-2 text-11-regular text-text-weak">Loading…</div>
++      </Show>
++    </div>
++  )
++}
++
+ export type SessionReviewDiffStyle = "unified" | "split"
+ 
+ export type SessionReviewComment = {
+@@ -407,7 +464,7 @@ export const SessionReview = (props: SessionReviewProps) => {
+                                   <Show when={file.includes("/")}>
+                                     <span data-slot="session-review-directory">{`\u202A${getDirectory(file)}\u202C`}</span>
+                                   </Show>
+-                                  <span data-slot="session-review-filename">{getFilename(file)}</span>
++                                  <FilePreview file={file} readFile={props.readFile} />
+                                   <Show when={props.onViewFile}>
+                                     <Tooltip value={openFileLabel()} placement="top" gutter={4}>
+                                       <button
+-- 
+2.43.0
+

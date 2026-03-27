@@ -1,0 +1,32 @@
+From 3fb94142f03f248666d0c8cf7eb75c3ad5f7e574 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <johnny.kang101@gmail.com>
+Date: Thu, 26 Mar 2026 15:31:13 -0700
+Subject: [PATCH 022/127] fix(build): replace pkg.name with literal "cobuilder"
+ in Bun compile target
+
+After renaming the binary prefix from "opencode" to "cobuilder", the
+target string was no longer replaced correctly since pkg.name is still
+"opencode". Bun requires compile targets to start with "bun-", so
+cobuilder-linux-arm64 caused a TypeError and broke every CD build.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ packages/opencode/script/build.ts | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/packages/opencode/script/build.ts b/packages/opencode/script/build.ts
+index 5c157f07c..c60611a36 100755
+--- a/packages/opencode/script/build.ts
++++ b/packages/opencode/script/build.ts
+@@ -206,7 +206,7 @@ for (const item of targets) {
+       autoloadDotenv: false,
+       autoloadTsconfig: true,
+       autoloadPackageJson: true,
+-      target: name.replace(pkg.name, "bun") as any,
++      target: name.replace("cobuilder", "bun") as any,
+       outfile: `dist/${name}/bin/cobuilder`,
+       execArgv: [`--user-agent=cobuilder/${Script.version}`, "--use-system-ca", "--"],
+       windows: {},
+-- 
+2.43.0
+

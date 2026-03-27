@@ -1,0 +1,142 @@
+From 311ba4179a3c112a7e0cbbeae152a971284a3632 Mon Sep 17 00:00:00 2001
+From: Adam <2363879+adamdotdevin@users.noreply.github.com>
+Date: Thu, 26 Mar 2026 14:34:01 -0500
+Subject: [PATCH 012/127] fix(app): remove fork session button
+
+---
+ packages/app/src/pages/session.tsx          | 27 +++----------------
+ packages/ui/src/components/message-part.tsx | 30 +++++----------------
+ 2 files changed, 9 insertions(+), 48 deletions(-)
+
+diff --git a/packages/app/src/pages/session.tsx b/packages/app/src/pages/session.tsx
+index 8a158cad5..c41133ded 100644
+--- a/packages/app/src/pages/session.tsx
++++ b/packages/app/src/pages/session.tsx
+@@ -26,8 +26,8 @@ import { createAutoScroll } from "@opencode-ai/ui/hooks"
+ import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
+ import { Button } from "@opencode-ai/ui/button"
+ import { showToast } from "@opencode-ai/ui/toast"
+-import { base64Encode, checksum } from "@opencode-ai/util/encode"
+-import { useNavigate, useSearchParams } from "@solidjs/router"
++import { checksum } from "@opencode-ai/util/encode"
++import { useSearchParams } from "@solidjs/router"
+ import { NewSessionView, SessionHeader } from "@/components/session"
+ import { useComments } from "@/context/comments"
+ import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
+@@ -317,7 +317,6 @@ export default function Page() {
+   const sync = useSync()
+   const dialog = useDialog()
+   const language = useLanguage()
+-  const navigate = useNavigate()
+   const sdk = useSDK()
+   const settings = useSettings()
+   const prompt = usePrompt()
+@@ -1555,26 +1554,6 @@ export default function Page() {
+   const reverting = createMemo(() => revertMutation.isPending || restoreMutation.isPending)
+   const restoring = createMemo(() => (restoreMutation.isPending ? restoreMutation.variables : undefined))
+ 
+-  const fork = (input: { sessionID: string; messageID: string }) => {
+-    const value = draft(input.messageID)
+-    const dir = base64Encode(sdk.directory)
+-    return sdk.client.session
+-      .fork(input)
+-      .then((result) => {
+-        const next = result.data
+-        if (!next) {
+-          showToast({
+-            variant: "error",
+-            title: language.t("common.requestFailed"),
+-          })
+-          return
+-        }
+-        prompt.set(value, undefined, { dir, id: next.id })
+-        navigate(`/${dir}/session/${next.id}`)
+-      })
+-      .catch(fail)
+-  }
+-
+   const revert = (input: { sessionID: string; messageID: string }) => {
+     if (reverting()) return
+     return revertMutation.mutateAsync(input)
+@@ -1593,7 +1572,7 @@ export default function Page() {
+       .map((item) => ({ id: item.id, text: line(item.id) }))
+   })
+ 
+-  const actions = { fork, revert }
++  const actions = { revert }
+ 
+   createEffect(() => {
+     const sessionID = params.id
+diff --git a/packages/ui/src/components/message-part.tsx b/packages/ui/src/components/message-part.tsx
+index 3b4ed9e54..a15e2e0c1 100644
+--- a/packages/ui/src/components/message-part.tsx
++++ b/packages/ui/src/components/message-part.tsx
+@@ -884,7 +884,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
+   const i18n = useI18n()
+   const [state, setState] = createStore({
+     copied: false,
+-    busy: undefined as "fork" | "revert" | undefined,
++    busy: false,
+   })
+   const copied = () => state.copied
+   const busy = () => state.busy
+@@ -938,10 +938,10 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
+     setTimeout(() => setState("copied", false), 2000)
+   }
+ 
+-  const run = (kind: "fork" | "revert") => {
+-    const act = kind === "fork" ? props.actions?.fork : props.actions?.revert
++  const revert = () => {
++    const act = props.actions?.revert
+     if (!act || busy()) return
+-    setState("busy", kind)
++    setState("busy", true)
+     void Promise.resolve()
+       .then(() =>
+         act({
+@@ -949,9 +949,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
+           messageID: props.message.id,
+         }),
+       )
+-      .finally(() => {
+-        if (busy() === kind) setState("busy", undefined)
+-      })
++      .finally(() => setState("busy", false))
+   }
+ 
+   return (
+@@ -1017,22 +1015,6 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
+                 </Show>
+               </span>
+             </Show>
+-            <Show when={props.actions?.fork}>
+-              <Tooltip value={i18n.t("ui.message.forkMessage")} placement="top" gutter={4}>
+-                <IconButton
+-                  icon="fork"
+-                  size="normal"
+-                  variant="ghost"
+-                  disabled={!!busy()}
+-                  onMouseDown={(e) => e.preventDefault()}
+-                  onClick={(event) => {
+-                    event.stopPropagation()
+-                    run("fork")
+-                  }}
+-                  aria-label={i18n.t("ui.message.forkMessage")}
+-                />
+-              </Tooltip>
+-            </Show>
+             <Show when={props.actions?.revert}>
+               <Tooltip value={i18n.t("ui.message.revertMessage")} placement="top" gutter={4}>
+                 <IconButton
+@@ -1043,7 +1025,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
+                   onMouseDown={(e) => e.preventDefault()}
+                   onClick={(event) => {
+                     event.stopPropagation()
+-                    run("revert")
++                    revert()
+                   }}
+                   aria-label={i18n.t("ui.message.revertMessage")}
+                 />
+-- 
+2.43.0
+

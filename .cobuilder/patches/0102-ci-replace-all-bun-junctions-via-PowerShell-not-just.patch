@@ -1,0 +1,60 @@
+From 790efc5af77f979c29f29bc9709bd56aff54a8c4 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Fri, 27 Mar 2026 10:30:28 -0700
+Subject: [PATCH 102/127] ci: replace all bun junctions via PowerShell (not
+ just electron-vite deps)
+
+---
+ .github/workflows/test-windows-build.yml | 35 +++++++++++++++---------
+ 1 file changed, 22 insertions(+), 13 deletions(-)
+
+diff --git a/.github/workflows/test-windows-build.yml b/.github/workflows/test-windows-build.yml
+index e0fe29a8e..b00337d24 100644
+--- a/.github/workflows/test-windows-build.yml
++++ b/.github/workflows/test-windows-build.yml
+@@ -42,20 +42,29 @@ jobs:
+           "
+ 
+       # Bun creates directory junctions on Windows which Node.js ESM can't traverse.
+-      # Fix: npm-install electron-vite + ALL its deps into RUNNER_TEMP, then replace
+-      # every bun junction in node_modules with a real copy that Node.js can resolve.
+-      - name: Replace bun junctions with real npm copies (Windows fix)
+-        shell: bash
++      # Fix: use PowerShell to detect all junctions in node_modules and replace with
++      # real file copies so Node.js resolution works normally.
++      - name: Replace all bun junctions with real copies (Windows fix)
++        shell: pwsh
+         run: |
+-          mkdir -p "$RUNNER_TEMP/evite"
+-          echo '{}' > "$RUNNER_TEMP/evite/package.json"
+-          npm install --prefix "$RUNNER_TEMP/evite" electron-vite vite --legacy-peer-deps --silent
+-          for pkg in "$RUNNER_TEMP/evite/node_modules"/*/; do
+-            name=$(basename "$pkg")
+-            [[ "$name" == .* ]] && continue
+-            rm -rf "node_modules/$name"
+-            cp -r "$pkg" "node_modules/$name"
+-          done
++          $count = 0
++          function Replace-Junctions([string]$dir) {
++            if (-not (Test-Path $dir)) { return }
++            Get-ChildItem -Path $dir -Force | Where-Object { $_.LinkType -eq 'Junction' } | ForEach-Object {
++              $target = $_.Target
++              $dest = $_.FullName
++              Remove-Item $dest -Force -Recurse -ErrorAction SilentlyContinue
++              Copy-Item -Path $target -Destination $dest -Recurse -Force -ErrorAction SilentlyContinue
++              $script:count++
++            }
++          }
++          # Replace top-level package junctions
++          Replace-Junctions "node_modules"
++          # Replace scoped package junctions (@scope/package)
++          Get-ChildItem "node_modules" -Filter "@*" -Directory -Force -ErrorAction SilentlyContinue | ForEach-Object {
++            Replace-Junctions $_.FullName
++          }
++          Write-Host "Replaced $count junctions with real copies"
+ 
+       - name: Build
+         shell: bash
+-- 
+2.43.0
+

@@ -1,0 +1,1404 @@
+From b242a8d8e42839496c7213d020e8cba19a76e111 Mon Sep 17 00:00:00 2001
+From: "opencode-agent[bot]" <opencode-agent[bot]@users.noreply.github.com>
+Date: Fri, 27 Mar 2026 01:47:36 +0000
+Subject: [PATCH 044/127] chore: generate
+
+---
+ packages/opencode/src/config/config.ts  | 632 +++++++++++------------
+ packages/opencode/src/mcp/index.ts      |   3 -
+ packages/opencode/src/snapshot/index.ts | 635 ++++++++++++------------
+ 3 files changed, 631 insertions(+), 639 deletions(-)
+
+diff --git a/packages/opencode/src/config/config.ts b/packages/opencode/src/config/config.ts
+index 6a912202c..41fa4a1ca 100644
+--- a/packages/opencode/src/config/config.ts
++++ b/packages/opencode/src/config/config.ts
+@@ -1136,376 +1136,380 @@ export namespace Config {
+     }),
+   )
+ 
+-  export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Auth.Service | Account.Service> = Layer.effect(
+-    Service,
+-    Effect.gen(function* () {
+-      const fs = yield* AppFileSystem.Service
+-      const authSvc = yield* Auth.Service
+-      const accountSvc = yield* Account.Service
+-
+-      const readConfigFile = Effect.fnUntraced(function* (filepath: string) {
+-        return yield* fs.readFileString(filepath).pipe(
+-          Effect.catchIf(
+-            (e) => e.reason._tag === "NotFound",
+-            () => Effect.succeed(undefined),
+-          ),
+-          Effect.orDie,
+-        )
+-      })
++  export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Auth.Service | Account.Service> =
++    Layer.effect(
++      Service,
++      Effect.gen(function* () {
++        const fs = yield* AppFileSystem.Service
++        const authSvc = yield* Auth.Service
++        const accountSvc = yield* Account.Service
++
++        const readConfigFile = Effect.fnUntraced(function* (filepath: string) {
++          return yield* fs.readFileString(filepath).pipe(
++            Effect.catchIf(
++              (e) => e.reason._tag === "NotFound",
++              () => Effect.succeed(undefined),
++            ),
++            Effect.orDie,
++          )
++        })
+ 
+-      const loadConfig = Effect.fnUntraced(function* (
+-        text: string,
+-        options: { path: string } | { dir: string; source: string },
+-      ) {
+-        const original = text
+-        const source = "path" in options ? options.path : options.source
+-        const isFile = "path" in options
+-        const data = yield* Effect.promise(() =>
+-          ConfigPaths.parseText(text, "path" in options ? options.path : { source: options.source, dir: options.dir }),
+-        )
++        const loadConfig = Effect.fnUntraced(function* (
++          text: string,
++          options: { path: string } | { dir: string; source: string },
++        ) {
++          const original = text
++          const source = "path" in options ? options.path : options.source
++          const isFile = "path" in options
++          const data = yield* Effect.promise(() =>
++            ConfigPaths.parseText(
++              text,
++              "path" in options ? options.path : { source: options.source, dir: options.dir },
++            ),
++          )
+ 
+-        const normalized = (() => {
+-          if (!data || typeof data !== "object" || Array.isArray(data)) return data
+-          const copy = { ...(data as Record<string, unknown>) }
+-          const hadLegacy = "theme" in copy || "keybinds" in copy || "tui" in copy
+-          if (!hadLegacy) return copy
+-          delete copy.theme
+-          delete copy.keybinds
+-          delete copy.tui
+-          log.warn("tui keys in opencode config are deprecated; move them to tui.json", { path: source })
+-          return copy
+-        })()
+-
+-        const parsed = Info.safeParse(normalized)
+-        if (parsed.success) {
+-          if (!parsed.data.$schema && isFile) {
+-            parsed.data.$schema = "https://opencode.ai/config.json"
+-            const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
+-            yield* fs.writeFileString(options.path, updated).pipe(Effect.catch(() => Effect.void))
+-          }
+-          const data = parsed.data
+-          if (data.plugin && isFile) {
+-            for (let i = 0; i < data.plugin.length; i++) {
+-              const plugin = data.plugin[i]
+-              try {
+-                data.plugin[i] = import.meta.resolve!(plugin, options.path)
+-              } catch (e) {
++          const normalized = (() => {
++            if (!data || typeof data !== "object" || Array.isArray(data)) return data
++            const copy = { ...(data as Record<string, unknown>) }
++            const hadLegacy = "theme" in copy || "keybinds" in copy || "tui" in copy
++            if (!hadLegacy) return copy
++            delete copy.theme
++            delete copy.keybinds
++            delete copy.tui
++            log.warn("tui keys in opencode config are deprecated; move them to tui.json", { path: source })
++            return copy
++          })()
++
++          const parsed = Info.safeParse(normalized)
++          if (parsed.success) {
++            if (!parsed.data.$schema && isFile) {
++              parsed.data.$schema = "https://opencode.ai/config.json"
++              const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
++              yield* fs.writeFileString(options.path, updated).pipe(Effect.catch(() => Effect.void))
++            }
++            const data = parsed.data
++            if (data.plugin && isFile) {
++              for (let i = 0; i < data.plugin.length; i++) {
++                const plugin = data.plugin[i]
+                 try {
+-                  const require = createRequire(options.path)
+-                  const resolvedPath = require.resolve(plugin)
+-                  data.plugin[i] = pathToFileURL(resolvedPath).href
+-                } catch {
+-                  // Ignore, plugin might be a generic string identifier like "mcp-server"
++                  data.plugin[i] = import.meta.resolve!(plugin, options.path)
++                } catch (e) {
++                  try {
++                    const require = createRequire(options.path)
++                    const resolvedPath = require.resolve(plugin)
++                    data.plugin[i] = pathToFileURL(resolvedPath).href
++                  } catch {
++                    // Ignore, plugin might be a generic string identifier like "mcp-server"
++                  }
+                 }
+               }
+             }
++            return data
+           }
+-          return data
+-        }
+ 
+-        throw new InvalidError({
+-          path: source,
+-          issues: parsed.error.issues,
++          throw new InvalidError({
++            path: source,
++            issues: parsed.error.issues,
++          })
+         })
+-      })
+-
+-      const loadFile = Effect.fnUntraced(function* (filepath: string) {
+-        log.info("loading", { path: filepath })
+-        const text = yield* readConfigFile(filepath)
+-        if (!text) return {} as Info
+-        return yield* loadConfig(text, { path: filepath })
+-      })
+ 
+-      const loadGlobal = Effect.fnUntraced(function* () {
+-        let result: Info = pipe(
+-          {},
+-          mergeDeep(yield* loadFile(path.join(Global.Path.config, "config.json"))),
+-          mergeDeep(yield* loadFile(path.join(Global.Path.config, "opencode.json"))),
+-          mergeDeep(yield* loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
+-        )
++        const loadFile = Effect.fnUntraced(function* (filepath: string) {
++          log.info("loading", { path: filepath })
++          const text = yield* readConfigFile(filepath)
++          if (!text) return {} as Info
++          return yield* loadConfig(text, { path: filepath })
++        })
+ 
+-        const legacy = path.join(Global.Path.config, "config")
+-        if (existsSync(legacy)) {
+-          yield* Effect.promise(() =>
+-            import(pathToFileURL(legacy).href, { with: { type: "toml" } })
+-              .then(async (mod) => {
+-                const { provider, model, ...rest } = mod.default
+-                if (provider && model) result.model = `${provider}/${model}`
+-                result["$schema"] = "https://opencode.ai/config.json"
+-                result = mergeDeep(result, rest)
+-                await fsNode.writeFile(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
+-                await fsNode.unlink(legacy)
+-              })
+-              .catch(() => {}),
++        const loadGlobal = Effect.fnUntraced(function* () {
++          let result: Info = pipe(
++            {},
++            mergeDeep(yield* loadFile(path.join(Global.Path.config, "config.json"))),
++            mergeDeep(yield* loadFile(path.join(Global.Path.config, "opencode.json"))),
++            mergeDeep(yield* loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
+           )
+-        }
+ 
+-        return result
+-      })
++          const legacy = path.join(Global.Path.config, "config")
++          if (existsSync(legacy)) {
++            yield* Effect.promise(() =>
++              import(pathToFileURL(legacy).href, { with: { type: "toml" } })
++                .then(async (mod) => {
++                  const { provider, model, ...rest } = mod.default
++                  if (provider && model) result.model = `${provider}/${model}`
++                  result["$schema"] = "https://opencode.ai/config.json"
++                  result = mergeDeep(result, rest)
++                  await fsNode.writeFile(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
++                  await fsNode.unlink(legacy)
++                })
++                .catch(() => {}),
++            )
++          }
++
++          return result
++        })
+ 
+-      const [cachedGlobal, invalidateGlobal] = yield* Effect.cachedInvalidateWithTTL(
+-        loadGlobal().pipe(
+-          Effect.tapError((error) =>
+-            Effect.sync(() => log.error("failed to load global config, using defaults", { error: String(error) })),
++        const [cachedGlobal, invalidateGlobal] = yield* Effect.cachedInvalidateWithTTL(
++          loadGlobal().pipe(
++            Effect.tapError((error) =>
++              Effect.sync(() => log.error("failed to load global config, using defaults", { error: String(error) })),
++            ),
++            Effect.orElseSucceed((): Info => ({})),
+           ),
+-          Effect.orElseSucceed((): Info => ({})),
+-        ),
+-        Duration.infinity,
+-      )
++          Duration.infinity,
++        )
+ 
+-      const getGlobal = Effect.fn("Config.getGlobal")(function* () {
+-        return yield* cachedGlobal
+-      })
++        const getGlobal = Effect.fn("Config.getGlobal")(function* () {
++          return yield* cachedGlobal
++        })
+ 
+-      const loadInstanceState = Effect.fnUntraced(function* (ctx: InstanceContext) {
+-        const auth = yield* authSvc.all().pipe(Effect.orDie)
+-
+-        let result: Info = {}
+-        for (const [key, value] of Object.entries(auth)) {
+-          if (value.type === "wellknown") {
+-            const url = key.replace(/\/+$/, "")
+-            process.env[value.key] = value.token
+-            log.debug("fetching remote config", { url: `${url}/.well-known/opencode` })
+-            const response = yield* Effect.promise(() => fetch(`${url}/.well-known/opencode`))
+-            if (!response.ok) {
+-              throw new Error(`failed to fetch remote config from ${url}: ${response.status}`)
++        const loadInstanceState = Effect.fnUntraced(function* (ctx: InstanceContext) {
++          const auth = yield* authSvc.all().pipe(Effect.orDie)
++
++          let result: Info = {}
++          for (const [key, value] of Object.entries(auth)) {
++            if (value.type === "wellknown") {
++              const url = key.replace(/\/+$/, "")
++              process.env[value.key] = value.token
++              log.debug("fetching remote config", { url: `${url}/.well-known/opencode` })
++              const response = yield* Effect.promise(() => fetch(`${url}/.well-known/opencode`))
++              if (!response.ok) {
++                throw new Error(`failed to fetch remote config from ${url}: ${response.status}`)
++              }
++              const wellknown = (yield* Effect.promise(() => response.json())) as any
++              const remoteConfig = wellknown.config ?? {}
++              if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
++              result = mergeConfigConcatArrays(
++                result,
++                yield* loadConfig(JSON.stringify(remoteConfig), {
++                  dir: path.dirname(`${url}/.well-known/opencode`),
++                  source: `${url}/.well-known/opencode`,
++                }),
++              )
++              log.debug("loaded remote config from well-known", { url })
+             }
+-            const wellknown = (yield* Effect.promise(() => response.json())) as any
+-            const remoteConfig = wellknown.config ?? {}
+-            if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
+-            result = mergeConfigConcatArrays(
+-              result,
+-              yield* loadConfig(JSON.stringify(remoteConfig), {
+-                dir: path.dirname(`${url}/.well-known/opencode`),
+-                source: `${url}/.well-known/opencode`,
+-              }),
+-            )
+-            log.debug("loaded remote config from well-known", { url })
+           }
+-        }
+ 
+-        result = mergeConfigConcatArrays(result, yield* getGlobal())
++          result = mergeConfigConcatArrays(result, yield* getGlobal())
+ 
+-        if (Flag.OPENCODE_CONFIG) {
+-          result = mergeConfigConcatArrays(result, yield* loadFile(Flag.OPENCODE_CONFIG))
+-          log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
+-        }
++          if (Flag.OPENCODE_CONFIG) {
++            result = mergeConfigConcatArrays(result, yield* loadFile(Flag.OPENCODE_CONFIG))
++            log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
++          }
+ 
+-        if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+-          for (const file of yield* Effect.promise(() =>
+-            ConfigPaths.projectFiles("opencode", ctx.directory, ctx.worktree),
+-          )) {
+-            result = mergeConfigConcatArrays(result, yield* loadFile(file))
++          if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
++            for (const file of yield* Effect.promise(() =>
++              ConfigPaths.projectFiles("opencode", ctx.directory, ctx.worktree),
++            )) {
++              result = mergeConfigConcatArrays(result, yield* loadFile(file))
++            }
+           }
+-        }
+ 
+-        result.agent = result.agent || {}
+-        result.mode = result.mode || {}
+-        result.plugin = result.plugin || []
++          result.agent = result.agent || {}
++          result.mode = result.mode || {}
++          result.plugin = result.plugin || []
+ 
+-        const directories = yield* Effect.promise(() => ConfigPaths.directories(ctx.directory, ctx.worktree))
++          const directories = yield* Effect.promise(() => ConfigPaths.directories(ctx.directory, ctx.worktree))
+ 
+-        if (Flag.OPENCODE_CONFIG_DIR) {
+-          log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
+-        }
++          if (Flag.OPENCODE_CONFIG_DIR) {
++            log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
++          }
+ 
+-        const deps: Promise<void>[] = []
++          const deps: Promise<void>[] = []
+ 
+-        for (const dir of unique(directories)) {
+-          if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
+-            for (const file of ["opencode.jsonc", "opencode.json"]) {
+-              log.debug(`loading config from ${path.join(dir, file)}`)
+-              result = mergeConfigConcatArrays(result, yield* loadFile(path.join(dir, file)))
+-              result.agent ??= {}
+-              result.mode ??= {}
+-              result.plugin ??= []
++          for (const dir of unique(directories)) {
++            if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
++              for (const file of ["opencode.jsonc", "opencode.json"]) {
++                log.debug(`loading config from ${path.join(dir, file)}`)
++                result = mergeConfigConcatArrays(result, yield* loadFile(path.join(dir, file)))
++                result.agent ??= {}
++                result.mode ??= {}
++                result.plugin ??= []
++              }
+             }
+-          }
+ 
+-          deps.push(
+-            iife(async () => {
+-              const shouldInstall = await needsInstall(dir)
+-              if (shouldInstall) await installDependencies(dir)
+-            }),
+-          )
+-
+-          result.command = mergeDeep(result.command ?? {}, yield* Effect.promise(() => loadCommand(dir)))
+-          result.agent = mergeDeep(result.agent, yield* Effect.promise(() => loadAgent(dir)))
+-          result.agent = mergeDeep(result.agent, yield* Effect.promise(() => loadMode(dir)))
+-          result.plugin.push(...(yield* Effect.promise(() => loadPlugin(dir))))
+-        }
++            deps.push(
++              iife(async () => {
++                const shouldInstall = await needsInstall(dir)
++                if (shouldInstall) await installDependencies(dir)
++              }),
++            )
+ 
+-        if (process.env.OPENCODE_CONFIG_CONTENT) {
+-          result = mergeConfigConcatArrays(
+-            result,
+-            yield* loadConfig(process.env.OPENCODE_CONFIG_CONTENT, {
+-              dir: ctx.directory,
+-              source: "OPENCODE_CONFIG_CONTENT",
+-            }),
+-          )
+-          log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
+-        }
++            result.command = mergeDeep(result.command ?? {}, yield* Effect.promise(() => loadCommand(dir)))
++            result.agent = mergeDeep(result.agent, yield* Effect.promise(() => loadAgent(dir)))
++            result.agent = mergeDeep(result.agent, yield* Effect.promise(() => loadMode(dir)))
++            result.plugin.push(...(yield* Effect.promise(() => loadPlugin(dir))))
++          }
+ 
+-        const active = Option.getOrUndefined(yield* accountSvc.active().pipe(Effect.orDie))
+-        if (active?.active_org_id) {
+-          yield* Effect.gen(function* () {
+-            const [configOpt, tokenOpt] = yield* Effect.all(
+-              [accountSvc.config(active.id, active.active_org_id!), accountSvc.token(active.id)],
+-              { concurrency: 2 },
++          if (process.env.OPENCODE_CONFIG_CONTENT) {
++            result = mergeConfigConcatArrays(
++              result,
++              yield* loadConfig(process.env.OPENCODE_CONFIG_CONTENT, {
++                dir: ctx.directory,
++                source: "OPENCODE_CONFIG_CONTENT",
++              }),
+             )
+-            const token = Option.getOrUndefined(tokenOpt)
+-            if (token) {
+-              process.env["OPENCODE_CONSOLE_TOKEN"] = token
+-              Env.set("OPENCODE_CONSOLE_TOKEN", token)
+-            }
++            log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
++          }
+ 
+-            const config = Option.getOrUndefined(configOpt)
+-            if (config) {
+-              result = mergeConfigConcatArrays(
+-                result,
+-                yield* loadConfig(JSON.stringify(config), {
+-                  dir: path.dirname(`${active.url}/api/config`),
+-                  source: `${active.url}/api/config`,
+-                }),
++          const active = Option.getOrUndefined(yield* accountSvc.active().pipe(Effect.orDie))
++          if (active?.active_org_id) {
++            yield* Effect.gen(function* () {
++              const [configOpt, tokenOpt] = yield* Effect.all(
++                [accountSvc.config(active.id, active.active_org_id!), accountSvc.token(active.id)],
++                { concurrency: 2 },
+               )
+-            }
+-          }).pipe(
+-            Effect.catch((err) => {
+-              log.debug("failed to fetch remote account config", {
+-                error: err instanceof Error ? err.message : String(err),
+-              })
+-              return Effect.void
+-            }),
+-          )
+-        }
++              const token = Option.getOrUndefined(tokenOpt)
++              if (token) {
++                process.env["OPENCODE_CONSOLE_TOKEN"] = token
++                Env.set("OPENCODE_CONSOLE_TOKEN", token)
++              }
+ 
+-        if (existsSync(managedDir)) {
+-          for (const file of ["opencode.jsonc", "opencode.json"]) {
+-            result = mergeConfigConcatArrays(result, yield* loadFile(path.join(managedDir, file)))
++              const config = Option.getOrUndefined(configOpt)
++              if (config) {
++                result = mergeConfigConcatArrays(
++                  result,
++                  yield* loadConfig(JSON.stringify(config), {
++                    dir: path.dirname(`${active.url}/api/config`),
++                    source: `${active.url}/api/config`,
++                  }),
++                )
++              }
++            }).pipe(
++              Effect.catch((err) => {
++                log.debug("failed to fetch remote account config", {
++                  error: err instanceof Error ? err.message : String(err),
++                })
++                return Effect.void
++              }),
++            )
+           }
+-        }
+ 
+-        for (const [name, mode] of Object.entries(result.mode ?? {})) {
+-          result.agent = mergeDeep(result.agent ?? {}, {
+-            [name]: {
+-              ...mode,
+-              mode: "primary" as const,
+-            },
+-          })
+-        }
++          if (existsSync(managedDir)) {
++            for (const file of ["opencode.jsonc", "opencode.json"]) {
++              result = mergeConfigConcatArrays(result, yield* loadFile(path.join(managedDir, file)))
++            }
++          }
+ 
+-        if (Flag.OPENCODE_PERMISSION) {
+-          result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.OPENCODE_PERMISSION))
+-        }
++          for (const [name, mode] of Object.entries(result.mode ?? {})) {
++            result.agent = mergeDeep(result.agent ?? {}, {
++              [name]: {
++                ...mode,
++                mode: "primary" as const,
++              },
++            })
++          }
+ 
+-        if (result.tools) {
+-          const perms: Record<string, Config.PermissionAction> = {}
+-          for (const [tool, enabled] of Object.entries(result.tools)) {
+-            const action: Config.PermissionAction = enabled ? "allow" : "deny"
+-            if (tool === "write" || tool === "edit" || tool === "patch" || tool === "multiedit") {
+-              perms.edit = action
+-              continue
++          if (Flag.OPENCODE_PERMISSION) {
++            result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.OPENCODE_PERMISSION))
++          }
++
++          if (result.tools) {
++            const perms: Record<string, Config.PermissionAction> = {}
++            for (const [tool, enabled] of Object.entries(result.tools)) {
++              const action: Config.PermissionAction = enabled ? "allow" : "deny"
++              if (tool === "write" || tool === "edit" || tool === "patch" || tool === "multiedit") {
++                perms.edit = action
++                continue
++              }
++              perms[tool] = action
+             }
+-            perms[tool] = action
++            result.permission = mergeDeep(perms, result.permission ?? {})
+           }
+-          result.permission = mergeDeep(perms, result.permission ?? {})
+-        }
+ 
+-        if (!result.username) result.username = os.userInfo().username
++          if (!result.username) result.username = os.userInfo().username
+ 
+-        if (result.autoshare === true && !result.share) {
+-          result.share = "auto"
+-        }
++          if (result.autoshare === true && !result.share) {
++            result.share = "auto"
++          }
+ 
+-        if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) {
+-          result.compaction = { ...result.compaction, auto: false }
+-        }
+-        if (Flag.OPENCODE_DISABLE_PRUNE) {
+-          result.compaction = { ...result.compaction, prune: false }
+-        }
++          if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) {
++            result.compaction = { ...result.compaction, auto: false }
++          }
++          if (Flag.OPENCODE_DISABLE_PRUNE) {
++            result.compaction = { ...result.compaction, prune: false }
++          }
+ 
+-        result.plugin = deduplicatePlugins(result.plugin ?? [])
++          result.plugin = deduplicatePlugins(result.plugin ?? [])
+ 
+-        return {
+-          config: result,
+-          directories,
+-          deps,
+-        }
+-      })
+-
+-      const state = yield* InstanceState.make<State>(
+-        Effect.fn("Config.state")(function* (ctx) {
+-          return yield* loadInstanceState(ctx)
+-        }),
+-      )
++          return {
++            config: result,
++            directories,
++            deps,
++          }
++        })
+ 
+-      const get = Effect.fn("Config.get")(function* () {
+-        return yield* InstanceState.use(state, (s) => s.config)
+-      })
++        const state = yield* InstanceState.make<State>(
++          Effect.fn("Config.state")(function* (ctx) {
++            return yield* loadInstanceState(ctx)
++          }),
++        )
+ 
+-      const directories = Effect.fn("Config.directories")(function* () {
+-        return yield* InstanceState.use(state, (s) => s.directories)
+-      })
++        const get = Effect.fn("Config.get")(function* () {
++          return yield* InstanceState.use(state, (s) => s.config)
++        })
+ 
+-      const waitForDependencies = Effect.fn("Config.waitForDependencies")(function* () {
+-        yield* InstanceState.useEffect(state, (s) => Effect.promise(() => Promise.all(s.deps).then(() => undefined)))
+-      })
++        const directories = Effect.fn("Config.directories")(function* () {
++          return yield* InstanceState.use(state, (s) => s.directories)
++        })
+ 
+-      const update = Effect.fn("Config.update")(function* (config: Info) {
+-        const file = path.join(Instance.directory, "config.json")
+-        const existing = yield* loadFile(file)
+-        yield* fs.writeFileString(file, JSON.stringify(mergeDeep(existing, config), null, 2)).pipe(Effect.orDie)
+-        yield* Effect.promise(() => Instance.dispose())
+-      })
++        const waitForDependencies = Effect.fn("Config.waitForDependencies")(function* () {
++          yield* InstanceState.useEffect(state, (s) => Effect.promise(() => Promise.all(s.deps).then(() => undefined)))
++        })
+ 
+-      const invalidate = Effect.fn("Config.invalidate")(function* (wait?: boolean) {
+-        yield* invalidateGlobal
+-        const task = Instance.disposeAll()
+-          .catch(() => undefined)
+-          .finally(() =>
+-            GlobalBus.emit("event", {
+-              directory: "global",
+-              payload: {
+-                type: Event.Disposed.type,
+-                properties: {},
+-              },
+-            }),
+-          )
+-        if (wait) yield* Effect.promise(() => task)
+-        else void task
+-      })
++        const update = Effect.fn("Config.update")(function* (config: Info) {
++          const file = path.join(Instance.directory, "config.json")
++          const existing = yield* loadFile(file)
++          yield* fs.writeFileString(file, JSON.stringify(mergeDeep(existing, config), null, 2)).pipe(Effect.orDie)
++          yield* Effect.promise(() => Instance.dispose())
++        })
+ 
+-      const updateGlobal = Effect.fn("Config.updateGlobal")(function* (config: Info) {
+-        const file = globalConfigFile()
+-        const before = (yield* readConfigFile(file)) ?? "{}"
++        const invalidate = Effect.fn("Config.invalidate")(function* (wait?: boolean) {
++          yield* invalidateGlobal
++          const task = Instance.disposeAll()
++            .catch(() => undefined)
++            .finally(() =>
++              GlobalBus.emit("event", {
++                directory: "global",
++                payload: {
++                  type: Event.Disposed.type,
++                  properties: {},
++                },
++              }),
++            )
++          if (wait) yield* Effect.promise(() => task)
++          else void task
++        })
+ 
+-        let next: Info
+-        if (!file.endsWith(".jsonc")) {
+-          const existing = parseConfig(before, file)
+-          const merged = mergeDeep(existing, config)
+-          yield* fs.writeFileString(file, JSON.stringify(merged, null, 2)).pipe(Effect.orDie)
+-          next = merged
+-        } else {
+-          const updated = patchJsonc(before, config)
+-          next = parseConfig(updated, file)
+-          yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
+-        }
++        const updateGlobal = Effect.fn("Config.updateGlobal")(function* (config: Info) {
++          const file = globalConfigFile()
++          const before = (yield* readConfigFile(file)) ?? "{}"
++
++          let next: Info
++          if (!file.endsWith(".jsonc")) {
++            const existing = parseConfig(before, file)
++            const merged = mergeDeep(existing, config)
++            yield* fs.writeFileString(file, JSON.stringify(merged, null, 2)).pipe(Effect.orDie)
++            next = merged
++          } else {
++            const updated = patchJsonc(before, config)
++            next = parseConfig(updated, file)
++            yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
++          }
+ 
+-        yield* invalidate()
+-        return next
+-      })
++          yield* invalidate()
++          return next
++        })
+ 
+-      return Service.of({
+-        get,
+-        getGlobal,
+-        update,
+-        updateGlobal,
+-        invalidate,
+-        directories,
+-        waitForDependencies,
+-      })
+-    }),
+-  )
++        return Service.of({
++          get,
++          getGlobal,
++          update,
++          updateGlobal,
++          invalidate,
++          directories,
++          waitForDependencies,
++        })
++      }),
++    )
+ 
+   export const defaultLayer = layer.pipe(
+     Layer.provide(AppFileSystem.defaultLayer),
+diff --git a/packages/opencode/src/mcp/index.ts b/packages/opencode/src/mcp/index.ts
+index 15ab0c9e3..e3bf4cac0 100644
+--- a/packages/opencode/src/mcp/index.ts
++++ b/packages/opencode/src/mcp/index.ts
+@@ -477,10 +477,8 @@ export namespace MCP {
+         })
+       }
+ 
+-
+       const cache = yield* InstanceState.make<State>(
+         Effect.fn("MCP.state")(function* () {
+-
+           const cfg = yield* cfgSvc.get()
+           const config = cfg.mcp ?? {}
+           const s: State = {
+@@ -706,7 +704,6 @@ export namespace MCP {
+       })
+ 
+       const getMcpConfig = Effect.fnUntraced(function* (mcpName: string) {
+-
+         const cfg = yield* cfgSvc.get()
+         const mcpConfig = cfg.mcp?.[mcpName]
+         if (!mcpConfig || !isMcpConfigured(mcpConfig)) return undefined
+diff --git a/packages/opencode/src/snapshot/index.ts b/packages/opencode/src/snapshot/index.ts
+index 4429a2569..a0ab62f75 100644
+--- a/packages/opencode/src/snapshot/index.ts
++++ b/packages/opencode/src/snapshot/index.ts
+@@ -82,350 +82,341 @@ export namespace Snapshot {
+       }
+ 
+       const state = yield* InstanceState.make<State>(
+-          Effect.fn("Snapshot.state")(function* (ctx) {
+-            const state = {
+-              directory: ctx.directory,
+-              worktree: ctx.worktree,
+-              gitdir: path.join(Global.Path.data, "snapshot", ctx.project.id, Hash.fast(ctx.worktree)),
+-              vcs: ctx.project.vcs,
+-            }
+-
+-            const args = (cmd: string[]) => ["--git-dir", state.gitdir, "--work-tree", state.worktree, ...cmd]
+-
+-            const git = Effect.fnUntraced(
+-              function* (cmd: string[], opts?: { cwd?: string; env?: Record<string, string> }) {
+-                const proc = ChildProcess.make("git", cmd, {
+-                  cwd: opts?.cwd,
+-                  env: opts?.env,
+-                  extendEnv: true,
+-                })
+-                const handle = yield* spawner.spawn(proc)
+-                const [text, stderr] = yield* Effect.all(
+-                  [
+-                    Stream.mkString(Stream.decodeText(handle.stdout)),
+-                    Stream.mkString(Stream.decodeText(handle.stderr)),
+-                  ],
+-                  { concurrency: 2 },
+-                )
+-                const code = yield* handle.exitCode
+-                return { code, text, stderr } satisfies GitResult
+-              },
+-              Effect.scoped,
+-              Effect.catch((err) =>
+-                Effect.succeed({
+-                  code: ChildProcessSpawner.ExitCode(1),
+-                  text: "",
+-                  stderr: String(err),
+-                }),
+-              ),
+-            )
+-
+-            const exists = (file: string) => fs.exists(file).pipe(Effect.orDie)
+-            const read = (file: string) => fs.readFileString(file).pipe(Effect.catch(() => Effect.succeed("")))
+-            const remove = (file: string) => fs.remove(file).pipe(Effect.catch(() => Effect.void))
+-            const locked = <A, E, R>(fx: Effect.Effect<A, E, R>) => lock(state.gitdir).withPermits(1)(fx)
+-
+-            const enabled = Effect.fnUntraced(function* () {
+-              if (state.vcs !== "git") return false
+-              return (yield* config.get()).snapshot !== false
+-            })
+-
+-            const excludes = Effect.fnUntraced(function* () {
+-              const result = yield* git(["rev-parse", "--path-format=absolute", "--git-path", "info/exclude"], {
+-                cwd: state.worktree,
++        Effect.fn("Snapshot.state")(function* (ctx) {
++          const state = {
++            directory: ctx.directory,
++            worktree: ctx.worktree,
++            gitdir: path.join(Global.Path.data, "snapshot", ctx.project.id, Hash.fast(ctx.worktree)),
++            vcs: ctx.project.vcs,
++          }
++
++          const args = (cmd: string[]) => ["--git-dir", state.gitdir, "--work-tree", state.worktree, ...cmd]
++
++          const git = Effect.fnUntraced(
++            function* (cmd: string[], opts?: { cwd?: string; env?: Record<string, string> }) {
++              const proc = ChildProcess.make("git", cmd, {
++                cwd: opts?.cwd,
++                env: opts?.env,
++                extendEnv: true,
+               })
+-              const file = result.text.trim()
+-              if (!file) return
+-              if (!(yield* exists(file))) return
+-              return file
+-            })
+-
+-            const sync = Effect.fnUntraced(function* (list: string[] = []) {
+-              const file = yield* excludes()
+-              const target = path.join(state.gitdir, "info", "exclude")
+-              const text = [
+-                file ? (yield* read(file)).trimEnd() : "",
+-                ...list.map((item) => `/${item.replaceAll("\\", "/")}`),
+-              ]
+-                .filter(Boolean)
+-                .join("\n")
+-              yield* fs.ensureDir(path.join(state.gitdir, "info")).pipe(Effect.orDie)
+-              yield* fs.writeFileString(target, text ? `${text}\n` : "").pipe(Effect.orDie)
+-            })
+-
+-            const add = Effect.fnUntraced(function* () {
+-              yield* sync()
+-              const [diff, other] = yield* Effect.all(
+-                [
+-                  git([...quote, ...args(["diff-files", "--name-only", "-z", "--", "."])], {
+-                    cwd: state.directory,
+-                  }),
+-                  git([...quote, ...args(["ls-files", "--others", "--exclude-standard", "-z", "--", "."])], {
+-                    cwd: state.directory,
+-                  }),
+-                ],
++              const handle = yield* spawner.spawn(proc)
++              const [text, stderr] = yield* Effect.all(
++                [Stream.mkString(Stream.decodeText(handle.stdout)), Stream.mkString(Stream.decodeText(handle.stderr))],
+                 { concurrency: 2 },
+               )
+-              if (diff.code !== 0 || other.code !== 0) {
+-                log.warn("failed to list snapshot files", {
+-                  diffCode: diff.code,
+-                  diffStderr: diff.stderr,
+-                  otherCode: other.code,
+-                  otherStderr: other.stderr,
+-                })
+-                return
+-              }
+-
+-              const tracked = diff.text.split("\0").filter(Boolean)
+-              const all = Array.from(new Set([...tracked, ...other.text.split("\0").filter(Boolean)]))
+-              if (!all.length) return
+-
+-              const large = (yield* Effect.all(
+-                all.map((item) =>
+-                  fs
+-                    .stat(path.join(state.directory, item))
+-                    .pipe(Effect.catch(() => Effect.void))
+-                    .pipe(
+-                      Effect.map((stat) => {
+-                        if (!stat || stat.type !== "File") return
+-                        const size = typeof stat.size === "bigint" ? Number(stat.size) : stat.size
+-                        return size > limit ? item : undefined
+-                      }),
+-                    ),
+-                ),
+-                { concurrency: 8 },
+-              )).filter((item): item is string => Boolean(item))
+-              yield* sync(large)
+-              const result = yield* git([...cfg, ...args(["add", "--sparse", "."])], { cwd: state.directory })
+-              if (result.code !== 0) {
+-                log.warn("failed to add snapshot files", {
+-                  exitCode: result.code,
+-                  stderr: result.stderr,
+-                })
+-              }
+-            })
+-
+-            const cleanup = Effect.fnUntraced(function* () {
+-              return yield* locked(
+-                Effect.gen(function* () {
+-                  if (!(yield* enabled())) return
+-                  if (!(yield* exists(state.gitdir))) return
+-                  const result = yield* git(args(["gc", `--prune=${prune}`]), { cwd: state.directory })
+-                  if (result.code !== 0) {
+-                    log.warn("cleanup failed", {
+-                      exitCode: result.code,
+-                      stderr: result.stderr,
+-                    })
+-                    return
+-                  }
+-                  log.info("cleanup", { prune })
+-                }),
+-              )
++              const code = yield* handle.exitCode
++              return { code, text, stderr } satisfies GitResult
++            },
++            Effect.scoped,
++            Effect.catch((err) =>
++              Effect.succeed({
++                code: ChildProcessSpawner.ExitCode(1),
++                text: "",
++                stderr: String(err),
++              }),
++            ),
++          )
++
++          const exists = (file: string) => fs.exists(file).pipe(Effect.orDie)
++          const read = (file: string) => fs.readFileString(file).pipe(Effect.catch(() => Effect.succeed("")))
++          const remove = (file: string) => fs.remove(file).pipe(Effect.catch(() => Effect.void))
++          const locked = <A, E, R>(fx: Effect.Effect<A, E, R>) => lock(state.gitdir).withPermits(1)(fx)
++
++          const enabled = Effect.fnUntraced(function* () {
++            if (state.vcs !== "git") return false
++            return (yield* config.get()).snapshot !== false
++          })
++
++          const excludes = Effect.fnUntraced(function* () {
++            const result = yield* git(["rev-parse", "--path-format=absolute", "--git-path", "info/exclude"], {
++              cwd: state.worktree,
+             })
+-
+-            const track = Effect.fnUntraced(function* () {
+-              return yield* locked(
+-                Effect.gen(function* () {
+-                  if (!(yield* enabled())) return
+-                  const existed = yield* exists(state.gitdir)
+-                  yield* fs.ensureDir(state.gitdir).pipe(Effect.orDie)
+-                  if (!existed) {
+-                    yield* git(["init"], {
+-                      env: { GIT_DIR: state.gitdir, GIT_WORK_TREE: state.worktree },
+-                    })
+-                    yield* git(["--git-dir", state.gitdir, "config", "core.autocrlf", "false"])
+-                    yield* git(["--git-dir", state.gitdir, "config", "core.longpaths", "true"])
+-                    yield* git(["--git-dir", state.gitdir, "config", "core.symlinks", "true"])
+-                    yield* git(["--git-dir", state.gitdir, "config", "core.fsmonitor", "false"])
+-                    log.info("initialized")
+-                  }
+-                  yield* add()
+-                  const result = yield* git(args(["write-tree"]), { cwd: state.directory })
+-                  const hash = result.text.trim()
+-                  log.info("tracking", { hash, cwd: state.directory, git: state.gitdir })
+-                  return hash
++            const file = result.text.trim()
++            if (!file) return
++            if (!(yield* exists(file))) return
++            return file
++          })
++
++          const sync = Effect.fnUntraced(function* (list: string[] = []) {
++            const file = yield* excludes()
++            const target = path.join(state.gitdir, "info", "exclude")
++            const text = [
++              file ? (yield* read(file)).trimEnd() : "",
++              ...list.map((item) => `/${item.replaceAll("\\", "/")}`),
++            ]
++              .filter(Boolean)
++              .join("\n")
++            yield* fs.ensureDir(path.join(state.gitdir, "info")).pipe(Effect.orDie)
++            yield* fs.writeFileString(target, text ? `${text}\n` : "").pipe(Effect.orDie)
++          })
++
++          const add = Effect.fnUntraced(function* () {
++            yield* sync()
++            const [diff, other] = yield* Effect.all(
++              [
++                git([...quote, ...args(["diff-files", "--name-only", "-z", "--", "."])], {
++                  cwd: state.directory,
+                 }),
+-              )
+-            })
+-
+-            const patch = Effect.fnUntraced(function* (hash: string) {
+-              return yield* locked(
+-                Effect.gen(function* () {
+-                  yield* add()
+-                  const result = yield* git(
+-                    [...quote, ...args(["diff", "--cached", "--no-ext-diff", "--name-only", hash, "--", "."])],
+-                    {
+-                      cwd: state.directory,
+-                    },
+-                  )
+-                  if (result.code !== 0) {
+-                    log.warn("failed to get diff", { hash, exitCode: result.code })
+-                    return { hash, files: [] }
+-                  }
+-                  return {
+-                    hash,
+-                    files: result.text
+-                      .trim()
+-                      .split("\n")
+-                      .map((x) => x.trim())
+-                      .filter(Boolean)
+-                      .map((x) => path.join(state.worktree, x).replaceAll("\\", "/")),
+-                  }
++                git([...quote, ...args(["ls-files", "--others", "--exclude-standard", "-z", "--", "."])], {
++                  cwd: state.directory,
+                 }),
+-              )
+-            })
++              ],
++              { concurrency: 2 },
++            )
++            if (diff.code !== 0 || other.code !== 0) {
++              log.warn("failed to list snapshot files", {
++                diffCode: diff.code,
++                diffStderr: diff.stderr,
++                otherCode: other.code,
++                otherStderr: other.stderr,
++              })
++              return
++            }
+ 
+-            const restore = Effect.fnUntraced(function* (snapshot: string) {
+-              return yield* locked(
+-                Effect.gen(function* () {
+-                  log.info("restore", { commit: snapshot })
+-                  const result = yield* git([...core, ...args(["read-tree", snapshot])], { cwd: state.worktree })
+-                  if (result.code === 0) {
+-                    const checkout = yield* git([...core, ...args(["checkout-index", "-a", "-f"])], {
+-                      cwd: state.worktree,
+-                    })
+-                    if (checkout.code === 0) return
+-                    log.error("failed to restore snapshot", {
+-                      snapshot,
+-                      exitCode: checkout.code,
+-                      stderr: checkout.stderr,
+-                    })
+-                    return
+-                  }
+-                  log.error("failed to restore snapshot", {
+-                    snapshot,
++            const tracked = diff.text.split("\0").filter(Boolean)
++            const all = Array.from(new Set([...tracked, ...other.text.split("\0").filter(Boolean)]))
++            if (!all.length) return
++
++            const large = (yield* Effect.all(
++              all.map((item) =>
++                fs
++                  .stat(path.join(state.directory, item))
++                  .pipe(Effect.catch(() => Effect.void))
++                  .pipe(
++                    Effect.map((stat) => {
++                      if (!stat || stat.type !== "File") return
++                      const size = typeof stat.size === "bigint" ? Number(stat.size) : stat.size
++                      return size > limit ? item : undefined
++                    }),
++                  ),
++              ),
++              { concurrency: 8 },
++            )).filter((item): item is string => Boolean(item))
++            yield* sync(large)
++            const result = yield* git([...cfg, ...args(["add", "--sparse", "."])], { cwd: state.directory })
++            if (result.code !== 0) {
++              log.warn("failed to add snapshot files", {
++                exitCode: result.code,
++                stderr: result.stderr,
++              })
++            }
++          })
++
++          const cleanup = Effect.fnUntraced(function* () {
++            return yield* locked(
++              Effect.gen(function* () {
++                if (!(yield* enabled())) return
++                if (!(yield* exists(state.gitdir))) return
++                const result = yield* git(args(["gc", `--prune=${prune}`]), { cwd: state.directory })
++                if (result.code !== 0) {
++                  log.warn("cleanup failed", {
+                     exitCode: result.code,
+                     stderr: result.stderr,
+                   })
+-                }),
+-              )
+-            })
+-
+-            const revert = Effect.fnUntraced(function* (patches: Snapshot.Patch[]) {
+-              return yield* locked(
+-                Effect.gen(function* () {
+-                  const seen = new Set<string>()
+-                  for (const item of patches) {
+-                    for (const file of item.files) {
+-                      if (seen.has(file)) continue
+-                      seen.add(file)
+-                      log.info("reverting", { file, hash: item.hash })
+-                      const result = yield* git([...core, ...args(["checkout", item.hash, "--", file])], {
++                  return
++                }
++                log.info("cleanup", { prune })
++              }),
++            )
++          })
++
++          const track = Effect.fnUntraced(function* () {
++            return yield* locked(
++              Effect.gen(function* () {
++                if (!(yield* enabled())) return
++                const existed = yield* exists(state.gitdir)
++                yield* fs.ensureDir(state.gitdir).pipe(Effect.orDie)
++                if (!existed) {
++                  yield* git(["init"], {
++                    env: { GIT_DIR: state.gitdir, GIT_WORK_TREE: state.worktree },
++                  })
++                  yield* git(["--git-dir", state.gitdir, "config", "core.autocrlf", "false"])
++                  yield* git(["--git-dir", state.gitdir, "config", "core.longpaths", "true"])
++                  yield* git(["--git-dir", state.gitdir, "config", "core.symlinks", "true"])
++                  yield* git(["--git-dir", state.gitdir, "config", "core.fsmonitor", "false"])
++                  log.info("initialized")
++                }
++                yield* add()
++                const result = yield* git(args(["write-tree"]), { cwd: state.directory })
++                const hash = result.text.trim()
++                log.info("tracking", { hash, cwd: state.directory, git: state.gitdir })
++                return hash
++              }),
++            )
++          })
++
++          const patch = Effect.fnUntraced(function* (hash: string) {
++            return yield* locked(
++              Effect.gen(function* () {
++                yield* add()
++                const result = yield* git(
++                  [...quote, ...args(["diff", "--cached", "--no-ext-diff", "--name-only", hash, "--", "."])],
++                  {
++                    cwd: state.directory,
++                  },
++                )
++                if (result.code !== 0) {
++                  log.warn("failed to get diff", { hash, exitCode: result.code })
++                  return { hash, files: [] }
++                }
++                return {
++                  hash,
++                  files: result.text
++                    .trim()
++                    .split("\n")
++                    .map((x) => x.trim())
++                    .filter(Boolean)
++                    .map((x) => path.join(state.worktree, x).replaceAll("\\", "/")),
++                }
++              }),
++            )
++          })
++
++          const restore = Effect.fnUntraced(function* (snapshot: string) {
++            return yield* locked(
++              Effect.gen(function* () {
++                log.info("restore", { commit: snapshot })
++                const result = yield* git([...core, ...args(["read-tree", snapshot])], { cwd: state.worktree })
++                if (result.code === 0) {
++                  const checkout = yield* git([...core, ...args(["checkout-index", "-a", "-f"])], {
++                    cwd: state.worktree,
++                  })
++                  if (checkout.code === 0) return
++                  log.error("failed to restore snapshot", {
++                    snapshot,
++                    exitCode: checkout.code,
++                    stderr: checkout.stderr,
++                  })
++                  return
++                }
++                log.error("failed to restore snapshot", {
++                  snapshot,
++                  exitCode: result.code,
++                  stderr: result.stderr,
++                })
++              }),
++            )
++          })
++
++          const revert = Effect.fnUntraced(function* (patches: Snapshot.Patch[]) {
++            return yield* locked(
++              Effect.gen(function* () {
++                const seen = new Set<string>()
++                for (const item of patches) {
++                  for (const file of item.files) {
++                    if (seen.has(file)) continue
++                    seen.add(file)
++                    log.info("reverting", { file, hash: item.hash })
++                    const result = yield* git([...core, ...args(["checkout", item.hash, "--", file])], {
++                      cwd: state.worktree,
++                    })
++                    if (result.code !== 0) {
++                      const rel = path.relative(state.worktree, file)
++                      const tree = yield* git([...core, ...args(["ls-tree", item.hash, "--", rel])], {
+                         cwd: state.worktree,
+                       })
+-                      if (result.code !== 0) {
+-                        const rel = path.relative(state.worktree, file)
+-                        const tree = yield* git([...core, ...args(["ls-tree", item.hash, "--", rel])], {
+-                          cwd: state.worktree,
+-                        })
+-                        if (tree.code === 0 && tree.text.trim()) {
+-                          log.info("file existed in snapshot but checkout failed, keeping", { file })
+-                        } else {
+-                          log.info("file did not exist in snapshot, deleting", { file })
+-                          yield* remove(file)
+-                        }
++                      if (tree.code === 0 && tree.text.trim()) {
++                        log.info("file existed in snapshot but checkout failed, keeping", { file })
++                      } else {
++                        log.info("file did not exist in snapshot, deleting", { file })
++                        yield* remove(file)
+                       }
+                     }
+                   }
+-                }),
+-              )
+-            })
++                }
++              }),
++            )
++          })
++
++          const diff = Effect.fnUntraced(function* (hash: string) {
++            return yield* locked(
++              Effect.gen(function* () {
++                yield* add()
++                const result = yield* git([...quote, ...args(["diff", "--cached", "--no-ext-diff", hash, "--", "."])], {
++                  cwd: state.worktree,
++                })
++                if (result.code !== 0) {
++                  log.warn("failed to get diff", {
++                    hash,
++                    exitCode: result.code,
++                    stderr: result.stderr,
++                  })
++                  return ""
++                }
++                return result.text.trim()
++              }),
++            )
++          })
+ 
+-            const diff = Effect.fnUntraced(function* (hash: string) {
+-              return yield* locked(
+-                Effect.gen(function* () {
+-                  yield* add()
+-                  const result = yield* git(
+-                    [...quote, ...args(["diff", "--cached", "--no-ext-diff", hash, "--", "."])],
+-                    {
+-                      cwd: state.worktree,
+-                    },
+-                  )
+-                  if (result.code !== 0) {
+-                    log.warn("failed to get diff", {
+-                      hash,
+-                      exitCode: result.code,
+-                      stderr: result.stderr,
+-                    })
+-                    return ""
+-                  }
+-                  return result.text.trim()
+-                }),
+-              )
+-            })
++          const diffFull = Effect.fnUntraced(function* (from: string, to: string) {
++            return yield* locked(
++              Effect.gen(function* () {
++                const result: Snapshot.FileDiff[] = []
++                const status = new Map<string, "added" | "deleted" | "modified">()
+ 
+-            const diffFull = Effect.fnUntraced(function* (from: string, to: string) {
+-              return yield* locked(
+-                Effect.gen(function* () {
+-                  const result: Snapshot.FileDiff[] = []
+-                  const status = new Map<string, "added" | "deleted" | "modified">()
+-
+-                  const statuses = yield* git(
+-                    [
+-                      ...quote,
+-                      ...args(["diff", "--no-ext-diff", "--name-status", "--no-renames", from, to, "--", "."]),
+-                    ],
+-                    { cwd: state.directory },
+-                  )
+-
+-                  for (const line of statuses.text.trim().split("\n")) {
+-                    if (!line) continue
+-                    const [code, file] = line.split("\t")
+-                    if (!code || !file) continue
+-                    status.set(file, code.startsWith("A") ? "added" : code.startsWith("D") ? "deleted" : "modified")
+-                  }
++                const statuses = yield* git(
++                  [...quote, ...args(["diff", "--no-ext-diff", "--name-status", "--no-renames", from, to, "--", "."])],
++                  { cwd: state.directory },
++                )
+ 
+-                  const numstat = yield* git(
+-                    [...quote, ...args(["diff", "--no-ext-diff", "--no-renames", "--numstat", from, to, "--", "."])],
+-                    {
+-                      cwd: state.directory,
+-                    },
+-                  )
+-
+-                  for (const line of numstat.text.trim().split("\n")) {
+-                    if (!line) continue
+-                    const [adds, dels, file] = line.split("\t")
+-                    if (!file) continue
+-                    const binary = adds === "-" && dels === "-"
+-                    const [before, after] = binary
+-                      ? ["", ""]
+-                      : yield* Effect.all(
+-                          [
+-                            git([...cfg, ...args(["show", `${from}:${file}`])]).pipe(Effect.map((item) => item.text)),
+-                            git([...cfg, ...args(["show", `${to}:${file}`])]).pipe(Effect.map((item) => item.text)),
+-                          ],
+-                          { concurrency: 2 },
+-                        )
+-                    const additions = binary ? 0 : parseInt(adds)
+-                    const deletions = binary ? 0 : parseInt(dels)
+-                    result.push({
+-                      file,
+-                      before,
+-                      after,
+-                      additions: Number.isFinite(additions) ? additions : 0,
+-                      deletions: Number.isFinite(deletions) ? deletions : 0,
+-                      status: status.get(file) ?? "modified",
+-                    })
+-                  }
++                for (const line of statuses.text.trim().split("\n")) {
++                  if (!line) continue
++                  const [code, file] = line.split("\t")
++                  if (!code || !file) continue
++                  status.set(file, code.startsWith("A") ? "added" : code.startsWith("D") ? "deleted" : "modified")
++                }
+ 
+-                  return result
+-                }),
+-              )
+-            })
++                const numstat = yield* git(
++                  [...quote, ...args(["diff", "--no-ext-diff", "--no-renames", "--numstat", from, to, "--", "."])],
++                  {
++                    cwd: state.directory,
++                  },
++                )
++
++                for (const line of numstat.text.trim().split("\n")) {
++                  if (!line) continue
++                  const [adds, dels, file] = line.split("\t")
++                  if (!file) continue
++                  const binary = adds === "-" && dels === "-"
++                  const [before, after] = binary
++                    ? ["", ""]
++                    : yield* Effect.all(
++                        [
++                          git([...cfg, ...args(["show", `${from}:${file}`])]).pipe(Effect.map((item) => item.text)),
++                          git([...cfg, ...args(["show", `${to}:${file}`])]).pipe(Effect.map((item) => item.text)),
++                        ],
++                        { concurrency: 2 },
++                      )
++                  const additions = binary ? 0 : parseInt(adds)
++                  const deletions = binary ? 0 : parseInt(dels)
++                  result.push({
++                    file,
++                    before,
++                    after,
++                    additions: Number.isFinite(additions) ? additions : 0,
++                    deletions: Number.isFinite(deletions) ? deletions : 0,
++                    status: status.get(file) ?? "modified",
++                  })
++                }
+ 
+-            yield* cleanup().pipe(
+-              Effect.catchCause((cause) => {
+-                log.error("cleanup loop failed", { cause: Cause.pretty(cause) })
+-                return Effect.void
++                return result
+               }),
+-              Effect.repeat(Schedule.spaced(Duration.hours(1))),
+-              Effect.delay(Duration.minutes(1)),
+-              Effect.forkScoped,
+             )
+-
+-            return { cleanup, track, patch, restore, revert, diff, diffFull }
+-          }),
+-        )
++          })
++
++          yield* cleanup().pipe(
++            Effect.catchCause((cause) => {
++              log.error("cleanup loop failed", { cause: Cause.pretty(cause) })
++              return Effect.void
++            }),
++            Effect.repeat(Schedule.spaced(Duration.hours(1))),
++            Effect.delay(Duration.minutes(1)),
++            Effect.forkScoped,
++          )
++
++          return { cleanup, track, patch, restore, revert, diff, diffFull }
++        }),
++      )
+ 
+       return Service.of({
+         init: Effect.fn("Snapshot.init")(function* () {
+-- 
+2.43.0
+

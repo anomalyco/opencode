@@ -1,0 +1,157 @@
+From c333e914eecfe3716ec703e17425af0b908a21f5 Mon Sep 17 00:00:00 2001
+From: "opencode-agent[bot]" <opencode-agent[bot]@users.noreply.github.com>
+Date: Thu, 26 Mar 2026 18:42:59 +0000
+Subject: [PATCH 007/127] chore: generate
+
+---
+ packages/opencode/src/mcp/index.ts           | 65 +++++++++++---------
+ packages/opencode/test/mcp/lifecycle.test.ts |  1 -
+ 2 files changed, 36 insertions(+), 30 deletions(-)
+
+diff --git a/packages/opencode/src/mcp/index.ts b/packages/opencode/src/mcp/index.ts
+index 9bc6ef9dc..184e84a2a 100644
+--- a/packages/opencode/src/mcp/index.ts
++++ b/packages/opencode/src/mcp/index.ts
+@@ -165,7 +165,7 @@ export namespace MCP {
+   function defs(key: string, client: MCPClient, timeout?: number) {
+     return Effect.tryPromise({
+       try: () => withTimeout(client.listTools(), timeout ?? DEFAULT_TIMEOUT),
+-      catch: (err) => err instanceof Error ? err : new Error(String(err)),
++      catch: (err) => (err instanceof Error ? err : new Error(String(err))),
+     }).pipe(
+       Effect.map((result) => result.tools),
+       Effect.catch((err) => {
+@@ -267,15 +267,15 @@ export namespace MCP {
+               },
+               catch: (e) => (e instanceof Error ? e : new Error(String(e))),
+             }),
+-          (t, exit) =>
+-            Exit.isFailure(exit)
+-              ? Effect.tryPromise(() => t.close()).pipe(Effect.ignore)
+-              : Effect.void,
++          (t, exit) => (Exit.isFailure(exit) ? Effect.tryPromise(() => t.close()).pipe(Effect.ignore) : Effect.void),
+         )
+ 
+       const DISABLED_RESULT: CreateResult = { status: { status: "disabled" } }
+ 
+-      const connectRemote = Effect.fn("MCP.connectRemote")(function* (key: string, mcp: Config.Mcp & { type: "remote" }) {
++      const connectRemote = Effect.fn("MCP.connectRemote")(function* (
++        key: string,
++        mcp: Config.Mcp & { type: "remote" },
++      ) {
+         const oauthDisabled = mcp.oauth === false
+         const oauthConfig = typeof mcp.oauth === "object" ? mcp.oauth : undefined
+         let authProvider: McpOAuthProvider | undefined
+@@ -333,21 +333,25 @@ export namespace MCP {
+                     status: "needs_client_registration" as const,
+                     error: "Server does not support dynamic client registration. Please provide clientId in config.",
+                   }
+-                  return bus.publish(TuiEvent.ToastShow, {
+-                    title: "MCP Authentication Required",
+-                    message: `Server "${key}" requires a pre-registered client ID. Add clientId to your config.`,
+-                    variant: "warning",
+-                    duration: 8000,
+-                  }).pipe(Effect.ignore, Effect.as(undefined))
++                  return bus
++                    .publish(TuiEvent.ToastShow, {
++                      title: "MCP Authentication Required",
++                      message: `Server "${key}" requires a pre-registered client ID. Add clientId to your config.`,
++                      variant: "warning",
++                      duration: 8000,
++                    })
++                    .pipe(Effect.ignore, Effect.as(undefined))
+                 } else {
+                   pendingOAuthTransports.set(key, transport)
+                   lastStatus = { status: "needs_auth" as const }
+-                  return bus.publish(TuiEvent.ToastShow, {
+-                    title: "MCP Authentication Required",
+-                    message: `Server "${key}" requires authentication. Run: opencode mcp auth ${key}`,
+-                    variant: "warning",
+-                    duration: 8000,
+-                  }).pipe(Effect.ignore, Effect.as(undefined))
++                  return bus
++                    .publish(TuiEvent.ToastShow, {
++                      title: "MCP Authentication Required",
++                      message: `Server "${key}" requires authentication. Run: opencode mcp auth ${key}`,
++                      variant: "warning",
++                      duration: 8000,
++                    })
++                    .pipe(Effect.ignore, Effect.as(undefined))
+                 }
+               }
+ 
+@@ -369,7 +373,10 @@ export namespace MCP {
+           if (lastStatus?.status === "needs_auth" || lastStatus?.status === "needs_client_registration") break
+         }
+ 
+-        return { client: undefined as MCPClient | undefined, status: (lastStatus ?? { status: "failed", error: "Unknown error" }) as Status }
++        return {
++          client: undefined as MCPClient | undefined,
++          status: (lastStatus ?? { status: "failed", error: "Unknown error" }) as Status,
++        }
+       })
+ 
+       const connectLocal = Effect.fn("MCP.connectLocal")(function* (key: string, mcp: Config.Mcp & { type: "local" }) {
+@@ -392,7 +399,10 @@ export namespace MCP {
+ 
+         const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
+         return yield* connectTransport(transport, connectTimeout).pipe(
+-          Effect.map((client): { client: MCPClient | undefined; status: Status } => ({ client, status: { status: "connected" } })),
++          Effect.map((client): { client: MCPClient | undefined; status: Status } => ({
++            client,
++            status: { status: "connected" },
++          })),
+           Effect.catch((error): Effect.Effect<{ client: MCPClient | undefined; status: Status }> => {
+             const msg = error instanceof Error ? error.message : String(error)
+             log.error("local mcp startup failed", { key, command: mcp.command, cwd, error: msg })
+@@ -409,9 +419,10 @@ export namespace MCP {
+ 
+         log.info("found", { key, type: mcp.type })
+ 
+-        const { client: mcpClient, status } = mcp.type === "remote"
+-          ? yield* connectRemote(key, mcp as Config.Mcp & { type: "remote" })
+-          : yield* connectLocal(key, mcp as Config.Mcp & { type: "local" })
++        const { client: mcpClient, status } =
++          mcp.type === "remote"
++            ? yield* connectRemote(key, mcp as Config.Mcp & { type: "remote" })
++            : yield* connectLocal(key, mcp as Config.Mcp & { type: "local" })
+ 
+         if (!mcpClient) {
+           return { status } satisfies CreateResult
+@@ -493,9 +504,7 @@ export namespace MCP {
+                   return
+                 }
+ 
+-                const result = yield* create(key, mcp).pipe(
+-                  Effect.catch(() => Effect.succeed(undefined)),
+-                )
++                const result = yield* create(key, mcp).pipe(Effect.catch(() => Effect.succeed(undefined)))
+                 if (!result) return
+ 
+                 s.status[key] = result.status
+@@ -643,9 +652,7 @@ export namespace MCP {
+         return Effect.forEach(
+           Object.entries(s.clients).filter(([name]) => s.status[name]?.status === "connected"),
+           ([clientName, client]) =>
+-            fetchFromClient(clientName, client, listFn, label).pipe(
+-              Effect.map((items) => Object.entries(items ?? {})),
+-            ),
++            fetchFromClient(clientName, client, listFn, label).pipe(Effect.map((items) => Object.entries(items ?? {}))),
+           { concurrency: "unbounded" },
+         ).pipe(Effect.map((results) => Object.fromEntries<T & { client: string }>(results.flat())))
+       }
+diff --git a/packages/opencode/test/mcp/lifecycle.test.ts b/packages/opencode/test/mcp/lifecycle.test.ts
+index d57783f66..3d17d3a0d 100644
+--- a/packages/opencode/test/mcp/lifecycle.test.ts
++++ b/packages/opencode/test/mcp/lifecycle.test.ts
+@@ -673,7 +673,6 @@ test(
+   ),
+ )
+ 
+-
+ // ========================================================================
+ // Test: transport leak — local stdio timeout (#19168)
+ // ========================================================================
+-- 
+2.43.0
+

@@ -1,0 +1,25 @@
+From ad3b35067298a0803eef0c306510d37670ec8b18 Mon Sep 17 00:00:00 2001
+From: Adam <2363879+adamdotdevin@users.noreply.github.com>
+Date: Thu, 26 Mar 2026 14:20:30 -0500
+Subject: [PATCH 011/127] fix(app): default shell tool to collapsed
+
+---
+ packages/app/src/context/settings.tsx | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/packages/app/src/context/settings.tsx b/packages/app/src/context/settings.tsx
+index 679f3f86d..4402855a6 100644
+--- a/packages/app/src/context/settings.tsx
++++ b/packages/app/src/context/settings.tsx
+@@ -92,7 +92,7 @@ const defaultSettings: Settings = {
+     releaseNotes: true,
+     followup: "steer",
+     showReasoningSummaries: false,
+-    shellToolPartsExpanded: true,
++    shellToolPartsExpanded: false,
+     editToolPartsExpanded: false,
+   },
+   updates: {
+-- 
+2.43.0
+

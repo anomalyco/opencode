@@ -1,0 +1,852 @@
+From 9be9e21f68f080822c6ad765cacc62546734a56e Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Thu, 26 Mar 2026 17:59:41 -0700
+Subject: [PATCH 041/127] feat: autopilot mode, Claude prefill fix, e2e tests,
+ wizard validation (#18)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+* fix(onboard): replace multi-select model input with single select
+
+Users select one default model during onboard — they can switch to any
+other model from the same provider inside the app. The comma-separated
+number input was confusing and unnecessary.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* fix(onboard): restore security step, single-select model, fix instance crash
+
+- Remove Config.get() call that crashed with "No context found for instance"
+  during onboarding (instance ALS not initialized in CLI context)
+- Replace comma-separated multi-select model input with single select
+- Restore security modules step (inline, no missing module deps)
+- Move prompts.outro to main handler after all steps complete
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* fix(tips): rebrand all opencode references to cobuilder
+
+Replace opencode CLI commands, /opencode slash commands, OpenCode product
+name, and .opencode/ config paths with their cobuilder equivalents.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* fix(system-prompt): tell model not to use which/shell to check for skills
+
+Skills are CoBuilder-native and accessed via the skill tool, not system
+binaries. Without this hint models run `which gsd` and report it as
+not installed.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* fix(system-prompt): list installed skills in env block
+
+Adds 'Installed skills: gsd:plan-phase, ...' to the <env> section so
+the model knows upfront what skills are available without needing to
+run which/command -v shell checks.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* test(e2e): validate all onboard wizard selections — providers + security modules
+
+Step 8 now covers both wizard steps:
+- Step 1: all 5 providers (Anthropic, OpenAI, OpenRouter, Google, 9Router)
+- Step 2: all 6 security modules — each individually disabled, all disabled,
+  and combined provider+security state
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* fix(prompt): rebrand OpenCode→CoBuilder, add mandatory GSD workflow
+
+CoBuilder is the product name throughout the system prompt. Added
+mandatory GSD section so the model proactively routes non-trivial
+tasks through the structured workflow without user having to ask.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* fix(prompt): broaden CoBuilder identity beyond coding agent
+
+CoBuilder builds software, products, automations, content, plans,
+and more — not just code. Update system prompt to reflect this.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* fix(prompt): rebrand all model prompts — CoBuilder is a general AI agent
+
+Update all 6 remaining prompt files (default, gemini, gpt, beast,
+trinity, codex) to use CoBuilder identity and broaden scope beyond
+software engineering to "build anything".
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* feat: add --autopilot flag to auto-approve all permission requests
+
+Adds `cobuilder --autopilot` (or env var COBUILDER_AUTOPILOT=1) which
+skips permission confirmation prompts — useful for CI, scripts, and
+non-interactive runs.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* fix(tui,prompt): cleaner tool output + autonomous GSD behavior
+
+- TUI: show only first input value (truncated to 60 chars) instead of
+  dumping all key=value pairs for generic/MCP tool calls
+- Prompt: remove gsd:do/sub-skill references that caused double skill
+  load; instruct model to complete full GSD flow autonomously without
+  asking follow-up questions when intent is clear
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* feat(tui): show autopilot badge in prompt mode line
+
+When --autopilot is active, displays "autopilot ·" in warning color
+next to the agent name in the prompt area so the user can see at a
+glance that permission prompts are being auto-approved.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* fix(provider): strip trailing assistant messages for Claude models
+
+claude-sonnet-4-6 and newer Claude models reject requests where the last
+message is an assistant role ("assistant message prefill"). Strip any
+trailing assistant messages before sending to Anthropic/Claude endpoints.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+---------
+
+Co-authored-by: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ .github/workflows/e2e.yml                     |  26 +++
+ packages/opencode/src/cli/cmd/onboard.ts      |  43 +----
+ .../cli/cmd/tui/component/prompt/index.tsx    |  10 +-
+ .../src/cli/cmd/tui/component/tips.tsx        |  28 +--
+ .../src/cli/cmd/tui/routes/session/index.tsx  |   4 +-
+ packages/opencode/src/flag/flag.ts            |  14 ++
+ packages/opencode/src/index.ts                |   5 +
+ packages/opencode/src/permission/index.ts     |   7 +
+ packages/opencode/src/provider/transform.ts   |  23 ++-
+ packages/opencode/src/session/prompt.ts       |   2 +-
+ .../opencode/src/session/prompt/anthropic.txt |  31 +++-
+ .../opencode/src/session/prompt/beast.txt     |   2 +-
+ .../opencode/src/session/prompt/codex.txt     |   4 +-
+ .../opencode/src/session/prompt/default.txt   |  10 +-
+ .../opencode/src/session/prompt/gemini.txt    |   2 +-
+ packages/opencode/src/session/prompt/gpt.txt  |   4 +-
+ .../opencode/src/session/prompt/trinity.txt   |   2 +-
+ packages/opencode/src/session/system.ts       |  10 +-
+ test-e2e.sh                                   | 159 +++++++++++++++---
+ 19 files changed, 288 insertions(+), 98 deletions(-)
+ create mode 100644 .github/workflows/e2e.yml
+
+diff --git a/.github/workflows/e2e.yml b/.github/workflows/e2e.yml
+new file mode 100644
+index 000000000..66b834cf9
+--- /dev/null
++++ b/.github/workflows/e2e.yml
+@@ -0,0 +1,26 @@
++name: E2E
++
++on:
++  # Run automatically after a successful CD release
++  workflow_run:
++    workflows: [CD]
++    types: [completed]
++    branches: [main]
++  # Also allow manual runs
++  workflow_dispatch:
++
++jobs:
++  e2e:
++    name: End-to-end tests
++    # Only run if CD succeeded (or on manual trigger)
++    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v4
++
++      - name: Install test dependencies
++        run: sudo apt-get update -qq && sudo apt-get install -y -qq expect git curl
++
++      - name: Run E2E test suite
++        run: bash test-e2e.sh
++        timeout-minutes: 10
+diff --git a/packages/opencode/src/cli/cmd/onboard.ts b/packages/opencode/src/cli/cmd/onboard.ts
+index f819931b8..b05f38c6c 100644
+--- a/packages/opencode/src/cli/cmd/onboard.ts
++++ b/packages/opencode/src/cli/cmd/onboard.ts
+@@ -109,48 +109,18 @@ async function setup9Router() {
+   }
+ 
+   // Step 4: Model selection
+-  prompts.log.info("Available models:\n" + modelIds.map((id, i) => `  ${i + 1}. ${id}`).join("\n"))
+-
+-  const selectionInput = await prompts.text({
+-    message: 'Select models (enter numbers separated by commas, or "all")',
+-    placeholder: "e.g. 1,2,5 or all",
+-    validate: (v) => {
+-      if (!v?.trim()) return "Please select at least one model"
+-      if (v.trim() === "all") return
+-      const parts = v.split(",").map((s) => s.trim())
+-      for (const p of parts) {
+-        const n = parseInt(p)
+-        if (isNaN(n) || n < 1 || n > modelIds.length) return `"${p}" is not a valid number (1–${modelIds.length})`
+-      }
+-    },
++  const modelChoice = await prompts.select({
++    message: "Which model would you like to use?",
++    options: modelIds.map((id) => ({ value: id, label: id })),
+   })
+ 
+-  if (prompts.isCancel(selectionInput)) {
++  if (prompts.isCancel(modelChoice)) {
+     prompts.cancel("Setup cancelled.")
+     process.exit(0)
+   }
+ 
+-  const raw = (selectionInput as string).trim()
+-  const chosenIds =
+-    raw === "all"
+-      ? modelIds
+-      : raw
+-          .split(",")
+-          .map((s) => parseInt(s.trim()) - 1)
+-          .map((i) => modelIds[i])
+-          .filter(Boolean)
+-
+-  // Step 5: Default model
+-  let defaultModelId = chosenIds[0]
+-  if (chosenIds.length > 1) {
+-    const defaultChoice = await prompts.select({
+-      message: "Which model should be your default?",
+-      options: chosenIds.map((id) => ({ value: id, label: id })),
+-    })
+-    if (!prompts.isCancel(defaultChoice)) {
+-      defaultModelId = defaultChoice as string
+-    }
+-  }
++  const defaultModelId = modelChoice as string
++  const chosenIds = [defaultModelId]
+ 
+   // Step 6: Save config
+   const modelConfig: Record<string, { name: string }> = {}
+@@ -185,7 +155,6 @@ async function setup9Router() {
+ 
+   await Filesystem.writeJson(configPath, updated)
+ 
+-  prompts.log.success(`${chosenIds.length} model${chosenIds.length !== 1 ? "s" : ""} registered`)
+   prompts.log.success(`Default model: ${NINEROUTER_ID}/${defaultModelId}`)
+ }
+ 
+diff --git a/packages/opencode/src/cli/cmd/tui/component/prompt/index.tsx b/packages/opencode/src/cli/cmd/tui/component/prompt/index.tsx
+index 257248c3c..52570d898 100644
+--- a/packages/opencode/src/cli/cmd/tui/component/prompt/index.tsx
++++ b/packages/opencode/src/cli/cmd/tui/component/prompt/index.tsx
+@@ -26,6 +26,7 @@ import type { FilePart } from "@opencode-ai/sdk/v2"
+ import { TuiEvent } from "../../event"
+ import { iife } from "@/util/iife"
+ import { Locale } from "@/util/locale"
++import { Flag } from "@/flag/flag"
+ import { formatDuration } from "@/util/format"
+ import { createColors, createFrames } from "../../ui/spinner.ts"
+ import { useDialog } from "@tui/ui/dialog"
+@@ -1028,8 +1029,15 @@ export function Prompt(props: PromptProps) {
+             />
+             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
+               <text fg={highlight()}>
+-                {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
++                {Flag.COBUILDER_AUTOPILOT
++                  ? ""
++                  : store.mode === "shell"
++                    ? "Shell "
++                    : Locale.titlecase(local.agent.current().name) + " "}
+               </text>
++              <Show when={Flag.COBUILDER_AUTOPILOT}>
++                <text><span style={{ fg: theme.warning, bold: true }}>Autopilot</span></text>
++              </Show>
+               <Show when={store.mode === "normal"}>
+                 <box flexDirection="row" gap={1}>
+                   <text flexShrink={0} fg={keybind.leader ? theme.textMuted : theme.text}>
+diff --git a/packages/opencode/src/cli/cmd/tui/component/tips.tsx b/packages/opencode/src/cli/cmd/tui/component/tips.tsx
+index 9aefa130b..9f6e448a8 100644
+--- a/packages/opencode/src/cli/cmd/tui/component/tips.tsx
++++ b/packages/opencode/src/cli/cmd/tui/component/tips.tsx
+@@ -102,24 +102,24 @@ const TIPS = [
+   "CoBuilder uses LSP servers for intelligent code analysis",
+   "Create {highlight}.ts{/highlight} files in {highlight}.opencode/tools/{/highlight} to define new LLM tools",
+   "Tool definitions can invoke scripts written in Python, Go, etc",
+-  "Add {highlight}.ts{/highlight} files to {highlight}.opencode/plugin/{/highlight} for event hooks",
++  "Add {highlight}.ts{/highlight} files to {highlight}.cobuilder/plugin/{/highlight} for event hooks",
+   "Use plugins to send OS notifications when sessions complete",
+   "Create a plugin to prevent CoBuilder from reading sensitive files",
+-  "Use {highlight}opencode run{/highlight} for non-interactive scripting",
+-  "Use {highlight}opencode --continue{/highlight} to resume the last session",
+-  "Use {highlight}opencode run -f file.ts{/highlight} to attach files via CLI",
++  "Use {highlight}cobuilder run{/highlight} for non-interactive scripting",
++  "Use {highlight}cobuilder --continue{/highlight} to resume the last session",
++  "Use {highlight}cobuilder run -f file.ts{/highlight} to attach files via CLI",
+   "Use {highlight}--format json{/highlight} for machine-readable output in scripts",
+-  "Run {highlight}opencode serve{/highlight} for headless API access to CoBuilder",
+-  "Use {highlight}opencode run --attach{/highlight} to connect to a running server",
+-  "Run {highlight}opencode upgrade{/highlight} to update to the latest version",
+-  "Run {highlight}opencode auth list{/highlight} to see all configured providers",
+-  "Run {highlight}opencode agent create{/highlight} for guided agent creation",
+-  "Use {highlight}/opencode{/highlight} in GitHub issues/PRs to trigger AI actions",
+-  "Run {highlight}opencode github install{/highlight} to set up the GitHub workflow",
+-  "Comment {highlight}/opencode fix this{/highlight} on issues to auto-create PRs",
++  "Run {highlight}cobuilder serve{/highlight} for headless API access to CoBuilder",
++  "Use {highlight}cobuilder run --attach{/highlight} to connect to a running server",
++  "Run {highlight}cobuilder upgrade{/highlight} to update to the latest version",
++  "Run {highlight}cobuilder auth list{/highlight} to see all configured providers",
++  "Run {highlight}cobuilder agent create{/highlight} for guided agent creation",
++  "Use {highlight}/cobuilder{/highlight} in GitHub issues/PRs to trigger AI actions",
++  "Run {highlight}cobuilder github install{/highlight} to set up the GitHub workflow",
++  "Comment {highlight}/cobuilder fix this{/highlight} on issues to auto-create PRs",
+   "Comment {highlight}/oc{/highlight} on PR code lines for targeted code reviews",
+   'Use {highlight}"theme": "system"{/highlight} to match your terminal\'s colors',
+-  "Create JSON theme files in {highlight}.opencode/themes/{/highlight} directory",
++  "Create JSON theme files in {highlight}.cobuilder/themes/{/highlight} directory",
+   "Themes support dark/light variants for both modes",
+   "Reference ANSI colors 0-255 in custom themes",
+   "Use {highlight}{env:VAR_NAME}{/highlight} syntax to reference environment variables in config",
+@@ -135,7 +135,7 @@ const TIPS = [
+   "Run {highlight}/unshare{/highlight} to remove a session from public access",
+   "Permission {highlight}doom_loop{/highlight} prevents infinite tool call loops",
+   "Permission {highlight}external_directory{/highlight} protects files outside project",
+-  "Run {highlight}opencode debug config{/highlight} to troubleshoot configuration",
++  "Run {highlight}cobuilder debug config{/highlight} to troubleshoot configuration",
+   "Use {highlight}--print-logs{/highlight} flag to see detailed logs in stderr",
+   "Press {highlight}Ctrl+X G{/highlight} or {highlight}/timeline{/highlight} to jump to specific messages",
+   "Press {highlight}Ctrl+X H{/highlight} to toggle code block visibility in messages",
+diff --git a/packages/opencode/src/cli/cmd/tui/routes/session/index.tsx b/packages/opencode/src/cli/cmd/tui/routes/session/index.tsx
+index 0d9ddc746..24a48aaf5 100644
+--- a/packages/opencode/src/cli/cmd/tui/routes/session/index.tsx
++++ b/packages/opencode/src/cli/cmd/tui/routes/session/index.tsx
+@@ -2272,7 +2272,9 @@ function input(input: Record<string, any>, omit?: string[]): string {
+     return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+   })
+   if (primitives.length === 0) return ""
+-  return `[${primitives.map(([key, value]) => `${key}=${value}`).join(", ")}]`
++  const [, firstValue] = primitives[0]
++  const str = String(firstValue)
++  return str.length > 60 ? str.slice(0, 57) + "…" : str
+ }
+ 
+ function filetype(input?: string) {
+diff --git a/packages/opencode/src/flag/flag.ts b/packages/opencode/src/flag/flag.ts
+index b35f84c8e..2b237eb81 100644
+--- a/packages/opencode/src/flag/flag.ts
++++ b/packages/opencode/src/flag/flag.ts
+@@ -76,6 +76,9 @@ export namespace Flag {
+   export const OPENCODE_SKIP_MIGRATIONS = truthy("OPENCODE_SKIP_MIGRATIONS")
+   export const OPENCODE_STRICT_CONFIG_DEPS = truthy("OPENCODE_STRICT_CONFIG_DEPS")
+ 
++  // CoBuilder-specific flags
++  export declare const COBUILDER_AUTOPILOT: boolean
++
+   function number(key: string) {
+     const value = process.env[key]
+     if (!value) return undefined
+@@ -127,3 +130,14 @@ Object.defineProperty(Flag, "OPENCODE_CLIENT", {
+   enumerable: true,
+   configurable: false,
+ })
++
++// Dynamic getter for COBUILDER_AUTOPILOT
++// Must be evaluated at access time so --autopilot CLI flag can set the env var at runtime
++Object.defineProperty(Flag, "COBUILDER_AUTOPILOT", {
++  get() {
++    const value = process.env["COBUILDER_AUTOPILOT"]?.toLowerCase()
++    return value === "true" || value === "1"
++  },
++  enumerable: true,
++  configurable: false,
++})
+diff --git a/packages/opencode/src/index.ts b/packages/opencode/src/index.ts
+index d00b401d0..cacb1dffb 100644
+--- a/packages/opencode/src/index.ts
++++ b/packages/opencode/src/index.ts
+@@ -72,7 +72,12 @@ let cli = yargs(hideBin(process.argv))
+     type: "string",
+     choices: ["DEBUG", "INFO", "WARN", "ERROR"],
+   })
++  .option("autopilot", {
++    describe: "auto-approve all permission requests without prompting",
++    type: "boolean",
++  })
+   .middleware(async (opts) => {
++    if (opts.autopilot) process.env.COBUILDER_AUTOPILOT = "1"
+     await Log.init({
+       print: process.argv.includes("--print-logs"),
+       dev: Installation.isLocal(),
+diff --git a/packages/opencode/src/permission/index.ts b/packages/opencode/src/permission/index.ts
+index 1a7bd2c61..cf9ccbbbe 100644
+--- a/packages/opencode/src/permission/index.ts
++++ b/packages/opencode/src/permission/index.ts
+@@ -15,6 +15,7 @@ import os from "os"
+ import z from "zod"
+ import { evaluate as evalRule } from "./evaluate"
+ import { PermissionID } from "./schema"
++import { Flag } from "@/flag/flag"
+ 
+ export namespace Permission {
+   const log = Log.create({ service: "permission" })
+@@ -182,6 +183,12 @@ export namespace Permission {
+ 
+         if (!needsAsk) return
+ 
++        // --autopilot: auto-approve without prompting
++        if (Flag.COBUILDER_AUTOPILOT) {
++          log.info("autopilot: auto-approving permission", { permission: request.permission, patterns: request.patterns })
++          return
++        }
++
+         const id = request.id ?? PermissionID.ascending()
+         const info: Request = {
+           id,
+diff --git a/packages/opencode/src/provider/transform.ts b/packages/opencode/src/provider/transform.ts
+index 418ccc5b2..1925056d0 100644
+--- a/packages/opencode/src/provider/transform.ts
++++ b/packages/opencode/src/provider/transform.ts
+@@ -252,10 +252,8 @@ export namespace ProviderTransform {
+     })
+   }
+ 
+-  export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
+-    msgs = unsupportedParts(msgs, model)
+-    msgs = normalizeMessages(msgs, model, options)
+-    if (
++  function isClaudeModel(model: Provider.Model) {
++    return (
+       (model.providerID === "anthropic" ||
+         model.api.id.includes("anthropic") ||
+         model.api.id.includes("claude") ||
+@@ -263,8 +261,23 @@ export namespace ProviderTransform {
+         model.id.includes("claude") ||
+         model.api.npm === "@ai-sdk/anthropic") &&
+       model.api.npm !== "@ai-sdk/gateway"
+-    ) {
++    )
++  }
++
++  // Claude does not support assistant message prefill — the conversation must end
++  // with a user message. Strip any trailing assistant messages before sending.
++  function stripTrailingAssistant(msgs: ModelMessage[]): ModelMessage[] {
++    let i = msgs.length - 1
++    while (i >= 0 && msgs[i].role === "assistant") i--
++    return i < msgs.length - 1 ? msgs.slice(0, i + 1) : msgs
++  }
++
++  export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
++    msgs = unsupportedParts(msgs, model)
++    msgs = normalizeMessages(msgs, model, options)
++    if (isClaudeModel(model)) {
+       msgs = applyCaching(msgs, model)
++      msgs = stripTrailingAssistant(msgs)
+     }
+ 
+     // Remap providerOptions keys from stored providerID to expected SDK key
+diff --git a/packages/opencode/src/session/prompt.ts b/packages/opencode/src/session/prompt.ts
+index 5320519c1..054c3fdb7 100644
+--- a/packages/opencode/src/session/prompt.ts
++++ b/packages/opencode/src/session/prompt.ts
+@@ -677,7 +677,7 @@ export namespace SessionPrompt {
+       const memoryContext = step === 1 ? await SystemPrompt.memory(session.directory) : ""
+       const installedCommands = step === 1 ? await SystemPrompt.installedCommands() : ""
+       const system = [
+-        ...(await SystemPrompt.environment(model)),
++        ...(await SystemPrompt.environment(model, agent)),
+         ...(skills ? [skills] : []),
+         ...(installedCommands ? [installedCommands] : []),
+         ...(await InstructionPrompt.system()),
+diff --git a/packages/opencode/src/session/prompt/anthropic.txt b/packages/opencode/src/session/prompt/anthropic.txt
+index 21d9c0e9f..0ddec20c3 100644
+--- a/packages/opencode/src/session/prompt/anthropic.txt
++++ b/packages/opencode/src/session/prompt/anthropic.txt
+@@ -1,15 +1,15 @@
+-You are OpenCode, the best coding agent on the planet.
++You are CoBuilder, the best AI agent on the planet.
+ 
+-You are an interactive CLI tool that helps users with software engineering tasks. Use the instructions below and the tools available to you to assist the user.
++You are an interactive CLI tool that helps users build anything — software, products, automations, content, plans, and more. Use the instructions below and the tools available to you to assist the user.
+ 
+-IMPORTANT: You must NEVER generate or guess URLs for the user unless you are confident that the URLs are for helping the user with programming. You may use URLs provided by the user in their messages or local files.
++IMPORTANT: You must NEVER generate or guess URLs for the user unless you are confident that the URLs are for helping the user with their task. You may use URLs provided by the user in their messages or local files.
+ 
+ If the user asks for help or wants to give feedback inform them of the following:
+ - ctrl+p to list available actions
+ - To give feedback, users should report the issue at
+   https://github.com/anomalyco/opencode
+ 
+-When the user directly asks about OpenCode (eg. "can OpenCode do...", "does OpenCode have..."), or asks in second person (eg. "are you able...", "can you do..."), or asks how to use a specific OpenCode feature (eg. implement a hook, write a slash command, or install an MCP server), use the WebFetch tool to gather information to answer the question from OpenCode docs. The list of available docs is available at https://opencode.ai/docs
++When the user directly asks about CoBuilder (eg. "can CoBuilder do...", "does CoBuilder have..."), or asks in second person (eg. "are you able...", "can you do..."), or asks how to use a specific CoBuilder feature (eg. implement a hook, write a slash command, or install an MCP server), use the WebFetch tool to gather information to answer the question from CoBuilder docs. The list of available docs is available at https://opencode.ai/docs
+ 
+ # Tone and style
+ - Only use emojis if the user explicitly requests it. Avoid using emojis in all communication unless asked.
+@@ -18,7 +18,7 @@ When the user directly asks about OpenCode (eg. "can OpenCode do...", "does Open
+ - NEVER create files unless they're absolutely necessary for achieving your goal. ALWAYS prefer editing an existing file to creating a new one. This includes markdown files.
+ 
+ # Professional objectivity
+-Prioritize technical accuracy and truthfulness over validating the user's beliefs. Focus on facts and problem-solving, providing direct, objective technical info without any unnecessary superlatives, praise, or emotional validation. It is best for the user if OpenCode honestly applies the same rigorous standards to all ideas and disagrees when necessary, even if it may not be what the user wants to hear. Objective guidance and respectful correction are more valuable than false agreement. Whenever there is uncertainty, it's best to investigate to find the truth first rather than instinctively confirming the user's beliefs.
++Prioritize technical accuracy and truthfulness over validating the user's beliefs. Focus on facts and problem-solving, providing direct, objective technical info without any unnecessary superlatives, praise, or emotional validation. It is best for the user if CoBuilder honestly applies the same rigorous standards to all ideas and disagrees when necessary, even if it may not be what the user wants to hear. Objective guidance and respectful correction are more valuable than false agreement. Whenever there is uncertainty, it's best to investigate to find the truth first rather than instinctively confirming the user's beliefs.
+ 
+ # Task Management
+ You have access to the TodoWrite tools to help you manage and plan tasks. Use these tools VERY frequently to ensure that you are tracking your tasks and giving the user visibility into your progress.
+@@ -67,6 +67,27 @@ I've found some existing telemetry code. Let me mark the first todo as in_progre
+ </example>
+ 
+ 
++# GSD Workflow (MANDATORY for non-trivial tasks)
++GSD (Get Shit Done) is your structured development methodology. It is available as a skill.
++
++**ALWAYS use GSD proactively — never ask the user if they want to use it.**
++
++Use GSD for ANY of these (do not answer inline):
++- Feature requests, bug fixes, refactors
++- UI/UX improvements or recommendations
++- Architecture or design questions
++- Planning, scoping, or roadmap work
++- Any multi-step implementation task
++
++How to invoke:
++1. Load skill `gsd` — it handles all routing internally
++2. Complete the FULL analysis or plan in one response — do NOT ask "what would you like to do next?" when the intent was clear
++3. For quick one-liner tasks — handle inline without loading GSD
++
++**Never run `which gsd` or check for a gsd binary. GSD is a skill, not a CLI tool.**
++**Never load `gsd:do`, `gsd:discuss-phase`, or other sub-skills — load `gsd` only.**
++**Complete the task autonomously. Only ask questions if you are genuinely blocked.**
++
+ # Doing tasks
+ The user will primarily request you perform software engineering tasks. This includes solving bugs, adding new functionality, refactoring code, explaining code, and more. For these tasks the following steps are recommended:
+ - 
+diff --git a/packages/opencode/src/session/prompt/beast.txt b/packages/opencode/src/session/prompt/beast.txt
+index e92e4d020..873457e05 100644
+--- a/packages/opencode/src/session/prompt/beast.txt
++++ b/packages/opencode/src/session/prompt/beast.txt
+@@ -1,4 +1,4 @@
+-You are opencode, an agent - please keep going until the user’s query is completely resolved, before ending your turn and yielding back to the user.
++You are CoBuilder, an agent that helps users build anything — please keep going until the user’s query is completely resolved, before ending your turn and yielding back to the user.
+ 
+ Your thinking should be thorough and so it's fine if it's very long. However, avoid unnecessary repetition and verbosity. You should be concise, but thorough.
+ 
+diff --git a/packages/opencode/src/session/prompt/codex.txt b/packages/opencode/src/session/prompt/codex.txt
+index d595cadb0..8559947cd 100644
+--- a/packages/opencode/src/session/prompt/codex.txt
++++ b/packages/opencode/src/session/prompt/codex.txt
+@@ -1,6 +1,6 @@
+-You are OpenCode, the best coding agent on the planet.
++You are CoBuilder, the best AI agent on the planet.
+ 
+-You are an interactive CLI tool that helps users with software engineering tasks. Use the instructions below and the tools available to you to assist the user.
++You are an interactive CLI tool that helps users build anything — software, products, automations, content, plans, and more. Use the instructions below and the tools available to you to assist the user.
+ 
+ ## Editing constraints
+ - Default to ASCII when editing or creating files. Only introduce non-ASCII or other Unicode characters when there is a clear justification and the file already uses them.
+diff --git a/packages/opencode/src/session/prompt/default.txt b/packages/opencode/src/session/prompt/default.txt
+index 365663eee..486036b8b 100644
+--- a/packages/opencode/src/session/prompt/default.txt
++++ b/packages/opencode/src/session/prompt/default.txt
+@@ -1,12 +1,12 @@
+-You are opencode, an interactive CLI tool that helps users with software engineering tasks. Use the instructions below and the tools available to you to assist the user.
++You are CoBuilder, an interactive CLI tool that helps users build anything — software, products, automations, content, plans, and more. Use the instructions below and the tools available to you to assist the user.
+ 
+-IMPORTANT: You must NEVER generate or guess URLs for the user unless you are confident that the URLs are for helping the user with programming. You may use URLs provided by the user in their messages or local files.
++IMPORTANT: You must NEVER generate or guess URLs for the user unless you are confident that the URLs are for helping the user with their task. You may use URLs provided by the user in their messages or local files.
+ 
+ If the user asks for help or wants to give feedback inform them of the following:
+-- /help: Get help with using opencode
+-- To give feedback, users should report the issue at https://github.com/anomalyco/opencode/issues
++- /help: Get help with using CoBuilder
++- To give feedback, users should report the issue at https://github.com/CobuilderLabs/opencode/issues
+ 
+-When the user directly asks about opencode (eg 'can opencode do...', 'does opencode have...') or asks in second person (eg 'are you able...', 'can you do...'), first use the WebFetch tool to gather information to answer the question from opencode docs at https://opencode.ai
++When the user directly asks about CoBuilder (eg 'can CoBuilder do...', 'does CoBuilder have...') or asks in second person (eg 'are you able...', 'can you do...'), first use the WebFetch tool to gather information to answer the question from CoBuilder docs at https://opencode.ai
+ 
+ # Tone and style
+ You should be concise, direct, and to the point. When you run a non-trivial bash command, you should explain what the command does and why you are running it, to make sure the user understands what you are doing (this is especially important when you are running a command that will make changes to the user's system).
+diff --git a/packages/opencode/src/session/prompt/gemini.txt b/packages/opencode/src/session/prompt/gemini.txt
+index 87fe422bc..a9f00efb5 100644
+--- a/packages/opencode/src/session/prompt/gemini.txt
++++ b/packages/opencode/src/session/prompt/gemini.txt
+@@ -1,4 +1,4 @@
+-You are opencode, an interactive CLI agent specializing in software engineering tasks. Your primary goal is to help users safely and efficiently, adhering strictly to the following instructions and utilizing your available tools.
++You are CoBuilder, an interactive CLI agent that helps users build anything — software, products, automations, content, plans, and more. Your primary goal is to help users safely and efficiently, adhering strictly to the following instructions and utilizing your available tools.
+ 
+ # Core Mandates
+ 
+diff --git a/packages/opencode/src/session/prompt/gpt.txt b/packages/opencode/src/session/prompt/gpt.txt
+index cafc7f0fe..c5435985a 100644
+--- a/packages/opencode/src/session/prompt/gpt.txt
++++ b/packages/opencode/src/session/prompt/gpt.txt
+@@ -1,6 +1,6 @@
+-You are OpenCode, You and the user share the same workspace and collaborate to achieve the user's goals.
++You are CoBuilder, and you share the same workspace with the user to collaborate and achieve their goals.
+ 
+-You are a deeply pragmatic, effective software engineer. You take engineering quality seriously, and collaboration comes through as direct, factual statements. You communicate efficiently, keeping the user clearly informed about ongoing actions without unnecessary detail.
++You are a deeply pragmatic, effective agent. You take quality seriously — whether building software, automations, content, or plans — and collaboration comes through as direct, factual statements. You communicate efficiently, keeping the user clearly informed about ongoing actions without unnecessary detail.
+ 
+ ## Values
+ You are guided by these core values:
+diff --git a/packages/opencode/src/session/prompt/trinity.txt b/packages/opencode/src/session/prompt/trinity.txt
+index 28ee4c4f2..e517d10fc 100644
+--- a/packages/opencode/src/session/prompt/trinity.txt
++++ b/packages/opencode/src/session/prompt/trinity.txt
+@@ -1,4 +1,4 @@
+-You are opencode, an interactive CLI tool that helps users with software engineering tasks. Use the instructions below and the tools available to you to assist the user.
++You are CoBuilder, an interactive CLI tool that helps users build anything — software, products, automations, content, plans, and more. Use the instructions below and the tools available to you to assist the user.
+ 
+ # Tone and style
+ You should be concise, direct, and to the point. When you run a non-trivial bash command, you should explain what the command does and why you are running it, to make sure the user understands what you are doing (this is especially important when you are running a command that will make changes to the user's system).
+diff --git a/packages/opencode/src/session/system.ts b/packages/opencode/src/session/system.ts
+index 6f92df9ce..6eeb29a00 100644
+--- a/packages/opencode/src/session/system.ts
++++ b/packages/opencode/src/session/system.ts
+@@ -34,8 +34,14 @@ export namespace SystemPrompt {
+     return [PROMPT_DEFAULT]
+   }
+ 
+-  export async function environment(model: Provider.Model) {
++  export async function environment(model: Provider.Model, agent?: Agent.Info) {
+     const project = Instance.project
++    const skillList = agent && !Permission.disabled(["skill"], agent.permission).has("skill")
++      ? await Skill.available(agent)
++      : []
++    const skillsLine = skillList.length > 0
++      ? `  Installed skills: ${skillList.map((s) => s.name).join(", ")}`
++      : `  Installed skills: none`
+     return [
+       [
+         `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
+@@ -46,6 +52,7 @@ export namespace SystemPrompt {
+         `  Is directory a git repo: ${project.vcs === "git" ? "yes" : "no"}`,
+         `  Platform: ${process.platform}`,
+         `  Today's date: ${new Date().toDateString()}`,
++        skillsLine,
+         `</env>`,
+         `<directories>`,
+         `  ${
+@@ -74,6 +81,7 @@ export namespace SystemPrompt {
+     return [
+       "Skills provide specialized instructions and workflows for specific tasks.",
+       "Use the skill tool to load a skill when a task matches its description.",
++      "IMPORTANT: Skills are NOT system binaries. Never use `which`, `command -v`, or shell lookups to check if a skill is available. Use the skill tool directly.",
+       // the agents seem to ingest the information about skills a bit better if we present a more verbose
+       // version of them here and a less verbose version in tool description, rather than vice versa.
+       Skill.fmt(list, { verbose: true }),
+diff --git a/test-e2e.sh b/test-e2e.sh
+index cb1f7f81a..dbd12fc2a 100644
+--- a/test-e2e.sh
++++ b/test-e2e.sh
+@@ -1,7 +1,7 @@
+ #!/usr/bin/env bash
+-# End-to-end test: install → use cases → uninstall → reinstall
+-# Usage: bash test-e2e.sh
+-# Designed to run in a fresh environment (CI or Docker).
++# End-to-end test: install → use cases → wizard config validation → uninstall → reinstall
++# Usage:  bash test-e2e.sh
++# Requirements: curl, git  (no expect needed)
+ set -euo pipefail
+ 
+ bold="\033[1m"
+@@ -9,61 +9,178 @@ green="\033[32m"
+ red="\033[31m"
+ reset="\033[0m"
+ 
+-pass() { echo -e "  ${bold}${green}✔${reset}  $*"; }
+-fail() { echo -e "  ${bold}${red}✘${reset}  $*"; exit 1; }
++pass()    { echo -e "  ${bold}${green}✔${reset}  $*"; }
++fail()    { echo -e "  ${bold}${red}✘${reset}  $*"; exit 1; }
+ section() { echo -e "\n${bold}▶ $*${reset}"; }
+ 
+ INSTALL_DIR="${COBUILDER_INSTALL_DIR:-$HOME/.local/bin}"
+ export PATH="$INSTALL_DIR:$PATH"
++CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
++DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/opencode"
+ 
+ # ── 1. Install ────────────────────────────────────────────────────────────────
+-section "1 / 7  Install via curl | bash"
++section "1 / 10  Install via curl | bash"
+ curl -fsSL https://raw.githubusercontent.com/CobuilderLabs/opencode/main/install.sh | bash
+ [[ -x "$INSTALL_DIR/cobuilder" ]] || fail "Binary not found at $INSTALL_DIR/cobuilder"
+ pass "Binary installed"
+ 
+ # ── 2. Version ───────────────────────────────────────────────────────────────
+-section "2 / 7  cobuilder --version shows proper semver"
++section "2 / 10  cobuilder --version shows proper semver"
+ VERSION=$(cobuilder --version 2>&1)
+ echo "  Version: $VERSION"
+ [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "Version '$VERSION' is not semver (expected X.Y.Z)"
+ pass "Version is $VERSION"
+ 
+ # ── 3. Help / command surface ─────────────────────────────────────────────────
+-section "3 / 7  Core commands present in --help"
++section "3 / 10  Core commands present in --help"
+ HELP=$(cobuilder --help 2>&1)
+ for CMD in onboard skills workflow providers run; do
+   echo "$HELP" | grep -q "$CMD" || fail "Command '$CMD' missing from --help"
+   pass "Command '$CMD' present"
+ done
+ 
+-# ── 4. skills list (empty) ───────────────────────────────────────────────────
+-section "4 / 7  cobuilder skills list (clean state)"
++# ── 4. DB migration + skills list ────────────────────────────────────────────
++section "4 / 10  First run (DB migration) + skills list clean"
++# Triggers one-time DB migration on first run
+ cobuilder skills list 2>&1 | grep -qiE "no skills|install" || fail "Expected 'no skills' message"
+-pass "skills list reports empty"
++pass "DB migration done, skills list empty"
+ 
+-# ── 5. skills install gsd ────────────────────────────────────────────────────
+-section "5 / 7  cobuilder skills install gsd"
++# ── 5. skills install + verify ───────────────────────────────────────────────
++section "5 / 10  cobuilder skills install gsd"
+ cobuilder skills install gsd 2>&1 | grep -qi "installed" || fail "skills install gsd did not report success"
+-pass "gsd installed"
++cobuilder skills list 2>&1 | grep -q "gsd" || fail "gsd not found in skills list after install"
++pass "gsd installed and visible in list"
+ 
+-# ── 6. skills list shows gsd ─────────────────────────────────────────────────
+-section "6 / 7  cobuilder skills list shows gsd"
+-cobuilder skills list 2>&1 | grep -q "gsd" || fail "gsd not found in skills list"
+-pass "gsd visible in skills list"
++# ── 6. skills remove ─────────────────────────────────────────────────────────
++section "6 / 10  cobuilder skills remove gsd"
++cobuilder skills remove gsd 2>&1 | grep -qi "removed" || fail "skills remove gsd did not report success"
++cobuilder skills list 2>&1 | grep -qiE "no skills|install" || fail "Expected empty list after remove"
++pass "gsd removed"
+ 
+-# ── 7. Uninstall then reinstall ───────────────────────────────────────────────
+-section "7 / 7  Uninstall → reinstall"
++# ── 7. Onboard wizard — provider menu appears in help ────────────────────────
++section "7 / 10  Onboard wizard — command exists and is documented"
++cobuilder --help 2>&1 | grep -q "onboard" \
++  || fail "'onboard' command missing from --help"
++cobuilder onboard --help 2>&1 | grep -qi "setup\|provider\|interactive" \
++  || fail "onboard --help missing expected description"
++pass "onboard command documented"
++
++# ── 8. Onboard wizard — each wizard selection validated ───────────────────────
++# Strategy: write the exact config that each wizard flow produces, then verify
++# cobuilder can read it without crashing (via `cobuilder providers`).
++# This covers both Step 1 (provider selection) and Step 2 (security modules).
++section "8 / 10  Onboard wizard — all provider + security selections validated"
++
++mkdir -p "$CONFIG_DIR" "$DATA_DIR"
++
++# Helper: write provider config and verify cobuilder accepts it
++check_provider() {
++  local provider="$1"
++  local auth_json="$2"
++  local cfg_json="$3"
++
++  echo "$auth_json" > "$DATA_DIR/auth.json"
++  chmod 600 "$DATA_DIR/auth.json"
++  if [[ -n "$cfg_json" ]]; then
++    echo "$cfg_json" > "$CONFIG_DIR/opencode.json"
++  else
++    rm -f "$CONFIG_DIR/opencode.json"
++  fi
++
++  OUTPUT=$(cobuilder providers 2>&1 || true)
++  echo "$OUTPUT" | grep -qi "error\|panic\|crash\|fatal" \
++    && fail "cobuilder crashed reading $provider config: $OUTPUT"
++
++  pass "  Provider: $provider — config accepted"
++}
++
++# Helper: write security config and verify cobuilder accepts it
++check_security() {
++  local label="$1"
++  local cfg_json="$2"
++
++  echo "$cfg_json" > "$CONFIG_DIR/opencode.json"
++
++  OUTPUT=$(cobuilder providers 2>&1 || true)
++  echo "$OUTPUT" | grep -qi "error\|panic\|crash\|fatal" \
++    && fail "cobuilder crashed reading security config ($label): $OUTPUT"
++
++  pass "  Security: $label — config accepted"
++}
++
++echo ""
++echo "  Step 1 of 2 — Provider selections"
++
++# Anthropic: auth.json with api key
++check_provider "Anthropic" \
++  '{"anthropic":{"type":"api","key":"sk-ant-test-e2e-key"}}' \
++  ''
++
++# OpenAI: auth.json with api key
++check_provider "OpenAI" \
++  '{"openai":{"type":"api","key":"sk-test-e2e-openai-key"}}' \
++  ''
++
++# OpenRouter: auth.json with api key
++check_provider "OpenRouter" \
++  '{"openrouter":{"type":"api","key":"sk-or-test-e2e-openrouter-key"}}' \
++  ''
++
++# Google: auth.json with api key
++check_provider "Google" \
++  '{"google":{"type":"api","key":"AIzaSy-test-e2e-google-key"}}' \
++  ''
++
++# 9Router: opencode.json with custom provider config (no auth.json needed)
++check_provider "9Router" \
++  '{}' \
++  '{"model":"9router/test-model","provider":{"9router":{"npm":"@ai-sdk/openai-compatible","name":"9Router","options":{"baseURL":"http://localhost:20123/v1","apiKey":"9router"},"models":{"test-model":{"name":"test-model"}}}}}'
++
++echo ""
++echo "  Step 2 of 2 — Security module selections"
++
++# All modules enabled (default — wizard writes no security key)
++rm -f "$CONFIG_DIR/opencode.json"
++OUTPUT=$(cobuilder providers 2>&1 || true)
++echo "$OUTPUT" | grep -qi "error\|panic\|crash\|fatal" \
++  && fail "cobuilder crashed with no security config (all-enabled): $OUTPUT"
++pass "  Security: all modules enabled (default) — config accepted"
++
++# Each individual module disabled (wizard writes {security:{module:{enabled:false}}})
++for mod in ssrf promptInjection pathTraversal auditLog rateLimiting headers; do
++  check_security "only $mod disabled" \
++    "{\"security\":{\"$mod\":{\"enabled\":false}}}"
++done
++
++# All modules disabled at once
++check_security "all modules disabled" \
++  '{"security":{"ssrf":{"enabled":false},"promptInjection":{"enabled":false},"pathTraversal":{"enabled":false},"auditLog":{"enabled":false},"rateLimiting":{"enabled":false},"headers":{"enabled":false}}}'
++
++# Security config combined with a provider (realistic post-wizard state)
++check_security "Anthropic + partial security disabled" \
++  '{"security":{"auditLog":{"enabled":false},"rateLimiting":{"enabled":false}}}'
++
++# Cleanup test config
++rm -f "$DATA_DIR/auth.json" "$CONFIG_DIR/opencode.json"
++
++# ── 9. Uninstall then reinstall ───────────────────────────────────────────────
++section "9 / 10  Uninstall → reinstall"
+ rm -f "$INSTALL_DIR/cobuilder"
+ [[ ! -x "$INSTALL_DIR/cobuilder" ]] || fail "Binary still present after removal"
+ pass "Uninstalled"
+-
+ curl -fsSL https://raw.githubusercontent.com/CobuilderLabs/opencode/main/install.sh | bash
+ [[ -x "$INSTALL_DIR/cobuilder" ]] || fail "Binary missing after reinstall"
+ VERSION2=$(cobuilder --version 2>&1)
+ [[ "$VERSION2" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "Version after reinstall '$VERSION2' is not semver"
+ pass "Reinstalled — version $VERSION2"
+ 
++# ── 10. Headless install — no /dev/tty error ──────────────────────────────────
++section "10 / 10  Install script gracefully handles headless env"
++OUTPUT=$(curl -fsSL https://raw.githubusercontent.com/CobuilderLabs/opencode/main/install.sh | bash 2>&1 || true)
++echo "$OUTPUT" | grep -q "CoBuilder installed successfully" || fail "Install script did not complete"
++echo "$OUTPUT" | grep -qi "No such device" && fail "/dev/tty error leaked to output" || true
++pass "Clean headless install — no /dev/tty errors"
++
+ # ── Summary ───────────────────────────────────────────────────────────────────
+ echo ""
+ echo -e "${bold}${green}All tests passed.${reset}"
+-- 
+2.43.0
+

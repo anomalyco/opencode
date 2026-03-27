@@ -1,0 +1,84 @@
+From 4c1ec1f1fa2d139a41a280e785834b214309f7b0 Mon Sep 17 00:00:00 2001
+From: CoBuilder CEO <ceo@cobuilder.ai>
+Date: Fri, 27 Mar 2026 13:08:35 -0700
+Subject: [PATCH 116/127] fix(upgrade): point upgrade to CobuilderLabs releases
+ + fix auto-merge
+
+- GitHub API now fetches from CobuilderLabs/opencode instead of anomalyco/opencode
+- Tag prefix stripped as cb-v instead of v (e.g. cb-v0.18.3 -> 0.18.3)
+- curl upgrade fetches CoBuilder install.sh instead of opencode.ai/install
+- Auto-merge uses GraphQL mutation instead of gh cli to avoid token scope issues
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ .github/workflows/pr-management.yml         | 25 ++++++++++++++++-----
+ packages/opencode/src/installation/index.ts |  6 ++---
+ 2 files changed, 22 insertions(+), 9 deletions(-)
+
+diff --git a/.github/workflows/pr-management.yml b/.github/workflows/pr-management.yml
+index e8530f4e6..a3394f5c8 100644
+--- a/.github/workflows/pr-management.yml
++++ b/.github/workflows/pr-management.yml
+@@ -79,12 +79,25 @@ jobs:
+       contents: write
+     steps:
+       - name: Enable auto-merge (merge commit)
+-        env:
+-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+-        run: |
+-          gh pr merge "${{ github.event.pull_request.number }}" \
+-            --auto --merge \
+-            --repo ${{ github.repository }}
++        uses: actions/github-script@v8
++        with:
++          script: |
++            const { data: pr } = await github.rest.pulls.get({
++              owner: context.repo.owner,
++              repo: context.repo.repo,
++              pull_number: context.payload.pull_request.number,
++            });
++            await github.graphql(`
++              mutation EnableAutoMerge($pullRequestId: ID!) {
++                enablePullRequestAutoMerge(input: {
++                  pullRequestId: $pullRequestId,
++                  mergeMethod: MERGE
++                }) {
++                  pullRequest { number }
++                }
++              }
++            `, { pullRequestId: pr.node_id });
++            console.log(`Auto-merge enabled on PR #${context.payload.pull_request.number}`);
+ 
+   add-contributor-label:
+     runs-on: ubuntu-latest
+diff --git a/packages/opencode/src/installation/index.ts b/packages/opencode/src/installation/index.ts
+index 76f3d0c9e..9a9b026a9 100644
+--- a/packages/opencode/src/installation/index.ts
++++ b/packages/opencode/src/installation/index.ts
+@@ -151,7 +151,7 @@ export namespace Installation {
+ 
+         const upgradeCurl = Effect.fnUntraced(
+           function* (target: string) {
+-            const response = yield* httpOk.execute(HttpClientRequest.get("https://opencode.ai/install"))
++            const response = yield* httpOk.execute(HttpClientRequest.get("https://raw.githubusercontent.com/CobuilderLabs/opencode/main/install.sh"))
+             const body = yield* response.text
+             const bodyBytes = new TextEncoder().encode(body)
+             const proc = ChildProcess.make("bash", [], {
+@@ -258,12 +258,12 @@ export namespace Installation {
+           }
+ 
+           const response = yield* httpOk.execute(
+-            HttpClientRequest.get("https://api.github.com/repos/anomalyco/opencode/releases/latest").pipe(
++            HttpClientRequest.get("https://api.github.com/repos/CobuilderLabs/opencode/releases/latest").pipe(
+               HttpClientRequest.acceptJson,
+             ),
+           )
+           const data = yield* HttpClientResponse.schemaBodyJson(GitHubRelease)(response)
+-          return data.tag_name.replace(/^v/, "")
++          return data.tag_name.replace(/^cb-v/, "")
+         }, Effect.orDie)
+ 
+         const upgradeImpl = Effect.fn("Installation.upgrade")(function* (m: Method, target: string) {
+-- 
+2.43.0
+

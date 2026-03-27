@@ -1,0 +1,1222 @@
+From f367e2754491e388c90fdf42eb27720f2ee90925 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Thu, 26 Mar 2026 15:10:34 -0700
+Subject: [PATCH 016/127] fix: rename release assets from opencode- to
+ cobuilder- prefix
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+* feat(01-01): security config schema + call site guards
+
+- Add security Zod sub-schema to Config.Info with 6 modules (ssrf, promptInjection, pathTraversal, auditLog, rateLimiting, headers)
+- Wrap validateProviderURL in onboard.ts with cfg.security?.ssrf?.enabled !== false guard
+- Wrap getSecurityHeaders in server.ts with cfg.security?.headers?.enabled !== false guard
+
+* docs(01-01): complete security config schema plan summary and state update
+
+* feat(01-02): apply config guards to all 4 remaining security modules
+
+Self-guards added to prompt-injection, path traversal, audit log, and
+rate limiter modules. All 6 security modules now respect
+cfg.security?.MODULE?.enabled !== false (SEC-02–05).
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* docs(01-02): add wave 2 summary
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* feat(01-03): add bun:test coverage for all 6 security modules
+
+Tests verify enabled-by-default (SEC-07) and enable/disable config
+behavior (SEC-01 through SEC-06). Fixed NUL byte injection to reject
+paths containing null bytes rather than stripping them.
+
+32 tests pass, 0 failures across 6 test files.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* docs(01-03): add wave 3 summary — Phase 1 complete
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* chore: update STATE.md — Phase 1 complete, Phase 2 starting
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* feat(02-01): add workflow alias registry with resolveSource()
+
+- REGISTRY maps gsd/ralph-loop/gstack to canonical GitHub URLs
+- resolveSource() passes through full URLs, throws on unknown alias
+- 6 unit tests covering all aliases, URL passthrough, and error case
+
+* feat(02-01): add Workflow.Service with list/install/remove operations
+
+- Workflow namespace with Info zod schema (name, version, description, commands)
+- list() reads workflow.paths from opencode.json, parses each WORKFLOW.md
+- install() resolves alias via resolveSource(), git clones, deduplicates paths
+- remove() finds by dir name or manifest name, deletes dir, updates config
+- parseManifest() uses ConfigMarkdown.parse() + Info.parse(md.data)
+- 9 unit tests (8 pass, 1 integration skip)
+
+* docs(02-01): add plan summary for Workflow.Service + Registry
+
+* feat(02-02): add workflow.paths to Config.Info schema + directory injection
+
+- Add workflow.paths Zod field to Config.Info alongside skills
+- Inject workflow paths into directories before loadCommand scan
+- Merge workflow.paths arrays in mergeConfigConcatArrays
+
+* docs(02-02): complete Config.Info schema extension plan
+
+* feat(02-03): add WorkflowCommand CLI with add/list/remove subcommands
+
+- Create packages/opencode/src/cli/cmd/workflow.ts with three subcommands
+- workflowAddCmd: resolves alias/URL, clones via Workflow.install(), shows restart notice
+- workflowListCmd: calls Workflow.list(), prints name/version/description/path
+- workflowRemoveCmd: calls Workflow.remove(), spinner feedback on success/error
+- Register WorkflowCommand in src/index.ts after OnboardCommand
+
+* docs(02-03): complete workflow CLI plan summary
+
+* feat(02-04): add sandbox path validation and wire into install()
+
+- Create sandbox.ts with validateWorkflowPath() blocking path traversal
+- Import and call validateWorkflowPath(destDir) in Workflow.install()
+  before any filesystem ops
+
+* feat(02-04): scaffold GSD reference plugin and workflow-plugins docs
+
+- Add gsd-reference/WORKFLOW.md manifest (name, version, commands list)
+- Add commands/ stubs: plan-phase, execute-phase, discuss-phase
+- Add hooks/.gitkeep (WF-09 placeholder, no execution wired)
+- Add docs/workflow-plugins.md with format reference and CLI guide
+
+* docs(02-04): complete sandboxing + GSD reference plugin plan summary
+
+* feat(onboard): add security module and workflow plugin configuration steps
+
+After provider setup, onboarding now walks through:
+1. Security modules — multiselect (all enabled by default, deselect to disable)
+2. Workflow plugins — multiselect (none selected by default, opt-in install)
+
+Security config writes disabled modules to opencode.json security key.
+Workflow install calls Workflow.install() with spinner per plugin.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* feat(onboard): add recommended MCP tools step with extensible registry
+
+New src/mcp/recommended.ts holds the curated tool list — add an entry
+there to surface it in onboard on next update. Each re-run skips already-
+configured tools so users only see net-new recommendations.
+
+Initial list:
+- context-mode (MCP/npx): sandboxes tool output to protect context window
+- agent-browser (CLI): headless browser automation for AI agents
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* fix: rename release assets from opencode- to cobuilder- prefix
+
+pkg.name in packages/opencode/package.json is still "opencode" (upstream
+name), so archive names were opencode-linux-arm64.tar.gz etc. Hardcode
+"cobuilder" as the asset prefix so release downloads match the brand.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* docs: update README download links to cobuilder- prefix
+
+Matches the build.ts asset rename in the same branch.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* docs: correct Desktop App section — it's in BETA, not coming soon
+
+packages/desktop-electron exists and ships via CD. Remove the
+"coming soon" placeholder and point users to the latest release.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* fix: rebrand desktop-electron config to CoBuilder
+
+- Rename artifact prefix: opencode-electron- → cobuilder-
+- Update appId, productName, rpm packageName for all channels
+- Point publish targets to CobuilderLabs/opencode (was anomalyco)
+- Revert README desktop note to "coming soon" — signing certs not yet set up
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* ci: add Windows and Linux desktop build jobs to CD
+
+- Add desktop-linux job (ubuntu-latest): builds AppImage, deb, rpm
+- Add desktop-windows job (windows-latest): builds NSIS installer
+- Both jobs run after release job and upload assets to the GitHub release
+- macOS desktop job skipped until Apple signing certs are configured
+- Update README to note Windows/Linux desktop BETA availability
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* docs(03-ui-ux-polish): create phase plan
+
+---------
+
+Co-authored-by: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ .github/workflows/cd.yml                      |  90 ++++++
+ .planning/ROADMAP.md                          |  31 ++
+ .../phases/03-ui-ux-polish/03-01-PLAN.md      | 211 +++++++++++++
+ .../phases/03-ui-ux-polish/03-02-PLAN.md      | 258 ++++++++++++++++
+ .../phases/03-ui-ux-polish/03-03-PLAN.md      | 287 ++++++++++++++++++
+ README.md                                     |  16 +-
+ .../electron-builder.config.ts                |  32 +-
+ packages/opencode/script/build.ts             |   2 +-
+ 8 files changed, 902 insertions(+), 25 deletions(-)
+ create mode 100644 .planning/phases/03-ui-ux-polish/03-01-PLAN.md
+ create mode 100644 .planning/phases/03-ui-ux-polish/03-02-PLAN.md
+ create mode 100644 .planning/phases/03-ui-ux-polish/03-03-PLAN.md
+
+diff --git a/.github/workflows/cd.yml b/.github/workflows/cd.yml
+index 9a22027eb..a5d55e2f4 100644
+--- a/.github/workflows/cd.yml
++++ b/.github/workflows/cd.yml
+@@ -17,6 +17,9 @@ jobs:
+   release:
+     name: Release
+     runs-on: ubuntu-latest
++    outputs:
++      tag: ${{ steps.next_version.outputs.tag }}
++      semver: ${{ steps.next_version.outputs.semver }}
+     steps:
+       - uses: actions/checkout@v4
+         with:
+@@ -140,3 +143,90 @@ jobs:
+         run: |
+           cd packages/opencode
+           bun run build
++
++  desktop-linux:
++    name: Desktop (Linux)
++    needs: release
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v4
++
++      - uses: oven-sh/setup-bun@v2
++        with:
++          bun-version: "1.3.11"
++
++      - name: Install dependencies
++        run: bun install --frozen-lockfile
++
++      - name: Set desktop version
++        run: |
++          cd packages/desktop-electron
++          node -e "
++            const fs = require('fs');
++            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
++            pkg.version = '${{ needs.release.outputs.semver }}';
++            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
++          "
++
++      - name: Build
++        run: cd packages/desktop-electron && bun run build
++        env:
++          OPENCODE_CHANNEL: prod
++
++      - name: Package
++        run: cd packages/desktop-electron && bun run package:linux
++        env:
++          OPENCODE_CHANNEL: prod
++
++      - name: Upload to release
++        env:
++          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
++        run: |
++          gh release upload "${{ needs.release.outputs.tag }}" \
++            packages/desktop-electron/dist/*.AppImage \
++            packages/desktop-electron/dist/*.deb \
++            packages/desktop-electron/dist/*.rpm \
++            --repo CobuilderLabs/opencode --clobber
++
++  desktop-windows:
++    name: Desktop (Windows)
++    needs: release
++    runs-on: windows-latest
++    steps:
++      - uses: actions/checkout@v4
++
++      - uses: oven-sh/setup-bun@v2
++        with:
++          bun-version: "1.3.11"
++
++      - name: Install dependencies
++        run: bun install --frozen-lockfile
++
++      - name: Set desktop version
++        run: |
++          cd packages/desktop-electron
++          node -e "
++            const fs = require('fs');
++            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
++            pkg.version = '${{ needs.release.outputs.semver }}';
++            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
++          "
++
++      - name: Build
++        run: cd packages/desktop-electron && bun run build
++        env:
++          OPENCODE_CHANNEL: prod
++
++      - name: Package
++        run: cd packages/desktop-electron && bun run package:win
++        env:
++          OPENCODE_CHANNEL: prod
++
++      - name: Upload to release
++        shell: bash
++        env:
++          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
++        run: |
++          gh release upload "${{ needs.release.outputs.tag }}" \
++            packages/desktop-electron/dist/*.exe \
++            --repo CobuilderLabs/opencode --clobber
+diff --git a/.planning/ROADMAP.md b/.planning/ROADMAP.md
+index 70677f987..a1d2d037b 100644
+--- a/.planning/ROADMAP.md
++++ b/.planning/ROADMAP.md
+@@ -7,6 +7,7 @@
+ 
+ - [ ] **Phase 1: Modular Security System** — Configurable security modules via opencode.json
+ - [ ] **Phase 2: Workflow Plugin System** — Installable methodology plugins (GSD, Ralph, GStack)
++- [ ] **Phase 3: UI/UX Polish** — Fix 13 identified UI/UX issues across TUI, Web app, and Electron shell
+ 
+ ---
+ 
+@@ -42,4 +43,34 @@
+ 
+ ---
+ 
++## Phase 3: UI/UX Polish
++
++**Goal:** Fix 13 identified UI/UX issues across the TUI, Web app, and Electron shell — completing the CoBuilder rebrand, fixing first-run UX, removing debug artifacts, and improving visual polish.
++
++**Requirements:** UX-01, UX-02, UX-03, UX-04, UX-05, UX-06, UX-07, UX-08, UX-09, UX-10, UX-11, UX-12, UX-13
++
++**Plans:** 3 plans
++
++Plans:
++- [ ] 03-01-PLAN.md — Safe isolated fixes: tips logic, debug log, footer hint, Electron loading polish
++- [ ] 03-02-PLAN.md — CoBuilder rebrand sweep across TUI, Web, Electron + cross-platform menu
++- [ ] 03-03-PLAN.md — Web app UX flows: reactive onboarding, no-provider guard, composer spinner, drag handles
++
++**Success Criteria:**
++1. No "OpenCode" brand references remain in TUI, Electron menu, error pages, or window globals
++2. TUI home screen shows tips only to first-time users (zero sessions)
++3. Electron app has a native menu bar on Windows and Linux
++4. Web app onboarding check is driven by sync state, not a 800ms timeout
++5. Session view shows an inline provider prompt when no provider is connected
++6. Composer shows a spinner while prompt is loading
++7. Electron loading progress bar uses accent/primary color (not warning orange)
++8. Web session history truncation is communicated with a "Load older messages" affordance
++9. Session tabs have a visible drag handle
++10. Debug console.log removed from TUI app.tsx
++11. TUI footer provider hint is persistent, not timer-cycling
++12. Electron loading screen shows "CoBuilder" product name
++13. TUI home.tsx TODO comment resolved with a proper implementation
++
++---
++
+ *Roadmap created: 2026-03-26*
+diff --git a/.planning/phases/03-ui-ux-polish/03-01-PLAN.md b/.planning/phases/03-ui-ux-polish/03-01-PLAN.md
+new file mode 100644
+index 000000000..27ded4b6c
+--- /dev/null
++++ b/.planning/phases/03-ui-ux-polish/03-01-PLAN.md
+@@ -0,0 +1,211 @@
++---
++phase: 03-ui-ux-polish
++plan: 01
++type: execute
++wave: 1
++depends_on: []
++files_modified:
++  - packages/opencode/src/cli/cmd/tui/routes/home.tsx
++  - packages/opencode/src/cli/cmd/tui/app.tsx
++  - packages/opencode/src/cli/cmd/tui/routes/session/footer.tsx
++  - packages/desktop-electron/src/renderer/loading.tsx
++autonomous: true
++requirements: [UX-02, UX-07, UX-10, UX-11, UX-12, UX-13]
++
++must_haves:
++  truths:
++    - "TUI shows tips to first-time users (zero sessions), hides tips for returning users who dismissed them"
++    - "Electron loading progress bar uses accent color, not warning orange"
++    - "No debug console.log(JSON.stringify(route.data)) in TUI app.tsx"
++    - "TUI footer shows persistent /connect hint when no provider connected, no cycling timer"
++    - "Electron loading screen displays CoBuilder product name"
++    - "TUI home.tsx has no TODO hack — once-guard replaced with proper SolidJS pattern"
++  artifacts:
++    - path: "packages/opencode/src/cli/cmd/tui/routes/home.tsx"
++      provides: "Fixed tips logic and resolved TODO once-guard"
++    - path: "packages/opencode/src/cli/cmd/tui/app.tsx"
++      provides: "Removed debug console.log"
++    - path: "packages/opencode/src/cli/cmd/tui/routes/session/footer.tsx"
++      provides: "Static persistent /connect hint"
++    - path: "packages/desktop-electron/src/renderer/loading.tsx"
++      provides: "Accent color progress bar and CoBuilder product name"
++  key_links: []
++---
++
++<objective>
++Fix 6 safe, isolated UI/UX issues across TUI and Electron that touch independent files with no cross-dependencies.
++
++Purpose: Quick wins that improve first-run experience, remove debug artifacts, and polish Electron loading.
++Output: 4 modified files with 6 issues resolved.
++</objective>
++
++<execution_context>
++@$HOME/.claude/get-shit-done/workflows/execute-plan.md
++@$HOME/.claude/get-shit-done/templates/summary.md
++</execution_context>
++
++<context>
++@.planning/PROJECT.md
++@.planning/ROADMAP.md
++@.planning/STATE.md
++</context>
++
++<tasks>
++
++<task type="auto">
++  <name>Task 1: Fix TUI home tips, debug log, and TODO hack (UX-02, UX-10, UX-13)</name>
++  <read_first>
++    packages/opencode/src/cli/cmd/tui/routes/home.tsx
++    packages/opencode/src/cli/cmd/tui/app.tsx
++  </read_first>
++  <files>
++    packages/opencode/src/cli/cmd/tui/routes/home.tsx
++    packages/opencode/src/cli/cmd/tui/app.tsx
++  </files>
++  <action>
++**UX-02 — Invert tips logic in home.tsx (line ~40-44):**
++
++Current code:
++```tsx
++const showTips = createMemo(() => {
++  // Don't show tips for first-time users
++  if (isFirstTimeUser()) return false
++  return !tipsHidden()
++})
++```
++
++Change to:
++```tsx
++const showTips = createMemo(() => {
++  if (isFirstTimeUser()) return true
++  return !tipsHidden()
++})
++```
++
++Update the comment above the `if` to: `// Show tips to first-time users to help them get started`
++
++**UX-13 — Resolve the TODO once-guard hack in home.tsx (line ~19-20):**
++
++Current code:
++```tsx
++// TODO: what is the best way to do this?
++let once = false
++```
++
++The `once` variable is a module-level boolean used as a one-shot guard. This is a common SolidJS pattern issue. Look at how `once` is used in the component — it likely gates a one-time side effect in a `createEffect`. Replace with a proper SolidJS pattern:
++- If it guards a `createEffect` that should run once, use `createEffect` with `on(dep, fn, { defer: true })` and untrack/early-return after first run.
++- If it guards initialization, use `onMount` instead.
++- Remove the `let once = false` line and the TODO comment entirely.
++
++Read the full file to see exactly how `once` is used before choosing the replacement pattern.
++
++**UX-10 — Remove debug console.log in app.tsx (line ~263):**
++
++Delete the entire `createEffect` block:
++```tsx
++createEffect(() => {
++  console.log(JSON.stringify(route.data))
++})
++```
++
++Remove the full `createEffect(() => { ... })` wrapping it, not just the console.log line.
++  </action>
++  <verify>
++    <automated>cd /home/jkang/cobuilder-opencode && grep -n "isFirstTimeUser.*return false" packages/opencode/src/cli/cmd/tui/routes/home.tsx; echo "EXIT:$?" && grep -n "console.log.*JSON.stringify.*route" packages/opencode/src/cli/cmd/tui/app.tsx; echo "EXIT:$?" && grep -n "let once = false" packages/opencode/src/cli/cmd/tui/routes/home.tsx; echo "EXIT:$?"</automated>
++  </verify>
++  <acceptance_criteria>
++    - `grep "isFirstTimeUser.*return false" home.tsx` returns NO matches (exit 1)
++    - `grep "isFirstTimeUser.*return true" home.tsx` returns a match (exit 0)
++    - `grep "console.log.*JSON.stringify.*route" app.tsx` returns NO matches (exit 1)
++    - `grep "let once = false" home.tsx` returns NO matches (exit 1)
++    - `grep "TODO.*best way" home.tsx` returns NO matches (exit 1)
++  </acceptance_criteria>
++  <done>Tips shown to first-time users, debug log removed, TODO hack resolved with proper SolidJS pattern</done>
++</task>
++
++<task type="auto">
++  <name>Task 2: Fix Electron loading bar color, add product name, and fix TUI footer hint (UX-07, UX-12, UX-11)</name>
++  <read_first>
++    packages/desktop-electron/src/renderer/loading.tsx
++    packages/opencode/src/cli/cmd/tui/routes/session/footer.tsx
++  </read_first>
++  <files>
++    packages/desktop-electron/src/renderer/loading.tsx
++    packages/opencode/src/cli/cmd/tui/routes/session/footer.tsx
++  </files>
++  <action>
++**UX-07 — Change loading bar from warning orange to accent in loading.tsx (line ~74):**
++
++Current class on the Progress component:
++```
++[&_[data-slot='progress-fill']]:bg-icon-warning-base
++```
++
++Replace with:
++```
++[&_[data-slot='progress-fill']]:bg-accent-base
++```
++
++Keep all other classes on the Progress component unchanged.
++
++**UX-12 — Add CoBuilder product name to Electron loading screen in loading.tsx:**
++
++Find the loading screen layout (near the Splash/Logo component and the progress bar). Add a text element showing "CoBuilder" above or near the progress bar. Use the existing design system text styles. Example:
++
++```tsx
++<span class="text-lg font-semibold text-text-strong tracking-tight">CoBuilder</span>
++```
++
++Place this in the flex column layout, after any logo/splash and before the progress bar, so it reads: [Logo] > "CoBuilder" > [progress bar].
++
++Look at the existing JSX structure to find the exact insertion point. The text should be centered and use `text-text-strong` for visibility.
++
++**UX-11 — Make TUI footer /connect hint persistent in footer.tsx:**
++
++Current code (lines 27-50) has a `tick()` function cycling `store.welcome` between true/false on setTimeout timers (5s show, 10s hide). This makes the "/connect" hint flash in and out.
++
++Replace the entire `onMount` block (lines 27-50) with a simpler reactive pattern:
++
++```tsx
++// Show /connect hint persistently when no provider is connected
++createEffect(() => {
++  setStore("welcome", !connected())
++})
++```
++
++This makes the hint always visible when disconnected and always hidden when connected — no cycling. Remove the `onMount`, `onCleanup`, and the `timeouts` array entirely. Import `createEffect` from solid-js (check if already imported at line 1).
++  </action>
++  <verify>
++    <automated>cd /home/jkang/cobuilder-opencode && grep -c "bg-icon-warning-base" packages/desktop-electron/src/renderer/loading.tsx && echo "FAIL: warning color still present" || echo "OK: warning color removed" && grep -c "bg-accent-base" packages/desktop-electron/src/renderer/loading.tsx && grep -c "CoBuilder" packages/desktop-electron/src/renderer/loading.tsx && grep -c "setTimeout" packages/opencode/src/cli/cmd/tui/routes/session/footer.tsx; echo "TIMER_COUNT (should be 0)"</automated>
++  </verify>
++  <acceptance_criteria>
++    - `grep "bg-icon-warning-base" loading.tsx` returns NO matches
++    - `grep "bg-accent-base" loading.tsx` returns a match
++    - `grep "CoBuilder" loading.tsx` returns at least 1 match
++    - `grep "setTimeout" footer.tsx` returns NO matches (timer removed)
++    - `grep "tick()" footer.tsx` returns NO matches (cycling function removed)
++  </acceptance_criteria>
++  <done>Electron loading bar is accent-colored with "CoBuilder" text; TUI footer shows persistent /connect hint without timer cycling</done>
++</task>
++
++</tasks>
++
++<verification>
++All 6 issues verifiable by grep:
++1. UX-02: `grep "isFirstTimeUser.*return true" home.tsx` matches
++2. UX-07: `grep "bg-accent-base" loading.tsx` matches, no `bg-icon-warning-base`
++3. UX-10: no `console.log.*JSON.stringify` in app.tsx
++4. UX-11: no `setTimeout` in footer.tsx
++5. UX-12: `grep "CoBuilder" loading.tsx` matches
++6. UX-13: no `let once = false` or `TODO` in home.tsx
++
++Typecheck: `cd /home/jkang/cobuilder-opencode && bunx tsc --noEmit -p packages/opencode/tsconfig.json 2>&1 | head -20`
++</verification>
++
++<success_criteria>
++All 6 grep checks pass. No TypeScript errors introduced. TUI and Electron loading screen render correctly.
++</success_criteria>
++
++<output>
++After completion, create `.planning/phases/03-ui-ux-polish/03-01-SUMMARY.md`
++</output>
+diff --git a/.planning/phases/03-ui-ux-polish/03-02-PLAN.md b/.planning/phases/03-ui-ux-polish/03-02-PLAN.md
+new file mode 100644
+index 000000000..74b8786bb
+--- /dev/null
++++ b/.planning/phases/03-ui-ux-polish/03-02-PLAN.md
+@@ -0,0 +1,258 @@
++---
++phase: 03-ui-ux-polish
++plan: 02
++type: execute
++wave: 2
++depends_on: []
++files_modified:
++  - packages/opencode/src/cli/cmd/tui/app.tsx
++  - packages/opencode/src/cli/cmd/tui/component/tips.tsx
++  - packages/opencode/src/cli/cmd/tui/component/dialog-provider.tsx
++  - packages/opencode/src/cli/cmd/tui/routes/session/permission.tsx
++  - packages/opencode/src/cli/cmd/tui/routes/session/sidebar.tsx
++  - packages/app/src/app.tsx
++  - packages/app/src/entry.tsx
++  - packages/app/src/i18n/en.ts
++  - packages/app/src/i18n/es.ts
++  - packages/app/src/pages/error.tsx
++  - packages/desktop-electron/src/main/menu.ts
++autonomous: true
++requirements: [UX-01, UX-03]
++
++must_haves:
++  truths:
++    - "No string 'OpenCode' appears in user-visible TUI text (app title, tips, permission, sidebar, dialog-provider)"
++    - "No anomalyco/opencode URL in TUI issue reporter"
++    - "window.__OPENCODE__ renamed to window.__COBUILDER__ in Web app"
++    - "Electron menu works on Windows and Linux (not just macOS)"
++    - "Electron menu says CoBuilder, not OpenCode"
++    - "Web app i18n strings say CoBuilder where they previously said OpenCode"
++  artifacts:
++    - path: "packages/desktop-electron/src/main/menu.ts"
++      provides: "Cross-platform menu with CoBuilder branding"
++    - path: "packages/opencode/src/cli/cmd/tui/component/tips.tsx"
++      provides: "Tips with CoBuilder branding"
++    - path: "packages/app/src/i18n/en.ts"
++      provides: "English i18n with CoBuilder branding"
++  key_links:
++    - from: "packages/app/src/app.tsx"
++      to: "window.__COBUILDER__"
++      via: "global type declaration and property access"
++      pattern: "__COBUILDER__"
++---
++
++<objective>
++Complete the CoBuilder rebrand across all three surfaces (TUI, Web, Electron) and add cross-platform menu support for Electron on Windows/Linux.
++
++Purpose: Eliminate all remaining "OpenCode" brand references and make Electron usable on non-macOS platforms.
++Output: 11 modified files with consistent CoBuilder branding and cross-platform Electron menu.
++</objective>
++
++<execution_context>
++@$HOME/.claude/get-shit-done/workflows/execute-plan.md
++@$HOME/.claude/get-shit-done/templates/summary.md
++</execution_context>
++
++<context>
++@.planning/PROJECT.md
++@.planning/ROADMAP.md
++@.planning/STATE.md
++</context>
++
++<tasks>
++
++<task type="auto">
++  <name>Task 1: Rebrand TUI — replace all OpenCode references with CoBuilder (UX-01 partial)</name>
++  <read_first>
++    packages/opencode/src/cli/cmd/tui/app.tsx
++    packages/opencode/src/cli/cmd/tui/component/tips.tsx
++    packages/opencode/src/cli/cmd/tui/component/dialog-provider.tsx
++    packages/opencode/src/cli/cmd/tui/routes/session/permission.tsx
++    packages/opencode/src/cli/cmd/tui/routes/session/sidebar.tsx
++  </read_first>
++  <files>
++    packages/opencode/src/cli/cmd/tui/app.tsx
++    packages/opencode/src/cli/cmd/tui/component/tips.tsx
++    packages/opencode/src/cli/cmd/tui/component/dialog-provider.tsx
++    packages/opencode/src/cli/cmd/tui/routes/session/permission.tsx
++    packages/opencode/src/cli/cmd/tui/routes/session/sidebar.tsx
++  </files>
++  <action>
++**app.tsx rebrand:**
++- Line 271: `renderer.setTerminalTitle("OpenCode")` -> `renderer.setTerminalTitle("CoBuilder")`
++- Line 278: `renderer.setTerminalTitle("OpenCode")` -> `renderer.setTerminalTitle("CoBuilder")`
++- Line 786: `"Successfully updated to OpenCode v${result.data.version}..."` -> `"Successfully updated to CoBuilder v${result.data.version}..."`
++- Line 842: `new URL("https://github.com/anomalyco/opencode/issues/new?template=bug-report.yml")` -> `new URL("https://github.com/CobuilderLabs/opencode/issues/new?template=bug-report.yml")`
++
++**tips.tsx rebrand — replace all "OpenCode" in tip strings with "CoBuilder":**
++- Line 90: "OpenCode auto-handles..." -> "CoBuilder auto-handles..."
++- Line 99: "OpenCode auto-formats..." -> "CoBuilder auto-formats..."
++- Line 102: "OpenCode uses LSP..." -> "CoBuilder uses LSP..."
++- Line 107: "...prevent OpenCode from reading..." -> "...prevent CoBuilder from reading..."
++- Line 112: `opencode serve` command reference stays as-is (it's the actual CLI command name), but change "...access to OpenCode" -> "...access to CoBuilder"
++- Line 145: `ghcr.io/anomalyco/opencode` -> `ghcr.io/cobuilderlabs/opencode` (update the container registry path)
++- Line 146: "...with OpenCode Zen..." -> "...with CoBuilder Zen..."
++
++**dialog-provider.tsx rebrand:**
++- Line 243: "OpenCode Zen gives you..." -> "CoBuilder Zen gives you..."
++- Line 254: "OpenCode Go is a..." -> "CoBuilder Go is a..."
++- Line 258: "opencode.ai/zen" can stay (it's a URL), but "enable OpenCode Go" -> "enable CoBuilder Go"
++
++**permission.tsx rebrand:**
++- Line 160: "...until OpenCode is restarted" -> "...until CoBuilder is restarted"
++- Line 164: "...until OpenCode is restarted" -> "...until CoBuilder is restarted"
++- Line 504: "Tell OpenCode what to do differently" -> "Tell CoBuilder what to do differently"
++
++**sidebar.tsx rebrand:**
++- Line 295: "OpenCode includes free models..." -> "CoBuilder includes free models..."
++
++IMPORTANT: Do NOT rename the `opencode` CLI command itself, package names, import paths, or config file paths. Only rebrand user-visible display strings.
++  </action>
++  <verify>
++    <automated>cd /home/jkang/cobuilder-opencode && for f in packages/opencode/src/cli/cmd/tui/app.tsx packages/opencode/src/cli/cmd/tui/component/tips.tsx packages/opencode/src/cli/cmd/tui/component/dialog-provider.tsx packages/opencode/src/cli/cmd/tui/routes/session/permission.tsx packages/opencode/src/cli/cmd/tui/routes/session/sidebar.tsx; do echo "=== $f ===" && grep -n "OpenCode" "$f" | grep -v "import\|require\|from\|//.*opencode\|opencode\.ai" || echo "(clean)"; done</automated>
++  </verify>
++  <acceptance_criteria>
++    - `grep "OpenCode" app.tsx` returns no user-visible string matches (imports/paths OK)
++    - `grep "anomalyco" app.tsx` returns NO matches
++    - `grep "OpenCode" tips.tsx` returns NO matches
++    - `grep "OpenCode" dialog-provider.tsx` returns no user-visible string matches
++    - `grep "OpenCode" permission.tsx` returns NO matches
++    - `grep "OpenCode" sidebar.tsx` returns NO matches
++    - All "CoBuilder" replacements present in the corresponding lines
++  </acceptance_criteria>
++  <done>All user-visible "OpenCode" strings in TUI replaced with "CoBuilder"; issue URL points to CobuilderLabs org</done>
++</task>
++
++<task type="auto">
++  <name>Task 2: Rebrand Web app + Electron menu cross-platform (UX-01 partial, UX-03)</name>
++  <read_first>
++    packages/app/src/app.tsx
++    packages/app/src/entry.tsx
++    packages/app/src/i18n/en.ts
++    packages/app/src/i18n/es.ts
++    packages/app/src/pages/error.tsx
++    packages/desktop-electron/src/main/menu.ts
++  </read_first>
++  <files>
++    packages/app/src/app.tsx
++    packages/app/src/entry.tsx
++    packages/app/src/i18n/en.ts
++    packages/app/src/i18n/es.ts
++    packages/app/src/pages/error.tsx
++    packages/desktop-electron/src/main/menu.ts
++  </files>
++  <action>
++**app.tsx — rename window global (UX-01):**
++- Line 72: Change `window.__OPENCODE__?` to `window.__COBUILDER__?` in the `declare global` block
++- Find ALL references to `window.__OPENCODE__` or `__OPENCODE__` in the file and replace with `__COBUILDER__`
++- Also grep the entire `packages/app/src/` and `packages/desktop-electron/src/` directories for `__OPENCODE__` to catch any other references — update them all
++
++**entry.tsx rebrand:**
++- Line 70: `"https://opencode.ai/favicon-96x96-v3.png"` — leave as-is (it's a working URL for now), OR replace with a local asset path if one exists
++- Line 101: `location.hostname.includes("opencode.ai")` — this is a domain check for the hosted app, leave as-is (functional, not a display string)
++
++**i18n/en.ts rebrand — search-and-replace "OpenCode" in ALL user-visible strings:**
++Key strings to change (non-exhaustive, do a full scan):
++- `"dialog.model.unpaid.freeModels.title"`: "...provided by OpenCode" -> "...provided by CoBuilder"
++- `"provider.connect.*"`: "...in OpenCode" -> "...in CoBuilder"
++- `"error.page.report.prefix"`: "...to the OpenCode team" -> "...to the CoBuilder team"
++- `"error.chain.mcpFailed"`: "...OpenCode no soporta..." -> "...CoBuilder does not support..."
++- `"sidebar.gettingStarted.line1"`: "OpenCode includes..." -> "CoBuilder includes..."
++- `"app.name.desktop"`: "OpenCode Desktop" -> "CoBuilder Desktop"
++- ALL `"settings.*description"` strings mentioning OpenCode -> CoBuilder
++- `"toast.update.description"`: "...version of OpenCode..." -> "...version of CoBuilder..."
++
++Do NOT change: import paths, package names, config file names, CLI command names (`opencode serve` stays).
++
++**i18n/es.ts rebrand — same pattern as en.ts** for all Spanish strings containing "OpenCode".
++
++**error.tsx:** Check for any hardcoded "OpenCode" strings beyond what's in i18n. The error page uses `language.t()` calls, so i18n changes should cover it. If there are any hardcoded strings, change those too.
++
++**menu.ts — Cross-platform menu (UX-03) + rebrand:**
++
++Current code returns early on non-darwin (line 15): `if (process.platform !== "darwin") return`
++
++Replace with a cross-platform menu:
++1. Remove the early return for non-darwin
++2. Keep the existing macOS menu template as the darwin branch
++3. Add a Windows/Linux menu template that uses `Ctrl` instead of `Cmd` for accelerators and omits the macOS-specific app submenu (the first item with role: "about", etc.)
++4. Use `process.platform === "darwin"` to select which template to use
++5. Rename "OpenCode" label (line 19) to "CoBuilder"
++6. Rename "OpenCode Documentation" (line 104) to "CoBuilder Documentation"
++7. Update discord/docs URLs if needed
++
++Structure:
++```typescript
++export function createMenu(deps: Deps) {
++  const isMac = process.platform === "darwin"
++
++  const template: Electron.MenuItemConstructorOptions[] = [
++    // macOS app menu (only on darwin)
++    ...(isMac ? [{
++      label: "CoBuilder",
++      submenu: [
++        { role: "about" as const },
++        // ... existing mac-only items (check for updates, preferences, etc.)
++        { role: "quit" as const },
++      ]
++    }] : []),
++    {
++      label: "File",
++      submenu: [
++        { label: "New Session", accelerator: isMac ? "Shift+Cmd+S" : "Shift+Ctrl+S", click: () => deps.trigger("session.new") },
++        { label: "Open Project...", accelerator: isMac ? "Cmd+O" : "Ctrl+O", click: () => deps.trigger("project.open") },
++        // ... rest of file menu
++        ...(!isMac ? [{ role: "quit" as const }] : []),
++      ]
++    },
++    // Edit, View, Window, Help menus with platform-appropriate accelerators
++    // ... keep existing structure but replace Cmd with isMac ? "Cmd" : "Ctrl"
++  ]
++
++  Menu.buildFromTemplate(template)
++  // ... rest of function
++}
++```
++
++Read the full menu.ts file to get the complete menu structure before modifying.
++  </action>
++  <verify>
++    <automated>cd /home/jkang/cobuilder-opencode && echo "=== __OPENCODE__ check ===" && grep -r "__OPENCODE__" packages/app/src/ packages/desktop-electron/src/ 2>/dev/null; echo "EXIT:$?" && echo "=== menu darwin early return ===" && grep -n "platform.*!.*darwin.*return" packages/desktop-electron/src/main/menu.ts; echo "EXIT:$?" && echo "=== OpenCode in en.ts (sample) ===" && grep -c "OpenCode" packages/app/src/i18n/en.ts && echo "=== CoBuilder in en.ts ===" && grep -c "CoBuilder" packages/app/src/i18n/en.ts && echo "=== menu CoBuilder ===" && grep -c "CoBuilder" packages/desktop-electron/src/main/menu.ts</automated>
++  </verify>
++  <acceptance_criteria>
++    - `grep -r "__OPENCODE__" packages/app/src/ packages/desktop-electron/src/` returns NO matches (exit 1)
++    - `grep "__COBUILDER__" packages/app/src/app.tsx` returns matches
++    - `grep "platform.*!.*darwin.*return" menu.ts` returns NO matches (early return removed)
++    - `grep -c "OpenCode" packages/app/src/i18n/en.ts` returns 0 (all rebranded)
++    - `grep -c "CoBuilder" packages/app/src/i18n/en.ts` returns > 0
++    - `grep "CoBuilder" packages/desktop-electron/src/main/menu.ts` returns matches
++    - Menu template includes both macOS and Windows/Linux accelerators
++  </acceptance_criteria>
++  <done>Web app global renamed to __COBUILDER__, all i18n strings rebranded, Electron menu works cross-platform with CoBuilder branding</done>
++</task>
++
++</tasks>
++
++<verification>
++Full rebrand check across all packages:
++```bash
++cd /home/jkang/cobuilder-opencode
++# Should return ZERO matches in user-visible strings (imports/paths OK)
++grep -rn "OpenCode" packages/opencode/src/cli/cmd/tui/ packages/app/src/i18n/ packages/desktop-electron/src/main/menu.ts --include="*.tsx" --include="*.ts" | grep -v "import\|require\|from\|/opencode\|opencode/" | head -20
++```
++
++Cross-platform menu check:
++```bash
++grep "isMac\|process.platform" packages/desktop-electron/src/main/menu.ts
++```
++
++Typecheck: `cd /home/jkang/cobuilder-opencode && bun run typecheck 2>&1 | tail -5`
++</verification>
++
++<success_criteria>
++Zero "OpenCode" in user-visible display strings across TUI, Web i18n, and Electron menu. Electron menu renders on all platforms. TypeScript compiles cleanly.
++</success_criteria>
++
++<output>
++After completion, create `.planning/phases/03-ui-ux-polish/03-02-SUMMARY.md`
++</output>
+diff --git a/.planning/phases/03-ui-ux-polish/03-03-PLAN.md b/.planning/phases/03-ui-ux-polish/03-03-PLAN.md
+new file mode 100644
+index 000000000..f7d87828b
+--- /dev/null
++++ b/.planning/phases/03-ui-ux-polish/03-03-PLAN.md
+@@ -0,0 +1,287 @@
++---
++phase: 03-ui-ux-polish
++plan: 03
++type: execute
++wave: 3
++depends_on: []
++files_modified:
++  - packages/app/src/app.tsx
++  - packages/app/src/pages/session.tsx
++  - packages/app/src/pages/session/composer/session-composer-region.tsx
++  - packages/app/src/components/session/session-sortable-tab.tsx
++autonomous: true
++requirements: [UX-04, UX-05, UX-06, UX-08, UX-09]
++
++must_haves:
++  truths:
++    - "Web app onboarding check uses reactive sync state, not setTimeout 800ms"
++    - "Session view shows an inline prompt when no provider is connected"
++    - "Composer shows a visual spinner while prompt is loading (not just text)"
++    - "Session tabs have a visible drag handle icon"
++  artifacts:
++    - path: "packages/app/src/app.tsx"
++      provides: "Reactive onboarding check without setTimeout"
++    - path: "packages/app/src/pages/session.tsx"
++      provides: "No-provider empty state guard"
++    - path: "packages/app/src/pages/session/composer/session-composer-region.tsx"
++      provides: "Loading spinner for prompt"
++    - path: "packages/app/src/components/session/session-sortable-tab.tsx"
++      provides: "Drag handle on sortable tabs"
++  key_links:
++    - from: "packages/app/src/app.tsx"
++      to: "globalSync.data.provider.connected"
++      via: "createEffect reactive subscription"
++      pattern: "createEffect.*provider\\.connected"
++---
++
++<objective>
++Fix 4 Web app UX issues involving SolidJS reactive patterns: replace the onboarding timing race, add no-provider guard, enhance composer loading feedback, and add drag handles to session tabs.
++
++Note: UX-08 (session history truncation) is already implemented — `onLoadEarlier` button exists in message-timeline.tsx with i18n keys `session.messages.loadEarlier` and `session.messages.loadingEarlier`. No work needed.
++
++Purpose: Eliminate race conditions, improve empty states, and add missing affordances in the Web app.
++Output: 4 modified files with 4 issues resolved (UX-08 pre-existing).
++</objective>
++
++<execution_context>
++@$HOME/.claude/get-shit-done/workflows/execute-plan.md
++@$HOME/.claude/get-shit-done/templates/summary.md
++</execution_context>
++
++<context>
++@.planning/PROJECT.md
++@.planning/ROADMAP.md
++@.planning/STATE.md
++</context>
++
++<tasks>
++
++<task type="auto">
++  <name>Task 1: Replace onboarding setTimeout with reactive check and add no-provider session guard (UX-04, UX-05)</name>
++  <read_first>
++    packages/app/src/app.tsx
++    packages/app/src/pages/session.tsx
++    packages/app/src/components/dialog-onboarding.tsx
++  </read_first>
++  <files>
++    packages/app/src/app.tsx
++    packages/app/src/pages/session.tsx
++  </files>
++  <action>
++**UX-04 — Replace setTimeout 800ms onboarding race in app.tsx (lines ~129-138):**
++
++Current code:
++```tsx
++onMount(() => {
++  if (wasOnboardingShown()) return
++  // Give sync a moment to populate connected providers
++  setTimeout(() => {
++    const connected = globalSync.data.provider.connected
++    if (connected.length === 0) {
++      dialog.show(() => <DialogOnboarding />)
++    }
++  }, 800)
++})
++```
++
++Replace with a reactive `createEffect` that watches `globalSync.data.provider` and triggers once when the provider list is first populated (not empty array from initial state, but the actual server response):
++
++```tsx
++onMount(() => {
++  if (wasOnboardingShown()) return
++
++  // Use a one-shot effect that fires when provider data is first loaded
++  const dispose = createRoot((dispose) => {
++    createEffect(() => {
++      const providers = globalSync.data.provider
++      // Wait until sync has actually loaded provider data
++      // Check if the provider object has been populated (not just initial empty state)
++      if (!providers) return
++      const connected = providers.connected
++      if (connected.length === 0) {
++        dialog.show(() => <DialogOnboarding />)
++      }
++      // Dispose after first meaningful check
++      dispose()
++    })
++    return dispose
++  })
++})
++```
++
++Alternative simpler approach — use `createEffect` with `on()` to watch the connected array reactively and fire once:
++
++```tsx
++onMount(() => {
++  if (wasOnboardingShown()) return
++
++  let checked = false
++  createEffect(() => {
++    const connected = globalSync.data.provider.connected
++    if (checked) return
++    // Skip the initial empty array before sync loads
++    // provider.connected starts as [] and stays [] if no provider, or becomes [...] if connected
++    // We need to know when sync has finished its initial load
++    // Check if sync.ready or similar signal exists
++    checked = true
++    if (connected.length === 0) {
++      dialog.show(() => <DialogOnboarding />)
++    }
++  })
++})
++```
++
++IMPORTANT: Read app.tsx fully to understand what signals are available from `globalSync` — there may be a `ready` or `initialized` signal that indicates the sync state has been populated from the server. If such a signal exists, use it as the gate instead of the timeout. The key requirement is: do NOT show the onboarding dialog before the provider list has actually been fetched from the server.
++
++Look for patterns like `globalSync.ready`, `globalSync.data.initialized`, or similar in the sync context. If none exists, use a `createEffect` that watches `globalSync.data.provider.connected` and fires on the first change from the initial value.
++
++**UX-05 — Add no-provider empty state in session.tsx:**
++
++When a user navigates to a session but has no provider connected, they see a blank composer with no guidance. Add an inline prompt/banner.
++
++Find the session page render — look for where `SessionComposerRegion` is rendered (around line 1764). Add a `Show` guard that checks if any provider is connected:
++
++```tsx
++<Show when={globalSync.data.provider.connected.length === 0 && messagesReady()}>
++  <div class="flex flex-col items-center gap-3 py-8 text-center">
++    <p class="text-sm text-text-weak">
++      {language.t("session.noProvider.message", { fallback: "No AI provider connected. Connect a provider to start chatting." })}
++    </p>
++    <button
++      class="text-sm text-accent-base hover:underline cursor-pointer"
++      onClick={() => {/* trigger provider dialog or navigate to settings */}}
++    >
++      {language.t("session.noProvider.connect", { fallback: "Connect a provider" })}
++    </button>
++  </div>
++</Show>
++```
++
++Read session.tsx to find:
++1. Where the composer region is rendered
++2. How other dialogs/commands are triggered (look for `useCommand` or dialog patterns)
++3. How to trigger the provider connection dialog (likely via a command like `command.execute("provider.connect")` or similar)
++
++Place the no-provider banner above or instead of the composer when no provider is connected. The banner should have a clickable action that opens the provider connection flow.
++  </action>
++  <verify>
++    <automated>cd /home/jkang/cobuilder-opencode && grep -c "setTimeout.*800" packages/app/src/app.tsx; echo "TIMEOUT_COUNT (should be 0)" && grep -c "createEffect" packages/app/src/app.tsx && grep -c "noProvider\|no.*provider\|Connect a provider" packages/app/src/pages/session.tsx; echo "NO_PROVIDER_GUARD (should be > 0)"</automated>
++  </verify>
++  <acceptance_criteria>
++    - `grep "setTimeout.*800" app.tsx` returns NO matches
++    - `grep "createEffect" app.tsx` confirms reactive approach is present
++    - `grep -i "provider" session.tsx` shows the no-provider guard/banner
++    - Onboarding dialog only appears after sync has loaded provider data
++  </acceptance_criteria>
++  <done>Onboarding uses reactive sync state (no 800ms race), session view shows connect prompt when no provider available</done>
++</task>
++
++<task type="auto">
++  <name>Task 2: Add composer loading spinner and tab drag handles (UX-06, UX-09)</name>
++  <read_first>
++    packages/app/src/pages/session/composer/session-composer-region.tsx
++    packages/app/src/components/session/session-sortable-tab.tsx
++  </read_first>
++  <files>
++    packages/app/src/pages/session/composer/session-composer-region.tsx
++    packages/app/src/components/session/session-sortable-tab.tsx
++  </files>
++  <action>
++**UX-06 — Add spinner to composer loading state in session-composer-region.tsx:**
++
++The file already has a fallback for `!prompt.ready()` at line ~164-181 that shows `language.t("prompt.loading")` text. Enhance this with a visual spinner.
++
++Find the `<Show when={prompt.ready()} fallback={...}>` block (around line 162-182). In the fallback branch, add a spinning indicator before or alongside the loading text. Check what spinner/loading components are available in the UI library:
++
++```bash
++grep -r "Spinner\|Loading\|Loader" packages/ui/src/ --include="*.tsx" -l
++```
++
++If a `Spinner` component exists in `@opencode-ai/ui`, import and use it:
++```tsx
++import { Spinner } from "@opencode-ai/ui/spinner"
++```
++
++If no spinner component exists, add a CSS-animated spinner using Tailwind:
++```tsx
++<div class="flex items-center gap-2 px-4 py-3 text-text-weak">
++  <svg class="animate-spin size-4" viewBox="0 0 24 24" fill="none">
++    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
++    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
++  </svg>
++  <span>{handoffPrompt() || language.t("prompt.loading")}</span>
++</div>
++```
++
++Place this inside the existing fallback block, replacing or augmenting the current plain-text loading display. Keep the `handoffPrompt()` text display — just add the spinner icon before it.
++
++**UX-09 — Add drag handle to session sortable tabs in session-sortable-tab.tsx:**
++
++Current code (line 42): The entire tab has `use:sortable` which makes the whole tab the drag target. There's no visual drag affordance.
++
++Add a grip/drag-handle icon that serves as the visual indicator. The `use:sortable` can stay on the parent div (whole tab draggable is fine), but add a visual grip icon:
++
++Find the `SortableTab` component's return JSX (line ~41). Add a grip icon before the tab content:
++
++```tsx
++<div use:sortable class="h-full flex items-center" classList={{ "opacity-0": sortable.isActiveDraggable }}>
++  {/* Drag handle - visible on hover */}
++  <span class="shrink-0 opacity-0 group-hover:opacity-40 hover:!opacity-70 cursor-grab active:cursor-grabbing px-0.5 text-text-weak">
++    <svg class="size-3" viewBox="0 0 16 16" fill="currentColor">
++      <circle cx="5" cy="3" r="1.5" />
++      <circle cx="11" cy="3" r="1.5" />
++      <circle cx="5" cy="8" r="1.5" />
++      <circle cx="11" cy="8" r="1.5" />
++      <circle cx="5" cy="13" r="1.5" />
++      <circle cx="11" cy="13" r="1.5" />
++    </svg>
++  </span>
++  <div class="relative">
++    ...existing tab content...
++  </div>
++</div>
++```
++
++Check if the parent of sortable tabs has `group` class for the hover effect to work. If not, add `group` to the outer `<div use:sortable>`:
++```tsx
++<div use:sortable class="group h-full flex items-center" ...>
++```
++
++Also check if there's an existing icon library (like `@opencode-ai/ui/icon` or lucide icons). If so, use `GripVertical` or similar icon instead of inline SVG.
++
++Look for icon imports in nearby files:
++```bash
++grep -r "Icon\|icon" packages/app/src/components/session/session-sortable-tab.tsx
++```
++  </action>
++  <verify>
++    <automated>cd /home/jkang/cobuilder-opencode && grep -c "animate-spin\|Spinner\|spinner" packages/app/src/pages/session/composer/session-composer-region.tsx; echo "SPINNER (should be > 0)" && grep -c "grip\|drag.*handle\|GripVertical\|cursor-grab" packages/app/src/components/session/session-sortable-tab.tsx; echo "DRAG_HANDLE (should be > 0)"</automated>
++  </verify>
++  <acceptance_criteria>
++    - Composer region has a spinner element when `!prompt.ready()` — confirmed by grep for `animate-spin` or `Spinner`
++    - Sortable tab has a drag handle element — confirmed by grep for `cursor-grab` or `grip` or `GripVertical`
++    - Both files compile without TypeScript errors
++  </acceptance_criteria>
++  <done>Composer shows visual spinner during prompt loading; session tabs display a visible drag handle for reordering</done>
++</task>
++
++</tasks>
++
++<verification>
++All UX issues for this plan:
++1. UX-04: No `setTimeout.*800` in app.tsx, `createEffect` present
++2. UX-05: No-provider guard present in session.tsx
++3. UX-06: Spinner element in composer fallback
++4. UX-08: Pre-existing (already implemented — `onLoadEarlier` in message-timeline.tsx)
++5. UX-09: Drag handle in sortable tab
++
++Typecheck: `cd /home/jkang/cobuilder-opencode && bun run typecheck 2>&1 | tail -5`
++</verification>
++
++<success_criteria>
++All 4 active issues resolved (UX-08 pre-existing). No setTimeout race in onboarding. Session shows connect prompt when no provider. Composer has spinner. Tabs have drag handles. TypeScript compiles cleanly.
++</success_criteria>
++
++<output>
++After completion, create `.planning/phases/03-ui-ux-polish/03-03-SUMMARY.md`
++</output>
+diff --git a/README.md b/README.md
+index 0c93d6936..20b3c897f 100644
+--- a/README.md
++++ b/README.md
+@@ -23,14 +23,14 @@ Pre-built binaries are available for every major platform — [**latest release
+ 
+ | Platform | Download |
+ |----------|---------|
+-| macOS (Apple Silicon) | [`opencode-darwin-arm64.zip`](https://github.com/CobuilderLabs/opencode/releases/latest/download/opencode-darwin-arm64.zip) |
+-| macOS (Intel) | [`opencode-darwin-x64.zip`](https://github.com/CobuilderLabs/opencode/releases/latest/download/opencode-darwin-x64.zip) |
+-| Windows (x64) | [`opencode-windows-x64.zip`](https://github.com/CobuilderLabs/opencode/releases/latest/download/opencode-windows-x64.zip) |
+-| Windows (ARM64) | [`opencode-windows-arm64.zip`](https://github.com/CobuilderLabs/opencode/releases/latest/download/opencode-windows-arm64.zip) |
+-| Linux (x64) | [`opencode-linux-x64.tar.gz`](https://github.com/CobuilderLabs/opencode/releases/latest/download/opencode-linux-x64.tar.gz) |
+-| Linux (ARM64) | [`opencode-linux-arm64.tar.gz`](https://github.com/CobuilderLabs/opencode/releases/latest/download/opencode-linux-arm64.tar.gz) |
+-
+-> **Desktop App** — native GUI coming soon.
++| macOS (Apple Silicon) | [`cobuilder-darwin-arm64.zip`](https://github.com/CobuilderLabs/opencode/releases/latest/download/cobuilder-darwin-arm64.zip) |
++| macOS (Intel) | [`cobuilder-darwin-x64.zip`](https://github.com/CobuilderLabs/opencode/releases/latest/download/cobuilder-darwin-x64.zip) |
++| Windows (x64) | [`cobuilder-windows-x64.zip`](https://github.com/CobuilderLabs/opencode/releases/latest/download/cobuilder-windows-x64.zip) |
++| Windows (ARM64) | [`cobuilder-windows-arm64.zip`](https://github.com/CobuilderLabs/opencode/releases/latest/download/cobuilder-windows-arm64.zip) |
++| Linux (x64) | [`cobuilder-linux-x64.tar.gz`](https://github.com/CobuilderLabs/opencode/releases/latest/download/cobuilder-linux-x64.tar.gz) |
++| Linux (ARM64) | [`cobuilder-linux-arm64.tar.gz`](https://github.com/CobuilderLabs/opencode/releases/latest/download/cobuilder-linux-arm64.tar.gz) |
++
++> **Desktop App (BETA)** — Windows and Linux installers available on the [latest release →](https://github.com/CobuilderLabs/opencode/releases/latest) macOS coming soon.
+ 
+ ---
+ 
+diff --git a/packages/desktop-electron/electron-builder.config.ts b/packages/desktop-electron/electron-builder.config.ts
+index e6b4bcd2b..e7d6dea05 100644
+--- a/packages/desktop-electron/electron-builder.config.ts
++++ b/packages/desktop-electron/electron-builder.config.ts
+@@ -7,7 +7,7 @@ const channel = (() => {
+ })()
+ 
+ const getBase = (): Configuration => ({
+-  artifactName: "opencode-electron-${os}-${arch}.${ext}",
++  artifactName: "cobuilder-${os}-${arch}.${ext}",
+   directories: {
+     output: "dist",
+     buildResources: "resources",
+@@ -17,7 +17,7 @@ const getBase = (): Configuration => ({
+     {
+       from: "resources/",
+       to: "",
+-      filter: ["opencode-cli*"],
++      filter: ["cobuilder*"],
+     },
+     {
+       from: "native/",
+@@ -39,7 +39,7 @@ const getBase = (): Configuration => ({
+     sign: true,
+   },
+   protocols: {
+-    name: "OpenCode",
++    name: "CoBuilder",
+     schemes: ["opencode"],
+   },
+   win: {
+@@ -66,29 +66,29 @@ function getConfig() {
+     case "dev": {
+       return {
+         ...base,
+-        appId: "ai.opencode.desktop.dev",
+-        productName: "OpenCode Dev",
+-        rpm: { packageName: "opencode-dev" },
++        appId: "ai.cobuilder.desktop.dev",
++        productName: "CoBuilder Dev",
++        rpm: { packageName: "cobuilder-dev" },
+       }
+     }
+     case "beta": {
+       return {
+         ...base,
+-        appId: "ai.opencode.desktop.beta",
+-        productName: "OpenCode Beta",
+-        protocols: { name: "OpenCode Beta", schemes: ["opencode"] },
+-        publish: { provider: "github", owner: "anomalyco", repo: "opencode-beta", channel: "latest" },
+-        rpm: { packageName: "opencode-beta" },
++        appId: "ai.cobuilder.desktop.beta",
++        productName: "CoBuilder Beta",
++        protocols: { name: "CoBuilder Beta", schemes: ["opencode"] },
++        publish: { provider: "github", owner: "CobuilderLabs", repo: "opencode", channel: "latest" },
++        rpm: { packageName: "cobuilder-beta" },
+       }
+     }
+     case "prod": {
+       return {
+         ...base,
+-        appId: "ai.opencode.desktop",
+-        productName: "OpenCode",
+-        protocols: { name: "OpenCode", schemes: ["opencode"] },
+-        publish: { provider: "github", owner: "anomalyco", repo: "opencode", channel: "latest" },
+-        rpm: { packageName: "opencode" },
++        appId: "ai.cobuilder.desktop",
++        productName: "CoBuilder",
++        protocols: { name: "CoBuilder", schemes: ["opencode"] },
++        publish: { provider: "github", owner: "CobuilderLabs", repo: "opencode", channel: "latest" },
++        rpm: { packageName: "cobuilder" },
+       }
+     }
+   }
+diff --git a/packages/opencode/script/build.ts b/packages/opencode/script/build.ts
+index c6260436d..5c157f07c 100755
+--- a/packages/opencode/script/build.ts
++++ b/packages/opencode/script/build.ts
+@@ -176,7 +176,7 @@ if (!skipInstall) {
+ }
+ for (const item of targets) {
+   const name = [
+-    pkg.name,
++    "cobuilder",
+     // changing to win32 flags npm for some reason
+     item.os === "win32" ? "windows" : item.os,
+     item.arch,
+-- 
+2.43.0
+

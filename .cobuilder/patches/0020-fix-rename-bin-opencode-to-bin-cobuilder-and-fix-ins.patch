@@ -1,0 +1,113 @@
+From 8fd7064995954597cdfcdb0bf6e19ac4795cd0d3 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Thu, 26 Mar 2026 15:18:52 -0700
+Subject: [PATCH 020/127] fix: rename bin/opencode to bin/cobuilder and fix
+ install.sh asset names
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- Renames packages/opencode/bin/opencode → bin/cobuilder
+- Updates bin wrapper: .cobuilder cache, cobuilder- asset prefix, cobuilder binary name
+- Updates package.json bin field: ./bin/opencode → ./bin/cobuilder
+- Fixes install.sh: opencode-${PLATFORM}-${ARCH} → cobuilder-${PLATFORM}-${ARCH}
+- Adds `cobuilder` script to root package.json for `bun run cobuilder`
+
+Without this, `cobuilder install` downloaded the right file but unpacked
+looking for an `opencode` binary — and the install script was fetching
+opencode-* asset names that no longer exist.
+
+Co-authored-by: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ install.sh                                    | 6 +++---
+ package.json                                  | 1 +
+ packages/opencode/bin/{opencode => cobuilder} | 8 ++++----
+ packages/opencode/package.json                | 2 +-
+ 4 files changed, 9 insertions(+), 8 deletions(-)
+ rename packages/opencode/bin/{opencode => cobuilder} (94%)
+
+diff --git a/install.sh b/install.sh
+index e5d94cb46..b9817d3e7 100755
+--- a/install.sh
++++ b/install.sh
+@@ -59,13 +59,13 @@ fi
+ info "Latest release: ${LATEST}"
+ 
+ # ── Build asset name ─────────────────────────────────────────────────────────
+-# Asset naming: opencode-<platform>-<arch>.tar.gz (linux) or .zip (others)
+-PKG_NAME="opencode-${PLATFORM}-${ARCH}"
++# Asset naming: cobuilder-<platform>-<arch>.tar.gz (linux) or .zip (others)
++PKG_NAME="cobuilder-${PLATFORM}-${ARCH}"
+ 
+ if [[ "$PLATFORM" == "linux" ]]; then
+   # Detect musl
+   if ldd --version 2>&1 | grep -qi musl || [[ -f /etc/alpine-release ]]; then
+-    PKG_NAME="opencode-${PLATFORM}-${ARCH}-musl"
++    PKG_NAME="cobuilder-${PLATFORM}-${ARCH}-musl"
+   fi
+   ASSET="${PKG_NAME}.tar.gz"
+ else
+diff --git a/package.json b/package.json
+index 985c449c7..652c2412c 100644
+--- a/package.json
++++ b/package.json
+@@ -6,6 +6,7 @@
+   "type": "module",
+   "packageManager": "bun@1.3.11",
+   "scripts": {
++    "cobuilder": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
+     "dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
+     "onboard": "bun run --cwd packages/opencode --conditions=browser src/index.ts onboard",
+     "dev:desktop": "bun --cwd packages/desktop tauri dev",
+diff --git a/packages/opencode/bin/opencode b/packages/opencode/bin/cobuilder
+similarity index 94%
+rename from packages/opencode/bin/opencode
+rename to packages/opencode/bin/cobuilder
+index a7674ce2f..a3979389a 100755
+--- a/packages/opencode/bin/opencode
++++ b/packages/opencode/bin/cobuilder
+@@ -26,7 +26,7 @@ const scriptPath = fs.realpathSync(__filename)
+ const scriptDir = path.dirname(scriptPath)
+ 
+ //
+-const cached = path.join(scriptDir, ".opencode")
++const cached = path.join(scriptDir, ".cobuilder")
+ if (fs.existsSync(cached)) {
+   run(cached)
+ }
+@@ -50,8 +50,8 @@ let arch = archMap[os.arch()]
+ if (!arch) {
+   arch = os.arch()
+ }
+-const base = "opencode-" + platform + "-" + arch
+-const binary = platform === "windows" ? "opencode.exe" : "opencode"
++const base = "cobuilder-" + platform + "-" + arch
++const binary = platform === "windows" ? "cobuilder.exe" : "cobuilder"
+ 
+ function supportsAvx2() {
+   if (arch !== "x64") return false
+@@ -169,7 +169,7 @@ function findBinary(startDir) {
+ const resolved = findBinary(scriptDir)
+ if (!resolved) {
+   console.error(
+-    "It seems that your package manager failed to install the right version of the opencode CLI for your platform. You can try manually installing " +
++    "It seems that your package manager failed to install the right version of the CoBuilder CLI for your platform. You can try manually installing " +
+       names.map((n) => `\"${n}\"`).join(" or ") +
+       " package",
+   )
+diff --git a/packages/opencode/package.json b/packages/opencode/package.json
+index a3686f47b..261261c75 100644
+--- a/packages/opencode/package.json
++++ b/packages/opencode/package.json
+@@ -20,7 +20,7 @@
+     "db": "bun drizzle-kit"
+   },
+   "bin": {
+-    "cobuilder": "./bin/opencode"
++    "cobuilder": "./bin/cobuilder"
+   },
+   "randomField": "this-is-a-random-value-12345",
+   "exports": {
+-- 
+2.43.0
+

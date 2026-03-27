@@ -1,0 +1,39 @@
+From e24f397dee10215e9d23352d040cc29a31a9b206 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Fri, 27 Mar 2026 12:58:49 -0700
+Subject: [PATCH 115/127] ci(pr-management): switch to ubuntu-latest, replace
+ composite setup-bun action
+
+---
+ .github/workflows/pr-management.yml | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/.github/workflows/pr-management.yml b/.github/workflows/pr-management.yml
+index 62483fa56..e8530f4e6 100644
+--- a/.github/workflows/pr-management.yml
++++ b/.github/workflows/pr-management.yml
+@@ -6,7 +6,7 @@ on:
+ 
+ jobs:
+   check-duplicates:
+-    runs-on: blacksmith-4vcpu-ubuntu-2404
++    runs-on: ubuntu-latest
+     permissions:
+       contents: read
+       pull-requests: write
+@@ -27,9 +27,10 @@ jobs:
+             echo "is_team=false" >> "$GITHUB_OUTPUT"
+           fi
+ 
+-      - name: Setup Bun
++      - uses: oven-sh/setup-bun@v2
+         if: steps.team-check.outputs.is_team != 'true'
+-        uses: ./.github/actions/setup-bun
++        with:
++          bun-version: "1.3.11"
+ 
+       - name: Install dependencies
+         if: steps.team-check.outputs.is_team != 'true'
+-- 
+2.43.0
+

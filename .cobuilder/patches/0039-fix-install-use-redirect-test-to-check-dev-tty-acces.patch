@@ -1,0 +1,30 @@
+From 37985628d49cf4f40ad6aa6f284d8badff0f8341 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <johnny.kang101@gmail.com>
+Date: Thu, 26 Mar 2026 16:22:40 -0700
+Subject: [PATCH 039/127] fix(install): use redirect test to check /dev/tty
+ accessibility
+
+(exec </dev/tty) leaks bash errors; { true </dev/tty; } 2>/dev/null
+cleanly tests if the device can be opened without any output.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ install.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/install.sh b/install.sh
+index 9d323324a..74e72aa34 100755
+--- a/install.sh
++++ b/install.sh
+@@ -132,7 +132,7 @@ echo ""
+ # so interactive prompts (arrow keys etc.) work seamlessly.
+ if [ -t 0 ]; then
+   "$COBUILDER_BIN" onboard
+-elif [ -e /dev/tty ] && (exec </dev/tty) 2>/dev/null; then
++elif { true </dev/tty; } 2>/dev/null; then
+   "$COBUILDER_BIN" onboard </dev/tty
+ else
+   echo ""
+-- 
+2.43.0
+

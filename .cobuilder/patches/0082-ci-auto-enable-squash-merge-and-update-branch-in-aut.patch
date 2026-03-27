@@ -1,0 +1,45 @@
+From f9d1423b028e1cd72c4b24d64139da637a63426b Mon Sep 17 00:00:00 2001
+From: johnnykang101 <johnny.kang101@gmail.com>
+Date: Fri, 27 Mar 2026 08:33:40 -0700
+Subject: [PATCH 082/127] ci: auto-enable squash merge and update branch in
+ auto-approve workflow
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ .github/workflows/auto-approve.yml | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/.github/workflows/auto-approve.yml b/.github/workflows/auto-approve.yml
+index bcb300b75..19b0cd758 100644
+--- a/.github/workflows/auto-approve.yml
++++ b/.github/workflows/auto-approve.yml
+@@ -9,6 +9,7 @@ jobs:
+     runs-on: ubuntu-latest
+     permissions:
+       pull-requests: write
++      contents: write
+     steps:
+       - name: Get bot token
+         id: bot-token
+@@ -43,3 +44,18 @@ jobs:
+               event: 'APPROVE'
+             });
+             console.log(`Approved PR #${pr} for ${login}`);
++
++            await github.rest.pulls.updateBranch({
++              owner: context.repo.owner,
++              repo: context.repo.repo,
++              pull_number: pr,
++            }).catch(() => console.log('Branch already up to date'));
++
++            await github.graphql(`
++              mutation EnableAutoMerge($prId: ID!) {
++                enablePullRequestAutoMerge(input: { pullRequestId: $prId, mergeMethod: SQUASH }) {
++                  pullRequest { autoMergeRequest { mergeMethod } }
++                }
++              }
++            `, { prId: context.payload.pull_request.node_id });
++            console.log(`Enabled auto-merge (squash) on PR #${pr}`);
+-- 
+2.43.0
+

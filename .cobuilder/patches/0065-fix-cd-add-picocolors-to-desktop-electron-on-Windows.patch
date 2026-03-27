@@ -1,0 +1,37 @@
+From d84e6e9d0b5f11d464f4ee6990d7668545879149 Mon Sep 17 00:00:00 2001
+From: CoBuilder CEO <ceo@cobuilder.ai>
+Date: Thu, 26 Mar 2026 22:27:30 -0700
+Subject: [PATCH 065/127] fix(cd): add picocolors to desktop-electron on
+ Windows to fix electron-vite resolution
+
+---
+ .github/workflows/cd.yml | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/.github/workflows/cd.yml b/.github/workflows/cd.yml
+index c6b4d6063..c1d71ff78 100644
+--- a/.github/workflows/cd.yml
++++ b/.github/workflows/cd.yml
+@@ -255,8 +255,8 @@ jobs:
+       - name: Install dependencies
+         run: bun install --frozen-lockfile
+ 
+-      - name: Install desktop dependencies with npm (Windows node_modules compat)
+-        run: cd packages/desktop-electron && npm install --legacy-peer-deps
++      - name: Fix electron-vite picocolors resolution (Windows)
++        run: bun add picocolors --cwd packages/desktop-electron
+ 
+       - name: Set desktop version
+         run: |
+@@ -269,7 +269,7 @@ jobs:
+           "
+ 
+       - name: Build
+-        run: cd packages/desktop-electron && npx electron-vite build
++        run: cd packages/desktop-electron && bun run build
+         env:
+           OPENCODE_CHANNEL: prod
+ 
+-- 
+2.43.0
+

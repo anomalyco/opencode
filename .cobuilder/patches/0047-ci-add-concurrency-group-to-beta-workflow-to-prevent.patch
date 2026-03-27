@@ -1,0 +1,32 @@
+From e276e41008a4b81a71e82fd130206ab4803e6173 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <johnny.kang101@gmail.com>
+Date: Thu, 26 Mar 2026 20:36:46 -0700
+Subject: [PATCH 047/127] ci: add concurrency group to beta workflow to prevent
+ queue pile-up
+
+Without a concurrency group the hourly cron kept adding new runs while
+old ones were stuck queued, accumulating 24+ stale runs.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ .github/workflows/beta.yml | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/.github/workflows/beta.yml b/.github/workflows/beta.yml
+index a7106667b..f96867b03 100644
+--- a/.github/workflows/beta.yml
++++ b/.github/workflows/beta.yml
+@@ -5,6 +5,10 @@ on:
+   schedule:
+     - cron: "0 * * * *"
+ 
++concurrency:
++  group: beta-sync
++  cancel-in-progress: true
++
+ jobs:
+   sync:
+     runs-on: blacksmith-4vcpu-ubuntu-2404
+-- 
+2.43.0
+

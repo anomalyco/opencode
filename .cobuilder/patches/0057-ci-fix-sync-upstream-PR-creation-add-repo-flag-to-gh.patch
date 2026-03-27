@@ -1,0 +1,28 @@
+From b26e12585b1475ddba4691f4ee349dffe761b969 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <johnny.kang101@gmail.com>
+Date: Thu, 26 Mar 2026 20:57:39 -0700
+Subject: [PATCH 057/127] =?UTF-8?q?ci:=20fix=20sync-upstream=20PR=20creati?=
+ =?UTF-8?q?on=20=E2=80=94=20add=20--repo=20flag=20to=20gh=20pr=20create?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ .github/workflows/sync-upstream.yml | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/.github/workflows/sync-upstream.yml b/.github/workflows/sync-upstream.yml
+index 325b070b7..f25efabd6 100644
+--- a/.github/workflows/sync-upstream.yml
++++ b/.github/workflows/sync-upstream.yml
+@@ -104,6 +104,7 @@ jobs:
+           fi
+ 
+           gh pr create \
++            --repo "$GITHUB_REPOSITORY" \
+             --title "$TITLE" \
+             --body "$BODY" \
+             --base main \
+-- 
+2.43.0
+

@@ -1,0 +1,25 @@
+From eea369c8312953c378a1c902474b7f756207f49d Mon Sep 17 00:00:00 2001
+From: CoBuilder CEO <ceo@cobuilder.ai>
+Date: Thu, 26 Mar 2026 22:37:21 -0700
+Subject: [PATCH 068/127] fix(desktop): add picocolors as explicit
+ devDependency to fix electron-vite module resolution on Windows
+
+---
+ bun.lock | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/bun.lock b/bun.lock
+index 9a7a586e4..e26fb6b80 100644
+--- a/bun.lock
++++ b/bun.lock
+@@ -246,6 +246,7 @@
+         "electron": "40.4.1",
+         "electron-builder": "^26",
+         "electron-vite": "^5",
++        "picocolors": "^1",
+         "typescript": "~5.6.2",
+         "vite": "catalog:",
+       },
+-- 
+2.43.0
+

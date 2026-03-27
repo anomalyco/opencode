@@ -1,0 +1,27 @@
+From 2316dff1f992e52192a9ca6c4b3f8771a601bf56 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Fri, 27 Mar 2026 08:58:20 -0700
+Subject: [PATCH 086/127] fix: replace opencode with cobuilder in TUI exit
+ message (#31)
+
+Co-authored-by: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ packages/opencode/src/cli/cmd/tui/routes/session/index.tsx | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/packages/opencode/src/cli/cmd/tui/routes/session/index.tsx b/packages/opencode/src/cli/cmd/tui/routes/session/index.tsx
+index 24a48aaf5..3716ce9bd 100644
+--- a/packages/opencode/src/cli/cmd/tui/routes/session/index.tsx
++++ b/packages/opencode/src/cli/cmd/tui/routes/session/index.tsx
+@@ -253,7 +253,7 @@ export function Session() {
+         `${logo[3] ?? ""}`,
+         ``,
+         `  ${weak("Session")}${UI.Style.TEXT_NORMAL_BOLD}${title}${UI.Style.TEXT_NORMAL}`,
+-        `  ${weak("Continue")}${UI.Style.TEXT_NORMAL_BOLD}opencode -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
++        `  ${weak("Continue")}${UI.Style.TEXT_NORMAL_BOLD}cobuilder -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
+         ``,
+       ].join("\n"),
+     )
+-- 
+2.43.0
+

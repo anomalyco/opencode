@@ -1,0 +1,2429 @@
+From c7760b433b1bdbcaed7e7cd55d53b5b331f0f0fa Mon Sep 17 00:00:00 2001
+From: Adam <2363879+adamdotdevin@users.noreply.github.com>
+Date: Thu, 26 Mar 2026 13:41:22 -0500
+Subject: [PATCH 006/127] fix(app): more startup perf (#19288)
+
+---
+ packages/app/e2e/actions.ts                   |   5 +-
+ .../e2e/session/session-composer-dock.spec.ts |  21 +-
+ .../session/session-model-persistence.spec.ts | 192 +++++---
+ .../components/dialog-connect-provider.tsx    |  19 +-
+ .../app/src/components/dialog-select-mcp.tsx  |  46 +-
+ .../components/dialog-select-model-unpaid.tsx |  20 +-
+ .../src/components/dialog-select-model.tsx    |  35 +-
+ packages/app/src/components/prompt-input.tsx  |   7 +-
+ .../src/components/session-context-usage.tsx  |   4 +-
+ .../session/session-context-tab.tsx           |   4 +-
+ .../src/components/status-popover-body.tsx    | 443 ++++++++++++++++++
+ .../app/src/components/status-popover.tsx     | 410 +---------------
+ packages/app/src/context/global-sync.tsx      |   9 +-
+ .../app/src/context/global-sync/bootstrap.ts  | 165 +++++--
+ .../src/context/global-sync/child-store.ts    |   3 +
+ packages/app/src/context/global-sync/types.ts |   3 +
+ packages/app/src/context/local.tsx            |  22 +-
+ packages/app/src/hooks/use-providers.ts       |   2 +-
+ packages/app/src/pages/directory-layout.tsx   |   7 +
+ packages/app/src/pages/session.tsx            |   1 -
+ .../src/pages/session/session-side-panel.tsx  |   9 +-
+ .../pages/session/use-session-commands.tsx    |  28 +-
+ packages/app/src/testing/model-selection.ts   |  35 +-
+ packages/opencode/src/server/routes/event.ts  |   1 +
+ packages/opencode/src/server/routes/global.ts |   2 +
+ packages/opencode/src/server/server.ts        |  14 +
+ packages/sdk/js/src/client.ts                 |  25 +
+ packages/sdk/js/src/v2/client.ts              |  48 +-
+ 28 files changed, 1012 insertions(+), 568 deletions(-)
+ create mode 100644 packages/app/src/components/status-popover-body.tsx
+
+diff --git a/packages/app/e2e/actions.ts b/packages/app/e2e/actions.ts
+index 90af177ed..efd370d39 100644
+--- a/packages/app/e2e/actions.ts
++++ b/packages/app/e2e/actions.ts
+@@ -465,10 +465,13 @@ export async function waitSession(page: Page, input: { directory: string; sessio
+         if (!slug) return false
+         const resolved = await resolveSlug(slug).catch(() => undefined)
+         if (!resolved || resolved.directory !== target) return false
+-        if (input.sessionID && sessionIDFromUrl(page.url()) !== input.sessionID) return false
++        const current = sessionIDFromUrl(page.url())
++        if (input.sessionID && current !== input.sessionID) return false
++        if (!input.sessionID && current) return false
+ 
+         const state = await probeSession(page)
+         if (input.sessionID && (!state || state.sessionID !== input.sessionID)) return false
++        if (!input.sessionID && state?.sessionID) return false
+         if (state?.dir) {
+           const dir = await resolveDirectory(state.dir).catch(() => state.dir ?? "")
+           if (dir !== target) return false
+diff --git a/packages/app/e2e/session/session-composer-dock.spec.ts b/packages/app/e2e/session/session-composer-dock.spec.ts
+index 5b2e8a8c6..f083bf359 100644
+--- a/packages/app/e2e/session/session-composer-dock.spec.ts
++++ b/packages/app/e2e/session/session-composer-dock.spec.ts
+@@ -93,7 +93,7 @@ async function todoDock(page: any, sessionID: string) {
+ 
+   const write = async (driver: ComposerDriverState | undefined) => {
+     await page.evaluate(
+-      (input) => {
++      (input: { event: string; sessionID: string; driver: ComposerDriverState | undefined }) => {
+         const win = window as ComposerWindow
+         const composer = win.__opencode_e2e?.composer
+         if (!composer?.enabled) throw new Error("Composer e2e driver is not enabled")
+@@ -118,7 +118,7 @@ async function todoDock(page: any, sessionID: string) {
+   }
+ 
+   const read = () =>
+-    page.evaluate((sessionID) => {
++    page.evaluate((sessionID: string) => {
+       const win = window as ComposerWindow
+       return win.__opencode_e2e?.composer?.sessions?.[sessionID]?.probe ?? null
+     }, sessionID) as Promise<ComposerProbeState | null>
+@@ -186,6 +186,8 @@ async function withMockPermission<T>(
+   opts: { child?: any } | undefined,
+   fn: (state: { resolved: () => Promise<void> }) => Promise<T>,
+ ) {
++  const listUrl = /\/permission(?:\?.*)?$/
++  const replyUrls = [/\/session\/[^/]+\/permissions\/[^/?]+(?:\?.*)?$/, /\/permission\/[^/]+\/reply(?:\?.*)?$/]
+   let pending = [
+     {
+       ...request,
+@@ -204,7 +206,8 @@ async function withMockPermission<T>(
+ 
+   const reply = async (route: any) => {
+     const url = new URL(route.request().url())
+-    const id = url.pathname.split("/").pop()
++    const parts = url.pathname.split("/").filter(Boolean)
++    const id = parts.at(-1) === "reply" ? parts.at(-2) : parts.at(-1)
+     pending = pending.filter((item) => item.id !== id)
+     await route.fulfill({
+       status: 200,
+@@ -213,8 +216,10 @@ async function withMockPermission<T>(
+     })
+   }
+ 
+-  await page.route("**/permission", list)
+-  await page.route("**/session/*/permissions/*", reply)
++  await page.route(listUrl, list)
++  for (const item of replyUrls) {
++    await page.route(item, reply)
++  }
+ 
+   const sessionList = opts?.child
+     ? async (route: any) => {
+@@ -242,8 +247,10 @@ async function withMockPermission<T>(
+   try {
+     return await fn(state)
+   } finally {
+-    await page.unroute("**/permission", list)
+-    await page.unroute("**/session/*/permissions/*", reply)
++    await page.unroute(listUrl, list)
++    for (const item of replyUrls) {
++      await page.unroute(item, reply)
++    }
+     if (sessionList) await page.unroute("**/session?*", sessionList)
+   }
+ }
+diff --git a/packages/app/e2e/session/session-model-persistence.spec.ts b/packages/app/e2e/session/session-model-persistence.spec.ts
+index b758a3b3d..36cbb0fbf 100644
+--- a/packages/app/e2e/session/session-model-persistence.spec.ts
++++ b/packages/app/e2e/session/session-model-persistence.spec.ts
+@@ -28,7 +28,17 @@ type Footer = {
+ type Probe = {
+   dir?: string
+   sessionID?: string
+-  model?: { providerID: string; modelID: string }
++  agent?: string
++  model?: { providerID: string; modelID: string; name?: string }
++  variant?: string | null
++  pick?: {
++    agent?: string
++    model?: { providerID: string; modelID: string }
++    variant?: string | null
++  }
++  variants?: string[]
++  models?: Array<{ providerID: string; modelID: string; name: string }>
++  agents?: Array<{ name: string }>
+ }
+ 
+ const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+@@ -50,6 +60,86 @@ async function probe(page: Page): Promise<Probe | null> {
+   })
+ }
+ 
++async function currentModel(page: Page) {
++  await expect.poll(() => probe(page).then(modelKey), { timeout: 30_000 }).not.toBe(null)
++  const value = await probe(page).then(modelKey)
++  if (!value) throw new Error("Failed to resolve current model key")
++  return value
++}
++
++async function waitControl(page: Page, key: "setAgent" | "setModel" | "setVariant") {
++  await expect
++    .poll(
++      () =>
++        page.evaluate((key) => {
++          const win = window as Window & {
++            __opencode_e2e?: {
++              model?: {
++                controls?: Record<string, unknown>
++              }
++            }
++          }
++          return !!win.__opencode_e2e?.model?.controls?.[key]
++        }, key),
++      { timeout: 30_000 },
++    )
++    .toBe(true)
++}
++
++async function pickAgent(page: Page, value: string) {
++  await waitControl(page, "setAgent")
++  await page.evaluate((value) => {
++    const win = window as Window & {
++      __opencode_e2e?: {
++        model?: {
++          controls?: {
++            setAgent?: (value: string | undefined) => void
++          }
++        }
++      }
++    }
++    const fn = win.__opencode_e2e?.model?.controls?.setAgent
++    if (!fn) throw new Error("Model e2e agent control is not enabled")
++    fn(value)
++  }, value)
++}
++
++async function pickModel(page: Page, value: { providerID: string; modelID: string }) {
++  await waitControl(page, "setModel")
++  await page.evaluate((value) => {
++    const win = window as Window & {
++      __opencode_e2e?: {
++        model?: {
++          controls?: {
++            setModel?: (value: { providerID: string; modelID: string } | undefined) => void
++          }
++        }
++      }
++    }
++    const fn = win.__opencode_e2e?.model?.controls?.setModel
++    if (!fn) throw new Error("Model e2e model control is not enabled")
++    fn(value)
++  }, value)
++}
++
++async function pickVariant(page: Page, value: string) {
++  await waitControl(page, "setVariant")
++  await page.evaluate((value) => {
++    const win = window as Window & {
++      __opencode_e2e?: {
++        model?: {
++          controls?: {
++            setVariant?: (value: string | undefined) => void
++          }
++        }
++      }
++    }
++    const fn = win.__opencode_e2e?.model?.controls?.setVariant
++    if (!fn) throw new Error("Model e2e variant control is not enabled")
++    fn(value)
++  }, value)
++}
++
+ async function read(page: Page): Promise<Footer> {
+   return {
+     agent: await text(page.locator(`${promptAgentSelector} [data-slot="select-select-trigger-value"]`).first()),
+@@ -82,31 +172,15 @@ async function waitModel(page: Page, value: string) {
+ async function choose(page: Page, root: string, value: string) {
+   const select = page.locator(root)
+   await expect(select).toBeVisible()
+-  await select.locator('[data-action], [data-slot="select-select-trigger"]').first().click()
+-  const item = page
+-    .locator('[data-slot="select-select-item"]')
+-    .filter({ hasText: new RegExp(`^\\s*${escape(value)}\\s*$`) })
+-    .first()
+-  await expect(item).toBeVisible()
+-  await item.click()
++  await pickAgent(page, value)
+ }
+ 
+ async function variantCount(page: Page) {
+-  const select = page.locator(promptVariantSelector)
+-  await expect(select).toBeVisible()
+-  await select.locator('[data-slot="select-select-trigger"]').click()
+-  const count = await page.locator('[data-slot="select-select-item"]').count()
+-  await page.keyboard.press("Escape")
+-  return count
++  return (await probe(page))?.variants?.length ?? 0
+ }
+ 
+ async function agents(page: Page) {
+-  const select = page.locator(promptAgentSelector)
+-  await expect(select).toBeVisible()
+-  await select.locator('[data-action], [data-slot="select-select-trigger"]').first().click()
+-  const labels = await page.locator('[data-slot="select-select-item-label"]').allTextContents()
+-  await page.keyboard.press("Escape")
+-  return labels.map((item) => item.trim()).filter(Boolean)
++  return ((await probe(page))?.agents ?? []).map((item) => item.name).filter(Boolean)
+ }
+ 
+ async function ensureVariant(page: Page, directory: string): Promise<Footer> {
+@@ -132,48 +206,23 @@ async function ensureVariant(page: Page, directory: string): Promise<Footer> {
+ 
+ async function chooseDifferentVariant(page: Page): Promise<Footer> {
+   const current = await read(page)
+-  const select = page.locator(promptVariantSelector)
+-  await expect(select).toBeVisible()
+-  await select.locator('[data-slot="select-select-trigger"]').click()
+-
+-  const items = page.locator('[data-slot="select-select-item"]')
+-  const count = await items.count()
+-  if (count < 2) throw new Error("Current model has no alternate variant to select")
+-
+-  for (let i = 0; i < count; i++) {
+-    const item = items.nth(i)
+-    const next = await text(item.locator('[data-slot="select-select-item-label"]').first())
+-    if (!next || next === current.variant) continue
+-    await item.click()
+-    return waitFooter(page, { agent: current.agent, model: current.model, variant: next })
+-  }
++  const next = (await probe(page))?.variants?.find((item) => item !== current.variant)
++  if (!next) throw new Error("Current model has no alternate variant to select")
+ 
+-  throw new Error("Failed to choose a different variant")
++  await pickVariant(page, next)
++  return waitFooter(page, { agent: current.agent, model: current.model, variant: next })
+ }
+ 
+-async function chooseOtherModel(page: Page): Promise<Footer> {
+-  const current = await read(page)
+-  const button = page.locator(`${promptModelSelector} [data-action="prompt-model"]`)
+-  await expect(button).toBeVisible()
+-  await button.click()
+-
+-  const dialog = page.getByRole("dialog")
+-  await expect(dialog).toBeVisible()
+-  const items = dialog.locator('[data-slot="list-item"]')
+-  const count = await items.count()
+-  expect(count).toBeGreaterThan(1)
+-
+-  for (let i = 0; i < count; i++) {
+-    const item = items.nth(i)
+-    const selected = (await item.getAttribute("data-selected")) === "true"
+-    if (selected) continue
+-    await item.click()
+-    await expect(dialog).toHaveCount(0)
+-    await expect.poll(async () => (await read(page)).model !== current.model, { timeout: 30_000 }).toBe(true)
+-    return read(page)
+-  }
+-
+-  throw new Error("Failed to choose a different model")
++async function chooseOtherModel(page: Page, skip: string[] = []): Promise<Footer> {
++  const current = await currentModel(page)
++  const next = (await probe(page))?.models?.find((item) => {
++    const key = `${item.providerID}:${item.modelID}`
++    return key !== current && !skip.includes(key)
++  })
++  if (!next) throw new Error("Failed to choose a different model")
++  await pickModel(page, { providerID: next.providerID, modelID: next.modelID })
++  await expect.poll(async () => (await read(page)).model, { timeout: 30_000 }).toBe(next.name)
++  return read(page)
+ }
+ 
+ async function goto(page: Page, directory: string, sessionID?: string) {
+@@ -249,17 +298,14 @@ async function newWorkspaceSession(page: Page, slug: string) {
+   return waitSession(page, { directory: next.directory }).then((item) => item.directory)
+ }
+ 
+-test("session model and variant restore per session without leaking into new sessions", async ({
+-  page,
+-  withProject,
+-}) => {
++test("session model restore per session without leaking into new sessions", async ({ page, withProject }) => {
+   await page.setViewportSize({ width: 1440, height: 900 })
+ 
+   await withProject(async ({ directory, gotoSession, trackSession }) => {
+     await gotoSession()
+ 
+-    await ensureVariant(page, directory)
+-    const firstState = await chooseDifferentVariant(page)
++    const firstState = await chooseOtherModel(page)
++    const firstKey = await currentModel(page)
+     const first = await submit(page, `session variant ${Date.now()}`)
+     trackSession(first)
+     await waitUser(directory, first)
+@@ -269,10 +315,10 @@ test("session model and variant restore per session without leaking into new ses
+     await waitFooter(page, firstState)
+ 
+     await gotoSession()
+-    const fresh = await ensureVariant(page, directory)
+-    expect(fresh.variant).not.toBe(firstState.variant)
++    const fresh = await read(page)
++    expect(fresh.model).not.toBe(firstState.model)
+ 
+-    const secondState = await chooseOtherModel(page)
++    const secondState = await chooseOtherModel(page, [firstKey])
+     const second = await submit(page, `session model ${Date.now()}`)
+     trackSession(second)
+     await waitUser(directory, second)
+@@ -294,8 +340,8 @@ test("session model restore across workspaces", async ({ page, withProject }) =>
+   await withProject(async ({ directory: root, slug, gotoSession, trackDirectory, trackSession }) => {
+     await gotoSession()
+ 
+-    await ensureVariant(page, root)
+-    const firstState = await chooseDifferentVariant(page)
++    const firstState = await chooseOtherModel(page)
++    const firstKey = await currentModel(page)
+     const first = await submit(page, `root session ${Date.now()}`)
+     trackSession(first, root)
+     await waitUser(root, first)
+@@ -307,7 +353,8 @@ test("session model restore across workspaces", async ({ page, withProject }) =>
+     const oneDir = await newWorkspaceSession(page, one.slug)
+     trackDirectory(oneDir)
+ 
+-    const secondState = await chooseOtherModel(page)
++    const secondState = await chooseOtherModel(page, [firstKey])
++    const secondKey = await currentModel(page)
+     const second = await submit(page, `workspace one ${Date.now()}`)
+     trackSession(second, oneDir)
+     await waitUser(oneDir, second)
+@@ -316,8 +363,7 @@ test("session model restore across workspaces", async ({ page, withProject }) =>
+     const twoDir = await newWorkspaceSession(page, two.slug)
+     trackDirectory(twoDir)
+ 
+-    await ensureVariant(page, twoDir)
+-    const thirdState = await chooseDifferentVariant(page)
++    const thirdState = await chooseOtherModel(page, [firstKey, secondKey])
+     const third = await submit(page, `workspace two ${Date.now()}`)
+     trackSession(third, twoDir)
+     await waitUser(twoDir, third)
+diff --git a/packages/app/src/components/dialog-connect-provider.tsx b/packages/app/src/components/dialog-connect-provider.tsx
+index e7eaa1fb2..41225d02a 100644
+--- a/packages/app/src/components/dialog-connect-provider.tsx
++++ b/packages/app/src/components/dialog-connect-provider.tsx
+@@ -15,13 +15,20 @@ import { Link } from "@/components/link"
+ import { useGlobalSDK } from "@/context/global-sdk"
+ import { useGlobalSync } from "@/context/global-sync"
+ import { useLanguage } from "@/context/language"
+-import { DialogSelectProvider } from "./dialog-select-provider"
++import { useProviders } from "@/hooks/use-providers"
+ 
+ export function DialogConnectProvider(props: { provider: string }) {
+   const dialog = useDialog()
+   const globalSync = useGlobalSync()
+   const globalSDK = useGlobalSDK()
+   const language = useLanguage()
++  const providers = useProviders()
++
++  const all = () => {
++    void import("./dialog-select-provider").then((x) => {
++      dialog.show(() => <x.DialogSelectProvider />)
++    })
++  }
+ 
+   const alive = { value: true }
+   const timer = { current: undefined as ReturnType<typeof setTimeout> | undefined }
+@@ -33,7 +40,11 @@ export function DialogConnectProvider(props: { provider: string }) {
+     timer.current = undefined
+   })
+ 
+-  const provider = createMemo(() => globalSync.data.provider.all.find((x) => x.id === props.provider)!)
++  const provider = createMemo(
++    () =>
++      providers.all().find((x) => x.id === props.provider) ??
++      globalSync.data.provider.all.find((x) => x.id === props.provider)!,
++  )
+   const fallback = createMemo<ProviderAuthMethod[]>(() => [
+     {
+       type: "api" as const,
+@@ -333,7 +344,7 @@ export function DialogConnectProvider(props: { provider: string }) {
+ 
+   function goBack() {
+     if (methods().length === 1) {
+-      dialog.show(() => <DialogSelectProvider />)
++      all()
+       return
+     }
+     if (store.authorization) {
+@@ -344,7 +355,7 @@ export function DialogConnectProvider(props: { provider: string }) {
+       dispatch({ type: "method.reset" })
+       return
+     }
+-    dialog.show(() => <DialogSelectProvider />)
++    all()
+   }
+ 
+   function MethodSelection() {
+diff --git a/packages/app/src/components/dialog-select-mcp.tsx b/packages/app/src/components/dialog-select-mcp.tsx
+index fafba6168..98f262ce5 100644
+--- a/packages/app/src/components/dialog-select-mcp.tsx
++++ b/packages/app/src/components/dialog-select-mcp.tsx
+@@ -1,10 +1,12 @@
+ import { useMutation } from "@tanstack/solid-query"
+-import { Component, createMemo, Show } from "solid-js"
++import { Component, createEffect, createMemo, on, Show } from "solid-js"
++import { createStore } from "solid-js/store"
+ import { useSync } from "@/context/sync"
+ import { useSDK } from "@/context/sdk"
+ import { Dialog } from "@opencode-ai/ui/dialog"
+ import { List } from "@opencode-ai/ui/list"
+ import { Switch } from "@opencode-ai/ui/switch"
++import { showToast } from "@opencode-ai/ui/toast"
+ import { useLanguage } from "@/context/language"
+ 
+ const statusLabels = {
+@@ -18,6 +20,48 @@ export const DialogSelectMcp: Component = () => {
+   const sync = useSync()
+   const sdk = useSDK()
+   const language = useLanguage()
++  const [state, setState] = createStore({
++    done: false,
++    loading: false,
++  })
++
++  createEffect(
++    on(
++      () => sync.data.mcp_ready,
++      (ready, prev) => {
++        if (!ready && prev) setState("done", false)
++      },
++      { defer: true },
++    ),
++  )
++
++  createEffect(() => {
++    if (state.done || state.loading) return
++    if (sync.data.mcp_ready) {
++      setState("done", true)
++      return
++    }
++
++    setState("loading", true)
++    void sdk.client.mcp
++      .status()
++      .then((result) => {
++        sync.set("mcp", result.data ?? {})
++        sync.set("mcp_ready", true)
++        setState("done", true)
++      })
++      .catch((err) => {
++        setState("done", true)
++        showToast({
++          variant: "error",
++          title: language.t("common.requestFailed"),
++          description: err instanceof Error ? err.message : String(err),
++        })
++      })
++      .finally(() => {
++        setState("loading", false)
++      })
++  })
+ 
+   const items = createMemo(() =>
+     Object.entries(sync.data.mcp ?? {})
+diff --git a/packages/app/src/components/dialog-select-model-unpaid.tsx b/packages/app/src/components/dialog-select-model-unpaid.tsx
+index 2106b3a01..e25e8f0c1 100644
+--- a/packages/app/src/components/dialog-select-model-unpaid.tsx
++++ b/packages/app/src/components/dialog-select-model-unpaid.tsx
+@@ -8,8 +8,6 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
+ import { type Component, Show } from "solid-js"
+ import { useLocal } from "@/context/local"
+ import { popularProviders, useProviders } from "@/hooks/use-providers"
+-import { DialogConnectProvider } from "./dialog-connect-provider"
+-import { DialogSelectProvider } from "./dialog-select-provider"
+ import { ModelTooltip } from "./model-tooltip"
+ import { useLanguage } from "@/context/language"
+ 
+@@ -21,6 +19,18 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
+   const providers = useProviders()
+   const language = useLanguage()
+ 
++  const connect = (provider: string) => {
++    void import("./dialog-connect-provider").then((x) => {
++      dialog.show(() => <x.DialogConnectProvider provider={provider} />)
++    })
++  }
++
++  const all = () => {
++    void import("./dialog-select-provider").then((x) => {
++      dialog.show(() => <x.DialogSelectProvider />)
++    })
++  }
++
+   let listRef: ListRef | undefined
+   const handleKeyDown = (e: KeyboardEvent) => {
+     if (e.key === "Escape") return
+@@ -91,7 +101,7 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
+                 }}
+                 onSelect={(x) => {
+                   if (!x) return
+-                  dialog.show(() => <DialogConnectProvider provider={x.id} />)
++                  connect(x.id)
+                 }}
+               >
+                 {(i) => (
+@@ -122,9 +132,7 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
+                 variant="ghost"
+                 class="w-full justify-start px-[11px] py-3.5 gap-4.5 text-14-medium"
+                 icon="dot-grid"
+-                onClick={() => {
+-                  dialog.show(() => <DialogSelectProvider />)
+-                }}
++                onClick={all}
+               >
+                 {language.t("dialog.provider.viewAll")}
+               </Button>
+diff --git a/packages/app/src/components/dialog-select-model.tsx b/packages/app/src/components/dialog-select-model.tsx
+index 3654aab85..cb688c30a 100644
+--- a/packages/app/src/components/dialog-select-model.tsx
++++ b/packages/app/src/components/dialog-select-model.tsx
+@@ -10,8 +10,6 @@ import { Tag } from "@opencode-ai/ui/tag"
+ import { Dialog } from "@opencode-ai/ui/dialog"
+ import { List } from "@opencode-ai/ui/list"
+ import { Tooltip } from "@opencode-ai/ui/tooltip"
+-import { DialogSelectProvider } from "./dialog-select-provider"
+-import { DialogManageModels } from "./dialog-manage-models"
+ import { ModelTooltip } from "./model-tooltip"
+ import { useLanguage } from "@/context/language"
+ 
+@@ -107,12 +105,16 @@ export function ModelSelectorPopover(props: {
+ 
+   const handleManage = () => {
+     setStore("open", false)
+-    dialog.show(() => <DialogManageModels />)
++    void import("./dialog-manage-models").then((x) => {
++      dialog.show(() => <x.DialogManageModels />)
++    })
+   }
+ 
+   const handleConnectProvider = () => {
+     setStore("open", false)
+-    dialog.show(() => <DialogSelectProvider />)
++    void import("./dialog-select-provider").then((x) => {
++      dialog.show(() => <x.DialogSelectProvider />)
++    })
+   }
+   const language = useLanguage()
+ 
+@@ -193,26 +195,29 @@ export const DialogSelectModel: Component<{ provider?: string; model?: ModelStat
+   const dialog = useDialog()
+   const language = useLanguage()
+ 
++  const provider = () => {
++    void import("./dialog-select-provider").then((x) => {
++      dialog.show(() => <x.DialogSelectProvider />)
++    })
++  }
++
++  const manage = () => {
++    void import("./dialog-manage-models").then((x) => {
++      dialog.show(() => <x.DialogManageModels />)
++    })
++  }
++
+   return (
+     <Dialog
+       title={language.t("dialog.model.select.title")}
+       action={
+-        <Button
+-          class="h-7 -my-1 text-14-medium"
+-          icon="plus-small"
+-          tabIndex={-1}
+-          onClick={() => dialog.show(() => <DialogSelectProvider />)}
+-        >
++        <Button class="h-7 -my-1 text-14-medium" icon="plus-small" tabIndex={-1} onClick={provider}>
+           {language.t("command.provider.connect")}
+         </Button>
+       }
+     >
+       <ModelList provider={props.provider} model={props.model} onSelect={() => dialog.close()} />
+-      <Button
+-        variant="ghost"
+-        class="ml-3 mt-5 mb-6 text-text-base self-start"
+-        onClick={() => dialog.show(() => <DialogManageModels />)}
+-      >
++      <Button variant="ghost" class="ml-3 mt-5 mb-6 text-text-base self-start" onClick={manage}>
+         {language.t("dialog.model.manage")}
+       </Button>
+     </Dialog>
+diff --git a/packages/app/src/components/prompt-input.tsx b/packages/app/src/components/prompt-input.tsx
+index ee98e68cd..1cc7c578d 100644
+--- a/packages/app/src/components/prompt-input.tsx
++++ b/packages/app/src/components/prompt-input.tsx
+@@ -27,7 +27,6 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
+ import { Select } from "@opencode-ai/ui/select"
+ import { useDialog } from "@opencode-ai/ui/context/dialog"
+ import { ModelSelectorPopover } from "@/components/dialog-select-model"
+-import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
+ import { useProviders } from "@/hooks/use-providers"
+ import { useCommand } from "@/context/command"
+ import { Persist, persisted } from "@/utils/persist"
+@@ -1494,7 +1493,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
+                           size="normal"
+                           class="min-w-0 max-w-[320px] text-13-regular text-text-base group"
+                           style={control()}
+-                          onClick={() => dialog.show(() => <DialogSelectModelUnpaid model={local.model} />)}
++                          onClick={() => {
++                            void import("@/components/dialog-select-model-unpaid").then((x) => {
++                              dialog.show(() => <x.DialogSelectModelUnpaid model={local.model} />)
++                            })
++                          }}
+                         >
+                           <Show when={local.model.current()?.provider?.id}>
+                             <ProviderIcon
+diff --git a/packages/app/src/components/session-context-usage.tsx b/packages/app/src/components/session-context-usage.tsx
+index 7379833f8..d7c249ab0 100644
+--- a/packages/app/src/components/session-context-usage.tsx
++++ b/packages/app/src/components/session-context-usage.tsx
+@@ -7,6 +7,7 @@ import { useFile } from "@/context/file"
+ import { useLayout } from "@/context/layout"
+ import { useSync } from "@/context/sync"
+ import { useLanguage } from "@/context/language"
++import { useProviders } from "@/hooks/use-providers"
+ import { getSessionContextMetrics } from "@/components/session/session-context-metrics"
+ import { useSessionLayout } from "@/pages/session/session-layout"
+ import { createSessionTabs } from "@/pages/session/helpers"
+@@ -32,6 +33,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
+   const file = useFile()
+   const layout = useLayout()
+   const language = useLanguage()
++  const providers = useProviders()
+   const { params, tabs, view } = useSessionLayout()
+ 
+   const variant = createMemo(() => props.variant ?? "button")
+@@ -50,7 +52,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
+       }),
+   )
+ 
+-  const metrics = createMemo(() => getSessionContextMetrics(messages(), sync.data.provider.all))
++  const metrics = createMemo(() => getSessionContextMetrics(messages(), providers.all()))
+   const context = createMemo(() => metrics().context)
+   const cost = createMemo(() => {
+     return usd().format(metrics().totalCost)
+diff --git a/packages/app/src/components/session/session-context-tab.tsx b/packages/app/src/components/session/session-context-tab.tsx
+index 4d90930a0..4e7dc8e78 100644
+--- a/packages/app/src/components/session/session-context-tab.tsx
++++ b/packages/app/src/components/session/session-context-tab.tsx
+@@ -12,6 +12,7 @@ import { Markdown } from "@opencode-ai/ui/markdown"
+ import { ScrollView } from "@opencode-ai/ui/scroll-view"
+ import type { Message, Part, UserMessage } from "@opencode-ai/sdk/v2/client"
+ import { useLanguage } from "@/context/language"
++import { useProviders } from "@/hooks/use-providers"
+ import { useSessionLayout } from "@/pages/session/session-layout"
+ import { getSessionContextMetrics } from "./session-context-metrics"
+ import { estimateSessionContextBreakdown, type SessionContextBreakdownKey } from "./session-context-breakdown"
+@@ -92,6 +93,7 @@ const emptyUserMessages: UserMessage[] = []
+ export function SessionContextTab() {
+   const sync = useSync()
+   const language = useLanguage()
++  const providers = useProviders()
+   const { params, view } = useSessionLayout()
+ 
+   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
+@@ -130,7 +132,7 @@ export function SessionContextTab() {
+       }),
+   )
+ 
+-  const metrics = createMemo(() => getSessionContextMetrics(messages(), sync.data.provider.all))
++  const metrics = createMemo(() => getSessionContextMetrics(messages(), providers.all()))
+   const ctx = createMemo(() => metrics().context)
+   const formatter = createMemo(() => createSessionContextFormatter(language.intl()))
+ 
+diff --git a/packages/app/src/components/status-popover-body.tsx b/packages/app/src/components/status-popover-body.tsx
+new file mode 100644
+index 000000000..aaf9f58d6
+--- /dev/null
++++ b/packages/app/src/components/status-popover-body.tsx
+@@ -0,0 +1,443 @@
++import { Button } from "@opencode-ai/ui/button"
++import { useDialog } from "@opencode-ai/ui/context/dialog"
++import { Icon } from "@opencode-ai/ui/icon"
++import { Switch } from "@opencode-ai/ui/switch"
++import { Tabs } from "@opencode-ai/ui/tabs"
++import { useMutation } from "@tanstack/solid-query"
++import { showToast } from "@opencode-ai/ui/toast"
++import { useNavigate } from "@solidjs/router"
++import { type Accessor, createEffect, createMemo, For, type JSXElement, onCleanup, Show } from "solid-js"
++import { createStore, reconcile } from "solid-js/store"
++import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
++import { useLanguage } from "@/context/language"
++import { usePlatform } from "@/context/platform"
++import { useSDK } from "@/context/sdk"
++import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
++import { useSync } from "@/context/sync"
++import { useCheckServerHealth, type ServerHealth } from "@/utils/server-health"
++
++const pollMs = 10_000
++
++const pluginEmptyMessage = (value: string, file: string): JSXElement => {
++  const parts = value.split(file)
++  if (parts.length === 1) return value
++  return (
++    <>
++      {parts[0]}
++      <code class="bg-surface-raised-base px-1.5 py-0.5 rounded-sm text-text-base">{file}</code>
++      {parts.slice(1).join(file)}
++    </>
++  )
++}
++
++const listServersByHealth = (
++  list: ServerConnection.Any[],
++  active: ServerConnection.Key | undefined,
++  status: Record<ServerConnection.Key, ServerHealth | undefined>,
++) => {
++  if (!list.length) return list
++  const order = new Map(list.map((url, index) => [url, index] as const))
++  const rank = (value?: ServerHealth) => {
++    if (value?.healthy === true) return 0
++    if (value?.healthy === false) return 2
++    return 1
++  }
++
++  return list.slice().sort((a, b) => {
++    if (ServerConnection.key(a) === active) return -1
++    if (ServerConnection.key(b) === active) return 1
++    const diff = rank(status[ServerConnection.key(a)]) - rank(status[ServerConnection.key(b)])
++    if (diff !== 0) return diff
++    return (order.get(a) ?? 0) - (order.get(b) ?? 0)
++  })
++}
++
++const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, enabled: Accessor<boolean>) => {
++  const checkServerHealth = useCheckServerHealth()
++  const [status, setStatus] = createStore({} as Record<ServerConnection.Key, ServerHealth | undefined>)
++
++  createEffect(() => {
++    if (!enabled()) {
++      setStatus(reconcile({}))
++      return
++    }
++    const list = servers()
++    let dead = false
++
++    const refresh = async () => {
++      const results: Record<string, ServerHealth> = {}
++      await Promise.all(
++        list.map(async (conn) => {
++          results[ServerConnection.key(conn)] = await checkServerHealth(conn.http)
++        }),
++      )
++      if (dead) return
++      setStatus(reconcile(results))
++    }
++
++    void refresh()
++    const id = setInterval(() => void refresh(), pollMs)
++    onCleanup(() => {
++      dead = true
++      clearInterval(id)
++    })
++  })
++
++  return status
++}
++
++const useDefaultServerKey = (
++  get: (() => string | Promise<string | null | undefined> | null | undefined) | undefined,
++) => {
++  const [state, setState] = createStore({
++    url: undefined as string | undefined,
++    tick: 0,
++  })
++
++  createEffect(() => {
++    state.tick
++    let dead = false
++    const result = get?.()
++    if (!result) {
++      setState("url", undefined)
++      onCleanup(() => {
++        dead = true
++      })
++      return
++    }
++
++    if (result instanceof Promise) {
++      void result.then((next) => {
++        if (dead) return
++        setState("url", next ? normalizeServerUrl(next) : undefined)
++      })
++      onCleanup(() => {
++        dead = true
++      })
++      return
++    }
++
++    setState("url", normalizeServerUrl(result))
++    onCleanup(() => {
++      dead = true
++    })
++  })
++
++  return {
++    key: () => {
++      const u = state.url
++      if (!u) return
++      return ServerConnection.key({ type: "http", http: { url: u } })
++    },
++    refresh: () => setState("tick", (value) => value + 1),
++  }
++}
++
++const useMcpToggleMutation = () => {
++  const sync = useSync()
++  const sdk = useSDK()
++  const language = useLanguage()
++
++  return useMutation(() => ({
++    mutationFn: async (name: string) => {
++      const status = sync.data.mcp[name]
++      await (status?.status === "connected" ? sdk.client.mcp.disconnect({ name }) : sdk.client.mcp.connect({ name }))
++      const result = await sdk.client.mcp.status()
++      if (result.data) sync.set("mcp", result.data)
++    },
++    onError: (err) => {
++      showToast({
++        variant: "error",
++        title: language.t("common.requestFailed"),
++        description: err instanceof Error ? err.message : String(err),
++      })
++    },
++  }))
++}
++
++export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
++  const sync = useSync()
++  const server = useServer()
++  const platform = usePlatform()
++  const dialog = useDialog()
++  const language = useLanguage()
++  const navigate = useNavigate()
++  const sdk = useSDK()
++
++  const [load, setLoad] = createStore({
++    lspDone: false,
++    lspLoading: false,
++    mcpDone: false,
++    mcpLoading: false,
++  })
++
++  const fail = (err: unknown) => {
++    showToast({
++      variant: "error",
++      title: language.t("common.requestFailed"),
++      description: err instanceof Error ? err.message : String(err),
++    })
++  }
++
++  createEffect(() => {
++    if (!props.shown()) return
++
++    if (!sync.data.mcp_ready && !load.mcpDone && !load.mcpLoading) {
++      setLoad("mcpLoading", true)
++      void sdk.client.mcp
++        .status()
++        .then((result) => {
++          sync.set("mcp", result.data ?? {})
++          sync.set("mcp_ready", true)
++        })
++        .catch((err) => {
++          setLoad("mcpDone", true)
++          fail(err)
++        })
++        .finally(() => {
++          setLoad("mcpLoading", false)
++        })
++    }
++
++    if (!sync.data.lsp_ready && !load.lspDone && !load.lspLoading) {
++      setLoad("lspLoading", true)
++      void sdk.client.lsp
++        .status()
++        .then((result) => {
++          sync.set("lsp", result.data ?? [])
++          sync.set("lsp_ready", true)
++        })
++        .catch((err) => {
++          setLoad("lspDone", true)
++          fail(err)
++        })
++        .finally(() => {
++          setLoad("lspLoading", false)
++        })
++    }
++  })
++
++  let dialogRun = 0
++  let dialogDead = false
++  onCleanup(() => {
++    dialogDead = true
++    dialogRun += 1
++  })
++  const servers = createMemo(() => {
++    const current = server.current
++    const list = server.list
++    if (!current) return list
++    if (list.every((item) => ServerConnection.key(item) !== ServerConnection.key(current))) return [current, ...list]
++    return [current, ...list.filter((item) => ServerConnection.key(item) !== ServerConnection.key(current))]
++  })
++  const health = useServerHealth(servers, props.shown)
++  const sortedServers = createMemo(() => listServersByHealth(servers(), server.key, health))
++  const toggleMcp = useMcpToggleMutation()
++  const defaultServer = useDefaultServerKey(platform.getDefaultServer)
++  const mcpNames = createMemo(() => Object.keys(sync.data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
++  const mcpStatus = (name: string) => sync.data.mcp?.[name]?.status
++  const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
++  const lspItems = createMemo(() => sync.data.lsp ?? [])
++  const lspCount = createMemo(() => lspItems().length)
++  const plugins = createMemo(() => sync.data.config.plugin ?? [])
++  const pluginCount = createMemo(() => plugins().length)
++  const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))
++
++  return (
++    <div class="flex items-center gap-1 w-[360px] rounded-xl shadow-[var(--shadow-lg-border-base)]">
++      <Tabs
++        aria-label={language.t("status.popover.ariaLabel")}
++        class="tabs bg-background-strong rounded-xl overflow-hidden"
++        data-component="tabs"
++        data-active="servers"
++        defaultValue="servers"
++        variant="alt"
++      >
++        <Tabs.List data-slot="tablist" class="bg-transparent border-b-0 px-4 pt-2 pb-0 gap-4 h-10">
++          <Tabs.Trigger value="servers" data-slot="tab" class="text-12-regular">
++            {sortedServers().length > 0 ? `${sortedServers().length} ` : ""}
++            {language.t("status.popover.tab.servers")}
++          </Tabs.Trigger>
++          <Tabs.Trigger value="mcp" data-slot="tab" class="text-12-regular">
++            {mcpConnected() > 0 ? `${mcpConnected()} ` : ""}
++            {language.t("status.popover.tab.mcp")}
++          </Tabs.Trigger>
++          <Tabs.Trigger value="lsp" data-slot="tab" class="text-12-regular">
++            {lspCount() > 0 ? `${lspCount()} ` : ""}
++            {language.t("status.popover.tab.lsp")}
++          </Tabs.Trigger>
++          <Tabs.Trigger value="plugins" data-slot="tab" class="text-12-regular">
++            {pluginCount() > 0 ? `${pluginCount()} ` : ""}
++            {language.t("status.popover.tab.plugins")}
++          </Tabs.Trigger>
++        </Tabs.List>
++
++        <Tabs.Content value="servers">
++          <div class="flex flex-col px-2 pb-2">
++            <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
++              <For each={sortedServers()}>
++                {(s) => {
++                  const key = ServerConnection.key(s)
++                  const blocked = () => health[key]?.healthy === false
++                  return (
++                    <button
++                      type="button"
++                      class="flex items-center gap-2 w-full h-8 pl-3 pr-1.5 py-1.5 rounded-md transition-colors text-left"
++                      classList={{
++                        "hover:bg-surface-raised-base-hover": !blocked(),
++                        "cursor-not-allowed": blocked(),
++                      }}
++                      aria-disabled={blocked()}
++                      onClick={() => {
++                        if (blocked()) return
++                        navigate("/")
++                        queueMicrotask(() => server.setActive(key))
++                      }}
++                    >
++                      <ServerHealthIndicator health={health[key]} />
++                      <ServerRow
++                        conn={s}
++                        dimmed={blocked()}
++                        status={health[key]}
++                        class="flex items-center gap-2 w-full min-w-0"
++                        nameClass="text-14-regular text-text-base truncate"
++                        versionClass="text-12-regular text-text-weak truncate"
++                        badge={
++                          <Show when={key === defaultServer.key()}>
++                            <span class="text-11-regular text-text-base bg-surface-base px-1.5 py-0.5 rounded-md">
++                              {language.t("common.default")}
++                            </span>
++                          </Show>
++                        }
++                      >
++                        <div class="flex-1" />
++                        <Show when={server.current && key === ServerConnection.key(server.current)}>
++                          <Icon name="check" size="small" class="text-icon-weak shrink-0" />
++                        </Show>
++                      </ServerRow>
++                    </button>
++                  )
++                }}
++              </For>
++
++              <Button
++                variant="secondary"
++                class="mt-3 self-start h-8 px-3 py-1.5"
++                onClick={() => {
++                  const run = ++dialogRun
++                  void import("./dialog-select-server").then((x) => {
++                    if (dialogDead || dialogRun !== run) return
++                    dialog.show(() => <x.DialogSelectServer />, defaultServer.refresh)
++                  })
++                }}
++              >
++                {language.t("status.popover.action.manageServers")}
++              </Button>
++            </div>
++          </div>
++        </Tabs.Content>
++
++        <Tabs.Content value="mcp">
++          <div class="flex flex-col px-2 pb-2">
++            <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
++              <Show
++                when={mcpNames().length > 0}
++                fallback={
++                  <div class="text-14-regular text-text-base text-center my-auto">{language.t("dialog.mcp.empty")}</div>
++                }
++              >
++                <For each={mcpNames()}>
++                  {(name) => {
++                    const status = () => mcpStatus(name)
++                    const enabled = () => status() === "connected"
++                    return (
++                      <button
++                        type="button"
++                        class="flex items-center gap-2 w-full h-8 pl-3 pr-2 py-1 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
++                        onClick={() => {
++                          if (toggleMcp.isPending) return
++                          toggleMcp.mutate(name)
++                        }}
++                        disabled={toggleMcp.isPending && toggleMcp.variables === name}
++                      >
++                        <div
++                          classList={{
++                            "size-1.5 rounded-full shrink-0": true,
++                            "bg-icon-success-base": status() === "connected",
++                            "bg-icon-critical-base": status() === "failed",
++                            "bg-border-weak-base": status() === "disabled",
++                            "bg-icon-warning-base":
++                              status() === "needs_auth" || status() === "needs_client_registration",
++                          }}
++                        />
++                        <span class="text-14-regular text-text-base truncate flex-1">{name}</span>
++                        <div onClick={(event) => event.stopPropagation()}>
++                          <Switch
++                            checked={enabled()}
++                            disabled={toggleMcp.isPending && toggleMcp.variables === name}
++                            onChange={() => {
++                              if (toggleMcp.isPending) return
++                              toggleMcp.mutate(name)
++                            }}
++                          />
++                        </div>
++                      </button>
++                    )
++                  }}
++                </For>
++              </Show>
++            </div>
++          </div>
++        </Tabs.Content>
++
++        <Tabs.Content value="lsp">
++          <div class="flex flex-col px-2 pb-2">
++            <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
++              <Show
++                when={lspItems().length > 0}
++                fallback={
++                  <div class="text-14-regular text-text-base text-center my-auto">{language.t("dialog.lsp.empty")}</div>
++                }
++              >
++                <For each={lspItems()}>
++                  {(item) => (
++                    <div class="flex items-center gap-2 w-full px-2 py-1">
++                      <div
++                        classList={{
++                          "size-1.5 rounded-full shrink-0": true,
++                          "bg-icon-success-base": item.status === "connected",
++                          "bg-icon-critical-base": item.status === "error",
++                        }}
++                      />
++                      <span class="text-14-regular text-text-base truncate">{item.name || item.id}</span>
++                    </div>
++                  )}
++                </For>
++              </Show>
++            </div>
++          </div>
++        </Tabs.Content>
++
++        <Tabs.Content value="plugins">
++          <div class="flex flex-col px-2 pb-2">
++            <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
++              <Show
++                when={plugins().length > 0}
++                fallback={<div class="text-14-regular text-text-base text-center my-auto">{pluginEmpty()}</div>}
++              >
++                <For each={plugins()}>
++                  {(plugin) => (
++                    <div class="flex items-center gap-2 w-full px-2 py-1">
++                      <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
++                      <span class="text-14-regular text-text-base truncate">{plugin}</span>
++                    </div>
++                  )}
++                </For>
++              </Show>
++            </div>
++          </div>
++        </Tabs.Content>
++      </Tabs>
++    </div>
++  )
++}
+diff --git a/packages/app/src/components/status-popover.tsx b/packages/app/src/components/status-popover.tsx
+index 8d5ecac39..6820a940b 100644
+--- a/packages/app/src/components/status-popover.tsx
++++ b/packages/app/src/components/status-popover.tsx
+@@ -1,202 +1,24 @@
+ import { Button } from "@opencode-ai/ui/button"
+-import { useDialog } from "@opencode-ai/ui/context/dialog"
+ import { Icon } from "@opencode-ai/ui/icon"
+ import { Popover } from "@opencode-ai/ui/popover"
+-import { Switch } from "@opencode-ai/ui/switch"
+-import { Tabs } from "@opencode-ai/ui/tabs"
+-import { useMutation } from "@tanstack/solid-query"
+-import { showToast } from "@opencode-ai/ui/toast"
+-import { useNavigate } from "@solidjs/router"
+-import { type Accessor, createEffect, createMemo, createSignal, For, type JSXElement, onCleanup, Show } from "solid-js"
+-import { createStore, reconcile } from "solid-js/store"
+-import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
++import { Suspense, createMemo, createSignal, lazy, Show } from "solid-js"
+ import { useLanguage } from "@/context/language"
+-import { usePlatform } from "@/context/platform"
+-import { useSDK } from "@/context/sdk"
+-import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
++import { useServer } from "@/context/server"
+ import { useSync } from "@/context/sync"
+-import { useCheckServerHealth, type ServerHealth } from "@/utils/server-health"
+ 
+-const pollMs = 10_000
+-
+-const pluginEmptyMessage = (value: string, file: string): JSXElement => {
+-  const parts = value.split(file)
+-  if (parts.length === 1) return value
+-  return (
+-    <>
+-      {parts[0]}
+-      <code class="bg-surface-raised-base px-1.5 py-0.5 rounded-sm text-text-base">{file}</code>
+-      {parts.slice(1).join(file)}
+-    </>
+-  )
+-}
+-
+-const listServersByHealth = (
+-  list: ServerConnection.Any[],
+-  active: ServerConnection.Key | undefined,
+-  status: Record<ServerConnection.Key, ServerHealth | undefined>,
+-) => {
+-  if (!list.length) return list
+-  const order = new Map(list.map((url, index) => [url, index] as const))
+-  const rank = (value?: ServerHealth) => {
+-    if (value?.healthy === true) return 0
+-    if (value?.healthy === false) return 2
+-    return 1
+-  }
+-
+-  return list.slice().sort((a, b) => {
+-    if (ServerConnection.key(a) === active) return -1
+-    if (ServerConnection.key(b) === active) return 1
+-    const diff = rank(status[ServerConnection.key(a)]) - rank(status[ServerConnection.key(b)])
+-    if (diff !== 0) return diff
+-    return (order.get(a) ?? 0) - (order.get(b) ?? 0)
+-  })
+-}
+-
+-const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, enabled: Accessor<boolean>) => {
+-  const checkServerHealth = useCheckServerHealth()
+-  const [status, setStatus] = createStore({} as Record<ServerConnection.Key, ServerHealth | undefined>)
+-
+-  createEffect(() => {
+-    if (!enabled()) {
+-      setStatus(reconcile({}))
+-      return
+-    }
+-    const list = servers()
+-    let dead = false
+-
+-    const refresh = async () => {
+-      const results: Record<string, ServerHealth> = {}
+-      await Promise.all(
+-        list.map(async (conn) => {
+-          results[ServerConnection.key(conn)] = await checkServerHealth(conn.http)
+-        }),
+-      )
+-      if (dead) return
+-      setStatus(reconcile(results))
+-    }
+-
+-    void refresh()
+-    const id = setInterval(() => void refresh(), pollMs)
+-    onCleanup(() => {
+-      dead = true
+-      clearInterval(id)
+-    })
+-  })
+-
+-  return status
+-}
+-
+-const useDefaultServerKey = (
+-  get: (() => string | Promise<string | null | undefined> | null | undefined) | undefined,
+-) => {
+-  const [state, setState] = createStore({
+-    url: undefined as string | undefined,
+-    tick: 0,
+-  })
+-
+-  createEffect(() => {
+-    state.tick
+-    let dead = false
+-    const result = get?.()
+-    if (!result) {
+-      setState("url", undefined)
+-      onCleanup(() => {
+-        dead = true
+-      })
+-      return
+-    }
+-
+-    if (result instanceof Promise) {
+-      void result.then((next) => {
+-        if (dead) return
+-        setState("url", next ? normalizeServerUrl(next) : undefined)
+-      })
+-      onCleanup(() => {
+-        dead = true
+-      })
+-      return
+-    }
+-
+-    setState("url", normalizeServerUrl(result))
+-    onCleanup(() => {
+-      dead = true
+-    })
+-  })
+-
+-  return {
+-    key: () => {
+-      const u = state.url
+-      if (!u) return
+-      return ServerConnection.key({ type: "http", http: { url: u } })
+-    },
+-    refresh: () => setState("tick", (value) => value + 1),
+-  }
+-}
+-
+-const useMcpToggleMutation = () => {
+-  const sync = useSync()
+-  const sdk = useSDK()
+-  const language = useLanguage()
+-
+-  return useMutation(() => ({
+-    mutationFn: async (name: string) => {
+-      const status = sync.data.mcp[name]
+-      await (status?.status === "connected" ? sdk.client.mcp.disconnect({ name }) : sdk.client.mcp.connect({ name }))
+-      const result = await sdk.client.mcp.status()
+-      if (result.data) sync.set("mcp", result.data)
+-    },
+-    onError: (err) => {
+-      showToast({
+-        variant: "error",
+-        title: language.t("common.requestFailed"),
+-        description: err instanceof Error ? err.message : String(err),
+-      })
+-    },
+-  }))
+-}
++const Body = lazy(() => import("./status-popover-body").then((x) => ({ default: x.StatusPopoverBody })))
+ 
+ export function StatusPopover() {
+-  const sync = useSync()
+-  const server = useServer()
+-  const platform = usePlatform()
+-  const dialog = useDialog()
+   const language = useLanguage()
+-  const navigate = useNavigate()
+-
++  const server = useServer()
++  const sync = useSync()
+   const [shown, setShown] = createSignal(false)
+-  let dialogRun = 0
+-  let dialogDead = false
+-  onCleanup(() => {
+-    dialogDead = true
+-    dialogRun += 1
+-  })
+-  const servers = createMemo(() => {
+-    const current = server.current
+-    const list = server.list
+-    if (!current) return list
+-    if (list.every((item) => ServerConnection.key(item) !== ServerConnection.key(current))) return [current, ...list]
+-    return [current, ...list.filter((item) => ServerConnection.key(item) !== ServerConnection.key(current))]
+-  })
+-  const health = useServerHealth(servers, shown)
+-  const sortedServers = createMemo(() => listServersByHealth(servers(), server.key, health))
+-  const toggleMcp = useMcpToggleMutation()
+-  const defaultServer = useDefaultServerKey(platform.getDefaultServer)
+-  const mcpNames = createMemo(() => Object.keys(sync.data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
+-  const mcpStatus = (name: string) => sync.data.mcp?.[name]?.status
+-  const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
+-  const lspItems = createMemo(() => sync.data.lsp ?? [])
+-  const lspCount = createMemo(() => lspItems().length)
+-  const plugins = createMemo(() => sync.data.config.plugin ?? [])
+-  const pluginCount = createMemo(() => plugins().length)
+-  const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))
+-  const overallHealthy = createMemo(() => {
++  const ready = createMemo(() => server.healthy() === false || sync.data.mcp_ready)
++  const healthy = createMemo(() => {
+     const serverHealthy = server.healthy() === true
+-    const anyMcpIssue = mcpNames().some((name) => {
+-      const status = mcpStatus(name)
+-      return status !== "connected" && status !== "disabled"
+-    })
+-    return serverHealthy && !anyMcpIssue
++    const mcp = Object.values(sync.data.mcp ?? {})
++    const issue = mcp.some((item) => item.status !== "connected" && item.status !== "disabled")
++    return serverHealthy && !issue
+   })
+ 
+   return (
+@@ -218,9 +40,9 @@ export function StatusPopover() {
+           <div
+             classList={{
+               "absolute -top-px -right-px size-1.5 rounded-full": true,
+-              "bg-icon-success-base": overallHealthy(),
+-              "bg-icon-critical-base": !overallHealthy() && server.healthy() !== undefined,
+-              "bg-border-weak-base": server.healthy() === undefined,
++              "bg-icon-success-base": ready() && healthy(),
++              "bg-icon-critical-base": server.healthy() === false || (ready() && !healthy()),
++              "bg-border-weak-base": server.healthy() === undefined || !ready(),
+             }}
+           />
+         </div>
+@@ -230,205 +52,15 @@ export function StatusPopover() {
+       placement="bottom-end"
+       shift={-168}
+     >
+-      <div class="flex items-center gap-1 w-[360px] rounded-xl shadow-[var(--shadow-lg-border-base)]">
+-        <Tabs
+-          aria-label={language.t("status.popover.ariaLabel")}
+-          class="tabs bg-background-strong rounded-xl overflow-hidden"
+-          data-component="tabs"
+-          data-active="servers"
+-          defaultValue="servers"
+-          variant="alt"
++      <Show when={shown()}>
++        <Suspense
++          fallback={
++            <div class="w-[360px] h-14 rounded-xl bg-background-strong shadow-[var(--shadow-lg-border-base)]" />
++          }
+         >
+-          <Tabs.List data-slot="tablist" class="bg-transparent border-b-0 px-4 pt-2 pb-0 gap-4 h-10">
+-            <Tabs.Trigger value="servers" data-slot="tab" class="text-12-regular">
+-              {sortedServers().length > 0 ? `${sortedServers().length} ` : ""}
+-              {language.t("status.popover.tab.servers")}
+-            </Tabs.Trigger>
+-            <Tabs.Trigger value="mcp" data-slot="tab" class="text-12-regular">
+-              {mcpConnected() > 0 ? `${mcpConnected()} ` : ""}
+-              {language.t("status.popover.tab.mcp")}
+-            </Tabs.Trigger>
+-            <Tabs.Trigger value="lsp" data-slot="tab" class="text-12-regular">
+-              {lspCount() > 0 ? `${lspCount()} ` : ""}
+-              {language.t("status.popover.tab.lsp")}
+-            </Tabs.Trigger>
+-            <Tabs.Trigger value="plugins" data-slot="tab" class="text-12-regular">
+-              {pluginCount() > 0 ? `${pluginCount()} ` : ""}
+-              {language.t("status.popover.tab.plugins")}
+-            </Tabs.Trigger>
+-          </Tabs.List>
+-
+-          <Tabs.Content value="servers">
+-            <div class="flex flex-col px-2 pb-2">
+-              <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
+-                <For each={sortedServers()}>
+-                  {(s) => {
+-                    const key = ServerConnection.key(s)
+-                    const isBlocked = () => health[key]?.healthy === false
+-                    return (
+-                      <button
+-                        type="button"
+-                        class="flex items-center gap-2 w-full h-8 pl-3 pr-1.5 py-1.5 rounded-md transition-colors text-left"
+-                        classList={{
+-                          "hover:bg-surface-raised-base-hover": !isBlocked(),
+-                          "cursor-not-allowed": isBlocked(),
+-                        }}
+-                        aria-disabled={isBlocked()}
+-                        onClick={() => {
+-                          if (isBlocked()) return
+-                          navigate("/")
+-                          queueMicrotask(() => server.setActive(key))
+-                        }}
+-                      >
+-                        <ServerHealthIndicator health={health[key]} />
+-                        <ServerRow
+-                          conn={s}
+-                          dimmed={isBlocked()}
+-                          status={health[key]}
+-                          class="flex items-center gap-2 w-full min-w-0"
+-                          nameClass="text-14-regular text-text-base truncate"
+-                          versionClass="text-12-regular text-text-weak truncate"
+-                          badge={
+-                            <Show when={key === defaultServer.key()}>
+-                              <span class="text-11-regular text-text-base bg-surface-base px-1.5 py-0.5 rounded-md">
+-                                {language.t("common.default")}
+-                              </span>
+-                            </Show>
+-                          }
+-                        >
+-                          <div class="flex-1" />
+-                          <Show when={server.current && key === ServerConnection.key(server.current)}>
+-                            <Icon name="check" size="small" class="text-icon-weak shrink-0" />
+-                          </Show>
+-                        </ServerRow>
+-                      </button>
+-                    )
+-                  }}
+-                </For>
+-
+-                <Button
+-                  variant="secondary"
+-                  class="mt-3 self-start h-8 px-3 py-1.5"
+-                  onClick={() => {
+-                    const run = ++dialogRun
+-                    void import("./dialog-select-server").then((x) => {
+-                      if (dialogDead || dialogRun !== run) return
+-                      dialog.show(() => <x.DialogSelectServer />, defaultServer.refresh)
+-                    })
+-                  }}
+-                >
+-                  {language.t("status.popover.action.manageServers")}
+-                </Button>
+-              </div>
+-            </div>
+-          </Tabs.Content>
+-
+-          <Tabs.Content value="mcp">
+-            <div class="flex flex-col px-2 pb-2">
+-              <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
+-                <Show
+-                  when={mcpNames().length > 0}
+-                  fallback={
+-                    <div class="text-14-regular text-text-base text-center my-auto">
+-                      {language.t("dialog.mcp.empty")}
+-                    </div>
+-                  }
+-                >
+-                  <For each={mcpNames()}>
+-                    {(name) => {
+-                      const status = () => mcpStatus(name)
+-                      const enabled = () => status() === "connected"
+-                      return (
+-                        <button
+-                          type="button"
+-                          class="flex items-center gap-2 w-full h-8 pl-3 pr-2 py-1 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
+-                          onClick={() => {
+-                            if (toggleMcp.isPending) return
+-                            toggleMcp.mutate(name)
+-                          }}
+-                          disabled={toggleMcp.isPending && toggleMcp.variables === name}
+-                        >
+-                          <div
+-                            classList={{
+-                              "size-1.5 rounded-full shrink-0": true,
+-                              "bg-icon-success-base": status() === "connected",
+-                              "bg-icon-critical-base": status() === "failed",
+-                              "bg-border-weak-base": status() === "disabled",
+-                              "bg-icon-warning-base":
+-                                status() === "needs_auth" || status() === "needs_client_registration",
+-                            }}
+-                          />
+-                          <span class="text-14-regular text-text-base truncate flex-1">{name}</span>
+-                          <div onClick={(event) => event.stopPropagation()}>
+-                            <Switch
+-                              checked={enabled()}
+-                              disabled={toggleMcp.isPending && toggleMcp.variables === name}
+-                              onChange={() => {
+-                                if (toggleMcp.isPending) return
+-                                toggleMcp.mutate(name)
+-                              }}
+-                            />
+-                          </div>
+-                        </button>
+-                      )
+-                    }}
+-                  </For>
+-                </Show>
+-              </div>
+-            </div>
+-          </Tabs.Content>
+-
+-          <Tabs.Content value="lsp">
+-            <div class="flex flex-col px-2 pb-2">
+-              <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
+-                <Show
+-                  when={lspItems().length > 0}
+-                  fallback={
+-                    <div class="text-14-regular text-text-base text-center my-auto">
+-                      {language.t("dialog.lsp.empty")}
+-                    </div>
+-                  }
+-                >
+-                  <For each={lspItems()}>
+-                    {(item) => (
+-                      <div class="flex items-center gap-2 w-full px-2 py-1">
+-                        <div
+-                          classList={{
+-                            "size-1.5 rounded-full shrink-0": true,
+-                            "bg-icon-success-base": item.status === "connected",
+-                            "bg-icon-critical-base": item.status === "error",
+-                          }}
+-                        />
+-                        <span class="text-14-regular text-text-base truncate">{item.name || item.id}</span>
+-                      </div>
+-                    )}
+-                  </For>
+-                </Show>
+-              </div>
+-            </div>
+-          </Tabs.Content>
+-
+-          <Tabs.Content value="plugins">
+-            <div class="flex flex-col px-2 pb-2">
+-              <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
+-                <Show
+-                  when={plugins().length > 0}
+-                  fallback={<div class="text-14-regular text-text-base text-center my-auto">{pluginEmpty()}</div>}
+-                >
+-                  <For each={plugins()}>
+-                    {(plugin) => (
+-                      <div class="flex items-center gap-2 w-full px-2 py-1">
+-                        <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
+-                        <span class="text-14-regular text-text-base truncate">{plugin}</span>
+-                      </div>
+-                    )}
+-                  </For>
+-                </Show>
+-              </div>
+-            </div>
+-          </Tabs.Content>
+-        </Tabs>
+-      </div>
++          <Body shown={shown} />
++        </Suspense>
++      </Show>
+     </Popover>
+   )
+ }
+diff --git a/packages/app/src/context/global-sync.tsx b/packages/app/src/context/global-sync.tsx
+index cbd08e99f..86ac9b45a 100644
+--- a/packages/app/src/context/global-sync.tsx
++++ b/packages/app/src/context/global-sync.tsx
+@@ -15,7 +15,7 @@ import { useLanguage } from "@/context/language"
+ import { Persist, persisted } from "@/utils/persist"
+ import type { InitError } from "../pages/error"
+ import { useGlobalSDK } from "./global-sdk"
+-import { bootstrapDirectory, bootstrapGlobal } from "./global-sync/bootstrap"
++import { bootstrapDirectory, bootstrapGlobal, clearProviderRev } from "./global-sync/bootstrap"
+ import { createChildStoreManager } from "./global-sync/child-store"
+ import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./global-sync/event-reducer"
+ import { createRefreshQueue } from "./global-sync/queue"
+@@ -154,6 +154,7 @@ function createGlobalSync() {
+       queue.clear(directory)
+       sessionMeta.delete(directory)
+       sdkCache.delete(directory)
++      clearProviderRev(directory)
+       clearSessionPrefetchDirectory(directory)
+     },
+     translate: language.t,
+@@ -252,6 +253,7 @@ function createGlobalSync() {
+         directory,
+         global: {
+           config: globalStore.config,
++          path: globalStore.path,
+           project: globalStore.project,
+           provider: globalStore.provider,
+         },
+@@ -311,7 +313,10 @@ function createGlobalSync() {
+       loadLsp: () => {
+         sdkFor(directory)
+           .lsp.status()
+-          .then((x) => setStore("lsp", x.data ?? []))
++          .then((x) => {
++            setStore("lsp", x.data ?? [])
++            setStore("lsp_ready", true)
++          })
+       },
+     })
+   })
+diff --git a/packages/app/src/context/global-sync/bootstrap.ts b/packages/app/src/context/global-sync/bootstrap.ts
+index 6eec688b7..869f8b7ea 100644
+--- a/packages/app/src/context/global-sync/bootstrap.ts
++++ b/packages/app/src/context/global-sync/bootstrap.ts
+@@ -7,6 +7,7 @@ import type {
+   ProviderAuthResponse,
+   ProviderListResponse,
+   QuestionRequest,
++  Session,
+   Todo,
+ } from "@opencode-ai/sdk/v2/client"
+ import { showToast } from "@opencode-ai/ui/toast"
+@@ -52,6 +53,12 @@ function errors(list: PromiseSettledResult<unknown>[]) {
+   return list.filter((item): item is PromiseRejectedResult => item.status === "rejected").map((item) => item.reason)
+ }
+ 
++const providerRev = new Map<string, number>()
++
++export function clearProviderRev(directory: string) {
++  providerRev.delete(directory)
++}
++
+ function runAll(list: Array<() => Promise<unknown>>) {
+   return Promise.allSettled(list.map((item) => item()))
+ }
+@@ -144,6 +151,40 @@ function projectID(directory: string, projects: Project[]) {
+   return projects.find((project) => project.worktree === directory || project.sandboxes?.includes(directory))?.id
+ }
+ 
++function mergeSession(setStore: SetStoreFunction<State>, session: Session) {
++  setStore("session", (list) => {
++    const next = list.slice()
++    const idx = next.findIndex((item) => item.id >= session.id)
++    if (idx === -1) return [...next, session]
++    if (next[idx]?.id === session.id) {
++      next[idx] = session
++      return next
++    }
++    next.splice(idx, 0, session)
++    return next
++  })
++}
++
++function warmSessions(input: {
++  ids: string[]
++  store: Store<State>
++  setStore: SetStoreFunction<State>
++  sdk: OpencodeClient
++}) {
++  const known = new Set(input.store.session.map((item) => item.id))
++  const ids = [...new Set(input.ids)].filter((id) => !!id && !known.has(id))
++  if (ids.length === 0) return Promise.resolve()
++  return Promise.all(
++    ids.map((sessionID) =>
++      retry(() => input.sdk.session.get({ sessionID })).then((x) => {
++        const session = x.data
++        if (!session?.id) return
++        mergeSession(input.setStore, session)
++      }),
++    ),
++  ).then(() => undefined)
++}
++
+ export async function bootstrapDirectory(input: {
+   directory: string
+   sdk: OpencodeClient
+@@ -154,19 +195,29 @@ export async function bootstrapDirectory(input: {
+   translate: (key: string, vars?: Record<string, string | number>) => string
+   global: {
+     config: Config
++    path: Path
+     project: Project[]
+     provider: ProviderListResponse
+   }
+ }) {
+   const loading = input.store.status !== "complete"
+   const seededProject = projectID(input.directory, input.global.project)
++  const seededPath = input.global.path.directory === input.directory ? input.global.path : undefined
+   if (seededProject) input.setStore("project", seededProject)
++  if (seededPath) input.setStore("path", seededPath)
+   if (input.store.provider.all.length === 0 && input.global.provider.all.length > 0) {
+     input.setStore("provider", input.global.provider)
+   }
+   if (Object.keys(input.store.config).length === 0 && Object.keys(input.global.config).length > 0) {
+     input.setStore("config", input.global.config)
+   }
++  if (loading || input.store.provider.all.length === 0) {
++    input.setStore("provider_ready", false)
++  }
++  input.setStore("mcp_ready", false)
++  input.setStore("mcp", {})
++  input.setStore("lsp_ready", false)
++  input.setStore("lsp", [])
+   if (loading) input.setStore("status", "partial")
+ 
+   const fast = [
+@@ -177,13 +228,15 @@ export async function bootstrapDirectory(input: {
+     () => retry(() => input.sdk.app.agents().then((x) => input.setStore("agent", normalizeAgentList(x.data)))),
+     () => retry(() => input.sdk.config.get().then((x) => input.setStore("config", x.data!))),
+     () =>
+-      retry(() =>
+-        input.sdk.path.get().then((x) => {
+-          input.setStore("path", x.data!)
+-          const next = projectID(x.data?.directory ?? input.directory, input.global.project)
+-          if (next) input.setStore("project", next)
+-        }),
+-      ),
++      seededPath
++        ? Promise.resolve()
++        : retry(() =>
++            input.sdk.path.get().then((x) => {
++              input.setStore("path", x.data!)
++              const next = projectID(x.data?.directory ?? input.directory, input.global.project)
++              if (next) input.setStore("project", next)
++            }),
++          ),
+     () => retry(() => input.sdk.session.status().then((x) => input.setStore("session_status", x.data!))),
+     () =>
+       retry(() =>
+@@ -197,61 +250,66 @@ export async function bootstrapDirectory(input: {
+     () =>
+       retry(() =>
+         input.sdk.permission.list().then((x) => {
++          const ids = (x.data ?? []).map((perm) => perm?.sessionID).filter((id): id is string => !!id)
+           const grouped = groupBySession(
+             (x.data ?? []).filter((perm): perm is PermissionRequest => !!perm?.id && !!perm.sessionID),
+           )
+-          batch(() => {
+-            for (const sessionID of Object.keys(input.store.permission)) {
+-              if (grouped[sessionID]) continue
+-              input.setStore("permission", sessionID, [])
+-            }
+-            for (const [sessionID, permissions] of Object.entries(grouped)) {
+-              input.setStore(
+-                "permission",
+-                sessionID,
+-                reconcile(
+-                  permissions.filter((p) => !!p?.id).sort((a, b) => cmp(a.id, b.id)),
+-                  { key: "id" },
+-                ),
+-              )
+-            }
+-          })
++          return warmSessions({ ids, store: input.store, setStore: input.setStore, sdk: input.sdk }).then(() =>
++            batch(() => {
++              for (const sessionID of Object.keys(input.store.permission)) {
++                if (grouped[sessionID]) continue
++                input.setStore("permission", sessionID, [])
++              }
++              for (const [sessionID, permissions] of Object.entries(grouped)) {
++                input.setStore(
++                  "permission",
++                  sessionID,
++                  reconcile(
++                    permissions.filter((p) => !!p?.id).sort((a, b) => cmp(a.id, b.id)),
++                    { key: "id" },
++                  ),
++                )
++              }
++            }),
++          )
+         }),
+       ),
+     () =>
+       retry(() =>
+         input.sdk.question.list().then((x) => {
++          const ids = (x.data ?? []).map((question) => question?.sessionID).filter((id): id is string => !!id)
+           const grouped = groupBySession((x.data ?? []).filter((q): q is QuestionRequest => !!q?.id && !!q.sessionID))
+-          batch(() => {
+-            for (const sessionID of Object.keys(input.store.question)) {
+-              if (grouped[sessionID]) continue
+-              input.setStore("question", sessionID, [])
+-            }
+-            for (const [sessionID, questions] of Object.entries(grouped)) {
+-              input.setStore(
+-                "question",
+-                sessionID,
+-                reconcile(
+-                  questions.filter((q) => !!q?.id).sort((a, b) => cmp(a.id, b.id)),
+-                  { key: "id" },
+-                ),
+-              )
+-            }
+-          })
++          return warmSessions({ ids, store: input.store, setStore: input.setStore, sdk: input.sdk }).then(() =>
++            batch(() => {
++              for (const sessionID of Object.keys(input.store.question)) {
++                if (grouped[sessionID]) continue
++                input.setStore("question", sessionID, [])
++              }
++              for (const [sessionID, questions] of Object.entries(grouped)) {
++                input.setStore(
++                  "question",
++                  sessionID,
++                  reconcile(
++                    questions.filter((q) => !!q?.id).sort((a, b) => cmp(a.id, b.id)),
++                    { key: "id" },
++                  ),
++                )
++              }
++            }),
++          )
+         }),
+       ),
+   ]
+ 
+   const slow = [
++    () => Promise.resolve(input.loadSessions(input.directory)),
+     () =>
+       retry(() =>
+-        input.sdk.provider.list().then((x) => {
+-          input.setStore("provider", normalizeProviderList(x.data!))
++        input.sdk.mcp.status().then((x) => {
++          input.setStore("mcp", x.data!)
++          input.setStore("mcp_ready", true)
+         }),
+       ),
+-    () => Promise.resolve(input.loadSessions(input.directory)),
+-    () => retry(() => input.sdk.mcp.status().then((x) => input.setStore("mcp", x.data!))),
+-    () => retry(() => input.sdk.lsp.status().then((x) => input.setStore("lsp", x.data!))),
+   ]
+ 
+   const errs = errors(await runAll(fast))
+@@ -278,4 +336,23 @@ export async function bootstrapDirectory(input: {
+   }
+ 
+   if (loading && errs.length === 0 && slowErrs.length === 0) input.setStore("status", "complete")
++
++  const rev = (providerRev.get(input.directory) ?? 0) + 1
++  providerRev.set(input.directory, rev)
++  void retry(() => input.sdk.provider.list())
++    .then((x) => {
++      if (providerRev.get(input.directory) !== rev) return
++      input.setStore("provider", normalizeProviderList(x.data!))
++      input.setStore("provider_ready", true)
++    })
++    .catch((err) => {
++      if (providerRev.get(input.directory) !== rev) return
++      console.error("Failed to refresh provider list", err)
++      const project = getFilename(input.directory)
++      showToast({
++        variant: "error",
++        title: input.translate("toast.project.reloadFailed.title", { project }),
++        description: formatServerError(err, input.translate),
++      })
++    })
+ }
+diff --git a/packages/app/src/context/global-sync/child-store.ts b/packages/app/src/context/global-sync/child-store.ts
+index 70668350e..5678491f8 100644
+--- a/packages/app/src/context/global-sync/child-store.ts
++++ b/packages/app/src/context/global-sync/child-store.ts
+@@ -160,6 +160,7 @@ export function createChildStoreManager(input: {
+             project: "",
+             projectMeta: initialMeta,
+             icon: initialIcon,
++            provider_ready: false,
+             provider: { all: [], connected: [], default: {} },
+             config: {},
+             path: { state: "", config: "", worktree: "", directory: "", home: "" },
+@@ -173,7 +174,9 @@ export function createChildStoreManager(input: {
+             todo: {},
+             permission: {},
+             question: {},
++            mcp_ready: false,
+             mcp: {},
++            lsp_ready: false,
+             lsp: [],
+             vcs: vcsStore.value,
+             limit: 5,
+diff --git a/packages/app/src/context/global-sync/types.ts b/packages/app/src/context/global-sync/types.ts
+index c61dc337d..1d6e550f8 100644
+--- a/packages/app/src/context/global-sync/types.ts
++++ b/packages/app/src/context/global-sync/types.ts
+@@ -38,6 +38,7 @@ export type State = {
+   project: string
+   projectMeta: ProjectMeta | undefined
+   icon: string | undefined
++  provider_ready: boolean
+   provider: ProviderListResponse
+   config: Config
+   path: Path
+@@ -58,9 +59,11 @@ export type State = {
+   question: {
+     [sessionID: string]: QuestionRequest[]
+   }
++  mcp_ready: boolean
+   mcp: {
+     [name: string]: McpStatus
+   }
++  lsp_ready: boolean
+   lsp: LspStatus[]
+   vcs: VcsInfo | undefined
+   limit: number
+diff --git a/packages/app/src/context/local.tsx b/packages/app/src/context/local.tsx
+index 76d337c82..84a613c0d 100644
+--- a/packages/app/src/context/local.tsx
++++ b/packages/app/src/context/local.tsx
+@@ -390,10 +390,18 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
+     }
+ 
+     if (modelEnabled()) {
++      const probe = Symbol("model-probe")
++
++      modelProbe.bind(probe, {
++        setAgent: agent.set,
++        setModel: model.set,
++        setVariant: model.variant.set,
++      })
++
+       createEffect(() => {
+         const agent = result.agent.current()
+         const model = result.model.current()
+-        modelProbe.set({
++        modelProbe.set(probe, {
+           dir: sdk.directory,
+           sessionID: id(),
+           last: store.last,
+@@ -411,10 +419,20 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
+           pick: scope(),
+           base: undefined,
+           current: store.current,
++          variants: result.model.variant.list(),
++          models: result.model
++            .list()
++            .filter((item) => result.model.visible({ providerID: item.provider.id, modelID: item.id }))
++            .map((item) => ({
++              providerID: item.provider.id,
++              modelID: item.id,
++              name: item.name,
++            })),
++          agents: result.agent.list().map((item) => ({ name: item.name })),
+         })
+       })
+ 
+-      onCleanup(() => modelProbe.clear())
++      onCleanup(() => modelProbe.clear(probe))
+     }
+ 
+     return result
+diff --git a/packages/app/src/hooks/use-providers.ts b/packages/app/src/hooks/use-providers.ts
+index a8f2360bb..f4ed359de 100644
+--- a/packages/app/src/hooks/use-providers.ts
++++ b/packages/app/src/hooks/use-providers.ts
+@@ -22,7 +22,7 @@ export function useProviders() {
+   const providers = () => {
+     if (dir()) {
+       const [projectStore] = globalSync.child(dir())
+-      if (projectStore.provider.all.length > 0) return projectStore.provider
++      if (projectStore.provider_ready) return projectStore.provider
+     }
+     return globalSync.data.provider
+   }
+diff --git a/packages/app/src/pages/directory-layout.tsx b/packages/app/src/pages/directory-layout.tsx
+index 6d3b04be9..427b4823b 100644
+--- a/packages/app/src/pages/directory-layout.tsx
++++ b/packages/app/src/pages/directory-layout.tsx
+@@ -12,6 +12,7 @@ import { decode64 } from "@/utils/base64"
+ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
+   const location = useLocation()
+   const navigate = useNavigate()
++  const params = useParams()
+   const sync = useSync()
+   const slug = createMemo(() => base64Encode(props.directory))
+ 
+@@ -22,6 +23,12 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
+     navigate(`/${base64Encode(next)}${path}${location.search}${location.hash}`, { replace: true })
+   })
+ 
++  createEffect(() => {
++    const id = params.id
++    if (!id) return
++    void sync.session.sync(id)
++  })
++
+   return (
+     <DataProvider
+       data={sync.data}
+diff --git a/packages/app/src/pages/session.tsx b/packages/app/src/pages/session.tsx
+index 2d3e31355..8a158cad5 100644
+--- a/packages/app/src/pages/session.tsx
++++ b/packages/app/src/pages/session.tsx
+@@ -712,7 +712,6 @@ export default function Page() {
+             return Date.now() - info.at > SESSION_PREFETCH_TTL
+           })()
+       const todos = untrack(() => sync.data.todo[id] !== undefined || globalSync.data.session_todo[id] !== undefined)
+-
+       untrack(() => {
+         void sync.session.sync(id)
+       })
+diff --git a/packages/app/src/pages/session/session-side-panel.tsx b/packages/app/src/pages/session/session-side-panel.tsx
+index 58c650fcd..c07942627 100644
+--- a/packages/app/src/pages/session/session-side-panel.tsx
++++ b/packages/app/src/pages/session/session-side-panel.tsx
+@@ -13,7 +13,6 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
+ 
+ import FileTree from "@/components/file-tree"
+ import { SessionContextUsage } from "@/components/session-context-usage"
+-import { DialogSelectFile } from "@/components/dialog-select-file"
+ import { SessionContextTab, SortableTab, FileVisual } from "@/components/session"
+ import { useCommand } from "@/context/command"
+ import { useFile, type SelectedLineRange } from "@/context/file"
+@@ -293,9 +292,11 @@ export function SessionSidePanel(props: {
+                             variant="ghost"
+                             iconSize="large"
+                             class="!rounded-md"
+-                            onClick={() =>
+-                              dialog.show(() => <DialogSelectFile mode="files" onOpenFile={showAllFiles} />)
+-                            }
++                            onClick={() => {
++                              void import("@/components/dialog-select-file").then((x) => {
++                                dialog.show(() => <x.DialogSelectFile mode="files" onOpenFile={showAllFiles} />)
++                              })
++                            }}
+                             aria-label={language.t("command.file.open")}
+                           />
+                         </TooltipKeybind>
+diff --git a/packages/app/src/pages/session/use-session-commands.tsx b/packages/app/src/pages/session/use-session-commands.tsx
+index 7394765ae..1a1c290f6 100644
+--- a/packages/app/src/pages/session/use-session-commands.tsx
++++ b/packages/app/src/pages/session/use-session-commands.tsx
+@@ -11,10 +11,6 @@ import { usePrompt } from "@/context/prompt"
+ import { useSDK } from "@/context/sdk"
+ import { useSync } from "@/context/sync"
+ import { useTerminal } from "@/context/terminal"
+-import { DialogSelectFile } from "@/components/dialog-select-file"
+-import { DialogSelectModel } from "@/components/dialog-select-model"
+-import { DialogSelectMcp } from "@/components/dialog-select-mcp"
+-import { DialogFork } from "@/components/dialog-fork"
+ import { showToast } from "@opencode-ai/ui/toast"
+ import { findLast } from "@opencode-ai/util/array"
+ import { createSessionTabs } from "@/pages/session/helpers"
+@@ -257,7 +253,11 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
+         description: language.t("palette.search.placeholder"),
+         keybind: "mod+k,mod+p",
+         slash: "open",
+-        onSelect: () => dialog.show(() => <DialogSelectFile onOpenFile={showAllFiles} />),
++        onSelect: () => {
++          void import("@/components/dialog-select-file").then((x) => {
++            dialog.show(() => <x.DialogSelectFile onOpenFile={showAllFiles} />)
++          })
++        },
+       }),
+       fileCommand({
+         id: "tab.close",
+@@ -351,7 +351,11 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
+         description: language.t("command.model.choose.description"),
+         keybind: "mod+'",
+         slash: "model",
+-        onSelect: () => dialog.show(() => <DialogSelectModel model={local.model} />),
++        onSelect: () => {
++          void import("@/components/dialog-select-model").then((x) => {
++            dialog.show(() => <x.DialogSelectModel model={local.model} />)
++          })
++        },
+       }),
+       mcpCommand({
+         id: "mcp.toggle",
+@@ -359,7 +363,11 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
+         description: language.t("command.mcp.toggle.description"),
+         keybind: "mod+;",
+         slash: "mcp",
+-        onSelect: () => dialog.show(() => <DialogSelectMcp />),
++        onSelect: () => {
++          void import("@/components/dialog-select-mcp").then((x) => {
++            dialog.show(() => <x.DialogSelectMcp />)
++          })
++        },
+       }),
+       agentCommand({
+         id: "agent.cycle",
+@@ -487,7 +495,11 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
+         description: language.t("command.session.fork.description"),
+         slash: "fork",
+         disabled: !params.id || visibleUserMessages().length === 0,
+-        onSelect: () => dialog.show(() => <DialogFork />),
++        onSelect: () => {
++          void import("@/components/dialog-fork").then((x) => {
++            dialog.show(() => <x.DialogFork />)
++          })
++        },
+       }),
+       ...share,
+     ]
+diff --git a/packages/app/src/testing/model-selection.ts b/packages/app/src/testing/model-selection.ts
+index a5ea199ac..d2770fe28 100644
+--- a/packages/app/src/testing/model-selection.ts
++++ b/packages/app/src/testing/model-selection.ts
+@@ -3,6 +3,14 @@ type ModelKey = {
+   modelID: string
+ }
+ 
++type ModelItem = ModelKey & {
++  name: string
++}
++
++type AgentItem = {
++  name: string
++}
++
+ type State = {
+   agent?: string
+   model?: ModelKey | null
+@@ -26,6 +34,9 @@ export type ModelProbeState = {
+   pick?: State
+   base?: State
+   current?: string
++  variants?: string[]
++  models?: ModelItem[]
++  agents?: AgentItem[]
+ }
+ 
+ export type ModelWindow = Window & {
+@@ -33,6 +44,11 @@ export type ModelWindow = Window & {
+     model?: {
+       enabled?: boolean
+       current?: ModelProbeState
++      controls?: {
++        setAgent?: (name: string | undefined) => void
++        setModel?: (value: ModelKey | undefined) => void
++        setVariant?: (value: string | undefined) => void
++      }
+     }
+   }
+ }
+@@ -45,6 +61,8 @@ const clone = (state?: State) => {
+   }
+ }
+ 
++let active: symbol | undefined
++
+ export const modelEnabled = () => {
+   if (typeof window === "undefined") return false
+   return (window as ModelWindow).__opencode_e2e?.model?.enabled === true
+@@ -56,9 +74,15 @@ const root = () => {
+ }
+ 
+ export const modelProbe = {
+-  set(input: ModelProbeState) {
++  bind(id: symbol, input: NonNullable<NonNullable<ModelWindow["__opencode_e2e"]>["model"]>["controls"]) {
+     const state = root()
+     if (!state) return
++    active = id
++    state.controls = input
++  },
++  set(id: symbol, input: ModelProbeState) {
++    const state = root()
++    if (!state || active !== id) return
+     state.current = {
+       ...input,
+       model: input.model ? { ...input.model } : undefined,
+@@ -70,11 +94,16 @@ export const modelProbe = {
+         : undefined,
+       pick: clone(input.pick),
+       base: clone(input.base),
++      variants: input.variants?.slice(),
++      models: input.models?.map((item) => ({ ...item })),
++      agents: input.agents?.map((item) => ({ ...item })),
+     }
+   },
+-  clear() {
++  clear(id: symbol) {
+     const state = root()
+-    if (!state) return
++    if (!state || active !== id) return
++    active = undefined
+     state.current = undefined
++    state.controls = undefined
+   },
+ }
+diff --git a/packages/opencode/src/server/routes/event.ts b/packages/opencode/src/server/routes/event.ts
+index 178da5994..96284242f 100644
+--- a/packages/opencode/src/server/routes/event.ts
++++ b/packages/opencode/src/server/routes/event.ts
+@@ -29,6 +29,7 @@ export const EventRoutes = lazy(() =>
+     }),
+     async (c) => {
+       log.info("event connected")
++      c.header("Cache-Control", "no-cache, no-transform")
+       c.header("X-Accel-Buffering", "no")
+       c.header("X-Content-Type-Options", "nosniff")
+       return streamSSE(c, async (stream) => {
+diff --git a/packages/opencode/src/server/routes/global.ts b/packages/opencode/src/server/routes/global.ts
+index 88f54f844..16b9e559f 100644
+--- a/packages/opencode/src/server/routes/global.ts
++++ b/packages/opencode/src/server/routes/global.ts
+@@ -118,6 +118,7 @@ export const GlobalRoutes = lazy(() =>
+       }),
+       async (c) => {
+         log.info("global event connected")
++        c.header("Cache-Control", "no-cache, no-transform")
+         c.header("X-Accel-Buffering", "no")
+         c.header("X-Content-Type-Options", "nosniff")
+ 
+@@ -157,6 +158,7 @@ export const GlobalRoutes = lazy(() =>
+       }),
+       async (c) => {
+         log.info("global sync event connected")
++        c.header("Cache-Control", "no-cache, no-transform")
+         c.header("X-Accel-Buffering", "no")
+         c.header("X-Content-Type-Options", "nosniff")
+         return streamEvents(c, (q) => {
+diff --git a/packages/opencode/src/server/server.ts b/packages/opencode/src/server/server.ts
+index e3eeead2a..7dc6ec1bd 100644
+--- a/packages/opencode/src/server/server.ts
++++ b/packages/opencode/src/server/server.ts
+@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
+ import { Log } from "../util/log"
+ import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
+ import { Hono } from "hono"
++import { compress } from "hono/compress"
+ import { cors } from "hono/cors"
+ import { proxy } from "hono/proxy"
+ import { basicAuth } from "hono/basic-auth"
+@@ -62,6 +63,14 @@ export namespace Server {
+     : // @ts-expect-error - generated file at build time
+       import("opencode-web-ui.gen.ts").then((module) => module.default as Record<string, string>).catch(() => null)
+ 
++  const zipped = compress()
++
++  const skipCompress = (path: string, method: string) => {
++    if (path === "/event" || path === "/global/event" || path === "/global/sync-event") return true
++    if (method === "POST" && /\/session\/[^/]+\/(message|prompt_async)$/.test(path)) return true
++    return false
++  }
++
+   export const Default = lazy(() => createApp({}))
+ 
+   export const createApp = (opts: { cors?: string[] }): Hono => {
+@@ -114,6 +123,7 @@ export namespace Server {
+       })
+       .use(
+         cors({
++          maxAge: 86_400,
+           origin(input) {
+             if (!input) return
+ 
+@@ -138,6 +148,10 @@ export namespace Server {
+           },
+         }),
+       )
++      .use((c, next) => {
++        if (skipCompress(c.req.path, c.req.method)) return next()
++        return zipped(c, next)
++      })
+       .route("/global", GlobalRoutes())
+       .put(
+         "/auth/:providerID",
+diff --git a/packages/sdk/js/src/client.ts b/packages/sdk/js/src/client.ts
+index e0d20152b..05f463825 100644
+--- a/packages/sdk/js/src/client.ts
++++ b/packages/sdk/js/src/client.ts
+@@ -5,6 +5,30 @@ import { type Config } from "./gen/client/types.gen.js"
+ import { OpencodeClient } from "./gen/sdk.gen.js"
+ export { type Config as OpencodeClientConfig, OpencodeClient }
+ 
++function pick(value: string | null, fallback?: string) {
++  if (!value) return
++  if (!fallback) return value
++  if (value === fallback) return fallback
++  if (value === encodeURIComponent(fallback)) return fallback
++  return value
++}
++
++function rewrite(request: Request, directory?: string) {
++  if (request.method !== "GET" && request.method !== "HEAD") return request
++
++  const value = pick(request.headers.get("x-opencode-directory"), directory)
++  if (!value) return request
++
++  const url = new URL(request.url)
++  if (!url.searchParams.has("directory")) {
++    url.searchParams.set("directory", value)
++  }
++
++  const next = new Request(url, request)
++  next.headers.delete("x-opencode-directory")
++  return next
++}
++
+ export function createOpencodeClient(config?: Config & { directory?: string }) {
+   if (!config?.fetch) {
+     const customFetch: any = (req: any) => {
+@@ -26,5 +50,6 @@ export function createOpencodeClient(config?: Config & { directory?: string }) {
+   }
+ 
+   const client = createClient(config)
++  client.interceptors.request.use((request) => rewrite(request, config?.directory))
+   return new OpencodeClient({ client })
+ }
+diff --git a/packages/sdk/js/src/v2/client.ts b/packages/sdk/js/src/v2/client.ts
+index ad956dd4b..e230a4b5d 100644
+--- a/packages/sdk/js/src/v2/client.ts
++++ b/packages/sdk/js/src/v2/client.ts
+@@ -5,6 +5,44 @@ import { type Config } from "./gen/client/types.gen.js"
+ import { OpencodeClient } from "./gen/sdk.gen.js"
+ export { type Config as OpencodeClientConfig, OpencodeClient }
+ 
++function pick(value: string | null, fallback?: string, encode?: (value: string) => string) {
++  if (!value) return
++  if (!fallback) return value
++  if (value === fallback) return fallback
++  if (encode && value === encode(fallback)) return fallback
++  return value
++}
++
++function rewrite(request: Request, values: { directory?: string; workspace?: string }) {
++  if (request.method !== "GET" && request.method !== "HEAD") return request
++
++  const url = new URL(request.url)
++  let changed = false
++
++  for (const [name, key] of [
++    ["x-opencode-directory", "directory"],
++    ["x-opencode-workspace", "workspace"],
++  ] as const) {
++    const value = pick(
++      request.headers.get(name),
++      key === "directory" ? values.directory : values.workspace,
++      key === "directory" ? encodeURIComponent : undefined,
++    )
++    if (!value) continue
++    if (!url.searchParams.has(key)) {
++      url.searchParams.set(key, value)
++    }
++    changed = true
++  }
++
++  if (!changed) return request
++
++  const next = new Request(url, request)
++  next.headers.delete("x-opencode-directory")
++  next.headers.delete("x-opencode-workspace")
++  return next
++}
++
+ export function createOpencodeClient(config?: Config & { directory?: string; experimental_workspaceID?: string }) {
+   if (!config?.fetch) {
+     const customFetch: any = (req: any) => {
+@@ -19,11 +57,9 @@ export function createOpencodeClient(config?: Config & { directory?: string; exp
+   }
+ 
+   if (config?.directory) {
+-    const isNonASCII = /[^\x00-\x7F]/.test(config.directory)
+-    const encodedDirectory = isNonASCII ? encodeURIComponent(config.directory) : config.directory
+     config.headers = {
+       ...config.headers,
+-      "x-opencode-directory": encodedDirectory,
++      "x-opencode-directory": encodeURIComponent(config.directory),
+     }
+   }
+ 
+@@ -35,5 +71,11 @@ export function createOpencodeClient(config?: Config & { directory?: string; exp
+   }
+ 
+   const client = createClient(config)
++  client.interceptors.request.use((request) =>
++    rewrite(request, {
++      directory: config?.directory,
++      workspace: config?.experimental_workspaceID,
++    }),
++  )
+   return new OpencodeClient({ client })
+ }
+-- 
+2.43.0
+

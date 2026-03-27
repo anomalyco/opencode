@@ -1,0 +1,34 @@
+From a1d16f8c5e36f7eda8db05cafa985627d4138b86 Mon Sep 17 00:00:00 2001
+From: CoBuilder CEO <ceo@cobuilder.ai>
+Date: Thu, 26 Mar 2026 22:08:51 -0700
+Subject: [PATCH 063/127] fix(onboard): guard Config.get() against missing
+ instance context in setup9Router
+
+---
+ packages/opencode/src/cli/cmd/onboard.ts | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/packages/opencode/src/cli/cmd/onboard.ts b/packages/opencode/src/cli/cmd/onboard.ts
+index 2a5ad1a10..cbce6f989 100644
+--- a/packages/opencode/src/cli/cmd/onboard.ts
++++ b/packages/opencode/src/cli/cmd/onboard.ts
+@@ -86,8 +86,14 @@ async function setup9Router() {
+   const baseURL = (urlInput as string).trim().replace(/\/+$/, "")
+ 
+   // SSRF validation (default-on: skipped only if explicitly disabled)
+-  const cfg = await Config.get()
+-  if (cfg.security?.ssrf?.enabled !== false) {
++  let ssrfEnabled = true
++  try {
++    const cfg = await Config.get()
++    ssrfEnabled = cfg.security?.ssrf?.enabled !== false
++  } catch {
++    // No instance context during onboarding — apply default (enabled)
++  }
++  if (ssrfEnabled) {
+     const ssrfCheck = validateProviderURL(baseURL, { allowLocalhost: true })
+     if (!ssrfCheck.ok) {
+       prompts.log.error(ssrfCheck.reason)
+-- 
+2.43.0
+

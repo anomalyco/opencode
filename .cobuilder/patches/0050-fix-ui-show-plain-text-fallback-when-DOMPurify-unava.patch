@@ -1,0 +1,48 @@
+From a89c8a4a2bd18d1cc4dc011af0396c9bcc609f84 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Thu, 26 Mar 2026 20:40:40 -0700
+Subject: [PATCH 050/127] fix(ui): show plain text fallback when DOMPurify
+ unavailable or parse pending (#22)
+
+- sanitize() now falls back to escaped plain text instead of empty string
+  when DOMPurify.isSupported is false
+- initialValue for createResource now uses fallback() on client too,
+  so content is visible immediately while marked.parse() is async
+
+Co-authored-by: CoBuilder CEO <ceo@cobuilder.ai>
+---
+ packages/ui/src/components/markdown.tsx | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/packages/ui/src/components/markdown.tsx b/packages/ui/src/components/markdown.tsx
+index 01254f118..1d5a2056a 100644
+--- a/packages/ui/src/components/markdown.tsx
++++ b/packages/ui/src/components/markdown.tsx
+@@ -39,8 +39,8 @@ const iconPaths = {
+   check: '<path d="M5 11.9657L8.37838 14.7529L15 5.83398" stroke="currentColor" stroke-linecap="square"/>',
+ }
+ 
+-function sanitize(html: string) {
+-  if (!DOMPurify.isSupported) return ""
++function sanitize(html: string, raw: string) {
++  if (!DOMPurify.isSupported) return fallback(raw)
+   return DOMPurify.sanitize(html, config)
+ }
+ 
+@@ -264,11 +264,11 @@ export function Markdown(
+       }
+ 
+       const next = await marked.parse(markdown)
+-      const safe = sanitize(next)
++      const safe = sanitize(next, markdown)
+       if (key && hash) touch(key, { hash, html: safe })
+       return safe
+     },
+-    { initialValue: isServer ? fallback(local.text) : "" },
++    { initialValue: isServer ? fallback(local.text) : fallback(local.text) },
+   )
+ 
+   let copySetupTimer: ReturnType<typeof setTimeout> | undefined
+-- 
+2.43.0
+

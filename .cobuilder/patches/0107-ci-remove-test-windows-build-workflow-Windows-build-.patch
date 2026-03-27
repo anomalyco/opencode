@@ -1,0 +1,79 @@
+From a8977b3221a94b4d049ef8ad3d38c14427ffc4dd Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Fri, 27 Mar 2026 10:53:21 -0700
+Subject: [PATCH 107/127] =?UTF-8?q?ci:=20remove=20test-windows-build=20wor?=
+ =?UTF-8?q?kflow=20=E2=80=94=20Windows=20build=20confirmed=20fixed?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ .github/workflows/test-windows-build.yml | 56 ------------------------
+ 1 file changed, 56 deletions(-)
+ delete mode 100644 .github/workflows/test-windows-build.yml
+
+diff --git a/.github/workflows/test-windows-build.yml b/.github/workflows/test-windows-build.yml
+deleted file mode 100644
+index e04f069f6..000000000
+--- a/.github/workflows/test-windows-build.yml
++++ /dev/null
+@@ -1,56 +0,0 @@
+-name: Test Windows Build
+-
+-on:
+-  workflow_dispatch:
+-
+-env:
+-  BUN_VERSION: "1.3.11"
+-
+-jobs:
+-  desktop-windows:
+-    name: Desktop (Windows)
+-    runs-on: windows-latest
+-    timeout-minutes: 20
+-    steps:
+-      - uses: actions/checkout@v4
+-
+-      - uses: oven-sh/setup-bun@v2
+-        with:
+-          bun-version: ${{ env.BUN_VERSION }}
+-
+-      - name: Cache bun dependencies
+-        uses: actions/cache@v4
+-        with:
+-          path: |
+-            ~\AppData\Local\bun\install\cache
+-            node_modules
+-            packages\*\node_modules
+-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+-          restore-keys: bun-${{ runner.os }}-
+-
+-      - name: Install dependencies
+-        run: bun install --frozen-lockfile
+-
+-      - name: Set desktop version
+-        run: |
+-          cd packages/desktop-electron
+-          node -e "
+-            const fs = require('fs');
+-            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+-            pkg.version = '0.0.0-test';
+-            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+-          "
+-
+-      - name: Build
+-        run: cd packages/desktop-electron && bun run build
+-        env:
+-          OPENCODE_CHANNEL: prod
+-
+-      - name: Package (no publish)
+-        run: cd packages/desktop-electron && bun run package:win -- --publish never
+-        env:
+-          OPENCODE_CHANNEL: prod
+-
+-      - name: List output
+-        shell: bash
+-        run: ls packages/desktop-electron/dist/*.exe 2>/dev/null && echo "SUCCESS" || echo "No .exe found"
+-- 
+2.43.0
+

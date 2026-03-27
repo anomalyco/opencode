@@ -1,0 +1,191 @@
+From 46f7f085519ae01757c7566fbd7907ccd5fe337f Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Thu, 26 Mar 2026 20:41:02 -0700
+Subject: [PATCH 051/127] feat: UX parity with Claude Code (5 improvements)
+ (#20)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+* feat: UX parity with Claude Code across 5 improvements
+
+- Open edit tool parts expanded by default (matches Claude Code behavior)
+- Open diffs collapsible by default after each completed turn
+- Add contextual bottom HUD showing shortcuts below the prompt input
+  (idle: '/ commands · @ mention', streaming: 'Esc · to stop')
+- Improve interrupt discoverability by surfacing Esc hint during generation
+- Add per-turn token/cost display after each assistant response
+
+* fix(ui): swap Show condition so turnUsage accessor types correctly
+
+`turnUsage() && !working()` evaluates to `true` (boolean) when both are
+truthy, causing TS2339 on the accessor. Swapping to `!working() && turnUsage()`
+returns the usage object so the accessor types as expected.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+---------
+
+Co-authored-by: CoBuilder CEO <ceo@cobuilder.ai>
+Co-authored-by: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ packages/app/src/context/settings.tsx         |  2 +-
+ packages/app/src/i18n/en.ts                   |  3 ++
+ .../composer/session-composer-region.tsx      | 39 +++++++++++++++++++
+ packages/ui/src/components/session-turn.tsx   | 33 +++++++++++++++-
+ 4 files changed, 75 insertions(+), 2 deletions(-)
+
+diff --git a/packages/app/src/context/settings.tsx b/packages/app/src/context/settings.tsx
+index eddd752eb..0c0124946 100644
+--- a/packages/app/src/context/settings.tsx
++++ b/packages/app/src/context/settings.tsx
+@@ -49,7 +49,7 @@ const defaultSettings: Settings = {
+     followup: "steer",
+     showReasoningSummaries: false,
+     shellToolPartsExpanded: true,
+-    editToolPartsExpanded: false,
++    editToolPartsExpanded: true,
+   },
+   updates: {
+     startup: true,
+diff --git a/packages/app/src/i18n/en.ts b/packages/app/src/i18n/en.ts
+index 03634093a..b25a6aaae 100644
+--- a/packages/app/src/i18n/en.ts
++++ b/packages/app/src/i18n/en.ts
+@@ -280,6 +280,9 @@ export const dict = {
+   "prompt.attachment.remove": "Remove attachment",
+   "prompt.action.send": "Send",
+   "prompt.action.stop": "Stop",
++  "prompt.hud.stop": "to stop",
++  "prompt.hud.commands": "commands",
++  "prompt.hud.mention": "mention file or agent",
+ 
+   "prompt.toast.pasteUnsupported.title": "Unsupported attachment",
+   "prompt.toast.pasteUnsupported.description": "Only images, PDFs, or text files can be attached here.",
+diff --git a/packages/app/src/pages/session/composer/session-composer-region.tsx b/packages/app/src/pages/session/composer/session-composer-region.tsx
+index b491ff9a7..689f43668 100644
+--- a/packages/app/src/pages/session/composer/session-composer-region.tsx
++++ b/packages/app/src/pages/session/composer/session-composer-region.tsx
+@@ -4,6 +4,7 @@ import { useSpring } from "@opencode-ai/ui/motion-spring"
+ import { PromptInput } from "@/components/prompt-input"
+ import { useLanguage } from "@/context/language"
+ import { usePrompt } from "@/context/prompt"
++import { useSync } from "@/context/sync"
+ import { getSessionHandoff, setSessionHandoff } from "@/pages/session/handoff"
+ import { useSessionKey } from "@/pages/session/session-layout"
+ import { SessionPermissionDock } from "@/pages/session/composer/session-permission-dock"
+@@ -44,8 +45,19 @@ export function SessionComposerRegion(props: {
+ }) {
+   const prompt = usePrompt()
+   const language = useLanguage()
++  const sync = useSync()
+   const route = useSessionKey()
+ 
++  const working = createMemo(() => {
++    const id = route.params.id
++    if (!id) return false
++    const status = sync.data.session_status[id] ?? { type: "idle" }
++    if (status.type !== "idle") return true
++    return (sync.data.message[id] ?? []).some(
++      (item) => item.role === "assistant" && typeof item.time.completed !== "number",
++    )
++  })
++
+   const handoffPrompt = createMemo(() => getSessionHandoff(route.sessionKey())?.prompt)
+ 
+   const previewPrompt = () =>
+@@ -250,6 +262,33 @@ export function SessionComposerRegion(props: {
+                 onAbort={props.followup?.onAbort}
+                 onSubmit={props.onSubmit}
+               />
++              <div
++                data-component="session-hud"
++                class="flex items-center gap-3 px-1 pt-1.5 text-[11px] text-text-weak select-none pointer-events-none"
++                aria-hidden="true"
++              >
++                <Show
++                  when={working()}
++                  fallback={
++                    <>
++                      <span class="opacity-40">
++                        <kbd class="font-sans">/</kbd>
++                        <span class="ml-1 opacity-75">{language.t("prompt.hud.commands")}</span>
++                      </span>
++                      <span class="opacity-25">·</span>
++                      <span class="opacity-40">
++                        <kbd class="font-sans">@</kbd>
++                        <span class="ml-1 opacity-75">{language.t("prompt.hud.mention")}</span>
++                      </span>
++                    </>
++                  }
++                >
++                  <span class="opacity-60">
++                    <kbd class="font-sans">Esc</kbd>
++                    <span class="ml-1 opacity-75">{language.t("prompt.hud.stop")}</span>
++                  </span>
++                </Show>
++              </div>
+             </div>
+           </Show>
+         </Show>
+diff --git a/packages/ui/src/components/session-turn.tsx b/packages/ui/src/components/session-turn.tsx
+index ed4c0e914..538891ba9 100644
+--- a/packages/ui/src/components/session-turn.tsx
++++ b/packages/ui/src/components/session-turn.tsx
+@@ -243,7 +243,7 @@ export function SessionTurn(
+   })
+   const edited = createMemo(() => diffs().length)
+   const [state, setState] = createStore({
+-    open: false,
++    open: true,
+     expanded: [] as string[],
+   })
+   const open = () => state.open
+@@ -341,6 +341,24 @@ export function SessionTurn(
+     if (end < start) return undefined
+     return end - start
+   })
++
++  const turnUsage = createMemo(() => {
++    const msgs = assistantMessages()
++    if (!msgs.length) return undefined
++    let input = 0
++    let output = 0
++    let cost = 0
++    for (const msg of msgs) {
++      if (typeof msg.tokens?.input === "number") input += msg.tokens.input
++      if (typeof msg.tokens?.output === "number") output += msg.tokens.output
++      if (typeof msg.cost === "number") cost += msg.cost
++    }
++    if (input === 0 && output === 0) return undefined
++    return { input, output, cost }
++  })
++
++  const fmt = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n))
++
+   const assistantDerived = createMemo(() => {
+     let visible = 0
+     let tail: "text" | "other" | undefined
+@@ -525,6 +543,19 @@ export function SessionTurn(
+                   </Collapsible>
+                 </div>
+               </Show>
++              <Show when={!working() && turnUsage()}>
++                {(usage) => (
++                  <div data-slot="session-turn-usage" class="px-4 md:px-5 pt-1 pb-0.5 flex items-center gap-2 text-[11px] text-text-weak opacity-60 select-none">
++                    <span>↑ {fmt(usage().input)}</span>
++                    <span>↓ {fmt(usage().output)}</span>
++                    <span class="text-text-weakest">tokens</span>
++                    <Show when={usage().cost > 0}>
++                      <span class="opacity-70">·</span>
++                      <span>~${usage().cost.toFixed(4)}</span>
++                    </Show>
++                  </div>
++                )}
++              </Show>
+               <Show when={error()}>
+                 <Card variant="error" class="error-card">
+                   {errorText()}
+-- 
+2.43.0
+
