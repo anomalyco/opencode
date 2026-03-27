@@ -13,8 +13,9 @@ import { useFileComponent } from "../context/file"
 import { useI18n } from "../context/i18n"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
-import { createEffect, createMemo, For, Match, Show, Switch, untrack, type JSX } from "solid-js"
+import { createEffect, createMemo, createResource, For, Match, Show, Switch, untrack, type JSX } from "solid-js"
 import { onCleanup } from "solid-js"
+import { HoverCard } from "./hover-card"
 import { createStore } from "solid-js/store"
 import { type FileContent, type FileDiff } from "@opencode-ai/sdk/v2"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
@@ -25,6 +26,62 @@ import { cloneSelectedLineRange, previewSelectedLines } from "../pierre/selectio
 import { createLineCommentController } from "./line-comment-annotations"
 
 const MAX_DIFF_CHANGED_LINES = 500
+
+function FilePreview(props: { file: string; readFile?: (path: string) => Promise<FileContent | undefined> }) {
+  if (!props.readFile) return <span data-slot="session-review-filename">{getFilename(props.file)}</span>
+
+  return (
+    <HoverCard
+      openDelay={300}
+      placement="right-start"
+      gutter={12}
+      trigger={<span data-slot="session-review-filename">{getFilename(props.file)}</span>}
+    >
+      <FilePreviewContent file={props.file} readFile={props.readFile} />
+    </HoverCard>
+  )
+}
+
+function FilePreviewContent(props: { file: string; readFile: (path: string) => Promise<FileContent | undefined> }) {
+  const [content] = createResource(() => props.file, props.readFile)
+  const lines = createMemo(() =>
+    content()
+      ?.content?.split("\n")
+      .slice(0, 20)
+      .map((l, i) => ({ n: i + 1, text: l })) ?? [],
+  )
+
+  return (
+    <div data-component="file-preview-hover" class="w-80 max-h-60 overflow-hidden flex flex-col">
+      <div class="px-3 py-1.5 border-b border-border-weak-base flex items-center gap-1.5">
+        <FileIcon node={{ path: props.file, type: "file" }} class="size-3.5 shrink-0" />
+        <span class="text-11-medium text-text-strong truncate">{props.file}</span>
+      </div>
+      <Show
+        when={content.loading}
+        fallback={
+          <Show
+            when={lines().length > 0}
+            fallback={<div class="px-3 py-2 text-11-regular text-text-weak">No preview available</div>}
+          >
+            <div class="overflow-y-auto no-scrollbar p-2">
+              <For each={lines()}>
+                {(line) => (
+                  <div class="flex gap-2 text-[11px] font-mono leading-[1.6]">
+                    <span class="shrink-0 w-6 text-right text-text-weakest select-none">{line.n}</span>
+                    <span class="text-text-base whitespace-pre truncate">{line.text || " "}</span>
+                  </div>
+                )}
+              </For>
+            </div>
+          </Show>
+        }
+      >
+        <div class="px-3 py-2 text-11-regular text-text-weak">Loading…</div>
+      </Show>
+    </div>
+  )
+}
 
 export type SessionReviewDiffStyle = "unified" | "split"
 
@@ -407,7 +464,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                   <Show when={file.includes("/")}>
                                     <span data-slot="session-review-directory">{`\u202A${getDirectory(file)}\u202C`}</span>
                                   </Show>
-                                  <span data-slot="session-review-filename">{getFilename(file)}</span>
+                                  <FilePreview file={file} readFile={props.readFile} />
                                   <Show when={props.onViewFile}>
                                     <Tooltip value={openFileLabel()} placement="top" gutter={4}>
                                       <button

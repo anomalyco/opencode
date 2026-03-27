@@ -1,4 +1,4 @@
-import { createEffect, For, Match, on, onCleanup, Show, Switch, type JSX } from "solid-js"
+import { createEffect, createSignal, For, Match, on, onCleanup, Show, Switch, type JSX } from "solid-js"
 import { animate, type AnimationPlaybackControls } from "motion"
 import { useI18n } from "../context/i18n"
 import { createStore } from "solid-js/store"
@@ -46,6 +46,78 @@ export function BasicTool(props: BasicToolProps) {
   const open = () => state.open
   const ready = () => state.ready
   const pending = () => props.status === "pending" || props.status === "running"
+
+  const [searchQuery, setSearchQuery] = createSignal("")
+  const [searchOpen, setSearchOpen] = createSignal(false)
+  let searchRef: HTMLInputElement | undefined
+  let toolRef: HTMLDivElement | undefined
+
+  const openSearch = () => {
+    if (!open()) setState("open", true)
+    setSearchOpen(true)
+    requestAnimationFrame(() => searchRef?.focus())
+  }
+
+  const closeSearch = () => {
+    setSearchOpen(false)
+    setSearchQuery("")
+    clearHighlights()
+  }
+
+  const clearHighlights = () => {
+    toolRef?.querySelectorAll("mark[data-tool-search]").forEach((el) => {
+      const parent = el.parentNode
+      if (!parent) return
+      parent.replaceChild(document.createTextNode(el.textContent ?? ""), el)
+      parent.normalize()
+    })
+  }
+
+  const applyHighlights = (q: string) => {
+    clearHighlights()
+    if (!q || !toolRef) return
+    const content = toolRef.querySelector("[data-slot='collapsible-content'], [data-component='collapsible-content']")
+    if (!content) return
+    const walk = document.createTreeWalker(content, NodeFilter.SHOW_TEXT)
+    const matches: { node: Text; start: number }[] = []
+    let node: Node | null
+    const lower = q.toLowerCase()
+    while ((node = walk.nextNode())) {
+      const text = node.textContent ?? ""
+      let idx = text.toLowerCase().indexOf(lower)
+      while (idx !== -1) {
+        matches.push({ node: node as Text, start: idx })
+        idx = text.toLowerCase().indexOf(lower, idx + 1)
+      }
+    }
+    for (let i = matches.length - 1; i >= 0; i--) {
+      const { node, start } = matches[i]
+      const range = document.createRange()
+      range.setStart(node, start)
+      range.setEnd(node, start + q.length)
+      const mark = document.createElement("mark")
+      mark.setAttribute("data-tool-search", "")
+      mark.style.background = "var(--surface-warning-soft, rgba(250,200,50,0.35))"
+      mark.style.color = "inherit"
+      mark.style.borderRadius = "2px"
+      range.surroundContents(mark)
+      if (i === 0) mark.scrollIntoView({ block: "nearest" })
+    }
+  }
+
+  createEffect(() => {
+    const q = searchQuery()
+    if (!searchOpen()) return
+    applyHighlights(q)
+  })
+
+  const handleToolKeyDown = (e: KeyboardEvent) => {
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "f") {
+      e.preventDefault()
+      e.stopPropagation()
+      openSearch()
+    }
+  }
 
   let frame: number | undefined
 
@@ -122,7 +194,12 @@ export function BasicTool(props: BasicToolProps) {
   }
 
   return (
-    <Collapsible open={open()} onOpenChange={handleOpenChange} class="tool-collapsible">
+    <div ref={toolRef} onKeyDown={handleToolKeyDown} tabIndex={-1} class="tool-collapsible-wrapper">
+    <Collapsible
+      open={open()}
+      onOpenChange={handleOpenChange}
+      class="tool-collapsible"
+    >
       <Collapsible.Trigger>
         <div data-component="tool-trigger">
           <div data-slot="basic-tool-tool-trigger-content">
@@ -189,6 +266,36 @@ export function BasicTool(props: BasicToolProps) {
           </Show>
         </div>
       </Collapsible.Trigger>
+      <Show when={searchOpen()}>
+        <div
+          data-slot="basic-tool-search"
+          class="flex items-center gap-2 px-3 py-1.5 border-t border-border-weak-base bg-background-base"
+        >
+          <input
+            ref={searchRef}
+            placeholder="Search output…"
+            class="flex-1 bg-transparent text-12-regular text-text-strong placeholder:text-text-weakest outline-none"
+            value={searchQuery()}
+            onInput={(e) => setSearchQuery(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") { e.preventDefault(); closeSearch() }
+              if (e.key === "f" && (e.metaKey || e.ctrlKey)) { e.preventDefault() }
+            }}
+          />
+          <Show when={searchQuery()}>
+            <span class="text-11-regular text-text-weakest tabular-nums shrink-0">
+              {/* match count provided visually via browser highlight */}
+            </span>
+          </Show>
+          <button
+            class="text-11-regular text-text-weak hover:text-text-strong transition-colors shrink-0"
+            onClick={closeSearch}
+            tabIndex={-1}
+          >
+            ✕
+          </button>
+        </div>
+      </Show>
       <Show when={props.animated && props.children && !props.hideDetails}>
         <div
           ref={contentRef}
@@ -208,6 +315,7 @@ export function BasicTool(props: BasicToolProps) {
         </Collapsible.Content>
       </Show>
     </Collapsible>
+    </div>
   )
 }
 

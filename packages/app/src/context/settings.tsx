@@ -40,6 +40,10 @@ export interface Settings {
   }
   notifications: NotificationSettings
   sounds: SoundSettings
+  onboarding?: {
+    completedFirstSession?: boolean
+    dismissedCoachMarks?: string[]
+  }
 }
 
 const defaultSettings: Settings = {
@@ -245,6 +249,18 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         errors: withFallback(() => store.sounds?.errors, defaultSettings.sounds.errors),
         setErrors(value: string) {
           setStore("sounds", "errors", value)
+        },
+      },
+      onboarding: {
+        completedFirstSession: createMemo(() => store.onboarding?.completedFirstSession ?? false),
+        setCompletedFirstSession(value: boolean) {
+          setStore("onboarding", "completedFirstSession", value)
+        },
+        isDismissed(id: string) {
+          return createMemo(() => (store.onboarding?.dismissedCoachMarks ?? []).includes(id))
+        },
+        dismiss(id: string) {
+          setStore("onboarding", "dismissedCoachMarks", (prev) => [...(prev ?? []), id])
         },
       },
     }
