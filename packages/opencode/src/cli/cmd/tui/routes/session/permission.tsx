@@ -300,6 +300,28 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               }
             }
 
+            if (permission === "bash:unsandboxed") {
+              const command = typeof data.command === "string" ? data.command : ""
+              const reason = props.request.metadata?.reason
+              const isNetwork = reason === "possible_network_sandbox_denial"
+              return {
+                icon: "#",
+                title: "Retry shell command without sandbox",
+                body: (
+                  <box paddingLeft={1} flexDirection="column" gap={1}>
+                    <text fg={theme.textMuted}>
+                      {isNetwork
+                        ? "Sandbox networking is disabled, so the previous attempt may have failed because of the sandbox."
+                        : "The previous sandboxed attempt was denied."}
+                    </text>
+                    <Show when={command}>
+                      <text fg={theme.text}>{"$ " + command}</text>
+                    </Show>
+                  </box>
+                ),
+              }
+            }
+
             if (permission === "task") {
               const type = typeof data.subagent_type === "string" ? data.subagent_type : "Unknown"
               const desc = typeof data.description === "string" ? data.description : ""

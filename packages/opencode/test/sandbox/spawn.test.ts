@@ -159,6 +159,13 @@ describe("sandbox.spawn", () => {
 
   test("detects likely sandbox denials conservatively", () => {
     expect(
+      SandboxSpawn.retryReason({
+        active: true,
+        code: 1,
+        stderr: "sandbox-exec: sandbox_apply: Operation not permitted",
+      }),
+    ).toBe("sandbox_denial")
+    expect(
       SandboxSpawn.shouldRetry({
         active: true,
         code: 1,
@@ -193,6 +200,45 @@ describe("sandbox.spawn", () => {
         stderr: "permission denied",
       }),
     ).toBe(false)
+  })
+
+  test("classifies likely curl network failures when sandbox networking is disabled", () => {
+    expect(
+      SandboxSpawn.retryReason({
+        active: true,
+        code: 6,
+        stderr: "curl: (6) Could not resolve host: example.com",
+        allow_network: false,
+        command: "FOO=1 curl -I https://example.com",
+      }),
+    ).toBe("possible_network_sandbox_denial")
+    expect(
+      SandboxSpawn.retryReason({
+        active: true,
+        code: 7,
+        stderr: "curl: (7) Failed to connect to example.com port 443",
+        allow_network: false,
+        command: 'sh -c "curl https://example.com"',
+      }),
+    ).toBe("possible_network_sandbox_denial")
+    expect(
+      SandboxSpawn.retryReason({
+        active: true,
+        code: 6,
+        stderr: "curl: (6) Could not resolve host: example.com",
+        allow_network: true,
+        command: "curl https://example.com",
+      }),
+    ).toBeUndefined()
+    expect(
+      SandboxSpawn.retryReason({
+        active: true,
+        code: 6,
+        stderr: "curl: (6) Could not resolve host: example.com",
+        allow_network: false,
+        command: "python script.py",
+      }),
+    ).toBeUndefined()
   })
 
   test("respects the env override at runtime", async () => {

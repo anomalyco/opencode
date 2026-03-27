@@ -1,4 +1,5 @@
 import { Config } from "@/config/config"
+import { Protected } from "@/file/protected"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 import { BashArity } from "@/permission/arity"
@@ -7,12 +8,14 @@ import { Filesystem } from "@/util/filesystem"
 import os from "os"
 import path from "path"
 import { SandboxPolicy } from "./policy"
+import { SandboxPreset } from "./preset"
 
 const log = Log.create({ service: "sandbox" })
 const bin = "/usr/bin/sandbox-exec"
 
 export namespace SandboxSpawn {
   export type Mode = SandboxPolicy.Mode
+  export type RetryReason = "sandbox_denial" | "possible_network_sandbox_denial"
 
   export interface Diag {
     requested: boolean
@@ -30,9 +33,13 @@ export namespace SandboxSpawn {
 
   export interface Settings {
     requested: boolean
-    mode: Mode
-    extra_read_roots: string[]
-    extra_write_roots: string[]
+    preset?: string
+    mode?: Mode
+    network?: boolean
+    protected_roots?: string[]
+    presets: Record<string, SandboxPreset.PartialDef>
+    extra_read_roots?: string[]
+    extra_write_roots?: string[]
     extra_deny_paths: string[]
     excluded_commands: string[]
     allow_unsandboxed_retry: boolean
@@ -43,6 +50,8 @@ export namespace SandboxSpawn {
     cwd: string
     project_root: string
     worktree_root: string
+    preset?: string
+    mode?: Mode
     allow_network?: boolean
     allow_unix_sockets?: boolean
   }
@@ -54,6 +63,7 @@ export namespace SandboxSpawn {
     home: string
     mode?: Mode
     fail_if_unavailable?: boolean
+    protected_roots?: string[]
     opencode_roots?: string[]
     extra_read_roots?: string[]
     extra_write_roots?: string[]
@@ -205,9 +215,13 @@ export namespace SandboxSpawn {
       const raw = cfg.experimental?.sandbox
       return {
         requested: env === undefined ? raw?.enabled === true : Flag.OPENCODE_EXPERIMENTAL_SANDBOX,
-        mode: raw?.mode ?? "workspace-write",
-        extra_read_roots: raw?.extra_read_roots ?? [],
-        extra_write_roots: raw?.extra_write_roots ?? [],
+        preset: raw?.preset,
+        mode: raw?.mode,
+        network: raw?.network,
+        protected_roots: raw?.protected_roots,
+        presets: raw?.presets ?? {},
+        extra_read_roots: raw?.extra_read_roots,
+        extra_write_roots: raw?.extra_write_roots,
         extra_deny_paths: raw?.extra_deny_paths ?? [],
         excluded_commands: raw?.excluded_commands ?? [],
         allow_unsandboxed_retry: raw?.allow_unsandboxed_retry === true,
@@ -237,14 +251,45 @@ export namespace SandboxSpawn {
     }
   }
 
-  export function shouldRetry(input: { active: boolean; code: number; stderr: string }) {
-    if (!input.active || input.code === 0) return false
-    if (input.stderr.includes("sandbox-exec: sandbox_apply: Operation not permitted")) return true
-    if (input.stderr.includes("sandbox-exec: execvp()")) return true
-    if (input.stderr.includes("forbidden-sandbox-reinit")) return true
-    if (input.stderr.includes("Sandbox:") && input.stderr.includes("deny(1)")) return true
-    if (input.stderr.includes("Operation not permitted")) return true
-    return false
+  function usesText(input: string, target: string) {
+    return shell(input)
+      .flatMap(list)
+      .some((item) => name(item[0]).toLowerCase() === target)
+  }
+
+  export function retryReason(input: {
+    active: boolean
+    code: number
+    stderr: string
+    allow_network?: boolean
+    command?: string
+  }): RetryReason | undefined {
+    if (!input.active || input.code === 0) return
+    if (input.stderr.includes("sandbox-exec: sandbox_apply: Operation not permitted")) return "sandbox_denial"
+    if (input.stderr.includes("sandbox-exec: execvp()")) return "sandbox_denial"
+    if (input.stderr.includes("forbidden-sandbox-reinit")) return "sandbox_denial"
+    if (input.stderr.includes("Sandbox:") && input.stderr.includes("deny(1)")) return "sandbox_denial"
+    if (input.stderr.includes("Operation not permitted")) return "sandbox_denial"
+    if (
+      input.allow_network === false &&
+      input.command &&
+      usesText(input.command, "curl") &&
+      ((input.code === 6 && input.stderr.includes("Could not resolve host")) ||
+        (input.code === 7 &&
+          ["Failed to connect", "Couldn't connect", "Could not connect"].some((item) => input.stderr.includes(item))))
+    ) {
+      return "possible_network_sandbox_denial"
+    }
+  }
+
+  export function shouldRetry(input: {
+    active: boolean
+    code: number
+    stderr: string
+    allow_network?: boolean
+    command?: string
+  }) {
+    return Boolean(retryReason(input))
   }
 
   export function unwrap(input: { file: string; args: string[] }) {
@@ -302,6 +347,7 @@ export namespace SandboxSpawn {
       extra_read_roots: read.good,
       extra_write_roots: write.good,
       extra_deny_paths: input.extra_deny_paths,
+      protected_roots: input.protected_roots,
       opencode_roots: input.opencode_roots,
       mode: input.mode,
       allow_network: input.allow_network,
@@ -338,9 +384,29 @@ export namespace SandboxSpawn {
 
   export async function resolve(input: ResolveInput, cfg?: Settings): Promise<Output> {
     const raw = cfg ?? (await settings())
+    const preset =
+      raw.requested || raw.preset || input.preset
+        ? SandboxPreset.active({
+            preset: input.preset ?? raw.preset,
+            presets: raw.presets,
+            mode: input.mode ?? raw.mode,
+            network: input.allow_network ?? raw.network,
+            protected_roots: raw.protected_roots,
+            extra_read_roots: raw.extra_read_roots,
+            extra_write_roots: raw.extra_write_roots,
+          })
+        : undefined
     const home = Filesystem.resolve(Global.Path.home)
     const tmp = Filesystem.resolve(os.tmpdir())
     const temp = Filesystem.contains(tmp, home) ? [] : [tmp]
+    const mode = preset?.mode ?? input.mode ?? raw.mode ?? "workspace-write"
+    const allowNetwork = input.allow_network ?? preset?.network ?? raw.network ?? false
+    const readRoots = (preset?.extra_read_roots ?? raw.extra_read_roots ?? []).map(Filesystem.resolve)
+    const writeRoots = (preset?.extra_write_roots ?? raw.extra_write_roots ?? []).map(Filesystem.resolve)
+    const protectedRoots = await Protected.resolve(
+      Filesystem.resolve(input.worktree_root),
+      preset?.protected_roots ?? [],
+    )
     const out = plan({
       requested: raw.requested,
       platform: process.platform,
@@ -349,18 +415,16 @@ export namespace SandboxSpawn {
       project_root: Filesystem.resolve(input.project_root),
       worktree_root: Filesystem.resolve(input.worktree_root),
       home,
-      mode: raw.mode,
+      mode,
       fail_if_unavailable: raw.fail_if_unavailable,
+      protected_roots: protectedRoots,
       opencode_roots: [Global.Path.data, Global.Path.config, Global.Path.state, Global.Path.cache].map(
         Filesystem.resolve,
       ),
-      extra_read_roots: [...raw.extra_read_roots, ...temp].map(Filesystem.resolve),
-      extra_write_roots:
-        raw.mode === "read-only"
-          ? raw.extra_write_roots.map(Filesystem.resolve)
-          : [...raw.extra_write_roots, ...temp].map(Filesystem.resolve),
+      extra_read_roots: [...readRoots, ...temp],
+      extra_write_roots: mode === "read-only" ? writeRoots : [...writeRoots, ...temp],
       extra_deny_paths: raw.extra_deny_paths.map(Filesystem.resolve),
-      allow_network: input.allow_network,
+      allow_network: allowNetwork,
       allow_unix_sockets: input.allow_unix_sockets,
     })
 

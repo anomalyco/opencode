@@ -42,6 +42,7 @@ import { ConfigServer } from "./server"
 import { ConfigSkills } from "./skills"
 import { ConfigVariable } from "./variable"
 import { Npm } from "@/npm"
+import { SandboxPreset } from "@/sandbox/preset"
 
 const log = Log.create({ service: "config" })
 
@@ -79,6 +80,114 @@ async function resolveLoadedPlugins<T extends { plugin?: ConfigPlugin.Spec[] }>(
 export const Server = ConfigServer.Server.zod
 export const Layout = ConfigLayout.Layout.zod
 export type Layout = ConfigLayout.Layout
+
+const SandboxPresetConfig = Schema.Struct({
+  mode: Schema.optional(Schema.Literals(["workspace-write", "read-only"])),
+  network: Schema.optional(Schema.Boolean),
+  protected_roots: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+  extra_read_roots: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+  extra_write_roots: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+  permission: Schema.optional(Schema.Any.annotate({ [ZodOverride]: ConfigPermission.Info })),
+})
+
+const SandboxConfig = Schema.Struct({
+  enabled: Schema.optional(Schema.Boolean).annotate({
+    description: "Enable macOS sandboxing for bash, session shell commands, PTY initial spawns, and LSP launches",
+  }),
+  preset: Schema.optional(Schema.String).annotate({
+    description: "Named sandbox preset (default, strict, network, or a custom preset)",
+  }),
+  mode: Schema.optional(Schema.Literals(["workspace-write", "read-only"])).annotate({
+    description: "Sandbox mode for command execution (default: preset default, otherwise workspace-write)",
+  }),
+  network: Schema.optional(Schema.Boolean).annotate({
+    description: "Allow outbound network access inside the macOS sandbox",
+  }),
+  protected_roots: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+    description: "Workspace-relative paths that remain write-protected inside writable roots",
+  }),
+  extra_read_roots: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+    description: "Additional read-only roots for macOS sandboxing",
+  }),
+  extra_write_roots: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+    description: "Additional writable roots for macOS sandboxing",
+  }),
+  extra_deny_paths: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+    description: "Additional denied paths for macOS sandboxing",
+  }),
+  excluded_commands: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+    description: "Command prefixes that must be blocked before execution",
+  }),
+  allow_unsandboxed_retry: Schema.optional(Schema.Boolean).annotate({
+    description: "Allow an explicit unsandboxed retry after a sandbox denial",
+  }),
+  fail_if_unavailable: Schema.optional(Schema.Boolean).annotate({
+    description: "Hard-fail when sandboxing is enabled but cannot activate",
+  }),
+  presets: Schema.optional(Schema.Record(Schema.String, SandboxPresetConfig)),
+}).annotate({
+  [ZodOverride]: z
+    .object({
+      enabled: z
+        .boolean()
+        .optional()
+        .describe("Enable macOS sandboxing for bash, session shell commands, PTY initial spawns, and LSP launches"),
+      preset: z.string().optional().describe("Named sandbox preset (default, strict, network, or a custom preset)"),
+      mode: z
+        .enum(["workspace-write", "read-only"])
+        .optional()
+        .describe("Sandbox mode for command execution (default: preset default, otherwise workspace-write)"),
+      network: z.boolean().optional().describe("Allow outbound network access inside the macOS sandbox"),
+      protected_roots: z
+        .array(z.string())
+        .optional()
+        .describe("Workspace-relative paths that remain write-protected inside writable roots"),
+      extra_read_roots: z.array(z.string()).optional().describe("Additional read-only roots for macOS sandboxing"),
+      extra_write_roots: z.array(z.string()).optional().describe("Additional writable roots for macOS sandboxing"),
+      extra_deny_paths: z.array(z.string()).optional().describe("Additional denied paths for macOS sandboxing"),
+      excluded_commands: z
+        .array(z.string())
+        .optional()
+        .describe("Command prefixes that must be blocked before execution"),
+      allow_unsandboxed_retry: z
+        .boolean()
+        .optional()
+        .describe("Allow an explicit unsandboxed retry after a sandbox denial"),
+      fail_if_unavailable: z.boolean().optional().describe("Hard-fail when sandboxing is enabled but cannot activate"),
+      presets: z
+        .record(
+          z.string(),
+          z.object({
+            mode: z.enum(["workspace-write", "read-only"]).optional(),
+            network: z.boolean().optional(),
+            protected_roots: z.array(z.string()).optional(),
+            extra_read_roots: z.array(z.string()).optional(),
+            extra_write_roots: z.array(z.string()).optional(),
+            permission: ConfigPermission.Info.optional(),
+          }),
+        )
+        .optional(),
+    })
+    .superRefine((value, ctx) => {
+      const builtins = new Set(SandboxPreset.names())
+      for (const key of Object.keys(value.presets ?? {})) {
+        if (!builtins.has(key)) continue
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["presets", key],
+          message: `Custom sandbox preset "${key}" cannot shadow built-in preset "${key}"`,
+        })
+      }
+      if (!value.preset) return
+      if (builtins.has(value.preset)) return
+      if (Object.hasOwn(value.presets ?? {}, value.preset)) return
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["preset"],
+        message: `Unknown sandbox preset "${value.preset}"`,
+      })
+    }),
+})
 
 // Schemas that still live at the zod layer (have .transform / .preprocess /
 // .meta not expressible in current Effect Schema) get referenced via a
@@ -220,34 +329,7 @@ const InfoSchema = Schema.Struct({
     Schema.Struct({
       disable_paste_summary: Schema.optional(Schema.Boolean),
       batch_tool: Schema.optional(Schema.Boolean).annotate({ description: "Enable the batch tool" }),
-      sandbox: Schema.optional(
-        Schema.Struct({
-          enabled: Schema.optional(Schema.Boolean).annotate({
-            description: "Enable macOS sandboxing for bash, session shell commands, and PTY initial spawns",
-          }),
-          mode: Schema.optional(Schema.Literals(["workspace-write", "read-only"])).annotate({
-            description: "Sandbox mode for command execution (default: workspace-write)",
-          }),
-          extra_read_roots: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
-            description: "Additional read-only roots for macOS sandboxing",
-          }),
-          extra_write_roots: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
-            description: "Additional writable roots for macOS sandboxing",
-          }),
-          extra_deny_paths: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
-            description: "Additional denied paths for macOS sandboxing",
-          }),
-          excluded_commands: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
-            description: "Command prefixes that must be blocked before execution",
-          }),
-          allow_unsandboxed_retry: Schema.optional(Schema.Boolean).annotate({
-            description: "Allow an explicit unsandboxed retry after a sandbox denial",
-          }),
-          fail_if_unavailable: Schema.optional(Schema.Boolean).annotate({
-            description: "Hard-fail when sandboxing is enabled but cannot activate",
-          }),
-        }),
-      ),
+      sandbox: Schema.optional(SandboxConfig),
       openTelemetry: Schema.optional(Schema.Boolean).annotate({
         description: "Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)",
       }),

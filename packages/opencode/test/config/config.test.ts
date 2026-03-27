@@ -148,13 +148,28 @@ test("loads experimental sandbox config", async () => {
       experimental: {
         sandbox: {
           enabled: true,
+          preset: "strict",
           mode: "read-only",
+          network: false,
+          protected_roots: [".git", ".opencode", ".env"],
           extra_read_roots: ["/tmp/read"],
           extra_write_roots: ["/tmp/write"],
           extra_deny_paths: ["/tmp/deny"],
           excluded_commands: ["rm"],
           allow_unsandboxed_retry: false,
           fail_if_unavailable: true,
+          presets: {
+            ci: {
+              mode: "workspace-write",
+              network: true,
+              protected_roots: [".git", ".opencode"],
+              extra_read_roots: ["/tmp/ci-read"],
+              extra_write_roots: ["/tmp/ci-write"],
+              permission: {
+                bash: "allow",
+              },
+            },
+          },
         },
       },
     },
@@ -164,13 +179,18 @@ test("loads experimental sandbox config", async () => {
     fn: async () => {
       const config = await load()
       expect(config.experimental?.sandbox?.enabled).toBe(true)
+      expect(config.experimental?.sandbox?.preset).toBe("strict")
       expect(config.experimental?.sandbox?.mode).toBe("read-only")
+      expect(config.experimental?.sandbox?.network).toBe(false)
+      expect(config.experimental?.sandbox?.protected_roots).toEqual([".git", ".opencode", ".env"])
       expect(config.experimental?.sandbox?.extra_read_roots).toEqual(["/tmp/read"])
       expect(config.experimental?.sandbox?.extra_write_roots).toEqual(["/tmp/write"])
       expect(config.experimental?.sandbox?.extra_deny_paths).toEqual(["/tmp/deny"])
       expect(config.experimental?.sandbox?.excluded_commands).toEqual(["rm"])
       expect(config.experimental?.sandbox?.allow_unsandboxed_retry).toBe(false)
       expect(config.experimental?.sandbox?.fail_if_unavailable).toBe(true)
+      expect(config.experimental?.sandbox?.presets?.ci?.network).toBe(true)
+      expect(config.experimental?.sandbox?.presets?.ci?.permission).toEqual({ bash: "allow" })
     },
   })
 })

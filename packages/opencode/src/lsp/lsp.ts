@@ -190,7 +190,7 @@ export const layer = Layer.effect(
                 root: existing?.root ?? (async (_file, ctx) => ctx.directory),
                 extensions: item.extensions ?? existing?.extensions ?? [],
                 spawn: async (root) => ({
-                  process: lspspawn(item.command[0], item.command.slice(1), {
+                  process: await lspspawn(item.command[0], item.command.slice(1), {
                     cwd: root,
                     env: { ...process.env, ...item.env },
                   }),

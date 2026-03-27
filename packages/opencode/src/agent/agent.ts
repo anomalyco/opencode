@@ -14,10 +14,12 @@ import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { Permission } from "@/permission"
+import { Flag } from "@/flag/flag"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
 import path from "path"
 import { Plugin } from "@/plugin"
+import { SandboxPreset } from "@/sandbox/preset"
 import { Skill } from "../skill"
 import { Effect, Context, Layer } from "effect"
 import { InstanceState } from "@/effect"
@@ -104,6 +106,13 @@ export const layer = Layer.effect(
         })
 
         const user = Permission.fromConfig(cfg.permission ?? {})
+        const sandbox = cfg.experimental?.sandbox
+        const enabled =
+          process.env["OPENCODE_EXPERIMENTAL_SANDBOX"] === undefined
+            ? sandbox?.enabled === true
+            : Flag.OPENCODE_EXPERIMENTAL_SANDBOX
+        const preset = enabled ? SandboxPreset.active(sandbox) : undefined
+        const overlay = preset ? Permission.fromConfig(preset.permission) : []
 
         const agents: Record<string, Info> = {
           build: {
@@ -116,6 +125,7 @@ export const layer = Layer.effect(
                 question: "allow",
                 plan_enter: "allow",
               }),
+              overlay,
               user,
             ),
             mode: "primary",
@@ -152,6 +162,7 @@ export const layer = Layer.effect(
               Permission.fromConfig({
                 todowrite: "deny",
               }),
+              overlay,
               user,
             ),
             options: {},
@@ -243,7 +254,7 @@ export const layer = Layer.effect(
             item = agents[key] = {
               name: key,
               mode: "all",
-              permission: Permission.merge(defaults, user),
+              permission: Permission.merge(defaults, overlay, user),
               options: {},
               native: false,
             }
