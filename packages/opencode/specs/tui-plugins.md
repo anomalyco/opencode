@@ -7,7 +7,7 @@ Technical reference for the current TUI plugin system.
 - TUI plugin config lives in `tui.json`.
 - Author package entrypoint is `@opencode-ai/plugin/tui`.
 - Internal plugins load inside the CLI app the same way external TUI plugins do.
-- Package plugins can be installed with `opencode plugin <module>`.
+- Package plugins can be installed from CLI or TUI.
 
 ## TUI config
 
@@ -123,10 +123,16 @@ npm plugins can declare a version compatibility range in `package.json` using th
 - If `engines.opencode` is absent, no check is performed (backward compatible).
 - File plugins are never checked; only npm package plugins are validated.
 
-- `opencode plugin <module>` resolves and installs the package first, then reads `oc-plugin`, then patches config.
+- Install flow is shared by CLI and TUI in `src/plugin/install.ts`.
+- Shared helpers are `installPlugin`, `readPluginManifest`, and `patchPluginConfig`.
+- `opencode plugin <module>` and TUI install both run install → manifest read → config patch.
 - Alias: `opencode plug <module>`.
 - `-g` / `--global` writes into the global config dir.
-- Local installs write into `<git worktree>/.opencode` when inside a git repo, otherwise `<cwd>/.opencode`.
+- Local installs resolve target dir inside `patchPluginConfig`.
+- For local scope, path is `<worktree>/.opencode` only when VCS is git and `worktree !== "/"`; otherwise `<directory>/.opencode`.
+- Root-worktree fallback (`worktree === "/"` uses `<directory>/.opencode`) is covered by regression tests.
+- `patchPluginConfig` applies all declared manifest targets (`server` and/or `tui`) in one call.
+- `patchPluginConfig` returns structured result unions (`ok`, `code`, fields by error kind) instead of custom thrown errors.
 - Without `--force`, an already-configured npm package name is a no-op.
 - With `--force`, replacement matches by package name. If the existing row is `[spec, options]`, those tuple options are kept.
 - Tuple targets in `oc-plugin` provide default options written into config.
@@ -343,6 +349,12 @@ The plugin manager is exposed as a command with title `Plugins` and value `plugi
 - It lists both internal and external plugins.
 - It toggles based on `active`.
 - Its own row is disabled only inside the manager dialog.
+- It also exposes command `plugins.install` with title `Install plugin`.
+- Inside the Plugins dialog, key `i` opens the install prompt.
+- Install prompt asks for npm package name.
+- Scope defaults to local, and `tab` toggles local/global.
+- Install is blocked until `api.state.path.directory` is available; current guard message is `Paths are still syncing. Try again in a moment.`.
+- After a successful install, TUI shows a restart notice because newly installed plugins load on next startup.
 
 ## Current in-repo examples
 
