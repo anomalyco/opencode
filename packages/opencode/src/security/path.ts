@@ -1,9 +1,9 @@
 import path from "path"
 
 export function safePath(base: string, userInput: string): string | null {
-  const clean = userInput.replace(/\0/g, "")
+  if (userInput.includes("\0")) return null
   const resolvedBase = path.resolve(base)
-  const joined = path.resolve(base, clean)
+  const joined = path.resolve(base, userInput)
   if (!joined.startsWith(resolvedBase + path.sep) && joined !== resolvedBase) {
     return null
   }
