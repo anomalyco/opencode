@@ -248,11 +248,6 @@
     opacity: 1;
     pointer-events: auto;
   }
-
-  [data-component="markdown"] {
-    margin-top: 0;
-    font-size: var(--font-size-base);
-  }
 }
 
 [data-component="compaction-part"] {
@@ -290,7 +285,7 @@
   [data-component="markdown"] {
     margin-top: 24px;
     font-style: normal;
-    font-size: inherit;
+    font-size: var(--font-size-base);
     color: var(--text-weak);
 
     strong,
@@ -447,7 +442,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 12px;
   width: 100%;
 
   [data-slot="message-part-title-area"] {
@@ -459,10 +454,11 @@
   }
 
   [data-slot="message-part-title"] {
-    flex-shrink: 0;
+    flex: 1 1 auto;
     display: flex;
     align-items: center;
     gap: 8px;
+    min-width: 0;
     font-family: var(--font-family-sans);
     font-size: 14px;
     font-style: normal;
@@ -489,12 +485,17 @@
   }
 
   [data-slot="message-part-title-text"] {
+    flex-shrink: 0;
     text-transform: capitalize;
     color: var(--text-strong);
   }
 
   [data-slot="message-part-title-filename"] {
     /* No text-transform - preserve original filename casing */
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-weight: var(--font-weight-regular);
   }
 
@@ -524,6 +525,7 @@
     gap: 16px;
     align-items: center;
     justify-content: flex-end;
+    flex-shrink: 0;
   }
 }
 
@@ -1206,6 +1208,7 @@
     display: flex;
     flex-grow: 1;
     min-width: 0;
+    overflow: hidden;
   }
 
   [data-slot="apply-patch-directory"] {
@@ -1219,7 +1222,11 @@
 
   [data-slot="apply-patch-filename"] {
     color: var(--text-strong);
-    flex-shrink: 0;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   button[data-slot="apply-patch-filename"] {

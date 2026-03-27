@@ -14,11 +14,13 @@ import { Todo } from "../../session/todo"
 import { Agent } from "../../agent/agent"
 import { Snapshot } from "@/snapshot"
 import { Log } from "../../util/log"
-import { PermissionNext } from "@/permission"
+import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { Bus } from "../../bus"
+import { NamedError } from "@opencode-ai/util/error"
 
 const log = Log.create({ service: "server" })
 
@@ -88,8 +90,8 @@ export const SessionRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const result = SessionStatus.list()
-        return c.json(result)
+        const result = await SessionStatus.list()
+        return c.json(Object.fromEntries(result))
       },
     )
     .get(
@@ -279,14 +281,14 @@ export const SessionRoutes = lazy(() =>
         const sessionID = c.req.valid("param").sessionID
         const updates = c.req.valid("json")
 
-        let session = await Session.get(sessionID)
         if (updates.title !== undefined) {
-          session = await Session.setTitle({ sessionID, title: updates.title })
+          await Session.setTitle({ sessionID, title: updates.title })
         }
         if (updates.time?.archived !== undefined) {
-          session = await Session.setArchived({ sessionID, time: updates.time.archived })
+          await Session.setArchived({ sessionID, time: updates.time.archived })
         }
 
+        const session = await Session.get(sessionID)
         return c.json(session)
       },
     )
@@ -846,7 +848,13 @@ export const SessionRoutes = lazy(() =>
         return stream(c, async () => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
-          SessionPrompt.prompt({ ...body, sessionID })
+          SessionPrompt.prompt({ ...body, sessionID }).catch((err) => {
+            log.error("prompt_async failed", { sessionID, error: err })
+            Bus.publish(Session.Event.Error, {
+              sessionID,
+              error: new NamedError.Unknown({ message: err instanceof Error ? err.message : String(err) }).toObject(),
+            })
+          })
         })
       },
     )
@@ -1010,10 +1018,10 @@ export const SessionRoutes = lazy(() =>
           permissionID: PermissionID.zod,
         }),
       ),
-      validator("json", z.object({ response: PermissionNext.Reply })),
+      validator("json", z.object({ response: Permission.Reply })),
       async (c) => {
         const params = c.req.valid("param")
-        PermissionNext.reply({
+        Permission.reply({
           requestID: params.permissionID,
           reply: c.req.valid("json").response,
         })

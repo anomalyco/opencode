@@ -93,6 +93,13 @@ export const focusTerminalById = (id: string) => {
   return true
 }
 
+const skip = new Set(["Alt", "Control", "Meta", "Shift"])
+
+export const shouldFocusTerminalOnKeyDown = (event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey">) => {
+  if (skip.has(event.key)) return false
+  return !(event.ctrlKey || event.metaKey || event.altKey)
+}
+
 export const createOpenReviewFile = (input: {
   showAllFiles: () => void
   tabForPath: (path: string) => string
