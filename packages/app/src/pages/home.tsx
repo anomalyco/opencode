@@ -1,4 +1,4 @@
-import { createMemo, For, Match, Switch } from "solid-js"
+import { createEffect, createMemo, createResource, For, Match, Switch } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
 import { Logo } from "@opencode-ai/ui/logo"
 import { useLayout } from "@/context/layout"
@@ -29,6 +29,23 @@ export default function Home() {
       .sort((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
       .slice(0, 5)
   })
+  const dirs = createMemo(() =>
+    recent()
+      .map((project) => project.worktree)
+      .slice(0, 3),
+  )
+  const [warm] = createResource(
+    () => (sync.ready ? dirs() : undefined),
+    async (dirs) => {
+      await Promise.all(
+        dirs.map(async (dir) => {
+          sync.child(dir, { bootstrap: true })
+          await sync.project.loadSessions(dir)
+        }),
+      )
+    },
+  )
+  let sent = false
 
   const serverDotClass = createMemo(() => {
     const healthy = server.healthy()
@@ -42,6 +59,14 @@ export default function Home() {
     server.projects.touch(directory)
     navigate(`/${base64Encode(directory)}`)
   }
+
+  createEffect(() => {
+    if (sent) return
+    if (!sync.ready) return
+    if (warm.loading) return
+    sent = true
+    queueMicrotask(() => window.dispatchEvent(new CustomEvent("opencode:startup-interactive")))
+  })
 
   async function chooseProject() {
     function resolve(result: string | string[] | null) {

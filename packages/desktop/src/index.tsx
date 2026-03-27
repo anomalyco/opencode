@@ -28,7 +28,7 @@ import { relaunch } from "@tauri-apps/plugin-process"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { Store } from "@tauri-apps/plugin-store"
 import { check, type Update } from "@tauri-apps/plugin-updater"
-import { createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { render } from "solid-js/web"
 import pkg from "../package.json"
 import { initI18n, t } from "./i18n"
@@ -50,6 +50,72 @@ void initI18n()
 let update: Update | null = null
 const [busy, setBusy] = createSignal(false)
 const [openclawTick, setOpenclawTick] = createSignal(0)
+
+type StartupPhase = "launch" | "backend" | "project" | "session" | "ready"
+const startupReadyEvent = "opencode:startup-interactive"
+
+function startupShell() {
+  const root = document.getElementById("oc-startup-shell")
+  const title = document.getElementById("oc-startup-title")
+  const text = document.getElementById("oc-startup-text")
+  if (!(root instanceof HTMLElement) || !(title instanceof HTMLElement) || !(text instanceof HTMLElement)) return
+
+  const state = {
+    hidden: false,
+  }
+
+  const complete = () => {
+    show("ready")
+    window.setTimeout(hide, 140)
+  }
+
+  const onReady = () => complete()
+  window.addEventListener(startupReadyEvent, onReady, { once: true })
+
+  const copy: Record<StartupPhase, () => { title: string; text: string }> = {
+    launch: () => ({
+      title: t("desktop.startup.title.launch"),
+      text: t("desktop.startup.text.launch"),
+    }),
+    backend: () => ({
+      title: t("desktop.startup.title.backend"),
+      text: t("desktop.startup.text.backend"),
+    }),
+    project: () => ({
+      title: t("desktop.startup.title.project"),
+      text: t("desktop.startup.text.project"),
+    }),
+    session: () => ({
+      title: t("desktop.startup.title.session"),
+      text: t("desktop.startup.text.session"),
+    }),
+    ready: () => ({
+      title: t("desktop.startup.title.ready"),
+      text: t("desktop.startup.text.ready"),
+    }),
+  }
+
+  const show = (phase: StartupPhase) => {
+    if (state.hidden) return
+    root.dataset.phase = phase
+    const next = copy[phase]()
+    title.textContent = next.title
+    text.textContent = next.text
+  }
+
+  const hide = () => {
+    if (state.hidden) return
+    state.hidden = true
+    window.removeEventListener(startupReadyEvent, onReady)
+    root.dataset.phase = "ready"
+    root.classList.add("is-hidden")
+    root.setAttribute("aria-busy", "false")
+    window.setTimeout(() => root.remove(), 320)
+  }
+
+  show("launch")
+  return { show, hide }
+}
 
 const reload = async () => {
   if (busy()) return
@@ -607,7 +673,9 @@ void listenForDragDrop()
 
 render(() => {
   const platform = createPlatform()
+  const shell = startupShell()
   const loadLocale = async () => {
+    shell?.show("launch")
     const current = await platform.storage?.("opencode.global.dat").getItem("language")
     const legacy = current ? undefined : await platform.storage?.().getItem("language.v1")
     const raw = current ?? legacy
@@ -620,14 +688,18 @@ render(() => {
   }
 
   // Fetch sidecar credentials from Rust (available immediately, before health check)
-  const [sidecar] = createResource(() => commands.awaitInitialization(new Channel<InitStep>() as any))
+  const [sidecar] = createResource(async () => {
+    shell?.show("backend")
+    return commands.awaitInitialization(new Channel<InitStep>() as any)
+  })
   const [openclaw] = createResource(openclawTick, syncOpenclaw)
 
-  const [defaultServer] = createResource(() =>
-    platform.getDefaultServer?.().then((url) => {
+  const [defaultServer] = createResource(async () => {
+    shell?.show("project")
+    return platform.getDefaultServer?.().then((url) => {
       if (url) return ServerConnection.key({ type: "http", http: { url } })
-    }),
-  )
+    })
+  })
   const [locale] = createResource(loadLocale)
 
   // Build the sidecar server connection once credentials arrive
@@ -701,10 +773,27 @@ render(() => {
     })
   })
 
+  const boot = () => !defaultServer.loading && !sidecar.loading && !locale.loading
+
+  const ready = () => !!sidecar() && !locale.loading
+
+  createEffect(() => {
+    if (!shell) return
+    if (!sidecar()) {
+      shell.show("backend")
+      return
+    }
+    if (!boot()) {
+      shell.show("project")
+      return
+    }
+    shell.show("session")
+  })
+
   return (
     <PlatformProvider value={platform}>
       <AppBaseProviders locale={locale.latest}>
-        <Show when={!defaultServer.loading && !sidecar.loading && !locale.loading}>
+        <Show when={ready()}>
           {(_) => {
             return (
               <>

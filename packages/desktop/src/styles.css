@@ -6,6 +6,160 @@ div[data-tauri-decorum-tb] {
   height: calc(var(--spacing) * 10) !important;
 }
 
+.desktop-startup {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top, color-mix(in srgb, var(--color-primary) 14%, transparent), transparent 38%),
+    radial-gradient(circle at bottom, color-mix(in srgb, var(--color-surface-base) 24%, transparent), transparent 42%),
+    var(--color-background-base);
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity 260ms ease,
+    visibility 260ms ease;
+  pointer-events: all;
+}
+
+.desktop-startup.is-hidden {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.desktop-startup-shell {
+  display: flex;
+  width: min(420px, calc(100vw - 48px));
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  text-align: center;
+}
+
+.desktop-startup-stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 132px;
+  height: 132px;
+}
+
+.desktop-startup-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+}
+
+.desktop-startup-ring-a {
+  animation: desktop-startup-spin 7s linear infinite;
+}
+
+.desktop-startup-ring-b {
+  inset: 14px;
+  border-color: color-mix(in srgb, var(--color-primary) 38%, transparent);
+  animation: desktop-startup-spin 4.2s linear infinite reverse;
+}
+
+.desktop-startup-ring-c {
+  inset: 28px;
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--color-primary) 55%, transparent);
+  animation: desktop-startup-pulse 1.8s ease-in-out infinite;
+}
+
+.desktop-startup-mark {
+  width: 42px;
+  height: 52px;
+  opacity: 0.94;
+  filter: drop-shadow(0 8px 30px color-mix(in srgb, var(--color-primary) 18%, transparent));
+}
+
+.desktop-startup-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.desktop-startup-title {
+  color: var(--color-text-strong);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.desktop-startup-text {
+  color: var(--color-text-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.desktop-startup-steps {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.desktop-startup-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 74%, transparent);
+  background: color-mix(in srgb, var(--color-surface-base) 84%, transparent);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1;
+  transition:
+    color 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease,
+    transform 180ms ease;
+}
+
+.desktop-startup-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-border) 84%, transparent);
+  transition: background-color 180ms ease;
+}
+
+.desktop-startup[data-phase="backend"] [data-step="backend"],
+.desktop-startup[data-phase="project"] [data-step="project"],
+.desktop-startup[data-phase="session"] [data-step="session"] {
+  color: var(--color-text-strong);
+  border-color: color-mix(in srgb, var(--color-primary) 54%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-surface-base));
+  transform: translateY(-1px);
+}
+
+.desktop-startup[data-phase="backend"] [data-step="backend"] .desktop-startup-dot,
+.desktop-startup[data-phase="project"] [data-step="project"] .desktop-startup-dot,
+.desktop-startup[data-phase="session"] [data-step="session"] .desktop-startup-dot,
+.desktop-startup[data-phase="ready"] .desktop-startup-dot {
+  background: var(--color-primary);
+}
+
+.desktop-startup[data-phase="project"] [data-step="backend"],
+.desktop-startup[data-phase="session"] [data-step="backend"],
+.desktop-startup[data-phase="ready"] [data-step="backend"],
+.desktop-startup[data-phase="session"] [data-step="project"],
+.desktop-startup[data-phase="ready"] [data-step="project"],
+.desktop-startup[data-phase="ready"] [data-step="session"] {
+  color: var(--color-text-strong);
+  border-color: color-mix(in srgb, var(--color-primary) 40%, transparent);
+}
+
 .desktop-busy {
   position: fixed;
   inset: 0;
@@ -167,5 +321,28 @@ div[data-tauri-decorum-tb] {
   50% {
     opacity: 1;
     transform: translateX(-50%) scale(1.15);
+  }
+}
+
+@keyframes desktop-startup-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes desktop-startup-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.96);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.03);
   }
 }

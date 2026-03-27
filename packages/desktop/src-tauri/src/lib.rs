@@ -806,9 +806,9 @@ async fn await_initialization(
 ) -> Result<ServerReadyData, String> {
     let mut rx = init_state.current.clone();
 
-    let stream = async {
-        let e = *rx.borrow();
-        let _ = events.send(e);
+    tokio::spawn(async move {
+        let step = *rx.borrow();
+        let _ = events.send(step);
 
         while rx.changed().await.is_ok() {
             let step = *rx.borrow_and_update();
@@ -818,20 +818,14 @@ async fn await_initialization(
                 break;
             }
         }
-    };
+    });
 
-    // Wait for sidecar credentials (available immediately after spawn, before health check)
-    let data = async {
-        state
-            .inner()
-            .0
-            .clone()
-            .await
-            .map_err(|_| "Failed to get sidecar data".to_string())
-    };
-
-    let (result, _) = futures::future::join(data, stream).await;
-    result
+    state
+        .inner()
+        .0
+        .clone()
+        .await
+        .map_err(|_| "Failed to get sidecar data".to_string())
 }
 
 #[tauri::command]

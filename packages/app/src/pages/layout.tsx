@@ -115,6 +115,7 @@ export default function Layout(props: ParentProps) {
   )
 
   const pageReady = createMemo(() => ready())
+  let booted = false
 
   let scrollContainerRef: HTMLDivElement | undefined
   let dialogRun = 0
@@ -676,6 +677,25 @@ export default function Layout(props: ParentProps) {
       result.push(...dirSessions)
     }
     return result
+  })
+
+  const startup = createMemo(() => {
+    if (!pageReady()) return false
+    if (!layoutReady()) return false
+    if (autoselecting.loading) return false
+    const dir = currentDir()
+    if (!dir) return true
+    const [child] = globalSync.child(dir, { bootstrap: false })
+    if (!child.path.directory) return false
+    if (child.session.length > 0) return true
+    return child.status === "complete"
+  })
+
+  createEffect(() => {
+    if (booted) return
+    if (!startup()) return
+    booted = true
+    queueMicrotask(() => window.dispatchEvent(new CustomEvent("opencode:startup-interactive")))
   })
 
   type PrefetchQueue = {

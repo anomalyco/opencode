@@ -88,6 +88,17 @@ export async function bootstrapGlobal(input: {
       ),
     () =>
       retry(() =>
+        input.globalSDK.project.list().then((x) => {
+          const projects = (x.data ?? [])
+            .filter((p) => !!p?.id)
+            .filter((p) => !!p.worktree && !p.worktree.includes("opencode-test"))
+            .slice()
+            .sort((a, b) => cmp(a.id, b.id))
+          input.setGlobalStore("project", projects)
+        }),
+      ),
+    () =>
+      retry(() =>
         input.globalSDK.global.config.get().then((x) => {
           input.setGlobalStore("config", x.data!)
         }),
@@ -100,19 +111,7 @@ export async function bootstrapGlobal(input: {
       ),
   ]
 
-  const slow = [
-    () =>
-      retry(() =>
-        input.globalSDK.project.list().then((x) => {
-          const projects = (x.data ?? [])
-            .filter((p) => !!p?.id)
-            .filter((p) => !!p.worktree && !p.worktree.includes("opencode-test"))
-            .slice()
-            .sort((a, b) => cmp(a.id, b.id))
-          input.setGlobalStore("project", projects)
-        }),
-      ),
-  ]
+  const slow: Array<() => Promise<unknown>> = []
 
   showErrors({
     errors: errors(await runAll(fast)),
@@ -174,7 +173,6 @@ export async function bootstrapDirectory(input: {
       seededProject
         ? Promise.resolve()
         : retry(() => input.sdk.project.current()).then((x) => input.setStore("project", x.data!.id)),
-    () => retry(() => input.sdk.app.agents().then((x) => input.setStore("agent", x.data ?? []))),
     () => retry(() => input.sdk.config.get().then((x) => input.setStore("config", x.data!))),
     () =>
       retry(() =>
@@ -193,6 +191,11 @@ export async function bootstrapDirectory(input: {
           if (next) input.vcsCache.setStore("value", next)
         }),
       ),
+    () => Promise.resolve(input.loadSessions(input.directory)),
+  ]
+
+  const slow = [
+    () => retry(() => input.sdk.app.agents().then((x) => input.setStore("agent", x.data ?? []))),
     () => retry(() => input.sdk.command.list().then((x) => input.setStore("command", x.data ?? []))),
     () =>
       retry(() =>
@@ -240,16 +243,12 @@ export async function bootstrapDirectory(input: {
           })
         }),
       ),
-  ]
-
-  const slow = [
     () =>
       retry(() =>
         input.sdk.provider.list().then((x) => {
           input.setStore("provider", normalizeProviderList(x.data!))
         }),
       ),
-    () => Promise.resolve(input.loadSessions(input.directory)),
     () => retry(() => input.sdk.mcp.status().then((x) => input.setStore("mcp", x.data!))),
     () => retry(() => input.sdk.lsp.status().then((x) => input.setStore("lsp", x.data!))),
   ]
