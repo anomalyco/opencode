@@ -14,7 +14,6 @@ import { Global } from "../global"
 import { LSP } from "../lsp"
 import { Command } from "../command"
 import { Flag } from "../flag/flag"
-import { Filesystem } from "@/util/filesystem"
 import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
 import { ProjectRoutes } from "./routes/project"
@@ -26,7 +25,6 @@ import { ConfigRoutes } from "./routes/config"
 import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
 import { EventRoutes } from "./routes/event"
-import { InstanceBootstrap } from "../project/bootstrap"
 import { errorHandler } from "./middleware"
 
 const log = Log.create({ service: "server" })
@@ -45,26 +43,6 @@ const csp = (hash = "") =>
 export const InstanceRoutes = (app?: Hono) =>
   (app ?? new Hono())
     .onError(errorHandler(log))
-    .use(async (c, next) => {
-      const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
-      const directory = Filesystem.resolve(
-        (() => {
-          try {
-            return decodeURIComponent(raw)
-          } catch {
-            return raw
-          }
-        })(),
-      )
-
-      return Instance.provide({
-        directory,
-        init: InstanceBootstrap,
-        async fn() {
-          return next()
-        },
-      })
-    })
     .route("/project", ProjectRoutes())
     .route("/pty", PtyRoutes())
     .route("/config", ConfigRoutes())
