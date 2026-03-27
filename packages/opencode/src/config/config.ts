@@ -125,6 +125,15 @@ export namespace Config {
       await Filesystem.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
     }
 
+    // Bun can race cache writes on Windows when installs run in parallel across dirs.
+    // Serialize installs globally on win32, but keep parallel installs on other platforms.
+    await using __ =
+      process.platform === "win32"
+        ? await Flock.acquire("config-install:bun", {
+            signal: input?.signal,
+          })
+        : undefined
+
     await BunProc.run(
       [
         "install",

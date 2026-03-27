@@ -860,6 +860,65 @@ test("dedupes concurrent config dependency installs for the same dir", async () 
   expect(await Filesystem.exists(path.join(dir, "package.json"))).toBe(true)
 })
 
+test("serializes config dependency installs across dirs", async () => {
+  if (process.platform !== "win32") return
+
+  await using tmp = await tmpdir()
+  const a = path.join(tmp.path, "a")
+  const b = path.join(tmp.path, "b")
+  await fs.mkdir(a, { recursive: true })
+  await fs.mkdir(b, { recursive: true })
+
+  let calls = 0
+  let open = 0
+  let peak = 0
+  let start = () => {}
+  let done = () => {}
+  const ready = new Promise<void>((resolve) => {
+    start = resolve
+  })
+  const gate = new Promise<void>((resolve) => {
+    done = resolve
+  })
+
+  const online = spyOn(Network, "online").mockReturnValue(false)
+  const run = spyOn(BunProc, "run").mockImplementation(async (_cmd, opts) => {
+    calls += 1
+    open += 1
+    peak = Math.max(peak, open)
+    if (calls === 1) {
+      start()
+      await gate
+    }
+    const mod = path.join(opts?.cwd ?? "", "node_modules", "@opencode-ai", "plugin")
+    await fs.mkdir(mod, { recursive: true })
+    await Filesystem.write(
+      path.join(mod, "package.json"),
+      JSON.stringify({ name: "@opencode-ai/plugin", version: "1.0.0" }),
+    )
+    open -= 1
+    return {
+      code: 0,
+      stdout: Buffer.alloc(0),
+      stderr: Buffer.alloc(0),
+    }
+  })
+
+  try {
+    const first = Config.installDependencies(a)
+    await ready
+    const second = Config.installDependencies(b)
+    done()
+    await Promise.all([first, second])
+  } finally {
+    online.mockRestore()
+    run.mockRestore()
+  }
+
+  expect(calls).toBe(2)
+  expect(peak).toBe(1)
+})
+
 test("resolves scoped npm plugins in config", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
