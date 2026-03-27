@@ -10,6 +10,12 @@ on:
       - "assets/**"
       - "docs/**"
       - ".github/*.md"
+  # Fallback: fire CD when CI completes on main, in case the push trigger
+  # was silently dropped (GitHub drops extra triggers when concurrency queue is full).
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
 
 concurrency:
   group: cd-main
@@ -25,6 +31,9 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    if: |
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
     timeout-minutes: 20
     outputs:
       tag: ${{ steps.next_version.outputs.tag }}
