@@ -126,10 +126,13 @@ export namespace Snapshot {
           // #19437: import tree objects from pre-v1.3.3 flat snapshot layout
           if (state.gitdir !== legacy) {
             yield* Effect.gen(function* () {
-              if (!(yield* exists(path.join(legacy, "HEAD")))) return
+              if (!(yield* exists(path.join(legacy, "objects")))) return
               if (!(yield* exists(state.gitdir))) return
-              const result = yield* git(["--git-dir", state.gitdir, "fetch", legacy, "--no-tags"])
-              if (result.code === 0) log.info("migrated legacy snapshot objects", { from: legacy })
+              const alt = path.join(state.gitdir, "objects", "info", "alternates")
+              if (yield* exists(alt)) return
+              yield* fs.ensureDir(path.join(state.gitdir, "objects", "info")).pipe(Effect.orDie)
+              yield* fs.writeFileString(alt, path.join(legacy, "objects") + "\n").pipe(Effect.orDie)
+              log.info("linked legacy snapshot objects", { from: legacy })
             }).pipe(Effect.catch(() => Effect.void))
           }
 
