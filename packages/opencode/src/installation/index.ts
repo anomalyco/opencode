@@ -141,8 +141,8 @@ export namespace Installation {
         )
 
         const getBrewFormula = Effect.fnUntraced(function* () {
-          const tapFormula = yield* text(["brew", "list", "--formula", "anomalyco/tap/opencode"])
-          if (tapFormula.includes("opencode")) return "anomalyco/tap/opencode"
+          // const tapFormula = yield* text(["brew", "list", "--formula", "anomalyco/tap/opencode"])
+          // if (tapFormula.includes("opencode")) return "anomalyco/tap/opencode"
           const coreFormula = yield* text(["brew", "list", "--formula", "opencode"])
           if (coreFormula.includes("opencode")) return "opencode"
           return "opencode"
@@ -283,22 +283,23 @@ export namespace Installation {
             case "brew": {
               const formula = yield* getBrewFormula()
               const env = { HOMEBREW_NO_AUTO_UPDATE: "1" }
-              if (formula.includes("/")) {
-                const tap = yield* run(["brew", "tap", "anomalyco/tap"], { env })
-                if (tap.code !== 0) {
-                  result = tap
-                  break
-                }
-                const repo = yield* text(["brew", "--repo", "anomalyco/tap"])
-                const dir = repo.trim()
-                if (dir) {
-                  const pull = yield* run(["git", "pull", "--ff-only"], { cwd: dir, env })
-                  if (pull.code !== 0) {
-                    result = pull
-                    break
-                  }
-                }
-              }
+              // Tap support commented out until CobuilderLabs has its own Homebrew tap
+              // if (formula.includes("/")) {
+              //   const tap = yield* run(["brew", "tap", "anomalyco/tap"], { env })
+              //   if (tap.code !== 0) {
+              //     result = tap
+              //     break
+              //   }
+              //   const repo = yield* text(["brew", "--repo", "anomalyco/tap"])
+              //   const dir = repo.trim()
+              //   if (dir) {
+              //     const pull = yield* run(["git", "pull", "--ff-only"], { cwd: dir, env })
+              //     if (pull.code !== 0) {
+              //       result = pull
+              //       break
+              //     }
+              //   }
+              // }
               result = yield* run(["brew", "upgrade", formula], { env })
               break
             }
