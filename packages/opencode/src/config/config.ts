@@ -223,7 +223,10 @@ const InfoSchema = Schema.Struct({
       sandbox: Schema.optional(
         Schema.Struct({
           enabled: Schema.optional(Schema.Boolean).annotate({
-            description: "Enable macOS sandboxing for non-interactive shell commands",
+            description: "Enable macOS sandboxing for bash, session shell commands, and PTY initial spawns",
+          }),
+          mode: Schema.optional(Schema.Literals(["workspace-write", "read-only"])).annotate({
+            description: "Sandbox mode for command execution (default: workspace-write)",
           }),
           extra_read_roots: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
             description: "Additional read-only roots for macOS sandboxing",
@@ -231,8 +234,17 @@ const InfoSchema = Schema.Struct({
           extra_write_roots: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
             description: "Additional writable roots for macOS sandboxing",
           }),
+          extra_deny_paths: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+            description: "Additional denied paths for macOS sandboxing",
+          }),
+          excluded_commands: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+            description: "Command prefixes that must be blocked before execution",
+          }),
           allow_unsandboxed_retry: Schema.optional(Schema.Boolean).annotate({
             description: "Allow an explicit unsandboxed retry after a sandbox denial",
+          }),
+          fail_if_unavailable: Schema.optional(Schema.Boolean).annotate({
+            description: "Hard-fail when sandboxing is enabled but cannot activate",
           }),
         }),
       ),

@@ -126,4 +126,88 @@ describe("session.prompt sandbox", () => {
       },
     })
   })
+
+  test("blocks excluded commands before spawning", async () => {
+    await using tmp = await tmpdir({
+      config: {
+        experimental: {
+          sandbox: {
+            enabled: true,
+            excluded_commands: ["curl"],
+          },
+        },
+        agent: {
+          build: {
+            model: "openai/gpt-5.2",
+          },
+        },
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const out = await SessionPrompt.shell({
+          sessionID: session.id,
+          agent: "build",
+          command: "FOO=1 curl https://example.com\necho done",
+        })
+        const part = out.parts[0]
+        if (part.type !== "tool") throw new Error("expected tool part")
+        if (part.state.status !== "completed") throw new Error("expected completed part")
+        expect(part.state.output).toContain("curl")
+        await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("retries unsandboxed when permission is pre-allowed", async () => {
+    if (process.platform !== "darwin") return
+    await using home = await tmpdir({
+      init: async (dir) => {
+        await fs.mkdir(path.join(dir, ".ssh"), { recursive: true })
+        await Bun.write(path.join(dir, ".ssh", "secret"), "secret\n")
+      },
+    })
+    await using tmp = await tmpdir({
+      config: {
+        experimental: {
+          sandbox: {
+            enabled: true,
+            allow_unsandboxed_retry: true,
+          },
+        },
+        permission: {
+          "bash:unsandboxed": "allow",
+        },
+        agent: {
+          build: {
+            model: "openai/gpt-5.2",
+          },
+        },
+      },
+    })
+    process.env.HOME = home.path
+    process.env.OPENCODE_TEST_HOME = home.path
+    process.env.SHELL = "/bin/zsh"
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const out = await SessionPrompt.shell({
+          sessionID: session.id,
+          agent: "build",
+          command: 'cat "$HOME/.ssh/secret"',
+        })
+        const part = out.parts[0]
+        if (part.type !== "tool") throw new Error("expected tool part")
+        if (part.state.status !== "completed") throw new Error("expected completed part")
+        expect(part.state.output).toContain("secret\n")
+        expect(part.state.output).toContain("Retried command without sandbox")
+        await Session.remove(session.id)
+      },
+    })
+  })
 })

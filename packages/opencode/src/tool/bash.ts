@@ -87,6 +87,7 @@ export const log = Log.create({ service: "bash-tool" })
 
 function args(shell: string, command: string) {
   const name = (process.platform === "win32" ? path.win32.basename(shell, ".exe") : path.basename(shell)).toLowerCase()
+  if (name === "powershell" || name === "pwsh") return ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command]
   if (name === "zsh") return ["-f", "-c", command]
   if (name === "bash") return ["--noprofile", "--norc", "-c", command]
   return ["-c", command]
@@ -289,51 +290,76 @@ const ask = Effect.fn("BashTool.ask")(function* (ctx: Tool.Context, scan: Scan) 
   })
 })
 
-function argv(name: string, command: string) {
-  if (name === "powershell" || name === "pwsh") return ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command]
-  if (name === "zsh") return ["-f", "-c", command]
-  if (name === "bash") return ["--noprofile", "--norc", "-c", command]
-  return ["-c", command]
-}
-
-async function cmd(shell: string, name: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
-  const root = Instance.worktree === "/" ? Instance.directory : Instance.worktree
-  const sandbox = await SandboxSpawn.resolve({
-    cwd,
-    project_root: Instance.directory,
-    worktree_root: root,
-  })
-
-  if (sandbox.active && sandbox.profile) {
-    const wrap = SandboxSpawn.wrap({
-      profile: sandbox.profile,
-      file: shell,
-      args: argv(name, command),
-    })
-    return ChildProcess.make(wrap.file, wrap.args, {
-      cwd,
-      env,
-      stdin: "ignore",
-      detached: process.platform !== "win32",
-    })
-  }
-
-  if (process.platform === "win32" && PS.has(name)) {
-    return ChildProcess.make(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], {
-      cwd,
-      env,
-      stdin: "ignore",
-      detached: false,
-    })
-  }
-
-  return ChildProcess.make(command, [], {
-    shell,
+function raw(shell: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
+  return ChildProcess.make(shell, args(shell, command), {
     cwd,
     env,
     stdin: "ignore",
     detached: process.platform !== "win32",
   })
+}
+
+async function cmd(
+  shell: string,
+  name: string,
+  command: string,
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  cfg: SandboxSpawn.Settings,
+) {
+  const root = Instance.worktree === "/" ? Instance.directory : Instance.worktree
+  const sandbox = await SandboxSpawn.resolve(
+    {
+      cwd,
+      project_root: Instance.directory,
+      worktree_root: root,
+    },
+    cfg,
+  )
+  const plain = raw(shell, command, cwd, env)
+
+  if (sandbox.active && sandbox.profile) {
+    const wrap = SandboxSpawn.wrap({
+      profile: sandbox.profile,
+      file: shell,
+      args: args(shell, command),
+    })
+    return {
+      proc: ChildProcess.make(wrap.file, wrap.args, {
+        cwd,
+        env,
+        stdin: "ignore",
+        detached: process.platform !== "win32",
+      }),
+      plain,
+      sandbox,
+    }
+  }
+
+  if (process.platform === "win32" && PS.has(name)) {
+    return {
+      proc: ChildProcess.make(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], {
+        cwd,
+        env,
+        stdin: "ignore",
+        detached: false,
+      }),
+      plain,
+      sandbox,
+    }
+  }
+
+  return {
+    proc: ChildProcess.make(command, [], {
+      shell,
+      cwd,
+      env,
+      stdin: "ignore",
+      detached: process.platform !== "win32",
+    }),
+    plain,
+    sandbox,
+  }
 }
 
 const parser = lazy(async () => {
@@ -401,7 +427,13 @@ export const BashTool = Tool.define(
       return yield* resolvePath(next, cwd, shell)
     })
 
-    const collect = Effect.fn("BashTool.collect")(function* (root: Node, cwd: string, ps: boolean, shell: string) {
+    const collect = Effect.fn("BashTool.collect")(function* (
+      root: Node,
+      cwd: string,
+      ps: boolean,
+      shell: string,
+      deny: string[],
+    ) {
       const scan: Scan = {
         dirs: new Set<string>(),
         patterns: new Set<string>(),
@@ -411,6 +443,10 @@ export const BashTool = Tool.define(
       for (const node of commands(root)) {
         const command = parts(node)
         const tokens = command.map((item) => item.text)
+        const blocked = SandboxSpawn.excluded(tokens, deny)
+        if (blocked) {
+          throw new SandboxSpawn.CommandError(blocked.command, blocked.rule)
+        }
         const cmd = ps ? tokens[0]?.toLowerCase() : tokens[0]
 
         if (cmd && FILES.has(cmd)) {
@@ -453,6 +489,7 @@ export const BashTool = Tool.define(
         env: NodeJS.ProcessEnv
         timeout: number
         description: string
+        cfg: SandboxSpawn.Settings
       },
       ctx: Tool.Context,
     ) {
@@ -466,8 +503,62 @@ export const BashTool = Tool.define(
       let file = ""
       let sink: ReturnType<typeof createWriteStream> | undefined
       let cut = false
-      let expired = false
-      let aborted = false
+
+      const write = Effect.fnUntraced(function* (chunk: string) {
+        const size = Buffer.byteLength(chunk, "utf-8")
+        list.push({ text: chunk, size })
+        used += size
+        while (used > keep && list.length > 1) {
+          const item = list.shift()
+          if (!item) break
+          used -= item.size
+          cut = true
+        }
+
+        last = preview(last + chunk)
+
+        if (file) {
+          sink?.write(chunk)
+        } else {
+          full += chunk
+          if (Buffer.byteLength(full, "utf-8") > bytes) {
+            file = yield* trunc.write(full)
+            cut = true
+            sink = createWriteStream(file, { flags: "a" })
+            full = ""
+          }
+        }
+
+        yield* ctx.metadata({
+          metadata: {
+            output: last,
+            description: input.description,
+          },
+        })
+      })
+
+      const closeSink = Effect.fnUntraced(function* () {
+        if (!sink) return
+        const stream = sink
+        sink = undefined
+        yield* Effect.promise(
+          () =>
+            new Promise<void>((resolve) => {
+              stream.end(() => resolve())
+              stream.on("error", () => resolve())
+            }),
+        )
+      })
+
+      const resetOutput = Effect.fnUntraced(function* () {
+        yield* closeSink()
+        full = ""
+        last = ""
+        list.length = 0
+        used = 0
+        file = ""
+        cut = false
+      })
 
       yield* ctx.metadata({
         metadata: {
@@ -476,95 +567,107 @@ export const BashTool = Tool.define(
         },
       })
 
-      const code: number | null = yield* Effect.scoped(
-        Effect.gen(function* () {
-          const proc = yield* Effect.promise(() => cmd(input.shell, input.name, input.command, input.cwd, input.env))
-          const handle = yield* spawner.spawn(proc)
+      const launch = yield* Effect.promise(() =>
+        cmd(input.shell, input.name, input.command, input.cwd, input.env, input.cfg),
+      )
 
-          yield* Effect.forkScoped(
-            Stream.runForEach(Stream.decodeText(handle.all), (chunk) => {
-              const size = Buffer.byteLength(chunk, "utf-8")
-              list.push({ text: chunk, size })
-              used += size
-              while (used > keep && list.length > 1) {
-                const item = list.shift()
-                if (!item) break
-                used -= item.size
-                cut = true
-              }
+      const exec = Effect.fnUntraced(function* (proc: ReturnType<typeof ChildProcess.make>) {
+        let stderr = ""
+        let timedOut = false
+        let aborted = false
 
-              last = preview(last + chunk)
+        const code: number | null = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const handle = yield* spawner.spawn(proc)
 
-              if (file) {
-                sink?.write(chunk)
-              } else {
-                full += chunk
-                if (Buffer.byteLength(full, "utf-8") > bytes) {
-                  return trunc.write(full).pipe(
-                    Effect.andThen((next) =>
-                      Effect.sync(() => {
-                        file = next
-                        cut = true
-                        sink = createWriteStream(next, { flags: "a" })
-                        full = ""
-                      }),
-                    ),
-                    Effect.andThen(
-                      ctx.metadata({
-                        metadata: {
-                          output: last,
-                          description: input.description,
-                        },
-                      }),
-                    ),
-                  )
-                }
-              }
+            yield* Effect.forkScoped(
+              Stream.runForEach(Stream.decodeText(handle.stdout), (chunk) => {
+                return write(chunk)
+              }),
+            )
+            yield* Effect.forkScoped(
+              Stream.runForEach(Stream.decodeText(handle.stderr), (chunk) => {
+                stderr += chunk
+                return write(chunk)
+              }),
+            )
 
-              return ctx.metadata({
-                metadata: {
-                  output: last,
-                  description: input.description,
-                },
-              })
-            }),
-          )
+            const abort = Effect.callback<void>((resume) => {
+              if (ctx.abort.aborted) return resume(Effect.void)
+              const handler = () => resume(Effect.void)
+              ctx.abort.addEventListener("abort", handler, { once: true })
+              return Effect.sync(() => ctx.abort.removeEventListener("abort", handler))
+            })
 
-          const abort = Effect.callback<void>((resume) => {
-            if (ctx.abort.aborted) return resume(Effect.void)
-            const handler = () => resume(Effect.void)
-            ctx.abort.addEventListener("abort", handler, { once: true })
-            return Effect.sync(() => ctx.abort.removeEventListener("abort", handler))
+            const timeout = Effect.sleep(`${input.timeout + 100} millis`)
+
+            const exit = yield* Effect.raceAll([
+              handle.exitCode.pipe(Effect.map((code) => ({ kind: "exit" as const, code }))),
+              abort.pipe(Effect.map(() => ({ kind: "abort" as const, code: null }))),
+              timeout.pipe(Effect.map(() => ({ kind: "timeout" as const, code: null }))),
+            ])
+
+            if (exit.kind === "abort") {
+              aborted = true
+              yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
+            }
+            if (exit.kind === "timeout") {
+              timedOut = true
+              yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
+            }
+
+            return exit.kind === "exit" ? exit.code : null
+          }),
+        ).pipe(Effect.orDie)
+
+        return {
+          code,
+          stderr,
+          timedOut,
+          aborted,
+        }
+      })
+
+      let retried = false
+      let result = yield* exec(launch.proc)
+
+      if (
+        input.cfg.allow_unsandboxed_retry &&
+        !result.timedOut &&
+        !result.aborted &&
+        SandboxSpawn.shouldRetry({ active: launch.sandbox.active, code: result.code ?? 1, stderr: result.stderr })
+      ) {
+        try {
+          yield* ctx.ask({
+            permission: "bash:unsandboxed",
+            patterns: [input.command],
+            always: [input.command],
+            metadata: {
+              reason: "sandbox_denial",
+            },
           })
-
-          const timeout = Effect.sleep(`${input.timeout + 100} millis`)
-
-          const exit = yield* Effect.raceAll([
-            handle.exitCode.pipe(Effect.map((code) => ({ kind: "exit" as const, code }))),
-            abort.pipe(Effect.map(() => ({ kind: "abort" as const, code: null }))),
-            timeout.pipe(Effect.map(() => ({ kind: "timeout" as const, code: null }))),
-          ])
-
-          if (exit.kind === "abort") {
-            aborted = true
-            yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
-          }
-          if (exit.kind === "timeout") {
-            expired = true
-            yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
-          }
-
-          return exit.kind === "exit" ? exit.code : null
-        }),
-      ).pipe(Effect.orDie)
+          retried = true
+          yield* resetOutput()
+          yield* ctx.metadata({
+            metadata: {
+              output: "",
+              description: input.description,
+            },
+          })
+          result = yield* exec(launch.plain)
+        } catch (error) {
+          log.info("unsandboxed retry rejected", { error })
+        }
+      }
 
       const meta: string[] = []
-      if (expired) {
+      if (retried) meta.push("Retried command without sandbox after sandbox denial")
+      if (result.timedOut) {
         meta.push(
           `bash tool terminated command after exceeding timeout ${input.timeout} ms. If this command is expected to take longer and is not waiting for interactive input, retry with a larger timeout value in milliseconds.`,
         )
       }
-      if (aborted) meta.push("User aborted the command")
+      if (result.aborted) meta.push("User aborted the command")
       const raw = list.map((item) => item.text).join("")
       const end = tail(raw, lines, bytes)
       if (end.cut) cut = true
@@ -578,26 +681,16 @@ export const BashTool = Tool.define(
       if (cut && file) {
         output = `...output truncated...\n\nFull output saved to: ${file}\n\n` + output
       }
-
       if (meta.length > 0) {
         output += "\n\n<bash_metadata>\n" + meta.join("\n") + "\n</bash_metadata>"
       }
-      if (sink) {
-        const stream = sink
-        yield* Effect.promise(
-          () =>
-            new Promise<void>((resolve) => {
-              stream.end(() => resolve())
-              stream.on("error", () => resolve())
-            }),
-        )
-      }
+      yield* closeSink()
 
       return {
         title: input.description,
         metadata: {
           output: last || preview(output),
-          exit: code,
+          exit: result.code,
           description: input.description,
           truncated: cut,
           ...(cut && file ? { outputPath: file } : {}),
@@ -633,9 +726,10 @@ export const BashTool = Tool.define(
                 throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
               }
               const timeout = params.timeout ?? DEFAULT_TIMEOUT
+              const cfg = yield* Effect.promise(() => SandboxSpawn.settings())
               const ps = PS.has(name)
               const root = yield* parse(params.command, ps)
-              const scan = yield* collect(root, cwd, ps, shell)
+              const scan = yield* collect(root, cwd, ps, shell, cfg.excluded_commands)
               if (!Instance.containsPath(cwd)) scan.dirs.add(cwd)
               yield* ask(ctx, scan)
 
@@ -648,6 +742,7 @@ export const BashTool = Tool.define(
                   env: yield* shellEnv(ctx, cwd),
                   timeout,
                   description: params.description,
+                  cfg,
                 },
                 ctx,
               )

@@ -1,13 +1,17 @@
 import path from "path"
 
 export namespace SandboxPolicy {
+  export type Mode = "workspace-write" | "read-only"
+
   export interface Input {
     cwd: string
     project_root: string
     worktree_root: string
     home: string
+    mode?: Mode
     extra_read_roots?: string[]
     extra_write_roots?: string[]
+    extra_deny_paths?: string[]
     opencode_roots?: string[]
     allow_network?: boolean
     allow_unix_sockets?: boolean
@@ -21,6 +25,7 @@ export namespace SandboxPolicy {
   }
 
   const read = ["/bin", "/sbin", "/usr", "/System", "/Library", "/dev", "/tmp", "/private/tmp", "/private/etc"]
+  const temp = ["/tmp", "/private/tmp"]
   const secret = [".ssh", ".gnupg", ".aws", ".azure", path.join(".config", "gcloud"), ".netrc", ".npmrc"]
 
   function uniq(input: string[]) {
@@ -44,7 +49,11 @@ export namespace SandboxPolicy {
   }
 
   export function build(input: Input): Output {
-    const denyRoots = uniq([...secret.map((item) => path.join(input.home, item)), ...(input.opencode_roots ?? [])])
+    const denyRoots = uniq([
+      ...secret.map((item) => path.join(input.home, item)),
+      ...(input.opencode_roots ?? []),
+      ...(input.extra_deny_paths ?? []),
+    ])
     const readRoots = uniq([
       input.cwd,
       input.project_root,
@@ -52,7 +61,10 @@ export namespace SandboxPolicy {
       ...read,
       ...(input.extra_read_roots ?? []),
     ])
-    const writeRoots = uniq([input.cwd, input.project_root, input.worktree_root, ...(input.extra_write_roots ?? [])])
+    const writeRoots =
+      input.mode === "read-only"
+        ? uniq([...temp, ...(input.extra_write_roots ?? [])])
+        : uniq([input.cwd, input.project_root, input.worktree_root, ...(input.extra_write_roots ?? [])])
     const profile = [
       "(version 1)",
       "(deny default)",

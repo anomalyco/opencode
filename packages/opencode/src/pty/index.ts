@@ -1,3 +1,4 @@
+import path from "path"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect"
@@ -8,6 +9,7 @@ import { Log } from "../util"
 import { lazy } from "@opencode-ai/shared/util/lazy"
 import { Shell } from "@/shell/shell"
 import { Plugin } from "@/plugin"
+import { SandboxSpawn } from "@/sandbox/spawn"
 import { PtyID } from "./schema"
 import { Effect, Layer, Context } from "effect"
 import { EffectBridge } from "@/effect"
@@ -52,6 +54,17 @@ const meta = (cursor: number) => {
 }
 
 const pty = lazy(() => import("#pty"))
+
+function argv(command: string, args: string[], clean: boolean) {
+  if (args.length > 0) return args
+  const name = (
+    process.platform === "win32" ? path.win32.basename(command, ".exe") : path.basename(command)
+  ).toLowerCase()
+  if (name === "zsh") return clean ? ["-f"] : ["-l"]
+  if (name === "bash") return clean ? ["--noprofile", "--norc"] : ["-l"]
+  if (name.endsWith("sh")) return clean ? [] : ["-l"]
+  return args
+}
 
 export const Info = z
   .object({
@@ -175,12 +188,21 @@ export const layer = Layer.effect(
       const bridge = yield* EffectBridge.make()
       const id = PtyID.ascending()
       const command = input.command || Shell.preferred()
-      const args = input.args || []
-      if (Shell.login(command)) {
-        args.push("-l")
-      }
-
       const cwd = input.cwd || s.dir
+      const cfg = yield* Effect.promise(() => SandboxSpawn.settings())
+      const blocked = SandboxSpawn.excluded([command, ...(input.args ?? [])], cfg.excluded_commands)
+      if (blocked) {
+        throw new SandboxSpawn.CommandError(blocked.command, blocked.rule)
+      }
+      const root = Instance.worktree === "/" ? Instance.directory : Instance.worktree
+      const sandbox = yield* Effect.promise(() =>
+        SandboxSpawn.resolve({
+          cwd,
+          project_root: Instance.directory,
+          worktree_root: root,
+        }),
+      )
+      const args = argv(command, [...(input.args ?? [])], sandbox.active)
       const shell = yield* plugin.trigger("shell.env", { cwd }, { env: {} })
       const env = {
         ...process.env,
@@ -197,9 +219,17 @@ export const layer = Layer.effect(
       }
       log.info("creating session", { id, cmd: command, args, cwd })
 
+      const cmd =
+        sandbox.active && sandbox.profile
+          ? SandboxSpawn.wrap({
+              profile: sandbox.profile,
+              file: command,
+              args,
+            })
+          : { file: command, args }
       const { spawn } = yield* Effect.promise(() => pty())
       const proc = yield* Effect.sync(() =>
-        spawn(command, args, {
+        spawn(cmd.file, cmd.args, {
           name: "xterm-256color",
           cwd,
           env,

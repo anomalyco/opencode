@@ -53,6 +53,41 @@ describe("sandbox.spawn", () => {
     expect(out.diag.reason).toBe("unsupported_platform")
   })
 
+  test("matches excluded command prefixes", () => {
+    expect(SandboxSpawn.excluded(["rm", "-rf", "/tmp/test"], ["rm"]))?.toEqual({
+      command: "rm",
+      rule: "rm",
+    })
+    expect(SandboxSpawn.excluded(["git", "status"], ["git"]))?.toEqual({
+      command: "git status",
+      rule: "git",
+    })
+    expect(SandboxSpawn.excluded(["printf", "ok"], ["rm"]))?.toBeUndefined()
+  })
+
+  test("matches excluded commands through wrappers and shell text", () => {
+    expect(SandboxSpawn.excluded(["env", "FOO=1", "python", "-c", "print(1)"], ["python"]))?.toEqual({
+      command: "python -c",
+      rule: "python",
+    })
+    expect(SandboxSpawn.excluded(["sh", "-c", "curl https://example.com"], ["curl"]))?.toEqual({
+      command: "curl",
+      rule: "curl",
+    })
+    expect(SandboxSpawn.excludedText("FOO=1 curl https://example.com", ["curl"]))?.toEqual({
+      command: "curl",
+      rule: "curl",
+    })
+    expect(SandboxSpawn.excludedText("echo ok\ncurl https://example.com", ["curl"]))?.toEqual({
+      command: "curl",
+      rule: "curl",
+    })
+    expect(SandboxSpawn.excludedText("echo ok & curl https://example.com", ["curl"]))?.toEqual({
+      command: "curl",
+      rule: "curl",
+    })
+  })
+
   test("rejects broad home roots", () => {
     expect(() =>
       SandboxSpawn.plan({
@@ -66,6 +101,98 @@ describe("sandbox.spawn", () => {
         extra_read_roots: ["/Users/tester"],
       }),
     ).toThrow("unsafe_root")
+  })
+
+  test("hard-fails when sandbox availability is required", () => {
+    expect(() =>
+      SandboxSpawn.plan({
+        requested: true,
+        platform: "linux",
+        available: true,
+        cwd: "/tmp/project",
+        project_root: "/tmp/project",
+        worktree_root: "/tmp/project",
+        home: "/Users/tester",
+        fail_if_unavailable: true,
+      }),
+    ).toThrow("unsupported_platform")
+
+    expect(() =>
+      SandboxSpawn.plan({
+        requested: true,
+        platform: "darwin",
+        available: false,
+        cwd: "/tmp/project",
+        project_root: "/tmp/project",
+        worktree_root: "/tmp/project",
+        home: "/Users/tester",
+        fail_if_unavailable: true,
+      }),
+    ).toThrow("sandbox_exec_missing")
+  })
+
+  test("falls back when hard-fail is disabled", () => {
+    const platform = SandboxSpawn.plan({
+      requested: true,
+      platform: "linux",
+      available: true,
+      cwd: "/tmp/project",
+      project_root: "/tmp/project",
+      worktree_root: "/tmp/project",
+      home: "/Users/tester",
+    })
+    const missing = SandboxSpawn.plan({
+      requested: true,
+      platform: "darwin",
+      available: false,
+      cwd: "/tmp/project",
+      project_root: "/tmp/project",
+      worktree_root: "/tmp/project",
+      home: "/Users/tester",
+    })
+
+    expect(platform.active).toBe(false)
+    expect(platform.diag.reason).toBe("unsupported_platform")
+    expect(missing.active).toBe(false)
+    expect(missing.diag.reason).toBe("sandbox_exec_missing")
+  })
+
+  test("detects likely sandbox denials conservatively", () => {
+    expect(
+      SandboxSpawn.shouldRetry({
+        active: true,
+        code: 1,
+        stderr: "sandbox-exec: sandbox_apply: Operation not permitted",
+      }),
+    ).toBe(true)
+    expect(
+      SandboxSpawn.shouldRetry({
+        active: true,
+        code: 1,
+        stderr: "Sandbox: bash(1) deny(1) file-read-data /Users/tester/.ssh/secret",
+      }),
+    ).toBe(true)
+    expect(
+      SandboxSpawn.shouldRetry({
+        active: true,
+        code: 1,
+        stderr: "Operation not permitted",
+      }),
+    ).toBe(true)
+    expect(
+      SandboxSpawn.shouldRetry({
+        active: false,
+        code: 1,
+        stderr: "sandbox-exec: sandbox_apply: Operation not permitted",
+      }),
+    ).toBe(false)
+    expect(
+      SandboxSpawn.shouldRetry({
+        active: true,
+        code: 1,
+        stderr: "permission denied",
+      }),
+    ).toBe(false)
   })
 
   test("respects the env override at runtime", async () => {
