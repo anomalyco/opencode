@@ -12,25 +12,31 @@ function withInstance(directory: string, fn: () => Promise<any>) {
   return Instance.provide({ directory, fn })
 }
 
-async function wait(fn: () => Promise<boolean>, timeout = 30_000) {
-  const end = Date.now() + timeout
-  while (Date.now() < end) {
-    if (await fn()) return
-    await Bun.sleep(100)
-  }
-  throw new Error("timed out waiting for worktree bootstrap")
+async function ready(name: string) {
+  const { GlobalBus } = await import("../../src/bus/global")
+
+  return await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      GlobalBus.off("event", on)
+      reject(new Error(`timed out waiting for worktree.ready: ${name}`))
+    }, 30_000)
+
+    function on(evt: { payload: { type: string; properties?: { name?: string } } }) {
+      if (evt.payload.type !== Worktree.Event.Ready.type) return
+      if (evt.payload.properties?.name !== name) return
+      clearTimeout(timer)
+      GlobalBus.off("event", on)
+      resolve()
+    }
+
+    GlobalBus.on("event", on)
+  })
 }
 
 async function make(root: string, name: string) {
+  const wait = ready(name)
   const info = await withInstance(root, () => Worktree.create({ name }))
-
-  await wait(() =>
-    fs
-      .readFile(path.join(info.directory, "README.md"), "utf8")
-      .then(() => true)
-      .catch(() => false),
-  )
-
+  await wait
   return info
 }
 

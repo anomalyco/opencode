@@ -1,4 +1,5 @@
 import type { Agent, Project, ProviderListResponse } from "@opencode-ai/sdk/v2/client"
+import { unwrap } from "solid-js/store"
 
 export const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 
@@ -27,11 +28,12 @@ export function normalizeProviderList(input: ProviderListResponse): ProviderList
 }
 
 export function sanitizeProject(project: Project) {
-  if (!project.icon?.url && !project.icon?.override) return project
+  const next = structuredClone(unwrap(project))
+  if (!next.icon?.url && !next.icon?.override) return next
   return {
-    ...project,
+    ...next,
     icon: {
-      ...project.icon,
+      ...next.icon,
       url: undefined,
       override: undefined,
     },

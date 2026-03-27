@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import type { Agent } from "@opencode-ai/sdk/v2/client"
-import { normalizeAgentList } from "./utils"
+import type { Agent, Project } from "@opencode-ai/sdk/v2/client"
+import { createStore } from "solid-js/store"
+import { normalizeAgentList, sanitizeProject } from "./utils"
 
 const agent = (name = "build") =>
   ({
@@ -31,5 +32,26 @@ describe("normalizeAgentList", () => {
   test("drops invalid payloads", () => {
     expect(normalizeAgentList({ name: "AbortError" })).toEqual([])
     expect(normalizeAgentList([{ name: "build" }, agent("docs")])).toEqual([agent("docs")])
+  })
+})
+
+describe("sanitizeProject", () => {
+  test("returns a plain clone for store-backed projects", () => {
+    const [store] = createStore({
+      project: [
+        {
+          id: "p1",
+          name: "repo",
+          worktree: "/repo",
+          sandboxes: ["/repo/a"],
+          icon: {},
+        },
+      ] as Project[],
+    })
+
+    const next = sanitizeProject(store.project[0]!)
+    expect(next).toEqual(store.project[0])
+    expect(next).not.toBe(store.project[0])
+    expect(next.sandboxes).not.toBe(store.project[0]?.sandboxes)
   })
 })
