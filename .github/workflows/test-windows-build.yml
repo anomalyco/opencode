@@ -25,7 +25,7 @@ jobs:
             ~\AppData\Local\bun\install\cache
             node_modules
             packages\*\node_modules
-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lockb') }}
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
 
       - name: Install dependencies
