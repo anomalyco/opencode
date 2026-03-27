@@ -113,16 +113,18 @@ jobs:
           while IFS='|||' read -r subject hash; do
             [[ -z "$subject" ]] && continue
             CLEAN=$(strip_prefix "$subject")
+            SHORT="${hash:0:7}"
+            LINK="[\`${SHORT}\`](https://github.com/CobuilderLabs/opencode/commit/${hash})"
             if echo "$subject" | grep -qE '^.+(\(.+\))?!:|^BREAKING CHANGE'; then
-              BREAKING="${BREAKING}"$'\n'"- ${CLEAN}"
+              BREAKING="${BREAKING}"$'\n'"- ${CLEAN} ${LINK}"
             elif echo "$subject" | grep -qE '^feat(\(.+\))?:'; then
-              ADDED="${ADDED}"$'\n'"- ${CLEAN}"
+              ADDED="${ADDED}"$'\n'"- ${CLEAN} ${LINK}"
             elif echo "$subject" | grep -qE '^fix(\(.+\))?:'; then
-              FIXED="${FIXED}"$'\n'"- ${CLEAN}"
+              FIXED="${FIXED}"$'\n'"- ${CLEAN} ${LINK}"
             elif echo "$subject" | grep -qE '^(perf|refactor)(\(.+\))?:'; then
-              CHANGED="${CHANGED}"$'\n'"- ${CLEAN}"
+              CHANGED="${CHANGED}"$'\n'"- ${CLEAN} ${LINK}"
             elif echo "$subject" | grep -qE '^(security|sec)(\(.+\))?:'; then
-              SECURITY="${SECURITY}"$'\n'"- ${CLEAN}"
+              SECURITY="${SECURITY}"$'\n'"- ${CLEAN} ${LINK}"
             fi
           done <<< "$COMMITS"
 
