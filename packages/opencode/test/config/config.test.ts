@@ -34,7 +34,7 @@ async function check(map: (dir: string) => string) {
   await using tmp = await tmpdir({ git: true, config: { snapshot: true } })
   const prev = Global.Path.config
   ;(Global.Path as { config: string }).config = globalTmp.path
-  Config.global.reset()
+  await Config.invalidate()
   try {
     await writeConfig(globalTmp.path, {
       $schema: "https://opencode.ai/config.json",
@@ -52,7 +52,7 @@ async function check(map: (dir: string) => string) {
   } finally {
     await Instance.disposeAll()
     ;(Global.Path as { config: string }).config = prev
-    Config.global.reset()
+    await Config.invalidate()
   }
 }
 
