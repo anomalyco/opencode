@@ -190,10 +190,15 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       }
     })().finally(flush)
 
+    let hiddenAt = 0
     const onVisibility = () => {
       if (typeof document === "undefined") return
-      if (document.visibilityState !== "visible") return
-      if (Date.now() - lastEventAt < HEARTBEAT_TIMEOUT_MS) return
+      if (document.visibilityState === "hidden") {
+        hiddenAt = Date.now()
+        return
+      }
+      const hidden = hiddenAt > 0 ? Date.now() - hiddenAt : 0
+      if (Date.now() - lastEventAt < HEARTBEAT_TIMEOUT_MS && hidden < HEARTBEAT_TIMEOUT_MS) return
       attempt?.abort()
     }
     if (typeof document !== "undefined") {
