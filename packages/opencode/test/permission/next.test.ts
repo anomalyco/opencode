@@ -1,5 +1,6 @@
 import { afterEach, test, expect } from "bun:test"
 import os from "os"
+import path from "path"
 import { Bus } from "../../src/bus"
 import { Permission } from "../../src/permission"
 import { PermissionID } from "../../src/permission/schema"
@@ -1143,6 +1144,98 @@ test("ask - abort should clear pending request", async () => {
       } finally {
         await rejectAll()
       }
+    },
+  })
+})
+
+// plugin permission.ask hook tests
+
+async function writePermissionPlugin(dir: string, mode: "allow" | "deny" | "throw") {
+  const code = `
+    export default async function plugin() {
+      return {
+        "permission.ask": async (_input, output) => {
+          ${mode === "throw" ? 'throw new Error("plugin boom")' : `output.status = "${mode}"`}
+        },
+      }
+    }
+  `
+  const pluginPath = path.join(dir, "test-plugin.mjs")
+  await Bun.write(pluginPath, code)
+  return pluginPath
+}
+
+test("ask - plugin permission.ask can allow without prompting", async () => {
+  await using tmp = await tmpdir({ git: true })
+  const pluginPath = await writePermissionPlugin(tmp.path, "allow")
+  await Bun.write(
+    path.join(tmp.path, "opencode.json"),
+    JSON.stringify({ $schema: "https://opencode.ai/config.json", plugin: [`file://${pluginPath}`] }),
+  )
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const result = await Permission.ask({
+        sessionID: SessionID.make("session_plugin_allow"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      })
+      expect(result).toBeUndefined()
+      expect(await Permission.list()).toHaveLength(0)
+    },
+  })
+})
+
+test("ask - plugin permission.ask can deny before prompting", async () => {
+  await using tmp = await tmpdir({ git: true })
+  const pluginPath = await writePermissionPlugin(tmp.path, "deny")
+  await Bun.write(
+    path.join(tmp.path, "opencode.json"),
+    JSON.stringify({ $schema: "https://opencode.ai/config.json", plugin: [`file://${pluginPath}`] }),
+  )
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await expect(
+        Permission.ask({
+          sessionID: SessionID.make("session_plugin_deny"),
+          permission: "bash",
+          patterns: ["ls"],
+          metadata: {},
+          always: [],
+          ruleset: [],
+        }),
+      ).rejects.toBeInstanceOf(Permission.DeniedError)
+      expect(await Permission.list()).toHaveLength(0)
+    },
+  })
+})
+
+test("ask - plugin permission.ask errors fall back to prompt flow", async () => {
+  await using tmp = await tmpdir({ git: true })
+  const pluginPath = await writePermissionPlugin(tmp.path, "throw")
+  await Bun.write(
+    path.join(tmp.path, "opencode.json"),
+    JSON.stringify({ $schema: "https://opencode.ai/config.json", plugin: [`file://${pluginPath}`] }),
+  )
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const ask = Permission.ask({
+        sessionID: SessionID.make("session_plugin_throw"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      })
+      const pending = await waitForPending(1)
+      expect(pending).toHaveLength(1)
+      await rejectAll()
+      await ask.catch(() => {})
     },
   })
 })

@@ -11,6 +11,7 @@ import { Database, eq } from "@/storage/db"
 import { Log } from "@/util/log"
 import { Wildcard } from "@/util/wildcard"
 import { Deferred, Effect, Layer, Schema, ServiceMap } from "effect"
+import type { Permission as PluginPermission } from "@opencode-ai/sdk"
 import os from "os"
 import z from "zod"
 import { evaluate as evalRule } from "./evaluate"
@@ -130,6 +131,20 @@ export namespace Permission {
     approved: Ruleset
   }
 
+  function toPluginPermission(info: Request): PluginPermission {
+    return {
+      id: String(info.id),
+      type: info.permission,
+      pattern: info.patterns.length <= 1 ? info.patterns[0] : info.patterns,
+      sessionID: String(info.sessionID),
+      messageID: info.tool?.messageID ? String(info.tool.messageID) : MessageID.make("message_permission_hook"),
+      callID: info.tool?.callID,
+      title: info.permission,
+      metadata: info.metadata,
+      time: { created: Date.now() },
+    }
+  }
+
   export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
     log.info("evaluate", { permission, pattern, ruleset: rulesets.flat() })
     return evalRule(permission, pattern, ...rulesets)
@@ -192,8 +207,30 @@ export namespace Permission {
         const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
         pending.set(id, { info, deferred })
         void Bus.publish(Event.Asked, info)
+
         return yield* Effect.ensuring(
-          Deferred.await(deferred),
+          Effect.gen(function* () {
+            const pluginOutput = { status: "ask" as "ask" | "allow" | "deny" }
+            yield* Effect.tryPromise(() =>
+              import("../plugin/index").then(({ Plugin }) =>
+                Plugin.trigger("permission.ask", toPluginPermission(info), pluginOutput),
+              ),
+            ).pipe(
+              Effect.catch((error) => {
+                log.warn("permission.ask plugin hook failed", { error })
+                return Effect.void
+              }),
+            )
+
+            if (pluginOutput.status === "allow") return
+            if (pluginOutput.status === "deny") {
+              return yield* new DeniedError({
+                ruleset: input.ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
+              })
+            }
+
+            return yield* Deferred.await(deferred)
+          }),
           Effect.sync(() => {
             pending.delete(id)
           }),
