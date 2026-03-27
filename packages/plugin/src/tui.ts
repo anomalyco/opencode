@@ -390,6 +390,7 @@ export type TuiPluginApi = {
     list: () => ReadonlyArray<TuiPluginStatus>
     activate: (id: string) => Promise<boolean>
     deactivate: (id: string) => Promise<boolean>
+    add: (spec: string) => Promise<boolean>
   }
   lifecycle: TuiLifecycle
 }

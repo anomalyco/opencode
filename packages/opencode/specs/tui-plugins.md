@@ -166,7 +166,7 @@ Top-level API groups exposed to `tui(api, options, meta)`:
 - `api.event.on(type, handler)`
 - `api.renderer`
 - `api.slots.register(plugin)`
-- `api.plugins.list()`, `activate(id)`, `deactivate(id)`
+- `api.plugins.list()`, `activate(id)`, `deactivate(id)`, `add(spec)`
 - `api.lifecycle.signal`, `api.lifecycle.onDispose(fn)`
 
 ### Commands
@@ -290,6 +290,10 @@ Slot notes:
 - `enabled` is the persisted desired state. `active` means the plugin is currently initialized.
 - `api.plugins.activate(id)` sets `enabled=true`, persists it into KV, and initializes the plugin.
 - `api.plugins.deactivate(id)` sets `enabled=false`, persists it into KV, and disposes the plugin scope.
+- `api.plugins.add(spec)` trims the input and returns `false` for an empty string.
+- `api.plugins.add(spec)` resolves the current `tui.json` entry for that spec when present, otherwise it treats the input as the plugin spec.
+- `api.plugins.add(spec)` refreshes runtime config once when plugin metadata is missing, skips already-loaded specs, then loads and tracks metadata for the resolved spec.
+- `api.plugins.add(spec)` applies merged `plugin_enabled` state (config + KV), only initializes when enabled, and does not persist enable state.
 - If activation fails, the plugin can remain `enabled=true` and `active=false`.
 - `api.lifecycle.signal` is aborted before cleanup runs.
 - `api.lifecycle.onDispose(fn)` registers cleanup and returns an unregister function.
@@ -318,6 +322,9 @@ Metadata is persisted by plugin id.
 - External plugin resolution and import are parallel.
 - External plugin activation is sequential to keep command, route, and side-effect order deterministic.
 - File plugins that fail initially are retried once after waiting for config dependency installation.
+- Runtime add uses the same external loader path, including the file-plugin retry after dependency wait.
+- Runtime add skips duplicates by resolved spec and returns `true` when the spec is already loaded.
+- Runtime add returns `true` for a loaded-but-disabled plugin when merged enable state resolves to `false`.
 - Plugin init failure rolls back that plugin's tracked registrations and loading continues.
 - TUI runtime tracks and disposes:
   - command registrations
@@ -354,7 +361,9 @@ The plugin manager is exposed as a command with title `Plugins` and value `plugi
 - Install prompt asks for npm package name.
 - Scope defaults to local, and `tab` toggles local/global.
 - Install is blocked until `api.state.path.directory` is available; current guard message is `Paths are still syncing. Try again in a moment.`.
-- After a successful install, TUI shows a restart notice because newly installed plugins load on next startup.
+- If the installed package has no `tui` target, manager reports that and does not call runtime add.
+- After a successful install with a `tui` target, manager immediately calls `api.plugins.add(spec)`.
+- If runtime add fails, TUI shows a warning and restart remains the fallback.
 
 ## Current in-repo examples
 

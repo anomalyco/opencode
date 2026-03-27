@@ -124,6 +124,7 @@ async function apply(api: TuiPluginApi, mod: string, global: boolean) {
   return {
     ok: true as const,
     dir: patch.dir,
+    tui: manifest.targets.some((item) => item.kind === "tui"),
   }
 }
 
@@ -182,11 +183,31 @@ function Install(props: { api: TuiPluginApi }) {
               variant: "success",
               message: `Installed ${mod} (${global() ? "global" : "local"}: ${out.dir})`,
             })
-            props.api.ui.toast({
-              variant: "info",
-              message: "Restart TUI to load newly installed plugins.",
+            if (!out.tui) {
+              props.api.ui.toast({
+                variant: "info",
+                message: "Package has no TUI target to load in this app.",
+              })
+              show(props.api)
+              return
+            }
+
+            return props.api.plugins.add(mod).then((ok) => {
+              if (!ok) {
+                props.api.ui.toast({
+                  variant: "warning",
+                  message: "Installed plugin, but runtime load failed. See console/logs; restart TUI to retry.",
+                })
+                show(props.api)
+                return
+              }
+
+              props.api.ui.toast({
+                variant: "success",
+                message: `Loaded ${mod} in current session.`,
+              })
+              show(props.api)
             })
-            show(props.api)
           })
           .finally(() => {
             setBusy(false)

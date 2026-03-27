@@ -364,6 +364,9 @@ export function createTuiApi(input: Input): TuiHostPluginApi {
       async deactivate() {
         return false
       },
+      async add() {
+        return false
+      },
     },
     lifecycle,
     theme: {

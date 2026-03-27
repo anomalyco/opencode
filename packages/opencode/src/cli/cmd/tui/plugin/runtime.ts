@@ -68,6 +68,7 @@ type PluginEntry = {
 }
 
 type RuntimeState = {
+  directory: string
   api: Api
   slots: HostSlots
   plugins: PluginEntry[]
@@ -204,9 +205,10 @@ async function loadExternalPlugin(
   const target = resolved
   const meta = config.plugin_meta?.[spec]
   if (!meta) {
-    log.warn("missing tui plugin metadata", {
+    fail("missing tui plugin metadata", {
       path: spec,
       retry,
+      known: Object.keys(config.plugin_meta ?? {}),
     })
     return
   }
@@ -387,6 +389,13 @@ function readPluginEnabledMap(value: unknown) {
   )
 }
 
+function pluginEnabledState(state: RuntimeState, config: TuiConfig.Info) {
+  return {
+    ...readPluginEnabledMap(config.plugin_enabled),
+    ...readPluginEnabledMap(state.api.kv.get(KV_KEY, {})),
+  }
+}
+
 function writePluginEnabledState(api: Api, id: string, enabled: boolean) {
   api.kv.set(KV_KEY, {
     ...readPluginEnabledMap(api.kv.get(KV_KEY, {})),
@@ -537,6 +546,9 @@ function pluginApi(runtime: RuntimeState, load: PluginLoad, scope: PluginScope, 
       deactivate(id) {
         return deactivatePluginById(runtime, id, true)
       },
+      add(spec) {
+        return addPluginBySpec(runtime, spec)
+      },
     },
     lifecycle: scope.lifecycle,
   }
@@ -565,23 +577,168 @@ function addPluginEntry(state: RuntimeState, plugin: PluginEntry) {
       id: plugin.id,
       path: plugin.load.spec,
     })
-    return
+    return false
   }
 
   state.plugins_by_id.set(plugin.id, plugin)
   state.plugins.push(plugin)
+  return true
 }
 
 function applyInitialPluginEnabledState(state: RuntimeState, config: TuiConfig.Info) {
-  const map = {
-    ...readPluginEnabledMap(config.plugin_enabled),
-    ...readPluginEnabledMap(state.api.kv.get(KV_KEY, {})),
-  }
+  const map = pluginEnabledState(state, config)
   for (const plugin of state.plugins) {
     const enabled = map[plugin.id]
     if (enabled === undefined) continue
     plugin.enabled = enabled
   }
+}
+
+async function resolveExternalPlugins(config: TuiConfig.Info, list: Config.PluginSpec[], wait: () => Promise<void>) {
+  const loaded = await Promise.all(list.map((item) => loadExternalPlugin(config, item)))
+  const ready: PluginLoad[] = []
+  let deps: Promise<void> | undefined
+
+  for (let i = 0; i < list.length; i++) {
+    let entry = loaded[i]
+    if (!entry) {
+      const item = list[i]
+      if (!item) continue
+      const spec = Config.pluginSpecifier(item)
+      if (pluginSource(spec) !== "file") continue
+      deps ??= wait().catch((error) => {
+        log.warn("failed waiting for tui plugin dependencies", { error })
+      })
+      await deps
+      entry = await loadExternalPlugin(config, item, true)
+    }
+    if (!entry) continue
+    ready.push(entry)
+  }
+
+  return ready
+}
+
+async function addExternalPluginEntries(state: RuntimeState, ready: PluginLoad[]) {
+  if (!ready.length) return { plugins: [] as PluginEntry[], ok: true }
+
+  const meta = await PluginMeta.touchMany(
+    ready.map((item) => ({
+      spec: item.spec,
+      target: item.target,
+      id: item.id,
+    })),
+  ).catch((error) => {
+    log.warn("failed to track tui plugins", { error })
+    return undefined
+  })
+
+  const plugins: PluginEntry[] = []
+  let ok = true
+  for (let i = 0; i < ready.length; i++) {
+    const entry = ready[i]
+    if (!entry) continue
+    const hit = meta?.[i]
+    if (hit && hit.state !== "same") {
+      log.info("tui plugin metadata updated", {
+        path: entry.spec,
+        retry: entry.retry,
+        state: hit.state,
+        source: hit.entry.source,
+        version: hit.entry.version,
+        modified: hit.entry.modified,
+      })
+    }
+
+    const row = createMeta(entry.source, entry.spec, entry.target, hit, entry.id)
+    for (const plugin of collectPluginEntries(entry, row)) {
+      if (!addPluginEntry(state, plugin)) {
+        ok = false
+        continue
+      }
+      plugins.push(plugin)
+    }
+  }
+
+  return { plugins, ok }
+}
+
+function configPluginItem(config: TuiConfig.Info, spec: string) {
+  const list = config.plugin ?? []
+  return list.find((item) => Config.pluginSpecifier(item) === spec) ?? spec
+}
+
+async function runtimeConfig(state: RuntimeState, fresh = false) {
+  if (fresh) {
+    await Instance.reload({
+      directory: state.directory,
+    }).catch((error) => {
+      fail("failed to refresh tui plugin config", {
+        directory: state.directory,
+        error,
+      })
+    })
+  }
+
+  return Instance.provide({
+    directory: state.directory,
+    fn: () => TuiConfig.get(),
+  }).catch((error) => {
+    fail("failed to read tui plugin config", {
+      directory: state.directory,
+      error,
+    })
+    return
+  })
+}
+
+async function addPluginBySpec(state: RuntimeState | undefined, raw: string) {
+  if (!state) return false
+  const spec = raw.trim()
+  if (!spec) return false
+
+  let config = await runtimeConfig(state)
+  if (!config) return false
+  let item = configPluginItem(config, spec)
+  let nextSpec = Config.pluginSpecifier(item)
+  if (!config.plugin_meta?.[nextSpec]) {
+    const fresh = await runtimeConfig(state, true)
+    if (fresh) {
+      config = fresh
+      item = configPluginItem(config, spec)
+      nextSpec = Config.pluginSpecifier(item)
+    }
+  }
+
+  if (state.plugins.some((plugin) => plugin.load.spec === nextSpec)) return true
+
+  const ready = await Instance.provide({
+    directory: state.directory,
+    fn: () => resolveExternalPlugins(config, [item], () => TuiConfig.waitForDependencies()),
+  }).catch((error) => {
+    fail("failed to add tui plugin", { path: nextSpec, error })
+    return [] as PluginLoad[]
+  })
+  if (!ready.length) {
+    fail("failed to add tui plugin", { path: nextSpec })
+    return false
+  }
+
+  const out = await addExternalPluginEntries(state, ready)
+  const map = pluginEnabledState(state, config)
+  let ok = out.ok && out.plugins.length > 0
+  for (const plugin of out.plugins) {
+    const enabled = map[plugin.id]
+    if (enabled !== undefined) plugin.enabled = enabled
+    if (!plugin.enabled) continue
+    const active = await activatePluginEntry(state, plugin, false)
+    if (!active) ok = false
+  }
+
+  if (!ok) {
+    fail("failed to add tui plugin", { path: nextSpec })
+  }
+  return ok
 }
 
 export namespace TuiPluginRuntime {
@@ -617,6 +774,10 @@ export namespace TuiPluginRuntime {
     return deactivatePluginById(runtime, id, true)
   }
 
+  export async function addPlugin(spec: string) {
+    return addPluginBySpec(runtime, spec)
+  }
+
   export async function dispose() {
     const task = loaded
     loaded = undefined
@@ -635,6 +796,7 @@ export namespace TuiPluginRuntime {
     const cwd = process.cwd()
     const slots = setupSlots(api)
     const next: RuntimeState = {
+      directory: cwd,
       api,
       slots,
       plugins: [],
@@ -650,7 +812,6 @@ export namespace TuiPluginRuntime {
         if (Flag.OPENCODE_PURE && config.plugin?.length) {
           log.info("skipping external tui plugins in pure mode", { count: config.plugin.length })
         }
-        const deps: { wait?: Promise<void> } = {}
 
         for (const item of INTERNAL_TUI_PLUGINS) {
           log.info("loading internal tui plugin", { id: item.id })
@@ -661,57 +822,8 @@ export namespace TuiPluginRuntime {
           }
         }
 
-        const loaded = await Promise.all(plugins.map((item) => loadExternalPlugin(config, item)))
-        const ready: PluginLoad[] = []
-
-        for (let i = 0; i < plugins.length; i++) {
-          let entry = loaded[i]
-          if (!entry) {
-            const item = plugins[i]
-            if (!item) continue
-            const spec = Config.pluginSpecifier(item)
-            if (pluginSource(spec) !== "file") continue
-            deps.wait ??= TuiConfig.waitForDependencies().catch((error) => {
-              log.warn("failed waiting for tui plugin dependencies", { error })
-            })
-            await deps.wait
-            entry = await loadExternalPlugin(config, item, true)
-          }
-          if (!entry) continue
-          ready.push(entry)
-        }
-
-        const meta = await PluginMeta.touchMany(
-          ready.map((item) => ({
-            spec: item.spec,
-            target: item.target,
-            id: item.id,
-          })),
-        ).catch((error) => {
-          log.warn("failed to track tui plugins", { error })
-          return undefined
-        })
-
-        for (let i = 0; i < ready.length; i++) {
-          const entry = ready[i]
-          if (!entry) continue
-          const hit = meta?.[i]
-          if (hit && hit.state !== "same") {
-            log.info("tui plugin metadata updated", {
-              path: entry.spec,
-              retry: entry.retry,
-              state: hit.state,
-              source: hit.entry.source,
-              version: hit.entry.version,
-              modified: hit.entry.modified,
-            })
-          }
-
-          const row = createMeta(entry.source, entry.spec, entry.target, hit, entry.id)
-          for (const plugin of collectPluginEntries(entry, row)) {
-            addPluginEntry(next, plugin)
-          }
-        }
+        const ready = await resolveExternalPlugins(config, plugins, () => TuiConfig.waitForDependencies())
+        await addExternalPluginEntries(next, ready)
 
         applyInitialPluginEnabledState(next, config)
         for (const plugin of next.plugins) {
