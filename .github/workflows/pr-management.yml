@@ -77,12 +77,12 @@ jobs:
       pull-requests: write
       contents: write
     steps:
-      - name: Enable auto-merge (squash)
+      - name: Enable auto-merge (merge commit)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh pr merge "${{ github.event.pull_request.number }}" \
-            --auto --squash \
+            --auto --merge \
             --repo ${{ github.repository }}
 
   add-contributor-label:
