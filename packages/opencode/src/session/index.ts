@@ -76,6 +76,8 @@ export namespace Session {
       share,
       revert,
       permission: row.permission ?? undefined,
+      model: row.model ?? undefined,
+      modelVariant: row.model_variant ?? undefined,
       time: {
         created: row.time_created,
         updated: row.time_updated,
@@ -102,6 +104,8 @@ export namespace Session {
       summary_diffs: info.summary?.diffs,
       revert: info.revert ?? null,
       permission: info.permission,
+      model: info.model ?? null,
+      model_variant: info.modelVariant ?? null,
       time_created: info.time.created,
       time_updated: info.time.updated,
       time_compacting: info.time.compacting,
@@ -157,6 +161,13 @@ export namespace Session {
           diff: z.string().optional(),
         })
         .optional(),
+      model: z
+        .object({
+          providerID: z.string(),
+          modelID: z.string(),
+        })
+        .optional(),
+      modelVariant: z.string().optional(),
     })
     .meta({
       ref: "Session",
@@ -226,12 +237,31 @@ export namespace Session {
       })
       .optional(),
     async (input) => {
+      let inheritedModel: { providerID: string; modelID: string } | undefined
+      let inheritedVariant: string | undefined
+
+      if (input?.parentID) {
+        try {
+          const parent = await get(input.parentID)
+          if (parent?.model) {
+            inheritedModel = parent.model
+            inheritedVariant = parent.modelVariant
+          }
+        } catch (e) {
+          if (!NotFoundError.isInstance(e)) {
+            log.error("failed to inherit model from parent", { error: e, parentID: input.parentID })
+          }
+        }
+      }
+
       return createNext({
         parentID: input?.parentID,
         directory: Instance.directory,
         title: input?.title,
         permission: input?.permission,
         workspaceID: input?.workspaceID,
+        model: inheritedModel,
+        modelVariant: inheritedVariant,
       })
     },
   )
@@ -249,6 +279,8 @@ export namespace Session {
         directory: Instance.directory,
         workspaceID: original.workspaceID,
         title,
+        model: original.model,
+        modelVariant: original.modelVariant,
       })
       const msgs = await messages({ sessionID: input.sessionID })
       const idMap = new Map<string, MessageID>()
@@ -294,6 +326,36 @@ export namespace Session {
     })
   })
 
+  export const setModel = fn(
+    z.object({
+      sessionID: SessionID.zod,
+      model: z.object({
+        providerID: z.string(),
+        modelID: z.string(),
+      }),
+      variant: z.string().optional(),
+    }),
+    async (input) => {
+      const row = Database.use((db) => {
+        const row = db
+          .update(SessionTable)
+          .set({
+            model: input.model,
+            model_variant: input.variant ?? null,
+            time_updated: Date.now(),
+          })
+          .where(eq(SessionTable.id, input.sessionID))
+          .returning()
+          .get()
+        if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
+        return row
+      })
+      const info = fromRow(row)
+      Database.effect(() => Bus.publish(Event.Updated, { info }))
+      return info
+    },
+  )
+
   export async function createNext(input: {
     id?: SessionID
     title?: string
@@ -301,6 +363,8 @@ export namespace Session {
     workspaceID?: WorkspaceID
     directory: string
     permission?: PermissionNext.Ruleset
+    model?: { providerID: string; modelID: string }
+    modelVariant?: string
   }) {
     const result: Info = {
       id: SessionID.descending(input.id),
@@ -312,6 +376,8 @@ export namespace Session {
       parentID: input.parentID,
       title: input.title ?? createDefaultTitle(!!input.parentID),
       permission: input.permission,
+      model: input.model,
+      modelVariant: input.modelVariant,
       time: {
         created: Date.now(),
         updated: Date.now(),

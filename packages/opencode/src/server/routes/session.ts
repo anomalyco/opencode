@@ -185,6 +185,47 @@ export const SessionRoutes = lazy(() =>
         return c.json(todos)
       },
     )
+    .patch(
+      "/:sessionID/model",
+      describeRoute({
+        summary: "Set session model",
+        description: "Set the active model for a session, affecting future turns and inherited subagents.",
+        operationId: "session.setModel",
+        responses: {
+          200: {
+            description: "Successfully updated session model",
+            content: {
+              "application/json": {
+                schema: resolver(Session.Info),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      validator(
+        "json",
+        z.object({
+          model: z.object({
+            providerID: z.string(),
+            modelID: z.string(),
+          }),
+          variant: z.string().optional(),
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const { model, variant } = c.req.valid("json")
+        const session = await Session.setModel({ sessionID, model, variant })
+        return c.json(session)
+      },
+    )
     .post(
       "/",
       describeRoute({

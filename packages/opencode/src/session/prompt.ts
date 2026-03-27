@@ -1349,6 +1349,18 @@ export namespace SessionPrompt {
       await Session.updatePart(part)
     }
 
+    if (info.role === "user") {
+      try {
+        await Session.setModel({
+          sessionID: input.sessionID,
+          model: info.model,
+          variant: info.variant,
+        })
+      } catch (e) {
+        log.error("failed to set model on user message", { error: e, sessionID: input.sessionID })
+      }
+    }
+
     return {
       info,
       parts,

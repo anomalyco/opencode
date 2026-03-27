@@ -170,6 +170,21 @@ export function Prompt(props: PromptProps) {
     }
   })
 
+  let lastSessionModelID: string | undefined
+  createEffect(() => {
+    const sessionID = props.sessionID
+    if (!sessionID) return
+    const session = sync.session.get(sessionID)
+    const sessionModel = session?.model
+    if (!sessionModel) return
+
+    const modelKey = `${sessionModel.providerID}/${sessionModel.modelID}`
+    if (modelKey === lastSessionModelID) return
+
+    lastSessionModelID = modelKey
+    local.model.set(sessionModel)
+  })
+
   command.register(() => {
     return [
       {

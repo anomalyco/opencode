@@ -167,7 +167,17 @@ export interface Hooks {
   }
   auth?: AuthHook
   /**
-   * Called when a new message is received
+   * Called when a new message is received.
+   *
+   * Plugins may mutate `output.message` to change the effective model for this turn.
+   * The model written to `output.message.model` is persisted on the user message and
+   * becomes the authoritative model for:
+   *   - the assistant response generated for this user turn
+   *   - default task subagents launched during this turn (unless the subagent agent
+   *     has an explicit `model` pin, which always wins)
+   *
+   * This hook fires before the user message is saved to the database, so mutations
+   * to `output.message.model` affect what is stored and what downstream processing uses.
    */
   "chat.message"?: (
     input: {

@@ -843,6 +843,11 @@ export type Session = {
     snapshot?: string
     diff?: string
   }
+  model?: {
+    providerID: string
+    modelID: string
+  }
+  modelVariant?: string
 }
 
 export type EventSessionCreated = {
@@ -1707,6 +1712,11 @@ export type GlobalSession = {
     snapshot?: string
     diff?: string
   }
+  model?: {
+    providerID: string
+    modelID: string
+  }
+  modelVariant?: string
   project: ProjectSummary | null
 }
 
@@ -3031,6 +3041,46 @@ export type SessionTodoResponses = {
 }
 
 export type SessionTodoResponse = SessionTodoResponses[keyof SessionTodoResponses]
+
+export type SessionSetModelData = {
+  body?: {
+    model: {
+      providerID: string
+      modelID: string
+    }
+    variant?: string
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/model"
+}
+
+export type SessionSetModelErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionSetModelError = SessionSetModelErrors[keyof SessionSetModelErrors]
+
+export type SessionSetModelResponses = {
+  /**
+   * Successfully updated session model
+   */
+  200: Session
+}
+
+export type SessionSetModelResponse = SessionSetModelResponses[keyof SessionSetModelResponses]
 
 export type SessionInitData = {
   body?: {
