@@ -1,0 +1,45 @@
+name: auto-approve
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  auto-approve:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Get bot token
+        id: bot-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.AUTOBOT_APP_ID }}
+          private-key: ${{ secrets.AUTOBOT_PRIVATE_KEY }}
+
+      - name: Approve if author has write access
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ steps.bot-token.outputs.token }}
+          script: |
+            const login = context.payload.pull_request.user.login;
+            const pr = context.payload.pull_request.number;
+
+            const { data: perm } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              username: login.replace('[bot]', '')
+            }).catch(() => ({ data: { permission: 'none' } }));
+
+            if (!['write', 'admin'].includes(perm.permission)) {
+              console.log(`Skipping: ${login} does not have write access`);
+              return;
+            }
+
+            await github.rest.pulls.createReview({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr,
+              event: 'APPROVE'
+            });
+            console.log(`Approved PR #${pr} for ${login}`);
