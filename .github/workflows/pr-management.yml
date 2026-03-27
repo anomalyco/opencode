@@ -79,12 +79,25 @@ jobs:
       contents: write
     steps:
       - name: Enable auto-merge (merge commit)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh pr merge "${{ github.event.pull_request.number }}" \
-            --auto --merge \
-            --repo ${{ github.repository }}
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+            });
+            await github.graphql(`
+              mutation EnableAutoMerge($pullRequestId: ID!) {
+                enablePullRequestAutoMerge(input: {
+                  pullRequestId: $pullRequestId,
+                  mergeMethod: MERGE
+                }) {
+                  pullRequest { number }
+                }
+              }
+            `, { pullRequestId: pr.node_id });
+            console.log(`Auto-merge enabled on PR #${context.payload.pull_request.number}`);
 
   add-contributor-label:
     runs-on: ubuntu-latest
