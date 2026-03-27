@@ -1,0 +1,26 @@
+name: E2E
+
+on:
+  # Run automatically after a successful CD release
+  workflow_run:
+    workflows: [CD]
+    types: [completed]
+    branches: [main]
+  # Also allow manual runs
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    name: End-to-end tests
+    # Only run if CD succeeded (or on manual trigger)
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install test dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq expect git curl
+
+      - name: Run E2E test suite
+        run: bash test-e2e.sh
+        timeout-minutes: 10

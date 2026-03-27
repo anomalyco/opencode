@@ -34,8 +34,14 @@ export namespace SystemPrompt {
     return [PROMPT_DEFAULT]
   }
 
-  export async function environment(model: Provider.Model) {
+  export async function environment(model: Provider.Model, agent?: Agent.Info) {
     const project = Instance.project
+    const skillList = agent && !Permission.disabled(["skill"], agent.permission).has("skill")
+      ? await Skill.available(agent)
+      : []
+    const skillsLine = skillList.length > 0
+      ? `  Installed skills: ${skillList.map((s) => s.name).join(", ")}`
+      : `  Installed skills: none`
     return [
       [
         `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
@@ -46,6 +52,7 @@ export namespace SystemPrompt {
         `  Is directory a git repo: ${project.vcs === "git" ? "yes" : "no"}`,
         `  Platform: ${process.platform}`,
         `  Today's date: ${new Date().toDateString()}`,
+        skillsLine,
         `</env>`,
         `<directories>`,
         `  ${
@@ -74,6 +81,7 @@ export namespace SystemPrompt {
     return [
       "Skills provide specialized instructions and workflows for specific tasks.",
       "Use the skill tool to load a skill when a task matches its description.",
+      "IMPORTANT: Skills are NOT system binaries. Never use `which`, `command -v`, or shell lookups to check if a skill is available. Use the skill tool directly.",
       // the agents seem to ingest the information about skills a bit better if we present a more verbose
       // version of them here and a less verbose version in tool description, rather than vice versa.
       Skill.fmt(list, { verbose: true }),

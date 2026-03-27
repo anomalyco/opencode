@@ -677,7 +677,7 @@ export namespace SessionPrompt {
       const memoryContext = step === 1 ? await SystemPrompt.memory(session.directory) : ""
       const installedCommands = step === 1 ? await SystemPrompt.installedCommands() : ""
       const system = [
-        ...(await SystemPrompt.environment(model)),
+        ...(await SystemPrompt.environment(model, agent)),
         ...(skills ? [skills] : []),
         ...(installedCommands ? [installedCommands] : []),
         ...(await InstructionPrompt.system()),

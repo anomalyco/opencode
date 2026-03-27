@@ -109,48 +109,18 @@ async function setup9Router() {
   }
 
   // Step 4: Model selection
-  prompts.log.info("Available models:\n" + modelIds.map((id, i) => `  ${i + 1}. ${id}`).join("\n"))
-
-  const selectionInput = await prompts.text({
-    message: 'Select models (enter numbers separated by commas, or "all")',
-    placeholder: "e.g. 1,2,5 or all",
-    validate: (v) => {
-      if (!v?.trim()) return "Please select at least one model"
-      if (v.trim() === "all") return
-      const parts = v.split(",").map((s) => s.trim())
-      for (const p of parts) {
-        const n = parseInt(p)
-        if (isNaN(n) || n < 1 || n > modelIds.length) return `"${p}" is not a valid number (1–${modelIds.length})`
-      }
-    },
+  const modelChoice = await prompts.select({
+    message: "Which model would you like to use?",
+    options: modelIds.map((id) => ({ value: id, label: id })),
   })
 
-  if (prompts.isCancel(selectionInput)) {
+  if (prompts.isCancel(modelChoice)) {
     prompts.cancel("Setup cancelled.")
     process.exit(0)
   }
 
-  const raw = (selectionInput as string).trim()
-  const chosenIds =
-    raw === "all"
-      ? modelIds
-      : raw
-          .split(",")
-          .map((s) => parseInt(s.trim()) - 1)
-          .map((i) => modelIds[i])
-          .filter(Boolean)
-
-  // Step 5: Default model
-  let defaultModelId = chosenIds[0]
-  if (chosenIds.length > 1) {
-    const defaultChoice = await prompts.select({
-      message: "Which model should be your default?",
-      options: chosenIds.map((id) => ({ value: id, label: id })),
-    })
-    if (!prompts.isCancel(defaultChoice)) {
-      defaultModelId = defaultChoice as string
-    }
-  }
+  const defaultModelId = modelChoice as string
+  const chosenIds = [defaultModelId]
 
   // Step 6: Save config
   const modelConfig: Record<string, { name: string }> = {}
@@ -185,7 +155,6 @@ async function setup9Router() {
 
   await Filesystem.writeJson(configPath, updated)
 
-  prompts.log.success(`${chosenIds.length} model${chosenIds.length !== 1 ? "s" : ""} registered`)
   prompts.log.success(`Default model: ${NINEROUTER_ID}/${defaultModelId}`)
 }
 
