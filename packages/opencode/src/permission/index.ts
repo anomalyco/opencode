@@ -2,10 +2,11 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ConfigPermissionV1 } from "@opencode-ai/core/v1/config/permission"
 import { InstanceState } from "@/effect/instance-state"
 import { Wildcard } from "@opencode-ai/core/util/wildcard"
-import { Deferred, Effect, Layer, Context } from "effect"
+import { Cause, Deferred, Effect, Layer, Context } from "effect"
 import os from "os"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { Plugin } from "@/plugin"
 
 export const Event = PermissionV1.Event
 
@@ -43,6 +44,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2Bridge.Service
+    const plugin = yield* Plugin.Service
     const state = yield* InstanceState.make<State>(
       Effect.fn("Permission.state")(function* (ctx) {
         void ctx
@@ -94,6 +96,25 @@ const layer = Layer.effect(
         tool: request.tool,
       }
       yield* Effect.logInfo("asking", { id, permission: info.permission, patterns: info.patterns })
+
+      const hookOutput: { status: PermissionV1.Action; message: string | undefined } = {
+        status: "ask",
+        message: undefined,
+      }
+      const hook = yield* plugin.trigger("permission.ask", info, hookOutput).pipe(
+        Effect.catchCauseIf(
+          (cause) => Cause.hasDies(cause) && !Cause.hasInterrupts(cause),
+          (cause) =>
+            Effect.logWarning("permission.ask hook failed", { cause }).pipe(
+              Effect.as({ status: "ask" as PermissionV1.Action, message: undefined }),
+            ),
+        ),
+      )
+      if (hook.status === "deny") {
+        if (hook.message) return yield* new PermissionV1.CorrectedError({ feedback: hook.message })
+        return yield* new PermissionV1.RejectedError()
+      }
+      if (hook.status === "allow") return
 
       const deferred = yield* Deferred.make<void, PermissionV1.RejectedError | PermissionV1.CorrectedError>()
       pending.set(id, { info, deferred })
@@ -218,6 +239,6 @@ export function visibleTools<T>(tools: Record<string, T>, ruleset: PermissionV1.
   return Object.fromEntries(Object.entries(tools).filter(([name]) => !hidden.has(name)))
 }
 
-export const node = LayerNode.make({ service: Service, layer: layer, deps: [EventV2Bridge.node] })
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [EventV2Bridge.node, Plugin.node] })
 
 export * as Permission from "."
