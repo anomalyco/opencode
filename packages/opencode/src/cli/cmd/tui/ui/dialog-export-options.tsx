@@ -4,6 +4,7 @@ import { useDialog, type DialogContext } from "./dialog"
 import { createStore } from "solid-js/store"
 import { onMount, Show, type JSX } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
+import { isReturn } from "@/util/keybind"
 
 export type DialogExportOptionsProps = {
   defaultFilename: string
@@ -34,7 +35,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
   })
 
   useKeyboard((evt) => {
-    if (evt.name === "return") {
+    if (isReturn(evt.name)) {
       props.onConfirm?.({
         filename: textarea.plainText,
         thinking: store.thinking,
@@ -99,7 +100,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
             })
           }}
           height={3}
-          keyBindings={[{ name: "return", action: "submit" }]}
+          keyBindings={[{ name: "return", action: "submit" }, { name: "kpenter", action: "submit" }]}
           ref={(val: TextareaRenderable) => (textarea = val)}
           initialValue={props.defaultFilename}
           placeholder="Enter filename"

@@ -8,7 +8,7 @@ import * as fuzzysort from "fuzzysort"
 import { isDeepEqual } from "remeda"
 import { useDialog, type DialogContext } from "@tui/ui/dialog"
 import { useKeybind } from "@tui/context/keybind"
-import { Keybind } from "@/util/keybind"
+import { isReturn, Keybind } from "@/util/keybind"
 import { Locale } from "@/util/locale"
 
 export interface DialogSelectProps<T> {
@@ -194,7 +194,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     if (evt.name === "home") moveTo(0)
     if (evt.name === "end") moveTo(flat().length - 1)
 
-    if (evt.name === "return") {
+    if (isReturn(evt.name)) {
       const option = selected()
       if (option) {
         evt.preventDefault()

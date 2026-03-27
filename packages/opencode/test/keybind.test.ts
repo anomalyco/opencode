@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test"
-import { Keybind } from "../src/util/keybind"
+import { isReturn, Keybind } from "../src/util/keybind"
 
 describe("Keybind.toString", () => {
   test("should convert simple key to string", () => {
@@ -417,5 +417,35 @@ describe("Keybind.parse", () => {
         name: "z",
       },
     ])
+  })
+
+  test("should parse kpenter as key name", () => {
+    const result = Keybind.parse("kpenter")
+    expect(result).toEqual([
+      {
+        ctrl: false,
+        meta: false,
+        shift: false,
+        leader: false,
+        name: "kpenter",
+      },
+    ])
+  })
+})
+
+describe("isReturn", () => {
+  test("should match return", () => {
+    expect(isReturn("return")).toBe(true)
+  })
+
+  test("should match kpenter", () => {
+    expect(isReturn("kpenter")).toBe(true)
+  })
+
+  test("should not match other keys", () => {
+    expect(isReturn("enter")).toBe(false)
+    expect(isReturn("escape")).toBe(false)
+    expect(isReturn("space")).toBe(false)
+    expect(isReturn("")).toBe(false)
   })
 })

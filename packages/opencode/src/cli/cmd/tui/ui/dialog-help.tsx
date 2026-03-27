@@ -2,6 +2,7 @@ import { TextAttributes } from "@opentui/core"
 import { useTheme } from "@tui/context/theme"
 import { useDialog } from "./dialog"
 import { useKeyboard } from "@opentui/solid"
+import { isReturn } from "@/util/keybind"
 import { useKeybind } from "@tui/context/keybind"
 
 export function DialogHelp() {
@@ -10,7 +11,7 @@ export function DialogHelp() {
   const keybind = useKeybind()
 
   useKeyboard((evt) => {
-    if (evt.name === "return" || evt.name === "escape") {
+    if (isReturn(evt.name) || evt.name === "escape") {
       dialog.clear()
     }
   })
