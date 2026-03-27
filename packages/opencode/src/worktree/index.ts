@@ -12,7 +12,7 @@ import { Slug } from "@opencode-ai/util/slug"
 import { errorMessage } from "../util/error"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
-import { Effect, Layer, Path, Scope, ServiceMap, Stream } from "effect"
+import { Cause, Effect, Layer, Path, Scope, ServiceMap, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@/filesystem"
@@ -577,7 +577,7 @@ export namespace Worktree {
           )
         }
 
-        const restore = (left: number): Effect.Effect<void, ResetFailedError> =>
+        const restore = (left: number): Effect.Effect<void> =>
           Effect.gen(function* () {
             yield* stopFsmonitor(worktreePath)
 
@@ -621,14 +621,18 @@ export namespace Worktree {
               throw new ResetFailedError({ message: `Worktree reset left local changes:\n${status.text.trim()}` })
             }
           }).pipe(
-            Effect.catchIf(
-              (err): err is InstanceType<typeof ResetFailedError> =>
+            Effect.catchCause((cause): Effect.Effect<void> => {
+              const reason = cause.reasons.find(Cause.isDieReason)
+              if (
                 process.platform === "win32" &&
                 left > 1 &&
-                ResetFailedError.isInstance(err) &&
-                transient(err.data.message),
-              () => Effect.sleep(100).pipe(Effect.flatMap(() => restore(left - 1))),
-            ),
+                ResetFailedError.isInstance(reason?.defect) &&
+                transient(reason.defect.data.message)
+              ) {
+                return Effect.sleep(100).pipe(Effect.flatMap(() => restore(left - 1)))
+              }
+              return Effect.failCause(cause).pipe(Effect.orDie)
+            }),
           )
 
         yield* restore(process.platform === "win32" ? 5 : 1)
