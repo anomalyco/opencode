@@ -308,9 +308,9 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
             <span style={{ fg: theme.text }}>{directory().split("/").at(-1)}</span>
           </text>
           <text fg={theme.textMuted}>
-            <span style={{ fg: theme.success }}>•</span> <b>Open</b>
+            <span style={{ fg: theme.success }}>•</span>{" "}
             <span style={{ fg: theme.text }}>
-              <b>Code</b>
+              <b>CoBuilder</b>
             </span>{" "}
             <span>{Installation.VERSION}</span>
           </text>
