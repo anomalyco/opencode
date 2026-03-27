@@ -45,9 +45,36 @@ jobs:
             git merge --abort
           fi
 
-      - name: Push updated dev
+      - name: Reapply CoBuilder patches after merge
         if: steps.check.outputs.behind != '0' && steps.merge.outputs.merged == 'true'
+        id: patches
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          chmod +x .cobuilder/reapply-patches.sh
+          if ./.cobuilder/reapply-patches.sh; then
+            echo "applied=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "applied=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push updated dev
+        if: steps.check.outputs.behind != '0' && steps.merge.outputs.merged == 'true' && steps.patches.outputs.applied == 'true'
         run: git push origin dev
+
+      - name: Open PR if patch conflict
+        if: steps.check.outputs.behind != '0' && steps.merge.outputs.merged == 'true' && steps.patches.outputs.applied == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="sync/upstream-patch-conflict-$(date +%Y%m%d)"
+          git checkout -b "$BRANCH"
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "chore: sync upstream dev (CoBuilder patch conflict needs resolution)" \
+            --body "Upstream sync merged successfully but CoBuilder patches could not be reapplied cleanly. Please resolve patch conflicts in \`.cobuilder/patches/\` and merge this PR." \
+            --base dev \
+            --head "$BRANCH"
 
       - name: Open PR if merge conflict
         if: steps.check.outputs.behind != '0' && steps.merge.outputs.merged == 'false'
