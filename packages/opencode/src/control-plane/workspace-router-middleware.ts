@@ -26,18 +26,18 @@ const routes = lazy(() => InstanceRoutes())
 
 export const WorkspaceRouterMiddleware: MiddlewareHandler = async (c) => {
   if (!Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
-    return routes().fetch(c.req.raw)
+    return routes().fetch(c.req.raw, c.env)
   }
 
   const url = new URL(c.req.url)
   const raw = url.searchParams.get("workspace")
 
   if (!raw) {
-    return routes().fetch(c.req.raw)
+    return routes().fetch(c.req.raw, c.env)
   }
 
   if (local(c.req.method, url.pathname)) {
-    return routes().fetch(c.req.raw)
+    return routes().fetch(c.req.raw, c.env)
   }
 
   const workspaceID = WorkspaceID.make(raw)
