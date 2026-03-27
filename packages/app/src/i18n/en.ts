@@ -735,9 +735,17 @@ export const dict = {
   "settings.general.row.colorScheme.title": "Color scheme",
   "settings.general.row.colorScheme.description": "Choose whether CoBuilder follows the system, light, or dark theme",
   "settings.general.row.theme.title": "Theme",
+<<<<<<< HEAD
   "settings.general.row.theme.description": "Customise how CoBuilder is themed.",
   "settings.general.row.font.title": "Font",
   "settings.general.row.font.description": "Customise the mono font used in code blocks",
+=======
+  "settings.general.row.theme.description": "Customise how OpenCode is themed.",
+  "settings.general.row.font.title": "Code Font",
+  "settings.general.row.font.description": "Customise the font used in code blocks and terminals",
+  "settings.general.row.uiFont.title": "UI Font",
+  "settings.general.row.uiFont.description": "Customise the font used throughout the interface",
+>>>>>>> upstream/dev
   "settings.general.row.followup.title": "Follow-up behavior",
   "settings.general.row.followup.description": "Choose whether follow-up prompts steer immediately or wait in a queue",
   "settings.general.row.followup.option.queue": "Queue",
@@ -766,6 +774,7 @@ export const dict = {
   "settings.updates.action.checkNow": "Check now",
   "settings.updates.action.checking": "Checking...",
   "settings.updates.toast.latest.title": "You're up to date",
+<<<<<<< HEAD
   "settings.updates.toast.latest.description": "You're running the latest version of CoBuilder.",
   "font.option.ibmPlexMono": "IBM Plex Mono",
   "font.option.cascadiaCode": "Cascadia Code",
@@ -780,6 +789,9 @@ export const dict = {
   "font.option.sourceCodePro": "Source Code Pro",
   "font.option.ubuntuMono": "Ubuntu Mono",
   "font.option.geistMono": "Geist Mono",
+=======
+  "settings.updates.toast.latest.description": "You're running the latest version of OpenCode.",
+>>>>>>> upstream/dev
   "sound.option.none": "None",
   "sound.option.alert01": "Alert 01",
   "sound.option.alert02": "Alert 02",

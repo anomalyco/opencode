@@ -49,6 +49,10 @@ See `specs/effect-migration.md` for the compact pattern reference and examples.
 - Prefer `Path.Path`, `Config`, `Clock`, and `DateTime` when those concerns are already inside Effect code.
 - For background loops or scheduled tasks, use `Effect.repeat` or `Effect.schedule` with `Effect.forkScoped` in the layer definition.
 
+## Effect.cached for deduplication
+
+Use `Effect.cached` when multiple concurrent callers should share a single in-flight computation rather than storing `Fiber | undefined` or `Promise | undefined` manually. See `specs/effect-migration.md` for the full pattern.
+
 ## Instance.bind — ALS for native callbacks
 
 `Instance.bind(fn)` captures the current Instance AsyncLocalStorage context and restores it synchronously when called.
