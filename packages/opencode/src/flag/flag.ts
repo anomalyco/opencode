@@ -54,6 +54,7 @@ export namespace Flag {
   ).pipe(Config.withDefault(false))
   export const OPENCODE_EXPERIMENTAL_ICON_DISCOVERY =
     OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY")
+  export declare const OPENCODE_EXPERIMENTAL_SANDBOX: boolean
 
   const copy = process.env["OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT"]
   export const OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT =
@@ -148,6 +149,14 @@ Object.defineProperty(Flag, "OPENCODE_PLUGIN_META_FILE", {
 Object.defineProperty(Flag, "OPENCODE_CLIENT", {
   get() {
     return process.env["OPENCODE_CLIENT"] ?? "cli"
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+Object.defineProperty(Flag, "OPENCODE_EXPERIMENTAL_SANDBOX", {
+  get() {
+    return truthy("OPENCODE_EXPERIMENTAL_SANDBOX")
   },
   enumerable: true,
   configurable: false,

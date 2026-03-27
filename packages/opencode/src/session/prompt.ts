@@ -49,6 +49,7 @@ import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
+import { SandboxSpawn } from "@/sandbox/spawn"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1698,9 +1699,32 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         args: ["-c", `${input.command}`],
       },
     }
-
-    const matchingInvocation = invocations[shellName] ?? invocations[""]
-    const args = matchingInvocation?.args
+    const clean: Record<string, { args: string[] }> = {
+      nu: {
+        args: ["-c", input.command],
+      },
+      fish: {
+        args: ["-c", input.command],
+      },
+      zsh: {
+        args: ["-f", "-c", input.command],
+      },
+      bash: {
+        args: ["--noprofile", "--norc", "-c", input.command],
+      },
+      cmd: {
+        args: ["/c", input.command],
+      },
+      powershell: {
+        args: ["-NoProfile", "-Command", input.command],
+      },
+      pwsh: {
+        args: ["-NoProfile", "-Command", input.command],
+      },
+      "": {
+        args: ["-c", `${input.command}`],
+      },
+    }
 
     const cwd = Instance.directory
     const shellEnv = await Plugin.trigger(
@@ -1708,7 +1732,19 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       { cwd, sessionID: input.sessionID, callID: part.callID },
       { env: {} },
     )
-    const proc = spawn(shell, args, {
+    const root = Instance.worktree === "/" ? Instance.directory : Instance.worktree
+    const sandbox = await SandboxSpawn.resolve({
+      cwd,
+      project_root: Instance.directory,
+      worktree_root: root,
+    })
+    const args =
+      (sandbox.active ? clean : invocations)[shellName]?.args ?? (sandbox.active ? clean[""] : invocations[""]).args
+    const cmd =
+      sandbox.active && sandbox.profile
+        ? SandboxSpawn.wrap({ profile: sandbox.profile, file: shell, args })
+        : { file: shell, args }
+    const proc = spawn(cmd.file, cmd.args, {
       cwd,
       detached: process.platform !== "win32",
       windowsHide: process.platform === "win32",

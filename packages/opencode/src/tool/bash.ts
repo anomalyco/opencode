@@ -17,11 +17,19 @@ import { Shell } from "@/shell/shell"
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncate"
 import { Plugin } from "@/plugin"
+import { SandboxSpawn } from "@/sandbox/spawn"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
 
 export const log = Log.create({ service: "bash-tool" })
+
+function args(shell: string, command: string) {
+  const name = (process.platform === "win32" ? path.win32.basename(shell, ".exe") : path.basename(shell)).toLowerCase()
+  if (name === "zsh") return ["-f", "-c", command]
+  if (name === "bash") return ["--noprofile", "--norc", "-c", command]
+  return ["-c", command]
+}
 
 const resolveWasm = (asset: string) => {
   if (asset.startsWith("file://")) return fileURLToPath(asset)
@@ -164,17 +172,42 @@ export const BashTool = Tool.define("bash", async () => {
         { cwd, sessionID: ctx.sessionID, callID: ctx.callID },
         { env: {} },
       )
-      const proc = spawn(params.command, {
-        shell,
+      const root = Instance.worktree === "/" ? Instance.directory : Instance.worktree
+      const sandbox = await SandboxSpawn.resolve({
         cwd,
-        env: {
-          ...process.env,
-          ...shellEnv.env,
-        },
-        stdio: ["ignore", "pipe", "pipe"],
-        detached: process.platform !== "win32",
-        windowsHide: process.platform === "win32",
+        project_root: Instance.directory,
+        worktree_root: root,
       })
+      const cmd =
+        sandbox.active && sandbox.profile
+          ? SandboxSpawn.wrap({
+              profile: sandbox.profile,
+              file: shell,
+              args: args(shell, params.command),
+            })
+          : { file: params.command, args: [] as string[] }
+      const proc = sandbox.active
+        ? spawn(cmd.file, cmd.args, {
+            cwd,
+            env: {
+              ...process.env,
+              ...shellEnv.env,
+            },
+            stdio: ["ignore", "pipe", "pipe"],
+            detached: process.platform !== "win32",
+            windowsHide: process.platform === "win32",
+          })
+        : spawn(params.command, {
+            shell,
+            cwd,
+            env: {
+              ...process.env,
+              ...shellEnv.env,
+            },
+            stdio: ["ignore", "pipe", "pipe"],
+            detached: process.platform !== "win32",
+            windowsHide: process.platform === "win32",
+          })
 
       let output = ""
 
@@ -203,6 +236,7 @@ export const BashTool = Tool.define("bash", async () => {
       let timedOut = false
       let aborted = false
       let exited = false
+      let code = 0
 
       const kill = () => Shell.killTree(proc, { exited: () => exited })
 
@@ -229,7 +263,8 @@ export const BashTool = Tool.define("bash", async () => {
           ctx.abort.removeEventListener("abort", abortHandler)
         }
 
-        proc.once("exit", () => {
+        proc.once("exit", (value) => {
+          code = value ?? 1
           exited = true
           cleanup()
           resolve()
@@ -260,7 +295,7 @@ export const BashTool = Tool.define("bash", async () => {
         title: params.description,
         metadata: {
           output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
-          exit: proc.exitCode,
+          exit: code,
           description: params.description,
         },
         output,

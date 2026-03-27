@@ -1072,6 +1072,23 @@ export namespace Config {
         .object({
           disable_paste_summary: z.boolean().optional(),
           batch_tool: z.boolean().optional().describe("Enable the batch tool"),
+          sandbox: z
+            .object({
+              enabled: z.boolean().optional().describe("Enable macOS sandboxing for non-interactive shell commands"),
+              extra_read_roots: z
+                .array(z.string())
+                .optional()
+                .describe("Additional read-only roots for macOS sandboxing"),
+              extra_write_roots: z
+                .array(z.string())
+                .optional()
+                .describe("Additional writable roots for macOS sandboxing"),
+              allow_unsandboxed_retry: z
+                .boolean()
+                .optional()
+                .describe("Allow an explicit unsandboxed retry after a sandbox denial"),
+            })
+            .optional(),
           openTelemetry: z
             .boolean()
             .optional()

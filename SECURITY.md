@@ -12,11 +12,21 @@ submit one that will be an automatic ban from the project.
 
 OpenCode is an AI-powered coding assistant that runs locally on your machine. It provides an agent system with access to powerful tools including shell execution, file operations, and web access.
 
-### No Sandbox
+### Sandboxing
 
-OpenCode does **not** sandbox the agent. The permission system exists as a UX feature to help users stay aware of what actions the agent is taking - it prompts for confirmation before executing commands, writing files, etc. However, it is not designed to provide security isolation.
+On macOS, OpenCode can optionally sandbox agent-issued non-interactive shell commands executed through the bash tool and the session command execution path. This is opt-in and off by default.
 
-If you need true isolation, run OpenCode inside a Docker container or VM.
+The following are **not** covered by the sandbox:
+
+- PTY sessions (interactive shells)
+- MCP server processes
+- LSP server processes
+- Other local process launches
+- All non-macOS platforms
+
+The permission system (confirmation prompts before commands, file writes, etc.) remains a UX layer, not a security boundary. A sandbox denial can still block a command that the permission system allowed.
+
+For stronger isolation, run OpenCode inside a Docker container or VM.
 
 ### Server Mode
 
@@ -24,13 +34,13 @@ Server mode is opt-in only. When enabled, set `OPENCODE_SERVER_PASSWORD` to requ
 
 ### Out of Scope
 
-| Category                        | Rationale                                                               |
-| ------------------------------- | ----------------------------------------------------------------------- |
-| **Server access when opted-in** | If you enable server mode, API access is expected behavior              |
-| **Sandbox escapes**             | The permission system is not a sandbox (see above)                      |
-| **LLM provider data handling**  | Data sent to your configured LLM provider is governed by their policies |
-| **MCP server behavior**         | External MCP servers you configure are outside our trust boundary       |
-| **Malicious config files**      | Users control their own config; modifying it is not an attack vector    |
+| Category                              | Rationale                                                               |
+| ------------------------------------- | ----------------------------------------------------------------------- |
+| **Server access when opted-in**       | If you enable server mode, API access is expected behavior              |
+| **Sandbox escapes (uncovered paths)** | PTY, MCP, LSP, and non-macOS execution are not sandboxed                |
+| **LLM provider data handling**        | Data sent to your configured LLM provider is governed by their policies |
+| **MCP server behavior**               | External MCP servers you configure are outside our trust boundary       |
+| **Malicious config files**            | Users control their own config; modifying it is not an attack vector    |
 
 ---
 
