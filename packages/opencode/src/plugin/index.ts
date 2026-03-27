@@ -112,13 +112,17 @@ export namespace Plugin {
                   log.error("failed to install plugin", { pkg, version, error: detail })
                   return detail
                 },
-              }).pipe(Effect.catch((detail) =>
-                bus.publish(Session.Event.Error, {
-                  error: new NamedError.Unknown({
-                    message: `Failed to install plugin ${pkg}@${version}: ${detail}`,
-                  }).toObject(),
-                }).pipe(Effect.as("")),
-              ))
+              }).pipe(
+                Effect.catch((detail) =>
+                  bus
+                    .publish(Session.Event.Error, {
+                      error: new NamedError.Unknown({
+                        message: `Failed to install plugin ${pkg}@${version}: ${detail}`,
+                      }).toObject(),
+                    })
+                    .pipe(Effect.as("")),
+                ),
+              )
               if (!installed) continue
               pluginPath = installed
             }
@@ -141,13 +145,15 @@ export namespace Plugin {
                 log.error("failed to load plugin", { path: pluginPath, error: message })
                 return message
               },
-            }).pipe(Effect.catch((message) =>
-              bus.publish(Session.Event.Error, {
-                error: new NamedError.Unknown({
-                  message: `Failed to load plugin ${pluginPath}: ${message}`,
-                }).toObject(),
-              }),
-            ))
+            }).pipe(
+              Effect.catch((message) =>
+                bus.publish(Session.Event.Error, {
+                  error: new NamedError.Unknown({
+                    message: `Failed to load plugin ${pluginPath}: ${message}`,
+                  }).toObject(),
+                }),
+              ),
+            )
           }
 
           // Notify plugins of current config
