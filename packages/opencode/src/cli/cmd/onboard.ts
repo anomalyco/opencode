@@ -37,6 +37,8 @@ export const OnboardCommand = cmd({
     const providerChoice = await prompts.select({
       message: "Which provider would you like to use?",
       options: [
+        { value: "zen", label: "Zen", hint: "MiniMax M2.5 Free and more — no API key needed" },
+        { value: "github-copilot", label: "GitHub Copilot", hint: "Models via your GitHub account" },
         { value: "9router", label: "9Router", hint: "Local OpenAI-compatible proxy" },
         { value: "anthropic", label: "Anthropic", hint: "Claude models via API key" },
         { value: "openai", label: "OpenAI", hint: "GPT models via API key" },
@@ -50,7 +52,11 @@ export const OnboardCommand = cmd({
       process.exit(0)
     }
 
-    if (providerChoice === NINEROUTER_ID) {
+    if (providerChoice === "zen") {
+      await setupZenProvider()
+    } else if (providerChoice === "github-copilot") {
+      await setupCopilotProvider()
+    } else if (providerChoice === NINEROUTER_ID) {
       await setup9Router()
     } else {
       await setupApiKeyProvider(providerChoice as string)
@@ -156,6 +162,109 @@ async function setup9Router() {
 
   prompts.log.success(`Model registered: ${defaultModelId}`)
   prompts.log.success(`Default model: ${NINEROUTER_ID}/${defaultModelId}`)
+}
+
+async function setupZenProvider() {
+  const ZEN_MODELS = [
+    { value: "minimax-m2.5-free", label: "MiniMax M2.5 Free", hint: "free • default" },
+    { value: "minimax-m2.1-free", label: "MiniMax M2.1 Free", hint: "free" },
+    { value: "kimi-k2.5-free", label: "Kimi K2.5 Free", hint: "free" },
+    { value: "mimo-v2-flash-free", label: "MiMo V2 Flash Free", hint: "free" },
+    { value: "mimo-v2-omni-free", label: "MiMo V2 Omni Free", hint: "free" },
+    { value: "mimo-v2-pro-free", label: "MiMo V2 Pro Free", hint: "free" },
+    { value: "nemotron-3-super-free", label: "Nemotron 3 Super Free", hint: "free" },
+    { value: "trinity-large-preview-free", label: "Trinity Large Preview", hint: "free" },
+    { value: "glm-5-free", label: "GLM-5 Free", hint: "free" },
+    { value: "glm-4.7-free", label: "GLM-4.7 Free", hint: "free" },
+    { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", hint: "paid" },
+    { value: "claude-opus-4-6", label: "Claude Opus 4.6", hint: "paid" },
+    { value: "gpt-5", label: "GPT-5", hint: "paid" },
+    { value: "gpt-5.2-codex", label: "GPT-5.2 Codex", hint: "paid" },
+    { value: "gemini-3.1-pro", label: "Gemini 3.1 Pro Preview", hint: "paid" },
+    { value: "kimi-k2", label: "Kimi K2", hint: "paid" },
+    { value: "qwen3-coder", label: "Qwen3 Coder", hint: "paid" },
+    { value: "minimax-m2.5", label: "MiniMax M2.5", hint: "paid" },
+    { value: "minimax-m2.1", label: "MiniMax M2.1", hint: "paid" },
+  ]
+
+  const modelChoice = await prompts.select({
+    message: "Select your default model (you can switch anytime with /models)",
+    initialValue: "minimax-m2.5-free",
+    options: ZEN_MODELS,
+  })
+
+  if (prompts.isCancel(modelChoice)) {
+    prompts.cancel("Setup cancelled.")
+    process.exit(0)
+  }
+
+  const configPath = path.join(Global.Path.config, "opencode.json")
+  let existing: any = {}
+  try {
+    existing = await Filesystem.readJson(configPath)
+  } catch {}
+
+  await Filesystem.writeJson(configPath, {
+    ...existing,
+    model: `opencode/${modelChoice}`,
+  })
+
+  prompts.log.success(`Model set: opencode/${modelChoice}`)
+  if ((modelChoice as string).endsWith("-free")) {
+    prompts.log.info("Free model — no API key required")
+  } else {
+    prompts.log.info("Paid model — run `cobuilder providers login` to add your Zen API key")
+  }
+}
+
+async function setupCopilotProvider() {
+  const COPILOT_MODELS = [
+    { value: "claude-opus-4.6", label: "Claude Opus 4.6" },
+    { value: "claude-sonnet-4.6", label: "Claude Sonnet 4.6" },
+    { value: "claude-sonnet-4.5", label: "Claude Sonnet 4.5" },
+    { value: "claude-haiku-4.5", label: "Claude Haiku 4.5" },
+    { value: "gpt-5", label: "GPT-5" },
+    { value: "gpt-5.2-codex", label: "GPT-5.2 Codex" },
+    { value: "gpt-5.3-codex", label: "GPT-5.3 Codex" },
+    { value: "gpt-5.4", label: "GPT-5.4" },
+    { value: "gpt-5.4-mini", label: "GPT-5.4 Mini" },
+    { value: "gpt-5.1-codex", label: "GPT-5.1 Codex" },
+    { value: "gpt-5.1-codex-max", label: "GPT-5.1 Codex Max" },
+    { value: "gpt-5-mini", label: "GPT-5 Mini" },
+    { value: "gpt-4o", label: "GPT-4o" },
+    { value: "gpt-4.1", label: "GPT-4.1" },
+    { value: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro Preview" },
+    { value: "gemini-3-pro-preview", label: "Gemini 3 Pro Preview" },
+    { value: "gemini-3-flash-preview", label: "Gemini 3 Flash" },
+    { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+    { value: "grok-code-fast-1", label: "Grok Code Fast 1" },
+    { value: "claude-opus-4.5", label: "Claude Opus 4.5" },
+    { value: "claude-opus-41", label: "Claude Opus 4.1" },
+  ]
+
+  const modelChoice = await prompts.select({
+    message: "Select your default model (you can switch anytime with /models)",
+    options: COPILOT_MODELS,
+  })
+
+  if (prompts.isCancel(modelChoice)) {
+    prompts.cancel("Setup cancelled.")
+    process.exit(0)
+  }
+
+  const configPath = path.join(Global.Path.config, "opencode.json")
+  let existing: any = {}
+  try {
+    existing = await Filesystem.readJson(configPath)
+  } catch {}
+
+  await Filesystem.writeJson(configPath, {
+    ...existing,
+    model: `github-copilot/${modelChoice}`,
+  })
+
+  prompts.log.success(`Model set: github-copilot/${modelChoice}`)
+  prompts.log.info("To authenticate with GitHub Copilot, run: cobuilder providers login")
 }
 
 async function setupApiKeyProvider(providerId: string) {
