@@ -11,6 +11,7 @@ import { Database, NotFoundError, and, desc, eq, inArray, lt, or } from "@/stora
 import { MessageTable, PartTable, SessionTable } from "./session.sql"
 import { ProviderError } from "@/provider/error"
 import { iife } from "@/util/iife"
+import { errorMessage } from "@/util/error"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
@@ -990,7 +991,7 @@ export namespace MessageV2 {
           { cause: e },
         ).toObject()
       case e instanceof Error:
-        return new NamedError.Unknown({ message: e instanceof Error ? e.message : String(e) }, { cause: e }).toObject()
+        return new NamedError.Unknown({ message: errorMessage(e) }, { cause: e }).toObject()
       default:
         try {
           const parsed = ProviderError.parseStreamError(e)
