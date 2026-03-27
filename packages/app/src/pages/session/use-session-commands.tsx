@@ -11,10 +11,10 @@ import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
-import { promptLength } from "@/components/prompt-input/history"
 import { showToast } from "@opencode-ai/ui/toast"
 import { findLast } from "@opencode-ai/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
+import { restartCommand } from "@/pages/session/commands/restart"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
@@ -89,20 +89,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const showAllFiles = () => {
     if (layout.fileTree.tab() !== "changes") return
     layout.fileTree.setTab("all")
-  }
-
-  const restart = async () => {
-    const dir = params.dir
-    if (!dir) return
-    const msg = userMessages()[0]
-    if (!msg) return
-    const value = extractPromptFromParts(sync.data.part[msg.id] ?? [], {
-      directory: sdk.directory,
-      attachmentName: language.t("common.attachment"),
-    })
-
-    prompt.set(value, promptLength(value), { dir })
-    navigate(`/${dir}/session`)
   }
 
   const selectionPreview = (path: string, selection: FileSelection) => {
@@ -504,13 +490,16 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
           })
         },
       }),
-      sessionCommand({
-        id: "session.restart",
-        title: language.t("command.session.restart"),
-        description: language.t("command.session.restart.description"),
-        slash: "restart",
-        disabled: !params.id || userMessages().length === 0,
-        onSelect: restart,
+      restartCommand({
+        session: sessionCommand,
+        language,
+        id: params.id,
+        dir: params.dir,
+        directory: sdk.directory,
+        userMessages,
+        parts: (id) => sync.data.part[id] ?? [],
+        set: prompt.set,
+        navigate,
       }),
       sessionCommand({
         id: "session.fork",
