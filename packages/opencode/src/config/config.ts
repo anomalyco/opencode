@@ -30,20 +30,27 @@ import { GlobalBus } from "@/bus/global"
 import { Event } from "../server/event"
 import { Glob } from "../util/glob"
 import { PackageRegistry } from "@/bun/registry"
-import { proxied } from "@/util/proxied"
+import { online, proxied } from "@/util/network"
 import { iife } from "@/util/iife"
 import { Account } from "@/account"
+import { isRecord } from "@/util/record"
 import { ConfigPaths } from "./paths"
 import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
-import { Lock } from "@/util/lock"
 import { AppFileSystem } from "@/filesystem"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { Duration, Effect, Layer, Option, ServiceMap } from "effect"
+import { Flock } from "@/util/flock"
+import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "@/plugin/shared"
 
 export namespace Config {
   const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
+  const PluginOptions = z.record(z.string(), z.unknown())
+  export const PluginSpec = z.union([z.string(), z.tuple([z.string(), PluginOptions])])
+
+  export type PluginOptions = z.infer<typeof PluginOptions>
+  export type PluginSpec = z.infer<typeof PluginSpec>
 
   const log = Log.create({ service: "config" })
 
@@ -78,34 +85,65 @@ export namespace Config {
     return merged
   }
 
-  export async function installDependencies(dir: string) {
+  export type InstallInput = {
+    signal?: AbortSignal
+    waitTick?: (input: { dir: string; attempt: number; delay: number; waited: number }) => void | Promise<void>
+  }
+
+  export async function installDependencies(dir: string, input?: InstallInput) {
+    if (!(await needsInstall(dir))) return
+
+    await using _ = await Flock.acquire(`config-install:${Filesystem.resolve(dir)}`, {
+      signal: input?.signal,
+      onWait: (tick) =>
+        input?.waitTick?.({
+          dir,
+          attempt: tick.attempt,
+          delay: tick.delay,
+          waited: tick.waited,
+        }),
+    })
+
+    input?.signal?.throwIfAborted()
+    if (!(await needsInstall(dir))) return
+
     const pkg = path.join(dir, "package.json")
-    const targetVersion = Installation.isLocal() ? "*" : Installation.VERSION
+    const target = Installation.isLocal() ? "*" : Installation.VERSION
 
     const json = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => ({
       dependencies: {},
     }))
     json.dependencies = {
       ...json.dependencies,
-      "@opencode-ai/plugin": targetVersion,
+      "@opencode-ai/plugin": target,
     }
     await Filesystem.writeJson(pkg, json)
 
     const gitignore = path.join(dir, ".gitignore")
-    const hasGitIgnore = await Filesystem.exists(gitignore)
-    if (!hasGitIgnore)
+    const ignore = await Filesystem.exists(gitignore)
+    if (!ignore) {
       await Filesystem.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
+    }
 
-    // Install any additional dependencies defined in the package.json
-    // This allows local plugins and custom tools to use external packages
-    using _ = await Lock.write("bun-install")
+    // Bun can race cache writes on Windows when installs run in parallel across dirs.
+    // Serialize installs globally on win32, but keep parallel installs on other platforms.
+    await using __ =
+      process.platform === "win32"
+        ? await Flock.acquire("config-install:bun", {
+            signal: input?.signal,
+          })
+        : undefined
+
     await BunProc.run(
       [
         "install",
         // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
         ...(proxied() || process.env.CI ? ["--no-cache"] : []),
       ],
-      { cwd: dir },
+      {
+        cwd: dir,
+        abort: input?.signal,
+      },
     ).catch((err) => {
       if (err instanceof Process.RunFailedError) {
         const detail = {
@@ -149,8 +187,8 @@ export namespace Config {
       return false
     }
 
-    const nodeModules = path.join(dir, "node_modules")
-    if (!existsSync(nodeModules)) return true
+    const mod = path.join(dir, "node_modules", "@opencode-ai", "plugin")
+    if (!existsSync(mod)) return true
 
     const pkg = path.join(dir, "package.json")
     const pkgExists = await Filesystem.exists(pkg)
@@ -163,8 +201,9 @@ export namespace Config {
 
     const targetVersion = Installation.isLocal() ? "latest" : Installation.VERSION
     if (targetVersion === "latest") {
-      const isOutdated = await PackageRegistry.isOutdated("@opencode-ai/plugin", depVersion, dir)
-      if (!isOutdated) return false
+      if (!online()) return false
+      const stale = await PackageRegistry.isOutdated("@opencode-ai/plugin", depVersion, dir)
+      if (!stale) return false
       log.info("Cached version is outdated, proceeding with install", {
         pkg: "@opencode-ai/plugin",
         cachedVersion: depVersion,
@@ -303,7 +342,7 @@ export namespace Config {
   }
 
   async function loadPlugin(dir: string) {
-    const plugins: string[] = []
+    const plugins: PluginSpec[] = []
 
     for (const item of await Glob.scan("{plugin,plugins}/*.{ts,js}", {
       cwd: dir,
@@ -316,25 +355,44 @@ export namespace Config {
     return plugins
   }
 
-  /**
-   * Extracts a canonical plugin name from a plugin specifier.
-   * - For file:// URLs: extracts filename without extension
-   * - For npm packages: extracts package name without version
-   *
-   * @example
-   * getPluginName("file:///path/to/plugin/foo.js") // "foo"
-   * getPluginName("oh-my-opencode@2.4.3") // "oh-my-opencode"
-   * getPluginName("@scope/pkg@1.0.0") // "@scope/pkg"
-   */
-  export function getPluginName(plugin: string): string {
-    if (plugin.startsWith("file://")) {
-      return path.parse(new URL(plugin).pathname).name
+  export function pluginSpecifier(plugin: PluginSpec): string {
+    return Array.isArray(plugin) ? plugin[0] : plugin
+  }
+
+  export function pluginOptions(plugin: PluginSpec): PluginOptions | undefined {
+    return Array.isArray(plugin) ? plugin[1] : undefined
+  }
+
+  export async function resolvePluginSpec(plugin: PluginSpec, configFilepath: string): Promise<PluginSpec> {
+    const spec = pluginSpecifier(plugin)
+    if (!isPathPluginSpec(spec)) return plugin
+    if (spec.startsWith("file://")) {
+      const resolved = await resolvePathPluginTarget(spec).catch(() => spec)
+      if (Array.isArray(plugin)) return [resolved, plugin[1]]
+      return resolved
     }
-    const lastAt = plugin.lastIndexOf("@")
-    if (lastAt > 0) {
-      return plugin.substring(0, lastAt)
+    if (path.isAbsolute(spec) || /^[A-Za-z]:[\\/]/.test(spec)) {
+      const base = pathToFileURL(spec).href
+      const resolved = await resolvePathPluginTarget(base).catch(() => base)
+      if (Array.isArray(plugin)) return [resolved, plugin[1]]
+      return resolved
     }
-    return plugin
+    try {
+      const base = import.meta.resolve!(spec, configFilepath)
+      const resolved = await resolvePathPluginTarget(base).catch(() => base)
+      if (Array.isArray(plugin)) return [resolved, plugin[1]]
+      return resolved
+    } catch {
+      try {
+        const require = createRequire(configFilepath)
+        const base = pathToFileURL(require.resolve(spec)).href
+        const resolved = await resolvePathPluginTarget(base).catch(() => base)
+        if (Array.isArray(plugin)) return [resolved, plugin[1]]
+        return resolved
+      } catch {
+        return plugin
+      }
+    }
   }
 
   /**
@@ -348,17 +406,13 @@ export namespace Config {
    * Since plugins are added in low-to-high priority order,
    * we reverse, deduplicate (keeping first occurrence), then restore order.
    */
-  export function deduplicatePlugins(plugins: string[]): string[] {
-    // seenNames: canonical plugin names for duplicate detection
-    // e.g., "oh-my-opencode", "@scope/pkg"
+  export function deduplicatePlugins(plugins: PluginSpec[]): PluginSpec[] {
     const seenNames = new Set<string>()
-
-    // uniqueSpecifiers: full plugin specifiers to return
-    // e.g., "oh-my-opencode@2.4.3", "file:///path/to/plugin.js"
-    const uniqueSpecifiers: string[] = []
+    const uniqueSpecifiers: PluginSpec[] = []
 
     for (const specifier of plugins.toReversed()) {
-      const name = getPluginName(specifier)
+      const spec = pluginSpecifier(specifier)
+      const name = spec.startsWith("file://") ? spec : parsePluginSpecifier(spec).pkg
       if (!seenNames.has(name)) {
         seenNames.add(name)
         uniqueSpecifiers.push(specifier)
@@ -757,6 +811,7 @@ export namespace Config {
       terminal_suspend: z.string().optional().default("ctrl+z").describe("Suspend terminal"),
       terminal_title_toggle: z.string().optional().default("none").describe("Toggle terminal title"),
       tips_toggle: z.string().optional().default("<leader>h").describe("Toggle tips on home screen"),
+      plugin_manager: z.string().optional().default("none").describe("Open plugin manager dialog"),
       display_thinking: z.string().optional().default("none").describe("Toggle thinking blocks visibility"),
     })
     .strict()
@@ -858,13 +913,13 @@ export namespace Config {
           ignore: z.array(z.string()).optional(),
         })
         .optional(),
-      plugin: z.string().array().optional(),
       snapshot: z
         .boolean()
         .optional()
         .describe(
           "Enable or disable snapshot tracking. When false, filesystem snapshots are not recorded and undoing or reverting will not undo/redo file changes. Defaults to true.",
         ),
+      plugin: PluginSpec.array().optional(),
       share: z
         .enum(["manual", "auto", "disabled"])
         .optional()
@@ -1070,10 +1125,6 @@ export namespace Config {
     return candidates[0]
   }
 
-  function isRecord(value: unknown): value is Record<string, unknown> {
-    return !!value && typeof value === "object" && !Array.isArray(value)
-  }
-
   function patchJsonc(input: string, patch: unknown, path: string[] = []): string {
     if (!isRecord(patch)) {
       const edits = modify(input, path, patch, {
@@ -1189,19 +1240,9 @@ export namespace Config {
             }
             const data = parsed.data
             if (data.plugin && isFile) {
-              for (let i = 0; i < data.plugin.length; i++) {
-                const plugin = data.plugin[i]
-                try {
-                  data.plugin[i] = import.meta.resolve!(plugin, options.path)
-                } catch (e) {
-                  try {
-                    const require = createRequire(options.path)
-                    const resolvedPath = require.resolve(plugin)
-                    data.plugin[i] = pathToFileURL(resolvedPath).href
-                  } catch {
-                    // Ignore, plugin might be a generic string identifier like "mcp-server"
-                  }
-                }
+              const list = data.plugin
+              for (let i = 0; i < list.length; i++) {
+                list[i] = yield* Effect.promise(() => resolvePluginSpec(list[i], options.path))
               }
             }
             return data
@@ -1326,12 +1367,14 @@ export namespace Config {
               }
             }
 
-            deps.push(
-              iife(async () => {
-                const shouldInstall = await needsInstall(dir)
-                if (shouldInstall) await installDependencies(dir)
-              }),
-            )
+            const dep = iife(async () => {
+              const stale = await needsInstall(dir)
+              if (stale) await installDependencies(dir)
+            })
+            void dep.catch((err) => {
+              log.warn("background dependency install failed", { dir, error: err })
+            })
+            deps.push(dep)
 
             result.command = mergeDeep(result.command ?? {}, yield* Effect.promise(() => loadCommand(dir)))
             result.agent = mergeDeep(result.agent, yield* Effect.promise(() => loadAgent(dir)))
