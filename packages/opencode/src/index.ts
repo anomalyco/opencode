@@ -50,15 +50,11 @@ process.on("uncaughtException", (e) => {
   })
 })
 
-<<<<<<< HEAD
 process.on("exit", (code) => {
   if (code === 0) SessionCheckpoint.clearSync()
 })
 
 let cli = yargs(hideBin(process.argv))
-=======
-const cli = yargs(hideBin(process.argv))
->>>>>>> upstream/dev
   .parserConfiguration({ "populate--": true })
   .scriptName("cobuilder")
   .wrap(100)
@@ -161,7 +157,6 @@ const cli = yargs(hideBin(process.argv))
   .command(PrCommand)
   .command(SessionCommand)
   .command(DbCommand)
-<<<<<<< HEAD
   .command(OnboardCommand)
   .command(WorkflowCommand)
   .command(SkillsCommand)
@@ -171,8 +166,6 @@ if (Installation.isLocal()) {
 }
 
 cli = cli
-=======
->>>>>>> upstream/dev
   .fail((msg, err) => {
     if (
       msg?.startsWith("Unknown argument") ||

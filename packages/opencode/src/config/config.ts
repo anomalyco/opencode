@@ -84,7 +84,6 @@ export namespace Config {
     return merged
   }
 
-<<<<<<< HEAD
   export const state = Instance.state(async () => {
     const auth = await Auth.all()
 
@@ -288,8 +287,6 @@ export namespace Config {
     await Promise.all(deps)
   }
 
-=======
->>>>>>> upstream/dev
   export async function installDependencies(dir: string) {
     const pkg = path.join(dir, "package.json")
     const targetVersion = Installation.isLocal() ? "*" : Installation.VERSION
