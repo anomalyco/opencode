@@ -3,7 +3,9 @@ import { serviceUse } from "@/effect/service-use"
 import { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { generateObject, streamObject, type ModelMessage } from "ai"
-import { Truncate } from "@/tool/truncate"
+import { SystemPrompt } from "../session/system"
+import { Instance } from "../project/instance"
+import { Truncate } from "../tool/truncate"
 import { Auth } from "../auth"
 import { ProviderTransform } from "../provider/transform"
 import { isOpenAIProviderID } from "../provider/id"
@@ -14,47 +16,40 @@ import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SCOUT from "./prompt/scout.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
-import { Permission } from "@/permission"
+import { Permission as PermissionNext } from "@/permission"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@opencode-ai/core/global"
 import path from "path"
 import { Plugin } from "@/plugin"
 import { Skill } from "../skill"
-import { Effect, Context, Layer, Schema } from "effect"
-import { InstanceState } from "@/effect/instance-state"
-import { RuntimeFlags } from "@/effect/runtime-flags"
-import * as Option from "effect/Option"
-import * as OtelTracer from "@effect/opentelemetry/Tracer"
-import { type DeepMutable } from "@opencode-ai/core/schema"
 
-export const Info = Schema.Struct({
-  name: Schema.String,
-  description: Schema.optional(Schema.String),
-  mode: Schema.Literals(["subagent", "primary", "all"]),
-  native: Schema.optional(Schema.Boolean),
-  hidden: Schema.optional(Schema.Boolean),
-  topP: Schema.optional(Schema.Finite),
-  temperature: Schema.optional(Schema.Finite),
-  color: Schema.optional(Schema.String),
-  permission: Permission.Ruleset,
-  model: Schema.optional(
-    Schema.Struct({
-      modelID: ModelID,
-      providerID: ProviderID,
-    }),
-  ),
-  variant: Schema.optional(Schema.String),
-  prompt: Schema.optional(Schema.String),
-  options: Schema.Record(Schema.String, Schema.Unknown),
-  steps: Schema.optional(Schema.Finite),
-}).annotate({ identifier: "Agent" })
-export type Info = DeepMutable<Schema.Schema.Type<typeof Info>>
+export namespace Agent {
+  export const Info = z
+    .object({
+      name: z.string(),
+      description: z.string().optional(),
+      mode: z.enum(["subagent", "primary", "all"]),
+      native: z.boolean().optional(),
+      hidden: z.boolean().optional(),
+      topP: z.number().optional(),
+      temperature: z.number().optional(),
+      color: z.string().optional(),
+      permission: PermissionNext.Ruleset,
+      model: z
+        .object({
+          modelID: ModelID.zod,
+          providerID: ProviderID.zod,
+        })
+        .optional(),
+      variant: z.string().optional(),
+      prompt: z.string().optional(),
+      options: z.record(z.string(), z.any()),
+      steps: z.number().int().positive().optional(),
+    })
+    const user = PermissionNext.fromConfig(cfg.permission ?? {})
 
-const GeneratedAgent = Schema.Struct({
-  identifier: Schema.String,
-  whenToUse: Schema.String,
-  systemPrompt: Schema.String,
-})
+  const state = Instance.state(async () => {
+    const cfg = await Config.get()
 
     const skillDirs = await Skill.dirs()
     const whitelistedDirs = [Truncate.GLOB, ...skillDirs.map((dir) => path.join(dir, "*"))]
@@ -285,7 +280,7 @@ const GeneratedAgent = Schema.Struct({
     return primaryVisible.name
   }
 
-  export async function generate(input: { description: string; model?: { providerID: string; modelID: string } }) {
+  export async function generate(input: { description: string; model?: { providerID: ProviderID; modelID: ModelID } }) {
     const cfg = await Config.get()
     const defaultModel = input.model ?? (await Provider.defaultModel())
     const model = await Provider.getModel(defaultModel.providerID, defaultModel.modelID)

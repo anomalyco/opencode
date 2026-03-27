@@ -1,0 +1,65 @@
+/*
+ * Aether Theme Effects
+ * Paper texture, warm-tinted shadows, and elevated glassmorphism
+ * Activated via html[data-theme="aether"]
+ */
+
+/* ─── Paper Texture Overlay ─── */
+html[data-theme="aether"]::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='5' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Light mode: subtle paper grain */
+@media (prefers-color-scheme: light) {
+  html[data-theme="aether"]::after {
+    opacity: 0.028;
+    mix-blend-mode: multiply;
+  }
+}
+
+/* Dark mode: soft grain for materiality */
+@media (prefers-color-scheme: dark) {
+  html[data-theme="aether"]::after {
+    opacity: 0.04;
+    mix-blend-mode: soft-light;
+  }
+}
+
+/* ─── Warm Shadow System ─── */
+html[data-theme="aether"] {
+  /* Light mode: clay-tinted shadows for warm depth */
+  --shadow-xs:
+    0 1px 2px -0.5px light-dark(rgba(193, 95, 60, 0.07), rgba(0, 0, 0, 0.2)),
+    0 0.5px 1.5px 0 light-dark(rgba(193, 95, 60, 0.05), rgba(0, 0, 0, 0.15)),
+    0 1px 3px 0 light-dark(rgba(193, 95, 60, 0.08), rgba(0, 0, 0, 0.18));
+  --shadow-md:
+    0 6px 16px -2px light-dark(rgba(193, 95, 60, 0.12), rgba(0, 0, 0, 0.25)),
+    0 4px 8px -2px light-dark(rgba(193, 95, 60, 0.1), rgba(0, 0, 0, 0.22)),
+    0 1px 2px light-dark(rgba(193, 95, 60, 0.14), rgba(0, 0, 0, 0.2));
+  --shadow-lg:
+    0 20px 56px -8px light-dark(rgba(193, 95, 60, 0.14), rgba(0, 0, 0, 0.35)),
+    0 8px 16px -4px light-dark(rgba(193, 95, 60, 0.08), rgba(0, 0, 0, 0.2)),
+    0 2px 4px light-dark(rgba(193, 95, 60, 0.06), rgba(0, 0, 0, 0.15));
+  --shadow-xs-border:
+    0 0 0 1px light-dark(rgba(107, 95, 78, 0.18), rgba(107, 95, 78, 0.12)),
+    0 1px 2px -1px light-dark(rgba(193, 95, 60, 0.06), rgba(0, 0, 0, 0.12)),
+    0 1px 2px 0 light-dark(rgba(193, 95, 60, 0.08), rgba(0, 0, 0, 0.15)),
+    0 1px 3px 0 light-dark(rgba(193, 95, 60, 0.1), rgba(0, 0, 0, 0.18));
+  --shadow-xs-border-base:
+    0 0 0 1px light-dark(rgba(107, 95, 78, 0.12), rgba(107, 95, 78, 0.08)),
+    0 1px 2px -1px light-dark(rgba(193, 95, 60, 0.05), rgba(0, 0, 0, 0.1)),
+    0 1px 2px 0 light-dark(rgba(193, 95, 60, 0.07), rgba(0, 0, 0, 0.12)),
+    0 1px 3px 0 light-dark(rgba(193, 95, 60, 0.09), rgba(0, 0, 0, 0.15));
+  --shadow-lg-border-base:
+    0 0 0 1px light-dark(rgba(107, 95, 78, 0.1), rgba(107, 95, 78, 0.06)),
+    0 36px 80px 0 light-dark(rgba(193, 95, 60, 0.06), rgba(0, 0, 0, 0.12)),
+    0 14px 30px 0 light-dark(rgba(193, 95, 60, 0.07), rgba(0, 0, 0, 0.1)),
+    0 6px 14px 0 light-dark(rgba(193, 95, 60, 0.08), rgba(0, 0, 0, 0.09)),
+    0 3px 7px 0 light-dark(rgba(193, 95, 60, 0.1), rgba(0, 0, 0, 0.08)),
+    0 1px 3px 0 light-dark(rgba(193, 95, 60, 0.12), rgba(0, 0, 0, 0.12));
+}

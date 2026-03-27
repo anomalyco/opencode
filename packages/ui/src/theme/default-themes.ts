@@ -1,5 +1,6 @@
 import type { DesktopTheme } from "./types"
 import oc2ThemeJson from "./themes/oc-2.json"
+import aetherThemeJson from "./themes/aether.json"
 import amoledThemeJson from "./themes/amoled.json"
 import auraThemeJson from "./themes/aura.json"
 // New themes from CLI conversion
@@ -25,21 +26,9 @@ import synthwave84ThemeJson from "./themes/synthwave84.json"
 import vercelThemeJson from "./themes/vercel.json"
 import zenburnThemeJson from "./themes/zenburn.json"
 
-// Original themes
-export const oc1Theme = oc1ThemeJson as DesktopTheme
-export const tokyonightTheme = tokyoThemeJson as DesktopTheme
-export const draculaTheme = draculaThemeJson as DesktopTheme
-export const monokaiTheme = monokaiThemeJson as DesktopTheme
-export const solarizedTheme = solarizedThemeJson as DesktopTheme
-export const nordTheme = nordThemeJson as DesktopTheme
-export const catppuccinTheme = catppuccinThemeJson as DesktopTheme
-export const ayuTheme = ayuThemeJson as DesktopTheme
-export const oneDarkProTheme = oneDarkProThemeJson as DesktopTheme
-export const shadesOfPurpleTheme = shadesOfPurpleThemeJson as DesktopTheme
-export const nightowlTheme = nightowlThemeJson as DesktopTheme
-export const vesperTheme = vesperThemeJson as DesktopTheme
-export const carbonfoxTheme = carbonfoxThemeJson as DesktopTheme
-export const gruvboxTheme = gruvboxThemeJson as DesktopTheme
+export const oc2Theme = oc2ThemeJson as DesktopTheme
+export const aetherTheme = aetherThemeJson as DesktopTheme
+export const amoledTheme = amoledThemeJson as DesktopTheme
 export const auraTheme = auraThemeJson as DesktopTheme
 export const ayuTheme = ayuThemeJson as DesktopTheme
 export const carbonfoxTheme = carbonfoxThemeJson as DesktopTheme
@@ -100,8 +89,9 @@ export const vercelTheme = vercelThemeJson as DesktopTheme
 export const zenburnTheme = zenburnThemeJson as DesktopTheme
 
 export const DEFAULT_THEMES: Record<string, DesktopTheme> = {
-  // Original themes
-  "oc-1": oc1Theme,
+  "oc-2": oc2Theme,
+  aether: aetherTheme,
+  amoled: amoledTheme,
   aura: auraTheme,
   ayu: ayuTheme,
   carbonfox: carbonfoxTheme,

@@ -35,14 +35,10 @@ export { ThemeProvider, useTheme, type ColorScheme } from "./context"
 
 export {
   DEFAULT_THEMES,
-  // Original themes
-  oc1Theme,
-  tokyonightTheme,
-  draculaTheme,
-  monokaiTheme,
-  solarizedTheme,
-  nordTheme,
-  catppuccinTheme,
+  oc2Theme,
+  aetherTheme,
+  amoledTheme,
+  auraTheme,
   ayuTheme,
   carbonfoxTheme,
   catppuccinTheme,

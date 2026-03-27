@@ -1596,7 +1596,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         data-slot="prompt-shell"
         classList={{
           "group/prompt-input": true,
-          "focus-within:shadow-xs-border": true,
+          "prompt-shell-shadow": true,
           "border-icon-info-active border-dashed": store.draggingType !== null,
           [props.class ?? ""]: !!props.class,
         }}
@@ -1633,7 +1633,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             if (!(target instanceof HTMLElement)) return
             if (
               target.closest(
-                '[data-action="prompt-attach"], [data-action="prompt-expand"], [data-action="prompt-submit"], [data-action="prompt-permissions"]',
+                '[data-action="prompt-attach"], [data-action="prompt-expand"], [data-action="prompt-submit"]',
               )
             ) {
               return
@@ -1683,69 +1683,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </Show>
           </div>
 
-          <div
-            aria-hidden="true"
-            class="pointer-events-none absolute inset-x-0 bottom-0"
-            style={{
-              height: space,
-              background:
-                "linear-gradient(to top, var(--surface-raised-stronger-non-alpha) calc(100% - 20px), transparent)",
-            }}
-          />
-
-          <div class="pointer-events-none absolute inset-x-3 bottom-3 flex items-end justify-between gap-3">
-            <div class="pointer-events-auto flex items-center gap-2.5">
-              <TooltipKeybind
-                placement="top"
-                inactive={!prompt.dirty() && !working()}
-                value={
-                  <Switch>
-                    <Match when={working()}>
-                      <div class="flex items-center gap-2">
-                        <span>{language.t("prompt.action.stop")}</span>
-                        <span class="text-icon-base text-12-medium text-[10px]!">{language.t("common.key.esc")}</span>
-                      </div>
-                    </Match>
-                    <Match when={true}>
-                      <div class="flex items-center gap-2">
-                        <span>{language.t("prompt.action.send")}</span>
-                        <Icon name="enter" size="small" class="text-icon-base" />
-                      </div>
-                    </Match>
-                  </Switch>
-                }
-              >
-                <Button
-                  data-action="prompt-permissions"
-                  variant="ghost"
-                  disabled={!params.id}
-                  onClick={() => {
-                    if (!params.id) return
-                    permission.toggleAutoAccept(params.id, sdk.directory)
-                  }}
-                  classList={{
-                    "size-8 rounded-full flex items-center justify-center": true,
-                    "text-text-base": !accepting(),
-                    "bg-surface-success-weak text-icon-success-base": accepting(),
-                    "hover:bg-surface-success-base": accepting(),
-                  }}
-                  aria-label={
-                    accepting()
-                      ? language.t("command.permissions.autoaccept.disable")
-                      : language.t("command.permissions.autoaccept.enable")
-                  }
-                  aria-pressed={accepting()}
-                >
-                  <Icon
-                    name="chevron-double-right"
-                    size="small"
-                    class="scale-110"
-                    classList={{ "text-icon-success-base": accepting() }}
-                  />
-                </Button>
-              </TooltipKeybind>
-            </div>
-
+          <div class="pointer-events-none absolute inset-x-3 bottom-3 flex items-end justify-end gap-3">
             <div class="pointer-events-auto flex items-center gap-2.5">
               <input
                 ref={fileInputRef}

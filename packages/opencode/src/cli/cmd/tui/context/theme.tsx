@@ -4,6 +4,7 @@ import { createEffect, createMemo, onCleanup, onMount } from "solid-js"
 import { createSimpleContext } from "./helper"
 import { Glob } from "@opencode-ai/core/util/glob"
 import aura from "./theme/aura.json" with { type: "json" }
+import aether from "./theme/aether.json" with { type: "json" }
 import ayu from "./theme/ayu.json" with { type: "json" }
 import catppuccin from "./theme/catppuccin.json" with { type: "json" }
 import catppuccinFrappe from "./theme/catppuccin-frappe.json" with { type: "json" }
@@ -87,6 +88,7 @@ export type ThemeJson = {
 }
 
 export const DEFAULT_THEMES: Record<string, ThemeJson> = {
+  aether,
   aura,
   ayu,
   catppuccin,
