@@ -181,8 +181,9 @@ export namespace Worktree {
 
       const git = Effect.fnUntraced(
         function* (args: string[], opts?: { cwd?: string }) {
+          const cmd = args[0] === "fsmonitor--daemon" ? args : ["-c", "core.fsmonitor=false", ...args]
           const handle = yield* spawner.spawn(
-            ChildProcess.make("git", args, { cwd: opts?.cwd, extendEnv: true, stdin: "ignore" }),
+            ChildProcess.make("git", cmd, { cwd: opts?.cwd, extendEnv: true, stdin: "ignore" }),
           )
           const [text, stderr] = yield* Effect.all(
             [Stream.mkString(Stream.decodeText(handle.stdout)), Stream.mkString(Stream.decodeText(handle.stderr))],
@@ -588,7 +589,7 @@ export namespace Worktree {
           (r) => new ResetFailedError({ message: r.stderr || r.text || "Failed to clean submodules" }),
         )
 
-        const status = yield* git(["-c", "core.fsmonitor=false", "status", "--porcelain=v1"], { cwd: worktreePath })
+        const status = yield* git(["status", "--porcelain=v1"], { cwd: worktreePath })
         if (status.code !== 0) {
           throw new ResetFailedError({ message: status.stderr || status.text || "Failed to read git status" })
         }

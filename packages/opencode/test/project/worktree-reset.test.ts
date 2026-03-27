@@ -12,6 +12,28 @@ function withInstance(directory: string, fn: () => Promise<any>) {
   return Instance.provide({ directory, fn })
 }
 
+async function wait(fn: () => Promise<boolean>, timeout = 30_000) {
+  const end = Date.now() + timeout
+  while (Date.now() < end) {
+    if (await fn()) return
+    await Bun.sleep(100)
+  }
+  throw new Error("timed out waiting for worktree bootstrap")
+}
+
+async function make(root: string, name: string) {
+  const info = await withInstance(root, () => Worktree.create({ name }))
+
+  await wait(() =>
+    fs
+      .readFile(path.join(info.directory, "README.md"), "utf8")
+      .then(() => true)
+      .catch(() => false),
+  )
+
+  return info
+}
+
 describe("Worktree.reset", () => {
   afterEach(() => Instance.disposeAll())
 
@@ -23,11 +45,7 @@ describe("Worktree.reset", () => {
     await $`git add README.md`.cwd(root).quiet()
     await $`git commit -m "add readme"`.cwd(root).quiet()
 
-    const info = await withInstance(root, async () => {
-      const info = await Worktree.makeWorktreeInfo(`reset-${Date.now().toString(36)}`)
-      await Worktree.createFromInfo(info)
-      return info
-    })
+    const info = await make(root, `reset-${Date.now().toString(36)}`)
 
     const readme = path.join(info.directory, "README.md")
     const extra = path.join(info.directory, `extra-${Date.now().toString(36)}.txt`)
@@ -51,11 +69,7 @@ describe("Worktree.reset", () => {
     await $`git add README.md`.cwd(root).quiet()
     await $`git commit -m "add readme"`.cwd(root).quiet()
 
-    const info = await withInstance(root, async () => {
-      const info = await Worktree.makeWorktreeInfo(`reset-fsmonitor-${Date.now().toString(36)}`)
-      await Worktree.createFromInfo(info)
-      return info
-    })
+    const info = await make(root, `reset-fsmonitor-${Date.now().toString(36)}`)
 
     const readme = path.join(info.directory, "README.md")
     const extra = path.join(info.directory, `extra-${Date.now().toString(36)}.txt`)

@@ -2,7 +2,7 @@ import { DataProvider } from "@opencode-ai/ui/context"
 import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
-import { createEffect, createMemo, on, type ParentProps, Show } from "solid-js"
+import { createEffect, createMemo, type ParentProps, Show } from "solid-js"
 import { useLayout } from "@/context/layout"
 import { useLanguage } from "@/context/language"
 import { LocalProvider } from "@/context/local"
@@ -19,14 +19,9 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
   const sync = useSync()
   const slug = createMemo(() => base64Encode(props.directory))
 
-  createEffect(
-    on(
-      () => sync.data.path.worktree,
-      (worktree) => {
-        syncProject(sync.data.path.directory, worktree, layout.projects.open)
-      },
-    ),
-  )
+  createEffect(() => {
+    syncProject(sync.data.path.directory, sync.data.path.worktree, layout.projects.open)
+  })
 
   createEffect(() => {
     const next = sync.data.path.directory
