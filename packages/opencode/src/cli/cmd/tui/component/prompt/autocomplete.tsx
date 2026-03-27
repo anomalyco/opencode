@@ -14,6 +14,7 @@ import { Locale } from "@/util/locale"
 import type { PromptInfo } from "./history"
 import { useFrecency } from "./frecency"
 
+
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
   return hashIndex !== -1 ? input.substring(0, hashIndex) : input
@@ -81,6 +82,7 @@ export function Autocomplete(props: {
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
   const frecency = useFrecency()
+  let directorySelecting = false
 
   const [store, setStore] = createStore({
     index: 0,
@@ -449,6 +451,7 @@ export function Autocomplete(props: {
 
   function select() {
     const selected = options()[store.selected]
+
     if (!selected) return
     hide()
     selected.onSelect?.()
@@ -457,6 +460,8 @@ export function Autocomplete(props: {
   function expandDirectory() {
     const selected = options()[store.selected]
     if (!selected) return
+
+    directorySelecting = true
 
     const input = props.input()
     const currentCursorOffset = input.cursorOffset
@@ -485,6 +490,7 @@ export function Autocomplete(props: {
 
   function hide() {
     const text = props.input().plainText
+    directorySelecting = false
     if (store.visible === "/" && !text.endsWith(" ") && text.startsWith("/")) {
       const cursor = props.input().logicalCursor
       props.input().deleteRange(0, 0, cursor.row, cursor.col)
@@ -504,11 +510,16 @@ export function Autocomplete(props: {
       },
       onInput(value) {
         if (store.visible) {
+          const range = props.input().getTextRange(store.index, props.input().cursorOffset)
+          const hasSpace = range.match(/\s/)
+          // When directorySelecting, allow spaces within paths but hide on trailing space
+          const spaceHides = directorySelecting ? range.endsWith(" ") : hasSpace
           if (
             // Typed text before the trigger
             props.input().cursorOffset <= store.index ||
-            // There is a space between the trigger and the cursor
-            props.input().getTextRange(store.index, props.input().cursorOffset).match(/\s/) ||
+            // Space handling: in directory mode only trailing space closes,
+            // otherwise any space closes
+            spaceHides ||
             // "/<command>" is not the sole content
             (store.visible === "/" && value.match(/^\S+\s+\S+\s*$/))
           ) {
@@ -535,7 +546,9 @@ export function Autocomplete(props: {
 
         const between = text.slice(idx)
         const before = idx === 0 ? undefined : value[idx - 1]
-        if ((before === undefined || /\s/.test(before)) && !between.match(/\s/)) {
+        // When directorySelecting, allow spaces in paths (but not trailing space)
+        const noBlockingSpace = directorySelecting ? !between.endsWith(" ") : !between.match(/\s/)
+        if ((before === undefined || /\s/.test(before)) && noBlockingSpace) {
           show("@")
           setStore("index", idx)
         }
