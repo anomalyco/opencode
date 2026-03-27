@@ -97,7 +97,7 @@ Pre-built binaries for every platform — [**latest release →**](https://githu
 | Linux (x64)           | [`cobuilder-linux-x64.tar.gz`](https://github.com/CobuilderLabs/opencode/releases/latest/download/cobuilder-linux-x64.tar.gz)     |
 | Linux (ARM64)         | [`cobuilder-linux-arm64.tar.gz`](https://github.com/CobuilderLabs/opencode/releases/latest/download/cobuilder-linux-arm64.tar.gz) |
 
-> **Desktop App (BETA)** — Windows and Linux installers on the [latest release →](https://github.com/CobuilderLabs/opencode/releases/latest). macOS coming soon.
+> **Desktop App (BETA)** — Windows and Linux installers on the [latest release →](https://github.com/CobuilderLabs/opencode/releases/latest). macOS desktop coming soon — use the CLI binary above in the meantime.
 
 **Install to a custom path:**
 
