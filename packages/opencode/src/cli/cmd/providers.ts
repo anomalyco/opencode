@@ -313,7 +313,7 @@ export const ProvidersLoginCommand = cmd({
         const providers = await ModelsDev.get().then((x) => {
           const filtered: Record<string, (typeof x)[string]> = {}
           for (const [key, value] of Object.entries(x)) {
-            if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) {
+            if (!disabled.has(key)) {
               filtered[key] = value
             }
           }
@@ -333,7 +333,7 @@ export const ProvidersLoginCommand = cmd({
           hooks: await Plugin.list(),
           existingProviders: providers,
           disabled,
-          enabled,
+          enabled: undefined,
           providerNames: Object.fromEntries(Object.entries(config.provider ?? {}).map(([id, p]) => [id, p.name])),
         })
         const options = [
