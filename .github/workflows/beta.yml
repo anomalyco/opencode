@@ -5,6 +5,10 @@ on:
   schedule:
     - cron: "0 * * * *"
 
+concurrency:
+  group: beta-sync
+  cancel-in-progress: true
+
 jobs:
   sync:
     runs-on: blacksmith-4vcpu-ubuntu-2404
