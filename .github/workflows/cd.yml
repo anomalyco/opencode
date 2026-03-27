@@ -40,6 +40,13 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
       - name: Get latest CoBuilder tag
         id: latest_tag
         run: |
@@ -130,6 +137,18 @@ jobs:
             --title "CoBuilder ${{ steps.next_version.outputs.display }}" \
             --notes-file /tmp/release-notes.md \
             --latest
+
+      - name: Build and upload CLI + web binaries
+        env:
+          OPENCODE_RELEASE: "1"
+          OPENCODE_VERSION: ${{ steps.next_version.outputs.semver }}
+          OPENCODE_CHANNEL: latest
+          COBUILDER_RELEASE_TAG: ${{ steps.next_version.outputs.tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: CobuilderLabs/opencode
+        run: |
+          cd packages/opencode
+          bun run build
 
   desktop-linux:
     name: Desktop (Linux)
