@@ -132,7 +132,7 @@ export async function handler(
         retry,
         stickyProvider,
       )
-      validateModelSettings(authInfo)
+      validateModelSettings(billingSource, authInfo)
       updateProviderKey(authInfo, providerInfo)
       logger.metric({ provider: providerInfo.id })
 
@@ -768,9 +768,10 @@ export async function handler(
     return "balance"
   }
 
-  function validateModelSettings(authInfo: AuthInfo) {
-    if (!authInfo) return
-    if (authInfo.isDisabled) throw new ModelError(t("zen.api.error.modelDisabled"))
+  function validateModelSettings(billingSource: BillingSource, authInfo: AuthInfo) {
+    if (billingSource === "lite") return
+    if (billingSource === "anonymous") return
+    if (authInfo!.isDisabled) throw new ModelError(t("zen.api.error.modelDisabled"))
   }
 
   function updateProviderKey(authInfo: AuthInfo, providerInfo: ProviderInfo) {
