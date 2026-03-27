@@ -246,6 +246,7 @@
         "electron": "40.4.1",
         "electron-builder": "^26",
         "electron-vite": "^5",
+        "picocolors": "^1",
         "typescript": "~5.6.2",
         "vite": "catalog:",
       },
