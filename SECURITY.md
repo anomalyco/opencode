@@ -50,12 +50,19 @@ Inside writable workspace roots, `.git` and `.opencode` are always write-protect
 - **`workspace-write`** (default) — the sandboxed process can read system paths and read/write within the project workspace.
 - **`read-only`** — the sandboxed process can read, and writes are limited to `/tmp`, `/private/tmp`, and explicitly configured extra write roots.
 
+There is no `danger-full-access` or unrestricted mode. Even the most permissive built-in preset (`network`) still enforces filesystem boundaries and protected roots.
+
 #### Configuration options
 
 All options live under `experimental.sandbox` in `opencode.json`:
 
 - **`preset`** — selects a built-in or custom preset by name. Defaults to `default`.
 - **`presets`** — defines custom presets keyed by name. Each preset can specify `mode`, `network`, `protected_roots`, `permission`, `extra_read_roots`, and `extra_write_roots`.
+- **`mode`** — overrides the preset mode (`workspace-write` or `read-only`).
+- **`network`** — overrides the preset network policy (`true` or `false`).
+- **`protected_roots`** — overrides the preset list of write-protected directory basenames (defaults to `.git` and `.opencode`).
+- **`extra_read_roots`** — additional absolute paths the sandbox allows reading.
+- **`extra_write_roots`** — additional absolute paths the sandbox allows writing.
 - **`excluded_commands`** — a pre-spawn deny list of command prefixes. Matched commands are blocked before execution on all covered surfaces except LSP launches.
 - **`fail_if_unavailable`** — when `true`, hard-fails activation if sandboxing is enabled but `sandbox-exec` is missing or the platform is unsupported.
 - **`extra_deny_paths`** — extends the default set of denied paths (secrets directories like `.ssh`, `.gnupg`, `.aws`, etc.).
