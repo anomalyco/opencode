@@ -63,12 +63,19 @@ const parser = lazy(async () => {
 // TODO: we may wanna rename this tool so it works better on other shells
 export const BashTool = Tool.define("bash", async () => {
   const shell = Shell.acceptable()
+  const cfg = await SandboxSpawn.settings()
   log.info("bash tool using shell", { shell })
 
   return {
     description: DESCRIPTION.replaceAll("${directory}", Instance.directory)
       .replaceAll("${maxLines}", String(Truncate.MAX_LINES))
-      .replaceAll("${maxBytes}", String(Truncate.MAX_BYTES)),
+      .replaceAll("${maxBytes}", String(Truncate.MAX_BYTES))
+      .replaceAll(
+        "${unsandboxed}",
+        cfg.allow_unsandboxed_retry
+          ? "\n\nIf you know a command needs to run outside the sandbox before the first attempt, put `# opencode:unsandboxed <reason>` on the first non-empty line of the command. This asks for the separate `bash:unsandboxed` permission before execution while keeping the normal bash tool schema unchanged."
+          : "",
+      ),
     parameters: z.object({
       command: z.string().describe("The command to execute"),
       timeout: z.number().describe("Optional timeout in milliseconds").optional(),
@@ -85,16 +92,17 @@ export const BashTool = Tool.define("bash", async () => {
         ),
     }),
     async execute(params, ctx) {
+      const request = SandboxSpawn.directive(params.command)
+      const command = request.command
       const cwd = params.workdir || Instance.directory
       if (params.timeout !== undefined && params.timeout < 0) {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
       const timeout = params.timeout ?? DEFAULT_TIMEOUT
-      const tree = await parser().then((p) => p.parse(params.command))
+      const tree = await parser().then((p) => p.parse(command))
       if (!tree) {
         throw new Error("Failed to parse command")
       }
-      const cfg = await SandboxSpawn.settings()
       const directories = new Set<string>()
       if (!Instance.containsPath(cwd)) directories.add(cwd)
       const patterns = new Set<string>()
@@ -182,7 +190,7 @@ export const BashTool = Tool.define("bash", async () => {
       const root = Instance.worktree === "/" ? Instance.directory : Instance.worktree
       const base = {
         file: shell,
-        args: args(shell, params.command),
+        args: args(shell, command),
       }
       const cmd = await SandboxRuntime.plan({
         ...base,
@@ -213,7 +221,7 @@ export const BashTool = Tool.define("bash", async () => {
               detached: process.platform !== "win32",
               windowsHide: process.platform === "win32",
             })
-          : spawn(params.command, {
+          : spawn(command, {
               shell,
               cwd,
               env,
@@ -293,24 +301,61 @@ export const BashTool = Tool.define("bash", async () => {
         }
       }
 
-      let retried = false
-      let reason: SandboxSpawn.RetryReason | undefined
-      let result = await run(cmd.active ? cmd : undefined)
-
-      reason = SandboxSpawn.retryReason({
-        active: cmd.active,
-        code: result.code,
-        stderr: result.stderr,
-        allow_network: cmd.diag.allow_network,
-        command: params.command,
-      })
-
-      if (cfg.allow_unsandboxed_retry && !result.timedOut && !result.aborted && reason) {
+      let proactive = false
+      let rejected = false
+      let asked = false
+      if (command !== params.command && cfg.allow_unsandboxed_retry && cmd.active) {
+        asked = true
         try {
           await ctx.ask({
             permission: "bash:unsandboxed",
-            patterns: [params.command],
-            always: [params.command],
+            patterns: [command],
+            always: [command],
+            metadata: {
+              reason: "explicit_request" satisfies SandboxSpawn.UnsandboxedReason,
+              detail: request.detail,
+            },
+          })
+          proactive = true
+        } catch (error) {
+          rejected = true
+          log.info("proactive unsandboxed request rejected", { error })
+        }
+      }
+
+      let retried = false
+      let reason: SandboxSpawn.RetryReason | undefined
+      let result
+      try {
+        result = await run(proactive ? SandboxSpawn.unwrap(cmd) : cmd.active ? cmd : undefined)
+      } catch (error) {
+        if (rejected && !proactive && cmd.active) {
+          const message = error instanceof Error ? error.message : String(error)
+          throw new Error(
+            `Explicit unsandboxed request was rejected; sandboxed fallback failed before command start: ${message}`,
+            error instanceof Error ? { cause: error } : undefined,
+          )
+        }
+        throw error
+      }
+
+      if (!proactive) {
+        reason = SandboxSpawn.retryReason({
+          active: cmd.active,
+          code: result.code,
+          stderr: result.stderr,
+          allow_network: cmd.diag.allow_network,
+          command,
+        })
+      }
+
+      if (cfg.allow_unsandboxed_retry && !asked && !result.timedOut && !result.aborted && reason) {
+        asked = true
+        try {
+          await ctx.ask({
+            permission: "bash:unsandboxed",
+            patterns: [command],
+            always: [command],
             metadata: {
               reason,
             },
@@ -329,6 +374,10 @@ export const BashTool = Tool.define("bash", async () => {
       }
 
       const notes: string[] = []
+
+      if (rejected) {
+        notes.push("Explicit unsandboxed request was rejected; command ran in sandbox")
+      }
 
       if (retried) {
         notes.push(

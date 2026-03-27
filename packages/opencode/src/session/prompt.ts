@@ -1661,12 +1661,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         process.platform === "win32" ? path.win32.basename(shell, ".exe") : path.basename(shell)
       ).toLowerCase()
 
+      const request = SandboxSpawn.directive(input.command)
+      const command = request.command
       const invocations: Record<string, { args: string[] }> = {
         nu: {
-          args: ["-c", input.command],
+          args: ["-c", command],
         },
         fish: {
-          args: ["-c", input.command],
+          args: ["-c", command],
         },
         zsh: {
           args: [
@@ -1675,7 +1677,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             `
               [[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
               [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
-              eval ${JSON.stringify(input.command)}
+              eval ${JSON.stringify(command)}
             `,
           ],
         },
@@ -1686,47 +1688,47 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             `
               shopt -s expand_aliases
               [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
-              eval ${JSON.stringify(input.command)}
+              eval ${JSON.stringify(command)}
             `,
           ],
         },
         cmd: {
-          args: ["/c", input.command],
+          args: ["/c", command],
         },
         powershell: {
-          args: ["-NoProfile", "-Command", input.command],
+          args: ["-NoProfile", "-Command", command],
         },
         pwsh: {
-          args: ["-NoProfile", "-Command", input.command],
+          args: ["-NoProfile", "-Command", command],
         },
         "": {
-          args: ["-c", `${input.command}`],
+          args: ["-c", `${command}`],
         },
       }
       const clean: Record<string, { args: string[] }> = {
         nu: {
-          args: ["-c", input.command],
+          args: ["-c", command],
         },
         fish: {
-          args: ["-c", input.command],
+          args: ["-c", command],
         },
         zsh: {
-          args: ["-f", "-c", input.command],
+          args: ["-f", "-c", command],
         },
         bash: {
-          args: ["--noprofile", "--norc", "-c", input.command],
+          args: ["--noprofile", "--norc", "-c", command],
         },
         cmd: {
-          args: ["/c", input.command],
+          args: ["/c", command],
         },
         powershell: {
-          args: ["-NoProfile", "-Command", input.command],
+          args: ["-NoProfile", "-Command", command],
         },
         pwsh: {
-          args: ["-NoProfile", "-Command", input.command],
+          args: ["-NoProfile", "-Command", command],
         },
         "": {
-          args: ["-c", `${input.command}`],
+          args: ["-c", `${command}`],
         },
       }
 
@@ -1828,24 +1830,67 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         }
       }
 
-      let retried = false
-      let reason: SandboxSpawn.RetryReason | undefined
-      let result = await run(cmd)
-
-      reason = SandboxSpawn.retryReason({
-        active: plan.active,
-        code: result.code,
-        stderr: result.stderr,
-        allow_network: plan.diag.allow_network,
-        command: input.command,
-      })
-
-      if (cfg.allow_unsandboxed_retry && !result.aborted && reason) {
+      let proactive = false
+      let rejected = false
+      let asked = false
+      if (command !== input.command && cfg.allow_unsandboxed_retry && plan.active) {
+        asked = true
         try {
           await Permission.ask({
             permission: "bash:unsandboxed",
-            patterns: [input.command],
-            always: [input.command],
+            patterns: [command],
+            always: [command],
+            metadata: {
+              reason: "explicit_request" satisfies SandboxSpawn.UnsandboxedReason,
+              detail: request.detail,
+            },
+            sessionID: input.sessionID,
+            tool: {
+              messageID: msg.id,
+              callID: part.callID,
+            },
+            ruleset: Permission.merge(agent.permission, session.permission ?? []),
+          })
+          proactive = true
+        } catch (error) {
+          rejected = true
+          log.info("proactive unsandboxed request rejected", { error, sessionID: input.sessionID })
+        }
+      }
+
+      let retried = false
+      let reason: SandboxSpawn.RetryReason | undefined
+      let result
+      try {
+        result = await run(proactive ? raw : cmd)
+      } catch (error) {
+        if (rejected && !proactive && plan.active) {
+          const message = error instanceof Error ? error.message : String(error)
+          throw new Error(
+            `Explicit unsandboxed request was rejected; sandboxed fallback failed before command start: ${message}`,
+            error instanceof Error ? { cause: error } : undefined,
+          )
+        }
+        throw error
+      }
+
+      if (!proactive) {
+        reason = SandboxSpawn.retryReason({
+          active: plan.active,
+          code: result.code,
+          stderr: result.stderr,
+          allow_network: plan.diag.allow_network,
+          command,
+        })
+      }
+
+      if (cfg.allow_unsandboxed_retry && !asked && !result.aborted && reason) {
+        asked = true
+        try {
+          await Permission.ask({
+            permission: "bash:unsandboxed",
+            patterns: [command],
+            always: [command],
             metadata: {
               reason,
             },
@@ -1871,6 +1916,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }
 
       let output = result.output
+
+      if (rejected) {
+        output +=
+          "\n\n" +
+          ["<metadata>", "Explicit unsandboxed request was rejected; command ran in sandbox", "</metadata>"].join("\n")
+      }
 
       if (retried) {
         output +=

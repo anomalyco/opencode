@@ -241,6 +241,20 @@ describe("sandbox.spawn", () => {
     ).toBeUndefined()
   })
 
+  test("extracts explicit unsandboxed directives from the first non-empty line", () => {
+    expect(SandboxSpawn.directive("# opencode:unsandboxed needs network\ncurl https://example.com")).toEqual({
+      command: "curl https://example.com",
+      detail: "needs network",
+    })
+    expect(SandboxSpawn.directive("\n  # opencode:unsandboxed\ncat foo.txt")).toEqual({
+      command: "\ncat foo.txt",
+      detail: undefined,
+    })
+    expect(SandboxSpawn.directive("echo hi\n# opencode:unsandboxed later")).toEqual({
+      command: "echo hi\n# opencode:unsandboxed later",
+    })
+  })
+
   test("respects the env override at runtime", async () => {
     await using home = await tmpdir()
     await using tmp = await tmpdir({

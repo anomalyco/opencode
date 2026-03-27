@@ -15,10 +15,14 @@ export function SessionPermissionDock(props: {
   const toolDescription = () => {
     let permission = props.request.permission
     if (permission === "bash:unsandboxed") {
-      permission =
-        props.request.metadata?.reason === "possible_network_sandbox_denial"
-          ? "bash_unsandboxed_network"
-          : "bash_unsandboxed"
+      const reason = props.request.metadata?.reason
+      if (reason === "possible_network_sandbox_denial") {
+        permission = "bash_unsandboxed_network"
+      } else if (reason === "explicit_request") {
+        permission = "bash_unsandboxed_explicit"
+      } else {
+        permission = "bash_unsandboxed"
+      }
     }
     const key = `settings.permissions.tool.${permission}.description`
     const value = language.t(key as Parameters<typeof language.t>[0])
