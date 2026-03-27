@@ -115,6 +115,18 @@ At the end of each session, CoBuilder summarizes what happened — files touched
 
 If the CoBuilder server exits unexpectedly, the next launch detects the interrupted session and offers to resume it exactly where it left off. No work is lost. This uses a checkpoint written at each user turn — lightweight, fast, and stored locally.
 
+You can also resume sessions manually:
+
+```bash
+# Resume the last session
+cobuilder --continue
+
+# Resume a specific session by ID
+cobuilder -s <session-id>
+```
+
+The session ID is shown when you exit the TUI: `cobuilder -s ses_xxx`.
+
 ### LSP integration
 
 Language server diagnostics (errors, warnings, type information) flow directly into the AI's context window. The agent sees the same problems your editor sees, in real time.
