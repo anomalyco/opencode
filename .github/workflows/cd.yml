@@ -127,8 +127,6 @@ jobs:
           [[ -n "$DESKTOP" ]]  && NOTES+=$'\n'"## Desktop"$'\n'"${DESKTOP}"$'\n'
           [[ -n "$CORE" ]]     && NOTES+=$'\n'"## Core"$'\n'"${CORE}"$'\n'
           [[ -n "$MISC" ]]     && NOTES+=$'\n'"## Misc"$'\n'"${MISC}"$'\n'
-          NOTES+=$'\n'"**Full Changelog**: https://github.com/CobuilderLabs/opencode/compare/${TAG}...${NEXT_TAG}"
-
           echo "$NOTES" > /tmp/release-notes.md
           cat /tmp/release-notes.md
           echo "Next release: ${NEXT_TAG}"
