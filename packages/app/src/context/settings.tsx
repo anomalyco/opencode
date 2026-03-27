@@ -43,20 +43,45 @@ export interface Settings {
   sounds: SoundSettings
 }
 
-export const monoDefault = "IBM Plex Mono"
-export const sansDefault = "Inter"
+export const monoDefault = "System Mono"
+export const sansDefault = "System Sans"
 
 const monoFallback =
   'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
 const sansFallback = 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
 
-const monoBase = `"${monoDefault}", "IBM Plex Mono Fallback", ${monoFallback}`
-const sansBase = `"${sansDefault}", "Inter Fallback", ${sansFallback}`
+const monoBase = monoFallback
+const sansBase = sansFallback
 const monoKey = "ibm-plex-mono"
+const monoSkip = new Set([monoDefault])
+const sansSkip = new Set([sansDefault])
 
-function input(font: string | undefined, key?: string) {
-  if (!font || font === key || !font.trim()) return ""
-  return font
+function migrate(value: unknown) {
+  if (!value || typeof value !== "object") return value
+  const item = value as {
+    appearance?: {
+      font?: string
+      uiFont?: string
+    }
+  }
+  if (!item.appearance) return value
+  const font = item.appearance.font === monoKey || item.appearance.font === monoDefault ? "" : item.appearance.font
+  const uiFont = item.appearance.uiFont === sansDefault ? "" : item.appearance.uiFont
+  if (font === item.appearance.font && uiFont === item.appearance.uiFont) return value
+  return {
+    ...item,
+    appearance: {
+      ...item.appearance,
+      font,
+      uiFont,
+    },
+  }
+}
+
+function input(font: string | undefined, skip?: Set<string>) {
+  const value = font?.trim()
+  if (!value || skip?.has(value)) return ""
+  return value
 }
 
 function family(font: string) {
@@ -64,26 +89,26 @@ function family(font: string) {
   return `"${font.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`
 }
 
-function stack(font: string | undefined, base: string, key?: string) {
-  const value = input(font, key).trim()
+function stack(font: string | undefined, base: string, skip?: Set<string>) {
+  const value = input(font, skip).trim()
   if (!value) return base
   return `${family(value)}, ${base}`
 }
 
 export function monoInput(font: string | undefined) {
-  return input(font, monoKey)
+  return input(font, monoSkip)
 }
 
 export function sansInput(font: string | undefined) {
-  return input(font)
+  return input(font, sansSkip)
 }
 
 export function monoFontFamily(font: string | undefined) {
-  return stack(font, monoBase, monoKey)
+  return stack(font, monoBase, monoSkip)
 }
 
 export function sansFontFamily(font: string | undefined) {
-  return stack(font, sansBase)
+  return stack(font, sansBase, sansSkip)
 }
 
 const defaultSettings: Settings = {
@@ -129,7 +154,10 @@ function withFallback<T>(read: () => T | undefined, fallback: T) {
 export const { use: useSettings, provider: SettingsProvider } = createSimpleContext({
   name: "Settings",
   init: () => {
-    const [store, setStore, _, ready] = persisted("settings.v3", createStore<Settings>(defaultSettings))
+    const [store, setStore, _, ready] = persisted(
+      { key: "settings.v3", migrate },
+      createStore<Settings>(defaultSettings),
+    )
 
     createEffect(() => {
       if (typeof document === "undefined") return

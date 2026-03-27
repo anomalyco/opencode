@@ -159,7 +159,7 @@ test("typing a code font with spaces persists and updates CSS variable", async (
   const dialog = await openSettings(page)
   const input = dialog.locator(settingsCodeFontSelector)
   await expect(input).toBeVisible()
-  await expect(input).toHaveAttribute("placeholder", "IBM Plex Mono")
+  await expect(input).toHaveAttribute("placeholder", "System Mono")
 
   const initialFontFamily = await page.evaluate(() =>
     getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim(),
@@ -167,7 +167,7 @@ test("typing a code font with spaces persists and updates CSS variable", async (
   const initialUIFamily = await page.evaluate(() =>
     getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans").trim(),
   )
-  expect(initialFontFamily).toContain("IBM Plex Mono")
+  expect(initialFontFamily).toContain("ui-monospace")
 
   const next = "Test Mono"
 
@@ -206,7 +206,7 @@ test("typing a UI font with spaces persists and updates CSS variable", async ({ 
   const dialog = await openSettings(page)
   const input = dialog.locator(settingsUIFontSelector)
   await expect(input).toBeVisible()
-  await expect(input).toHaveAttribute("placeholder", "Inter")
+  await expect(input).toHaveAttribute("placeholder", "System Sans")
 
   const initialFontFamily = await page.evaluate(() =>
     getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans").trim(),
@@ -214,7 +214,7 @@ test("typing a UI font with spaces persists and updates CSS variable", async ({ 
   const initialCodeFamily = await page.evaluate(() =>
     getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim(),
   )
-  expect(initialFontFamily).toContain("Inter")
+  expect(initialFontFamily).toContain("ui-sans-serif")
 
   const next = "Test Sans"
 
@@ -274,7 +274,7 @@ test("clearing the code font field restores the default placeholder and stack", 
   await input.clear()
   await input.press("Space")
   await expect(input).toHaveValue("")
-  await expect(input).toHaveAttribute("placeholder", "IBM Plex Mono")
+  await expect(input).toHaveAttribute("placeholder", "System Mono")
 
   await expect
     .poll(async () => {
@@ -292,7 +292,7 @@ test("clearing the code font field restores the default placeholder and stack", 
   const fontFamily = await page.evaluate(() =>
     getComputedStyle(document.documentElement).getPropertyValue("--font-family-mono").trim(),
   )
-  expect(fontFamily).toContain("IBM Plex Mono")
+  expect(fontFamily).toContain("ui-monospace")
   expect(fontFamily).not.toContain("Reset Mono")
 })
 
@@ -323,7 +323,7 @@ test("clearing the UI font field restores the default placeholder and stack", as
   await input.clear()
   await input.press("Space")
   await expect(input).toHaveValue("")
-  await expect(input).toHaveAttribute("placeholder", "Inter")
+  await expect(input).toHaveAttribute("placeholder", "System Sans")
 
   await expect
     .poll(async () => {
@@ -341,7 +341,7 @@ test("clearing the UI font field restores the default placeholder and stack", as
   const fontFamily = await page.evaluate(() =>
     getComputedStyle(document.documentElement).getPropertyValue("--font-family-sans").trim(),
   )
-  expect(fontFamily).toContain("Inter")
+  expect(fontFamily).toContain("ui-sans-serif")
   expect(fontFamily).not.toContain("Reset Sans")
 })
 
