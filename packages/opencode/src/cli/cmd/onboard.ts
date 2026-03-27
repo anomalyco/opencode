@@ -4,11 +4,21 @@ import { UI } from "../ui"
 import { Global } from "../../global"
 import { Filesystem } from "../../util/filesystem"
 import { validateProviderURL } from "../../security"
+import { RECOMMENDED_TOOLS } from "../../mcp/recommended"
 import path from "path"
 
 const NINEROUTER_ID = "9router"
 const NINEROUTER_NAME = "9Router"
 const NINEROUTER_DEFAULT_URL = "http://localhost:20123/v1"
+
+const ALL_SECURITY_MODULES = [
+  { value: "ssrf", label: "SSRF protection", hint: "Blocks requests to internal IPs and cloud metadata endpoints" },
+  { value: "promptInjection", label: "Prompt injection detection", hint: "Scans input for override and jailbreak patterns" },
+  { value: "pathTraversal", label: "Path traversal prevention", hint: "Blocks ../ escapes and NUL byte injection" },
+  { value: "auditLog", label: "Audit log", hint: "SHA-256 chained append-only log of sensitive operations" },
+  { value: "rateLimiting", label: "Rate limiting", hint: "Token-bucket rate limiting in server mode" },
+  { value: "headers", label: "Security headers", hint: "CSP, X-Frame-Options, HSTS, and more" },
+] as const
 
 export const OnboardCommand = cmd({
   command: "onboard",
@@ -45,6 +55,11 @@ export const OnboardCommand = cmd({
     } else {
       await setupApiKeyProvider(providerChoice as string)
     }
+
+    await setupSecurity()
+    await setupRecommendedTools()
+
+    prompts.outro("All set! Run cobuilder to start building.")
   },
 })
 
@@ -93,52 +108,22 @@ async function setup9Router() {
   }
 
   // Step 4: Model selection
-  prompts.log.info("Available models:\n" + modelIds.map((id, i) => `  ${i + 1}. ${id}`).join("\n"))
-
-  const selectionInput = await prompts.text({
-    message: 'Select models (enter numbers separated by commas, or "all")',
-    placeholder: "e.g. 1,2,5 or all",
-    validate: (v) => {
-      if (!v?.trim()) return "Please select at least one model"
-      if (v.trim() === "all") return
-      const parts = v.split(",").map((s) => s.trim())
-      for (const p of parts) {
-        const n = parseInt(p)
-        if (isNaN(n) || n < 1 || n > modelIds.length) return `"${p}" is not a valid number (1–${modelIds.length})`
-      }
-    },
+  const modelChoice = await prompts.select({
+    message: "Select your default model (you can switch anytime with /models)",
+    options: modelIds.map((id) => ({ value: id, label: id })),
   })
 
-  if (prompts.isCancel(selectionInput)) {
+  if (prompts.isCancel(modelChoice)) {
     prompts.cancel("Setup cancelled.")
     process.exit(0)
   }
 
-  const raw = (selectionInput as string).trim()
-  const chosenIds =
-    raw === "all"
-      ? modelIds
-      : raw
-          .split(",")
-          .map((s) => parseInt(s.trim()) - 1)
-          .map((i) => modelIds[i])
-          .filter(Boolean)
-
-  // Step 5: Default model
-  let defaultModelId = chosenIds[0]
-  if (chosenIds.length > 1) {
-    const defaultChoice = await prompts.select({
-      message: "Which model should be your default?",
-      options: chosenIds.map((id) => ({ value: id, label: id })),
-    })
-    if (!prompts.isCancel(defaultChoice)) {
-      defaultModelId = defaultChoice as string
-    }
-  }
+  const defaultModelId = modelChoice as string
 
   // Step 6: Save config
-  const modelConfig: Record<string, { name: string }> = {}
-  for (const id of chosenIds) modelConfig[id] = { name: id }
+  const modelConfig: Record<string, { name: string }> = {
+    [defaultModelId]: { name: defaultModelId },
+  }
 
   const configPath = path.join(Global.Path.config, "opencode.json")
   let existing: any = {}
@@ -169,9 +154,8 @@ async function setup9Router() {
 
   await Filesystem.writeJson(configPath, updated)
 
-  prompts.log.success(`${chosenIds.length} model${chosenIds.length !== 1 ? "s" : ""} registered`)
+  prompts.log.success(`Model registered: ${defaultModelId}`)
   prompts.log.success(`Default model: ${NINEROUTER_ID}/${defaultModelId}`)
-  prompts.outro("All set! Run  opencode  to start coding.")
 }
 
 async function setupApiKeyProvider(providerId: string) {
@@ -207,5 +191,110 @@ async function setupApiKeyProvider(providerId: string) {
   await Filesystem.writeJson(authPath, existing, 0o600)
 
   prompts.log.success(`${name} connected`)
-  prompts.outro("All set! Run  opencode  to start coding.")
+}
+
+async function setupSecurity() {
+  prompts.log.step("Security modules — configure which are active")
+
+  const selected = await prompts.multiselect({
+    message: "Which security modules should be enabled?",
+    options: ALL_SECURITY_MODULES.map((m) => ({ ...m })),
+    initialValues: ALL_SECURITY_MODULES.map((m) => m.value),
+    required: false,
+  })
+
+  if (prompts.isCancel(selected)) return
+
+  const enabledSet = new Set(selected as string[])
+  const allKeys = ALL_SECURITY_MODULES.map((m) => m.value)
+  const disabled = allKeys.filter((k) => !enabledSet.has(k))
+
+  if (disabled.length === 0) {
+    prompts.log.info("All security modules enabled (default)")
+    return
+  }
+
+  const securityConfig: Record<string, { enabled: false }> = {}
+  for (const mod of disabled) {
+    securityConfig[mod] = { enabled: false }
+  }
+
+  const configPath = path.join(Global.Path.config, "opencode.json")
+  let existing: any = {}
+  try {
+    existing = await Filesystem.readJson(configPath)
+  } catch {}
+
+  await Filesystem.writeJson(configPath, {
+    ...existing,
+    security: { ...existing?.security, ...securityConfig },
+  })
+
+  prompts.log.success(
+    `${disabled.length} module${disabled.length !== 1 ? "s" : ""} disabled: ${disabled.join(", ")}`,
+  )
+}
+
+async function setupRecommendedTools() {
+  const configPath = path.join(Global.Path.config, "opencode.json")
+
+  let existing: any = {}
+  try {
+    existing = await Filesystem.readJson(configPath)
+  } catch {}
+
+  const alreadyConfigured = new Set(Object.keys(existing?.mcp ?? {}))
+  const available = RECOMMENDED_TOOLS.filter((t) => !alreadyConfigured.has(t.id))
+
+  if (available.length === 0) {
+    prompts.log.info("Recommended tools — all already installed")
+    return
+  }
+
+  prompts.log.step("Recommended tools — extend CoBuilder with community extensions")
+
+  const selected = await prompts.multiselect({
+    message: "Which recommended tools would you like to install?",
+    options: available.map((t) => ({
+      value: t.id,
+      label: `${t.label}  ${t.source}`,
+      hint: t.hint,
+    })),
+    initialValues: [],
+    required: false,
+  })
+
+  if (prompts.isCancel(selected) || (selected as string[]).length === 0) {
+    prompts.log.info("No tools installed — you can add them anytime via  cobuilder mcp")
+    return
+  }
+
+  const toInstall = RECOMMENDED_TOOLS.filter((t) => (selected as string[]).includes(t.id))
+
+  for (const tool of toInstall) {
+    const spin = prompts.spinner()
+    spin.start(`Installing ${tool.label}…`)
+    try {
+      if (tool.type === "mcp" && tool.mcpConfig) {
+        let cfg: any = {}
+        try { cfg = await Filesystem.readJson(configPath) } catch {}
+        await Filesystem.writeJson(configPath, {
+          ...cfg,
+          mcp: { ...cfg?.mcp, [tool.id]: tool.mcpConfig },
+        })
+        spin.stop(`${tool.label} configured`)
+      } else if (tool.type === "cli" && tool.installCommands) {
+        for (const cmd of tool.installCommands) {
+          const parts = cmd.split(" ")
+          const proc = Bun.spawn(parts, { stdout: "pipe", stderr: "pipe" })
+          const code = await proc.exited
+          if (code !== 0) throw new Error(`Command failed: ${cmd}`)
+        }
+        spin.stop(`${tool.label} installed`)
+      }
+    } catch (e) {
+      spin.stop(`${tool.label} failed`)
+      prompts.log.warn(e instanceof Error ? e.message : `Could not install ${tool.label} — try manually:\n  ${tool.manualInstall}`)
+    }
+  }
 }

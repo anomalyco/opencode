@@ -498,6 +498,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       category: "Agent",
       hidden: true,
       onSelect: () => {
+        if (Flag.COBUILDER_AUTOPILOT) return
         local.agent.move(1)
       },
     },
@@ -518,6 +519,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       category: "Agent",
       hidden: true,
       onSelect: () => {
+        if (Flag.COBUILDER_AUTOPILOT) return
         local.agent.move(-1)
       },
     },
