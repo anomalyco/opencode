@@ -1,7 +1,5 @@
 export const dict: Record<string, string> = {
   "ui.sessionReview.title": "Session changes",
-  "ui.sessionReview.title.git": "Git changes",
-  "ui.sessionReview.title.branch": "Branch changes",
   "ui.sessionReview.title.lastTurn": "Last turn changes",
   "ui.sessionReview.diffStyle.unified": "Unified",
   "ui.sessionReview.diffStyle.split": "Split",

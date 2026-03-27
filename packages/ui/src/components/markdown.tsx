@@ -7,6 +7,7 @@ import morphdom from "morphdom"
 import { checksum } from "@opencode-ai/util/encode"
 import { ComponentProps, createEffect, createResource, createSignal, onCleanup, splitProps } from "solid-js"
 import { isServer } from "solid-js/web"
+import { stream } from "./markdown-stream"
 
 type Entry = {
   hash: string
@@ -229,10 +230,11 @@ function decorate(root: HTMLDivElement, labels: CopyLabels, directory: string, o
   markTextLinks(root, directory, openable)
 }
 
-function setupCodeCopy(root: HTMLDivElement, labels: CopyLabels, onFileOpen?: (input: FileRef) => void) {
+function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels, onFileOpen?: (input: FileRef) => void) {
   const timeouts = new Map<HTMLButtonElement, ReturnType<typeof setTimeout>>()
 
   const updateLabel = (button: HTMLButtonElement) => {
+    const labels = getLabels()
     const copied = button.getAttribute("data-copied") === "true"
     setCopyState(button, labels, copied)
   }
@@ -261,6 +263,7 @@ function setupCodeCopy(root: HTMLDivElement, labels: CopyLabels, onFileOpen?: (i
     const clipboard = navigator?.clipboard
     if (!clipboard) return
     await clipboard.writeText(content)
+    const labels = getLabels()
     setCopyState(button, labels, true)
     const existing = timeouts.get(button)
     if (existing) clearTimeout(existing)
@@ -298,45 +301,57 @@ export function Markdown(
   props: ComponentProps<"div"> & {
     text: string
     cacheKey?: string
+    streaming?: boolean
     class?: string
     classList?: Record<string, boolean>
   },
 ) {
-  const [local, others] = splitProps(props, ["text", "cacheKey", "class", "classList"])
+  const [local, others] = splitProps(props, ["text", "cacheKey", "streaming", "class", "classList"])
   const marked = useMarked()
   const data = useData()
   const i18n = useI18n()
   const [root, setRoot] = createSignal<HTMLDivElement>()
   const [html] = createResource(
-    () => local.text,
-    async (markdown) => {
-      if (isServer) return fallback(markdown)
+    () => ({
+      text: local.text,
+      key: local.cacheKey,
+      streaming: local.streaming ?? false,
+    }),
+    async (src) => {
+      if (isServer) return fallback(src.text)
+      if (!src.text) return ""
 
-      const hash = checksum(markdown)
-      const key = local.cacheKey ?? hash
+      const base = src.key ?? checksum(src.text)
+      return Promise.all(
+        stream(src.text, src.streaming).map(async (block, index) => {
+          const hash = checksum(block.raw)
+          const key = base ? `${base}:${index}:${block.mode}` : hash
 
-      if (key && hash) {
-        const cached = cache.get(key)
-        if (cached && cached.hash === hash) {
-          touch(key, cached)
-          return cached.html
-        }
-      }
+          if (key && hash) {
+            const cached = cache.get(key)
+            if (cached && cached.hash === hash) {
+              touch(key, cached)
+              return cached.html
+            }
+          }
 
-      const next = await marked.parse(markdown)
-      const safe = sanitize(next)
-      if (key && hash) touch(key, { hash, html: safe })
-      return safe
+          const next = await Promise.resolve(marked.parse(block.src))
+          const safe = sanitize(next)
+          if (key && hash) touch(key, { hash, html: safe })
+          return safe
+        }),
+      )
+        .then((list) => list.join(""))
+        .catch(() => fallback(src.text))
     },
-    { initialValue: isServer ? fallback(local.text) : "" },
+    { initialValue: fallback(local.text) },
   )
 
-  let copySetupTimer: ReturnType<typeof setTimeout> | undefined
   let copyCleanup: (() => void) | undefined
 
   createEffect(() => {
     const container = root()
-    const content = html()
+    const content = local.text ? (html.latest ?? html() ?? "") : ""
     if (!container) return
     if (isServer) return
 
@@ -345,42 +360,43 @@ export function Markdown(
       return
     }
 
+    const labels = {
+      copy: i18n.t("ui.message.copy"),
+      copied: i18n.t("ui.message.copied"),
+    }
     const temp = document.createElement("div")
     temp.innerHTML = content
-    decorate(
-      temp,
-      {
-        copy: i18n.t("ui.message.copy"),
-        copied: i18n.t("ui.message.copied"),
-      },
-      data.directory,
-      !!data.openFilePath,
-    )
+    decorate(temp, labels, data.directory, !!data.openFilePath)
 
     morphdom(container, temp, {
       childrenOnly: true,
       onBeforeElUpdated: (fromEl, toEl) => {
+        if (
+          fromEl instanceof HTMLButtonElement &&
+          toEl instanceof HTMLButtonElement &&
+          fromEl.getAttribute("data-slot") === "markdown-copy-button" &&
+          toEl.getAttribute("data-slot") === "markdown-copy-button" &&
+          fromEl.getAttribute("data-copied") === "true"
+        ) {
+          setCopyState(toEl, labels, true)
+        }
         if (fromEl.isEqualNode(toEl)) return false
         return true
       },
     })
 
-    if (copySetupTimer) clearTimeout(copySetupTimer)
-    copySetupTimer = setTimeout(() => {
-      if (copyCleanup) copyCleanup()
-      copyCleanup = setupCodeCopy(
-        container,
-        {
-          copy: i18n.t("ui.message.copy"),
-          copied: i18n.t("ui.message.copied"),
-        },
-        data.openFilePath,
-      )
-    }, 150)
+    if (copyCleanup) copyCleanup()
+    copyCleanup = setupCodeCopy(
+      container,
+      () => ({
+        copy: i18n.t("ui.message.copy"),
+        copied: i18n.t("ui.message.copied"),
+      }),
+      data.openFilePath,
+    )
   })
 
   onCleanup(() => {
-    if (copySetupTimer) clearTimeout(copySetupTimer)
     if (copyCleanup) copyCleanup()
   })
 

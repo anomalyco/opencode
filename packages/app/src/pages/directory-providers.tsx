@@ -1,6 +1,6 @@
 import { DataProvider } from "@opencode-ai/ui/context"
 import { base64Encode } from "@opencode-ai/util/encode"
-import { useLocation, useNavigate } from "@solidjs/router"
+import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { createEffect, createMemo, type ParentProps } from "solid-js"
 import { LocalProvider } from "@/context/local"
 import { OpenFilePathProvider, useOpenFilePath } from "@/context/open-file-path"
@@ -10,6 +10,7 @@ import { SyncProvider, useSync } from "@/context/sync"
 function DirectoryData(props: ParentProps<{ directory: string }>) {
   const location = useLocation()
   const navigate = useNavigate()
+  const params = useParams()
   const sync = useSync()
   const slug = createMemo(() => base64Encode(props.directory))
   const open = useOpenFilePath()
@@ -19,6 +20,12 @@ function DirectoryData(props: ParentProps<{ directory: string }>) {
     if (!next || next === props.directory) return
     const path = location.pathname.slice(slug().length + 1)
     navigate(`/${base64Encode(next)}${path}${location.search}${location.hash}`, { replace: true })
+  })
+
+  createEffect(() => {
+    const id = params.id
+    if (!id) return
+    void sync.session.sync(id)
   })
 
   return (
