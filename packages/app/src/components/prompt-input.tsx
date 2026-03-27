@@ -477,6 +477,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const clearEditor = () => {
     editorRef.innerHTML = ""
+    // Ensure a clean text node exists to break any inherited formatting
+    // (e.g., browser link mode from previously typed URLs)
+    editorRef.appendChild(document.createTextNode(""))
   }
 
   const setEditorText = (text: string) => {
