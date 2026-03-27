@@ -109,6 +109,9 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       get client() {
         return sdk
       },
+      get workspaceID() {
+        return workspaceID
+      },
       directory: props.directory,
       event: emitter,
       fetch: props.fetch ?? fetch,
