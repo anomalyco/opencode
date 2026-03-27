@@ -30,17 +30,14 @@ jobs:
               return;
             }
 
-            // Check if author is a team member or bot
-            if (login === 'opencode-agent[bot]') return;
-            const { data: file } = await github.rest.repos.getContent({
+            // Skip if author has write access (collaborator, member, or owner)
+            const { data: perm } = await github.rest.repos.getCollaboratorPermissionLevel({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              path: '.github/TEAM_MEMBERS',
-              ref: 'main'
-            });
-            const members = Buffer.from(file.content, 'base64').toString().split('\n').map(l => l.trim()).filter(Boolean);
-            if (members.includes(login)) {
-              console.log(`Skipping: ${login} is a team member`);
+              username: login.replace('[bot]', '')
+            }).catch(() => ({ data: { permission: 'none' } }));
+            if (['write', 'admin'].includes(perm.permission)) {
+              console.log(`Skipping: ${login} has write access`);
               return;
             }
 
@@ -177,17 +174,14 @@ jobs:
               return;
             }
 
-            // Check if author is a team member or bot
-            if (login === 'opencode-agent[bot]') return;
-            const { data: file } = await github.rest.repos.getContent({
+            // Skip if author has write access (collaborator, member, or owner)
+            const { data: perm } = await github.rest.repos.getCollaboratorPermissionLevel({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              path: '.github/TEAM_MEMBERS',
-              ref: 'main'
-            });
-            const members = Buffer.from(file.content, 'base64').toString().split('\n').map(l => l.trim()).filter(Boolean);
-            if (members.includes(login)) {
-              console.log(`Skipping: ${login} is a team member`);
+              username: login.replace('[bot]', '')
+            }).catch(() => ({ data: { permission: 'none' } }));
+            if (['write', 'admin'].includes(perm.permission)) {
+              console.log(`Skipping: ${login} has write access`);
               return;
             }
 
