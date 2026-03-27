@@ -1640,6 +1640,15 @@ export default function Page() {
     consumePendingMessage: layout.pendingMessage.consume,
   })
 
+  createEffect(
+    on(
+      () => params.id,
+      (id) => {
+        if (!id) requestAnimationFrame(() => inputRef?.focus())
+      },
+    ),
+  )
+
   onMount(() => {
     document.addEventListener("keydown", handleKeyDown)
   })

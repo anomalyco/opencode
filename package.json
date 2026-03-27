@@ -46,7 +46,7 @@
       "drizzle-kit": "1.0.0-beta.19-d95b7a4",
       "drizzle-orm": "1.0.0-beta.19-d95b7a4",
       "effect": "4.0.0-beta.37",
-      "ai": "5.0.124",
+      "ai": "6.0.138",
       "hono": "4.10.7",
       "hono-openapi": "1.1.2",
       "fuzzysort": "3.1.0",
@@ -113,8 +113,8 @@
   },
   "patchedDependencies": {
     "@standard-community/standard-openapi@0.2.9": "patches/@standard-community%2Fstandard-openapi@0.2.9.patch",
-    "@openrouter/ai-sdk-provider@1.5.4": "patches/@openrouter%2Fai-sdk-provider@1.5.4.patch",
-    "@ai-sdk/xai@2.0.51": "patches/@ai-sdk%2Fxai@2.0.51.patch",
-    "solid-js@1.9.10": "patches/solid-js@1.9.10.patch"
+    "solid-js@1.9.10": "patches/solid-js@1.9.10.patch",
+    "@ai-sdk/provider-utils@4.0.21": "patches/@ai-sdk%2Fprovider-utils@4.0.21.patch",
+    "@ai-sdk/anthropic@3.0.64": "patches/@ai-sdk%2Fanthropic@3.0.64.patch"
   }
 }
