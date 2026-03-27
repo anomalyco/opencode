@@ -20,6 +20,15 @@ const disposal = {
   all: undefined as Promise<void> | undefined,
 }
 
+async function cleanup(directory: string, ctx: Shape, task?: Promise<Shape>) {
+  Log.Default.info("disposing instance", { directory })
+  await context.provide(ctx, async () => {
+    await Promise.all([State.dispose(directory), disposeInstance(directory)])
+  })
+  if (!task || cache.get(directory) === task) cache.delete(directory)
+  emit(directory)
+}
+
 function emit(directory: string) {
   GlobalBus.emit("event", {
     directory,
@@ -128,10 +137,20 @@ export const Instance = {
   },
   async dispose() {
     const directory = Instance.directory
-    Log.Default.info("disposing instance", { directory })
-    await Promise.all([State.dispose(directory), disposeInstance(directory)])
-    cache.delete(directory)
-    emit(directory)
+    await cleanup(directory, context.use())
+  },
+  async disposeDirectory(directory: string) {
+    const key = Filesystem.resolve(directory)
+    const task = cache.get(key)
+    if (!task) return
+    const ctx = await task.catch((error) => {
+      Log.Default.warn("instance dispose failed", { key, error })
+      if (cache.get(key) === task) cache.delete(key)
+      return undefined
+    })
+    if (!ctx) return
+    if (cache.get(key) !== task) return
+    await cleanup(key, ctx, task)
   },
   async disposeAll() {
     if (disposal.all) return disposal.all

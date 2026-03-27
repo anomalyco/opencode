@@ -18,9 +18,16 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
   const params = useParams()
   const sync = useSync()
   const slug = createMemo(() => base64Encode(props.directory))
+  let synced: string | undefined
 
   createEffect(() => {
-    syncProject(sync.data.path.directory, sync.data.path.worktree, layout.projects.open)
+    synced = syncProject(
+      synced,
+      sync.data.path.directory,
+      sync.data.path.worktree,
+      layout.projects.open,
+      layout.projects.close,
+    )
   })
 
   createEffect(() => {

@@ -1,34 +1,55 @@
 import { describe, expect, test } from "bun:test"
-import { syncProject } from "./directory-layout-sync"
+import { projectRoot, syncProject } from "./directory-layout-sync"
 
 describe("directory layout project registration", () => {
-  test("registers a git worktree", () => {
-    const opened: string[] = []
-
-    syncProject("/repo/worktree", "/repo", (directory) => {
-      opened.push(directory)
-    })
-
-    expect(opened).toEqual(["/repo"])
+  test("resolves a git worktree root", () => {
+    expect(projectRoot("/repo/worktree", "/repo")).toBe("/repo")
   })
 
   test("falls back to the directory for non-git projects", () => {
-    const opened: string[] = []
-
-    syncProject("/repo", "/", (directory) => {
-      opened.push(directory)
-    })
-
-    expect(opened).toEqual(["/repo"])
+    expect(projectRoot("/repo", "/")).toBe("/repo")
   })
 
   test("skips missing directories", () => {
-    const opened: string[] = []
+    expect(projectRoot(undefined, undefined)).toBeUndefined()
+  })
 
-    syncProject(undefined, undefined, (directory) => {
+  test("does not reopen the same project twice", () => {
+    const opened: string[] = []
+    let synced = syncProject(undefined, "/repo", "/repo", (directory) => {
       opened.push(directory)
     })
 
-    expect(opened).toEqual([])
+    synced = syncProject(synced, "/repo", "/repo", (directory) => {
+      opened.push(directory)
+    })
+
+    expect(synced).toBe("/repo")
+    expect(opened).toEqual(["/repo"])
+  })
+
+  test("replaces a fallback directory with the resolved worktree root", () => {
+    const opened: string[] = []
+    const closed: string[] = []
+
+    let synced = syncProject(undefined, "/repo/worktree", "/", (directory) => {
+      opened.push(directory)
+    })
+
+    synced = syncProject(
+      synced,
+      "/repo/worktree",
+      "/repo",
+      (directory) => {
+        opened.push(directory)
+      },
+      (directory) => {
+        closed.push(directory)
+      },
+    )
+
+    expect(synced).toBe("/repo")
+    expect(opened).toEqual(["/repo/worktree", "/repo"])
+    expect(closed).toEqual(["/repo/worktree"])
   })
 })

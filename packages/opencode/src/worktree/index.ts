@@ -510,6 +510,7 @@ export namespace Worktree {
         }
 
         const worktreePath = entry.path
+        yield* Effect.promise(() => Instance.disposeDirectory(worktreePath))
         yield* stopFsmonitor(worktreePath)
 
         const remoteList = yield* git(["remote"], { cwd: Instance.worktree })
