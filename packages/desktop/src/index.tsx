@@ -40,12 +40,22 @@ import { Channel } from "@tauri-apps/api/core"
 import { commands, type InitStep } from "./bindings"
 import { createMenu } from "./menu"
 
+const startupClock = typeof performance === "object" ? performance.now() : Date.now()
+const startupSeen = new Set<string>()
+
+function profile(phase: string, detail?: string) {
+  if (startupSeen.has(phase)) return Promise.resolve()
+  startupSeen.add(phase)
+  return commands.recordStartupProfile("frontend", phase, detail ?? null, performance.now() - startupClock).catch(() => {})
+}
+
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
   throw new Error(t("error.dev.rootNotFound"))
 }
 
 void initI18n()
+void profile("entry.module")
 
 document.documentElement.dataset.platform = "desktop"
 
@@ -74,7 +84,13 @@ function startupShell() {
   }
 
   const onReady = () => complete()
+  const onStartup = (event: Event) => {
+    const next = event.type === "opencode:startup-ready" ? "signal.ready" : "signal.interactive"
+    void profile(next)
+  }
   window.addEventListener(startupReadyEvent, onReady, { once: true })
+  window.addEventListener("opencode:startup-ready", onStartup)
+  window.addEventListener(startupReadyEvent, onStartup)
   const fallback = window.setTimeout(() => {
     complete()
   }, 12000)
@@ -124,6 +140,8 @@ function startupShell() {
     if (state.hidden) return
     state.hidden = true
     window.removeEventListener(startupReadyEvent, onReady)
+    window.removeEventListener("opencode:startup-ready", onStartup)
+    window.removeEventListener(startupReadyEvent, onStartup)
     window.clearTimeout(fallback)
     app.classList.add("is-ready")
     root.dataset.phase = "ready"
@@ -786,6 +804,7 @@ render(() => {
   }
 
   onMount(() => {
+    void profile("app.mount")
     document.addEventListener("click", handleClick)
     onCleanup(() => {
       document.removeEventListener("click", handleClick)
@@ -797,15 +816,23 @@ render(() => {
   const ready = () => !!sidecar() && !locale.loading
 
   createEffect(() => {
+    if (!ready()) return
+    void profile("app.ready")
+  })
+
+  createEffect(() => {
     if (!shell) return
     if (!sidecar()) {
+      void profile("phase.backend")
       shell.show("backend")
       return
     }
     if (!boot()) {
+      void profile("phase.project")
       shell.show("project")
       return
     }
+    void profile("phase.session")
     shell.show("session")
   })
 

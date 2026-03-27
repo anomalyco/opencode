@@ -1,0 +1,237 @@
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "defs": {
+    "ivory": "#FAF9F5",
+    "linen": "#F5F0E8",
+    "parchment": "#EDE8DF",
+    "sand": "#E5DFD4",
+    "warmGray": "#D8D4CF",
+    "stone": "#9C8E7A",
+    "driftwood": "#6B5F4E",
+    "espresso": "#3A3630",
+    "bark": "#262320",
+    "charcoal": "#201D19",
+    "inkBlack": "#1A1714",
+    "deepInk": "#171411",
+    "clay": "#C15F3C",
+    "clayLight": "#D97757",
+    "terracotta": "#BC5215",
+    "amber": "#DA702C",
+    "gold": "#D0A215",
+    "goldDark": "#AD8301",
+    "sage": "#879A39",
+    "sageDark": "#66800B",
+    "teal": "#3AA99F",
+    "tealDark": "#24837B",
+    "blue": "#4385BE",
+    "blueDark": "#205EA6",
+    "violet": "#8B7EC8",
+    "violetDark": "#5E409D",
+    "rose": "#CE5D97",
+    "roseDark": "#A02F6F",
+    "red": "#D14D41",
+    "redDark": "#AF3029"
+  },
+  "theme": {
+    "primary": {
+      "dark": "clayLight",
+      "light": "clay"
+    },
+    "secondary": {
+      "dark": "blue",
+      "light": "blueDark"
+    },
+    "accent": {
+      "dark": "violet",
+      "light": "violetDark"
+    },
+    "error": {
+      "dark": "red",
+      "light": "redDark"
+    },
+    "warning": {
+      "dark": "amber",
+      "light": "terracotta"
+    },
+    "success": {
+      "dark": "sage",
+      "light": "sageDark"
+    },
+    "info": {
+      "dark": "teal",
+      "light": "tealDark"
+    },
+    "text": {
+      "dark": "#E0D8C8",
+      "light": "deepInk"
+    },
+    "textMuted": {
+      "dark": "stone",
+      "light": "driftwood"
+    },
+    "background": {
+      "dark": "inkBlack",
+      "light": "ivory"
+    },
+    "backgroundPanel": {
+      "dark": "charcoal",
+      "light": "linen"
+    },
+    "backgroundElement": {
+      "dark": "bark",
+      "light": "parchment"
+    },
+    "border": {
+      "dark": "espresso",
+      "light": "warmGray"
+    },
+    "borderActive": {
+      "dark": "driftwood",
+      "light": "stone"
+    },
+    "borderSubtle": {
+      "dark": "bark",
+      "light": "sand"
+    },
+    "diffAdded": {
+      "dark": "sage",
+      "light": "sageDark"
+    },
+    "diffRemoved": {
+      "dark": "red",
+      "light": "redDark"
+    },
+    "diffContext": {
+      "dark": "stone",
+      "light": "driftwood"
+    },
+    "diffHunkHeader": {
+      "dark": "blue",
+      "light": "blueDark"
+    },
+    "diffHighlightAdded": {
+      "dark": "sage",
+      "light": "sageDark"
+    },
+    "diffHighlightRemoved": {
+      "dark": "red",
+      "light": "redDark"
+    },
+    "diffAddedBg": {
+      "dark": "#1D2618",
+      "light": "#E8F0DC"
+    },
+    "diffRemovedBg": {
+      "dark": "#2B1A18",
+      "light": "#F5DDD8"
+    },
+    "diffContextBg": {
+      "dark": "charcoal",
+      "light": "linen"
+    },
+    "diffLineNumber": {
+      "dark": "stone",
+      "light": "driftwood"
+    },
+    "diffAddedLineNumberBg": {
+      "dark": "#182015",
+      "light": "#DAE8CC"
+    },
+    "diffRemovedLineNumberBg": {
+      "dark": "#231515",
+      "light": "#E8CCC8"
+    },
+    "markdownText": {
+      "dark": "sand",
+      "light": "deepInk"
+    },
+    "markdownHeading": {
+      "dark": "clayLight",
+      "light": "clay"
+    },
+    "markdownLink": {
+      "dark": "blue",
+      "light": "blueDark"
+    },
+    "markdownLinkText": {
+      "dark": "teal",
+      "light": "tealDark"
+    },
+    "markdownCode": {
+      "dark": "teal",
+      "light": "tealDark"
+    },
+    "markdownBlockQuote": {
+      "dark": "stone",
+      "light": "driftwood"
+    },
+    "markdownEmph": {
+      "dark": "gold",
+      "light": "goldDark"
+    },
+    "markdownStrong": {
+      "dark": "clayLight",
+      "light": "clay"
+    },
+    "markdownHorizontalRule": {
+      "dark": "espresso",
+      "light": "warmGray"
+    },
+    "markdownListItem": {
+      "dark": "amber",
+      "light": "terracotta"
+    },
+    "markdownListEnumeration": {
+      "dark": "teal",
+      "light": "tealDark"
+    },
+    "markdownImage": {
+      "dark": "rose",
+      "light": "roseDark"
+    },
+    "markdownImageText": {
+      "dark": "teal",
+      "light": "tealDark"
+    },
+    "markdownCodeBlock": {
+      "dark": "sand",
+      "light": "deepInk"
+    },
+    "syntaxComment": {
+      "dark": "driftwood",
+      "light": "stone"
+    },
+    "syntaxKeyword": {
+      "dark": "clayLight",
+      "light": "clay"
+    },
+    "syntaxFunction": {
+      "dark": "amber",
+      "light": "terracotta"
+    },
+    "syntaxVariable": {
+      "dark": "blue",
+      "light": "blueDark"
+    },
+    "syntaxString": {
+      "dark": "teal",
+      "light": "tealDark"
+    },
+    "syntaxNumber": {
+      "dark": "violet",
+      "light": "violetDark"
+    },
+    "syntaxType": {
+      "dark": "gold",
+      "light": "goldDark"
+    },
+    "syntaxOperator": {
+      "dark": "stone",
+      "light": "driftwood"
+    },
+    "syntaxPunctuation": {
+      "dark": "stone",
+      "light": "driftwood"
+    }
+  }
+}

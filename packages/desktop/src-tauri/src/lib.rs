@@ -108,6 +108,34 @@ struct InitState {
     current: watch::Receiver<InitStep>,
 }
 
+#[derive(Clone, serde::Serialize, specta::Type, Debug)]
+#[serde(rename_all = "camelCase")]
+struct StartupSample {
+    origin: String,
+    phase: String,
+    native_elapsed_ms: u32,
+    delta_ms: u32,
+    frontend_elapsed_ms: Option<f64>,
+    detail: Option<String>,
+}
+
+struct StartupState {
+    start: Instant,
+    last: Mutex<Instant>,
+    list: Mutex<Vec<StartupSample>>,
+}
+
+impl StartupState {
+    fn new() -> Self {
+        let now = Instant::now();
+        Self {
+            start: now,
+            last: Mutex::new(now),
+            list: Mutex::new(Vec::new()),
+        }
+    }
+}
+
 struct ServerState {
     child: Arc<Mutex<Option<CommandChild>>>,
     hostname: String,
@@ -140,6 +168,75 @@ fn config_root() -> Option<PathBuf> {
     env::var("HOME")
         .ok()
         .map(|dir| PathBuf::from(dir).join(".config").join("opencode"))
+}
+
+fn startup_mark(
+    app: &AppHandle,
+    origin: &str,
+    phase: &str,
+    detail: Option<String>,
+    frontend_elapsed_ms: Option<f64>,
+) -> StartupSample {
+    let Some(state) = app.try_state::<StartupState>() else {
+        let sample = StartupSample {
+            origin: origin.to_string(),
+            phase: phase.to_string(),
+            native_elapsed_ms: 0,
+            delta_ms: 0,
+            frontend_elapsed_ms,
+            detail,
+        };
+
+        tracing::info!(
+            origin,
+            phase,
+            native_elapsed_ms = sample.native_elapsed_ms,
+            delta_ms = sample.delta_ms,
+            frontend_elapsed_ms = ?sample.frontend_elapsed_ms,
+            detail = ?sample.detail,
+            "Startup profile"
+        );
+
+        return sample;
+    };
+
+    let state = state.inner();
+    let now = Instant::now();
+    let native_elapsed_ms = now.duration_since(state.start).as_millis() as u32;
+    let delta_ms = state
+        .last
+        .lock()
+        .map(|mut last| {
+            let delta = now.duration_since(*last).as_millis() as u32;
+            *last = now;
+            delta
+        })
+        .unwrap_or_default();
+
+    let sample = StartupSample {
+        origin: origin.to_string(),
+        phase: phase.to_string(),
+        native_elapsed_ms,
+        delta_ms,
+        frontend_elapsed_ms,
+        detail,
+    };
+
+    if let Ok(mut list) = state.list.lock() {
+        list.push(sample.clone());
+    }
+
+    tracing::info!(
+        origin,
+        phase,
+        native_elapsed_ms = sample.native_elapsed_ms,
+        delta_ms = sample.delta_ms,
+        frontend_elapsed_ms = ?sample.frontend_elapsed_ms,
+        detail = ?sample.detail,
+        "Startup profile"
+    );
+
+    sample
 }
 
 fn push_config_file(
@@ -829,6 +926,32 @@ async fn await_initialization(
 
 #[tauri::command]
 #[specta::specta]
+fn record_startup_profile(
+    app: AppHandle,
+    origin: String,
+    phase: String,
+    detail: Option<String>,
+    frontend_elapsed_ms: Option<f64>,
+) {
+    startup_mark(&app, &origin, &phase, detail, frontend_elapsed_ms);
+}
+
+#[tauri::command]
+#[specta::specta]
+fn list_startup_profile(app: AppHandle) -> Result<Vec<StartupSample>, String> {
+    let state = app
+        .try_state::<StartupState>()
+        .ok_or_else(|| "Startup profile state missing".to_string())?;
+
+    state
+        .list
+        .lock()
+        .map(|list| list.clone())
+        .map_err(|_| "Failed to lock startup profile state".to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
 fn filter_directories(paths: Vec<String>) -> Vec<String> {
     paths
         .into_iter()
@@ -1289,6 +1412,7 @@ pub fn run() {
                     .unwrap_or_default(),
             );
             handle.manage(InitialPathState(Arc::new(Mutex::new(initial_path))));
+            handle.manage(StartupState::new());
 
             let log_dir = app
                 .path()
@@ -1297,6 +1421,7 @@ pub fn run() {
             // Hold the guard in managed state so it lives for the app's lifetime,
             // ensuring all buffered logs are flushed on shutdown.
             handle.manage(logging::init(&log_dir));
+            startup_mark(&handle, "native", "setup.ready", None, None);
 
             builder.mount_events(&handle);
             tauri::async_runtime::spawn(initialize(handle));
@@ -1329,6 +1454,8 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             sync_openclaw_server,
             cli::install_cli,
             await_initialization,
+            record_startup_profile,
+            list_startup_profile,
             server::get_default_server_url,
             server::set_default_server_url,
             server::get_wsl_config,
@@ -1382,6 +1509,7 @@ fn test_export_types() {
 
 async fn initialize(app: AppHandle) {
     tracing::info!("Initializing app");
+    startup_mark(&app, "native", "initialize.start", None, None);
 
     let (init_tx, init_rx) = watch::channel(InitStep::ServerWaiting);
 
@@ -1397,6 +1525,7 @@ async fn initialize(app: AppHandle) {
     tracing::info!("Spawning sidecar on {url}");
     let (child, health_check) =
         server::spawn_local_server(app.clone(), hostname.to_string(), port, password.clone());
+    startup_mark(&app, "native", "sidecar.spawned", Some(url.clone()), None);
 
     publish_bridge(
         &app,
@@ -1407,6 +1536,7 @@ async fn initialize(app: AppHandle) {
         },
     )
     .expect("Failed to publish bridge file");
+    startup_mark(&app, "native", "bridge.published", None, None);
 
     // Make sidecar credentials available immediately (before health check completes)
     let (ready_tx, ready_rx) = oneshot::channel();
@@ -1429,6 +1559,7 @@ async fn initialize(app: AppHandle) {
         .and_then(|s| s.0.lock().ok()?.take());
     MainWindow::create_hidden_with_path(&app, initial_path.as_deref())
         .expect("Failed to create main window");
+    startup_mark(&app, "native", "windows.created", None, None);
 
     // SQLite migration handling:
     // We only do this if the sqlite db doesn't exist, and we're expecting the sidecar to create it.
@@ -1439,6 +1570,7 @@ async fn initialize(app: AppHandle) {
             path = %opencode_db_path().expect("failed to get db path").display(),
             "Sqlite file not found, waiting for it to be generated"
         );
+        startup_mark(&app, "native", "sqlite.waiting", None, None);
 
         let (done_tx, done_rx) = oneshot::channel::<()>();
         let done_tx = Arc::new(Mutex::new(Some(done_tx)));
@@ -1455,30 +1587,47 @@ async fn initialize(app: AppHandle) {
         });
 
         let app = app.clone();
-        tokio::spawn(done_rx.map(async move |_| {
+        tokio::spawn(async move {
+            let _ = done_rx.await;
             app.unlisten(id);
-        }))
+        })
     });
 
     // The loading task waits for SQLite migration (if needed) then for the sidecar health check.
     // The native loading window only covers the pre-webview gap. After that, the main window's
     // HTML startup shell takes over until the first click can react immediately.
     let loading_task = tokio::spawn({
+        let app = app.clone();
         async move {
             if let Some(sqlite_done_rx) = sqlite_done {
                 let _ = sqlite_done_rx.await;
+                startup_mark(&app, "native", "sqlite.ready", None, None);
             }
 
             // Wait for sidecar to become healthy (for loading window progress)
+            startup_mark(&app, "native", "health.waiting", None, None);
             let res = timeout(Duration::from_secs(30), health_check.0).await;
             match res {
-                Ok(Ok(Ok(()))) => tracing::info!("Sidecar health check OK"),
-                Ok(Ok(Err(e))) => tracing::error!("Sidecar health check failed: {e}"),
-                Ok(Err(e)) => tracing::error!("Sidecar health check task failed: {e}"),
-                Err(_) => tracing::error!("Sidecar health check timed out"),
+                Ok(Ok(Ok(()))) => {
+                    tracing::info!("Sidecar health check OK");
+                    startup_mark(&app, "native", "health.ready", None, None);
+                }
+                Ok(Ok(Err(e))) => {
+                    tracing::error!("Sidecar health check failed: {e}");
+                    startup_mark(&app, "native", "health.failed", Some(e), None);
+                }
+                Ok(Err(e)) => {
+                    tracing::error!("Sidecar health check task failed: {e}");
+                    startup_mark(&app, "native", "health.task_failed", Some(e.to_string()), None);
+                }
+                Err(_) => {
+                    tracing::error!("Sidecar health check timed out");
+                    startup_mark(&app, "native", "health.timed_out", None, None);
+                }
             }
 
             tracing::info!("Loading task finished");
+            startup_mark(&app, "native", "loading.task_done", None, None);
         }
     })
     .map_err(|_| ())
@@ -1488,16 +1637,19 @@ async fn initialize(app: AppHandle) {
 
     tracing::info!("Loading done, completing initialisation");
     let _ = init_tx.send(InitStep::Done);
+    startup_mark(&app, "native", "initialize.done", None, None);
 
     tracing::info!("Showing main window after startup loading");
 
     if let Some(window) = app.get_webview_window(MainWindow::LABEL) {
         let _ = window.show();
         let _ = window.set_focus();
+        startup_mark(&app, "native", "main_window.shown", None, None);
     }
 
     sleep(Duration::from_millis(120)).await;
     let _ = loading_window.close();
+    startup_mark(&app, "native", "loading_window.closed", None, None);
 }
 
 fn setup_app(app: &tauri::AppHandle, init_rx: watch::Receiver<InitStep>) {

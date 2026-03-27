@@ -258,10 +258,7 @@ export namespace ProviderTransform {
     }
 
     for (const msg of unique([...system, ...final])) {
-      const useMessageLevelOptions =
-        model.providerID === "anthropic" ||
-        model.providerID.includes("bedrock") ||
-        model.api.npm === "@ai-sdk/amazon-bedrock"
+      const useMessageLevelOptions = model.providerID === "anthropic" || model.providerID.includes("bedrock")
       const shouldUseContentOptions = !useMessageLevelOptions && Array.isArray(msg.content) && msg.content.length > 0
 
       if (shouldUseContentOptions) {
@@ -823,13 +820,11 @@ export namespace ProviderTransform {
     }
 
     if (input.model.api.npm === "@ai-sdk/google" || input.model.api.npm === "@ai-sdk/google-vertex") {
-      if (input.model.capabilities.reasoning) {
-        result["thinkingConfig"] = {
-          includeThoughts: true,
-        }
-        if (input.model.api.id.includes("gemini-3")) {
-          result["thinkingConfig"]["thinkingLevel"] = "high"
-        }
+      result["thinkingConfig"] = {
+        includeThoughts: true,
+      }
+      if (input.model.api.id.includes("gemini-3")) {
+        result["thinkingConfig"]["thinkingLevel"] = "high"
       }
     }
 

@@ -67,6 +67,7 @@ let cli = yargs(hideBin(process.argv))
     choices: ["DEBUG", "INFO", "WARN", "ERROR"],
   })
   .middleware(async (opts) => {
+    const start = Date.now()
     await Log.init({
       print: process.argv.includes("--print-logs"),
       dev: Installation.isLocal(),
@@ -81,6 +82,12 @@ let cli = yargs(hideBin(process.argv))
     process.env.OPENCODE = "1"
     process.env.OPENCODE_PID = String(process.pid)
 
+    Log.create({ service: "startup" }).info("cli.bootstrap", {
+      duration: Date.now() - start,
+      print_logs: process.argv.includes("--print-logs"),
+      level: opts.logLevel ?? (Installation.isLocal() ? "DEBUG" : "INFO"),
+    })
+
     Log.Default.info("opencode", {
       version: Installation.VERSION,
       args: process.argv.slice(2),
@@ -88,6 +95,7 @@ let cli = yargs(hideBin(process.argv))
 
     const marker = path.join(Global.Path.data, "opencode.db")
     if (!(await Filesystem.exists(marker))) {
+      const timer = Log.create({ service: "startup" }).time("sqlite.migration")
       const tty = process.stderr.isTTY
       process.stderr.write("Performing one time database migration, may take a few minutes..." + EOL)
       const width = 36
@@ -115,6 +123,7 @@ let cli = yargs(hideBin(process.argv))
           },
         })
       } finally {
+        timer.stop()
         if (tty) process.stderr.write("\x1b[?25h")
         else {
           process.stderr.write(`sqlite-migration:done${EOL}`)

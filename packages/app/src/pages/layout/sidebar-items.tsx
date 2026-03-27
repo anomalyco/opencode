@@ -121,7 +121,9 @@ const SessionRow = (props: {
       <Show when={props.isWorking() || props.hasPermissions() || props.hasError() || props.unseenCount() > 0}>
         <div
           class="shrink-0 size-6 flex items-center justify-center"
-          style={{ color: props.tint() ?? "var(--icon-interactive-base)" }}
+          style={{
+            color: props.active ? "var(--sidebar-session-accent)" : (props.tint() ?? "var(--icon-interactive-base)"),
+          }}
         >
           <Switch>
             <Match when={props.isWorking()}>
@@ -142,9 +144,10 @@ const SessionRow = (props: {
       <span
         classList={{
           "text-14-regular grow-1 min-w-0 overflow-hidden text-ellipsis truncate transition-colors": true,
-          "text-icon-warning-base font-medium": !!props.active,
+          "font-medium": !!props.active,
           "text-text-weak group-hover/session:text-text-strong": !props.active,
         }}
+        style={props.active ? { color: "var(--sidebar-session-accent)" } : undefined}
       >
         {props.session.title}
       </span>
@@ -320,23 +323,12 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   return (
     <div
       data-session-id={props.session.id}
+      data-component="sidebar-session"
+      data-active={isActive() ? "true" : "false"}
       classList={{
-        "group/session relative flex items-center w-full min-w-0 rounded-lg cursor-default transition-colors pl-2 pr-3": true,
-        "hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[[data-expanded]]:bg-surface-raised-base-hover":
-          !isActive(),
-        "bg-surface-raised-base-hover": isActive(),
+        "group/session relative flex items-center w-full min-w-0 rounded-[22px] cursor-default transition-[background-color,border-color,box-shadow] pl-2 pr-3 border border-transparent": true,
       }}
     >
-      <Show when={isActive()}>
-        <div
-          class="absolute top-1/2 -translate-y-1/2 w-[4px] rounded-full"
-          style={{
-            "background-color": tint() ?? "var(--icon-interactive-base)",
-            height: "calc(var(--spacing) * 7)",
-            left: "calc(var(--spacing) * 1)",
-          }}
-        />
-      </Show>
       <div class="min-w-0 grow">
         <Show
           when={hoverEnabled()}

@@ -226,7 +226,7 @@
   :not(pre) > code {
     font-family: var(--font-family-mono);
     font-feature-settings: var(--font-family-mono--font-feature-settings);
-    color: var(--markdown-code, var(--syntax-string));
+    color: #c28db1;
     font-weight: var(--font-weight-medium);
     /* font-size: 13px; */
 
