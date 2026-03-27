@@ -1,4 +1,4 @@
-import { Server } from "virtual:opencode-server"
+import { Server, Log } from "virtual:opencode-server"
 import { DEFAULT_SERVER_URL_KEY, WSL_ENABLED_KEY } from "./constants"
 import { store } from "./store"
 
@@ -30,6 +30,7 @@ export function setWslConfig(config: WslConfig) {
 }
 
 export async function spawnLocalServer(hostname: string, port: number, password: string) {
+  await Log.init({ level: "WARN" })
   const listener = await Server.listen({
     port,
     hostname,

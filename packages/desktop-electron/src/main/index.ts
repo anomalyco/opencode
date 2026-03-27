@@ -8,6 +8,8 @@ import type { Event } from "electron"
 import { app, BrowserWindow, dialog } from "electron"
 import pkg from "electron-updater"
 
+process.env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = "true"
+
 const APP_NAMES: Record<string, string> = {
   dev: "OpenCode Dev",
   beta: "OpenCode Beta",
