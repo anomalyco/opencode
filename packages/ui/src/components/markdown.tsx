@@ -39,8 +39,8 @@ const iconPaths = {
   check: '<path d="M5 11.9657L8.37838 14.7529L15 5.83398" stroke="currentColor" stroke-linecap="square"/>',
 }
 
-function sanitize(html: string) {
-  if (!DOMPurify.isSupported) return ""
+function sanitize(html: string, raw: string) {
+  if (!DOMPurify.isSupported) return fallback(raw)
   return DOMPurify.sanitize(html, config)
 }
 
@@ -264,11 +264,11 @@ export function Markdown(
       }
 
       const next = await marked.parse(markdown)
-      const safe = sanitize(next)
+      const safe = sanitize(next, markdown)
       if (key && hash) touch(key, { hash, html: safe })
       return safe
     },
-    { initialValue: isServer ? fallback(local.text) : "" },
+    { initialValue: isServer ? fallback(local.text) : fallback(local.text) },
   )
 
   let copySetupTimer: ReturnType<typeof setTimeout> | undefined
