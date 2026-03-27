@@ -255,6 +255,9 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Install desktop dependencies with npm (Windows node_modules compat)
+        run: cd packages/desktop-electron && npm install --legacy-peer-deps
+
       - name: Set desktop version
         run: |
           cd packages/desktop-electron
@@ -266,7 +269,7 @@ jobs:
           "
 
       - name: Build
-        run: cd packages/desktop-electron && bun run build
+        run: cd packages/desktop-electron && npx electron-vite build
         env:
           OPENCODE_CHANNEL: prod
 
