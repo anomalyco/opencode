@@ -817,9 +817,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         const shellName = (
           process.platform === "win32" ? path.win32.basename(sh, ".exe") : path.basename(sh)
         ).toLowerCase()
+        const request = SandboxSpawn.directive(input.command)
+        const command = request.command
         const invocations: Record<string, { args: string[] }> = {
-          nu: { args: ["-c", input.command] },
-          fish: { args: ["-c", input.command] },
+          nu: { args: ["-c", command] },
+          fish: { args: ["-c", command] },
           zsh: {
             args: [
               "-l",
@@ -829,7 +831,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 [[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
                 [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
                 cd "$__oc_cwd"
-                eval ${JSON.stringify(input.command)}
+                eval ${JSON.stringify(command)}
               `,
             ],
           },
@@ -842,24 +844,24 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 shopt -s expand_aliases
                 [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
                 cd "$__oc_cwd"
-                eval ${JSON.stringify(input.command)}
+                eval ${JSON.stringify(command)}
               `,
             ],
           },
-          cmd: { args: ["/c", input.command] },
-          powershell: { args: ["-NoProfile", "-Command", input.command] },
-          pwsh: { args: ["-NoProfile", "-Command", input.command] },
-          "": { args: ["-c", input.command] },
+          cmd: { args: ["/c", command] },
+          powershell: { args: ["-NoProfile", "-Command", command] },
+          pwsh: { args: ["-NoProfile", "-Command", command] },
+          "": { args: ["-c", command] },
         }
         const clean: Record<string, { args: string[] }> = {
-          nu: { args: ["-c", input.command] },
-          fish: { args: ["-c", input.command] },
-          zsh: { args: ["-f", "-c", input.command] },
-          bash: { args: ["--noprofile", "--norc", "-c", input.command] },
-          cmd: { args: ["/c", input.command] },
-          powershell: { args: ["-NoProfile", "-Command", input.command] },
-          pwsh: { args: ["-NoProfile", "-Command", input.command] },
-          "": { args: ["-c", input.command] },
+          nu: { args: ["-c", command] },
+          fish: { args: ["-c", command] },
+          zsh: { args: ["-f", "-c", command] },
+          bash: { args: ["--noprofile", "--norc", "-c", command] },
+          cmd: { args: ["/c", command] },
+          powershell: { args: ["-NoProfile", "-Command", command] },
+          pwsh: { args: ["-NoProfile", "-Command", command] },
+          "": { args: ["-c", command] },
         }
 
         const cwd = ctx.directory
@@ -937,21 +939,69 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           return { code: exit.value, stderr }
         })
 
-        let retried = false
-        let result = yield* exec(call)
-
-        if (
-          cfg.allow_unsandboxed_retry &&
-          !aborted &&
-          SandboxSpawn.shouldRetry({ active: sandbox.active, code: result.code, stderr: result.stderr })
-        ) {
+        let proactive = false
+        let rejected = false
+        let asked = false
+        if (command !== input.command && cfg.allow_unsandboxed_retry && sandbox.active) {
+          asked = true
           try {
             yield* permission.ask({
               permission: "bash:unsandboxed",
-              patterns: [input.command],
-              always: [input.command],
+              patterns: [command],
+              always: [command],
               metadata: {
-                reason: "sandbox_denial",
+                reason: "explicit_request" satisfies SandboxSpawn.UnsandboxedReason,
+                detail: request.detail,
+              },
+              sessionID: input.sessionID,
+              tool: {
+                messageID: msg.id,
+                callID: part.callID,
+              },
+              ruleset: Permission.merge(agent.permission, session.permission ?? []),
+            })
+            proactive = true
+          } catch (error) {
+            rejected = true
+            log.info("proactive unsandboxed request rejected", { error, sessionID: input.sessionID })
+          }
+        }
+
+        let retried = false
+        let reason: SandboxSpawn.RetryReason | undefined
+        let result
+        try {
+          result = yield* exec(proactive ? raw : call)
+        } catch (error) {
+          if (rejected && !proactive && sandbox.active) {
+            const message = error instanceof Error ? error.message : String(error)
+            throw new Error(
+              `Explicit unsandboxed request was rejected; sandboxed fallback failed before command start: ${message}`,
+              error instanceof Error ? { cause: error } : undefined,
+            )
+          }
+          throw error
+        }
+
+        if (!proactive) {
+          reason = SandboxSpawn.retryReason({
+            active: sandbox.active,
+            code: result.code,
+            stderr: result.stderr,
+            allow_network: sandbox.diag.allow_network,
+            command,
+          })
+        }
+
+        if (cfg.allow_unsandboxed_retry && !asked && !aborted && reason) {
+          asked = true
+          try {
+            yield* permission.ask({
+              permission: "bash:unsandboxed",
+              patterns: [command],
+              always: [command],
+              metadata: {
+                reason,
               },
               sessionID: input.sessionID,
               tool: {
@@ -972,9 +1022,24 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           }
         }
 
+        if (rejected) {
+          output +=
+            "\n\n" +
+            ["<metadata>", "Explicit unsandboxed request was rejected; command ran in sandbox", "</metadata>"].join(
+              "\n",
+            )
+        }
+
         if (retried) {
           output +=
-            "\n\n" + ["<metadata>", "Retried command without sandbox after sandbox denial", "</metadata>"].join("\n")
+            "\n\n" +
+            [
+              "<metadata>",
+              reason === "possible_network_sandbox_denial"
+                ? "Retried command without sandbox after a possible network-related sandbox failure"
+                : "Retried command without sandbox after sandbox denial",
+              "</metadata>",
+            ].join("\n")
         }
 
         yield* finish

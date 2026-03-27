@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, spyOn, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { BashTool } from "../../src/tool/bash"
+import { SandboxRuntime } from "../../src/sandbox/runtime"
 import { Tool } from "../../src/tool/tool"
 import { Instance } from "../../src/project/instance"
 import { SessionID, MessageID } from "../../src/session/schema"
@@ -262,6 +263,49 @@ describe("tool.bash sandbox", () => {
     })
   })
 
+  test("runs unsandboxed on the first attempt after an explicit request", async () => {
+    if (process.platform !== "darwin") return
+    await using home = await tmpdir({
+      init: async (dir) => {
+        await fs.mkdir(path.join(dir, ".ssh"), { recursive: true })
+        await Bun.write(path.join(dir, ".ssh", "secret"), "secret\n")
+      },
+    })
+    await using tmp = await tmpdir({
+      config: {
+        experimental: {
+          sandbox: {
+            enabled: true,
+            allow_unsandboxed_retry: true,
+          },
+        },
+      },
+    })
+    process.env.HOME = home.path
+    process.env.OPENCODE_TEST_HOME = home.path
+    process.env.SHELL = "/bin/zsh"
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const seen: string[] = []
+        const bash = await BashTool.init()
+        const out = await bash.execute(
+          {
+            command: '# opencode:unsandboxed needs secret access\ncat "$HOME/.ssh/secret"',
+            description: "Requests unsandboxed first attempt",
+          },
+          makeCtx(async (req) => {
+            seen.push(req.permission)
+          }),
+        )
+        expect(seen).toContain("bash:unsandboxed")
+        expect(out.output).toContain("secret\n")
+        expect(out.output).not.toContain("Retried command without sandbox")
+      },
+    })
+  })
+
   test("keeps the original denial when unsandboxed retry is rejected", async () => {
     if (process.platform !== "darwin") return
     await using home = await tmpdir({
@@ -304,6 +348,106 @@ describe("tool.bash sandbox", () => {
         expect(out.output).toContain("Operation not permitted")
       },
     })
+  })
+
+  test("falls back to sandboxed execution when an explicit request is rejected", async () => {
+    if (process.platform !== "darwin") return
+    await using home = await tmpdir({
+      init: async (dir) => {
+        await fs.mkdir(path.join(dir, ".ssh"), { recursive: true })
+        await Bun.write(path.join(dir, ".ssh", "secret"), "secret\n")
+      },
+    })
+    await using tmp = await tmpdir({
+      config: {
+        experimental: {
+          sandbox: {
+            enabled: true,
+            allow_unsandboxed_retry: true,
+          },
+        },
+      },
+    })
+    process.env.HOME = home.path
+    process.env.OPENCODE_TEST_HOME = home.path
+    process.env.SHELL = "/bin/zsh"
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const seen: string[] = []
+        const bash = await BashTool.init()
+        const out = await bash.execute(
+          {
+            command: '# opencode:unsandboxed needs secret access\ncat "$HOME/.ssh/secret"',
+            description: "Rejects proactive unsandboxed request",
+          },
+          makeCtx(async (req) => {
+            seen.push(req.permission)
+            if (req.permission === "bash:unsandboxed") throw new Error("reject")
+          }),
+        )
+        expect(seen.filter((item) => item === "bash:unsandboxed")).toEqual(["bash:unsandboxed"])
+        expect(out.output).not.toContain("secret\n")
+        expect(out.output).toContain("Operation not permitted")
+        expect(out.output).toContain("Explicit unsandboxed request was rejected; command ran in sandbox")
+      },
+    })
+  })
+
+  test("reports sandboxed fallback launch failures after explicit rejection", async () => {
+    if (process.platform !== "darwin") return
+    const plan = spyOn(SandboxRuntime, "plan").mockResolvedValue({
+      active: true,
+      file: "/definitely/missing-sandbox-exec",
+      args: [],
+      diag: {
+        requested: true,
+        active: true,
+        reason: "enabled",
+        wrapper: "/usr/bin/sandbox-exec",
+        cwd: "/tmp/project",
+        mode: "workspace-write",
+        read_roots: [],
+        write_roots: [],
+        unsafe_roots: [],
+        allow_network: false,
+        allow_unix_sockets: false,
+      },
+    })
+    try {
+      await using tmp = await tmpdir({
+        config: {
+          experimental: {
+            sandbox: {
+              enabled: true,
+              allow_unsandboxed_retry: true,
+            },
+          },
+        },
+      })
+      process.env.SHELL = "/bin/zsh"
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const bash = await BashTool.init()
+          await expect(
+            bash.execute(
+              {
+                command: "# opencode:unsandboxed needs network\nwget google.com",
+                description: "Rejects proactive unsandboxed request before spawn",
+              },
+              makeCtx(async (req) => {
+                if (req.permission === "bash:unsandboxed") throw new Error("reject")
+              }),
+            ),
+          ).rejects.toThrow("Explicit unsandboxed request was rejected; sandboxed fallback failed before command start")
+        },
+      })
+    } finally {
+      plan.mockRestore()
+    }
   })
 
   test("preserves timeout and abort through the sandbox wrapper", async () => {

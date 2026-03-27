@@ -34,6 +34,7 @@ import type {
 } from "@opencode-ai/sdk/v2"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@/util"
+import { SandboxSpawn } from "@/sandbox/spawn"
 import type { Tool } from "@/tool"
 import type { ReadTool } from "@/tool/read"
 import type { WriteTool } from "@/tool/write"
@@ -1766,7 +1767,14 @@ function Bash(props: ToolProps<typeof BashTool>) {
   const { theme } = useTheme()
   const sync = useSync()
   const isRunning = createMemo(() => props.part.state.status === "running")
-  const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
+  const output = createMemo(() => {
+    let out = props.metadata.output?.trim() ?? ""
+    out = out
+      .replace(/<bash_metadata>[\s\S]*?(?:<\/bash_metadata>|$)/g, "")
+      .replace(/<metadata>[\s\S]*?(?:<\/metadata>|$)/g, "")
+      .trim()
+    return stripAnsi(out)
+  })
   const [expanded, setExpanded] = createSignal(false)
   const lines = createMemo(() => output().split("\n"))
   const overflow = createMemo(() => lines().length > 10)
@@ -1800,6 +1808,8 @@ function Bash(props: ToolProps<typeof BashTool>) {
     return `# ${desc} in ${wd}`
   })
 
+  const command = createMemo(() => SandboxSpawn.directive(props.input.command ?? "").command)
+
   return (
     <Switch>
       <Match when={props.metadata.output !== undefined}>
@@ -1810,7 +1820,7 @@ function Bash(props: ToolProps<typeof BashTool>) {
           onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
         >
           <box gap={1}>
-            <text fg={theme.text}>$ {props.input.command}</text>
+            <text fg={theme.text}>$ {command()}</text>
             <Show when={output()}>
               <text fg={theme.text}>{limited()}</text>
             </Show>
@@ -1821,8 +1831,8 @@ function Bash(props: ToolProps<typeof BashTool>) {
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool icon="$" pending="Writing command..." complete={props.input.command} part={props.part}>
-          {props.input.command}
+        <InlineTool icon="$" pending="Writing command..." complete={command()} part={props.part}>
+          {command()}
         </InlineTool>
       </Match>
     </Switch>

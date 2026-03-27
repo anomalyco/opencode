@@ -1825,7 +1825,12 @@ ToolRegistry.register({
     const sawPending = pending()
     const text = createMemo(() => {
       const cmd = props.input.command ?? props.metadata.command ?? ""
-      const out = stripAnsi(props.output || props.metadata.output || "")
+      let out = props.output || props.metadata.output || ""
+      out = out
+        .replace(/<bash_metadata>[\s\S]*?(?:<\/bash_metadata>|$)/g, "")
+        .replace(/<metadata>[\s\S]*?(?:<\/metadata>|$)/g, "")
+        .trim()
+      out = stripAnsi(out)
       return `$ ${cmd}${out ? "\n\n" + out : ""}`
     })
     const [copied, setCopied] = createSignal(false)

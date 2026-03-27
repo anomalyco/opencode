@@ -1,7 +1,9 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, spyOn, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
+import { Permission } from "../../src/permission"
 import { Instance } from "../../src/project/instance"
+import { SandboxRuntime } from "../../src/sandbox/runtime"
 import { Session } from "../../src/session"
 import { SessionPrompt } from "../../src/session/prompt"
 import { tmpdir } from "../fixture/fixture"
@@ -10,6 +12,15 @@ const env = {
   HOME: process.env.HOME,
   OPENCODE_TEST_HOME: process.env.OPENCODE_TEST_HOME,
   SHELL: process.env.SHELL,
+}
+
+async function waitForPending(count: number) {
+  for (let i = 0; i < 20; i++) {
+    const list = await Permission.list()
+    if (list.length === count) return list
+    await Bun.sleep(0)
+  }
+  return Permission.list()
 }
 
 afterEach(() => {
@@ -209,5 +220,182 @@ describe("session.prompt sandbox", () => {
         await Session.remove(session.id)
       },
     })
+  })
+
+  test("runs unsandboxed on the first attempt after an explicit request", async () => {
+    if (process.platform !== "darwin") return
+    await using home = await tmpdir({
+      init: async (dir) => {
+        await fs.mkdir(path.join(dir, ".ssh"), { recursive: true })
+        await Bun.write(path.join(dir, ".ssh", "secret"), "secret\n")
+      },
+    })
+    await using tmp = await tmpdir({
+      config: {
+        experimental: {
+          sandbox: {
+            enabled: true,
+            allow_unsandboxed_retry: true,
+          },
+        },
+        permission: {
+          "bash:unsandboxed": "allow",
+        },
+        agent: {
+          build: {
+            model: "openai/gpt-5.2",
+          },
+        },
+      },
+    })
+    process.env.HOME = home.path
+    process.env.OPENCODE_TEST_HOME = home.path
+    process.env.SHELL = "/bin/zsh"
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const out = await SessionPrompt.shell({
+          sessionID: session.id,
+          agent: "build",
+          command: '# opencode:unsandboxed needs secret access\ncat "$HOME/.ssh/secret"',
+        })
+        const part = out.parts[0]
+        if (part.type !== "tool") throw new Error("expected tool part")
+        if (part.state.status !== "completed") throw new Error("expected completed part")
+        expect(part.state.output).toContain("secret\n")
+        expect(part.state.output).not.toContain("Retried command without sandbox")
+        await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("signals when an explicit unsandboxed request is rejected and the command falls back to sandbox", async () => {
+    if (process.platform !== "darwin") return
+    await using home = await tmpdir({
+      init: async (dir) => {
+        await fs.mkdir(path.join(dir, ".ssh"), { recursive: true })
+        await Bun.write(path.join(dir, ".ssh", "secret"), "secret\n")
+      },
+    })
+    await using tmp = await tmpdir({
+      config: {
+        experimental: {
+          sandbox: {
+            enabled: true,
+            allow_unsandboxed_retry: true,
+          },
+        },
+        permission: {
+          "bash:unsandboxed": "ask",
+        },
+        agent: {
+          build: {
+            model: "openai/gpt-5.2",
+          },
+        },
+      },
+    })
+    process.env.HOME = home.path
+    process.env.OPENCODE_TEST_HOME = home.path
+    process.env.SHELL = "/bin/zsh"
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const run = SessionPrompt.shell({
+          sessionID: session.id,
+          agent: "build",
+          command: '# opencode:unsandboxed needs secret access\ncat "$HOME/.ssh/secret"',
+        })
+        const pending = await waitForPending(1)
+        expect(pending).toHaveLength(1)
+        await Permission.reply({
+          requestID: pending[0].id,
+          reply: "reject",
+        })
+        const out = await run
+        const part = out.parts[0]
+        if (part.type !== "tool") throw new Error("expected tool part")
+        if (part.state.status !== "completed") throw new Error("expected completed part")
+        expect(part.state.output).not.toContain("secret\n")
+        expect(part.state.output).toContain("Operation not permitted")
+        expect(part.state.output).toContain("Explicit unsandboxed request was rejected; command ran in sandbox")
+        await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("signals when explicit rejection is followed by sandboxed launch failure", async () => {
+    if (process.platform !== "darwin") return
+    const plan = spyOn(SandboxRuntime, "plan").mockResolvedValue({
+      active: true,
+      file: "/definitely/missing-sandbox-exec",
+      args: [],
+      diag: {
+        requested: true,
+        active: true,
+        reason: "enabled",
+        wrapper: "/usr/bin/sandbox-exec",
+        cwd: "/tmp/project",
+        mode: "workspace-write",
+        read_roots: [],
+        write_roots: [],
+        unsafe_roots: [],
+        allow_network: false,
+        allow_unix_sockets: false,
+      },
+    })
+    try {
+      await using tmp = await tmpdir({
+        config: {
+          experimental: {
+            sandbox: {
+              enabled: true,
+              allow_unsandboxed_retry: true,
+            },
+          },
+          permission: {
+            "bash:unsandboxed": "ask",
+          },
+          agent: {
+            build: {
+              model: "openai/gpt-5.2",
+            },
+          },
+        },
+      })
+      process.env.SHELL = "/bin/zsh"
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const session = await Session.create({})
+          const run = SessionPrompt.shell({
+            sessionID: session.id,
+            agent: "build",
+            command: "# opencode:unsandboxed needs network\nwget google.com",
+          })
+          const pending = await waitForPending(1)
+          expect(pending).toHaveLength(1)
+          await Permission.reply({
+            requestID: pending[0].id,
+            reply: "reject",
+          })
+          const out = await run
+          const part = out.parts[0]
+          if (part.type !== "tool") throw new Error("expected tool part")
+          if (part.state.status !== "completed") throw new Error("expected completed part")
+          expect(part.state.output).toContain(
+            "Explicit unsandboxed request was rejected; sandboxed fallback failed before command start",
+          )
+          await Session.remove(session.id)
+        },
+      })
+    } finally {
+      plan.mockRestore()
+    }
   })
 })

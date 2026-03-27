@@ -184,7 +184,13 @@ function skill(info: ToolProps<typeof SkillTool>) {
 }
 
 function bash(info: ToolProps<typeof BashTool>) {
-  const output = info.part.state.status === "completed" ? info.part.state.output?.trim() : undefined
+  let output = info.part.state.status === "completed" ? info.part.state.output?.trim() : undefined
+  if (output) {
+    output = output
+      .replace(/<bash_metadata>[\s\S]*?(?:<\/bash_metadata>|$)/g, "")
+      .replace(/<metadata>[\s\S]*?(?:<\/metadata>|$)/g, "")
+      .trim()
+  }
   block(
     {
       icon: "$",

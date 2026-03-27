@@ -16,6 +16,12 @@ const bin = "/usr/bin/sandbox-exec"
 export namespace SandboxSpawn {
   export type Mode = SandboxPolicy.Mode
   export type RetryReason = "sandbox_denial" | "possible_network_sandbox_denial"
+  export type UnsandboxedReason = RetryReason | "explicit_request"
+
+  export interface Directive {
+    command: string
+    detail?: string
+  }
 
   export interface Diag {
     requested: boolean
@@ -150,6 +156,19 @@ export namespace SandboxSpawn {
     }
     if (next.length > 0) out.push(next)
     return out
+  }
+
+  export function directive(input: string): Directive {
+    const lines = input.split("\n")
+    const idx = lines.findIndex((item) => item.trim().length > 0)
+    if (idx < 0) return { command: input }
+    const line = lines[idx]
+    const match = line && /^\s*#\s*opencode:\s*unsandboxed(?:\s+(.*))?\s*$/.exec(line)
+    if (!match) return { command: input }
+    return {
+      command: lines.filter((_, i) => i !== idx).join("\n"),
+      detail: match[1]?.trim() || undefined,
+    }
   }
 
   function list(input: string[]): string[][] {

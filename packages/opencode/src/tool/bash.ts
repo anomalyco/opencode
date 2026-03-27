@@ -397,6 +397,7 @@ export const BashTool = Tool.define(
     const fs = yield* AppFileSystem.Service
     const trunc = yield* Truncate.Service
     const plugin = yield* Plugin.Service
+    const sandbox = yield* Effect.promise(() => SandboxSpawn.settings())
 
     const cygpath = Effect.fn("BashTool.cygpath")(function* (shell: string, text: string) {
       const lines = yield* spawner
@@ -485,6 +486,8 @@ export const BashTool = Tool.define(
         shell: string
         name: string
         command: string
+        source: string
+        detail?: string
         cwd: string
         env: NodeJS.ProcessEnv
         timeout: number
@@ -629,21 +632,63 @@ export const BashTool = Tool.define(
       })
 
       let retried = false
-      let result = yield* exec(launch.proc)
+      let proactive = false
+      let rejected = false
+      let asked = false
 
-      if (
-        input.cfg.allow_unsandboxed_retry &&
-        !result.timedOut &&
-        !result.aborted &&
-        SandboxSpawn.shouldRetry({ active: launch.sandbox.active, code: result.code ?? 1, stderr: result.stderr })
-      ) {
+      if (input.command !== input.source && input.cfg.allow_unsandboxed_retry && launch.sandbox.active) {
+        asked = true
         try {
           yield* ctx.ask({
             permission: "bash:unsandboxed",
             patterns: [input.command],
             always: [input.command],
             metadata: {
-              reason: "sandbox_denial",
+              reason: "explicit_request" satisfies SandboxSpawn.UnsandboxedReason,
+              detail: input.detail,
+            },
+          })
+          proactive = true
+        } catch (error) {
+          rejected = true
+          log.info("proactive unsandboxed request rejected", { error })
+        }
+      }
+
+      let reason: SandboxSpawn.RetryReason | undefined
+      let result
+      try {
+        result = yield* exec(proactive ? launch.plain : launch.proc)
+      } catch (error) {
+        if (rejected && !proactive && launch.sandbox.active) {
+          const message = error instanceof Error ? error.message : String(error)
+          throw new Error(
+            `Explicit unsandboxed request was rejected; sandboxed fallback failed before command start: ${message}`,
+            error instanceof Error ? { cause: error } : undefined,
+          )
+        }
+        throw error
+      }
+
+      if (!proactive) {
+        reason = SandboxSpawn.retryReason({
+          active: launch.sandbox.active,
+          code: result.code ?? 1,
+          stderr: result.stderr,
+          allow_network: launch.sandbox.diag.allow_network,
+          command: input.command,
+        })
+      }
+
+      if (input.cfg.allow_unsandboxed_retry && !asked && !result.timedOut && !result.aborted && reason) {
+        asked = true
+        try {
+          yield* ctx.ask({
+            permission: "bash:unsandboxed",
+            patterns: [input.command],
+            always: [input.command],
+            metadata: {
+              reason,
             },
           })
           retried = true
@@ -661,7 +706,16 @@ export const BashTool = Tool.define(
       }
 
       const meta: string[] = []
-      if (retried) meta.push("Retried command without sandbox after sandbox denial")
+      if (rejected) {
+        meta.push("Explicit unsandboxed request was rejected; command ran in sandbox")
+      }
+      if (retried) {
+        meta.push(
+          reason === "possible_network_sandbox_denial"
+            ? "Retried command without sandbox after a possible network-related sandbox failure"
+            : "Retried command without sandbox after sandbox denial",
+        )
+      }
       if (result.timedOut) {
         meta.push(
           `bash tool terminated command after exceeding timeout ${input.timeout} ms. If this command is expected to take longer and is not waiting for interactive input, retry with a larger timeout value in milliseconds.`,
@@ -715,10 +769,18 @@ export const BashTool = Tool.define(
             .replaceAll("${shell}", name)
             .replaceAll("${chaining}", chain)
             .replaceAll("${maxLines}", String(Truncate.MAX_LINES))
-            .replaceAll("${maxBytes}", String(Truncate.MAX_BYTES)),
+            .replaceAll("${maxBytes}", String(Truncate.MAX_BYTES))
+            .replaceAll(
+              "${unsandboxed}",
+              sandbox.allow_unsandboxed_retry
+                ? "\n\nIf you know a command needs to run outside the sandbox before the first attempt, put `# opencode:unsandboxed <reason>` on the first non-empty line of the command. This asks for the separate `bash:unsandboxed` permission before execution while keeping the normal bash tool schema unchanged."
+                : "",
+            ),
           parameters: Parameters,
           execute: (params: z.infer<typeof Parameters>, ctx: Tool.Context) =>
             Effect.gen(function* () {
+              const request = SandboxSpawn.directive(params.command)
+              const command = request.command
               const cwd = params.workdir
                 ? yield* resolvePath(params.workdir, Instance.directory, shell)
                 : Instance.directory
@@ -728,7 +790,7 @@ export const BashTool = Tool.define(
               const timeout = params.timeout ?? DEFAULT_TIMEOUT
               const cfg = yield* Effect.promise(() => SandboxSpawn.settings())
               const ps = PS.has(name)
-              const root = yield* parse(params.command, ps)
+              const root = yield* parse(command, ps)
               const scan = yield* collect(root, cwd, ps, shell, cfg.excluded_commands)
               if (!Instance.containsPath(cwd)) scan.dirs.add(cwd)
               yield* ask(ctx, scan)
@@ -737,7 +799,9 @@ export const BashTool = Tool.define(
                 {
                   shell,
                   name,
-                  command: params.command,
+                  command,
+                  source: params.command,
+                  detail: request.detail,
                   cwd,
                   env: yield* shellEnv(ctx, cwd),
                   timeout,
