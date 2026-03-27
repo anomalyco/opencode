@@ -521,7 +521,7 @@ export namespace File {
         if (!Instance.containsPath(full)) throw new Error("Access denied: path escapes project directory")
 
         if (isImageByExtension(file)) {
-          const exists = yield* appFs.exists(full).pipe(Effect.catch(() => Effect.succeed(false)))
+          const exists = yield* appFs.existsSafe(full)
           if (exists) {
             const bytes = yield* appFs.readFile(full).pipe(Effect.catch(() => Effect.succeed(new Uint8Array())))
             return {
@@ -538,7 +538,7 @@ export namespace File {
 
         if (isBinaryByExtension(file) && !knownText) return { type: "binary" as const, content: "" }
 
-        const exists = yield* appFs.exists(full).pipe(Effect.catch(() => Effect.succeed(false)))
+        const exists = yield* appFs.existsSafe(full)
         if (!exists) return { type: "text" as const, content: "" }
 
         const mimeType = Filesystem.mimeType(full)
@@ -605,29 +605,25 @@ export namespace File {
         const resolved = dir ? path.join(Instance.directory, dir) : Instance.directory
         if (!Instance.containsPath(resolved)) throw new Error("Access denied: path escapes project directory")
 
-        const entries = yield* appFs.readDirectory(resolved).pipe(Effect.catch(() => Effect.succeed([] as string[])))
+        const entries = yield* appFs.readDirectoryEntries(resolved).pipe(Effect.orElseSucceed(() => []))
 
-        return yield* Effect.promise(async () => {
-          const nodes: File.Node[] = []
-          for (const name of entries) {
-            if (exclude.includes(name)) continue
-            const absolute = path.join(resolved, name)
-            const stat = await fs.promises.stat(absolute).catch(() => null)
-            if (!stat) continue
-            const type = stat.isDirectory() ? "directory" : "file"
-            const file = path.relative(Instance.directory, absolute)
-            nodes.push({
-              name,
-              path: file,
-              absolute,
-              type,
-              ignored: ignored(type === "directory" ? file + "/" : file),
-            })
-          }
-          return nodes.sort((a, b) => {
-            if (a.type !== b.type) return a.type === "directory" ? -1 : 1
-            return a.name.localeCompare(b.name)
+        const nodes: File.Node[] = []
+        for (const entry of entries) {
+          if (exclude.includes(entry.name)) continue
+          const absolute = path.join(resolved, entry.name)
+          const file = path.relative(Instance.directory, absolute)
+          const type = entry.type === "directory" ? "directory" : "file"
+          nodes.push({
+            name: entry.name,
+            path: file,
+            absolute,
+            type,
+            ignored: ignored(type === "directory" ? file + "/" : file),
           })
+        }
+        return nodes.sort((a, b) => {
+          if (a.type !== b.type) return a.type === "directory" ? -1 : 1
+          return a.name.localeCompare(b.name)
         })
       })
 
