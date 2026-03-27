@@ -1358,12 +1358,14 @@ export namespace Config {
               }
             }
 
-            deps.push(
-              iife(async () => {
-                const shouldInstall = await needsInstall(dir)
-                if (shouldInstall) await installDependencies(dir)
-              }),
-            )
+            const dep = iife(async () => {
+              const stale = await needsInstall(dir)
+              if (stale) await installDependencies(dir)
+            })
+            void dep.catch((err) => {
+              log.warn("background dependency install failed", { dir, error: err })
+            })
+            deps.push(dep)
 
             result.command = mergeDeep(result.command ?? {}, yield* Effect.promise(() => loadCommand(dir)))
             result.agent = mergeDeep(result.agent, yield* Effect.promise(() => loadAgent(dir)))
