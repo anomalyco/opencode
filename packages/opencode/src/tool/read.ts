@@ -3,6 +3,7 @@ import { createReadStream } from "fs"
 import * as fs from "fs/promises"
 import * as path from "path"
 import { createInterface } from "readline"
+import { spawn } from "node:child_process"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
 import { FileTime } from "../file/time"
@@ -17,6 +18,8 @@ const MAX_LINE_LENGTH = 2000
 const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
 const MAX_BYTES = 50 * 1024
 const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
+const MARKITDOWN_TIMEOUT_MS = 30_000
+const MARKITDOWN_EXTENSIONS = new Set([".docx", ".pptx"])
 
 export const ReadTool = Tool.define("read", {
   description: DESCRIPTION,
@@ -141,6 +144,34 @@ export const ReadTool = Tool.define("read", {
       }
     }
 
+    const ext = path.extname(filepath).toLowerCase()
+    if (MARKITDOWN_EXTENSIONS.has(ext)) {
+      const converted = await convertWithMarkItDown(filepath)
+      const rendered = renderTextOutput(converted, offsetAndLimit(params))
+
+      let output = [`<path>${filepath}</path>`, `<type>file</type>`, "<content>"].join("\n")
+      output += rendered.content
+      output += rendered.footer
+      output += "\n</content>"
+
+      LSP.touchFile(filepath, false)
+      await FileTime.read(ctx.sessionID, filepath)
+
+      if (instructions.length > 0) {
+        output += `\n\n<system-reminder>\n${instructions.map((i) => i.content).join("\n\n")}\n</system-reminder>`
+      }
+
+      return {
+        title,
+        output,
+        metadata: {
+          preview: rendered.preview,
+          truncated: rendered.truncated,
+          loaded: instructions.map((i) => i.filepath),
+        },
+      }
+    }
+
     const isBinary = await isBinaryFile(filepath, Number(stat.size))
     if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
 
@@ -231,6 +262,133 @@ export const ReadTool = Tool.define("read", {
     }
   },
 })
+
+function offsetAndLimit(params: { offset?: number; limit?: number }) {
+  return {
+    offset: params.offset ?? 1,
+    limit: params.limit ?? DEFAULT_READ_LIMIT,
+  }
+}
+
+function renderTextOutput(text: string, options: { offset: number; limit: number }) {
+  const normalized = text.replace(/\r\n/g, "\n")
+  const allLines = normalized.length === 0 ? [] : normalized.split("\n")
+  if (normalized.endsWith("\n") && allLines.length > 0 && allLines[allLines.length - 1] === "") {
+    allLines.pop()
+  }
+
+  const totalLines = allLines.length
+  const offset = options.offset
+  const limit = options.limit
+  if (totalLines < offset && !(totalLines === 0 && offset === 1)) {
+    throw new Error(`Offset ${offset} is out of range for this file (${totalLines} lines)`)
+  }
+
+  const start = offset - 1
+  const raw: string[] = []
+  let bytes = 0
+  let truncatedByBytes = false
+  let hasMoreLines = false
+
+  for (let i = start; i < totalLines; i++) {
+    if (raw.length >= limit) {
+      hasMoreLines = true
+      break
+    }
+
+    const textLine = allLines[i]
+    const line =
+      textLine.length > MAX_LINE_LENGTH ? textLine.substring(0, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX : textLine
+    const size = Buffer.byteLength(line, "utf-8") + (raw.length > 0 ? 1 : 0)
+    if (bytes + size > MAX_BYTES) {
+      truncatedByBytes = true
+      hasMoreLines = true
+      break
+    }
+
+    raw.push(line)
+    bytes += size
+  }
+
+  const content = raw.map((line, index) => `${index + offset}: ${line}`).join("\n")
+  const preview = raw.slice(0, 20).join("\n")
+  const lastReadLine = offset + raw.length - 1
+  const nextOffset = lastReadLine + 1
+  const truncated = hasMoreLines || truncatedByBytes
+
+  let footer = ""
+  if (truncatedByBytes) {
+    footer += `\n\n(Output capped at ${MAX_BYTES_LABEL}. Showing lines ${offset}-${lastReadLine}. Use offset=${nextOffset} to continue.)`
+  } else if (hasMoreLines) {
+    footer += `\n\n(Showing lines ${offset}-${lastReadLine} of ${totalLines}. Use offset=${nextOffset} to continue.)`
+  } else {
+    footer += `\n\n(End of file - total ${totalLines} lines)`
+  }
+
+  return {
+    content,
+    footer,
+    preview,
+    truncated,
+  }
+}
+
+async function convertWithMarkItDown(filepath: string): Promise<string> {
+  const configured = process.env.OPENCODE_MARKITDOWN_CMD?.trim()
+  if (configured) {
+    return runCommand(configured, [filepath])
+  }
+
+  try {
+    return await runCommand("markitdown", [filepath])
+  } catch (error) {
+    if (!isCommandMissing(error)) throw error
+  }
+
+  try {
+    return await runCommand("python3", ["-m", "markitdown", filepath])
+  } catch (error) {
+    if (!isCommandMissing(error)) throw error
+  }
+
+  throw new Error(
+    "Unable to run MarkItDown. Install the 'markitdown' CLI or set OPENCODE_MARKITDOWN_CMD to a working executable.",
+  )
+}
+
+function isCommandMissing(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  return /not found|ENOENT|spawn/i.test(error.message)
+}
+
+function runCommand(command: string, args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] })
+    const stdout: Buffer[] = []
+    const stderr: Buffer[] = []
+
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM")
+      reject(new Error(`Command timed out after ${MARKITDOWN_TIMEOUT_MS}ms: ${command} ${args.join(" ")}`))
+    }, MARKITDOWN_TIMEOUT_MS)
+
+    child.stdout.on("data", (chunk) => stdout.push(Buffer.from(chunk)))
+    child.stderr.on("data", (chunk) => stderr.push(Buffer.from(chunk)))
+    child.on("error", (error) => {
+      clearTimeout(timer)
+      reject(new Error(`Failed to execute ${command}: ${error.message}`))
+    })
+    child.on("close", (code) => {
+      clearTimeout(timer)
+      if (code === 0) {
+        resolve(Buffer.concat(stdout).toString("utf-8"))
+        return
+      }
+      const err = Buffer.concat(stderr).toString("utf-8").trim()
+      reject(new Error(`Command failed (${code}): ${command} ${args.join(" ")}\n${err}`))
+    })
+  })
+}
 
 async function isBinaryFile(filepath: string, fileSize: number): Promise<boolean> {
   const ext = path.extname(filepath).toLowerCase()
