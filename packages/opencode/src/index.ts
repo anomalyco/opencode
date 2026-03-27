@@ -161,10 +161,6 @@ let cli = yargs(hideBin(process.argv))
   .command(WorkflowCommand)
   .command(SkillsCommand)
 
-if (Installation.isLocal()) {
-  cli = cli.command(WorkspaceServeCommand)
-}
-
 cli = cli
   .fail((msg, err) => {
     if (
