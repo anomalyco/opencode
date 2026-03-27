@@ -46,6 +46,14 @@ function ctxDir(dir: string, worktree: string): PlugCtx {
   }
 }
 
+function ctxRoot(dir: string): PlugCtx {
+  return {
+    vcs: "git",
+    worktree: "/",
+    directory: dir,
+  }
+}
+
 async function plugin(dir: string, kinds?: unknown) {
   const p = path.join(dir, "plugin")
   await fs.mkdir(p, { recursive: true })
@@ -257,6 +265,23 @@ describe("plugin.install.task", () => {
     expect(ok).toBe(true)
     expect(await Filesystem.exists(path.join(directory, ".opencode", "opencode.jsonc"))).toBe(true)
     expect(await Filesystem.exists(path.join(worktree, ".opencode", "opencode.jsonc"))).toBe(false)
+  })
+
+  test("writes local scope under directory when worktree is root slash", async () => {
+    await using tmp = await tmpdir()
+    const target = await plugin(tmp.path, ["server"])
+    const directory = path.join(tmp.path, "dir")
+    await fs.mkdir(directory, { recursive: true })
+    const run = createPlugTask(
+      {
+        mod: "acme@1.2.3",
+      },
+      deps(path.join(tmp.path, "global"), target),
+    )
+
+    const ok = await run(ctxRoot(directory))
+    expect(ok).toBe(true)
+    expect(await Filesystem.exists(path.join(directory, ".opencode", "opencode.jsonc"))).toBe(true)
   })
 
   test("writes only tui config for tui-only plugins", async () => {

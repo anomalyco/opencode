@@ -237,7 +237,8 @@ export async function readPluginManifest(target: string): Promise<ManifestResult
 
 function patchDir(input: PatchInput) {
   if (input.global) return input.config ?? Global.Path.config
-  const root = input.vcs === "git" ? input.worktree : input.directory
+  const git = input.vcs === "git" && input.worktree !== "/"
+  const root = git ? input.worktree : input.directory
   return path.join(root, ".opencode")
 }
 
