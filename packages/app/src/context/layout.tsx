@@ -13,7 +13,7 @@ import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 import { createPathHelpers } from "./file/path"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
-const DEFAULT_PANEL_WIDTH = 344
+const DEFAULT_SIDEBAR_WIDTH = 344
 const DEFAULT_FILE_TREE_WIDTH = 200
 const DEFAULT_SESSION_WIDTH = 600
 const DEFAULT_TERMINAL_HEIGHT = 280
@@ -231,7 +231,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       createStore({
         sidebar: {
           opened: false,
-          width: DEFAULT_PANEL_WIDTH,
+          width: DEFAULT_SIDEBAR_WIDTH,
           workspaces: {} as Record<string, boolean>,
           workspacesDefault: false,
         },
