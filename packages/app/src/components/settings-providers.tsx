@@ -156,7 +156,7 @@ export const SettingsProviders: Component = () => {
             >
               <For each={connected()}>
                 {(item) => (
-                  <div class="group flex flex-wrap items-center justify-between gap-4 min-h-16 py-3 border-b border-border-weak-base last:border-none">
+                  <div class="group flex flex-wrap items-center justify-between gap-4 min-h-16 py-3 border-b border-border-weak-base last:border-none hover:bg-surface-hovered transition-colors">
                     <div class="flex items-center gap-3 min-w-0">
                       <ProviderIcon id={item.id} class="size-5 shrink-0 icon-strong-base" />
                       <span class="text-14-medium text-text-strong truncate">{item.name}</span>
@@ -165,12 +165,12 @@ export const SettingsProviders: Component = () => {
                     <Show
                       when={canDisconnect(item)}
                       fallback={
-                        <span class="text-14-regular text-text-base opacity-0 group-hover:opacity-100 transition-opacity duration-200 pr-3 cursor-default">
+                        <span class="text-14-regular text-text-base pr-3">
                           {language.t("settings.providers.connected.environmentDescription")}
                         </span>
                       }
                     >
-                      <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      <div class="flex items-center gap-2 [&>*]:opacity-0 [&>*]:group-hover:opacity-100 [&>*]:transition-opacity">
                         <Show when={canEdit(item)}>
                           <Button
                             size="large"
