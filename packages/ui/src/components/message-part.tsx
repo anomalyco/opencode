@@ -310,11 +310,6 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
         icon: "checklist",
         title: i18n.t("ui.tool.todos"),
       }
-    case "todoread":
-      return {
-        icon: "checklist",
-        title: i18n.t("ui.tool.todos.read"),
-      }
     case "question":
       return {
         icon: "bubble-5",
@@ -357,7 +352,7 @@ function sessionLink(id: string | undefined, path: string, href?: (id: string) =
 }
 
 const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
-const HIDDEN_TOOLS = new Set(["todowrite", "todoread"])
+const HIDDEN_TOOLS = new Set(["todowrite"])
 
 function list<T>(value: T[] | undefined | null, fallback: T[]) {
   if (Array.isArray(value)) return value
@@ -889,7 +884,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   const i18n = useI18n()
   const [state, setState] = createStore({
     copied: false,
-    busy: undefined as "fork" | "revert" | undefined,
+    busy: false,
   })
   const copied = () => state.copied
   const busy = () => state.busy
@@ -943,10 +938,10 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
     setTimeout(() => setState("copied", false), 2000)
   }
 
-  const run = (kind: "fork" | "revert") => {
-    const act = kind === "fork" ? props.actions?.fork : props.actions?.revert
+  const revert = () => {
+    const act = props.actions?.revert
     if (!act || busy()) return
-    setState("busy", kind)
+    setState("busy", true)
     void Promise.resolve()
       .then(() =>
         act({
@@ -954,9 +949,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
           messageID: props.message.id,
         }),
       )
-      .finally(() => {
-        if (busy() === kind) setState("busy", undefined)
-      })
+      .finally(() => setState("busy", false))
   }
 
   return (
@@ -1022,22 +1015,6 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
                 </Show>
               </span>
             </Show>
-            <Show when={props.actions?.fork}>
-              <Tooltip value={i18n.t("ui.message.forkMessage")} placement="top" gutter={4}>
-                <IconButton
-                  icon="fork"
-                  size="normal"
-                  variant="ghost"
-                  disabled={!!busy()}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    run("fork")
-                  }}
-                  aria-label={i18n.t("ui.message.forkMessage")}
-                />
-              </Tooltip>
-            </Show>
             <Show when={props.actions?.revert}>
               <Tooltip value={i18n.t("ui.message.revertMessage")} placement="top" gutter={4}>
                 <IconButton
@@ -1048,7 +1025,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={(event) => {
                     event.stopPropagation()
-                    run("revert")
+                    revert()
                   }}
                   aria-label={i18n.t("ui.message.revertMessage")}
                 />
@@ -1210,7 +1187,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const data = useData()
   const i18n = useI18n()
   const part = () => props.part as ToolPart
-  if (part().tool === "todowrite" || part().tool === "todoread") return null
+  if (part().tool === "todowrite") return null
 
   const hideQuestion = createMemo(
     () => part().tool === "question" && (part().state.status === "pending" || part().state.status === "running"),
@@ -1357,6 +1334,9 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 
   const displayText = () => (part().text ?? "").trim()
   const throttledText = createThrottledValue(displayText)
+  const streaming = createMemo(
+    () => props.message.role === "assistant" && typeof (props.message as AssistantMessage).time.completed !== "number",
+  )
   const isLastTextPart = createMemo(() => {
     const last = (data.store.part?.[props.message.id] ?? [])
       .filter((item): item is TextPart => item?.type === "text" && !!item.text?.trim())
@@ -1383,7 +1363,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     <Show when={throttledText()}>
       <div data-component="text-part">
         <div data-slot="text-part-body">
-          <Markdown text={throttledText()} cacheKey={part().id} />
+          <Markdown text={throttledText()} cacheKey={part().id} streaming={streaming()} />
         </div>
         <Show when={showCopy()}>
           <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
@@ -1417,11 +1397,14 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   const part = () => props.part as ReasoningPart
   const text = () => part().text.trim()
   const throttledText = createThrottledValue(text)
+  const streaming = createMemo(
+    () => props.message.role === "assistant" && typeof (props.message as AssistantMessage).time.completed !== "number",
+  )
 
   return (
     <Show when={throttledText()}>
       <div data-component="reasoning-part">
-        <Markdown text={throttledText()} cacheKey={part().id} />
+        <Markdown text={throttledText()} cacheKey={part().id} streaming={streaming()} />
       </div>
     </Show>
   )
