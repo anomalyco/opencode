@@ -300,31 +300,60 @@ function NineRouterMethod(props: NineRouterMethodProps) {
       onConfirm={async (value) => {
         if (!value) return
         const baseURL = value.trim().replace(/\/+$/, "")
-        const configResult = await sdk.client.config.get()
-        if (configResult.data) {
-          const cfg = configResult.data as any
-          const updated = {
-            ...cfg,
+
+        // Fetch live model list directly from the server
+        let modelIds: string[] = []
+        try {
+          const res = await fetch(`${baseURL}/models`)
+          if (res.ok) {
+            const json = (await res.json()) as any
+            modelIds = ((json?.data ?? []) as any[]).map((m: any) => String(m.id)).filter(Boolean)
+          }
+        } catch {}
+
+        if (modelIds.length === 0) {
+          // Fallback: no models fetched, skip to model dialog after saving URL
+          await sdk.client.config.update({
+            body: { provider: { "9router": { options: { baseURL } } } } as any,
+          })
+          await sdk.client.auth.set({ providerID: props.providerID, auth: { type: "api", key: "9router" } })
+          await sdk.client.instance.dispose()
+          await sync.bootstrap()
+          dialog.replace(() => <DialogModel providerID={props.providerID} />)
+          return
+        }
+
+        // Show model selection (like onboarding) using fetched list directly
+        const modelID = await new Promise<string | null>((resolve) => {
+          dialog.replace(
+            () => (
+              <DialogSelect
+                title="Select default model"
+                options={modelIds.map((id) => ({ title: id, value: id }))}
+                onSelect={(opt) => resolve(opt.value)}
+              />
+            ),
+            () => resolve(null),
+          )
+        })
+        if (!modelID) return
+
+        // Save URL + all models + auth, then refresh
+        await sdk.client.config.update({
+          body: {
             provider: {
-              ...cfg.provider,
               "9router": {
-                ...(cfg.provider?.["9router"] ?? {}),
-                options: {
-                  ...(cfg.provider?.["9router"]?.options ?? {}),
-                  baseURL,
-                },
+                options: { baseURL },
+                models: Object.fromEntries(modelIds.map((id) => [id, { name: id }])),
               },
             },
-          }
-          await sdk.client.config.update({ body: updated })
-        }
-        await sdk.client.auth.set({
-          providerID: props.providerID,
-          auth: { type: "api", key: "9router" },
+            model: `9router/${modelID}`,
+          } as any,
         })
+        await sdk.client.auth.set({ providerID: props.providerID, auth: { type: "api", key: "9router" } })
         await sdk.client.instance.dispose()
         await sync.bootstrap()
-        dialog.replace(() => <DialogModel providerID={props.providerID} />)
+        dialog.clear()
       }}
     />
   )
