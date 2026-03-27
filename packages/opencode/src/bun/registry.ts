@@ -30,6 +30,14 @@ export namespace PackageRegistry {
   }
 
   export async function isOutdated(pkg: string, cachedVersion: string, cwd?: string): Promise<boolean> {
+    // Guard against non-SemVer cached versions (e.g., "latest", "unknown", etc.)
+    // These should never exist in cache but may from previous buggy versions
+    const isSemVer = /^\d+\.\d+\.\d+/.test(cachedVersion)
+    if (!isSemVer) {
+      log.warn("Cached version is not valid SemVer, treating as outdated for reinstall", { pkg, cachedVersion })
+      return true
+    }
+
     const latestVersion = await info(pkg, "version", cwd)
     if (!latestVersion) {
       log.warn("Failed to resolve latest version, using cached", { pkg, cachedVersion })

@@ -71,9 +71,17 @@ export namespace BunProc {
     } else if (version !== "latest" && cachedVersion === version) {
       return mod
     } else if (version === "latest") {
-      const isOutdated = await PackageRegistry.isOutdated(pkg, cachedVersion, Global.Path.cache)
-      if (!isOutdated) return mod
-      log.info("Cached version is outdated, proceeding with install", { pkg, cachedVersion })
+      // Validate cached version is a proper SemVer before checking if outdated
+      // Prevents errors from corrupted cache with invalid versions like "latest"
+      const isValidSemVer = /^\d+\.\d+\.\d+/.test(cachedVersion)
+      if (!isValidSemVer) {
+        log.warn("Cached version is not valid SemVer, removing and reinstalling", { pkg, cachedVersion })
+        delete dependencies[pkg]
+      } else {
+        const isOutdated = await PackageRegistry.isOutdated(pkg, cachedVersion, Global.Path.cache)
+        if (!isOutdated) return mod
+        log.info("Cached version is outdated, proceeding with install", { pkg, cachedVersion })
+      }
     }
 
     // Build command arguments
@@ -108,8 +116,8 @@ export namespace BunProc {
       )
     })
 
-    // Resolve actual version from installed package when using "latest"
-    // This ensures subsequent starts use the cached version until explicitly updated
+    // Resolve actual version from installed package to cache a real SemVer
+    // This ensures subsequent starts use the cached version instead of querying npm each time
     let resolvedVersion = version
     if (version === "latest") {
       const installedPkg = await Filesystem.readJson<{ version?: string }>(path.join(mod, "package.json")).catch(
@@ -117,11 +125,21 @@ export namespace BunProc {
       )
       if (installedPkg?.version) {
         resolvedVersion = installedPkg.version
+        log.info("Resolved 'latest' to actual version", { pkg, resolvedVersion })
+      } else {
+        log.error("Failed to read version from installed package, cannot cache", { pkg, modPath: mod })
       }
     }
-
-    parsed.dependencies[pkg] = resolvedVersion
-    await Filesystem.writeJson(pkgjsonPath, parsed)
+    
+    // Only cache valid SemVer versions
+    // Never cache "latest" or any non-SemVer strings as they cause semver parsing errors
+    if (resolvedVersion !== "latest" && /^\d+\.\d+\.\d+/.test(resolvedVersion)) {
+      parsed.dependencies[pkg] = resolvedVersion
+      await Bun.write(pkgjson.name!, JSON.stringify(parsed, null, 2))
+      log.info("Cached resolved version", { pkg, version: resolvedVersion })
+    } else if (resolvedVersion === "latest") {
+      log.warn("Could not resolve package version from installed package.json, will re-resolve on next run", { pkg })
+    }
     return mod
   }
 }
