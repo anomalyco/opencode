@@ -17,13 +17,18 @@ concurrency:
 permissions:
   contents: write
 
+env:
+  BUN_VERSION: "1.3.11"
+
 jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     outputs:
       tag: ${{ steps.next_version.outputs.tag }}
       semver: ${{ steps.next_version.outputs.semver }}
+      skip: ${{ steps.next_version.outputs.skip }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,7 +36,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.3.11"
+          bun-version: ${{ env.BUN_VERSION }}
 
       - name: Cache bun dependencies
         uses: actions/cache@v4
@@ -69,6 +74,14 @@ jobs:
 
           SUBJECTS=$(echo "$COMMITS" | cut -d'|' -f1)
 
+          # Skip release if no feat/fix/breaking commits since last tag
+          if ! echo "$SUBJECTS" | grep -qE '^(feat|fix)(\(.+\))?!?:|^.+(\(.+\))?!:|^BREAKING CHANGE'; then
+            echo "No releasable commits — skipping"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
           # Determine version bump
           if echo "$SUBJECTS" | grep -qE '^.+(\(.+\))?!:|^BREAKING CHANGE'; then
             MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
@@ -87,7 +100,6 @@ jobs:
           echo "semver=${MAJOR}.${MINOR}.${PATCH}" >> "$GITHUB_OUTPUT"
           echo "prev_tag=${TAG}" >> "$GITHUB_OUTPUT"
 
-          # Strip conventional commit prefix and capitalize first letter
           strip_prefix() {
             echo "$1" | sed -E 's/^(feat|fix|chore|ci|docs|refactor|perf|test|style|build|revert)(\([^)]+\))?!?:[[:space:]]*//' | sed 's/\(.\)/\u\1/'
           }
@@ -111,8 +123,6 @@ jobs:
               CHANGED="${CHANGED}"$'\n'"- ${CLEAN}"
             elif echo "$subject" | grep -qE '^(security|sec)(\(.+\))?:'; then
               SECURITY="${SECURITY}"$'\n'"- ${CLEAN}"
-            else
-              CHANGED="${CHANGED}"$'\n'"- ${CLEAN}"
             fi
           done <<< "$COMMITS"
 
@@ -129,6 +139,7 @@ jobs:
           echo "Next release: ${NEXT_TAG}"
 
       - name: Update package version
+        if: steps.next_version.outputs.skip != 'true'
         run: |
           cd packages/opencode
           node -e "
@@ -138,8 +149,8 @@ jobs:
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
           "
 
-      # Create release BEFORE build so build.ts can upload assets to it via gh release upload
       - name: Create GitHub release (draft)
+        if: steps.next_version.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -157,6 +168,7 @@ jobs:
           fi
 
       - name: Build and upload binaries
+        if: steps.next_version.outputs.skip != 'true'
         env:
           OPENCODE_RELEASE: "1"
           OPENCODE_VERSION: ${{ steps.next_version.outputs.semver }}
@@ -169,6 +181,7 @@ jobs:
           bun run build
 
       - name: Publish release
+        if: steps.next_version.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -180,13 +193,15 @@ jobs:
   desktop-linux:
     name: Desktop (Linux)
     needs: release
+    if: needs.release.outputs.skip != 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.3.11"
+          bun-version: ${{ env.BUN_VERSION }}
 
       - name: Cache bun dependencies
         uses: actions/cache@v4
@@ -234,13 +249,15 @@ jobs:
   desktop-windows:
     name: Desktop (Windows)
     needs: release
+    if: needs.release.outputs.skip != 'true'
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.3.11"
+          bun-version: ${{ env.BUN_VERSION }}
 
       - name: Cache bun dependencies
         uses: actions/cache@v4

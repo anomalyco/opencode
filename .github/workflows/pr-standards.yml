@@ -2,7 +2,7 @@ name: pr-standards
 
 on:
   pull_request_target:
-    types: [opened, edited, synchronize]
+    types: [opened, synchronize]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
