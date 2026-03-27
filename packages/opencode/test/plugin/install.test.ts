@@ -284,6 +284,23 @@ describe("plugin.install.task", () => {
     expect(await Filesystem.exists(path.join(directory, ".opencode", "opencode.jsonc"))).toBe(true)
   })
 
+  test("writes tui local scope under directory when worktree is root slash", async () => {
+    await using tmp = await tmpdir()
+    const target = await plugin(tmp.path, ["tui"])
+    const directory = path.join(tmp.path, "dir")
+    await fs.mkdir(directory, { recursive: true })
+    const run = createPlugTask(
+      {
+        mod: "acme@1.2.3",
+      },
+      deps(path.join(tmp.path, "global"), target),
+    )
+
+    const ok = await run(ctxRoot(directory))
+    expect(ok).toBe(true)
+    expect(await Filesystem.exists(path.join(directory, ".opencode", "tui.jsonc"))).toBe(true)
+  })
+
   test("writes only tui config for tui-only plugins", async () => {
     await using tmp = await tmpdir()
     const target = await plugin(tmp.path, ["tui"])
