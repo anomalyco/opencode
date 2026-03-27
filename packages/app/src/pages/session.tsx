@@ -1656,11 +1656,17 @@ export default function Page() {
     consumePendingMessage: layout.pendingMessage.consume,
   })
 
+  createEffect(() => {
+    const title = info()?.title ?? "CoBuilder"
+    document.title = busy(params.id ?? "") ? `⟳ ${title}` : title
+  })
+
   onMount(() => {
     document.addEventListener("keydown", handleKeyDown)
   })
 
   onCleanup(() => {
+    document.title = "CoBuilder"
     document.removeEventListener("keydown", handleKeyDown)
     if (reviewFrame !== undefined) cancelAnimationFrame(reviewFrame)
     if (refreshFrame !== undefined) cancelAnimationFrame(refreshFrame)

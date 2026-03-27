@@ -4,6 +4,10 @@ on:
   pull_request_target:
     types: [opened]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   check-duplicates:
     runs-on: blacksmith-4vcpu-ubuntu-2404

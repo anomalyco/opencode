@@ -6,6 +6,10 @@ on:
     - cron: "0 23 * * *"
   workflow_dispatch: # Allow manual trigger for testing
 
+concurrency:
+  group: daily-issues-recap
+  cancel-in-progress: true
+
 jobs:
   daily-recap:
     runs-on: blacksmith-4vcpu-ubuntu-2404
