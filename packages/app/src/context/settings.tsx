@@ -49,7 +49,7 @@ const defaultSettings: Settings = {
     followup: "steer",
     showReasoningSummaries: false,
     shellToolPartsExpanded: true,
-    editToolPartsExpanded: false,
+    editToolPartsExpanded: true,
   },
   updates: {
     startup: true,

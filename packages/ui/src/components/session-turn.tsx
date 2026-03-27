@@ -243,7 +243,7 @@ export function SessionTurn(
   })
   const edited = createMemo(() => diffs().length)
   const [state, setState] = createStore({
-    open: false,
+    open: true,
     expanded: [] as string[],
   })
   const open = () => state.open
@@ -341,6 +341,24 @@ export function SessionTurn(
     if (end < start) return undefined
     return end - start
   })
+
+  const turnUsage = createMemo(() => {
+    const msgs = assistantMessages()
+    if (!msgs.length) return undefined
+    let input = 0
+    let output = 0
+    let cost = 0
+    for (const msg of msgs) {
+      if (typeof msg.tokens?.input === "number") input += msg.tokens.input
+      if (typeof msg.tokens?.output === "number") output += msg.tokens.output
+      if (typeof msg.cost === "number") cost += msg.cost
+    }
+    if (input === 0 && output === 0) return undefined
+    return { input, output, cost }
+  })
+
+  const fmt = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n))
+
   const assistantDerived = createMemo(() => {
     let visible = 0
     let tail: "text" | "other" | undefined
@@ -524,6 +542,19 @@ export function SessionTurn(
                     </Collapsible.Content>
                   </Collapsible>
                 </div>
+              </Show>
+              <Show when={turnUsage() && !working()}>
+                {(usage) => (
+                  <div data-slot="session-turn-usage" class="px-4 md:px-5 pt-1 pb-0.5 flex items-center gap-2 text-[11px] text-text-weak opacity-60 select-none">
+                    <span>↑ {fmt(usage().input)}</span>
+                    <span>↓ {fmt(usage().output)}</span>
+                    <span class="text-text-weakest">tokens</span>
+                    <Show when={usage().cost > 0}>
+                      <span class="opacity-70">·</span>
+                      <span>~${usage().cost.toFixed(4)}</span>
+                    </Show>
+                  </div>
+                )}
               </Show>
               <Show when={error()}>
                 <Card variant="error" class="error-card">
