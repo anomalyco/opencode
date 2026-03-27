@@ -1,5 +1,5 @@
 import { Keybind } from "@/util/keybind"
-import type { TuiPlugin, TuiPluginApi, TuiPluginStatus } from "@opencode-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginApi, TuiPluginModule, TuiPluginStatus } from "@opencode-ai/plugin/tui"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { fileURLToPath } from "url"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
@@ -256,7 +256,9 @@ const tui: TuiPlugin = async (api) => {
   ])
 }
 
-export default {
+const plugin: TuiPluginModule & { id: string } = {
   id,
   tui,
 }
+
+export default plugin

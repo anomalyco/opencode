@@ -128,6 +128,7 @@ describe("plugin.loader.shared", () => {
           file,
           [
             "export default {",
+            '  id: "demo.v1-default",',
             "  server: async () => {",
             `    await Bun.write(${JSON.stringify(mark)}, "default")`,
             "    return {}",
@@ -152,6 +153,82 @@ describe("plugin.loader.shared", () => {
 
     await load(tmp.path)
     expect(await Bun.file(tmp.extra.mark).text()).toBe("default")
+  })
+
+  test("rejects v1 file server plugin without id", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const file = path.join(dir, "plugin.ts")
+        const mark = path.join(dir, "called.txt")
+        await Bun.write(
+          file,
+          [
+            "export default {",
+            "  server: async () => {",
+            `    await Bun.write(${JSON.stringify(mark)}, "called")`,
+            "    return {}",
+            "  },",
+            "}",
+            "",
+          ].join("\n"),
+        )
+
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({ plugin: [pathToFileURL(file).href] }, null, 2),
+        )
+
+        return { mark }
+      },
+    })
+
+    const errors = await errs(tmp.path)
+    const called = await Bun.file(tmp.extra.mark)
+      .text()
+      .then(() => true)
+      .catch(() => false)
+
+    expect(called).toBe(false)
+    expect(errors.some((x) => x.includes("must export id"))).toBe(true)
+  })
+
+  test("rejects v1 plugin that exports server and tui together", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const file = path.join(dir, "plugin.ts")
+        const mark = path.join(dir, "called.txt")
+        await Bun.write(
+          file,
+          [
+            "export default {",
+            '  id: "demo.mixed",',
+            "  server: async () => {",
+            `    await Bun.write(${JSON.stringify(mark)}, "server")`,
+            "    return {}",
+            "  },",
+            "  tui: async () => {},",
+            "}",
+            "",
+          ].join("\n"),
+        )
+
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({ plugin: [pathToFileURL(file).href] }, null, 2),
+        )
+
+        return { mark }
+      },
+    })
+
+    const errors = await errs(tmp.path)
+    const called = await Bun.file(tmp.extra.mark)
+      .text()
+      .then(() => true)
+      .catch(() => false)
+
+    expect(called).toBe(false)
+    expect(errors.some((x) => x.includes("either server() or tui(), not both"))).toBe(true)
   })
 
   test("resolves npm plugin specs with explicit and default versions", async () => {

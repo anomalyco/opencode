@@ -42,7 +42,8 @@ export type Plugin = (input: PluginInput, options?: PluginOptions) => Promise<Ho
 
 export type PluginModule = {
   id?: string
-  server?: Plugin
+  server: Plugin
+  tui?: never
 }
 
 type Rule = {
