@@ -265,12 +265,16 @@ jobs:
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
           "
 
-      - name: Build
+      - name: Fix electron-vite missing deps on Windows
         shell: pwsh
         run: |
-          $env:NODE_PATH = "${{ github.workspace }}\node_modules"
-          cd packages/desktop-electron
-          bun run build
+          $evite = (Get-ChildItem "${{ github.workspace }}\node_modules\.bun" -Filter "electron-vite*" -Directory | Select-Object -First 1).FullName
+          $target = "$evite\node_modules\electron-vite\node_modules"
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          Copy-Item -Recurse -Force "${{ github.workspace }}\node_modules\.bun\picocolors*\node_modules\picocolors" "$target\picocolors"
+
+      - name: Build
+        run: cd packages/desktop-electron && bun run build
         env:
           OPENCODE_CHANNEL: prod
 
