@@ -8,8 +8,8 @@ Use `InstanceState` (from `src/effect/instance-state.ts`) for services that need
 
 Use `makeRuntime` (from `src/effect/run-service.ts`) to create a per-service `ManagedRuntime` that lazily initializes and shares layers via a global `memoMap`. Returns `{ runPromise, runFork, runCallback }`.
 
-- Global services (no per-directory state): Account, Auth, Installation, Truncate
-- Instance-scoped (per-directory state via InstanceState): File, FileTime, FileWatcher, Format, Permission, Question, Skill, Snapshot, Vcs, ProviderAuth
+- Global services (no per-directory state): Account, Auth, AppFileSystem, Installation, Truncate, Worktree
+- Instance-scoped (per-directory state via InstanceState): Agent, Bus, Command, Config, File, FileTime, FileWatcher, Format, LSP, MCP, Permission, Plugin, ProviderAuth, Pty, Question, SessionStatus, Skill, Snapshot, ToolRegistry, Vcs
 
 Rule of thumb: if two open directories should not share one copy of the service, it needs `InstanceState`.
 
@@ -121,6 +121,32 @@ yield *
 
 The key insight: don't split init into a separate method with a `started` flag. Put everything in the `InstanceState.make` closure and let `ScopedCache` handle the run-once semantics.
 
+## Effect.cached for deduplication
+
+Use `Effect.cached` when multiple concurrent callers should share a single in-flight computation. It memoizes the result and deduplicates concurrent fibers — second caller joins the first caller's fiber instead of starting a new one.
+
+```ts
+// Inside the layer — yield* to initialize the memo
+let cached = yield * Effect.cached(loadExpensive())
+
+const get = Effect.fn("Foo.get")(function* () {
+  return yield* cached // concurrent callers share the same fiber
+})
+
+// To invalidate: swap in a fresh memo
+const invalidate = Effect.fn("Foo.invalidate")(function* () {
+  cached = yield* Effect.cached(loadExpensive())
+})
+```
+
+Prefer `Effect.cached` over these patterns:
+
+- Storing a `Fiber.Fiber | undefined` with manual check-and-fork (e.g. `file/index.ts` `ensure`)
+- Storing a `Promise<void>` task for deduplication (e.g. `skill/index.ts` `ensure`)
+- `let cached: X | undefined` with check-and-load (races when two callers see `undefined` before either resolves)
+
+`Effect.cached` handles the run-once + concurrent-join semantics automatically. For invalidatable caches, reassign with `yield* Effect.cached(...)` — the old memo is discarded.
+
 ## Scheduled Tasks
 
 For loops or periodic work, use `Effect.repeat` or `Effect.schedule` with `Effect.forkScoped` in the layer definition.
@@ -155,36 +181,39 @@ That is fine for leaf files like `schema.ts`. Keep the service surface in the ow
 Fully migrated (single namespace, InstanceState where needed, flattened facade):
 
 - [x] `Account` — `account/index.ts`
+- [x] `Agent` — `agent/agent.ts`
+- [x] `AppFileSystem` — `filesystem/index.ts`
 - [x] `Auth` — `auth/index.ts` (uses `zod()` helper for Schema→Zod interop)
+- [x] `Bus` — `bus/index.ts`
+- [x] `Command` — `command/index.ts`
+- [x] `Config` — `config/config.ts`
+- [x] `Discovery` — `skill/discovery.ts` (dependency-only layer, no standalone runtime)
 - [x] `File` — `file/index.ts`
 - [x] `FileTime` — `file/time.ts`
 - [x] `FileWatcher` — `file/watcher.ts`
 - [x] `Format` — `format/index.ts`
 - [x] `Installation` — `installation/index.ts`
+- [x] `LSP` — `lsp/index.ts`
+- [x] `MCP` — `mcp/index.ts`
+- [x] `McpAuth` — `mcp/auth.ts`
 - [x] `Permission` — `permission/index.ts`
+- [x] `Plugin` — `plugin/index.ts`
+- [x] `Project` — `project/project.ts`
 - [x] `ProviderAuth` — `provider/auth.ts`
+- [x] `Pty` — `pty/index.ts`
 - [x] `Question` — `question/index.ts`
+- [x] `SessionStatus` — `session/status.ts`
 - [x] `Skill` — `skill/index.ts`
 - [x] `Snapshot` — `snapshot/index.ts`
+- [x] `ToolRegistry` — `tool/registry.ts`
 - [x] `Truncate` — `tool/truncate.ts`
 - [x] `Vcs` — `project/vcs.ts`
-- [x] `Discovery` — `skill/discovery.ts`
-- [x] `SessionStatus`
+- [x] `Worktree` — `worktree/index.ts`
 
 Still open and likely worth migrating:
 
-- [x] `Plugin`
-- [x] `ToolRegistry`
-- [ ] `Pty`
-- [x] `Worktree`
-- [x] `Bus`
-- [x] `Command`
-- [ ] `Config`
 - [ ] `Session`
 - [ ] `SessionProcessor`
 - [ ] `SessionPrompt`
 - [ ] `SessionCompaction`
 - [ ] `Provider`
-- [x] `Project`
-- [ ] `LSP`
-- [x] `MCP`

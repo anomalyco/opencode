@@ -273,7 +273,7 @@ export namespace Pty {
         if (input.size) {
           session.process.resize(input.size.cols, input.size.rows)
         }
-        yield* Effect.promise(() => Bus.publish(Event.Updated, { info: session.info }))
+        void Bus.publish(Event.Updated, { info: session.info })
         return session.info
       })
 

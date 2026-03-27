@@ -465,10 +465,13 @@ export async function waitSession(page: Page, input: { directory: string; sessio
         if (!slug) return false
         const resolved = await resolveSlug(slug).catch(() => undefined)
         if (!resolved || resolved.directory !== target) return false
-        if (input.sessionID && sessionIDFromUrl(page.url()) !== input.sessionID) return false
+        const current = sessionIDFromUrl(page.url())
+        if (input.sessionID && current !== input.sessionID) return false
+        if (!input.sessionID && current) return false
 
         const state = await probeSession(page)
         if (input.sessionID && (!state || state.sessionID !== input.sessionID)) return false
+        if (!input.sessionID && state?.sessionID) return false
         if (state?.dir) {
           const dir = await resolveDirectory(state.dir).catch(() => state.dir ?? "")
           if (dir !== target) return false
