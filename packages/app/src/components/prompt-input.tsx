@@ -592,7 +592,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const pinned: AtOption[] = open.map((path) => ({ type: "file", path, display: path, recent: true }))
       if (!query.trim()) return [...agents, ...pinned]
       const pathy = /[./\\]/.test(query)
-      const paths = await files.searchFiles(query)
+      const seek = query.replaceAll("\\", "/")
+      const paths = await files.searchFiles(seek)
       const fileOptions: AtOption[] = paths
         .filter((path) => !seen.has(path))
         .map((path) => ({ type: "file", path, display: path }))
@@ -602,6 +603,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     key: atKey,
     filterKeys: ["display"],
     stale: false,
+    fuzzy: (query) => !/[./\\]/.test(query),
     groupBy: (item) => {
       if (item.type === "agent") return "agent"
       if (item.recent) return "recent"

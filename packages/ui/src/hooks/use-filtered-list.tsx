@@ -15,6 +15,7 @@ export interface FilteredListProps<T> {
   onSelect?: (value: T | undefined, index: number) => void
   noInitialSelection?: boolean
   stale?: boolean
+  fuzzy?: boolean | ((filter: string) => boolean)
 }
 
 export function useFilteredList<T>(props: FilteredListProps<T>) {
@@ -31,11 +32,12 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
     async ({ filter, items }) => {
       const query = filter ?? ""
       const needle = query.toLowerCase()
+      const fuzzy = typeof props.fuzzy === "function" ? props.fuzzy(query) : (props.fuzzy ?? true)
       const all = (await Promise.resolve(items)) || []
       const result = pipe(
         all,
         (x) => {
-          if (!needle) return x
+          if (!needle || !fuzzy) return x
           if (!props.filterKeys && Array.isArray(x) && x.every((e) => typeof e === "string")) {
             return fuzzysort.go(needle, x).map((x) => x.target) as T[]
           }

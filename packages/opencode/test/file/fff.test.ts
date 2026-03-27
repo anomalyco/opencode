@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { tmpdir } from "../fixture/fixture"
@@ -9,6 +9,10 @@ async function write(file: string, body: string) {
   await fs.mkdir(path.dirname(file), { recursive: true })
   await fs.writeFile(file, body)
 }
+
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 describe("file.fff", () => {
   test("allowed respects hidden filter", async () => {
