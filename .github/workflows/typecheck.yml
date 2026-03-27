@@ -7,6 +7,10 @@ on:
     branches: [dev]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   typecheck:
     runs-on: blacksmith-4vcpu-ubuntu-2404
