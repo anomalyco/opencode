@@ -51,11 +51,18 @@ jobs:
               pull_number: pr,
             }).catch(() => console.log('Branch already up to date'));
 
+      - name: Enable auto-merge
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request.number;
             await github.graphql(`
               mutation EnableAutoMerge($prId: ID!) {
                 enablePullRequestAutoMerge(input: { pullRequestId: $prId, mergeMethod: SQUASH }) {
                   pullRequest { autoMergeRequest { mergeMethod } }
                 }
               }
-            `, { prId: context.payload.pull_request.node_id });
-            console.log(`Enabled auto-merge (squash) on PR #${pr}`);
+            `, { prId: context.payload.pull_request.node_id })
+              .then(() => console.log(`Enabled auto-merge (squash) on PR #${pr}`))
+              .catch(e => console.log(`Auto-merge not enabled: ${e.message}`));
