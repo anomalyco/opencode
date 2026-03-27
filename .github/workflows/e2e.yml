@@ -6,8 +6,17 @@ on:
     workflows: [CD]
     types: [completed]
     branches: [main]
-  # Also allow manual runs
+  # Also allow manual runs with optional tag override
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "CoBuilder release tag to test (e.g. cb-v1.2.3). Leave blank for latest."
+        required: false
+        default: ""
+
+concurrency:
+  group: e2e-${{ github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   e2e:
@@ -15,12 +24,43 @@ jobs:
     # Only run if CD succeeded (or on manual trigger)
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Install test dependencies
         run: sudo apt-get update -qq && sudo apt-get install -y -qq expect git curl
 
+      - name: Resolve release tag
+        id: tag
+        run: |
+          TAG="${{ github.event.inputs.release_tag }}"
+          if [[ -z "$TAG" ]]; then
+            # Get the latest CoBuilder release tag
+            TAG=$(gh release list --repo CobuilderLabs/opencode --limit 10 --json tagName,isDraft \
+              --jq '[.[] | select(.isDraft == false) | .tagName] | first')
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Testing release: ${TAG}"
+
+      - name: Wait for release assets to be available
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          echo "Waiting for release assets for ${TAG}..."
+          for i in $(seq 1 10); do
+            ASSET_COUNT=$(gh release view "$TAG" --repo CobuilderLabs/opencode --json assets \
+              --jq '.assets | length' 2>/dev/null || echo "0")
+            if [[ "$ASSET_COUNT" -gt 0 ]]; then
+              echo "Release assets available (${ASSET_COUNT} assets)"
+              break
+            fi
+            echo "Attempt ${i}/10: No assets yet, waiting 30s..."
+            sleep 30
+          done
+
       - name: Run E2E test suite
+        env:
+          COBUILDER_TEST_TAG: ${{ steps.tag.outputs.tag }}
         run: bash test-e2e.sh
-        timeout-minutes: 10
+        timeout-minutes: 15

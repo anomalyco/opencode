@@ -18,9 +18,28 @@ export PATH="$INSTALL_DIR:$PATH"
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/opencode"
 
+# If a specific release tag was passed by CI (e.g. cb-v1.2.3), strip the prefix
+# and export as COBUILDER_VERSION so install.sh uses that exact release.
+if [[ -n "${COBUILDER_TEST_TAG:-}" ]]; then
+  export COBUILDER_VERSION="${COBUILDER_TEST_TAG#cb-v}"
+fi
+
+install_cobuilder() {
+  local attempt=0
+  while (( attempt < 3 )); do
+    if curl -fsSL https://raw.githubusercontent.com/CobuilderLabs/opencode/main/install.sh | bash; then
+      return 0
+    fi
+    attempt=$(( attempt + 1 ))
+    echo "  Install attempt ${attempt}/3 failed, retrying in 15s..."
+    sleep 15
+  done
+  fail "Install failed after 3 attempts"
+}
+
 # ── 1. Install ────────────────────────────────────────────────────────────────
 section "1 / 10  Install via curl | bash"
-curl -fsSL https://raw.githubusercontent.com/CobuilderLabs/opencode/main/install.sh | bash
+install_cobuilder
 [[ -x "$INSTALL_DIR/cobuilder" ]] || fail "Binary not found at $INSTALL_DIR/cobuilder"
 pass "Binary installed"
 
@@ -168,7 +187,7 @@ section "9 / 10  Uninstall → reinstall"
 rm -f "$INSTALL_DIR/cobuilder"
 [[ ! -x "$INSTALL_DIR/cobuilder" ]] || fail "Binary still present after removal"
 pass "Uninstalled"
-curl -fsSL https://raw.githubusercontent.com/CobuilderLabs/opencode/main/install.sh | bash
+install_cobuilder
 [[ -x "$INSTALL_DIR/cobuilder" ]] || fail "Binary missing after reinstall"
 VERSION2=$(cobuilder --version 2>&1)
 [[ "$VERSION2" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "Version after reinstall '$VERSION2' is not semver"
@@ -176,7 +195,7 @@ pass "Reinstalled — version $VERSION2"
 
 # ── 10. Headless install — no /dev/tty error ──────────────────────────────────
 section "10 / 10  Install script gracefully handles headless env"
-OUTPUT=$(curl -fsSL https://raw.githubusercontent.com/CobuilderLabs/opencode/main/install.sh | bash 2>&1 || true)
+OUTPUT=$(install_cobuilder 2>&1 || true)
 echo "$OUTPUT" | grep -q "CoBuilder installed successfully" || fail "Install script did not complete"
 echo "$OUTPUT" | grep -qi "No such device" && fail "/dev/tty error leaked to output" || true
 pass "Clean headless install — no /dev/tty errors"
