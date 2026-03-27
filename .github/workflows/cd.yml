@@ -283,8 +283,30 @@ jobs:
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
           "
 
+      # Bun runs electron-vite from an isolated .bun cache dir that lacks
+      # peer deps (picocolors) on Windows. Use npm+npx instead.
+      # catalog: entries must be resolved first since npm doesn't understand them.
+      - name: Resolve catalog deps and install with npm (Windows)
+        shell: pwsh
+        run: |
+          $catalog = (Get-Content package.json | ConvertFrom-Json).catalog
+          $pkg = Get-Content packages/desktop-electron/package.json | ConvertFrom-Json
+          foreach ($section in @("dependencies","devDependencies")) {
+            $deps = $pkg.$section
+            if (-not $deps) { continue }
+            $deps.PSObject.Properties | ForEach-Object {
+              if ($_.Value -eq "catalog:") {
+                $resolved = $catalog.($_.Name)
+                if ($resolved) { $deps.($_.Name) = $resolved }
+              }
+            }
+          }
+          $pkg | ConvertTo-Json -Depth 10 | Set-Content packages/desktop-electron/package.json
+          cd packages/desktop-electron
+          npm install --legacy-peer-deps
+
       - name: Build
-        run: cd packages/desktop-electron && bun run build
+        run: cd packages/desktop-electron && npx electron-vite build
         env:
           OPENCODE_CHANNEL: prod
 
