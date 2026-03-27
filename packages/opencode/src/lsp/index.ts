@@ -191,7 +191,7 @@ export namespace LSP {
                 root: existing?.root ?? (async () => Instance.directory),
                 extensions: item.extensions ?? existing?.extensions ?? [],
                 spawn: async (root) => ({
-                  process: lspspawn(item.command[0], item.command.slice(1), {
+                  process: await lspspawn(item.command[0], item.command.slice(1), {
                     cwd: root,
                     env: { ...process.env, ...item.env },
                   }),

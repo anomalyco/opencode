@@ -9,6 +9,7 @@ export namespace SandboxPolicy {
     worktree_root: string
     home: string
     mode?: Mode
+    protected_roots?: string[]
     extra_read_roots?: string[]
     extra_write_roots?: string[]
     extra_deny_paths?: string[]
@@ -48,12 +49,17 @@ export namespace SandboxPolicy {
     ])
   }
 
+  function denyWrite(roots: string[]) {
+    return roots.map((item) => `(deny file-write* (subpath "${quote(item)}"))`)
+  }
+
   export function build(input: Input): Output {
     const denyRoots = uniq([
       ...secret.map((item) => path.join(input.home, item)),
       ...(input.opencode_roots ?? []),
       ...(input.extra_deny_paths ?? []),
     ])
+    const protectedRoots = uniq(input.protected_roots ?? [])
     const readRoots = uniq([
       input.cwd,
       input.project_root,
@@ -77,6 +83,7 @@ export namespace SandboxPolicy {
       ...allow("file-read*", readRoots),
       ...allow("file-write*", writeRoots),
       ...deny(denyRoots),
+      ...denyWrite(protectedRoots),
       ...(input.allow_network ? ["(allow network*)"] : []),
       ...(input.allow_unix_sockets
         ? [

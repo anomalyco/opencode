@@ -9,6 +9,7 @@ import { Log } from "../util/log"
 import { lazy } from "@opencode-ai/util/lazy"
 import { Shell } from "@/shell/shell"
 import { Plugin } from "@/plugin"
+import { SandboxRuntime } from "@/sandbox/runtime"
 import { SandboxSpawn } from "@/sandbox/spawn"
 import { PtyID } from "./schema"
 import { Effect, Layer, ServiceMap } from "effect"
@@ -195,15 +196,17 @@ export namespace Pty {
             throw new SandboxSpawn.CommandError(blocked.command, blocked.rule)
           }
           const root = Instance.worktree === "/" ? Instance.directory : Instance.worktree
-          const sandbox = await SandboxSpawn.resolve(
-            {
-              cwd,
-              project_root: Instance.directory,
-              worktree_root: root,
-            },
+          const clean = argv(command, [...(input.args ?? [])], true)
+          const raw = argv(command, [...(input.args ?? [])], false)
+          const cmd = await SandboxRuntime.plan({
+            file: command,
+            args: clean,
+            cwd,
+            project_root: Instance.directory,
+            worktree_root: root,
             cfg,
-          )
-          const args = argv(command, [...(input.args ?? [])], sandbox.active)
+          })
+          const args = cmd.active ? clean : raw
           const shellEnv = await Plugin.trigger("shell.env", { cwd }, { env: {} })
           const env = {
             ...process.env,
@@ -221,19 +224,15 @@ export namespace Pty {
           log.info("creating session", { id, cmd: command, args, cwd })
 
           const spawn = await pty()
-          const cmd =
-            sandbox.active && sandbox.profile
-              ? SandboxSpawn.wrap({
-                  profile: sandbox.profile,
-                  file: command,
-                  args,
-                })
-              : { file: command, args }
-          const proc = spawn(cmd.file, cmd.args, {
-            name: "xterm-256color",
-            cwd,
-            env,
-          })
+          const proc = spawn(
+            (cmd.active ? cmd : { file: command, args }).file,
+            (cmd.active ? cmd : { file: command, args }).args,
+            {
+              name: "xterm-256color",
+              cwd,
+              env,
+            },
+          )
 
           const info = {
             id,

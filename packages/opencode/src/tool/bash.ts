@@ -17,6 +17,7 @@ import { Shell } from "@/shell/shell"
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncate"
 import { Plugin } from "@/plugin"
+import { SandboxRuntime } from "@/sandbox/runtime"
 import { SandboxSpawn } from "@/sandbox/spawn"
 
 const MAX_METADATA_LENGTH = 30_000
@@ -179,26 +180,17 @@ export const BashTool = Tool.define("bash", async () => {
         { env: {} },
       )
       const root = Instance.worktree === "/" ? Instance.directory : Instance.worktree
-      const sandbox = await SandboxSpawn.resolve(
-        {
-          cwd,
-          project_root: Instance.directory,
-          worktree_root: root,
-        },
-        cfg,
-      )
       const base = {
         file: shell,
         args: args(shell, params.command),
       }
-      const cmd =
-        sandbox.active && sandbox.profile
-          ? SandboxSpawn.wrap({
-              profile: sandbox.profile,
-              file: base.file,
-              args: base.args,
-            })
-          : { file: params.command, args: [] as string[] }
+      const cmd = await SandboxRuntime.plan({
+        ...base,
+        cwd,
+        project_root: Instance.directory,
+        worktree_root: root,
+        cfg,
+      })
       const env = {
         ...process.env,
         ...shellEnv.env,
@@ -302,21 +294,25 @@ export const BashTool = Tool.define("bash", async () => {
       }
 
       let retried = false
-      let result = await run(sandbox.active ? cmd : undefined)
+      let reason: SandboxSpawn.RetryReason | undefined
+      let result = await run(cmd.active ? cmd : undefined)
 
-      if (
-        cfg.allow_unsandboxed_retry &&
-        !result.timedOut &&
-        !result.aborted &&
-        SandboxSpawn.shouldRetry({ active: sandbox.active, code: result.code, stderr: result.stderr })
-      ) {
+      reason = SandboxSpawn.retryReason({
+        active: cmd.active,
+        code: result.code,
+        stderr: result.stderr,
+        allow_network: cmd.diag.allow_network,
+        command: params.command,
+      })
+
+      if (cfg.allow_unsandboxed_retry && !result.timedOut && !result.aborted && reason) {
         try {
           await ctx.ask({
             permission: "bash:unsandboxed",
             patterns: [params.command],
             always: [params.command],
             metadata: {
-              reason: "sandbox_denial",
+              reason,
             },
           })
           retried = true
@@ -335,7 +331,11 @@ export const BashTool = Tool.define("bash", async () => {
       const notes: string[] = []
 
       if (retried) {
-        notes.push("Retried command without sandbox after sandbox denial")
+        notes.push(
+          reason === "possible_network_sandbox_denial"
+            ? "Retried command without sandbox after a possible network-related sandbox failure"
+            : "Retried command without sandbox after sandbox denial",
+        )
       }
 
       if (result.timedOut) {

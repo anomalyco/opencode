@@ -49,6 +49,7 @@ import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
+import { SandboxRuntime } from "@/sandbox/runtime"
 import { SandboxSpawn } from "@/sandbox/spawn"
 
 // @ts-ignore
@@ -1736,21 +1737,18 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         { env: {} },
       )
       const root = Instance.worktree === "/" ? Instance.directory : Instance.worktree
-      const sandbox = await SandboxSpawn.resolve(
-        {
-          cwd,
-          project_root: Instance.directory,
-          worktree_root: root,
-        },
-        cfg,
-      )
       const cleanArgs = clean[shellName]?.args ?? clean[""].args
       const rawArgs = invocations[shellName]?.args ?? invocations[""].args
       const raw = { file: shell, args: rawArgs }
-      const cmd =
-        sandbox.active && sandbox.profile
-          ? SandboxSpawn.wrap({ profile: sandbox.profile, file: shell, args: cleanArgs })
-          : raw
+      const plan = await SandboxRuntime.plan({
+        file: shell,
+        args: cleanArgs,
+        cwd,
+        project_root: Instance.directory,
+        worktree_root: root,
+        cfg,
+      })
+      const cmd = plan.active ? plan : raw
       const env = {
         ...process.env,
         ...shellEnv.env,
@@ -1831,20 +1829,25 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }
 
       let retried = false
+      let reason: SandboxSpawn.RetryReason | undefined
       let result = await run(cmd)
 
-      if (
-        cfg.allow_unsandboxed_retry &&
-        !result.aborted &&
-        SandboxSpawn.shouldRetry({ active: sandbox.active, code: result.code, stderr: result.stderr })
-      ) {
+      reason = SandboxSpawn.retryReason({
+        active: plan.active,
+        code: result.code,
+        stderr: result.stderr,
+        allow_network: plan.diag.allow_network,
+        command: input.command,
+      })
+
+      if (cfg.allow_unsandboxed_retry && !result.aborted && reason) {
         try {
           await Permission.ask({
             permission: "bash:unsandboxed",
             patterns: [input.command],
             always: [input.command],
             metadata: {
-              reason: "sandbox_denial",
+              reason,
             },
             sessionID: input.sessionID,
             tool: {
@@ -1871,7 +1874,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
       if (retried) {
         output +=
-          "\n\n" + ["<metadata>", "Retried command without sandbox after sandbox denial", "</metadata>"].join("\n")
+          "\n\n" +
+          [
+            "<metadata>",
+            reason === "possible_network_sandbox_denial"
+              ? "Retried command without sandbox after a possible network-related sandbox failure"
+              : "Retried command without sandbox after sandbox denial",
+            "</metadata>",
+          ].join("\n")
       }
 
       if (result.aborted) {

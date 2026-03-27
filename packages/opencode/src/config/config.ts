@@ -40,6 +40,7 @@ import { Process } from "@/util/process"
 import { AppFileSystem } from "@/filesystem"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
+import { SandboxPreset } from "@/sandbox/preset"
 import { Duration, Effect, Layer, Option, ServiceMap } from "effect"
 import { Flock } from "@/util/flock"
 import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "@/plugin/shared"
@@ -561,6 +562,65 @@ export namespace Config {
   })
   export type Command = z.infer<typeof Command>
 
+  const SandboxPresetConfig = z.object({
+    mode: z.enum(["workspace-write", "read-only"]).optional(),
+    network: z.boolean().optional(),
+    protected_roots: z.array(z.string()).optional(),
+    extra_read_roots: z.array(z.string()).optional(),
+    extra_write_roots: z.array(z.string()).optional(),
+    permission: Permission.optional(),
+  })
+
+  const SandboxConfig = z
+    .object({
+      enabled: z
+        .boolean()
+        .optional()
+        .describe("Enable macOS sandboxing for bash, session shell commands, PTY initial spawns, and LSP launches"),
+      preset: z.string().optional().describe("Named sandbox preset (default, strict, network, or a custom preset)"),
+      mode: z
+        .enum(["workspace-write", "read-only"])
+        .optional()
+        .describe("Sandbox mode for command execution (default: preset default, otherwise workspace-write)"),
+      network: z.boolean().optional().describe("Allow outbound network access inside the macOS sandbox"),
+      protected_roots: z
+        .array(z.string())
+        .optional()
+        .describe("Workspace-relative paths that remain write-protected inside writable roots"),
+      extra_read_roots: z.array(z.string()).optional().describe("Additional read-only roots for macOS sandboxing"),
+      extra_write_roots: z.array(z.string()).optional().describe("Additional writable roots for macOS sandboxing"),
+      extra_deny_paths: z.array(z.string()).optional().describe("Additional denied paths for macOS sandboxing"),
+      excluded_commands: z
+        .array(z.string())
+        .optional()
+        .describe("Command prefixes that must be blocked before execution"),
+      allow_unsandboxed_retry: z
+        .boolean()
+        .optional()
+        .describe("Allow an explicit unsandboxed retry after a sandbox denial"),
+      fail_if_unavailable: z.boolean().optional().describe("Hard-fail when sandboxing is enabled but cannot activate"),
+      presets: z.record(z.string(), SandboxPresetConfig).optional(),
+    })
+    .superRefine((value, ctx) => {
+      const builtins = new Set(SandboxPreset.names())
+      for (const key of Object.keys(value.presets ?? {})) {
+        if (!builtins.has(key)) continue
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["presets", key],
+          message: `Custom sandbox preset "${key}" cannot shadow built-in preset "${key}"`,
+        })
+      }
+      if (!value.preset) return
+      if (builtins.has(value.preset)) return
+      if (Object.hasOwn(value.presets ?? {}, value.preset)) return
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["preset"],
+        message: `Unknown sandbox preset "${value.preset}"`,
+      })
+    })
+
   export const Skills = z.object({
     paths: z.array(z.string()).optional().describe("Additional paths to skill folders"),
     urls: z
@@ -1072,39 +1132,7 @@ export namespace Config {
         .object({
           disable_paste_summary: z.boolean().optional(),
           batch_tool: z.boolean().optional().describe("Enable the batch tool"),
-          sandbox: z
-            .object({
-              enabled: z
-                .boolean()
-                .optional()
-                .describe("Enable macOS sandboxing for bash, session shell commands, and PTY initial spawns"),
-              mode: z
-                .enum(["workspace-write", "read-only"])
-                .optional()
-                .describe("Sandbox mode for command execution (default: workspace-write)"),
-              extra_read_roots: z
-                .array(z.string())
-                .optional()
-                .describe("Additional read-only roots for macOS sandboxing"),
-              extra_write_roots: z
-                .array(z.string())
-                .optional()
-                .describe("Additional writable roots for macOS sandboxing"),
-              extra_deny_paths: z.array(z.string()).optional().describe("Additional denied paths for macOS sandboxing"),
-              excluded_commands: z
-                .array(z.string())
-                .optional()
-                .describe("Command prefixes that must be blocked before execution"),
-              allow_unsandboxed_retry: z
-                .boolean()
-                .optional()
-                .describe("Allow an explicit unsandboxed retry after a sandbox denial"),
-              fail_if_unavailable: z
-                .boolean()
-                .optional()
-                .describe("Hard-fail when sandboxing is enabled but cannot activate"),
-            })
-            .optional(),
+          sandbox: SandboxConfig.optional(),
           openTelemetry: z
             .boolean()
             .optional()
