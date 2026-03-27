@@ -16,6 +16,7 @@ import {
   type Accessor,
   type Component,
   createMemo,
+  createEffect,
   createResource,
   createSignal,
   ErrorBoundary,
@@ -179,6 +180,7 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean }>) {
   const [store, setStore] = createStore({
     message: "",
   })
+  let sent = false
 
   const [checkMode, setCheckMode] = createSignal<"blocking" | "background">("blocking")
 
@@ -203,6 +205,14 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean }>) {
           Effect.runPromise,
         ),
   )
+
+  createEffect(() => {
+    if (sent) return
+    if (startupHealthCheck.loading) return
+    if (!startupHealthCheck()) return
+    sent = true
+    queueMicrotask(() => window.dispatchEvent(new CustomEvent("opencode:startup-ready")))
+  })
 
   return (
     <Suspense
