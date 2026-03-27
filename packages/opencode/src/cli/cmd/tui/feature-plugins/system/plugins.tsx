@@ -7,7 +7,7 @@ import { createEffect, createMemo, createSignal } from "solid-js"
 
 const id = "internal:plugin-manager"
 const key = Keybind.parse("space").at(0)
-const add = Keybind.parse("i").at(0)
+const add = Keybind.parse("shift+i").at(0)
 const tab = Keybind.parse("tab").at(0)
 
 function state(api: TuiPluginApi, item: TuiPluginStatus) {

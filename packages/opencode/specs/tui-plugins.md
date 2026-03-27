@@ -361,7 +361,7 @@ The plugin manager is exposed as a command with title `Plugins` and value `plugi
 - It toggles based on `active`.
 - Its own row is disabled only inside the manager dialog.
 - It also exposes command `plugins.install` with title `Install plugin`.
-- Inside the Plugins dialog, key `i` opens the install prompt.
+- Inside the Plugins dialog, key `shift+i` opens the install prompt.
 - Install prompt asks for npm package name.
 - Scope defaults to local, and `tab` toggles local/global.
 - Install is blocked until `api.state.path.directory` is available; current guard message is `Paths are still syncing. Try again in a moment.`.
