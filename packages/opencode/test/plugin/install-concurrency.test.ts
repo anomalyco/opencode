@@ -56,7 +56,7 @@ function expectPlugins(list: unknown[] | undefined, expectMods: string[]) {
   expect(new Set(hit)).toEqual(new Set(expectMods))
 }
 
-describe("cli.plug.concurrent", () => {
+describe("plugin.install.concurrent", () => {
   test("serializes concurrent server config updates across processes", async () => {
     await using tmp = await tmpdir()
     const target = await plugin(tmp.path, ["server"])

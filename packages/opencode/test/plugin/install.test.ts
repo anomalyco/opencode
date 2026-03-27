@@ -16,15 +16,10 @@ function deps(global: string, target: string | Error): PlugDeps {
       info() {},
       success() {},
     },
-    mkdir: async (dir, opts) => {
-      await fs.mkdir(dir, opts)
-    },
     resolve: async () => {
       if (target instanceof Error) throw target
       return target
     },
-    stat: Filesystem.stat,
-    readJson: (file) => Filesystem.readJson(file),
     readText: (file) => Filesystem.readText(file),
     write: async (file, text) => {
       await Filesystem.write(file, text)
@@ -75,7 +70,7 @@ async function read(file: string) {
   }>(file)
 }
 
-describe("cli.plug.task", () => {
+describe("plugin.install.task", () => {
   test("writes both server and tui config entries", async () => {
     await using tmp = await tmpdir()
     const target = await plugin(tmp.path, ["server", "tui"])

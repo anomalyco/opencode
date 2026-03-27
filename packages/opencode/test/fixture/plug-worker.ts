@@ -1,5 +1,4 @@
 import path from "path"
-import { mkdir } from "fs/promises"
 
 import { createPlugTask, type PlugCtx, type PlugDeps } from "../../src/cli/cmd/plug"
 import { Filesystem } from "../../src/util/filesystem"
@@ -48,12 +47,7 @@ function deps(msg: Msg): PlugDeps {
       info() {},
       success() {},
     },
-    mkdir: async (dir, opts) => {
-      await mkdir(dir, opts)
-    },
     resolve: async () => msg.target,
-    stat: (file) => Filesystem.stat(file),
-    readJson: (file) => Filesystem.readJson(file),
     readText: (file) => Filesystem.readText(file),
     write: async (file, text) => {
       if (msg.holdMs && msg.holdMs > 0) {
