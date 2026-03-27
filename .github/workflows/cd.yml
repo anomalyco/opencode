@@ -265,11 +265,11 @@ jobs:
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
           "
 
+      - name: Install desktop dependencies with npm
+        run: cd packages/desktop-electron && npm install --legacy-peer-deps
+
       - name: Build
-        shell: pwsh
-        run: |
-          cd packages/desktop-electron
-          bun x electron-vite build
+        run: cd packages/desktop-electron && npx electron-vite build
         env:
           OPENCODE_CHANNEL: prod
 
