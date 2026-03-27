@@ -160,6 +160,15 @@ async function setup9Router() {
 
   await Filesystem.writeJson(configPath, updated)
 
+  // Write auth entry so /connect shows 9Router as already connected
+  const authPath = path.join(Global.Path.data, "auth.json")
+  let existingAuth: any = {}
+  try {
+    existingAuth = await Filesystem.readJson(authPath)
+  } catch {}
+  existingAuth[NINEROUTER_ID] = { type: "api", key: "9router" }
+  await Filesystem.writeJson(authPath, existingAuth, 0o600)
+
   prompts.log.success(`Model registered: ${defaultModelId}`)
   prompts.log.success(`Default model: ${NINEROUTER_ID}/${defaultModelId}`)
 }
@@ -204,10 +213,14 @@ async function setupZenProvider() {
     existing = await Filesystem.readJson(configPath)
   } catch {}
 
-  await Filesystem.writeJson(configPath, {
+  const zenEnabled: string[] | undefined = existing?.enabled_providers
+  const updatedZen: any = {
     ...existing,
     model: `opencode/${modelChoice}`,
-  })
+  }
+  if (zenEnabled) updatedZen.enabled_providers = Array.from(new Set([...zenEnabled, "opencode"]))
+
+  await Filesystem.writeJson(configPath, updatedZen)
 
   prompts.log.success(`Model set: opencode/${modelChoice}`)
   if ((modelChoice as string).endsWith("-free")) {
@@ -258,10 +271,14 @@ async function setupCopilotProvider() {
     existing = await Filesystem.readJson(configPath)
   } catch {}
 
-  await Filesystem.writeJson(configPath, {
+  const copilotEnabled: string[] | undefined = existing?.enabled_providers
+  const updatedCopilot: any = {
     ...existing,
     model: `github-copilot/${modelChoice}`,
-  })
+  }
+  if (copilotEnabled) updatedCopilot.enabled_providers = Array.from(new Set([...copilotEnabled, "github-copilot"]))
+
+  await Filesystem.writeJson(configPath, updatedCopilot)
 
   prompts.log.success(`Model set: github-copilot/${modelChoice}`)
   prompts.log.info("To authenticate with GitHub Copilot, run: cobuilder providers login")
