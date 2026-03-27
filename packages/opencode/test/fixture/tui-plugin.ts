@@ -191,6 +191,10 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
       activate: async () => false,
       deactivate: async () => false,
       add: async () => false,
+      install: async () => ({
+        ok: false,
+        message: "not implemented in fixture",
+      }),
     },
     lifecycle: {
       signal: ctrl.signal,

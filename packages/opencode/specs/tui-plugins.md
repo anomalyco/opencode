@@ -166,7 +166,7 @@ Top-level API groups exposed to `tui(api, options, meta)`:
 - `api.event.on(type, handler)`
 - `api.renderer`
 - `api.slots.register(plugin)`
-- `api.plugins.list()`, `activate(id)`, `deactivate(id)`, `add(spec)`
+- `api.plugins.list()`, `activate(id)`, `deactivate(id)`, `add(spec)`, `install(spec, options?)`
 - `api.lifecycle.signal`, `api.lifecycle.onDispose(fn)`
 
 ### Commands
@@ -294,6 +294,9 @@ Slot notes:
 - `api.plugins.add(spec)` resolves the current `tui.json` entry for that spec when present, otherwise it treats the input as the plugin spec.
 - `api.plugins.add(spec)` refreshes runtime config once when plugin metadata is missing, skips already-loaded specs, then loads and tracks metadata for the resolved spec.
 - `api.plugins.add(spec)` applies merged `plugin_enabled` state (config + KV), only initializes when enabled, and does not persist enable state.
+- `api.plugins.install(spec, { global? })` runs install -> manifest read -> config patch using the same helper flow as CLI install.
+- `api.plugins.install(...)` returns either `{ ok: false, message, missing? }` or `{ ok: true, dir, tui }`.
+- `api.plugins.install(...)` does not load plugins into the current session. Call `api.plugins.add(spec)` to load after install.
 - If activation fails, the plugin can remain `enabled=true` and `active=false`.
 - `api.lifecycle.signal` is aborted before cleanup runs.
 - `api.lifecycle.onDispose(fn)` registers cleanup and returns an unregister function.
@@ -325,6 +328,7 @@ Metadata is persisted by plugin id.
 - Runtime add uses the same external loader path, including the file-plugin retry after dependency wait.
 - Runtime add skips duplicates by resolved spec and returns `true` when the spec is already loaded.
 - Runtime add returns `true` for a loaded-but-disabled plugin when merged enable state resolves to `false`.
+- Runtime install and runtime add are separate operations.
 - Plugin init failure rolls back that plugin's tracked registrations and loading continues.
 - TUI runtime tracks and disposes:
   - command registrations
@@ -361,8 +365,9 @@ The plugin manager is exposed as a command with title `Plugins` and value `plugi
 - Install prompt asks for npm package name.
 - Scope defaults to local, and `tab` toggles local/global.
 - Install is blocked until `api.state.path.directory` is available; current guard message is `Paths are still syncing. Try again in a moment.`.
-- If the installed package has no `tui` target, manager reports that and does not call runtime add.
-- After a successful install with a `tui` target, manager immediately calls `api.plugins.add(spec)`.
+- Manager install uses `api.plugins.install(spec, { global })`.
+- If the installed package has no `tui` target (`tui=false`), manager reports that and does not expect a runtime load.
+- If install reports `tui=true`, manager then calls `api.plugins.add(spec)`.
 - If runtime add fails, TUI shows a warning and restart remains the fallback.
 
 ## Current in-repo examples

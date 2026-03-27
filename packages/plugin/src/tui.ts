@@ -346,6 +346,22 @@ export type TuiPluginStatus = {
   active: boolean
 }
 
+export type TuiPluginInstallOptions = {
+  global?: boolean
+}
+
+export type TuiPluginInstallResult =
+  | {
+      ok: true
+      dir: string
+      tui: boolean
+    }
+  | {
+      ok: false
+      message: string
+      missing?: boolean
+    }
+
 export type TuiWorkspace = {
   current: () => string | undefined
   set: (workspaceID?: string) => void
@@ -391,6 +407,7 @@ export type TuiPluginApi = {
     activate: (id: string) => Promise<boolean>
     deactivate: (id: string) => Promise<boolean>
     add: (spec: string) => Promise<boolean>
+    install: (spec: string, options?: TuiPluginInstallOptions) => Promise<TuiPluginInstallResult>
   }
   lifecycle: TuiLifecycle
 }

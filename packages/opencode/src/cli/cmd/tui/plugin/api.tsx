@@ -367,6 +367,12 @@ export function createTuiApi(input: Input): TuiHostPluginApi {
       async add() {
         return false
       },
+      async install() {
+        return {
+          ok: false,
+          message: "plugins.install is only available in plugin context",
+        }
+      },
     },
     lifecycle,
     theme: {

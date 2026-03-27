@@ -1,7 +1,4 @@
 import { Keybind } from "@/util/keybind"
-import { errorMessage } from "@/util/error"
-import { installPlugin, patchPluginConfig, readPluginManifest } from "@/plugin/install"
-import { Process } from "@/util/process"
 import type { TuiPlugin, TuiPluginApi, TuiPluginStatus } from "@opencode-ai/plugin/tui"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { fileURLToPath } from "url"
@@ -40,94 +37,6 @@ function meta(item: TuiPluginStatus, width: number) {
   return item.spec
 }
 
-function cause(err: unknown) {
-  if (!err || typeof err !== "object") return
-  if (!("cause" in err)) return
-  return (err as { cause?: unknown }).cause
-}
-
-function detail(err: unknown) {
-  const hit = cause(err) ?? err
-  if (!(hit instanceof Process.RunFailedError)) {
-    return {
-      msg: errorMessage(hit),
-      miss: false,
-    }
-  }
-
-  const lines = hit.stderr
-    .toString()
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-  const errs = lines.filter((line) => line.startsWith("error:")).map((line) => line.replace(/^error:\s*/, ""))
-  return {
-    msg: errs[0] ?? lines.at(-1) ?? errorMessage(hit),
-    miss: lines.some((line) => line.includes("No version matching")),
-  }
-}
-
-async function apply(api: TuiPluginApi, mod: string, global: boolean) {
-  if (!api.state.path.directory) {
-    return {
-      ok: false as const,
-      msg: "Paths are still syncing. Try again in a moment.",
-    }
-  }
-
-  const install = await installPlugin(mod)
-  if (!install.ok) {
-    const out = detail(install.error)
-    return {
-      ok: false as const,
-      msg: out.msg,
-      miss: out.miss,
-    }
-  }
-
-  const manifest = await readPluginManifest(install.target)
-  if (!manifest.ok) {
-    if (manifest.code === "manifest_no_targets") {
-      return {
-        ok: false as const,
-        msg: `"${mod}" does not declare supported targets in package.json`,
-      }
-    }
-
-    return {
-      ok: false as const,
-      msg: `Installed "${mod}" but failed to read ${manifest.file}`,
-    }
-  }
-
-  const patch = await patchPluginConfig({
-    spec: mod,
-    targets: manifest.targets,
-    global,
-    vcs: api.state.path.worktree && api.state.path.worktree !== "/" ? "git" : undefined,
-    worktree: api.state.path.worktree,
-    directory: api.state.path.directory,
-  })
-  if (!patch.ok) {
-    if (patch.code === "invalid_json") {
-      return {
-        ok: false as const,
-        msg: `Invalid JSON in ${patch.file} (${patch.parse} at line ${patch.line}, column ${patch.col})`,
-      }
-    }
-    return {
-      ok: false as const,
-      msg: errorMessage(patch.error),
-    }
-  }
-
-  return {
-    ok: true as const,
-    dir: patch.dir,
-    tui: manifest.targets.some((item) => item.kind === "tui"),
-  }
-}
-
 function Install(props: { api: TuiPluginApi }) {
   const [global, setGlobal] = createSignal(false)
   const [busy, setBusy] = createSignal(false)
@@ -163,19 +72,21 @@ function Install(props: { api: TuiPluginApi }) {
         }
 
         setBusy(true)
-        apply(props.api, mod, global())
+        props.api.plugins
+          .install(mod, { global: global() })
           .then((out) => {
             if (!out.ok) {
               props.api.ui.toast({
                 variant: "error",
-                message: out.msg,
+                message: out.message,
               })
-              if ("miss" in out && out.miss) {
+              if (out.missing) {
                 props.api.ui.toast({
                   variant: "info",
                   message: "Check npm registry/auth settings and try again.",
                 })
               }
+              show(props.api)
               return
             }
 

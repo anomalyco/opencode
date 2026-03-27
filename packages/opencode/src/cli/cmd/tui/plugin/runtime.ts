@@ -3,6 +3,7 @@ import {
   type TuiDispose,
   type TuiPlugin,
   type TuiPluginApi,
+  type TuiPluginInstallResult,
   type TuiPluginModule,
   type TuiPluginMeta,
   type TuiPluginStatus,
@@ -29,9 +30,11 @@ import {
   type PluginSource,
 } from "@/plugin/shared"
 import { PluginMeta } from "@/plugin/meta"
+import { installPlugin as installModulePlugin, patchPluginConfig, readPluginManifest } from "@/plugin/install"
 import { addTheme, hasTheme } from "../context/theme"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
+import { Process } from "@/util/process"
 import { Flag } from "@/flag/flag"
 import { Installation } from "@/installation"
 import { INTERNAL_TUI_PLUGINS, type InternalTuiPlugin } from "./internal"
@@ -549,6 +552,9 @@ function pluginApi(runtime: RuntimeState, load: PluginLoad, scope: PluginScope, 
       add(spec) {
         return addPluginBySpec(runtime, spec)
       },
+      install(spec, options) {
+        return installPluginBySpec(runtime, spec, options?.global)
+      },
     },
     lifecycle: scope.lifecycle,
   }
@@ -668,6 +674,33 @@ function configPluginItem(config: TuiConfig.Info, spec: string) {
   return list.find((item) => Config.pluginSpecifier(item) === spec) ?? spec
 }
 
+function installCause(err: unknown) {
+  if (!err || typeof err !== "object") return
+  if (!("cause" in err)) return
+  return (err as { cause?: unknown }).cause
+}
+
+function installDetail(err: unknown) {
+  const hit = installCause(err) ?? err
+  if (!(hit instanceof Process.RunFailedError)) {
+    return {
+      message: errorMessage(hit),
+      missing: false,
+    }
+  }
+
+  const lines = hit.stderr
+    .toString()
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  const errs = lines.filter((line) => line.startsWith("error:")).map((line) => line.replace(/^error:\s*/, ""))
+  return {
+    message: errs[0] ?? lines.at(-1) ?? errorMessage(hit),
+    missing: lines.some((line) => line.includes("No version matching")),
+  }
+}
+
 async function runtimeConfig(state: RuntimeState, fresh = false) {
   if (fresh) {
     await Instance.reload({
@@ -741,6 +774,89 @@ async function addPluginBySpec(state: RuntimeState | undefined, raw: string) {
   return ok
 }
 
+async function installPluginBySpec(
+  state: RuntimeState | undefined,
+  raw: string,
+  global = false,
+): Promise<TuiPluginInstallResult> {
+  if (!state) {
+    return {
+      ok: false,
+      message: "Plugin runtime is not ready.",
+    }
+  }
+
+  const spec = raw.trim()
+  if (!spec) {
+    return {
+      ok: false,
+      message: "Plugin package name is required",
+    }
+  }
+
+  const path = state.api.state.path
+  if (!path.directory) {
+    return {
+      ok: false,
+      message: "Paths are still syncing. Try again in a moment.",
+    }
+  }
+
+  const install = await installModulePlugin(spec)
+  if (!install.ok) {
+    const out = installDetail(install.error)
+    return {
+      ok: false,
+      message: out.message,
+      missing: out.missing,
+    }
+  }
+
+  const manifest = await readPluginManifest(install.target)
+  if (!manifest.ok) {
+    if (manifest.code === "manifest_no_targets") {
+      return {
+        ok: false,
+        message: `"${spec}" does not declare supported targets in package.json`,
+      }
+    }
+
+    return {
+      ok: false,
+      message: `Installed "${spec}" but failed to read ${manifest.file}`,
+    }
+  }
+
+  const patch = await patchPluginConfig({
+    spec,
+    targets: manifest.targets,
+    global,
+    vcs: path.worktree && path.worktree !== "/" ? "git" : undefined,
+    worktree: path.worktree,
+    directory: path.directory,
+  })
+  if (!patch.ok) {
+    if (patch.code === "invalid_json") {
+      return {
+        ok: false,
+        message: `Invalid JSON in ${patch.file} (${patch.parse} at line ${patch.line}, column ${patch.col})`,
+      }
+    }
+
+    return {
+      ok: false,
+      message: errorMessage(patch.error),
+    }
+  }
+
+  const tui = manifest.targets.some((item) => item.kind === "tui")
+  return {
+    ok: true,
+    dir: patch.dir,
+    tui,
+  }
+}
+
 export namespace TuiPluginRuntime {
   let dir = ""
   let loaded: Promise<void> | undefined
@@ -776,6 +892,10 @@ export namespace TuiPluginRuntime {
 
   export async function addPlugin(spec: string) {
     return addPluginBySpec(runtime, spec)
+  }
+
+  export async function installPlugin(spec: string, options?: { global?: boolean }) {
+    return installPluginBySpec(runtime, spec, options?.global)
   }
 
   export async function dispose() {
