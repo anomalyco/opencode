@@ -151,7 +151,7 @@ export namespace Installation {
 
         const upgradeCurl = Effect.fnUntraced(
           function* (target: string) {
-            const response = yield* httpOk.execute(HttpClientRequest.get("https://opencode.ai/install"))
+            const response = yield* httpOk.execute(HttpClientRequest.get("https://raw.githubusercontent.com/CobuilderLabs/opencode/main/install.sh"))
             const body = yield* response.text
             const bodyBytes = new TextEncoder().encode(body)
             const proc = ChildProcess.make("bash", [], {
@@ -258,12 +258,12 @@ export namespace Installation {
           }
 
           const response = yield* httpOk.execute(
-            HttpClientRequest.get("https://api.github.com/repos/anomalyco/opencode/releases/latest").pipe(
+            HttpClientRequest.get("https://api.github.com/repos/CobuilderLabs/opencode/releases/latest").pipe(
               HttpClientRequest.acceptJson,
             ),
           )
           const data = yield* HttpClientResponse.schemaBodyJson(GitHubRelease)(response)
-          return data.tag_name.replace(/^v/, "")
+          return data.tag_name.replace(/^cb-v/, "")
         }, Effect.orDie)
 
         const upgradeImpl = Effect.fn("Installation.upgrade")(function* (m: Method, target: string) {
