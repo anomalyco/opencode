@@ -69,6 +69,9 @@ export function createDialogProviderOptions() {
           }
           if (index == null) return
           const method = methods[index]
+          if (String(provider.id) === "9router" || String(provider.name) === "9Router") {
+            return dialog.replace(() => <NineRouterMethod providerID={String(provider.id)} title="9Router URL" />)
+          }
           if (method.type === "oauth") {
             let inputs: Record<string, string> | undefined
             if (method.prompts?.length) {
@@ -105,9 +108,6 @@ export function createDialogProviderOptions() {
             }
           }
           if (method.type === "api") {
-            if (provider.id === "9router") {
-              return dialog.replace(() => <NineRouterMethod providerID={provider.id} title={method.label} />)
-            }
             return dialog.replace(() => <ApiMethod providerID={provider.id} title={method.label} />)
           }
         },
