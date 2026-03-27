@@ -370,6 +370,17 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         },
       }),
       agentCommand({
+        id: "subagent.list",
+        title: language.t("command.subagent.list"),
+        description: language.t("command.subagent.list.description"),
+        slash: "subagents",
+        onSelect: () => {
+          void import("@/components/dialog-list-subagents").then((x) => {
+            dialog.show(() => <x.DialogListSubagents />)
+          })
+        },
+      }),
+      agentCommand({
         id: "agent.cycle",
         title: language.t("command.agent.cycle"),
         description: language.t("command.agent.cycle.description"),

@@ -65,6 +65,8 @@ export const dict = {
   "command.model.choose.description": "Select a different model",
   "command.mcp.toggle": "Toggle MCPs",
   "command.mcp.toggle.description": "Toggle MCPs",
+  "command.subagent.list": "List subagents",
+  "command.subagent.list.description": "Browse available subagents",
   "command.agent.cycle": "Cycle agent",
   "command.agent.cycle.description": "Switch to the next agent",
   "command.agent.cycle.reverse": "Cycle agent backwards",
@@ -292,6 +294,9 @@ export const dict = {
   "prompt.toast.promptSendFailed.title": "Failed to send prompt",
   "prompt.toast.promptSendFailed.description": "Unable to retrieve session",
 
+  "dialog.subagent.title": "Subagents",
+  "dialog.subagent.search.placeholder": "Search subagents",
+  "dialog.subagent.empty": "No subagents configured",
   "dialog.mcp.title": "MCPs",
   "dialog.mcp.description": "{{enabled}} of {{total}} enabled",
   "dialog.mcp.empty": "No MCPs configured",

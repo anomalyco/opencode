@@ -19,6 +19,7 @@ import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
+import { DialogSubagent } from "@tui/component/dialog-subagent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { DialogWorkspaceList } from "@tui/component/dialog-workspace-list"
 import { KeybindProvider } from "@tui/context/keybind"
@@ -478,6 +479,17 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
       onSelect: () => {
         dialog.replace(() => <DialogAgent />)
+      },
+    },
+    {
+      title: "List subagents",
+      value: "subagent.list",
+      category: "Agent",
+      slash: {
+        name: "subagents",
+      },
+      onSelect: () => {
+        dialog.replace(() => <DialogSubagent />)
       },
     },
     {
