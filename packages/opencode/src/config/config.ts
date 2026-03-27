@@ -150,6 +150,16 @@ export namespace Config {
           result.mode ??= {}
           result.plugin ??= []
         }
+
+        // Load opencode.local.jsonc last (highest priority) - for local overrides like custom LLMs
+        const localConfig = path.join(dir, "opencode.local.jsonc")
+        if (existsSync(localConfig)) {
+          log.debug(`loading local config from ${localConfig}`)
+          result = mergeConfigConcatArrays(result, await loadFile(localConfig))
+          result.agent ??= {}
+          result.mode ??= {}
+          result.plugin ??= []
+        }
       }
 
       deps.push(
