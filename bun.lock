@@ -516,6 +516,7 @@
         "motion-dom": "12.34.3",
         "motion-utils": "12.29.2",
         "remeda": "catalog:",
+        "remend": "catalog:",
         "shiki": "catalog:",
         "solid-js": "catalog:",
         "solid-list": "catalog:",
@@ -631,6 +632,7 @@
     "marked": "17.0.1",
     "marked-shiki": "1.2.1",
     "remeda": "2.26.0",
+    "remend": "1.3.0",
     "shiki": "3.20.0",
     "solid-js": "1.9.10",
     "solid-list": "0.3.0",
@@ -4106,6 +4108,8 @@
     "remark-stringify": ["remark-stringify@11.0.0", "", { "dependencies": { "@types/mdast": "^4.0.0", "mdast-util-to-markdown": "^2.0.0", "unified": "^11.0.0" } }, "sha512-1OSmLd3awB/t8qdoEOMazZkNsfVTeY4fTsgzcQFdXNq8ToTN4ZGwrMnlda4K6smTFKD+GRV6O48i6Z4iKgPPpw=="],
 
     "remeda": ["remeda@2.26.0", "", { "dependencies": { "type-fest": "^4.41.0" } }, "sha512-lmNNwtaC6Co4m0WTTNoZ/JlpjEqAjPZO0+czC9YVRQUpkbS4x8Hmh+Mn9HPfJfiXqUQ5IXXgSXSOB2pBKAytdA=="],
+
+    "remend": ["remend@1.3.0", "", {}, "sha512-iIhggPkhW3hFImKtB10w0dz4EZbs28mV/dmbcYVonWEJ6UGHHpP+bFZnTh6GNWJONg5m+U56JrL+8IxZRdgWjw=="],
 
     "request-light": ["request-light@0.7.0", "", {}, "sha512-lMbBMrDoxgsyO+yB3sDcrDuX85yYt7sS8BfQd11jtbW/z5ZWgLZRcEGLsLoYw7I0WSUGQBs8CC8ScIxkTX1+6Q=="],
 
