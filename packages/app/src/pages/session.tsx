@@ -63,7 +63,9 @@ import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
 
 const emptyUserMessages: UserMessage[] = []
-const emptyFollowups: (FollowupDraft & { id: string })[] = []
+type FollowupItem = FollowupDraft & { id: string }
+type FollowupEdit = Pick<FollowupItem, "id" | "prompt" | "context">
+const emptyFollowups: FollowupItem[] = []
 
 type SessionHistoryWindowInput = {
   sessionID: () => string | undefined
@@ -75,13 +77,6 @@ type SessionHistoryWindowInput = {
   loadMore: (sessionID: string) => Promise<void>
   userScrolled: () => boolean
   scroller: () => HTMLDivElement | undefined
-}
-
-type FollowupState = {
-  items: Record<string, (FollowupDraft & { id: string })[] | undefined>
-  failed: Record<string, string | undefined>
-  paused: Record<string, boolean | undefined>
-  edit: Record<string, { id: string; prompt: FollowupDraft["prompt"]; context: FollowupDraft["context"] } | undefined>
 }
 
 /**
@@ -522,7 +517,12 @@ export default function Page() {
 
   const [followup, setFollowup] = persisted(
     Persist.workspace(sdk.directory, "followup", ["followup.v1"]),
-    createStore<FollowupState>({
+    createStore<{
+      items: Record<string, FollowupItem[] | undefined>
+      failed: Record<string, string | undefined>
+      paused: Record<string, boolean | undefined>
+      edit: Record<string, FollowupEdit | undefined>
+    }>({
       items: {},
       failed: {},
       paused: {},
