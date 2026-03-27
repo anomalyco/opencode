@@ -104,6 +104,7 @@ jobs:
           fi
 
           gh pr create \
+            --repo "$GITHUB_REPOSITORY" \
             --title "$TITLE" \
             --body "$BODY" \
             --base main \
