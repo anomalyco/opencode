@@ -14,7 +14,6 @@ import { Installation } from "./installation"
 import { NamedError } from "@opencode-ai/util/error"
 import { FormatError } from "./cli/error"
 import { ServeCommand } from "./cli/cmd/serve"
-import { WorkspaceServeCommand } from "./cli/cmd/workspace-serve"
 import { Filesystem } from "./util/filesystem"
 import { DebugCommand } from "./cli/cmd/debug"
 import { StatsCommand } from "./cli/cmd/stats"
@@ -51,11 +50,15 @@ process.on("uncaughtException", (e) => {
   })
 })
 
+<<<<<<< HEAD
 process.on("exit", (code) => {
   if (code === 0) SessionCheckpoint.clearSync()
 })
 
 let cli = yargs(hideBin(process.argv))
+=======
+const cli = yargs(hideBin(process.argv))
+>>>>>>> upstream/dev
   .parserConfiguration({ "populate--": true })
   .scriptName("cobuilder")
   .wrap(100)
@@ -158,6 +161,7 @@ let cli = yargs(hideBin(process.argv))
   .command(PrCommand)
   .command(SessionCommand)
   .command(DbCommand)
+<<<<<<< HEAD
   .command(OnboardCommand)
   .command(WorkflowCommand)
   .command(SkillsCommand)
@@ -167,6 +171,8 @@ if (Installation.isLocal()) {
 }
 
 cli = cli
+=======
+>>>>>>> upstream/dev
   .fail((msg, err) => {
     if (
       msg?.startsWith("Unknown argument") ||
