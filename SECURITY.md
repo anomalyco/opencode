@@ -23,8 +23,27 @@ OpenCode can optionally sandbox certain command execution paths on macOS using `
 | **Bash tool** (agent-issued non-interactive commands)       | Yes             | Yes (pre-spawn)        | Yes (`bash:unsandboxed` permission) |
 | **Session command path** (user-initiated command execution) | Yes             | Yes (pre-spawn)        | Yes (`bash:unsandboxed` permission) |
 | **PTY interactive sessions**                                | Yes             | Initial spawn only     | No                                  |
+| **LSP server launches**                                     | Yes             | No                     | No                                  |
 
 PTY sessions apply the sandbox profile to the initial process spawn and check `excluded_commands` before spawning. In-band command filtering inside a running PTY session is **not** performed — once a PTY shell is running, commands typed into it are not individually inspected or blocked.
+
+LSP servers are always launched with `read-only` mode and network denied, regardless of the active preset. This is hardcoded in `lsp/launch.ts` and cannot be overridden by configuration.
+
+#### Presets
+
+Built-in presets control mode, network, and permission defaults:
+
+| Preset        | Mode              | Network | Notes                                     |
+| ------------- | ----------------- | ------- | ----------------------------------------- |
+| **`default`** | `workspace-write` | No      | Read system paths, read/write workspace   |
+| **`strict`**  | `read-only`       | No      | Writes limited to `/tmp`; bash/edit = ask |
+| **`network`** | `workspace-write` | Yes     | Same as default but allows network access |
+
+Custom presets can be defined under `experimental.sandbox.presets` in `opencode.json`. Selecting a preset via the `preset` field resolves the named preset, then any sibling sandbox fields (`mode`, `network`, `protected_roots`, `extra_read_roots`, `extra_write_roots`) override the preset values.
+
+#### Protected roots
+
+Inside writable workspace roots, `.git` and `.opencode` are always write-protected. If the workspace is a git worktree, the resolved gitdir target (read from the `.git` file) is also write-protected. These deny rules are emitted after the write-allow rules in the `sandbox-exec` profile, so they take precedence.
 
 #### Modes
 
@@ -35,18 +54,19 @@ PTY sessions apply the sandbox profile to the initial process spawn and check `e
 
 All options live under `experimental.sandbox` in `opencode.json`:
 
-- **`excluded_commands`** — a pre-spawn deny list of command prefixes. Matched commands are blocked before execution on all three covered surfaces.
+- **`preset`** — selects a built-in or custom preset by name. Defaults to `default`.
+- **`presets`** — defines custom presets keyed by name. Each preset can specify `mode`, `network`, `protected_roots`, `permission`, `extra_read_roots`, and `extra_write_roots`.
+- **`excluded_commands`** — a pre-spawn deny list of command prefixes. Matched commands are blocked before execution on all covered surfaces except LSP launches.
 - **`fail_if_unavailable`** — when `true`, hard-fails activation if sandboxing is enabled but `sandbox-exec` is missing or the platform is unsupported.
 - **`extra_deny_paths`** — extends the default set of denied paths (secrets directories like `.ssh`, `.gnupg`, `.aws`, etc.).
-- **`allow_unsandboxed_retry`** — when `true`, adds a distinct `bash:unsandboxed` permission-gated retry for the bash tool and session command path only. If a sandboxed command fails due to a sandbox denial, the user is prompted to allow an unsandboxed re-execution. PTY sessions do **not** support unsandboxed retry.
+- **`allow_unsandboxed_retry`** — when `true`, adds a distinct `bash:unsandboxed` permission-gated retry for the bash tool and session command path only. If a sandboxed command fails due to a sandbox denial, the user is prompted to allow an unsandboxed re-execution. PTY sessions and LSP launches do **not** support unsandboxed retry.
 
 #### Not covered
 
 The following are explicitly **not** sandboxed:
 
-- MCP server processes
-- LSP server processes
-- Internal and shared spawn utilities not routed through the three surfaces above
+- MCP server processes (local stdio and SSE servers)
+- Internal spawn utilities (`util/process.ts`, `cross-spawn-spawner.ts`) not routed through the four surfaces above
 - Domain/proxy-mediated network controls
 - All non-macOS platforms (Linux, Windows, etc.)
 
@@ -60,13 +80,13 @@ Server mode is opt-in only. When enabled, set `OPENCODE_SERVER_PASSWORD` to requ
 
 ### Out of Scope
 
-| Category                              | Rationale                                                                 |
-| ------------------------------------- | ------------------------------------------------------------------------- |
-| **Server access when opted-in**       | If you enable server mode, API access is expected behavior                |
-| **Sandbox escapes (uncovered paths)** | MCP, LSP, non-macOS execution, and in-band PTY commands are not sandboxed |
-| **LLM provider data handling**        | Data sent to your configured LLM provider is governed by their policies   |
-| **MCP server behavior**               | External MCP servers you configure are outside our trust boundary         |
-| **Malicious config files**            | Users control their own config; modifying it is not an attack vector      |
+| Category                              | Rationale                                                                    |
+| ------------------------------------- | ---------------------------------------------------------------------------- |
+| **Server access when opted-in**       | If you enable server mode, API access is expected behavior                   |
+| **Sandbox escapes (uncovered paths)** | MCP servers, non-macOS execution, and in-band PTY commands are not sandboxed |
+| **LLM provider data handling**        | Data sent to your configured LLM provider is governed by their policies      |
+| **MCP server behavior**               | External MCP servers you configure are outside our trust boundary            |
+| **Malicious config files**            | Users control their own config; modifying it is not an attack vector         |
 
 ---
 
