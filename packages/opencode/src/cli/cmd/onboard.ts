@@ -35,6 +35,8 @@ export const OnboardCommand = cmd({
       message: "Which provider would you like to use?",
       options: [
         { value: "9router", label: "9Router", hint: "Local OpenAI-compatible proxy" },
+        { value: "opencode", label: "CoBuilder Zen", hint: "Curated, tested models via API key" },
+        { value: "github-copilot", label: "GitHub Copilot", hint: "Free for GitHub subscribers (OAuth)" },
         { value: "anthropic", label: "Anthropic", hint: "Claude models via API key" },
         { value: "openai", label: "OpenAI", hint: "GPT models via API key" },
         { value: "openrouter", label: "OpenRouter", hint: "Many providers via one API key" },
@@ -49,6 +51,10 @@ export const OnboardCommand = cmd({
 
     if (providerChoice === NINEROUTER_ID) {
       await setup9Router()
+    } else if (providerChoice === "github-copilot") {
+      await setupGitHubCopilot()
+    } else if (providerChoice === "opencode") {
+      await setupOpencode()
     } else {
       await setupApiKeyProvider(providerChoice as string)
     }
@@ -156,6 +162,59 @@ async function setup9Router() {
   await Filesystem.writeJson(configPath, updated)
 
   prompts.log.success(`Default model: ${NINEROUTER_ID}/${defaultModelId}`)
+}
+
+async function setupOpencode() {
+  prompts.log.info("CoBuilder Zen works out of the box — free models are available with no API key required.")
+
+  const wantKey = await prompts.confirm({
+    message: "Do you have a CoBuilder Zen API key for full model access?",
+    initialValue: false,
+  })
+
+  if (!prompts.isCancel(wantKey) && wantKey) {
+    const apiKey = await prompts.text({
+      message: "Enter your CoBuilder Zen API key",
+      placeholder: "zen-...",
+      validate: (v) => {
+        if (!v?.trim()) return "API key is required"
+      },
+    })
+
+    if (!prompts.isCancel(apiKey)) {
+      const authPath = path.join(Global.Path.data, "auth.json")
+      let existing: any = {}
+      try {
+        existing = await Filesystem.readJson(authPath)
+      } catch {}
+      existing["opencode"] = { type: "api", key: (apiKey as string).trim() }
+      await Filesystem.writeJson(authPath, existing, 0o600)
+      prompts.log.success("CoBuilder Zen connected with API key")
+      return
+    }
+  }
+
+  prompts.log.success("CoBuilder Zen ready — using free models")
+}
+
+async function setupGitHubCopilot() {
+  prompts.log.info(
+    "GitHub Copilot uses GitHub OAuth — this requires the interactive login flow.\n" +
+    "  After setup completes, run:  cobuilder providers connect github-copilot",
+  )
+
+  const configPath = path.join(Global.Path.config, "opencode.json")
+  let existing: any = {}
+  try {
+    existing = await Filesystem.readJson(configPath)
+  } catch {}
+
+  await Filesystem.writeJson(configPath, {
+    ...existing,
+    model: "github-copilot/gpt-4o",
+  })
+
+  prompts.log.success("GitHub Copilot selected — run  cobuilder providers connect github-copilot  to complete OAuth")
 }
 
 async function setupApiKeyProvider(providerId: string) {
