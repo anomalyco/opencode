@@ -547,24 +547,23 @@ The `mode` option can be set to `primary`, `subagent`, or `all`. If no `mode` is
 
 ### Hidden
 
-Hide a subagent from the `@` autocomplete menu with `hidden: true`. Useful for internal subagents that should only be invoked programmatically by other agents via the Task tool.
+Hide an agent from the UI with `hidden: true`.
+
+- **Primary agents**: excluded from the Tab-cycle agent switcher
+- **Subagents**: excluded from the `@` autocomplete menu
 
 ```json title="opencode.json"
 {
   "agent": {
-    "internal-helper": {
-      "mode": "subagent",
+    "internal-orchestrator": {
+      "mode": "primary",
       "hidden": true
     }
   }
 }
 ```
 
-This only affects user visibility in the autocomplete menu. Hidden agents can still be invoked by the model via the Task tool if permissions allow.
-
-:::note
-Only applies to `mode: subagent` agents.
-:::
+Hidden agents can still be invoked programmatically via the Task tool if permissions allow. A hidden agent cannot be set as the default agent.
 
 ---
 
@@ -598,6 +597,28 @@ Rules are evaluated in order, and the **last matching rule wins**. In the exampl
 :::tip
 Users can always invoke any subagent directly via the `@` autocomplete menu, even if the agent's task permissions would deny it.
 :::
+
+---
+
+### Expand Task prompts
+
+When a primary agent launches a subagent via the Task tool, `@` references in the `prompt` parameter are automatically expanded.
+
+- `@path/to/file` — the file contents are injected inline into the subagent's prompt context. The subagent receives the content without needing to read the file itself.
+- `@agent-name` — resolved as an agent mention, the same way `@` mentions work in user messages.
+
+This enables patterns where a parent agent writes shared context to a file, then launches multiple subagents with `@path/to/context.md` in their Task prompt. Each subagent receives the full context inline without the parent repeating it in every prompt.
+
+---
+
+### Subagent defaults
+
+Subagents spawned via the Task tool are created with restricted defaults:
+
+- `todowrite` and `todoread` are denied
+- If the invoking agent does not have `task` permission, the subagent also has `task` denied
+
+These defaults prevent subagents from modifying the parent's todo list or recursively spawning further subagents. The `experimental.primary_tools` config can override specific permissions.
 
 ---
 

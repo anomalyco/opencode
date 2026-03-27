@@ -159,6 +159,21 @@ This replaces:
 - `$2` with `src`
 - `$3` with `{ "key": "value" }`
 
+The highest-numbered positional parameter captures all remaining text, not just a single token.
+For example, if a template uses `$1` and `$2`:
+
+```bash frame="none"
+/my-command investigation Focus on the auth module
+```
+
+`$1` gets `investigation` and `$2` gets `Focus on the auth module`. This lets commands accept a selector plus free-text instructions.
+
+---
+
+### Auto-append
+
+If a template contains no `$N` or `$ARGUMENTS` placeholders but the user provides arguments, the arguments are appended to the end of the template automatically. This means commands without explicit argument handling still receive user input.
+
 ---
 
 ### Shell output
