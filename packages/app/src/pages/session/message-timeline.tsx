@@ -575,10 +575,24 @@ export function MessageTimeline(props: {
           }}
         >
           <button
-            class="pointer-events-auto size-8 flex items-center justify-center rounded-full bg-background-base border border-border-base shadow-sm text-text-base hover:bg-background-stronger transition-colors"
-            onClick={props.onResumeScroll}
+            class="pointer-events-auto flex items-center justify-center rounded-full bg-background-base border border-border-base shadow-sm text-text-base hover:bg-background-stronger transition-colors"
+            classList={{
+              "size-8": !(working() && activeMessageID()),
+              "h-8 px-3 gap-1.5 text-[11px] font-medium": !!(working() && activeMessageID()),
+            }}
+            onClick={() => {
+              const id = activeMessageID()
+              if (working() && id) {
+                document.querySelector(`[data-message="${id}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" })
+              } else {
+                props.onResumeScroll()
+              }
+            }}
           >
-            <Icon name="arrow-down-to-line" />
+            <Icon name={working() && activeMessageID() ? "arrow-up" : "arrow-down-to-line"} class="size-3.5" />
+            <Show when={working() && activeMessageID()}>
+              <span>active</span>
+            </Show>
           </button>
         </div>
         <ScrollView

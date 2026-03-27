@@ -5,7 +5,7 @@ import { useFileComponent } from "../context/file"
 
 import { Binary } from "@opencode-ai/util/binary"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { createEffect, createMemo, createSignal, For, on, ParentProps, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, ParentProps, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { AssistantParts, Message, MessageDivider, PART_MAPPING, type UserActions } from "./message-part"
@@ -370,6 +370,35 @@ export function SessionTurn(
     return true
   })
 
+  const [tokSec, setTokSec] = createSignal<number | undefined>(undefined)
+  let startMs = 0
+  let startTokens = 0
+  let ticker: ReturnType<typeof setInterval> | undefined
+
+  createEffect(
+    on(working, (active) => {
+      if (active) {
+        startMs = Date.now()
+        startTokens = turnUsage()?.output ?? 0
+        setTokSec(undefined)
+        ticker = setInterval(() => {
+          const elapsed = (Date.now() - startMs) / 1000
+          if (elapsed < 0.5) return
+          const out = (turnUsage()?.output ?? 0) - startTokens
+          setTokSec(Math.round(out / elapsed))
+        }, 1000)
+      } else {
+        if (ticker !== undefined) clearInterval(ticker)
+        ticker = undefined
+        setTokSec(undefined)
+      }
+    }),
+  )
+
+  onCleanup(() => {
+    if (ticker !== undefined) clearInterval(ticker)
+  })
+
   const autoScroll = createAutoScroll({
     working,
     onUserInteracted: props.onUserInteracted,
@@ -424,6 +453,11 @@ export function SessionTurn(
                       duration={700}
                     />
                   </Show>
+                </div>
+              </Show>
+              <Show when={working() && (tokSec() ?? 0) > 0}>
+                <div data-slot="session-turn-toksec" class="px-4 md:px-5 pt-0.5 pb-0 text-[11px] text-text-weakest select-none tabular-nums">
+                  ~{tokSec()} tok/s
                 </div>
               </Show>
               <SessionRetry status={status()} show={active()} />
