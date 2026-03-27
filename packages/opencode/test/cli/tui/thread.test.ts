@@ -71,6 +71,7 @@ mock.module("../../../src/cli/cmd/tui/win32", () => ({
 mock.module("@/config/tui", () => ({
   TuiConfig: {
     get: () => ({}),
+    waitForDependencies: async () => {},
   },
 }))
 
