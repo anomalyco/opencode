@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import { Log } from "../util/log"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
+import { compress } from "hono/compress"
 import { cors } from "hono/cors"
 import { proxy } from "hono/proxy"
 import { basicAuth } from "hono/basic-auth"
@@ -62,6 +63,14 @@ export namespace Server {
     : // @ts-expect-error - generated file at build time
       import("opencode-web-ui.gen.ts").then((module) => module.default as Record<string, string>).catch(() => null)
 
+  const zipped = compress()
+
+  const skipCompress = (path: string, method: string) => {
+    if (path === "/event" || path === "/global/event" || path === "/global/sync-event") return true
+    if (method === "POST" && /\/session\/[^/]+\/(message|prompt_async)$/.test(path)) return true
+    return false
+  }
+
   export const Default = lazy(() => createApp({}))
 
   export const createApp = (opts: { cors?: string[] }): Hono => {
@@ -114,6 +123,7 @@ export namespace Server {
       })
       .use(
         cors({
+          maxAge: 86_400,
           origin(input) {
             if (!input) return
 
@@ -138,6 +148,10 @@ export namespace Server {
           },
         }),
       )
+      .use((c, next) => {
+        if (skipCompress(c.req.path, c.req.method)) return next()
+        return zipped(c, next)
+      })
       .route("/global", GlobalRoutes())
       .put(
         "/auth/:providerID",
