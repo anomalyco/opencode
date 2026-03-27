@@ -2,8 +2,9 @@ import { Flag } from "@/flag/flag"
 import { lazy } from "@/util/lazy"
 import { Filesystem } from "@/util/filesystem"
 import { which } from "@/util/which"
-import path from "path"
+import path, { resolve as pathResolve } from "path"
 import { spawn, type ChildProcess } from "child_process"
+import { realpathSync } from "fs"
 import { setTimeout as sleep } from "node:timers/promises"
 
 const SIGKILL_TIMEOUT_MS = 200
@@ -41,16 +42,47 @@ export namespace Shell {
   }
   const BLACKLIST = new Set(["fish", "nu"])
 
+  function winbash() {
+    const bash = which("bash.exe") || which("bash")
+    if (bash && Filesystem.stat(bash)?.size) {
+      try {
+        return realpathSync.native(bash)
+      } catch {
+        return bash
+      }
+    }
+    const git = which("git")
+    if (!git) return null
+    const list = [git]
+    try {
+      list.push(realpathSync.native(git))
+    } catch {}
+    for (const item of list) {
+      const direct = pathResolve(item, "..", "bash.exe")
+      if (Filesystem.stat(direct)?.size) {
+        try {
+          return realpathSync.native(direct)
+        } catch {
+          return direct
+        }
+      }
+      const bin = pathResolve(item, "..", "..", "bin", "bash.exe")
+      if (Filesystem.stat(bin)?.size) {
+        try {
+          return realpathSync.native(bin)
+        } catch {
+          return bin
+        }
+      }
+    }
+    return null
+  }
+
   function fallback() {
     if (process.platform === "win32") {
       if (Flag.OPENCODE_GIT_BASH_PATH) return Flag.OPENCODE_GIT_BASH_PATH
-      const git = which("git")
-      if (git) {
-        // git.exe is typically at: C:\Program Files\Git\cmd\git.exe
-        // bash.exe is at: C:\Program Files\Git\bin\bash.exe
-        const bash = path.join(git, "..", "..", "bin", "bash.exe")
-        if (Filesystem.stat(bash)?.size) return bash
-      }
+      const bash = winbash()
+      if (bash) return bash
       return process.env.COMSPEC || "cmd.exe"
     }
     if (process.platform === "darwin") return "/bin/zsh"
