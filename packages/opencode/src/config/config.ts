@@ -993,6 +993,12 @@ export namespace Config {
           },
         ),
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
+      terminal_title: z
+        .string()
+        .optional()
+        .describe(
+          "Terminal title format. Placeholders: %n (session name), %s (BUSY/IDLE status), %m (model), %a (agent). Example: '[%s] OC | %n'",
+        ),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
       permission: Permission.optional(),
       tools: z.record(z.string(), z.boolean()).optional(),

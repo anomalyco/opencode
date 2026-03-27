@@ -1561,6 +1561,10 @@ export type Config = {
    * Additional instruction files or patterns to include
    */
   instructions?: Array<string>
+  /**
+   * Terminal title format. Placeholders: %n (session name), %s (BUSY/IDLE status), %m (model), %a (agent). Example: '[%s] OC | %n'
+   */
+  terminal_title?: string
   layout?: LayoutConfig
   permission?: PermissionConfig
   tools?: {
