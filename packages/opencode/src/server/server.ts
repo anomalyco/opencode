@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import { Log } from "../util/log"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
+import { compress } from "hono/compress"
 import { cors } from "hono/cors"
 import { proxy } from "hono/proxy"
 import { basicAuth } from "hono/basic-auth"
@@ -19,7 +20,6 @@ import { Auth } from "../auth"
 import { Flag } from "../flag/flag"
 import { Command } from "../command"
 import { Global } from "../global"
-import { WorkspaceContext } from "../control-plane/workspace-context"
 import { WorkspaceID } from "../control-plane/schema"
 import { ProviderID } from "../provider/schema"
 import { WorkspaceRouterMiddleware } from "../control-plane/workspace-router-middleware"
@@ -62,6 +62,14 @@ export namespace Server {
     ? Promise.resolve(null)
     : // @ts-expect-error - generated file at build time
       import("opencode-web-ui.gen.ts").then((module) => module.default as Record<string, string>).catch(() => null)
+
+  const zipped = compress()
+
+  const skipCompress = (path: string, method: string) => {
+    if (path === "/event" || path === "/global/event" || path === "/global/sync-event") return true
+    if (method === "POST" && /\/session\/[^/]+\/(message|prompt_async)$/.test(path)) return true
+    return false
+  }
 
   export const Default = lazy(() => createApp({}))
 
@@ -115,6 +123,7 @@ export namespace Server {
       })
       .use(
         cors({
+          maxAge: 86_400,
           origin(input) {
             if (!input) return
 
@@ -139,6 +148,10 @@ export namespace Server {
           },
         }),
       )
+      .use((c, next) => {
+        if (skipCompress(c.req.path, c.req.method)) return next()
+        return zipped(c, next)
+      })
       .route("/global", GlobalRoutes())
       .put(
         "/auth/:providerID",
@@ -204,7 +217,6 @@ export namespace Server {
       )
       .use(async (c, next) => {
         if (c.req.path === "/log") return next()
-        const rawWorkspaceID = c.req.query("workspace") || c.req.header("x-opencode-workspace")
         const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
         const directory = Filesystem.resolve(
           (() => {
@@ -216,20 +228,14 @@ export namespace Server {
           })(),
         )
 
-        return WorkspaceContext.provide({
-          workspaceID: rawWorkspaceID ? WorkspaceID.make(rawWorkspaceID) : undefined,
+        return Instance.provide({
+          directory,
+          init: InstanceBootstrap,
           async fn() {
-            return Instance.provide({
-              directory,
-              init: InstanceBootstrap,
-              async fn() {
-                return next()
-              },
-            })
+            return next()
           },
         })
       })
-      .use(WorkspaceRouterMiddleware)
       .get(
         "/doc",
         openAPIRouteHandler(app, {
@@ -252,6 +258,7 @@ export namespace Server {
           }),
         ),
       )
+      .use(WorkspaceRouterMiddleware)
       .route("/project", ProjectRoutes())
       .route("/pty", PtyRoutes())
       .route("/config", ConfigRoutes())
