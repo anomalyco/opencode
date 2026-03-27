@@ -57,6 +57,7 @@ import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { Identifier } from "@/utils/id"
+import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
@@ -74,6 +75,13 @@ type SessionHistoryWindowInput = {
   loadMore: (sessionID: string) => Promise<void>
   userScrolled: () => boolean
   scroller: () => HTMLDivElement | undefined
+}
+
+type FollowupState = {
+  items: Record<string, (FollowupDraft & { id: string })[] | undefined>
+  failed: Record<string, string | undefined>
+  paused: Record<string, boolean | undefined>
+  edit: Record<string, { id: string; prompt: FollowupDraft["prompt"]; context: FollowupDraft["context"] } | undefined>
 }
 
 /**
@@ -512,15 +520,15 @@ export default function Page() {
     deferRender: false,
   })
 
-  const [followup, setFollowup] = createStore({
-    items: {} as Record<string, (FollowupDraft & { id: string })[] | undefined>,
-    failed: {} as Record<string, string | undefined>,
-    paused: {} as Record<string, boolean | undefined>,
-    edit: {} as Record<
-      string,
-      { id: string; prompt: FollowupDraft["prompt"]; context: FollowupDraft["context"] } | undefined
-    >,
-  })
+  const [followup, setFollowup] = persisted(
+    Persist.workspace(sdk.directory, "followup", ["followup.v1"]),
+    createStore<FollowupState>({
+      items: {},
+      failed: {},
+      paused: {},
+      edit: {},
+    }),
+  )
 
   createComputed((prev) => {
     const key = sessionKey()
