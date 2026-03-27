@@ -53,100 +53,112 @@ export namespace Plugin {
     Service,
     Effect.gen(function* () {
       const bus = yield* Bus.Service
+      const config = yield* Config.Service
 
       const cache = yield* InstanceState.make<State>(
         Effect.fn("Plugin.state")(function* (ctx) {
           const hooks: Hooks[] = []
 
-          yield* Effect.promise(async () => {
-            const { Server } = await import("../server/server")
+          const { Server } = yield* Effect.promise(() => import("../server/server"))
 
-            const client = createOpencodeClient({
-              baseUrl: "http://localhost:4096",
-              directory: ctx.directory,
-              headers: Flag.OPENCODE_SERVER_PASSWORD
-                ? {
-                    Authorization: `Basic ${Buffer.from(`${Flag.OPENCODE_SERVER_USERNAME ?? "opencode"}:${Flag.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`,
-                  }
-                : undefined,
-              fetch: async (...args) => Server.Default().fetch(...args),
-            })
-            const cfg = await Config.get()
-            const input: PluginInput = {
-              client,
-              project: ctx.project,
-              worktree: ctx.worktree,
-              directory: ctx.directory,
-              get serverUrl(): URL {
-                return Server.url ?? new URL("http://localhost:4096")
-              },
-              $: Bun.$,
-            }
+          const client = createOpencodeClient({
+            baseUrl: "http://localhost:4096",
+            directory: ctx.directory,
+            headers: Flag.OPENCODE_SERVER_PASSWORD
+              ? {
+                  Authorization: `Basic ${Buffer.from(`${Flag.OPENCODE_SERVER_USERNAME ?? "opencode"}:${Flag.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`,
+                }
+              : undefined,
+            fetch: async (...args) => Server.Default().fetch(...args),
+          })
+          const cfg = yield* config.get()
+          const input: PluginInput = {
+            client,
+            project: ctx.project,
+            worktree: ctx.worktree,
+            directory: ctx.directory,
+            get serverUrl(): URL {
+              return Server.url ?? new URL("http://localhost:4096")
+            },
+            $: Bun.$,
+          }
 
-            for (const plugin of INTERNAL_PLUGINS) {
-              log.info("loading internal plugin", { name: plugin.name })
-              const init = await plugin(input).catch((err) => {
+          for (const plugin of INTERNAL_PLUGINS) {
+            log.info("loading internal plugin", { name: plugin.name })
+            const init = yield* Effect.tryPromise({
+              try: () => plugin(input),
+              catch: (err) => {
                 log.error("failed to load internal plugin", { name: plugin.name, error: err })
-              })
-              if (init) hooks.push(init)
-            }
+              },
+            }).pipe(Effect.option)
+            if (init._tag === "Some") hooks.push(init.value)
+          }
 
-            let plugins = cfg.plugin ?? []
-            if (plugins.length) await Config.waitForDependencies()
+          const plugins = cfg.plugin ?? []
+          if (plugins.length) yield* config.waitForDependencies()
 
-            for (let plugin of plugins) {
-              if (DEPRECATED_PLUGIN_PACKAGES.some((pkg) => plugin.includes(pkg))) continue
-              log.info("loading plugin", { path: plugin })
-              if (!plugin.startsWith("file://")) {
-                const idx = plugin.lastIndexOf("@")
-                const pkg = idx > 0 ? plugin.substring(0, idx) : plugin
-                const version = idx > 0 ? plugin.substring(idx + 1) : "latest"
-                plugin = await BunProc.install(pkg, version).catch((err) => {
+          for (let pluginPath of plugins) {
+            if (DEPRECATED_PLUGIN_PACKAGES.some((pkg) => pluginPath.includes(pkg))) continue
+            log.info("loading plugin", { path: pluginPath })
+            if (!pluginPath.startsWith("file://")) {
+              const idx = pluginPath.lastIndexOf("@")
+              const pkg = idx > 0 ? pluginPath.substring(0, idx) : pluginPath
+              const version = idx > 0 ? pluginPath.substring(idx + 1) : "latest"
+              const installed = yield* Effect.tryPromise({
+                try: () => BunProc.install(pkg, version),
+                catch: (err) => {
                   const cause = err instanceof Error ? err.cause : err
                   const detail = cause instanceof Error ? cause.message : String(cause ?? err)
                   log.error("failed to install plugin", { pkg, version, error: detail })
-                  Bus.publish(Session.Event.Error, {
-                    error: new NamedError.Unknown({
-                      message: `Failed to install plugin ${pkg}@${version}: ${detail}`,
-                    }).toObject(),
-                  })
-                  return ""
-                })
-                if (!plugin) continue
-              }
-
-              // Prevent duplicate initialization when plugins export the same function
-              // as both a named export and default export (e.g., `export const X` and `export default X`).
-              // Object.entries(mod) would return both entries pointing to the same function reference.
-              await import(plugin)
-                .then(async (mod) => {
-                  const seen = new Set<PluginInstance>()
-                  for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
-                    if (seen.has(fn)) continue
-                    seen.add(fn)
-                    hooks.push(await fn(input))
-                  }
-                })
-                .catch((err) => {
-                  const message = err instanceof Error ? err.message : String(err)
-                  log.error("failed to load plugin", { path: plugin, error: message })
-                  Bus.publish(Session.Event.Error, {
-                    error: new NamedError.Unknown({
-                      message: `Failed to load plugin ${plugin}: ${message}`,
-                    }).toObject(),
-                  })
-                })
+                  return detail
+                },
+              }).pipe(Effect.catch((detail) =>
+                bus.publish(Session.Event.Error, {
+                  error: new NamedError.Unknown({
+                    message: `Failed to install plugin ${pkg}@${version}: ${detail}`,
+                  }).toObject(),
+                }).pipe(Effect.as("")),
+              ))
+              if (!installed) continue
+              pluginPath = installed
             }
 
-            // Notify plugins of current config
-            for (const hook of hooks) {
-              try {
-                await (hook as any).config?.(cfg)
-              } catch (err) {
+            // Prevent duplicate initialization when plugins export the same function
+            // as both a named export and default export (e.g., `export const X` and `export default X`).
+            // Object.entries(mod) would return both entries pointing to the same function reference.
+            yield* Effect.tryPromise({
+              try: async () => {
+                const mod = await import(pluginPath)
+                const seen = new Set<PluginInstance>()
+                for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
+                  if (seen.has(fn)) continue
+                  seen.add(fn)
+                  hooks.push(await fn(input))
+                }
+              },
+              catch: (err) => {
+                const message = err instanceof Error ? err.message : String(err)
+                log.error("failed to load plugin", { path: pluginPath, error: message })
+                return message
+              },
+            }).pipe(Effect.catch((message) =>
+              bus.publish(Session.Event.Error, {
+                error: new NamedError.Unknown({
+                  message: `Failed to load plugin ${pluginPath}: ${message}`,
+                }).toObject(),
+              }),
+            ))
+          }
+
+          // Notify plugins of current config
+          for (const hook of hooks) {
+            yield* Effect.tryPromise({
+              try: () => Promise.resolve((hook as any).config?.(cfg)),
+              catch: (err) => {
                 log.error("plugin config hook failed", { error: err })
-              }
-            }
-          })
+              },
+            }).pipe(Effect.ignore)
+          }
 
           // Subscribe to bus events, fiber interrupted when scope closes
           yield* bus.subscribeAll().pipe(
@@ -171,13 +183,11 @@ export namespace Plugin {
       >(name: Name, input: Input, output: Output) {
         if (!name) return output
         const state = yield* InstanceState.get(cache)
-        yield* Effect.promise(async () => {
-          for (const hook of state.hooks) {
-            const fn = hook[name] as any
-            if (!fn) continue
-            await fn(input, output)
-          }
-        })
+        for (const hook of state.hooks) {
+          const fn = hook[name] as any
+          if (!fn) continue
+          yield* Effect.promise(() => fn(input, output))
+        }
         return output
       })
 
@@ -194,7 +204,7 @@ export namespace Plugin {
     }),
   )
 
-  const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
+  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Config.defaultLayer))
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export async function trigger<
