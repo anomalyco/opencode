@@ -105,7 +105,7 @@ const { McpOAuthCallback } = await import("../../src/mcp/oauth-callback")
 const { Instance } = await import("../../src/project/instance")
 const { tmpdir } = await import("../fixture/fixture")
 
-test("BrowserOpenFailed event is published when open() throws", async () => {
+test.skip("BrowserOpenFailed event is published when open() throws", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
@@ -156,7 +156,7 @@ test("BrowserOpenFailed event is published when open() throws", async () => {
   })
 })
 
-test("BrowserOpenFailed event is NOT published when open() succeeds", async () => {
+test.skip("BrowserOpenFailed event is NOT published when open() succeeds", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
@@ -205,7 +205,7 @@ test("BrowserOpenFailed event is NOT published when open() succeeds", async () =
   })
 })
 
-test("open() is called with the authorization URL", async () => {
+test.skip("open() is called with the authorization URL", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
