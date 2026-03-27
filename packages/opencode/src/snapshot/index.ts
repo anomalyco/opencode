@@ -130,7 +130,7 @@ export namespace Snapshot {
               if (!(yield* exists(state.gitdir))) return
               const result = yield* git(["--git-dir", state.gitdir, "fetch", legacy, "--no-tags"])
               if (result.code === 0) log.info("migrated legacy snapshot objects", { from: legacy })
-            }).pipe(Effect.catchAll(() => Effect.void))
+            }).pipe(Effect.catch(() => Effect.void))
           }
 
           const enabled = Effect.fnUntraced(function* () {
