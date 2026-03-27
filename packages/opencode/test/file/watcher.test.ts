@@ -5,6 +5,7 @@ import path from "path"
 import { ConfigProvider, Deferred, Effect, Layer, ManagedRuntime, Option } from "effect"
 import { tmpdir } from "../fixture/fixture"
 import { Bus } from "../../src/bus"
+import { Config } from "../../src/config/config"
 import { FileWatcher } from "../../src/file/watcher"
 import { Instance } from "../../src/project/instance"
 
@@ -30,6 +31,7 @@ function withWatcher<E>(directory: string, body: Effect.Effect<void, E>) {
     directory,
     fn: async () => {
       const layer: Layer.Layer<FileWatcher.Service, never, never> = FileWatcher.layer.pipe(
+        Layer.provide(Config.defaultLayer),
         Layer.provide(watcherConfigLayer),
       )
       const rt = ManagedRuntime.make(layer)
