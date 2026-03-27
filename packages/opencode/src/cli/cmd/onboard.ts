@@ -86,8 +86,14 @@ async function setup9Router() {
   const baseURL = (urlInput as string).trim().replace(/\/+$/, "")
 
   // SSRF validation (default-on: skipped only if explicitly disabled)
-  const cfg = await Config.get()
-  if (cfg.security?.ssrf?.enabled !== false) {
+  let ssrfEnabled = true
+  try {
+    const cfg = await Config.get()
+    ssrfEnabled = cfg.security?.ssrf?.enabled !== false
+  } catch {
+    // No instance context during onboarding — apply default (enabled)
+  }
+  if (ssrfEnabled) {
     const ssrfCheck = validateProviderURL(baseURL, { allowLocalhost: true })
     if (!ssrfCheck.ok) {
       prompts.log.error(ssrfCheck.reason)
