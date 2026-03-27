@@ -1,9 +1,60 @@
 @import "@opencode-ai/ui/styles/tailwind";
 
 @layer components {
+  [data-component="sidebar-session"] {
+    --sidebar-session-accent: #c98a6d;
+    --sidebar-session-hover-bg: #2c2924;
+    --sidebar-session-hover-border: rgba(201, 138, 109, 0.14);
+    --sidebar-session-active-bg-top: #302c27;
+    --sidebar-session-active-bg-bottom: #292622;
+    --sidebar-session-active-border: rgba(201, 138, 109, 0.2);
+    --sidebar-session-active-shadow: rgba(0, 0, 0, 0.34);
+  }
+
+  [data-component="sidebar-session"]:hover,
+  [data-component="sidebar-session"]:has(:focus-visible),
+  [data-component="sidebar-session"]:has([data-expanded]) {
+    background-color: var(--sidebar-session-hover-bg);
+    border-color: var(--sidebar-session-hover-border);
+  }
+
+  [data-component="sidebar-session"][data-active="true"] {
+    background: linear-gradient(180deg, var(--sidebar-session-active-bg-top), var(--sidebar-session-active-bg-bottom));
+    border-color: var(--sidebar-session-active-border);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.02),
+      0 10px 24px -18px var(--sidebar-session-active-shadow);
+  }
+
+  [data-component="sidebar-session"][data-active="true"]:hover,
+  [data-component="sidebar-session"][data-active="true"]:has(:focus-visible) {
+    background: linear-gradient(180deg, #34302b, #2c2824);
+    border-color: rgba(201, 138, 109, 0.28);
+  }
+
   [data-dock-surface="shell"][data-slot="prompt-shell"] {
     border-top-left-radius: 28px;
     border-top-right-radius: 28px;
+  }
+
+  [data-dock-surface="shell"][data-slot="prompt-shell"].prompt-shell-shadow:focus-within {
+    box-shadow: var(--shadow-xs-border);
+  }
+
+  html[data-theme="aether"] [data-dock-surface="shell"][data-slot="prompt-shell"].prompt-shell-shadow:focus-within {
+    box-shadow: var(--shadow-lg-border-base);
+  }
+
+  html[data-platform="desktop"] [data-component="user-message"] [data-slot="user-message-text"] {
+    background: light-dark(#d4ee77, color-mix(in oklch, var(--surface-weak) 78%, #d4ee77));
+  }
+
+  html[data-theme="aether"][data-platform="desktop"] [data-component="user-message"] [data-slot="user-message-text"] {
+    border-radius: 16px;
+    border-color: light-dark(rgba(201, 138, 109, 0.22), rgba(201, 138, 109, 0.18));
+    box-shadow:
+      inset 0 1px 0 light-dark(rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02)),
+      0 10px 24px -18px light-dark(rgba(193, 95, 60, 0.3), rgba(0, 0, 0, 0.34));
   }
 
   [data-component="button"].prompt-pick,

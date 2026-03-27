@@ -47,6 +47,8 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
 
 void initI18n()
 
+document.documentElement.dataset.platform = "desktop"
+
 let update: Update | null = null
 const [busy, setBusy] = createSignal(false)
 const [openclawTick, setOpenclawTick] = createSignal(0)
