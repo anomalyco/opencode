@@ -93,6 +93,7 @@ export const BashTool = Tool.define("bash", async () => {
       if (!tree) {
         throw new Error("Failed to parse command")
       }
+      const cfg = await SandboxSpawn.settings()
       const directories = new Set<string>()
       if (!Instance.containsPath(cwd)) directories.add(cwd)
       const patterns = new Set<string>()
@@ -118,6 +119,11 @@ export const BashTool = Tool.define("bash", async () => {
             continue
           }
           command.push(child.text)
+        }
+
+        const blocked = SandboxSpawn.excluded(command, cfg.excluded_commands)
+        if (blocked) {
+          throw new SandboxSpawn.CommandError(blocked.command, blocked.rule)
         }
 
         // not an exhaustive list, but covers most common cases
@@ -173,43 +179,30 @@ export const BashTool = Tool.define("bash", async () => {
         { env: {} },
       )
       const root = Instance.worktree === "/" ? Instance.directory : Instance.worktree
-      const sandbox = await SandboxSpawn.resolve({
-        cwd,
-        project_root: Instance.directory,
-        worktree_root: root,
-      })
+      const sandbox = await SandboxSpawn.resolve(
+        {
+          cwd,
+          project_root: Instance.directory,
+          worktree_root: root,
+        },
+        cfg,
+      )
+      const base = {
+        file: shell,
+        args: args(shell, params.command),
+      }
       const cmd =
         sandbox.active && sandbox.profile
           ? SandboxSpawn.wrap({
               profile: sandbox.profile,
-              file: shell,
-              args: args(shell, params.command),
+              file: base.file,
+              args: base.args,
             })
           : { file: params.command, args: [] as string[] }
-      const proc = sandbox.active
-        ? spawn(cmd.file, cmd.args, {
-            cwd,
-            env: {
-              ...process.env,
-              ...shellEnv.env,
-            },
-            stdio: ["ignore", "pipe", "pipe"],
-            detached: process.platform !== "win32",
-            windowsHide: process.platform === "win32",
-          })
-        : spawn(params.command, {
-            shell,
-            cwd,
-            env: {
-              ...process.env,
-              ...shellEnv.env,
-            },
-            stdio: ["ignore", "pipe", "pipe"],
-            detached: process.platform !== "win32",
-            windowsHide: process.platform === "win32",
-          })
-
-      let output = ""
+      const env = {
+        ...process.env,
+        ...shellEnv.env,
+      }
 
       // Initialize metadata with empty output
       ctx.metadata({
@@ -219,86 +212,155 @@ export const BashTool = Tool.define("bash", async () => {
         },
       })
 
-      const append = (chunk: Buffer) => {
-        output += chunk.toString()
-        ctx.metadata({
-          metadata: {
-            // truncate the metadata to avoid GIANT blobs of data (has nothing to do w/ what agent can access)
-            output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
-            description: params.description,
-          },
-        })
-      }
+      const run = async (input?: { file: string; args: string[] }) => {
+        const proc = input
+          ? spawn(input.file, input.args, {
+              cwd,
+              env,
+              stdio: ["ignore", "pipe", "pipe"],
+              detached: process.platform !== "win32",
+              windowsHide: process.platform === "win32",
+            })
+          : spawn(params.command, {
+              shell,
+              cwd,
+              env,
+              stdio: ["ignore", "pipe", "pipe"],
+              detached: process.platform !== "win32",
+              windowsHide: process.platform === "win32",
+            })
 
-      proc.stdout?.on("data", append)
-      proc.stderr?.on("data", append)
+        let output = ""
+        let stderr = ""
+        let timedOut = false
+        let aborted = false
+        let exited = false
+        let code = 0
 
-      let timedOut = false
-      let aborted = false
-      let exited = false
-      let code = 0
-
-      const kill = () => Shell.killTree(proc, { exited: () => exited })
-
-      if (ctx.abort.aborted) {
-        aborted = true
-        await kill()
-      }
-
-      const abortHandler = () => {
-        aborted = true
-        void kill()
-      }
-
-      ctx.abort.addEventListener("abort", abortHandler, { once: true })
-
-      const timeoutTimer = setTimeout(() => {
-        timedOut = true
-        void kill()
-      }, timeout + 100)
-
-      await new Promise<void>((resolve, reject) => {
-        const cleanup = () => {
-          clearTimeout(timeoutTimer)
-          ctx.abort.removeEventListener("abort", abortHandler)
+        const append = (chunk: Buffer) => {
+          output += chunk.toString()
+          ctx.metadata({
+            metadata: {
+              output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
+              description: params.description,
+            },
+          })
         }
 
-        proc.once("exit", (value) => {
-          code = value ?? 1
-          exited = true
-          cleanup()
-          resolve()
+        proc.stdout?.on("data", append)
+        proc.stderr?.on("data", (chunk) => {
+          stderr += chunk.toString()
+          append(chunk)
         })
 
-        proc.once("error", (error) => {
-          exited = true
-          cleanup()
-          reject(error)
+        const kill = () => Shell.killTree(proc, { exited: () => exited })
+
+        if (ctx.abort.aborted) {
+          aborted = true
+          await kill()
+        }
+
+        const abortHandler = () => {
+          aborted = true
+          void kill()
+        }
+
+        ctx.abort.addEventListener("abort", abortHandler, { once: true })
+
+        const timeoutTimer = setTimeout(() => {
+          timedOut = true
+          void kill()
+        }, timeout + 100)
+
+        await new Promise<void>((resolve, reject) => {
+          const cleanup = () => {
+            clearTimeout(timeoutTimer)
+            ctx.abort.removeEventListener("abort", abortHandler)
+          }
+
+          proc.once("exit", (value) => {
+            code = value ?? 1
+            exited = true
+            cleanup()
+            resolve()
+          })
+
+          proc.once("error", (error) => {
+            exited = true
+            cleanup()
+            reject(error)
+          })
         })
-      })
 
-      const resultMetadata: string[] = []
-
-      if (timedOut) {
-        resultMetadata.push(`bash tool terminated command after exceeding timeout ${timeout} ms`)
+        return {
+          output,
+          stderr,
+          timedOut,
+          aborted,
+          code,
+        }
       }
 
-      if (aborted) {
-        resultMetadata.push("User aborted the command")
+      let retried = false
+      let result = await run(sandbox.active ? cmd : undefined)
+
+      if (
+        cfg.allow_unsandboxed_retry &&
+        !result.timedOut &&
+        !result.aborted &&
+        SandboxSpawn.shouldRetry({ active: sandbox.active, code: result.code, stderr: result.stderr })
+      ) {
+        try {
+          await ctx.ask({
+            permission: "bash:unsandboxed",
+            patterns: [params.command],
+            always: [params.command],
+            metadata: {
+              reason: "sandbox_denial",
+            },
+          })
+          retried = true
+          ctx.metadata({
+            metadata: {
+              output: "",
+              description: params.description,
+            },
+          })
+          result = await run(SandboxSpawn.unwrap(cmd))
+        } catch (error) {
+          log.info("unsandboxed retry rejected", { error })
+        }
       }
 
-      if (resultMetadata.length > 0) {
-        output += "\n\n<bash_metadata>\n" + resultMetadata.join("\n") + "\n</bash_metadata>"
+      const notes: string[] = []
+
+      if (retried) {
+        notes.push("Retried command without sandbox after sandbox denial")
+      }
+
+      if (result.timedOut) {
+        notes.push(`bash tool terminated command after exceeding timeout ${timeout} ms`)
+      }
+
+      if (result.aborted) {
+        notes.push("User aborted the command")
+      }
+
+      if (notes.length > 0) {
+        result.output += "\n\n<bash_metadata>\n" + notes.join("\n") + "\n</bash_metadata>"
       }
 
       return {
         title: params.description,
         metadata: {
-          output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
-          exit: code,
+          output:
+            result.output.length > MAX_METADATA_LENGTH
+              ? result.output.slice(0, MAX_METADATA_LENGTH) + "\n\n..."
+              : result.output,
+          exit: result.code,
           description: params.description,
         },
-        output,
+        output: result.output,
       }
     },
   }

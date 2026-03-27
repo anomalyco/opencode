@@ -1074,7 +1074,14 @@ export namespace Config {
           batch_tool: z.boolean().optional().describe("Enable the batch tool"),
           sandbox: z
             .object({
-              enabled: z.boolean().optional().describe("Enable macOS sandboxing for non-interactive shell commands"),
+              enabled: z
+                .boolean()
+                .optional()
+                .describe("Enable macOS sandboxing for bash, session shell commands, and PTY initial spawns"),
+              mode: z
+                .enum(["workspace-write", "read-only"])
+                .optional()
+                .describe("Sandbox mode for command execution (default: workspace-write)"),
               extra_read_roots: z
                 .array(z.string())
                 .optional()
@@ -1083,10 +1090,19 @@ export namespace Config {
                 .array(z.string())
                 .optional()
                 .describe("Additional writable roots for macOS sandboxing"),
+              extra_deny_paths: z.array(z.string()).optional().describe("Additional denied paths for macOS sandboxing"),
+              excluded_commands: z
+                .array(z.string())
+                .optional()
+                .describe("Command prefixes that must be blocked before execution"),
               allow_unsandboxed_retry: z
                 .boolean()
                 .optional()
                 .describe("Allow an explicit unsandboxed retry after a sandbox denial"),
+              fail_if_unavailable: z
+                .boolean()
+                .optional()
+                .describe("Hard-fail when sandboxing is enabled but cannot activate"),
             })
             .optional(),
           openTelemetry: z

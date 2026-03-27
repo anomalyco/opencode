@@ -23,7 +23,7 @@ describe("pty", () => {
   test("publishes created, exited, deleted in order for a short-lived process", async () => {
     if (process.platform === "win32") return
 
-    await using dir = await tmpdir({ git: true })
+    await using dir = await tmpdir()
 
     await Instance.provide({
       directory: dir.path,
@@ -60,7 +60,7 @@ describe("pty", () => {
   test("publishes created, exited, deleted in order for /bin/sh + remove", async () => {
     if (process.platform === "win32") return
 
-    await using dir = await tmpdir({ git: true })
+    await using dir = await tmpdir()
 
     await Instance.provide({
       directory: dir.path,
@@ -86,6 +86,71 @@ describe("pty", () => {
           off.forEach((x) => x())
           if (id) await Pty.remove(id)
         }
+      },
+    })
+  })
+
+  test("preserves pty io through the sandbox wrapper", async () => {
+    if (process.platform !== "darwin") return
+
+    await using dir = await tmpdir({
+      config: {
+        experimental: {
+          sandbox: {
+            enabled: true,
+          },
+        },
+      },
+    })
+
+    await Instance.provide({
+      directory: dir.path,
+      fn: async () => {
+        const info = await Pty.create({ command: "cat", title: "cat" })
+        try {
+          const out: string[] = []
+          const ws: Parameters<typeof Pty.connect>[1] = {
+            readyState: 1,
+            data: { id: info.id },
+            send: (data: unknown) => {
+              out.push(typeof data === "string" ? data : Buffer.from(data as Uint8Array).toString("utf8"))
+            },
+            close: () => {},
+          }
+
+          await Pty.connect(info.id, ws)
+          out.length = 0
+          await Pty.write(info.id, "AAA\n")
+          await wait(() => out.join("").includes("AAA"))
+        } finally {
+          await Pty.remove(info.id)
+        }
+      },
+    })
+  })
+
+  test("blocks excluded commands on initial pty spawn", async () => {
+    await using dir = await tmpdir({
+      config: {
+        experimental: {
+          sandbox: {
+            enabled: true,
+            excluded_commands: ["python"],
+          },
+        },
+      },
+    })
+
+    await Instance.provide({
+      directory: dir.path,
+      fn: async () => {
+        await expect(Pty.create({ command: "python", title: "py" })).rejects.toThrow("python")
+        await expect(
+          Pty.create({ command: "env", args: ["FOO=1", "python", "-c", "print(1)"], title: "env" }),
+        ).rejects.toThrow("python")
+        await expect(Pty.create({ command: "sh", args: ["-c", "python -c 'print(1)'"], title: "sh" })).rejects.toThrow(
+          "python",
+        )
       },
     })
   })

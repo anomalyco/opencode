@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { BashTool } from "../../src/tool/bash"
+import { Tool } from "../../src/tool/tool"
 import { Instance } from "../../src/project/instance"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { tmpdir } from "../fixture/fixture"
@@ -22,6 +23,11 @@ const ctx = {
   metadata: () => {},
   ask: async () => {},
 }
+
+const makeCtx = (ask: Tool.Context["ask"] = async () => {}) => ({
+  ...ctx,
+  ask,
+})
 
 afterEach(() => {
   if (env.HOME === undefined) delete process.env.HOME
@@ -94,14 +100,206 @@ describe("tool.bash sandbox", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
+        const seen: string[] = []
         const bash = await BashTool.init()
         const out = await bash.execute(
           {
             command: 'cat "$HOME/.ssh/secret"',
             description: "Reads blocked home file",
           },
+          makeCtx(async (req) => {
+            seen.push(req.permission)
+          }),
+        )
+        expect(out.output).not.toContain("secret\n")
+        expect(out.output).toContain("Operation not permitted")
+        expect(seen).not.toContain("bash:unsandboxed")
+      },
+    })
+  })
+
+  test("denies in-project writes in read-only mode", async () => {
+    if (process.platform !== "darwin") return
+    await using home = await tmpdir()
+    await using tmp = await tmpdir({
+      config: {
+        experimental: {
+          sandbox: {
+            enabled: true,
+            mode: "read-only",
+          },
+        },
+      },
+    })
+    process.env.HOME = home.path
+    process.env.OPENCODE_TEST_HOME = home.path
+    process.env.SHELL = "/bin/zsh"
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const out = await bash.execute(
+          {
+            command: "printf 'ok' > hit.txt",
+            description: "Writes in read-only sandbox",
+          },
           ctx,
         )
+        expect(out.output).toContain("operation not permitted")
+        expect(await fs.stat(path.join(tmp.path, "hit.txt")).catch(() => undefined)).toBeUndefined()
+      },
+    })
+  })
+
+  test("allows tmp writes in read-only mode", async () => {
+    if (process.platform !== "darwin") return
+    await using home = await tmpdir()
+    await using tmp = await tmpdir({
+      config: {
+        experimental: {
+          sandbox: {
+            enabled: true,
+            mode: "read-only",
+          },
+        },
+      },
+    })
+    process.env.HOME = home.path
+    process.env.OPENCODE_TEST_HOME = home.path
+    process.env.SHELL = "/bin/zsh"
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const file = path.join("/tmp", `opencode-sandbox-${Date.now()}.txt`)
+        const bash = await BashTool.init()
+        const out = await bash.execute(
+          {
+            command: `printf 'ok' > ${JSON.stringify(file)} && cat ${JSON.stringify(file)} && rm ${JSON.stringify(file)}`,
+            description: "Writes tmp file in read-only sandbox",
+          },
+          ctx,
+        )
+        expect(out.output).toContain("ok")
+      },
+    })
+  })
+
+  test("blocks excluded commands before execution", async () => {
+    await using tmp = await tmpdir({
+      config: {
+        experimental: {
+          sandbox: {
+            enabled: true,
+            excluded_commands: ["rm"],
+          },
+        },
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const seen: string[] = []
+        const bash = await BashTool.init()
+        await expect(
+          bash.execute(
+            {
+              command: "rm -rf /tmp/test",
+              description: "Blocked command",
+            },
+            makeCtx(async (req) => {
+              seen.push(req.permission)
+            }),
+          ),
+        ).rejects.toThrow("rm")
+        expect(seen).toEqual([])
+      },
+    })
+  })
+
+  test("retries unsandboxed when allowed and approved", async () => {
+    if (process.platform !== "darwin") return
+    await using home = await tmpdir({
+      init: async (dir) => {
+        await fs.mkdir(path.join(dir, ".ssh"), { recursive: true })
+        await Bun.write(path.join(dir, ".ssh", "secret"), "secret\n")
+      },
+    })
+    await using tmp = await tmpdir({
+      config: {
+        experimental: {
+          sandbox: {
+            enabled: true,
+            allow_unsandboxed_retry: true,
+          },
+        },
+      },
+    })
+    process.env.HOME = home.path
+    process.env.OPENCODE_TEST_HOME = home.path
+    process.env.SHELL = "/bin/zsh"
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const seen: string[] = []
+        const bash = await BashTool.init()
+        const out = await bash.execute(
+          {
+            command: 'cat "$HOME/.ssh/secret"',
+            description: "Retries without sandbox",
+          },
+          makeCtx(async (req) => {
+            seen.push(req.permission)
+          }),
+        )
+        expect(seen).toContain("bash:unsandboxed")
+        expect(out.output).toContain("secret\n")
+        expect(out.output).toContain("Retried command without sandbox")
+      },
+    })
+  })
+
+  test("keeps the original denial when unsandboxed retry is rejected", async () => {
+    if (process.platform !== "darwin") return
+    await using home = await tmpdir({
+      init: async (dir) => {
+        await fs.mkdir(path.join(dir, ".ssh"), { recursive: true })
+        await Bun.write(path.join(dir, ".ssh", "secret"), "secret\n")
+      },
+    })
+    await using tmp = await tmpdir({
+      config: {
+        experimental: {
+          sandbox: {
+            enabled: true,
+            allow_unsandboxed_retry: true,
+          },
+        },
+      },
+    })
+    process.env.HOME = home.path
+    process.env.OPENCODE_TEST_HOME = home.path
+    process.env.SHELL = "/bin/zsh"
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const seen: string[] = []
+        const bash = await BashTool.init()
+        const out = await bash.execute(
+          {
+            command: 'cat "$HOME/.ssh/secret"',
+            description: "Rejects unsandboxed retry",
+          },
+          makeCtx(async (req) => {
+            seen.push(req.permission)
+            if (req.permission === "bash:unsandboxed") throw new Error("reject")
+          }),
+        )
+        expect(seen).toContain("bash:unsandboxed")
         expect(out.output).not.toContain("secret\n")
         expect(out.output).toContain("Operation not permitted")
       },

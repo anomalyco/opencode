@@ -29,7 +29,7 @@ PTY sessions apply the sandbox profile to the initial process spawn and check `e
 #### Modes
 
 - **`workspace-write`** (default) — the sandboxed process can read system paths and read/write within the project workspace.
-- **`read-only`** — the sandboxed process can only read; writes are limited to explicitly configured extra write roots.
+- **`read-only`** — the sandboxed process can read, and writes are limited to `/tmp`, `/private/tmp`, and explicitly configured extra write roots.
 
 #### Configuration options
 

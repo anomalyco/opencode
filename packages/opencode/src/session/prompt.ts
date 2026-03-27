@@ -1581,6 +1581,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       throw error
     }
     const model = input.model ?? agent.model ?? (await lastModel(input.sessionID))
+    const cfg = await SandboxSpawn.settings()
     const userMsg: MessageV2.User = {
       id: MessageID.ascending(),
       sessionID: input.sessionID,
@@ -1648,186 +1649,278 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       },
     }
     await Session.updatePart(part)
-    const shell = Shell.preferred()
-    const shellName = (
-      process.platform === "win32" ? path.win32.basename(shell, ".exe") : path.basename(shell)
-    ).toLowerCase()
+    try {
+      const blocked = SandboxSpawn.excludedText(input.command, cfg.excluded_commands)
+      if (blocked) {
+        throw new SandboxSpawn.CommandError(blocked.command, blocked.rule)
+      }
 
-    const invocations: Record<string, { args: string[] }> = {
-      nu: {
-        args: ["-c", input.command],
-      },
-      fish: {
-        args: ["-c", input.command],
-      },
-      zsh: {
-        args: [
-          "-c",
-          "-l",
-          `
-            [[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
-            [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
-            eval ${JSON.stringify(input.command)}
-          `,
-        ],
-      },
-      bash: {
-        args: [
-          "-c",
-          "-l",
-          `
-            shopt -s expand_aliases
-            [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
-            eval ${JSON.stringify(input.command)}
-          `,
-        ],
-      },
-      // Windows cmd
-      cmd: {
-        args: ["/c", input.command],
-      },
-      // Windows PowerShell
-      powershell: {
-        args: ["-NoProfile", "-Command", input.command],
-      },
-      pwsh: {
-        args: ["-NoProfile", "-Command", input.command],
-      },
-      // Fallback: any shell that doesn't match those above
-      //  - No -l, for max compatibility
-      "": {
-        args: ["-c", `${input.command}`],
-      },
-    }
-    const clean: Record<string, { args: string[] }> = {
-      nu: {
-        args: ["-c", input.command],
-      },
-      fish: {
-        args: ["-c", input.command],
-      },
-      zsh: {
-        args: ["-f", "-c", input.command],
-      },
-      bash: {
-        args: ["--noprofile", "--norc", "-c", input.command],
-      },
-      cmd: {
-        args: ["/c", input.command],
-      },
-      powershell: {
-        args: ["-NoProfile", "-Command", input.command],
-      },
-      pwsh: {
-        args: ["-NoProfile", "-Command", input.command],
-      },
-      "": {
-        args: ["-c", `${input.command}`],
-      },
-    }
+      const shell = Shell.preferred()
+      const shellName = (
+        process.platform === "win32" ? path.win32.basename(shell, ".exe") : path.basename(shell)
+      ).toLowerCase()
 
-    const cwd = Instance.directory
-    const shellEnv = await Plugin.trigger(
-      "shell.env",
-      { cwd, sessionID: input.sessionID, callID: part.callID },
-      { env: {} },
-    )
-    const root = Instance.worktree === "/" ? Instance.directory : Instance.worktree
-    const sandbox = await SandboxSpawn.resolve({
-      cwd,
-      project_root: Instance.directory,
-      worktree_root: root,
-    })
-    const args =
-      (sandbox.active ? clean : invocations)[shellName]?.args ?? (sandbox.active ? clean[""] : invocations[""]).args
-    const cmd =
-      sandbox.active && sandbox.profile
-        ? SandboxSpawn.wrap({ profile: sandbox.profile, file: shell, args })
-        : { file: shell, args }
-    const proc = spawn(cmd.file, cmd.args, {
-      cwd,
-      detached: process.platform !== "win32",
-      windowsHide: process.platform === "win32",
-      stdio: ["ignore", "pipe", "pipe"],
-      env: {
+      const invocations: Record<string, { args: string[] }> = {
+        nu: {
+          args: ["-c", input.command],
+        },
+        fish: {
+          args: ["-c", input.command],
+        },
+        zsh: {
+          args: [
+            "-c",
+            "-l",
+            `
+              [[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
+              [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
+              eval ${JSON.stringify(input.command)}
+            `,
+          ],
+        },
+        bash: {
+          args: [
+            "-c",
+            "-l",
+            `
+              shopt -s expand_aliases
+              [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
+              eval ${JSON.stringify(input.command)}
+            `,
+          ],
+        },
+        cmd: {
+          args: ["/c", input.command],
+        },
+        powershell: {
+          args: ["-NoProfile", "-Command", input.command],
+        },
+        pwsh: {
+          args: ["-NoProfile", "-Command", input.command],
+        },
+        "": {
+          args: ["-c", `${input.command}`],
+        },
+      }
+      const clean: Record<string, { args: string[] }> = {
+        nu: {
+          args: ["-c", input.command],
+        },
+        fish: {
+          args: ["-c", input.command],
+        },
+        zsh: {
+          args: ["-f", "-c", input.command],
+        },
+        bash: {
+          args: ["--noprofile", "--norc", "-c", input.command],
+        },
+        cmd: {
+          args: ["/c", input.command],
+        },
+        powershell: {
+          args: ["-NoProfile", "-Command", input.command],
+        },
+        pwsh: {
+          args: ["-NoProfile", "-Command", input.command],
+        },
+        "": {
+          args: ["-c", `${input.command}`],
+        },
+      }
+
+      const cwd = Instance.directory
+      const shellEnv = await Plugin.trigger(
+        "shell.env",
+        { cwd, sessionID: input.sessionID, callID: part.callID },
+        { env: {} },
+      )
+      const root = Instance.worktree === "/" ? Instance.directory : Instance.worktree
+      const sandbox = await SandboxSpawn.resolve(
+        {
+          cwd,
+          project_root: Instance.directory,
+          worktree_root: root,
+        },
+        cfg,
+      )
+      const cleanArgs = clean[shellName]?.args ?? clean[""].args
+      const rawArgs = invocations[shellName]?.args ?? invocations[""].args
+      const raw = { file: shell, args: rawArgs }
+      const cmd =
+        sandbox.active && sandbox.profile
+          ? SandboxSpawn.wrap({ profile: sandbox.profile, file: shell, args: cleanArgs })
+          : raw
+      const env = {
         ...process.env,
         ...shellEnv.env,
         TERM: "dumb",
-      },
-    })
-
-    let output = ""
-
-    proc.stdout?.on("data", (chunk) => {
-      output += chunk.toString()
-      if (part.state.status === "running") {
-        part.state.metadata = {
-          output: output,
-          description: "",
-        }
-        Session.updatePart(part)
       }
-    })
 
-    proc.stderr?.on("data", (chunk) => {
-      output += chunk.toString()
-      if (part.state.status === "running") {
-        part.state.metadata = {
-          output: output,
-          description: "",
+      const run = async (input: { file: string; args: string[] }) => {
+        const proc = spawn(input.file, input.args, {
+          cwd,
+          detached: process.platform !== "win32",
+          windowsHide: process.platform === "win32",
+          stdio: ["ignore", "pipe", "pipe"],
+          env,
+        })
+
+        let output = ""
+        let stderr = ""
+        let aborted = false
+        let exited = false
+        let code = 0
+
+        const push = (chunk: Buffer) => {
+          output += chunk.toString()
+          if (part.state.status === "running") {
+            part.state.metadata = {
+              output,
+              description: "",
+            }
+            Session.updatePart(part)
+          }
         }
-        Session.updatePart(part)
-      }
-    })
 
-    let aborted = false
-    let exited = false
+        proc.stdout?.on("data", push)
+        proc.stderr?.on("data", (chunk) => {
+          stderr += chunk.toString()
+          push(chunk)
+        })
 
-    const kill = () => Shell.killTree(proc, { exited: () => exited })
+        const kill = () => Shell.killTree(proc, { exited: () => exited })
 
-    if (abort.aborted) {
-      aborted = true
-      await kill()
-    }
+        if (abort.aborted) {
+          aborted = true
+          await kill()
+        }
 
-    const abortHandler = () => {
-      aborted = true
-      void kill()
-    }
+        const abortHandler = () => {
+          aborted = true
+          void kill()
+        }
 
-    abort.addEventListener("abort", abortHandler, { once: true })
+        abort.addEventListener("abort", abortHandler, { once: true })
 
-    await new Promise<void>((resolve) => {
-      proc.on("close", () => {
-        exited = true
-        abort.removeEventListener("abort", abortHandler)
-        resolve()
-      })
-    })
+        await new Promise<void>((resolve, reject) => {
+          const done = () => {
+            abort.removeEventListener("abort", abortHandler)
+          }
 
-    if (aborted) {
-      output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
-    }
-    msg.time.completed = Date.now()
-    await Session.updateMessage(msg)
-    if (part.state.status === "running") {
-      part.state = {
-        status: "completed",
-        time: {
-          ...part.state.time,
-          end: Date.now(),
-        },
-        input: part.state.input,
-        title: "",
-        metadata: {
+          proc.on("close", (value) => {
+            code = value ?? 1
+            exited = true
+            done()
+            resolve()
+          })
+
+          proc.on("error", (error) => {
+            exited = true
+            done()
+            reject(error)
+          })
+        })
+
+        return {
           output,
-          description: "",
-        },
-        output,
+          stderr,
+          aborted,
+          code,
+        }
       }
-      await Session.updatePart(part)
+
+      let retried = false
+      let result = await run(cmd)
+
+      if (
+        cfg.allow_unsandboxed_retry &&
+        !result.aborted &&
+        SandboxSpawn.shouldRetry({ active: sandbox.active, code: result.code, stderr: result.stderr })
+      ) {
+        try {
+          await Permission.ask({
+            permission: "bash:unsandboxed",
+            patterns: [input.command],
+            always: [input.command],
+            metadata: {
+              reason: "sandbox_denial",
+            },
+            sessionID: input.sessionID,
+            tool: {
+              messageID: msg.id,
+              callID: part.callID,
+            },
+            ruleset: Permission.merge(agent.permission, session.permission ?? []),
+          })
+          retried = true
+          if (part.state.status === "running") {
+            part.state.metadata = {
+              output: "",
+              description: "",
+            }
+            await Session.updatePart(part)
+          }
+          result = await run(raw)
+        } catch (error) {
+          log.info("unsandboxed retry rejected", { error, sessionID: input.sessionID })
+        }
+      }
+
+      let output = result.output
+
+      if (retried) {
+        output +=
+          "\n\n" + ["<metadata>", "Retried command without sandbox after sandbox denial", "</metadata>"].join("\n")
+      }
+
+      if (result.aborted) {
+        output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
+      }
+      msg.time.completed = Date.now()
+      await Session.updateMessage(msg)
+      if (part.state.status === "running") {
+        part.state = {
+          status: "completed",
+          time: {
+            ...part.state.time,
+            end: Date.now(),
+          },
+          input: part.state.input,
+          title: "",
+          metadata: {
+            output,
+            description: "",
+          },
+          output,
+        }
+        await Session.updatePart(part)
+      }
+      return { info: msg, parts: [part] }
+    } catch (error) {
+      const output = error instanceof Error ? error.message : String(error)
+      log.error("session shell failed", { error, sessionID: input.sessionID })
+      msg.time.completed = Date.now()
+      await Session.updateMessage(msg)
+      if (part.state.status === "running") {
+        part.state = {
+          status: "completed",
+          time: {
+            ...part.state.time,
+            end: Date.now(),
+          },
+          input: part.state.input,
+          title: "",
+          metadata: {
+            output,
+            description: "",
+          },
+          output,
+        }
+        await Session.updatePart(part)
+      }
+      return { info: msg, parts: [part] }
     }
-    return { info: msg, parts: [part] }
   }
 
   export const CommandInput = z.object({
