@@ -17,6 +17,10 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
 
+function shouldOpen(provider: string, label: string) {
+  return provider === "anthropic" && label === "Create an API Key"
+}
+
 export function DialogConnectProvider(props: { provider: string }) {
   const dialog = useDialog()
   const globalSync = useGlobalSync()
@@ -47,7 +51,7 @@ export function DialogConnectProvider(props: { provider: string }) {
   )
   const fallback = createMemo<ProviderAuthMethod[]>(() => [
     {
-      type: "api" as const,
+      type: "api",
       label: language.t("provider.connect.method.apiKey"),
     },
   ])
@@ -63,7 +67,9 @@ export function DialogConnectProvider(props: { provider: string }) {
     },
   )
   const loading = createMemo(() => auth.loading && !globalSync.data.provider_auth[props.provider])
-  const methods = createMemo(() => auth.latest ?? globalSync.data.provider_auth[props.provider] ?? fallback())
+  const methods = createMemo<ProviderAuthMethod[]>(
+    () => auth.latest ?? globalSync.data.provider_auth[props.provider] ?? fallback(),
+  )
   const [store, setStore] = createStore({
     methodIndex: undefined as undefined | number,
     authorization: undefined as undefined | ProviderAuthAuthorization,
@@ -171,6 +177,9 @@ export function DialogConnectProvider(props: { provider: string }) {
         )
         .then((x) => {
           if (!alive.value) return
+          if (x.data?.url && shouldOpen(props.provider, method.label)) {
+            window.open(x.data.url, "_blank", "noopener,noreferrer")
+          }
           const elapsed = Date.now() - start
           const delay = 1000 - elapsed
 
