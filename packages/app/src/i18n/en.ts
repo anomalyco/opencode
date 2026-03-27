@@ -157,6 +157,14 @@ export const dict = {
   "provider.connect.toast.connected.title": "{{provider}} connected",
   "provider.connect.toast.connected.description": "{{provider}} models are now available to use.",
 
+  "provider.edit.title": "Edit {{provider}}",
+  "provider.edit.apiKey.description": "Update your API key for {{provider}}.",
+
+  "provider.custom.edit.title": "Edit custom provider",
+
+  "provider.edit.toast.updated.title": "{{provider}} updated",
+  "provider.edit.toast.updated.description": "Your {{provider}} settings have been saved.",
+
   "provider.custom.title": "Custom provider",
   "provider.custom.description.prefix": "Configure an OpenAI-compatible provider. See the ",
   "provider.custom.description.link": "provider config docs",

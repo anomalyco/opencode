@@ -6,7 +6,7 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { useMutation } from "@tanstack/solid-query"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast } from "@opencode-ai/ui/toast"
-import { batch, For } from "solid-js"
+import { batch, For, Show, createMemo } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Link } from "@/components/link"
 import { useGlobalSDK } from "@/context/global-sdk"
@@ -17,6 +17,8 @@ import { DialogSelectProvider } from "./dialog-select-provider"
 
 type Props = {
   back?: "providers" | "close"
+  edit?: boolean
+  providerID?: string
 }
 
 export function DialogCustomProvider(props: Props) {
@@ -25,17 +27,57 @@ export function DialogCustomProvider(props: Props) {
   const globalSDK = useGlobalSDK()
   const language = useLanguage()
 
+  const existingConfig = createMemo(() => {
+    if (!props.edit || !props.providerID) return undefined
+    return globalSync.data.config.provider?.[props.providerID]
+  })
+
+  const existingProvider = createMemo(() => {
+    if (!props.edit || !props.providerID) return undefined
+    return globalSync.data.provider.all.find((p) => p.id === props.providerID) as { key?: string } | undefined
+  })
+
+  const existingModels = createMemo(() => {
+    const config = existingConfig()
+    if (!config?.models) return undefined
+    return Object.entries(config.models)
+  })
+
+  const existingHeaders = createMemo(() => {
+    const options = existingConfig()?.options as { headers?: Record<string, string> } | undefined
+    if (!options?.headers) return undefined
+    return Object.entries(options.headers)
+  })
+
   const [form, setForm] = createStore<FormState>({
-    providerID: "",
-    name: "",
-    baseURL: "",
-    apiKey: "",
-    models: [modelRow()],
-    headers: [headerRow()],
+    providerID: props.providerID ?? "",
+    name: existingConfig()?.name ?? "",
+    baseURL: (existingConfig()?.options as { baseURL?: string })?.baseURL ?? existingConfig()?.api ?? "",
+    apiKey: existingProvider()?.key ?? "",
+    models: existingModels()
+      ? existingModels()!.map(([id, m]) => ({
+          row: Math.random().toString(36).slice(2),
+          id,
+          name: m.name ?? id,
+          err: { id: undefined, name: undefined },
+        }))
+      : [modelRow()],
+    headers: existingHeaders()
+      ? existingHeaders()!.map(([key, value]) => ({
+          row: Math.random().toString(36).slice(2),
+          key,
+          value,
+          err: { key: undefined, value: undefined },
+        }))
+      : [headerRow()],
     err: {},
   })
 
   const goBack = () => {
+    if (props.edit) {
+      dialog.close()
+      return
+    }
     if (props.back === "close") {
       dialog.close()
       return
@@ -53,7 +95,7 @@ export function DialogCustomProvider(props: Props) {
   }
 
   const removeModel = (index: number) => {
-    if (form.models.length <= 1) return
+    if (form.models.length <= 1 && !props.edit) return
     setForm(
       "models",
       produce((rows) => {
@@ -72,7 +114,7 @@ export function DialogCustomProvider(props: Props) {
   }
 
   const removeHeader = (index: number) => {
-    if (form.headers.length <= 1) return
+    if (form.headers.length <= 1 && !props.edit) return
     setForm(
       "headers",
       produce((rows) => {
@@ -102,11 +144,14 @@ export function DialogCustomProvider(props: Props) {
   }
 
   const validate = () => {
+    const existingIDs = props.edit
+      ? new Set(globalSync.data.provider.all.map((p) => p.id).filter((id) => id !== props.providerID))
+      : new Set(globalSync.data.provider.all.map((p) => p.id))
     const output = validateCustomProvider({
       form,
       t: language.t,
       disabledProviders: globalSync.data.config.disabled_providers ?? [],
-      existingProviderIDs: new Set(globalSync.data.provider.all.map((p) => p.id)),
+      existingProviderIDs: existingIDs,
     })
     batch(() => {
       setForm("err", output.err)
@@ -139,11 +184,16 @@ export function DialogCustomProvider(props: Props) {
     },
     onSuccess: (result) => {
       dialog.close()
+      const isEdit = props.edit
       showToast({
         variant: "success",
         icon: "circle-check",
-        title: language.t("provider.connect.toast.connected.title", { provider: result.name }),
-        description: language.t("provider.connect.toast.connected.description", { provider: result.name }),
+        title: isEdit
+          ? language.t("provider.edit.toast.updated.title", { provider: result.name })
+          : language.t("provider.connect.toast.connected.title", { provider: result.name }),
+        description: isEdit
+          ? language.t("provider.edit.toast.updated.description", { provider: result.name })
+          : language.t("provider.connect.toast.connected.description", { provider: result.name }),
       })
     },
     onError: (err) => {
@@ -164,41 +214,57 @@ export function DialogCustomProvider(props: Props) {
   return (
     <Dialog
       title={
-        <IconButton
-          tabIndex={-1}
-          icon="arrow-left"
-          variant="ghost"
-          onClick={goBack}
-          aria-label={language.t("common.goBack")}
-        />
+        <Show
+          when={!props.edit}
+          fallback={<span class="text-16-medium text-text-strong">{language.t("provider.custom.edit.title")}</span>}
+        >
+          <IconButton
+            tabIndex={-1}
+            icon="arrow-left"
+            variant="ghost"
+            onClick={goBack}
+            aria-label={language.t("common.goBack")}
+          />
+        </Show>
       }
       transition
     >
       <div class="flex flex-col gap-6 px-2.5 pb-3 overflow-y-auto max-h-[60vh]">
-        <div class="px-2.5 flex gap-4 items-center">
-          <ProviderIcon id="synthetic" class="size-5 shrink-0 icon-strong-base" />
-          <div class="text-16-medium text-text-strong">{language.t("provider.custom.title")}</div>
-        </div>
+        <Show when={!props.edit}>
+          <div class="px-2.5 flex gap-4 items-center">
+            <ProviderIcon id="synthetic" class="size-5 shrink-0 icon-strong-base" />
+            <div class="text-16-medium text-text-strong">{language.t("provider.custom.title")}</div>
+          </div>
+        </Show>
+        <Show when={props.edit}>
+          <div class="px-2.5 flex gap-4 items-center">
+            <ProviderIcon id="synthetic" class="size-5 shrink-0 icon-strong-base" />
+            <div class="text-16-medium text-text-strong">{language.t("provider.custom.edit.title")}</div>
+          </div>
+        </Show>
 
         <form onSubmit={save} class="px-2.5 pb-6 flex flex-col gap-6">
-          <p class="text-14-regular text-text-base">
-            {language.t("provider.custom.description.prefix")}
-            <Link href="https://opencode.ai/docs/providers/#custom-provider" tabIndex={-1}>
-              {language.t("provider.custom.description.link")}
-            </Link>
-            {language.t("provider.custom.description.suffix")}
-          </p>
+          <Show when={!props.edit}>
+            <p class="text-14-regular text-text-base">
+              {language.t("provider.custom.description.prefix")}
+              <Link href="https://opencode.ai/docs/providers/#custom-provider" tabIndex={-1}>
+                {language.t("provider.custom.description.link")}
+              </Link>
+              {language.t("provider.custom.description.suffix")}
+            </p>
+          </Show>
 
           <div class="flex flex-col gap-4">
             <TextField
-              autofocus
+              autofocus={!props.edit}
               label={language.t("provider.custom.field.providerID.label")}
               placeholder={language.t("provider.custom.field.providerID.placeholder")}
-              description={language.t("provider.custom.field.providerID.description")}
-              value={form.providerID}
+              description={props.edit ? undefined : language.t("provider.custom.field.providerID.description")}
+              value={props.providerID ?? form.providerID}
               onChange={(v) => setField("providerID", v)}
               validationState={form.err.providerID ? "invalid" : undefined}
               error={form.err.providerID}
+              readOnly={props.edit}
             />
             <TextField
               label={language.t("provider.custom.field.name.label")}

@@ -12,6 +12,7 @@ import { DialogConnectProvider } from "./dialog-connect-provider"
 import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogCustomProvider } from "./dialog-custom-provider"
 import { SettingsList } from "./settings-list"
+import type { Provider } from "@opencode-ai/sdk/v2/client"
 
 type ProviderSource = "env" | "api" | "config" | "custom"
 type ProviderItem = ReturnType<ReturnType<typeof useProviders>["connected"]>[number]
@@ -70,6 +71,13 @@ export const SettingsProviders: Component = () => {
   }
 
   const canDisconnect = (item: ProviderItem) => source(item) !== "env"
+
+  const canEdit = (item: ProviderItem) => {
+    const src = source(item)
+    if (src === "api" || src === "custom") return true
+    if (src === "config" && isConfigCustom(item.id)) return true
+    return false
+  }
 
   const note = (id: string) => PROVIDER_NOTES.find((item) => item.match(id))?.key
 
@@ -162,9 +170,26 @@ export const SettingsProviders: Component = () => {
                         </span>
                       }
                     >
-                      <Button size="large" variant="ghost" onClick={() => void disconnect(item.id, item.name)}>
-                        {language.t("common.disconnect")}
-                      </Button>
+                      <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        <Show when={canEdit(item)}>
+                          <Button
+                            size="large"
+                            variant="ghost"
+                            onClick={() => {
+                              if (isConfigCustom(item.id)) {
+                                dialog.show(() => <DialogCustomProvider edit providerID={item.id} />)
+                              } else {
+                                dialog.show(() => <DialogConnectProvider provider={item.id} edit />)
+                              }
+                            }}
+                          >
+                            {language.t("common.edit")}
+                          </Button>
+                        </Show>
+                        <Button size="large" variant="ghost" onClick={() => void disconnect(item.id, item.name)}>
+                          {language.t("common.disconnect")}
+                        </Button>
+                      </div>
                     </Show>
                   </div>
                 )}

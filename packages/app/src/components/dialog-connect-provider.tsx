@@ -9,7 +9,7 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast } from "@opencode-ai/ui/toast"
-import { createEffect, createMemo, createResource, Match, onCleanup, onMount, Switch } from "solid-js"
+import { createEffect, createMemo, createResource, Match, onCleanup, onMount, Show, Switch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Link } from "@/components/link"
 import { useGlobalSDK } from "@/context/global-sdk"
@@ -17,7 +17,7 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { DialogSelectProvider } from "./dialog-select-provider"
 
-export function DialogConnectProvider(props: { provider: string }) {
+export function DialogConnectProvider(props: { provider: string; edit?: boolean }) {
   const dialog = useDialog()
   const globalSync = useGlobalSync()
   const globalSDK = useGlobalSDK()
@@ -34,6 +34,13 @@ export function DialogConnectProvider(props: { provider: string }) {
   })
 
   const provider = createMemo(() => globalSync.data.provider.all.find((x) => x.id === props.provider)!)
+
+  const currentKey = createMemo(() => {
+    if (!props.edit) return undefined
+    const p = provider()
+    if ("key" in p && typeof p.key === "string") return p.key
+    return undefined
+  })
   const fallback = createMemo<ProviderAuthMethod[]>(() => [
     {
       type: "api" as const,
@@ -314,6 +321,14 @@ export function DialogConnectProvider(props: { provider: string }) {
   createEffect(() => {
     if (auto) return
     if (loading()) return
+    if (props.edit) {
+      auto = true
+      const apiIndex = methods().findIndex((m) => m.type === "api")
+      if (apiIndex >= 0) {
+        selectMethod(apiIndex)
+      }
+      return
+    }
     if (methods().length === 1) {
       auto = true
       selectMethod(0)
@@ -323,15 +338,24 @@ export function DialogConnectProvider(props: { provider: string }) {
   async function complete() {
     await globalSDK.client.global.dispose()
     dialog.close()
+    const isEdit = props.edit
     showToast({
       variant: "success",
       icon: "circle-check",
-      title: language.t("provider.connect.toast.connected.title", { provider: provider().name }),
-      description: language.t("provider.connect.toast.connected.description", { provider: provider().name }),
+      title: isEdit
+        ? language.t("provider.edit.toast.updated.title", { provider: provider().name })
+        : language.t("provider.connect.toast.connected.title", { provider: provider().name }),
+      description: isEdit
+        ? language.t("provider.edit.toast.updated.description", { provider: provider().name })
+        : language.t("provider.connect.toast.connected.description", { provider: provider().name }),
     })
   }
 
   function goBack() {
+    if (props.edit) {
+      dialog.close()
+      return
+    }
     if (methods().length === 1) {
       dialog.show(() => <DialogSelectProvider />)
       return
@@ -381,7 +405,7 @@ export function DialogConnectProvider(props: { provider: string }) {
 
   function ApiAuthView() {
     const [formStore, setFormStore] = createStore({
-      value: "",
+      value: currentKey() ?? "",
       error: undefined as string | undefined,
     })
 
@@ -410,6 +434,11 @@ export function DialogConnectProvider(props: { provider: string }) {
 
     return (
       <div class="flex flex-col gap-6">
+        <Show when={props.edit}>
+          <div class="text-14-regular text-text-base">
+            {language.t("provider.edit.apiKey.description", { provider: provider().name })}
+          </div>
+        </Show>
         <Switch>
           <Match when={provider().id === "opencode"}>
             <div class="flex flex-col gap-4">
@@ -424,7 +453,7 @@ export function DialogConnectProvider(props: { provider: string }) {
               </div>
             </div>
           </Match>
-          <Match when={true}>
+          <Match when={!props.edit}>
             <div class="text-14-regular text-text-base">
               {language.t("provider.connect.apiKey.description", { provider: provider().name })}
             </div>
@@ -443,7 +472,7 @@ export function DialogConnectProvider(props: { provider: string }) {
             error={formStore.error}
           />
           <Button class="w-auto" type="submit" size="large" variant="primary">
-            {language.t("common.continue")}
+            {props.edit ? language.t("common.save") : language.t("common.continue")}
           </Button>
         </form>
       </div>
@@ -567,27 +596,46 @@ export function DialogConnectProvider(props: { provider: string }) {
   return (
     <Dialog
       title={
-        <IconButton
-          tabIndex={-1}
-          icon="arrow-left"
-          variant="ghost"
-          onClick={goBack}
-          aria-label={language.t("common.goBack")}
-        />
+        <Show
+          when={!props.edit}
+          fallback={
+            <span class="text-16-medium text-text-strong">
+              {language.t("provider.edit.title", { provider: provider().name })}
+            </span>
+          }
+        >
+          <IconButton
+            tabIndex={-1}
+            icon="arrow-left"
+            variant="ghost"
+            onClick={goBack}
+            aria-label={language.t("common.goBack")}
+          />
+        </Show>
       }
     >
       <div class="flex flex-col gap-6 px-2.5 pb-3">
-        <div class="px-2.5 flex gap-4 items-center">
-          <ProviderIcon id={props.provider} class="size-5 shrink-0 icon-strong-base" />
-          <div class="text-16-medium text-text-strong">
-            <Switch>
-              <Match when={props.provider === "anthropic" && method()?.label?.toLowerCase().includes("max")}>
-                {language.t("provider.connect.title.anthropicProMax")}
-              </Match>
-              <Match when={true}>{language.t("provider.connect.title", { provider: provider().name })}</Match>
-            </Switch>
+        <Show when={!props.edit}>
+          <div class="px-2.5 flex gap-4 items-center">
+            <ProviderIcon id={props.provider} class="size-5 shrink-0 icon-strong-base" />
+            <div class="text-16-medium text-text-strong">
+              <Switch>
+                <Match when={props.provider === "anthropic" && method()?.label?.toLowerCase().includes("max")}>
+                  {language.t("provider.connect.title.anthropicProMax")}
+                </Match>
+                <Match when={true}>{language.t("provider.connect.title", { provider: provider().name })}</Match>
+              </Switch>
+            </div>
           </div>
-        </div>
+        </Show>
+        <Show when={props.edit}>
+          <div class="px-2.5 flex gap-4 items-center">
+            <ProviderIcon id={props.provider} class="size-5 shrink-0 icon-strong-base" />
+            <div class="text-16-medium text-text-strong">
+              {language.t("provider.edit.title", { provider: provider().name })}
+            </div>
+          </div>
+        </Show>
         <div class="px-2.5 pb-10 flex flex-col gap-6">
           <div onKeyDown={handleKey} tabIndex={0} autofocus={store.methodIndex === undefined ? true : undefined}>
             <Switch>
