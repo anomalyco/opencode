@@ -443,6 +443,7 @@ export const RunCommand = cmd({
 
       async function loop() {
         const toggles = new Map<string, boolean>()
+        const sessions = new Set([sessionID])
 
         for await (const event of events.stream) {
           if (
@@ -459,7 +460,7 @@ export const RunCommand = cmd({
 
           if (event.type === "message.part.updated") {
             const part = event.properties.part
-            if (part.sessionID !== sessionID) continue
+            if (!sessions.has(part.sessionID)) continue
 
             if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
               if (emit("tool_use", { part })) continue
@@ -474,12 +475,11 @@ export const RunCommand = cmd({
               UI.error(part.state.error)
             }
 
-            if (
-              part.type === "tool" &&
-              part.tool === "task" &&
-              part.state.status === "running" &&
-              args.format !== "json"
-            ) {
+            if (part.type === "tool" && part.tool === "task" && part.state.status === "running") {
+              // Track child session IDs so their output is also printed
+              const meta = "metadata" in part.state ? (part.state.metadata as Record<string, unknown>) : undefined
+              if (meta && typeof meta.sessionId === "string") sessions.add(meta.sessionId)
+              if (args.format === "json") continue
               if (toggles.get(part.id) === true) continue
               task(props<typeof TaskTool>(part))
               toggles.set(part.id, true)
@@ -523,7 +523,7 @@ export const RunCommand = cmd({
 
           if (event.type === "session.error") {
             const props = event.properties
-            if (props.sessionID !== sessionID || !props.error) continue
+            if (!sessions.has(props.sessionID) || !props.error) continue
             let err = String(props.error.name)
             if ("data" in props.error && props.error.data && "message" in props.error.data) {
               err = String(props.error.data.message)
