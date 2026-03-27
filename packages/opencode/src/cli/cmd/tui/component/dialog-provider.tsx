@@ -105,6 +105,9 @@ export function createDialogProviderOptions() {
             }
           }
           if (method.type === "api") {
+            if (provider.id === "9router") {
+              return dialog.replace(() => <NineRouterMethod providerID={provider.id} title={method.label} />)
+            }
             return dialog.replace(() => <ApiMethod providerID={provider.id} title={method.label} />)
           }
         },
@@ -269,6 +272,55 @@ function ApiMethod(props: ApiMethodProps) {
             type: "api",
             key: value,
           },
+        })
+        await sdk.client.instance.dispose()
+        await sync.bootstrap()
+        dialog.replace(() => <DialogModel providerID={props.providerID} />)
+      }}
+    />
+  )
+}
+
+const NINEROUTER_DEFAULT_URL = "http://localhost:20123/v1"
+
+interface NineRouterMethodProps {
+  providerID: string
+  title: string
+}
+function NineRouterMethod(props: NineRouterMethodProps) {
+  const dialog = useDialog()
+  const sdk = useSDK()
+  const sync = useSync()
+
+  return (
+    <DialogPrompt
+      title={props.title}
+      placeholder={NINEROUTER_DEFAULT_URL}
+      value={NINEROUTER_DEFAULT_URL}
+      onConfirm={async (value) => {
+        if (!value) return
+        const baseURL = value.trim().replace(/\/+$/, "")
+        const configResult = await sdk.client.config.get()
+        if (configResult.data) {
+          const cfg = configResult.data as any
+          const updated = {
+            ...cfg,
+            provider: {
+              ...cfg.provider,
+              "9router": {
+                ...(cfg.provider?.["9router"] ?? {}),
+                options: {
+                  ...(cfg.provider?.["9router"]?.options ?? {}),
+                  baseURL,
+                },
+              },
+            },
+          }
+          await sdk.client.config.update({ body: updated })
+        }
+        await sdk.client.auth.set({
+          providerID: props.providerID,
+          auth: { type: "api", key: "9router" },
         })
         await sdk.client.instance.dispose()
         await sync.bootstrap()
