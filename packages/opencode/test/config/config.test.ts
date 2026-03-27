@@ -1,9 +1,19 @@
 import { test, expect, describe, mock, afterEach, spyOn } from "bun:test"
+import { Effect, Layer, Option } from "effect"
+import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Config } from "../../src/config/config"
 import { Instance } from "../../src/project/instance"
 import { Auth } from "../../src/auth"
 import { AccessToken, Account, AccountID, OrgID } from "../../src/account"
+import { AppFileSystem } from "../../src/filesystem"
+import { provideTmpdirInstance } from "../fixture/fixture"
 import { tmpdir } from "../fixture/fixture"
+import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+
+/** Infra layer that provides FileSystem, Path, ChildProcessSpawner for test fixtures */
+const infra = CrossSpawnSpawner.defaultLayer.pipe(
+  Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
+)
 import path from "path"
 import fs from "fs/promises"
 import { pathToFileURL } from "url"
@@ -11,6 +21,14 @@ import { Global } from "../../src/global"
 import { ProjectID } from "../../src/project/schema"
 import { Filesystem } from "../../src/util/filesystem"
 import { BunProc } from "../../src/bun"
+
+const emptyAccount = Layer.mock(Account.Service)({
+  active: () => Effect.succeed(Option.none()),
+})
+
+const emptyAuth = Layer.mock(Auth.Service)({
+  all: () => Effect.succeed({}),
+})
 
 // Get managed config directory from environment (set in preload.ts)
 const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
@@ -246,43 +264,44 @@ test("preserves env variables when adding $schema to config", async () => {
 })
 
 test("resolves env templates in account config with account token", async () => {
-  const originalActive = Account.active
-  const originalConfig = Account.config
-  const originalToken = Account.token
   const originalControlToken = process.env["OPENCODE_CONSOLE_TOKEN"]
 
-  Account.active = mock(async () => ({
-    id: AccountID.make("account-1"),
-    email: "user@example.com",
-    url: "https://control.example.com",
-    active_org_id: OrgID.make("org-1"),
-  }))
+  const fakeAccount = Layer.mock(Account.Service)({
+    active: () =>
+      Effect.succeed(
+        Option.some({
+          id: AccountID.make("account-1"),
+          email: "user@example.com",
+          url: "https://control.example.com",
+          active_org_id: OrgID.make("org-1"),
+        }),
+      ),
+    config: () =>
+      Effect.succeed(
+        Option.some({
+          provider: { opencode: { options: { apiKey: "{env:OPENCODE_CONSOLE_TOKEN}" } } },
+        }),
+      ),
+    token: () => Effect.succeed(Option.some(AccessToken.make("st_test_token"))),
+  })
 
-  Account.config = mock(async () => ({
-    provider: {
-      opencode: {
-        options: {
-          apiKey: "{env:OPENCODE_CONSOLE_TOKEN}",
-        },
-      },
-    },
-  }))
-
-  Account.token = mock(async () => AccessToken.make("st_test_token"))
+  const layer = Config.layer.pipe(
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(emptyAuth),
+    Layer.provide(fakeAccount),
+    Layer.provideMerge(infra),
+  )
 
   try {
-    await using tmp = await tmpdir()
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const config = await Config.get()
-        expect(config.provider?.["opencode"]?.options?.apiKey).toBe("st_test_token")
-      },
-    })
+    await provideTmpdirInstance(() =>
+      Config.Service.use((svc) =>
+        Effect.gen(function* () {
+          const config = yield* svc.get()
+          expect(config.provider?.["opencode"]?.options?.apiKey).toBe("st_test_token")
+        }),
+      ),
+    ).pipe(Effect.scoped, Effect.provide(layer), Effect.runPromise)
   } finally {
-    Account.active = originalActive
-    Account.config = originalConfig
-    Account.token = originalToken
     if (originalControlToken !== undefined) {
       process.env["OPENCODE_CONSOLE_TOKEN"] = originalControlToken
     } else {
@@ -1588,7 +1607,7 @@ test("local .opencode config can override MCP from project config", async () => 
 test("project config overrides remote well-known config", async () => {
   const originalFetch = globalThis.fetch
   let fetchedUrl: string | undefined
-  const mockFetch = mock((url: string | URL | Request) => {
+  globalThis.fetch = mock((url: string | URL | Request) => {
     const urlStr = url.toString()
     if (urlStr.includes(".well-known/opencode")) {
       fetchedUrl = urlStr
@@ -1596,13 +1615,7 @@ test("project config overrides remote well-known config", async () => {
         new Response(
           JSON.stringify({
             config: {
-              mcp: {
-                jira: {
-                  type: "remote",
-                  url: "https://jira.example.com/mcp",
-                  enabled: false,
-                },
-              },
+              mcp: { jira: { type: "remote", url: "https://jira.example.com/mcp", enabled: false } },
             },
           }),
           { status: 200 },
@@ -1610,60 +1623,46 @@ test("project config overrides remote well-known config", async () => {
       )
     }
     return originalFetch(url)
-  })
-  globalThis.fetch = mockFetch as unknown as typeof fetch
+  }) as unknown as typeof fetch
 
-  const originalAuthAll = Auth.all
-  Auth.all = mock(() =>
-    Promise.resolve({
-      "https://example.com": {
-        type: "wellknown" as const,
-        key: "TEST_TOKEN",
-        token: "test-token",
-      },
-    }),
+  const fakeAuth = Layer.mock(Auth.Service)({
+    all: () =>
+      Effect.succeed({
+        "https://example.com": new Auth.WellKnown({ type: "wellknown", key: "TEST_TOKEN", token: "test-token" }),
+      }),
+  })
+
+  const layer = Config.layer.pipe(
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(fakeAuth),
+    Layer.provide(emptyAccount),
+    Layer.provideMerge(infra),
   )
 
   try {
-    await using tmp = await tmpdir({
-      git: true,
-      init: async (dir) => {
-        // Project config enables jira (overriding remote default)
-        await Filesystem.write(
-          path.join(dir, "opencode.json"),
-          JSON.stringify({
-            $schema: "https://opencode.ai/config.json",
-            mcp: {
-              jira: {
-                type: "remote",
-                url: "https://jira.example.com/mcp",
-                enabled: true,
-              },
-            },
+    await provideTmpdirInstance(
+      () =>
+        Config.Service.use((svc) =>
+          Effect.gen(function* () {
+            const config = yield* svc.get()
+            expect(fetchedUrl).toBe("https://example.com/.well-known/opencode")
+            expect(config.mcp?.jira?.enabled).toBe(true)
           }),
-        )
+        ),
+      {
+        git: true,
+        config: { mcp: { jira: { type: "remote", url: "https://jira.example.com/mcp", enabled: true } } },
       },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const config = await Config.get()
-        // Verify fetch was called for wellknown config
-        expect(fetchedUrl).toBe("https://example.com/.well-known/opencode")
-        // Project config (enabled: true) should override remote (enabled: false)
-        expect(config.mcp?.jira?.enabled).toBe(true)
-      },
-    })
+    ).pipe(Effect.scoped, Effect.provide(layer), Effect.runPromise)
   } finally {
     globalThis.fetch = originalFetch
-    Auth.all = originalAuthAll
   }
 })
 
 test("wellknown URL with trailing slash is normalized", async () => {
   const originalFetch = globalThis.fetch
   let fetchedUrl: string | undefined
-  const mockFetch = mock((url: string | URL | Request) => {
+  globalThis.fetch = mock((url: string | URL | Request) => {
     const urlStr = url.toString()
     if (urlStr.includes(".well-known/opencode")) {
       fetchedUrl = urlStr
@@ -1671,13 +1670,7 @@ test("wellknown URL with trailing slash is normalized", async () => {
         new Response(
           JSON.stringify({
             config: {
-              mcp: {
-                slack: {
-                  type: "remote",
-                  url: "https://slack.example.com/mcp",
-                  enabled: true,
-                },
-              },
+              mcp: { slack: { type: "remote", url: "https://slack.example.com/mcp", enabled: true } },
             },
           }),
           { status: 200 },
@@ -1685,43 +1678,35 @@ test("wellknown URL with trailing slash is normalized", async () => {
       )
     }
     return originalFetch(url)
-  })
-  globalThis.fetch = mockFetch as unknown as typeof fetch
+  }) as unknown as typeof fetch
 
-  const originalAuthAll = Auth.all
-  Auth.all = mock(() =>
-    Promise.resolve({
-      "https://example.com/": {
-        type: "wellknown" as const,
-        key: "TEST_TOKEN",
-        token: "test-token",
-      },
-    }),
+  const fakeAuth = Layer.mock(Auth.Service)({
+    all: () =>
+      Effect.succeed({
+        "https://example.com/": new Auth.WellKnown({ type: "wellknown", key: "TEST_TOKEN", token: "test-token" }),
+      }),
+  })
+
+  const layer = Config.layer.pipe(
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(fakeAuth),
+    Layer.provide(emptyAccount),
+    Layer.provideMerge(infra),
   )
 
   try {
-    await using tmp = await tmpdir({
-      git: true,
-      init: async (dir) => {
-        await Filesystem.write(
-          path.join(dir, "opencode.json"),
-          JSON.stringify({
-            $schema: "https://opencode.ai/config.json",
+    await provideTmpdirInstance(
+      () =>
+        Config.Service.use((svc) =>
+          Effect.gen(function* () {
+            yield* svc.get()
+            expect(fetchedUrl).toBe("https://example.com/.well-known/opencode")
           }),
-        )
-      },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        await Config.get()
-        // Trailing slash should be stripped — no double slash in the fetch URL
-        expect(fetchedUrl).toBe("https://example.com/.well-known/opencode")
-      },
-    })
+        ),
+      { git: true },
+    ).pipe(Effect.scoped, Effect.provide(layer), Effect.runPromise)
   } finally {
     globalThis.fetch = originalFetch
-    Auth.all = originalAuthAll
   }
 })
 
