@@ -25,6 +25,13 @@ describe("markdown clipboard html", () => {
     expect(html).toContain("background: #f6f8fa")
   })
 
+  test("removes forbidden media tags before serializing", () => {
+    const html = serializeMarkdownClipboardHTML('<p>Hello</p><img src="https://example.com/x.png"><video></video>')
+    expect(html).toContain("<p>Hello</p>")
+    expect(html).not.toContain("<img")
+    expect(html).not.toContain("<video")
+  })
+
   test("returns empty string for blank html", () => {
     expect(serializeMarkdownClipboardHTML("   ")).toBe("")
   })
