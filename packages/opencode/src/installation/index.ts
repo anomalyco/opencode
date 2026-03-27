@@ -142,11 +142,9 @@ export namespace Installation {
         )
 
         const getBrewFormula = Effect.fnUntraced(function* () {
-          const tapFormula = yield* text(["brew", "list", "--formula", "anomalyco/tap/opencode"])
-          if (tapFormula.includes("opencode")) return "anomalyco/tap/opencode"
-          const coreFormula = yield* text(["brew", "list", "--formula", "opencode"])
-          if (coreFormula.includes("opencode")) return "opencode"
-          return "opencode"
+          const coreFormula = yield* text(["brew", "list", "--formula", "cobuilder"])
+          if (coreFormula.includes("cobuilder")) return "cobuilder"
+          return "cobuilder"
         })
 
         const upgradeCurl = Effect.fnUntraced(
@@ -285,12 +283,12 @@ export namespace Installation {
               const formula = yield* getBrewFormula()
               const env = { HOMEBREW_NO_AUTO_UPDATE: "1" }
               if (formula.includes("/")) {
-                const tap = yield* run(["brew", "tap", "anomalyco/tap"], { env })
+                const tap = yield* run(["brew", "tap", "CobuilderLabs/tap"], { env })
                 if (tap.code !== 0) {
                   result = tap
                   break
                 }
-                const repo = yield* text(["brew", "--repo", "anomalyco/tap"])
+                const repo = yield* text(["brew", "--repo", "CobuilderLabs/tap"])
                 const dir = repo.trim()
                 if (dir) {
                   const pull = yield* run(["git", "pull", "--ff-only"], { cwd: dir, env })
