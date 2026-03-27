@@ -23,7 +23,7 @@ export const AcpCommand = cmd({
     process.env.OPENCODE_CLIENT = "acp"
     await bootstrap(process.cwd(), async () => {
       const opts = await resolveNetworkOptions(args)
-      const server = Server.listen(opts)
+      const server = await Server.listen(opts)
 
       const sdk = createOpencodeClient({
         baseUrl: `http://${server.hostname}:${server.port}`,
