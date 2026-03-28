@@ -672,7 +672,7 @@ export default function Layout(props: ParentProps) {
 
     const result: Session[] = []
     for (const dir of dirs) {
-      const [dirStore] = globalSync.child(dir, { bootstrap: true })
+      const [dirStore] = globalSync.child(dir, { bootstrap: false })
       const dirSessions = sortedRootSessions(dirStore, now)
       result.push(...dirSessions)
     }
@@ -2308,26 +2308,28 @@ export default function Layout(props: ParentProps) {
   const side = createMemo(() => Math.max(layout.sidebar.width(), 244))
   const panel = createMemo(() => Math.max(side() - 64, 0))
 
-  const loadedSessionDirs = new Set<string>()
+  let started = false
 
   createEffect(
     on(
-      visibleSessionDirs,
-      (dirs) => {
-        if (dirs.length === 0) {
-          loadedSessionDirs.clear()
+      () => [visibleSessionDirs(), currentDir(), autoselecting.loading] as const,
+      ([dirs, dir, selecting]) => {
+        if (selecting) return
+        if (dirs.length === 0) return
+
+        if (!started) {
+          started = true
+          if (!dir) return
+          const [child] = globalSync.child(dir, { bootstrap: false })
+          if (child.sessions === "ready" || child.sessions === "loading") return
+          globalSync.project.loadSessions(dir, { silent: true })
           return
         }
 
-        const next = new Set(dirs)
-        for (const directory of next) {
-          if (loadedSessionDirs.has(directory)) continue
-          globalSync.project.loadSessions(directory)
-        }
-
-        loadedSessionDirs.clear()
-        for (const directory of next) {
-          loadedSessionDirs.add(directory)
+        for (const directory of dirs) {
+          const [child] = globalSync.child(directory, { bootstrap: false })
+          if (child.sessions === "ready" || child.sessions === "loading") continue
+          globalSync.project.loadSessions(directory, { silent: true })
         }
       },
       { defer: true },

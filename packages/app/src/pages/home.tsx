@@ -29,14 +29,20 @@ export default function Home() {
       .sort((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
       .slice(0, 5)
   })
-  const dirs = createMemo(() => recent().map((project) => project.worktree))
+  const warmed = createMemo(() => {
+    const last = server.projects.last()
+    if (last) return [last]
+    const first = recent()[0]?.worktree
+    if (!first) return []
+    return [first]
+  })
   const [warm] = createResource(
-    () => (sync.ready ? dirs() : undefined),
+    () => (sync.ready ? warmed() : undefined),
     async (dirs) => {
       await Promise.allSettled(
         dirs.map(async (dir) => {
           sync.child(dir, { bootstrap: true })
-          await Promise.race([sync.project.loadSessions(dir), new Promise((resolve) => setTimeout(resolve, 1500))])
+          await Promise.race([sync.project.loadSessions(dir, { silent: true }), new Promise((resolve) => setTimeout(resolve, 1500))])
         }),
       )
     },

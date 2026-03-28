@@ -16,7 +16,7 @@ import { type Session } from "@opencode-ai/sdk/v2/client"
 import { type LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
-import { NewSessionItem, SessionItem, SessionGroupHeader, SessionSearchBar, SessionSkeleton } from "./sidebar-items"
+import { NewSessionItem, SessionItem, SessionGroupHeader, SessionSearchBar } from "./sidebar-items"
 import { sessionGroupBoundaries, sortedRootSessions, type SessionGroupKey, workspaceKey } from "./helpers"
 
 type InlineEditorComponent = (props: {
@@ -271,7 +271,10 @@ const WorkspaceSessionList = (props: {
         />
       </Show>
       <Show when={props.loading()}>
-        <SessionSkeleton />
+        <div class="px-2 py-2 text-12-regular text-text-weak">
+          {props.language.t("common.loading")}
+          {props.language.t("common.loading.ellipsis")}
+        </div>
       </Show>
       <For each={props.sessions()}>
         {(session) => {
@@ -348,12 +351,11 @@ export const SortableWorkspace = (props: {
   })
   const open = createMemo(() => props.ctx.workspaceExpanded(props.directory, local()))
   const boot = createMemo(() => open() || active())
-  const booted = createMemo((prev) => prev || workspaceStore.status === "complete", false)
   const count = createMemo(() => sessions().length)
   const hasMore = createMemo(() => workspaceStore.sessionTotal > count())
   const busy = createMemo(() => props.ctx.isBusy(props.directory))
   const wasBusy = createMemo((prev) => prev || busy(), false)
-  const loading = createMemo(() => open() && !booted() && count() === 0 && !wasBusy())
+  const loading = createMemo(() => open() && workspaceStore.sessions === "loading" && count() === 0 && !wasBusy())
   const touch = createMediaQuery("(hover: none)")
   const showNew = createMemo(() => !loading() && (touch() || count() === 0 || (active() && !params.id)))
   const loadMore = async () => {
@@ -388,6 +390,13 @@ export const SortableWorkspace = (props: {
   createEffect(() => {
     if (!boot()) return
     globalSync.child(props.directory, { bootstrap: true })
+  })
+
+  createEffect(() => {
+    if (!boot()) return
+    if (!open() && !active()) return
+    if (workspaceStore.sessions === "ready" || workspaceStore.sessions === "loading") return
+    void globalSync.project.loadSessions(props.directory, { silent: true })
   })
 
   return (
@@ -493,13 +502,17 @@ export const LocalWorkspace = (props: {
     if (!query) return allSessions()
     return allSessions().filter((s) => s.title?.toLowerCase().includes(query))
   })
-  const booted = createMemo((prev) => prev || workspace().store.status === "complete", false)
-  const loading = createMemo(() => !booted() && allSessions().length === 0)
+  const loading = createMemo(() => workspace().store.sessions === "loading" && allSessions().length === 0)
   const hasMore = createMemo(() => !searchQuery() && workspace().store.sessionTotal > allSessions().length)
   const loadMore = async () => {
     workspace().setStore("limit", (limit) => (limit ?? 0) + 5)
     await globalSync.project.loadSessions(props.project.worktree)
   }
+
+  createEffect(() => {
+    if (workspace().store.sessions === "ready" || workspace().store.sessions === "loading") return
+    void globalSync.project.loadSessions(props.project.worktree, { silent: true })
+  })
 
   return (
     <div

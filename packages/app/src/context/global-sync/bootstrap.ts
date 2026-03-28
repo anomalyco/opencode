@@ -149,7 +149,6 @@ export async function bootstrapDirectory(input: {
   store: Store<State>
   setStore: SetStoreFunction<State>
   vcsCache: VcsCache
-  loadSessions: (directory: string) => Promise<void> | void
   translate: (key: string, vars?: Record<string, string | number>) => string
   global: {
     config: Config
@@ -191,7 +190,6 @@ export async function bootstrapDirectory(input: {
           if (next) input.vcsCache.setStore("value", next)
         }),
       ),
-    () => Promise.resolve(input.loadSessions(input.directory)),
   ]
 
   const slow = [
