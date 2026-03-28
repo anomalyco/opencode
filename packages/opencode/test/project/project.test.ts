@@ -47,7 +47,7 @@ function mockGitFailure(failArg: string) {
         }),
       )
     }),
-  ).pipe(Layer.provide(CrossSpawnSpawner.layer), Layer.provide(NodeFileSystem.layer), Layer.provide(NodePath.layer))
+  ).pipe(Layer.provide(CrossSpawnSpawner.defaultLayer))
 }
 
 function projectLayerWithFailure(failArg: string) {

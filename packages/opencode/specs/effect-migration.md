@@ -6,10 +6,10 @@ Practical reference for new and migrated Effect code in `packages/opencode`.
 
 Use `InstanceState` (from `src/effect/instance-state.ts`) for services that need per-directory state, per-instance cleanup, or project-bound background work. InstanceState uses a `ScopedCache` keyed by directory, so each open project gets its own copy of the state that is automatically cleaned up on disposal.
 
-Use `makeRunPromise` (from `src/effect/run-service.ts`) to create a per-service `ManagedRuntime` that lazily initializes and shares layers via a global `memoMap`.
+Use `makeRuntime` (from `src/effect/run-service.ts`) to create a per-service `ManagedRuntime` that lazily initializes and shares layers via a global `memoMap`. Returns `{ runPromise, runFork, runCallback }`.
 
-- Global services (no per-directory state): Account, Auth, Installation, Truncate
-- Instance-scoped (per-directory state via InstanceState): File, FileTime, FileWatcher, Format, Permission, Question, Skill, Snapshot, Vcs, ProviderAuth
+- Global services (no per-directory state): Account, Auth, AppFileSystem, Installation, Truncate, Worktree
+- Instance-scoped (per-directory state via InstanceState): Agent, Bus, Command, Config, File, FileTime, FileWatcher, Format, LSP, MCP, Permission, Plugin, ProviderAuth, Pty, Question, SessionStatus, Skill, Snapshot, ToolRegistry, Vcs
 
 Rule of thumb: if two open directories should not share one copy of the service, it needs `InstanceState`.
 
@@ -46,7 +46,7 @@ export namespace Foo {
   export const defaultLayer = layer.pipe(Layer.provide(FooDep.layer))
 
   // Per-service runtime (inside the namespace)
-  const runPromise = makeRunPromise(Service, defaultLayer)
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   // Async facade functions
   export async function get(id: FooID) {
@@ -79,22 +79,24 @@ See `Auth.ZodInfo` for the canonical example.
 
 The `InstanceState.make` init callback receives a `Scope`, so you can use `Effect.acquireRelease`, `Effect.addFinalizer`, and `Effect.forkScoped` inside it. Resources acquired this way are automatically cleaned up when the instance is disposed or invalidated by `ScopedCache`. This makes it the right place for:
 
-- **Subscriptions**: Use `Effect.acquireRelease` to subscribe and auto-unsubscribe:
+- **Subscriptions**: Yield `Bus.Service` at the layer level, then use `Stream` + `forkScoped` inside the init closure. The fiber is automatically interrupted when the instance scope closes:
 
 ```ts
+const bus = yield * Bus.Service
+
 const cache =
   yield *
   InstanceState.make<State>(
     Effect.fn("Foo.state")(function* (ctx) {
       // ... load state ...
 
-      yield* Effect.acquireRelease(
-        Effect.sync(() =>
-          Bus.subscribeAll((event) => {
+      yield* bus.subscribeAll().pipe(
+        Stream.runForEach((event) =>
+          Effect.sync(() => {
             /* handle */
           }),
         ),
-        (unsub) => Effect.sync(unsub),
+        Effect.forkScoped,
       )
 
       return {
@@ -104,10 +106,46 @@ const cache =
   )
 ```
 
+- **Resource cleanup**: Use `Effect.acquireRelease` or `Effect.addFinalizer` for resources that need teardown (native watchers, process handles, etc.):
+
+```ts
+yield *
+  Effect.acquireRelease(
+    Effect.sync(() => nativeAddon.watch(dir)),
+    (watcher) => Effect.sync(() => watcher.close()),
+  )
+```
+
 - **Background fibers**: Use `Effect.forkScoped` — the fiber is interrupted on disposal.
 - **Side effects at init**: Config notification, event wiring, etc. all belong in the init closure. Callers just do `InstanceState.get(cache)` to trigger everything, and `ScopedCache` deduplicates automatically.
 
 The key insight: don't split init into a separate method with a `started` flag. Put everything in the `InstanceState.make` closure and let `ScopedCache` handle the run-once semantics.
+
+## Effect.cached for deduplication
+
+Use `Effect.cached` when multiple concurrent callers should share a single in-flight computation. It memoizes the result and deduplicates concurrent fibers — second caller joins the first caller's fiber instead of starting a new one.
+
+```ts
+// Inside the layer — yield* to initialize the memo
+let cached = yield * Effect.cached(loadExpensive())
+
+const get = Effect.fn("Foo.get")(function* () {
+  return yield* cached // concurrent callers share the same fiber
+})
+
+// To invalidate: swap in a fresh memo
+const invalidate = Effect.fn("Foo.invalidate")(function* () {
+  cached = yield* Effect.cached(loadExpensive())
+})
+```
+
+Prefer `Effect.cached` over these patterns:
+
+- Storing a `Fiber.Fiber | undefined` with manual check-and-fork (e.g. `file/index.ts` `ensure`)
+- Storing a `Promise<void>` task for deduplication (e.g. `skill/index.ts` `ensure`)
+- `let cached: X | undefined` with check-and-load (races when two callers see `undefined` before either resolves)
+
+`Effect.cached` handles the run-once + concurrent-join semantics automatically. For invalidatable caches, reassign with `yield* Effect.cached(...)` — the old memo is discarded.
 
 ## Scheduled Tasks
 
@@ -143,36 +181,113 @@ That is fine for leaf files like `schema.ts`. Keep the service surface in the ow
 Fully migrated (single namespace, InstanceState where needed, flattened facade):
 
 - [x] `Account` — `account/index.ts`
+- [x] `Agent` — `agent/agent.ts`
+- [x] `AppFileSystem` — `filesystem/index.ts`
 - [x] `Auth` — `auth/index.ts` (uses `zod()` helper for Schema→Zod interop)
+- [x] `Bus` — `bus/index.ts`
+- [x] `Command` — `command/index.ts`
+- [x] `Config` — `config/config.ts`
+- [x] `Discovery` — `skill/discovery.ts` (dependency-only layer, no standalone runtime)
 - [x] `File` — `file/index.ts`
 - [x] `FileTime` — `file/time.ts`
 - [x] `FileWatcher` — `file/watcher.ts`
 - [x] `Format` — `format/index.ts`
 - [x] `Installation` — `installation/index.ts`
+- [x] `LSP` — `lsp/index.ts`
+- [x] `MCP` — `mcp/index.ts`
+- [x] `McpAuth` — `mcp/auth.ts`
 - [x] `Permission` — `permission/index.ts`
+- [x] `Plugin` — `plugin/index.ts`
+- [x] `Project` — `project/project.ts`
 - [x] `ProviderAuth` — `provider/auth.ts`
+- [x] `Pty` — `pty/index.ts`
 - [x] `Question` — `question/index.ts`
+- [x] `SessionStatus` — `session/status.ts`
 - [x] `Skill` — `skill/index.ts`
 - [x] `Snapshot` — `snapshot/index.ts`
+- [x] `ToolRegistry` — `tool/registry.ts`
 - [x] `Truncate` — `tool/truncate.ts`
 - [x] `Vcs` — `project/vcs.ts`
-- [x] `Discovery` — `skill/discovery.ts`
-- [x] `SessionStatus`
+- [x] `Worktree` — `worktree/index.ts`
 
 Still open and likely worth migrating:
 
-- [x] `Plugin`
-- [x] `ToolRegistry`
-- [ ] `Pty`
-- [x] `Worktree`
-- [ ] `Bus`
-- [x] `Command`
-- [ ] `Config`
-- [ ] `Session`
-- [ ] `SessionProcessor`
-- [ ] `SessionPrompt`
-- [ ] `SessionCompaction`
-- [ ] `Provider`
-- [x] `Project`
-- [ ] `LSP`
-- [ ] `MCP`
+- [x] `Session` — `session/index.ts`
+- [ ] `SessionProcessor` — blocked by AI SDK v6 PR (#18433)
+- [ ] `SessionPrompt` — blocked by AI SDK v6 PR (#18433)
+- [ ] `SessionCompaction` — blocked by AI SDK v6 PR (#18433)
+- [ ] `Provider` — blocked by AI SDK v6 PR (#18433)
+
+Other services not yet migrated:
+
+- [ ] `SessionSummary` — `session/summary.ts`
+- [ ] `SessionTodo` — `session/todo.ts`
+- [ ] `SessionRevert` — `session/revert.ts`
+- [ ] `Instruction` — `session/instruction.ts`
+- [ ] `ShareNext` — `share/share-next.ts`
+- [ ] `SyncEvent` — `sync/index.ts`
+- [ ] `Storage` — `storage/storage.ts`
+- [ ] `Workspace` — `control-plane/workspace.ts`
+
+## Tool interface → Effect
+
+Once individual tools are effectified, change `Tool.Info` (`tool/tool.ts`) so `init` and `execute` return `Effect` instead of `Promise`. This lets tool implementations compose natively with the Effect pipeline rather than being wrapped in `Effect.promise()` at the call site. Requires:
+
+1. Migrate each tool to return Effects
+2. Update `Tool.define()` factory to work with Effects
+3. Update `SessionPrompt` to `yield*` tool results instead of `await`ing — blocked by AI SDK v6 PR (#18433)
+
+Individual tools, ordered by value:
+
+- [ ] `apply_patch.ts` — HIGH: multi-step orchestration, error accumulation, Bus events
+- [ ] `read.ts` — HIGH: streaming I/O, readline, binary detection → FileSystem + Stream
+- [ ] `edit.ts` — HIGH: multi-step diff/format/publish pipeline, FileWatcher lock
+- [ ] `grep.ts` — MEDIUM: spawns ripgrep → ChildProcessSpawner, timeout handling
+- [ ] `write.ts` — MEDIUM: permission checks, diagnostics polling, Bus events
+- [ ] `codesearch.ts` — MEDIUM: HTTP + SSE + manual timeout → HttpClient + Effect.timeout
+- [ ] `webfetch.ts` — MEDIUM: fetch with UA retry, size limits → HttpClient
+- [ ] `websearch.ts` — MEDIUM: MCP over HTTP → HttpClient
+- [ ] `batch.ts` — MEDIUM: parallel execution, per-call error recovery → Effect.all
+- [ ] `task.ts` — MEDIUM: task state management
+- [ ] `glob.ts` — LOW: simple async generator
+- [ ] `lsp.ts` — LOW: dispatch switch over LSP operations
+- [ ] `skill.ts` — LOW: skill tool adapter
+- [ ] `plan.ts` — LOW: plan file operations
+
+## Effect service adoption in already-migrated code
+
+Some services are effectified but still use raw `Filesystem.*` or `Process.spawn` instead of the Effect equivalents. These are low-hanging fruit — the layers already exist, they just need the dependency swap.
+
+### `Filesystem.*` → `AppFileSystem.Service` (yield in layer)
+
+- [ ] `file/index.ts` — 11 calls (the File service itself)
+- [ ] `config/config.ts` — 7 calls
+- [ ] `auth/index.ts` — 3 calls
+- [ ] `skill/index.ts` — 3 calls
+- [ ] `file/time.ts` — 1 call
+
+### `Process.spawn` → `ChildProcessSpawner` (yield in layer)
+
+- [ ] `format/index.ts` — 1 call
+
+## Filesystem consolidation
+
+`util/filesystem.ts` (raw fs wrapper) is used by **64 files**. The effectified `AppFileSystem` service (`filesystem/index.ts`) exists but only has **8 consumers**. As services and tools are effectified, they should switch from `Filesystem.*` to yielding `AppFileSystem.Service` — this happens naturally during each migration, not as a separate effort.
+
+Similarly, **28 files** still import raw `fs` or `fs/promises` directly. These should migrate to `AppFileSystem` or `Filesystem.*` as they're touched.
+
+Current raw fs users that will convert during tool migration:
+
+- `tool/read.ts` — fs.createReadStream, readline
+- `tool/apply_patch.ts` — fs/promises
+- `tool/bash.ts` — fs/promises
+- `file/ripgrep.ts` — fs/promises
+- `storage/storage.ts` — fs/promises
+- `patch/index.ts` — fs, fs/promises
+
+## Primitives & utilities
+
+- [ ] `util/lock.ts` — reader-writer lock → Effect Semaphore/Permit
+- [ ] `util/flock.ts` — file-based distributed lock with heartbeat → Effect.repeat + addFinalizer
+- [ ] `util/process.ts` — child process spawn wrapper → return Effect instead of Promise
+- [ ] `util/lazy.ts` — replace uses in Effect code with Effect.cached; keep for sync-only code
