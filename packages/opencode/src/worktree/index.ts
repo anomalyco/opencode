@@ -9,6 +9,7 @@ import { ProjectTable } from "../project/project.sql"
 import type { ProjectID } from "../project/schema"
 import { Log } from "../util/log"
 import { Slug } from "@opencode-ai/util/slug"
+import { errorMessage } from "../util/error"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
 import { Effect, Layer, Path, Scope, ServiceMap, Stream } from "effect"
@@ -260,7 +261,7 @@ export namespace Worktree {
           })
             .then(() => true)
             .catch((error) => {
-              const message = error instanceof Error ? error.message : String(error)
+              const message = errorMessage(error)
               log.error("worktree bootstrap failed", { directory: info.directory, message })
               GlobalBus.emit("event", {
                 directory: info.directory,
@@ -344,9 +345,12 @@ export namespace Worktree {
 
       function cleanDirectory(target: string) {
         return Effect.promise(() =>
-          import("fs/promises").then((fsp) =>
-            fsp.rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }),
-          ),
+          import("fs/promises")
+            .then((fsp) => fsp.rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
+            .catch((error) => {
+              const message = errorMessage(error)
+              throw new RemoveFailedError({ message: message || "Failed to remove git worktree directory" })
+            }),
         )
       }
 
