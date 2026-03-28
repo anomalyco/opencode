@@ -138,9 +138,9 @@ export function DialogModel(props: { providerID?: string }) {
     local.model.set({ providerID, modelID }, { recent: true })
     if (local.model.variant.list().length > 0) {
       dialog.replace(() => <DialogVariant />)
-    } else {
-      dialog.clear()
+      return
     }
+    dialog.clear()
   }
 
   return (

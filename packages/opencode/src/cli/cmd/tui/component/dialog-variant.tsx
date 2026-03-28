@@ -1,6 +1,5 @@
 import { createMemo } from "solid-js"
 import { useLocal } from "@tui/context/local"
-import { useSync } from "@tui/context/sync"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
 
