@@ -178,7 +178,7 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean }>) {
           }
         }).pipe(
           effectMinDuration(checkMode() === "blocking" ? "1.2 seconds" : 0),
-          Effect.timeoutOrElse({ duration: "10 seconds", onTimeout: () => Effect.succeed(false) }),
+          Effect.timeoutOrElse({ duration: "10 seconds", orElse: () => Effect.succeed(false) }),
           Effect.ensuring(Effect.sync(() => setCheckMode("background"))),
           Effect.runPromise,
         ),
