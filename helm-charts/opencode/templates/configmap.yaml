@@ -1,0 +1,27 @@
+{{- if or .Values.configMaps.agents.enabled .Values.configMaps.docs.enabled .Values.configMaps.plugins.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "opencode.fullname" . }}-config
+  labels:
+    {{- include "opencode.labels" . | nindent 4 }}
+data:
+  {{- if .Values.configMaps.agents.enabled }}
+  {{- range $path, $content := .Values.configMaps.agents.data }}
+  {{ $path }}: |
+    {{- $content | nindent 4 }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.configMaps.docs.enabled }}
+  {{- range $path, $content := .Values.configMaps.docs.data }}
+  {{ $path }}: |
+    {{- $content | nindent 4 }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.configMaps.plugins.enabled }}
+  {{- range $path, $content := .Values.configMaps.plugins.data }}
+  {{ $path }}: |
+    {{- $content | nindent 4 }}
+  {{- end }}
+  {{- end }}
+{{- end }}

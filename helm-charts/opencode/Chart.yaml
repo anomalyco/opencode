@@ -1,0 +1,14 @@
+apiVersion: v2
+name: opencode
+description: Helm chart for OpenCode AI assistant server
+type: application
+version: 1.0.0
+appVersion: "1.3.3"
+keywords:
+  - opencode
+  - ai
+  - assistant
+  - lsp
+maintainers:
+  - name: OpenCode Team
+    URL: https://github.com/anomalyco/opencode

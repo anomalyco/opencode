@@ -1,0 +1,66 @@
+{{- if .Values.ingress.enabled -}}
+{{- $affinityAnnotations := dict -}}
+{{- if .Values.affinity.enabled -}}
+{{-   $isNginx := or (hasKey .Values.ingress.annotations "nginx.ingress.kubernetes.io/affinity") (contains "nginx" .Values.ingress.className) -}}
+{{-   $isTraefik := or (hasKey .Values.ingress.annotations "traefik.ingress.kubernetes.io/service.sticky.cookie") (contains "traefik" .Values.ingress.className) -}}
+{{-   if $isNginx -}}
+{{-     $affinityAnnotations = merge $affinityAnnotations (dict
+        "nginx.ingress.kubernetes.io/affinity" "cookie"
+        "nginx.ingress.kubernetes.io/affinity-mode" .Values.affinity.mode
+        "nginx.ingress.kubernetes.io/session-cookie-name" .Values.affinity.cookieName
+        "nginx.ingress.kubernetes.io/session-cookie-secure" "true"
+        "nginx.ingress.kubernetes.io/session-cookie-max-age" "86400"
+      ) -}}
+{{-   else if $isTraefik -}}
+{{-     $affinityAnnotations = merge $affinityAnnotations (dict
+        "traefik.ingress.kubernetes.io/service.sticky.cookie" "true"
+        "traefik.ingress.kubernetes.io/service.sticky.cookie.name" .Values.affinity.cookieName
+      ) -}}
+{{-   end -}}
+{{- end -}}
+{{- $mergedAnnotations := merge .Values.ingress.annotations $affinityAnnotations -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "opencode.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "opencode.labels" . | nindent 4 }}
+  annotations:
+    {{- toYaml $mergedAnnotations | nindent 4 }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  {{- if .Values.ingress.tls }}
+  tls:
+    {{- range .Values.ingress.tls }}
+    - hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      {{- if .secretName }}
+      secretName: {{ .secretName }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ . }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "opencode.fullname" $ }}
+                port:
+                  number: {{ $.Values.service.port }}
+          {{- end }}
+    {{- end }}
+  {{- if .Values.ingress.defaultBackend }}
+  defaultBackend:
+    {{- toYaml .Values.ingress.defaultBackend | nindent 4 }}
+  {{- end }}
+{{- end }}

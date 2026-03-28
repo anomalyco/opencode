@@ -1,0 +1,106 @@
+image:
+  repository: ghcr.io/anomalyco/opencode
+  tag: dev-alpine
+  pullPolicy: IfNotPresent
+  imageOverrides: {}
+
+replicaCount: 1
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 4096
+  annotations: {}
+
+ingress:
+  enabled: true
+  className: ""
+  annotations: {}
+  hosts:
+    - host: opencode.local
+      paths:
+        - "/"
+  tls: []
+
+affinity:
+  enabled: true
+  cookieName: "OPENCODEAFFINITY"
+  mode: "balanced"
+  type: "cookie"
+
+auth:
+  enabled: false
+  username: "opencode"
+  password: ""
+  existingSecret: ""
+
+server:
+  port: 4096
+  cors: []
+  mdns:
+    enabled: false
+    domain: "local"
+  configDir: "/root/.config/opencode"
+
+env: {}
+
+persistence:
+  data:
+    enabled: false
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 1Gi
+  cache:
+    enabled: false
+    storageClass: ""
+  config:
+    enabled: false
+    storageClass: ""
+
+configMaps:
+  agents:
+    enabled: false
+    data: {}
+  docs:
+    enabled: false
+    data: {}
+  plugins:
+    enabled: false
+    data: {}
+
+extraVolumes: []
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+
+nodeSelector: {}
+
+tolerations: []
+
+podAnnotations: {}
+
+podSecurityContext: {}
+
+serviceAccount:
+  create: false
+  name: ""
+
+securityContext:
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+  runAsNonRoot: false
+  runAsUser: 0

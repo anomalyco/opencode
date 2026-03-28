@@ -1,0 +1,130 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ template "opencode.fullname" . }}
+  labels:
+    {{- include "opencode.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "opencode.selectorLabels" . | nindent 6 }}
+  serviceName: {{ template "opencode.fullname" . }}
+  template:
+    metadata:
+      labels:
+        {{- include "opencode.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "opencode.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ include "opencode.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.server.port }}
+              protocol: TCP
+          env:
+            - name: OPENCODE_SERVER_USERNAME
+              value: {{ .Values.auth.username | quote }}
+            - name: OPENCODE_SERVER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.existingSecret | default (include "opencode.fullname" .) }}
+                  key: password
+            - name: OPENCODE_CONFIG_DIR
+              value: {{ .Values.server.configDir | quote }}
+            - name: OPENCODE_DB
+              value: {{ printf "sqlite:%s/opencode.db" .Values.server.configDir | quote }}
+            {{- if .Values.env }}
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- end }}
+          volumeMounts:
+            {{- if .Values.persistence.data.enabled }}
+            - name: data
+              mountPath: {{ .Values.server.configDir }}
+            {{- end }}
+            {{- if .Values.persistence.cache.enabled }}
+            - name: cache
+              mountPath: /tmp/opencode-cache
+            {{- end }}
+            {{- if .Values.persistence.config.enabled }}
+            - name: config
+              mountPath: /etc/opencode-config
+            {{- end }}
+            {{- if .Values.configMaps.agents.enabled }}
+            - name: agents
+              mountPath: /etc/opencode/agents
+              readOnly: true
+            {{- end }}
+            {{- if .Values.configMaps.docs.enabled }}
+            - name: docs
+              mountPath: /etc/opencode/docs
+              readOnly: true
+            {{- end }}
+            {{- if .Values.configMaps.plugins.enabled }}
+            - name: plugins
+              mountPath: /etc/opencode/plugins
+              readOnly: true
+            {{- end }}
+            {{- if .Values.extraVolumes }}
+            {{- toYaml .Values.extraVolumes | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+      volumes:
+        {{- if .Values.persistence.data.enabled }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ template "opencode.fullname" . }}-data
+        {{- end }}
+        {{- if .Values.persistence.cache.enabled }}
+        - name: cache
+          emptyDir: {}
+        {{- end }}
+        {{- if .Values.persistence.config.enabled }}
+        - name: config
+          persistentVolumeClaim:
+            claimName: {{ template "opencode.fullname" . }}-config
+        {{- end }}
+        {{- if .Values.configMaps.agents.enabled }}
+        - name: agents
+          configMap:
+            name: {{ template "opencode.fullname" . }}-agents
+        {{- end }}
+        {{- if .Values.configMaps.docs.enabled }}
+        - name: docs
+          configMap:
+            name: {{ template "opencode.fullname" . }}-docs
+        {{- end }}
+        {{- if .Values.configMaps.plugins.enabled }}
+        - name: plugins
+          configMap:
+            name: {{ template "opencode.fullname" . }}-plugins
+        {{- end }}
+        {{- if .Values.extraVolumes }}
+        {{- toYaml .Values.extraVolumes | nindent 6 }}
+        {{- end }}

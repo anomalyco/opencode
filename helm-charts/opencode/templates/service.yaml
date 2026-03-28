@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "opencode.fullname" . }}
+  labels:
+    {{- include "opencode.labels" . | nindent 4 }}
+  annotations:
+    {{- .Values.service.annotations | toYaml | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort | default .Values.server.port }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "opencode.selectorLabels" . | nindent 4 }}
