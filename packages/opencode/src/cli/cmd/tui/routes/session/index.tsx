@@ -1248,6 +1248,43 @@ function CallTraceBar() {
   const formatDuration = (ms: number) => (ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`)
   const formatTime = (ts: number) => new Date(ts).toTimeString().slice(0, 8)
   const truncate = (s: string | undefined, max: number) => (!s ? "" : s.length <= max ? s : s.slice(0, max - 1) + "…")
+  const formatTokens = (tokens?: { input: number; output: number }) =>
+    tokens ? `${tokens.input}→${tokens.output}` : ""
+  const formatCost = (cost?: number) => (cost !== undefined ? `$${cost.toFixed(4)}` : "")
+  const formatInput = (trace: CallTraceItem): string => {
+    if (trace.inputSummary) return trace.inputSummary
+    if (trace.type === "llm") {
+      const parts = []
+      if (trace.providerID) parts.push(trace.providerID)
+      if (trace.modelID) parts.push(trace.modelID)
+      if (trace.tokens) parts.push(`tokens: ${trace.tokens.input}`)
+      return parts.join(" | ") || "LLM call"
+    }
+    if (trace.type === "tool") {
+      const params = trace.input ? Object.keys(trace.input).join(", ") : ""
+      return trace.toolName ? `${trace.toolName}(${params})` : "Tool call"
+    }
+    if (trace.type === "omo") {
+      return trace.agentName || trace.description || "OMO agent"
+    }
+    return ""
+  }
+  const formatOutput = (trace: CallTraceItem): string => {
+    if (trace.outputSummary) return trace.outputSummary
+    if (trace.type === "llm") {
+      const parts = []
+      if (trace.tokens) parts.push(`tokens: ${trace.tokens.output}`)
+      if (trace.cost !== undefined) parts.push(formatCost(trace.cost))
+      return parts.join(" | ") || ""
+    }
+    if (trace.type === "tool") {
+      return trace.output ? truncate(trace.output, 100) : ""
+    }
+    if (trace.type === "omo") {
+      return trace.sessionID ? `session: ${trace.sessionID}` : ""
+    }
+    return ""
+  }
 
   return (
     <box flexShrink={0}>
@@ -1311,29 +1348,29 @@ function CallTraceBar() {
                     </Show>
                     <span style={{ fg: theme.textMuted }}> {formatTime(trace.startTime)}</span>
                   </text>
-                  <Show when={trace.inputSummary}>
+                  <Show when={formatInput(trace)}>
                     <box onMouseUp={() => toggle(trace.id, "in")}>
                       <text paddingLeft={3}>
                         <span style={{ fg: theme.textMuted }}>in: </span>
                         <Show
                           when={isExpanded(trace.id, "in")}
-                          fallback={<span style={{ fg: theme.text }}>{truncate(trace.inputSummary, 50)}</span>}
+                          fallback={<span style={{ fg: theme.text }}>{truncate(formatInput(trace), 50)}</span>}
                         >
-                          <span style={{ fg: theme.text }}>{trace.inputSummary}</span>
+                          <span style={{ fg: theme.text }}>{formatInput(trace)}</span>
                         </Show>
                         <span style={{ fg: theme.textMuted }}>{isExpanded(trace.id, "in") ? " [-]" : " [+]"}</span>
                       </text>
                     </box>
                   </Show>
-                  <Show when={trace.outputSummary}>
+                  <Show when={formatOutput(trace)}>
                     <box onMouseUp={() => toggle(trace.id, "out")}>
                       <text paddingLeft={3}>
                         <span style={{ fg: theme.textMuted }}>out: </span>
                         <Show
                           when={isExpanded(trace.id, "out")}
-                          fallback={<span style={{ fg: theme.text }}>{truncate(trace.outputSummary, 50)}</span>}
+                          fallback={<span style={{ fg: theme.text }}>{truncate(formatOutput(trace), 50)}</span>}
                         >
-                          <span style={{ fg: theme.text }}>{trace.outputSummary}</span>
+                          <span style={{ fg: theme.text }}>{formatOutput(trace)}</span>
                         </Show>
                         <span style={{ fg: theme.textMuted }}>{isExpanded(trace.id, "out") ? " [-]" : " [+]"}</span>
                       </text>

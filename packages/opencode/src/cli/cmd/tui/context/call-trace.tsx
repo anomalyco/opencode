@@ -11,19 +11,24 @@ export interface CallTraceItem {
   type: string
   source: TraceSource
   name: string
+  component: string
   startTime: number
   endTime?: number
   duration?: number
   status: TraceStatus
+  metadata?: Record<string, unknown>
+  inputSummary?: string
+  outputSummary?: string
   providerID?: string
   modelID?: string
   tokens?: { input: number; output: number }
   cost?: number
   toolName?: string
+  input?: Record<string, unknown>
+  output?: string
   agentName?: string
   description?: string
-  inputSummary?: string
-  outputSummary?: string
+  sessionID?: string
 }
 
 type CallTraceState = {
@@ -57,7 +62,8 @@ export const { use: useCallTrace, provider: CallTraceProvider } = createSimpleCo
         })
       } else if (eventType === "call-trace.end" && eventProperties) {
         log.info("call-trace.end received", { messageID: eventProperties.messageID })
-        const { messageID, traceID, endTime, duration, status, tokens, cost, outputSummary } = eventProperties
+        const { messageID, traceID, endTime, duration, status, tokens, cost, output, outputSummary, metadata } =
+          eventProperties
         setTraces(messageID, (prev) => {
           if (!prev) return prev
           return prev.map((t) => {
@@ -69,7 +75,9 @@ export const { use: useCallTrace, provider: CallTraceProvider } = createSimpleCo
               status,
               ...(tokens && { tokens }),
               ...(cost !== undefined && { cost }),
+              ...(output !== undefined && { output }),
               ...(outputSummary !== undefined && { outputSummary }),
+              ...(metadata && { metadata: { ...t.metadata, ...metadata } }),
             }
           })
         })
