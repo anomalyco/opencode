@@ -136,6 +136,7 @@ export namespace Provider {
     "@ai-sdk/vercel": createVercel,
     "gitlab-ai-provider": createGitLab,
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
+    "lmstudio": createOpenAICompatible,
   }
 
   type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
@@ -154,6 +155,76 @@ export namespace Provider {
   }
 
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
+    async lmstudio() {
+      const baseURL = Env.get("LM_STUDIO_URL") || "http://127.0.0.1:1234/v1"
+      return {
+        autoload: true,
+        options: { baseURL, apiKey: "lm-studio" },
+        async discoverModels() {
+          try {
+            const res = await fetch(`${baseURL}/models`)
+            if (!res.ok) return {}
+            const data = await res.json() as any
+            const models: Record<string, any> = {}
+            for (const m of (data.data || [])) {
+              if (m.id.includes("embedding")) continue // skip embeddings
+              
+              const prettyName = m.id.split("/").pop() || m.id
+              
+              models[`lmstudio/${m.id}`] = {
+                id: m.id,
+                name: \`LM Studio: \${prettyName}\`,
+                providerID: "lmstudio",
+                family: "lmstudio-local",
+                api: {
+                  id: m.id,
+                  url: baseURL,
+                  npm: "@ai-sdk/openai-compatible",
+                },
+                status: "active",
+                headers: {},
+                options: {},
+                cost: {
+                  input: 0,
+                  output: 0,
+                  cache: { read: 0, write: 0 },
+                },
+                limit: {
+                  context: 32000,
+                  output: 4096,
+                },
+                capabilities: {
+                  temperature: true,
+                  reasoning: false,
+                  attachment: false,
+                  toolcall: true,
+                  interleaved: false,
+                  input: {
+                    text: true,
+                    audio: false,
+                    image: false,
+                    video: false,
+                    pdf: false,
+                  },
+                  output: {
+                    text: true,
+                    audio: false,
+                    image: false,
+                    video: false,
+                    pdf: false,
+                  },
+                },
+                release_date: "2025-01-01",
+                variants: {},
+              }
+            }
+            return models
+          } catch (e) {
+            return {} // Return empty if LM Studio is not currently running
+          }
+        }
+      }
+    },
     async anthropic() {
       return {
         autoload: false,
