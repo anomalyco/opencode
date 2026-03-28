@@ -93,6 +93,8 @@ export namespace SessionPrompt {
       const sessions = yield* Session.Service
       const agents = yield* Agent.Service
       const processor = yield* SessionProcessor.Service
+      const compaction = yield* SessionCompaction.Service
+      const plugin = yield* Plugin.Service
       const scope = yield* Scope.Scope
 
       const cache = yield* InstanceState.make(
@@ -255,11 +257,9 @@ export namespace SessionPrompt {
           if (
             lastFinished &&
             lastFinished.summary !== true &&
-            (yield* Effect.promise(() => SessionCompaction.isOverflow({ tokens: lastFinished!.tokens, model })))
+            (yield* compaction.isOverflow({ tokens: lastFinished!.tokens, model }))
           ) {
-            yield* Effect.promise(() =>
-              SessionCompaction.create({ sessionID, agent: lastUser!.agent, model: lastUser!.model, auto: true }),
-            )
+            yield* compaction.create({ sessionID, agent: lastUser!.agent, model: lastUser!.model, auto: true })
             continue
           }
 
@@ -336,7 +336,7 @@ export namespace SessionPrompt {
                 }
               }
 
-              yield* Effect.promise(() => Plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs }))
+              yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
               const [skills, env, instructions, modelMsgs] = yield* Effect.promise(() =>
                 Promise.all([
@@ -386,15 +386,13 @@ export namespace SessionPrompt {
 
               if (result === "stop") return "break" as const
               if (result === "compact") {
-                yield* Effect.promise(() =>
-                  SessionCompaction.create({
-                    sessionID,
-                    agent: lastUser!.agent,
-                    model: lastUser!.model,
-                    auto: true,
-                    overflow: !handle.message.finish,
-                  }),
-                )
+                yield* compaction.create({
+                  sessionID,
+                  agent: lastUser!.agent,
+                  model: lastUser!.model,
+                  auto: true,
+                  overflow: !handle.message.finish,
+                })
               }
               return "continue" as const
             }),
@@ -409,7 +407,7 @@ export namespace SessionPrompt {
           continue
         }
 
-        SessionCompaction.prune({ sessionID })
+        yield* compaction.prune({ sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
         return yield* lastAssistant(sessionID)
       })
 
@@ -524,7 +522,9 @@ export namespace SessionPrompt {
     Effect.sync(() =>
       layer.pipe(
         Layer.provide(SessionStatus.layer),
+        Layer.provide(SessionCompaction.defaultLayer),
         Layer.provide(SessionProcessor.defaultLayer),
+        Layer.provide(Plugin.defaultLayer),
         Layer.provide(Session.defaultLayer),
         Layer.provide(Agent.defaultLayer),
         Layer.provide(Bus.layer),

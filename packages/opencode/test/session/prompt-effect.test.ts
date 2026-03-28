@@ -14,6 +14,7 @@ import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Session } from "../../src/session"
 import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
+import { SessionCompaction } from "../../src/session/compaction"
 import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
@@ -170,7 +171,8 @@ const deps = Layer.mergeAll(
   llm,
 ).pipe(Layer.provideMerge(infra))
 const proc = SessionProcessor.layer.pipe(Layer.provideMerge(deps))
-const env = SessionPrompt.layer.pipe(Layer.provideMerge(proc), Layer.provideMerge(deps))
+const compact = SessionCompaction.layer.pipe(Layer.provideMerge(proc), Layer.provideMerge(deps))
+const env = SessionPrompt.layer.pipe(Layer.provideMerge(compact), Layer.provideMerge(proc), Layer.provideMerge(deps))
 
 const it = testEffect(env)
 
