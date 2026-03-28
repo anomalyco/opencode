@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - ci
-      - dev
       - beta
       - snapshot-*
   workflow_dispatch:
