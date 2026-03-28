@@ -42,6 +42,7 @@ import { Filesystem } from "@/util/filesystem"
 import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
+import { WsEventRoutes } from "./routes/ws-event"
 import { MDNS } from "./mdns"
 import { lazy } from "@/util/lazy"
 import { initProjectors } from "./projectors"
@@ -68,7 +69,7 @@ export namespace Server {
 
   export const createApp = (opts: { cors?: string[] }): Hono => {
     const app = new Hono()
-    return app
+    const router = app
       .onError((err, c) => {
         log.error("failed", {
           error: err,
@@ -552,6 +553,8 @@ export namespace Server {
           return response
         }
       }) as unknown as Hono
+    if (Flag.OPENCODE_WS_SYNC) router.route("/", WsEventRoutes())
+    return router
   }
 
   export async function openapi() {
