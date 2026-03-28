@@ -15,11 +15,12 @@ on:
   pull_request_target:
     types: [closed]
     branches: [main]
-  # Hourly backstop: catches cases where pull_request_target webhook is
-  # silently dropped (known GitHub issue with GITHUB_TOKEN auto-merges).
-  # The release job skips automatically when HEAD is already tagged.
-  schedule:
-    - cron: '0 * * * *'
+  # Fired by auto-merge.yml after it merges a PR and dispatches this event.
+  # repository_dispatch from GITHUB_TOKEN reliably triggers workflows —
+  # unlike push/pull_request_target which are silently dropped for
+  # GITHUB_TOKEN auto-merges (known GitHub platform limitation).
+  repository_dispatch:
+    types: [cd-release]
 
 concurrency:
   group: cd-main
@@ -39,7 +40,7 @@ jobs:
       (github.event_name == 'workflow_dispatch') ||
       (github.event_name == 'push') ||
       (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true) ||
-      (github.event_name == 'schedule')
+      (github.event_name == 'repository_dispatch' && github.event.action == 'cd-release')
     outputs:
       tag: ${{ steps.next_version.outputs.tag }}
       semver: ${{ steps.next_version.outputs.semver }}

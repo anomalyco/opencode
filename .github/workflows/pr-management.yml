@@ -72,32 +72,11 @@ jobs:
           $COMMENT"
           fi
 
-  enable-auto-merge:
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-      contents: write
-    steps:
-      - name: Enable auto-merge (merge commit)
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const { data: pr } = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.payload.pull_request.number,
-            });
-            await github.graphql(`
-              mutation EnableAutoMerge($pullRequestId: ID!) {
-                enablePullRequestAutoMerge(input: {
-                  pullRequestId: $pullRequestId,
-                  mergeMethod: MERGE
-                }) {
-                  pullRequest { number }
-                }
-              }
-            `, { pullRequestId: pr.node_id });
-            console.log(`Auto-merge enabled on PR #${context.payload.pull_request.number}`);
+  # enable-auto-merge REMOVED: GitHub's enablePullRequestAutoMerge uses
+  # GITHUB_TOKEN which silently drops pull_request_target: closed webhooks
+  # and suppresses push events — CD never triggered. Replaced by
+  # auto-merge.yml which uses workflow_run + repository_dispatch (both
+  # reliable with GITHUB_TOKEN, unlike push/pull_request_target closed).
 
   add-contributor-label:
     runs-on: ubuntu-latest
