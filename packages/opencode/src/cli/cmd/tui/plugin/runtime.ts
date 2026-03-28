@@ -20,10 +20,10 @@ import { isRecord } from "@/util/record"
 import { Instance } from "@/project/instance"
 import {
   checkPluginCompatibility,
-  getDefaultPlugin,
   isDeprecatedPlugin,
   pluginSource,
   readPluginId,
+  readV1Plugin,
   resolvePluginEntrypoint,
   resolvePluginId,
   resolvePluginTarget,
@@ -231,9 +231,7 @@ async function loadExternalPlugin(
 
   const mod = await import(entry)
     .then((raw) => {
-      const mod = getDefaultPlugin(raw) as TuiPluginModule | undefined
-      if (!mod?.tui) throw new TypeError(`Plugin ${spec} must default export an object with tui()`)
-      return mod
+      return readV1Plugin(raw as Record<string, unknown>, spec, "tui") as TuiPluginModule
     })
     .catch((error) => {
       fail("failed to load tui plugin", { path: spec, target: entry, retry, error })
@@ -566,16 +564,13 @@ function pluginApi(runtime: RuntimeState, load: PluginLoad, scope: PluginScope, 
 }
 
 function collectPluginEntries(load: PluginLoad, meta: TuiPluginMeta) {
-  // TUI stays default-only so plugin ids, lifecycle, and errors remain stable.
-  const plugin = load.module.tui
-  if (!plugin) return []
   const options = load.item ? Config.pluginOptions(load.item) : undefined
   return [
     {
       id: load.id,
       load,
       meta,
-      plugin,
+      plugin: load.module.tui,
       options,
       enabled: true,
     },
