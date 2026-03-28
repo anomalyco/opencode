@@ -56,7 +56,7 @@ If unsure, choose the team/section with the most overlap with the issue and assi
   },
   async execute(args) {
     const issue = getIssueNumber()
-    const owner = "anomalyco"
+    const owner = "f5xc-salesdemos"
     const repo = "opencode"
 
     const results: string[] = []

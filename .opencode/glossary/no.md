@@ -2,8 +2,8 @@
 
 ## Sources
 
-- PR #10018: https://github.com/anomalyco/opencode/pull/10018
-- PR #12935: https://github.com/anomalyco/opencode/pull/12935
+- PR #10018: https://github.com/f5xc-salesdemos/opencode/pull/10018
+- PR #12935: https://github.com/f5xc-salesdemos/opencode/pull/12935
 
 ## Do Not Translate (Locale Additions)
 

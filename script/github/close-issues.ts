@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-const repo = "anomalyco/opencode"
+const repo = "f5xc-salesdemos/opencode"
 const days = 60
 const msg =
   "To stay organized issues are automatically closed after 90 days of no activity. If the issue is still relevant please open a new one."

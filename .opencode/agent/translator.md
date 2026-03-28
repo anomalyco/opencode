@@ -84,7 +84,7 @@ Windows Terminal
 Yarn
 Zellij
 Zed
-anomalyco
+f5xc-salesdemos
 ```
 
 Extracted from link labels in the English docs (review and prune as desired):
@@ -658,7 +658,7 @@ zod
 ```text
 24601/opencode-zellij-namer
 angristan/opencode-wakatime
-anomalyco/opencode
+f5xc-salesdemos/opencode
 apps/opencode-agent
 athal7/opencode-devcontainers
 awesome-opencode/awesome-opencode
