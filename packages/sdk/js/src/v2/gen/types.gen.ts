@@ -1440,6 +1440,12 @@ export type Config = {
      */
     paths?: Array<string>
     /**
+     * Enable or disable discovered skills on startup by skill name
+     */
+    enabled?: {
+      [key: string]: boolean
+    }
+    /**
      * URLs to fetch skills from (e.g., https://example.com/.well-known/skills/)
      */
     urls?: Array<string>

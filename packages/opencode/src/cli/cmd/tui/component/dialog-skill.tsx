@@ -1,20 +1,19 @@
-import { createMemo, createResource, createSignal } from "solid-js"
 import { TextAttributes } from "@opentui/core"
+import { createMemo, createResource, createSignal } from "solid-js"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
+import { useLocal } from "@tui/context/local"
+import { useSDK } from "@tui/context/sdk"
+import { useSync } from "@tui/context/sync"
 import { Keybind } from "@/util/keybind"
 import { useDialog } from "@tui/ui/dialog"
-import { useSDK } from "@tui/context/sdk"
 import { useTheme } from "../context/theme"
 
 export type DialogSkillProps = {
-  onSelect: (skill: string) => void
+  readonly onSelect: (skill: string) => void
 }
 
-function Status(props: { status: "enabled" | "disabled"; loading: boolean }) {
+function Status(props: { readonly status: "enabled" | "disabled" }) {
   const { theme } = useTheme()
-  if (props.loading) {
-    return <span style={{ fg: theme.textMuted }}>⋯ Loading</span>
-  }
   if (props.status === "enabled") {
     return <span style={{ fg: theme.success, attributes: TextAttributes.BOLD }}>✓ Enabled</span>
   }
@@ -23,17 +22,15 @@ function Status(props: { status: "enabled" | "disabled"; loading: boolean }) {
 
 export function DialogSkill(props: DialogSkillProps) {
   const dialog = useDialog()
+  const local = useLocal()
   const sdk = useSDK()
+  const sync = useSync()
   const [loading, setLoading] = createSignal<string | null>(null)
   dialog.setSize("large")
 
-  const [data, { refetch }] = createResource(async () => {
-    const [skillRes, statusRes] = await Promise.all([sdk.client.app.skills(), sdk.client.skill.status()])
-    const status = statusRes.data ?? {}
-    return (skillRes.data ?? []).map((skill) => ({
-      ...skill,
-      state: status[skill.name]?.status ?? "enabled",
-    }))
+  const [data] = createResource(async () => {
+    const result = await sdk.client.app.skills({}, { throwOnError: true })
+    return result.data ?? []
   })
 
   const options = createMemo<DialogSelectOption<string>[]>(() => {
@@ -41,10 +38,10 @@ export function DialogSkill(props: DialogSkillProps) {
     const max = Math.max(0, ...list.map((skill) => skill.name.length))
     return list.map((skill) => ({
       title: skill.name.padEnd(max),
-      description: skill.description?.replace(/\s+/g, " ").trim(),
+      description: skill.description?.replaceAll(/\s+/g, " ").trim(),
       value: skill.name,
       category: "Skills",
-      footer: <Status status={skill.state} loading={loading() === skill.name} />,
+      footer: <Status status={sync.data.skill[skill.name]?.status ?? "enabled"} />,
       onSelect: () => {
         props.onSelect(skill.name)
         dialog.clear()
@@ -63,17 +60,23 @@ export function DialogSkill(props: DialogSkillProps) {
           title: "toggle",
           disabled: loading() !== null,
           onTrigger: async (option) => {
+            if (loading() !== null) return
             const name = option.value
-            const match = (data() ?? []).find((item) => item.name === name)
-            if (!match) return
+            const state = sync.data.skill[name]?.status ?? "enabled"
+            const next = state === "enabled" ? "disabled" : "enabled"
+
             setLoading(name)
+            sync.set("skill", name, { status: next })
+
             try {
-              if (match.state === "enabled") {
-                await sdk.client.skill.disable({ name })
-              } else {
-                await sdk.client.skill.enable({ name })
-              }
-              await refetch()
+              await local.skill.toggle(name, state === "enabled")
+              const result = await sdk.client.skill.status({}, { throwOnError: true })
+              sync.set("skill", result.data ?? {})
+            } catch (err) {
+              console.error("Failed to toggle skill:", err)
+              const result = await sdk.client.skill.status().catch(() => undefined)
+              if (result?.data) sync.set("skill", result.data)
+              else sync.set("skill", name, { status: state })
             } finally {
               setLoading(null)
             }

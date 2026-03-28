@@ -378,6 +378,20 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       },
     }
 
+    const skill = {
+      isEnabled(name: string) {
+        const status = sync.data.skill[name]
+        return (status?.status ?? "enabled") === "enabled"
+      },
+      async toggle(name: string, enabled = (sync.data.skill[name]?.status ?? "enabled") === "enabled") {
+        if (enabled) {
+          await sdk.client.skill.disable({ name }, { throwOnError: true })
+          return
+        }
+        await sdk.client.skill.enable({ name }, { throwOnError: true })
+      },
+    }
+
     // Automatically update model when agent changes
     createEffect(() => {
       const value = agent.current()
@@ -400,6 +414,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       model,
       agent,
       mcp,
+      skill,
     }
     return result
   },

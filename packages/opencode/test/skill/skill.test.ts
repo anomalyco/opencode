@@ -2,8 +2,8 @@ import { afterEach, test, expect } from "bun:test"
 import { Skill } from "../../src/skill"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
-import path from "path"
-import fs from "fs/promises"
+import path from "node:path"
+import fs from "node:fs/promises"
 
 afterEach(async () => {
   await Instance.disposeAll()
@@ -51,7 +51,7 @@ Instructions here.
     fn: async () => {
       const skills = await Skill.all()
       expect(skills.length).toBe(1)
-      const testSkill = skills.find((s) => s.name === "test-skill")
+      const testSkill = skills.find((s: Skill.Info) => s.name === "test-skill")
       expect(testSkill).toBeDefined()
       expect(testSkill!.description).toBe("A test skill for verification.")
       expect(testSkill!.location).toContain(path.join("skill", "test-skill", "SKILL.md"))
@@ -208,8 +208,8 @@ description: Second test skill.
     fn: async () => {
       const skills = await Skill.all()
       expect(skills.length).toBe(2)
-      expect(skills.find((s) => s.name === "skill-one")).toBeDefined()
-      expect(skills.find((s) => s.name === "skill-two")).toBeDefined()
+      expect(skills.find((s: Skill.Info) => s.name === "skill-one")).toBeDefined()
+      expect(skills.find((s: Skill.Info) => s.name === "skill-two")).toBeDefined()
     },
   })
 })
@@ -261,7 +261,7 @@ description: A skill in the .claude/skills directory.
     fn: async () => {
       const skills = await Skill.all()
       expect(skills.length).toBe(1)
-      const claudeSkill = skills.find((s) => s.name === "claude-skill")
+      const claudeSkill = skills.find((s: Skill.Info) => s.name === "claude-skill")
       expect(claudeSkill).toBeDefined()
       expect(claudeSkill!.location).toContain(path.join(".claude", "skills", "claude-skill", "SKILL.md"))
     },
@@ -326,7 +326,7 @@ description: A skill in the .agents/skills directory.
     fn: async () => {
       const skills = await Skill.all()
       expect(skills.length).toBe(1)
-      const agentSkill = skills.find((s) => s.name === "agent-skill")
+      const agentSkill = skills.find((s: Skill.Info) => s.name === "agent-skill")
       expect(agentSkill).toBeDefined()
       expect(agentSkill!.location).toContain(path.join(".agents", "skills", "agent-skill", "SKILL.md"))
     },
@@ -404,8 +404,8 @@ description: A skill in the .agents/skills directory.
     fn: async () => {
       const skills = await Skill.all()
       expect(skills.length).toBe(2)
-      expect(skills.find((s) => s.name === "claude-skill")).toBeDefined()
-      expect(skills.find((s) => s.name === "agent-skill")).toBeDefined()
+      expect(skills.find((s: Skill.Info) => s.name === "claude-skill")).toBeDefined()
+      expect(skills.find((s: Skill.Info) => s.name === "agent-skill")).toBeDefined()
     },
   })
 })

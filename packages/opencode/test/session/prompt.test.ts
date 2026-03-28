@@ -1,7 +1,7 @@
-import path from "path"
+import path from "node:path"
 import { describe, expect, test } from "bun:test"
 import { NamedError } from "@opencode-ai/util/error"
-import { fileURLToPath } from "url"
+import { fileURLToPath } from "node:url"
 import { Instance } from "../../src/project/instance"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Session } from "../../src/session"
@@ -286,7 +286,7 @@ describe("session.prompt regression", () => {
           expect(result.parts.some((part) => part.type === "text" && part.text.includes("processor.ts"))).toBe(true)
 
           const msgs = await Session.messages({ sessionID: session.id })
-          expect(msgs.filter((msg) => msg.info.role === "assistant")).toHaveLength(1)
+          expect(msgs.filter((msg: MessageV2.WithParts) => msg.info.role === "assistant")).toHaveLength(1)
           expect(calls).toBe(1)
         },
       })
@@ -367,7 +367,7 @@ describe("session.prompt regression", () => {
           }
 
           const msgs = await Session.messages({ sessionID: session.id })
-          const last = msgs.findLast((msg) => msg.info.role === "assistant")
+          const last = msgs.findLast((msg: MessageV2.WithParts) => msg.info.role === "assistant")
           expect(last?.info.role).toBe("assistant")
           if (last?.info.role === "assistant") {
             expect(last.info.error?.name).toBe("MessageAbortedError")
