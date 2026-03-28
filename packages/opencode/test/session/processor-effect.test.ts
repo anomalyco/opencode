@@ -333,6 +333,69 @@ it.effect("session.processor effect tests capture llm input cleanly", () => {
   )
 })
 
+it.effect("session.processor effect tests stop after token overflow requests compaction", () => {
+  return provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const test = yield* TestLLM
+        const processors = yield* SessionProcessor.Service
+        const session = yield* Session.Service
+
+        yield* test.reply(
+          start(),
+          {
+            type: "finish-step",
+            finishReason: "stop",
+            rawFinishReason: "stop",
+            response: { id: "res", modelId: "test-model", timestamp: new Date() },
+            providerMetadata: undefined,
+            usage: usage(100, 0, 100),
+          },
+          textStart(),
+          textDelta("t", "after"),
+          textEnd(),
+        )
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "compact")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const abort = new AbortController()
+        const mdl = model(20)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+          abort: abort.signal,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies MessageV2.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          abort: abort.signal,
+          messages: [{ role: "user", content: "compact" }],
+          tools: {},
+        })
+
+        const parts = yield* Effect.promise(() => MessageV2.parts(msg.id))
+
+        expect(value).toBe("compact")
+        expect(parts.some((part) => part.type === "text")).toBe(false)
+        expect(parts.some((part) => part.type === "step-finish")).toBe(true)
+      }),
+    { git: true },
+  )
+})
+
 it.effect("session.processor effect tests reset reasoning state across retries", () => {
   return provideTmpdirInstance(
     (dir) =>
@@ -510,6 +573,76 @@ it.effect("session.processor effect tests retry recognized structured json error
   )
 })
 
+it.effect("session.processor effect tests publish retry status updates", () => {
+  return provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const test = yield* TestLLM
+        const processors = yield* SessionProcessor.Service
+        const session = yield* Session.Service
+        const bus = yield* Bus.Service
+
+        yield* test.push(
+          fail(
+            new APICallError({
+              message: "boom",
+              url: "https://example.com/v1/chat/completions",
+              requestBodyValues: {},
+              statusCode: 503,
+              responseHeaders: { "retry-after-ms": "0" },
+              responseBody: '{"error":"boom"}',
+              isRetryable: true,
+            }),
+            start(),
+          ),
+        )
+        yield* test.reply(start(), finishStep(), finish())
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "retry")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const abort = new AbortController()
+        const mdl = model(100)
+        const states: number[] = []
+        const off = yield* bus.subscribeCallback(SessionStatus.Event.Status, (evt) => {
+          if (evt.properties.sessionID !== chat.id) return
+          if (evt.properties.status.type === "retry") states.push(evt.properties.status.attempt)
+        })
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+          abort: abort.signal,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies MessageV2.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          abort: abort.signal,
+          messages: [{ role: "user", content: "retry" }],
+          tools: {},
+        })
+
+        off()
+
+        expect(value).toBe("continue")
+        expect(yield* test.calls).toBe(2)
+        expect(states).toStrictEqual([1])
+      }),
+    { git: true },
+  )
+})
+
 it.effect("session.processor effect tests compact on structured context overflow", () => {
   return provideTmpdirInstance(
     (dir) =>
@@ -563,6 +696,7 @@ it.effect("session.processor effect tests mark pending tools as aborted on clean
     (dir) =>
       Effect.gen(function* () {
         const ready = defer<void>()
+        const seen = defer<void>()
         const test = yield* TestLLM
         const processors = yield* SessionProcessor.Service
         const session = yield* Session.Service
@@ -619,6 +753,85 @@ it.effect("session.processor effect tests mark pending tools as aborted on clean
           expect(tool.state.error).toBe("Tool execution aborted")
           expect(tool.state.time.end).toBeDefined()
         }
+      }),
+    { git: true },
+  )
+})
+
+it.effect("session.processor effect tests record aborted errors and idle state", () => {
+  return provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const ready = defer<void>()
+        const seen = defer<void>()
+        const test = yield* TestLLM
+        const processors = yield* SessionProcessor.Service
+        const session = yield* Session.Service
+        const bus = yield* Bus.Service
+        const status = yield* SessionStatus.Service
+
+        yield* test.push((input) =>
+          hang(input, start()).pipe(
+            Stream.tap((event) => (event.type === "start" ? Effect.sync(() => ready.resolve()) : Effect.void)),
+          ),
+        )
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "abort")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const abort = new AbortController()
+        const mdl = model(100)
+        const errs: string[] = []
+        const off = yield* bus.subscribeCallback(Session.Event.Error, (evt) => {
+          if (evt.properties.sessionID !== chat.id) return
+          if (!evt.properties.error) return
+          errs.push(evt.properties.error.name)
+          seen.resolve()
+        })
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+          abort: abort.signal,
+        })
+
+        const run = Effect.runPromise(
+          handle.process({
+            user: {
+              id: parent.id,
+              sessionID: chat.id,
+              role: "user",
+              time: parent.time,
+              agent: parent.agent,
+              model: { providerID: ref.providerID, modelID: ref.modelID },
+            } satisfies MessageV2.User,
+            sessionID: chat.id,
+            model: mdl,
+            agent: agent(),
+            system: [],
+            abort: abort.signal,
+            messages: [{ role: "user", content: "abort" }],
+            tools: {},
+          }),
+        )
+
+        yield* Effect.promise(() => ready.promise)
+        abort.abort()
+
+        const value = yield* Effect.promise(() => run)
+        yield* Effect.promise(() => seen.promise)
+        const stored = yield* Effect.promise(() => MessageV2.get({ sessionID: chat.id, messageID: msg.id }))
+        const state = yield* status.get(chat.id)
+        off()
+
+        expect(value).toBe("stop")
+        expect(handle.message.error?.name).toBe("MessageAbortedError")
+        expect(stored.info.role).toBe("assistant")
+        if (stored.info.role === "assistant") {
+          expect(stored.info.error?.name).toBe("MessageAbortedError")
+        }
+        expect(state).toMatchObject({ type: "idle" })
+        expect(errs).toContain("MessageAbortedError")
       }),
     { git: true },
   )
