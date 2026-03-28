@@ -1,4 +1,5 @@
 name: upstream-sync
+# Syncs fork with upstream every 6 hours, publishes new release on success
 
 on:
   schedule:
