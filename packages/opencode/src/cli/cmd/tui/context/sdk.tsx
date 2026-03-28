@@ -115,6 +115,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       directory: props.directory,
       event: emitter,
       fetch: props.fetch ?? fetch,
+      headers: props.headers,
       setWorkspace(next?: string) {
         if (workspaceID === next) return
         workspaceID = next

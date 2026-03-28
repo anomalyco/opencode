@@ -145,7 +145,10 @@ export function Prompt(props: PromptProps) {
       (value) => {
         sdk.fetch(sdk.url + "/tui/prompt", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...sdk.headers,
+          },
           body: JSON.stringify({ input: value }),
         })
       },
