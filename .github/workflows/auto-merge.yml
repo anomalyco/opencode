@@ -16,6 +16,11 @@ name: Auto-merge and Release
 #      workflows (not affected by the GITHUB_TOKEN event restriction).
 #   3. CD listens to repository_dispatch: types: [cd-release] and releases.
 #
+# FORK LIMITATION: workflow_run.pull_requests is empty for PRs from forks.
+# This repo is internal-only (no fork PRs expected), so silent skip is fine.
+# If fork support is ever needed, switch to pull_request_target: closed with
+# a PAT token to avoid the GITHUB_TOKEN webhook suppression bug.
+#
 # RESULT: PR open → CI passes → this workflow fires (reliable) →
 #         merge → repository_dispatch → CD (reliable) → release.
 
@@ -23,9 +28,17 @@ on:
   workflow_run:
     workflows: [CI, test]
     types: [completed]
+  # Manual escape hatch: re-trigger merge+CD for a PR without re-running CI.
+  # Use when auto-merge fires but the dispatch step fails silently.
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR number to merge and release
+        required: true
+        type: number
 
 concurrency:
-  group: auto-merge-${{ github.event.workflow_run.head_sha }}
+  group: auto-merge-${{ github.event.workflow_run.head_sha || github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -34,20 +47,40 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    # Only proceed for successful runs on PRs targeting main
+    # For workflow_run: only proceed for successful runs on PRs targeting main.
+    # For workflow_dispatch: always proceed (manual override).
     if: |
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'pull_request'
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'pull_request')
     steps:
       - name: Find PR targeting main
         id: find_pr
         uses: actions/github-script@v8
         with:
           script: |
+            // Manual override: use the input PR number directly
+            if (context.eventName === 'workflow_dispatch') {
+              const prNum = context.payload.inputs.pr_number;
+              console.log(`Manual dispatch: using PR #${prNum}`);
+              core.setOutput('pr_number', String(prNum));
+              // Fetch the head SHA for this PR
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: Number(prNum),
+              });
+              core.setOutput('head_sha', pr.head.sha);
+              return;
+            }
+
+            // workflow_run: extract PR from event payload.
+            // NOTE: pull_requests array is empty for fork PRs — silent skip
+            // is intentional (this repo is internal, forks not expected).
             const prs = context.payload.workflow_run.pull_requests || [];
             const pr = prs.find(p => p.base.ref === 'main');
             if (!pr) {
-              console.log('No PR targeting main — skipping.');
+              console.log('No PR targeting main found (or fork PR) — skipping.');
               core.setOutput('pr_number', '');
               return;
             }
@@ -68,7 +101,14 @@ jobs:
               ref: sha,
               per_page: 100,
             });
-            const runs = data.check_runs;
+
+            // Filter to GitHub Actions checks only (app ID 15368).
+            // checks.listForRef can return stale runs from old check suites
+            // (e.g. re-runs, cancelled runs) — filtering by app ID ensures
+            // we only evaluate the current, authoritative check results.
+            const GITHUB_ACTIONS_APP_ID = 15368;
+            const runs = data.check_runs.filter(r => r.app?.id === GITHUB_ACTIONS_APP_ID);
+            console.log(`Found ${runs.length} GitHub Actions check runs for ${sha}`);
 
             // If any check is still in progress, bail — the other
             // workflow_run event will handle it once all are done.
@@ -138,7 +178,7 @@ jobs:
               event_type: 'cd-release',
               client_payload: {
                 pr_number: ${{ steps.find_pr.outputs.pr_number || 0 }},
-                triggered_by: 'auto-merge'
+                triggered_by: context.eventName === 'workflow_dispatch' ? 'manual' : 'auto-merge'
               }
             });
             console.log('Dispatched cd-release event → CD will now create a release.');
