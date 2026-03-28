@@ -1,1 +1,0 @@
-ALTER TABLE `usage` ADD `session_id` varchar(30);
