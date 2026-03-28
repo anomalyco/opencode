@@ -563,6 +563,10 @@ export namespace Config {
 
   export const Skills = z.object({
     paths: z.array(z.string()).optional().describe("Additional paths to skill folders"),
+    enabled: z
+      .record(z.string(), z.boolean())
+      .optional()
+      .describe("Enable or disable discovered skills on startup by skill name"),
     urls: z
       .array(z.string())
       .optional()

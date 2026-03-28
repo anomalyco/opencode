@@ -8,6 +8,7 @@ import { iife } from "@/util/iife"
 
 export const SkillTool = Tool.define("skill", async (ctx) => {
   const list = await Skill.available(ctx?.agent)
+  const status = await Skill.status()
 
   const description =
     list.length === 0
@@ -15,16 +16,18 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
       : [
           "Load a specialized skill that provides domain-specific instructions and workflows.",
           "",
-          "When you recognize that a task matches one of the available skills listed below, use this tool to load the full skill instructions.",
+          "When you recognize that a task matches one of the skills listed below, use this tool to load the full skill instructions.",
           "",
           "The skill will inject detailed instructions, workflows, and access to bundled resources (scripts, references, templates) into the conversation context.",
           "",
           'Tool output includes a `<skill_content name="...">` block with the loaded content.',
           "",
-          "The following skills provide specialized sets of instructions for particular tasks",
-          "Invoke this tool to load a skill when a task matches one of the available skills listed below:",
+          "Disabled skills remain visible but cannot be loaded until they are re-enabled.",
           "",
-          Skill.fmt(list, { verbose: false }),
+          "The following skills provide specialized sets of instructions for particular tasks.",
+          "Invoke this tool to load a skill when a task matches one of the skills listed below:",
+          "",
+          Skill.fmt(list, { verbose: false, status }),
         ].join("\n")
 
   const examples = list
@@ -46,6 +49,10 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
       if (!skill) {
         const available = await Skill.all().then((x) => x.map((skill) => skill.name).join(", "))
         throw new Error(`Skill "${params.name}" not found. Available skills: ${available || "none"}`)
+      }
+
+      if (!(await Skill.isEnabled(params.name))) {
+        throw new Error(`Skill "${params.name}" is disabled. Re-enable it from /skills before loading it.`)
       }
 
       await ctx.ask({

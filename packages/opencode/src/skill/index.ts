@@ -33,6 +33,15 @@ export namespace Skill {
   })
   export type Info = z.infer<typeof Info>
 
+  export const Status = z
+    .object({
+      status: z.enum(["enabled", "disabled"]),
+    })
+    .meta({
+      ref: "SkillStatus",
+    })
+  export type Status = z.infer<typeof Status>
+
   export const InvalidError = NamedError.create(
     "SkillInvalidError",
     z.object({
@@ -54,6 +63,7 @@ export namespace Skill {
   type State = {
     skills: Record<string, Info>
     dirs: Set<string>
+    status: Record<string, Status>
   }
 
   export interface Interface {
@@ -61,6 +71,10 @@ export namespace Skill {
     readonly all: () => Effect.Effect<Info[]>
     readonly dirs: () => Effect.Effect<string[]>
     readonly available: (agent?: Agent.Info) => Effect.Effect<Info[]>
+    readonly status: () => Effect.Effect<Record<string, Status>>
+    readonly enable: (name: string) => Effect.Effect<void>
+    readonly disable: (name: string) => Effect.Effect<void>
+    readonly isEnabled: (name: string) => Effect.Effect<boolean>
   }
 
   const add = Effect.fnUntraced(function* (state: State, match: string, bus: Bus.Interface) {
@@ -100,6 +114,9 @@ export namespace Skill {
       description: parsed.data.description,
       location: match,
       content: md.content,
+    }
+    state.status[parsed.data.name] = state.status[parsed.data.name] ?? {
+      status: "enabled",
     }
   })
 
@@ -193,6 +210,11 @@ export namespace Skill {
       }
     }
 
+    for (const [name, enabled] of Object.entries(cfg.skills?.enabled ?? {})) {
+      if (!state.skills[name]) continue
+      state.status[name] = { status: enabled ? "enabled" : "disabled" }
+    }
+
     log.info("init", { count: Object.keys(state.skills).length })
   })
 
@@ -206,7 +228,7 @@ export namespace Skill {
       const bus = yield* Bus.Service
       const state = yield* InstanceState.make(
         Effect.fn("Skill.state")(function* (ctx) {
-          const s: State = { skills: {}, dirs: new Set() }
+          const s: State = { skills: {}, dirs: new Set(), status: {} }
           yield* loadSkills(s, config, discovery, bus, ctx.directory, ctx.worktree)
           return s
         }),
@@ -234,7 +256,38 @@ export namespace Skill {
         return list.filter((skill) => Permission.evaluate("skill", skill.name, agent.permission).action !== "deny")
       })
 
-      return Service.of({ get, all, dirs, available })
+      const status = Effect.fn("Skill.status")(function* () {
+        const s = yield* InstanceState.get(state)
+        const result: Record<string, Status> = {}
+        for (const name of Object.keys(s.skills)) {
+          result[name] = s.status[name] ?? { status: "enabled" }
+        }
+        return result
+      })
+
+      const set = Effect.fn("Skill.set")(function* (name: string, next: Status["status"]) {
+        const s = yield* InstanceState.get(state)
+        if (!s.skills[name]) {
+          throw new Error(`Skill "${name}" not found`)
+        }
+        s.status[name] = { status: next }
+      })
+
+      const enable = Effect.fn("Skill.enable")(function* (name: string) {
+        yield* set(name, "enabled")
+      })
+
+      const disable = Effect.fn("Skill.disable")(function* (name: string) {
+        yield* set(name, "disabled")
+      })
+
+      const isEnabled = Effect.fn("Skill.isEnabled")(function* (name: string) {
+        const s = yield* InstanceState.get(state)
+        if (!s.skills[name]) return false
+        return (s.status[name] ?? { status: "enabled" }).status === "enabled"
+      })
+
+      return Service.of({ get, all, dirs, available, status, enable, disable, isEnabled })
     }),
   )
 
@@ -244,7 +297,7 @@ export namespace Skill {
     Layer.provide(Bus.layer),
   )
 
-  export function fmt(list: Info[], opts: { verbose: boolean }) {
+  export function fmt(list: Info[], opts: { verbose: boolean; status?: Record<string, Status> }) {
     if (list.length === 0) return "No skills are currently available."
 
     if (opts.verbose) {
@@ -254,6 +307,7 @@ export namespace Skill {
           "  <skill>",
           `    <name>${skill.name}</name>`,
           `    <description>${skill.description}</description>`,
+          `    <status>${opts.status?.[skill.name]?.status ?? "enabled"}</status>`,
           `    <location>${pathToFileURL(skill.location).href}</location>`,
           "  </skill>",
         ]),
@@ -261,7 +315,14 @@ export namespace Skill {
       ].join("\n")
     }
 
-    return ["## Available Skills", ...list.map((skill) => `- **${skill.name}**: ${skill.description}`)].join("\n")
+    return [
+      "## Available Skills",
+      ...list.map((skill) => {
+        const status = opts.status?.[skill.name]?.status ?? "enabled"
+        const name = status === "disabled" ? `${skill.name} (disabled)` : skill.name
+        return `- **${name}**: ${skill.description}`
+      }),
+    ].join("\n")
   }
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
@@ -280,5 +341,21 @@ export namespace Skill {
 
   export async function available(agent?: Agent.Info) {
     return runPromise((skill) => skill.available(agent))
+  }
+
+  export async function status() {
+    return runPromise((skill) => skill.status())
+  }
+
+  export async function enable(name: string) {
+    return runPromise((skill) => skill.enable(name))
+  }
+
+  export async function disable(name: string) {
+    return runPromise((skill) => skill.disable(name))
+  }
+
+  export async function isEnabled(name: string) {
+    return runPromise((skill) => skill.isEnabled(name))
   }
 }

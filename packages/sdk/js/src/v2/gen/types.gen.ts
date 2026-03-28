@@ -1918,6 +1918,10 @@ export type ProviderAuthAuthorization = {
   instructions: string
 }
 
+export type SkillStatus = {
+  status: "enabled" | "disabled"
+}
+
 export type Symbol = {
   name: string
   kind: number
@@ -4303,6 +4307,111 @@ export type ProviderOauthCallbackResponses = {
 
 export type ProviderOauthCallbackResponse = ProviderOauthCallbackResponses[keyof ProviderOauthCallbackResponses]
 
+export type AppSkillsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/skill"
+}
+
+export type AppSkillsResponses = {
+  /**
+   * List of skills
+   */
+  200: Array<{
+    name: string
+    description: string
+    location: string
+    content: string
+  }>
+}
+
+export type AppSkillsResponse = AppSkillsResponses[keyof AppSkillsResponses]
+
+export type SkillStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/skill/status"
+}
+
+export type SkillStatusResponses = {
+  /**
+   * Skill status
+   */
+  200: {
+    [key: string]: SkillStatus
+  }
+}
+
+export type SkillStatusResponse = SkillStatusResponses[keyof SkillStatusResponses]
+
+export type SkillEnableData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/skill/{name}/enable"
+}
+
+export type SkillEnableErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SkillEnableError = SkillEnableErrors[keyof SkillEnableErrors]
+
+export type SkillEnableResponses = {
+  /**
+   * Skill enabled
+   */
+  200: boolean
+}
+
+export type SkillEnableResponse = SkillEnableResponses[keyof SkillEnableResponses]
+
+export type SkillDisableData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/skill/{name}/disable"
+}
+
+export type SkillDisableErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SkillDisableError = SkillDisableErrors[keyof SkillDisableErrors]
+
+export type SkillDisableResponses = {
+  /**
+   * Skill disabled
+   */
+  200: boolean
+}
+
+export type SkillDisableResponse = SkillDisableResponses[keyof SkillDisableResponses]
+
 export type FindTextData = {
   body?: never
   path?: never
@@ -5101,30 +5210,6 @@ export type AppAgentsResponses = {
 }
 
 export type AppAgentsResponse = AppAgentsResponses[keyof AppAgentsResponses]
-
-export type AppSkillsData = {
-  body?: never
-  path?: never
-  query?: {
-    directory?: string
-    workspace?: string
-  }
-  url: "/skill"
-}
-
-export type AppSkillsResponses = {
-  /**
-   * List of skills
-   */
-  200: Array<{
-    name: string
-    description: string
-    location: string
-    content: string
-  }>
-}
-
-export type AppSkillsResponse = AppSkillsResponses[keyof AppSkillsResponses]
 
 export type LspStatusData = {
   body?: never

@@ -152,6 +152,11 @@ import type {
   SessionUnshareResponses,
   SessionUpdateErrors,
   SessionUpdateResponses,
+  SkillDisableErrors,
+  SkillDisableResponses,
+  SkillEnableErrors,
+  SkillEnableResponses,
+  SkillStatusResponses,
   SubtaskPartInput,
   TextPartInput,
   ToolIdsErrors,
@@ -458,36 +463,6 @@ export class App extends HeyApiClient {
   }
 
   /**
-   * List agents
-   *
-   * Get a list of all available AI agents in the OpenCode system.
-   */
-  public agents<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<AppAgentsResponses, unknown, ThrowOnError>({
-      url: "/agent",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
    * List skills
    *
    * Get a list of all available skills in the OpenCode system.
@@ -512,6 +487,36 @@ export class App extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<AppSkillsResponses, unknown, ThrowOnError>({
       url: "/skill",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List agents
+   *
+   * Get a list of all available AI agents in the OpenCode system.
+   */
+  public agents<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<AppAgentsResponses, unknown, ThrowOnError>({
+      url: "/agent",
       ...options,
       ...params,
     })
@@ -2798,6 +2803,102 @@ export class Provider extends HeyApiClient {
   }
 }
 
+export class Skill extends HeyApiClient {
+  /**
+   * Get skill status
+   *
+   * Get the runtime status of all discovered skills.
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SkillStatusResponses, unknown, ThrowOnError>({
+      url: "/skill/status",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Enable skill
+   *
+   * Enable a discovered skill for the current instance.
+   */
+  public enable<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SkillEnableResponses, SkillEnableErrors, ThrowOnError>({
+      url: "/skill/{name}/enable",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Disable skill
+   *
+   * Disable a discovered skill for the current instance.
+   */
+  public disable<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SkillDisableResponses, SkillDisableErrors, ThrowOnError>({
+      url: "/skill/{name}/disable",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Find extends HeyApiClient {
   /**
    * Find text
@@ -4020,6 +4121,11 @@ export class OpencodeClient extends HeyApiClient {
   private _provider?: Provider
   get provider(): Provider {
     return (this._provider ??= new Provider({ client: this.client }))
+  }
+
+  private _skill?: Skill
+  get skill(): Skill {
+    return (this._skill ??= new Skill({ client: this.client }))
   }
 
   private _find?: Find

@@ -7,6 +7,7 @@ import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Session } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
+import { Skill } from "../../src/skill"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
 
@@ -511,6 +512,92 @@ describe("session.agent-resolution", () => {
         if (NamedError.Unknown.isInstance(err)) {
           expect(err.data.message).toContain('Command not found: "nonexistent-command-xyz"')
           expect(err.data.message).toContain("init")
+        }
+      },
+    })
+  }, 30000)
+
+  test("disabled skill command throws typed error", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        const skillDir = path.join(dir, ".opencode", "skill", "blocked-skill")
+        await Bun.write(
+          path.join(skillDir, "SKILL.md"),
+          `---
+name: blocked-skill
+description: A blocked skill for command testing.
+---
+
+# Blocked Skill
+`,
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        await Skill.disable("blocked-skill")
+        const err = await SessionPrompt.command({
+          sessionID: session.id,
+          command: "blocked-skill",
+          arguments: "",
+        }).then(
+          () => undefined,
+          (e) => e,
+        )
+        expect(err).toBeDefined()
+        expect(NamedError.Unknown.isInstance(err)).toBe(true)
+        if (NamedError.Unknown.isInstance(err)) {
+          expect(err.data.message).toContain('Skill "blocked-skill" is disabled')
+        }
+      },
+    })
+  }, 30000)
+
+  test("skill disabled by config throws typed error", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      config: {
+        skills: {
+          enabled: {
+            "blocked-by-config": false,
+          },
+        },
+      },
+      init: async (dir) => {
+        const skillDir = path.join(dir, ".opencode", "skill", "blocked-by-config")
+        await Bun.write(
+          path.join(skillDir, "SKILL.md"),
+          `---
+name: blocked-by-config
+description: A blocked skill from config.
+---
+
+# Blocked By Config
+`,
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const err = await SessionPrompt.command({
+          sessionID: session.id,
+          command: "blocked-by-config",
+          arguments: "",
+        }).then(
+          () => undefined,
+          (e) => e,
+        )
+        expect(err).toBeDefined()
+        expect(NamedError.Unknown.isInstance(err)).toBe(true)
+        if (NamedError.Unknown.isInstance(err)) {
+          expect(err.data.message).toContain('Skill "blocked-by-config" is disabled')
         }
       },
     })

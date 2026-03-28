@@ -49,6 +49,7 @@ import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
+import { Skill } from "@/skill"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1840,6 +1841,18 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       })
       throw error
     }
+
+    if (command.source === "skill" && !(await Skill.isEnabled(command.name))) {
+      const error = new NamedError.Unknown({
+        message: `Skill "${command.name}" is disabled. Re-enable it from /skills before using /${command.name}.`,
+      })
+      Bus.publish(Session.Event.Error, {
+        sessionID: input.sessionID,
+        error: error.toObject(),
+      })
+      throw error
+    }
+
     const agentName = command.agent ?? input.agent ?? (await Agent.defaultAgent())
 
     const raw = input.arguments.match(argsRegex) ?? []

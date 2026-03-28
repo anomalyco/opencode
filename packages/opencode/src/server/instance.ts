@@ -20,6 +20,7 @@ import { ProjectRoutes } from "./routes/project"
 import { SessionRoutes } from "./routes/session"
 import { PtyRoutes } from "./routes/pty"
 import { McpRoutes } from "./routes/mcp"
+import { SkillRoutes } from "./routes/skill"
 import { FileRoutes } from "./routes/file"
 import { ConfigRoutes } from "./routes/config"
 import { ExperimentalRoutes } from "./routes/experimental"
@@ -51,6 +52,7 @@ export const InstanceRoutes = (app?: Hono) =>
     .route("/permission", PermissionRoutes())
     .route("/question", QuestionRoutes())
     .route("/provider", ProviderRoutes())
+    .route("/skill", SkillRoutes())
     .route("/", FileRoutes())
     .route("/", EventRoutes())
     .route("/mcp", McpRoutes())
@@ -182,28 +184,6 @@ export const InstanceRoutes = (app?: Hono) =>
       async (c) => {
         const modes = await Agent.list()
         return c.json(modes)
-      },
-    )
-    .get(
-      "/skill",
-      describeRoute({
-        summary: "List skills",
-        description: "Get a list of all available skills in the OpenCode system.",
-        operationId: "app.skills",
-        responses: {
-          200: {
-            description: "List of skills",
-            content: {
-              "application/json": {
-                schema: resolver(Skill.Info.array()),
-              },
-            },
-          },
-        },
-      }),
-      async (c) => {
-        const skills = await Skill.all()
-        return c.json(skills)
       },
     )
     .get(

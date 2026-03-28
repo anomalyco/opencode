@@ -95,6 +95,85 @@ description: Skill for dirs test.
   }
 })
 
+test("skills start enabled and can be disabled and re-enabled", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      const skillDir = path.join(dir, ".opencode", "skill", "toggle-skill")
+      await Bun.write(
+        path.join(skillDir, "SKILL.md"),
+        `---
+name: toggle-skill
+description: Skill for toggle test.
+---
+
+# Toggle Skill
+`,
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      expect(await Skill.isEnabled("toggle-skill")).toBe(true)
+      expect(await Skill.status()).toEqual({
+        "toggle-skill": { status: "enabled" },
+      })
+      await Skill.disable("toggle-skill")
+      expect(await Skill.isEnabled("toggle-skill")).toBe(false)
+      expect(await Skill.available()).toHaveLength(1)
+      expect(await Skill.status()).toEqual({
+        "toggle-skill": { status: "disabled" },
+      })
+      await Skill.enable("toggle-skill")
+      expect(await Skill.isEnabled("toggle-skill")).toBe(true)
+      expect(await Skill.status()).toEqual({
+        "toggle-skill": { status: "enabled" },
+      })
+    },
+  })
+})
+
+test("skills can start disabled from config", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    config: {
+      skills: {
+        enabled: {
+          "startup-skill": false,
+        },
+      },
+    },
+    init: async (dir) => {
+      const skillDir = path.join(dir, ".opencode", "skill", "startup-skill")
+      await Bun.write(
+        path.join(skillDir, "SKILL.md"),
+        `---
+name: startup-skill
+description: Skill for startup default test.
+---
+
+# Startup Skill
+`,
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      expect(await Skill.isEnabled("startup-skill")).toBe(false)
+      expect(await Skill.status()).toEqual({
+        "startup-skill": { status: "disabled" },
+      })
+      expect(await Skill.available()).toHaveLength(1)
+      await Skill.enable("startup-skill")
+      expect(await Skill.isEnabled("startup-skill")).toBe(true)
+    },
+  })
+})
+
 test("discovers multiple skills from .opencode/skill/ directory", async () => {
   await using tmp = await tmpdir({
     git: true,
