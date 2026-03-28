@@ -15,10 +15,11 @@ on:
   pull_request_target:
     types: [closed]
     branches: [main]
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
-    branches: [main]
+  # Hourly backstop: catches cases where pull_request_target webhook is
+  # silently dropped (known GitHub issue with GITHUB_TOKEN auto-merges).
+  # The release job skips automatically when HEAD is already tagged.
+  schedule:
+    - cron: '0 * * * *'
 
 concurrency:
   group: cd-main
@@ -38,10 +39,11 @@ jobs:
       (github.event_name == 'workflow_dispatch') ||
       (github.event_name == 'push') ||
       (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true) ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      (github.event_name == 'schedule')
     outputs:
       tag: ${{ steps.next_version.outputs.tag }}
       semver: ${{ steps.next_version.outputs.semver }}
+      needs_release: ${{ steps.latest_tag.outputs.needs_release }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -52,9 +54,17 @@ jobs:
         run: |
           TAG=$(git tag --sort=-v:refname | grep -E '^cb-v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)
           echo "tag=${TAG:-cb-v0.0.0}" >> "$GITHUB_OUTPUT"
+          # Guard: skip if HEAD is already tagged (prevents duplicate releases on schedule)
+          if [[ -n "$TAG" ]] && [[ "$(git rev-list -n1 "$TAG")" == "$(git rev-parse HEAD)" ]]; then
+            echo "needs_release=false" >> "$GITHUB_OUTPUT"
+            echo "HEAD is already tagged as $TAG — no release needed."
+          else
+            echo "needs_release=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Determine next version and generate release notes
         id: next_version
+        if: steps.latest_tag.outputs.needs_release == 'true'
         run: |
           TAG="${{ steps.latest_tag.outputs.tag }}"
           VERSION="${TAG#cb-v}"
@@ -130,6 +140,7 @@ jobs:
           echo "Next release: ${NEXT_TAG}"
 
       - name: Create GitHub release (draft)
+        if: steps.latest_tag.outputs.needs_release == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -141,6 +152,7 @@ jobs:
   desktop-linux:
     name: Desktop (Linux)
     needs: release
+    if: needs.release.outputs.needs_release == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -194,6 +206,7 @@ jobs:
   desktop-windows:
     name: Desktop (Windows)
     needs: release
+    if: needs.release.outputs.needs_release == 'true'
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -245,6 +258,7 @@ jobs:
   build-cli:
     name: CLI Binaries (all platforms)
     needs: release
+    if: needs.release.outputs.needs_release == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -280,7 +294,7 @@ jobs:
     name: Publish Release
     needs: [release, build-cli, desktop-linux, desktop-windows]
     runs-on: ubuntu-latest
-    if: success()
+    if: needs.release.outputs.needs_release == 'true' && success()
     steps:
       - name: Publish draft as latest release
         env:
