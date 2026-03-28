@@ -45,6 +45,7 @@ import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
+import { AppFileSystem } from "@/filesystem"
 import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
@@ -95,6 +96,7 @@ export namespace SessionPrompt {
       const processor = yield* SessionProcessor.Service
       const compaction = yield* SessionCompaction.Service
       const plugin = yield* Plugin.Service
+      const fsys = yield* AppFileSystem.Service
       const scope = yield* Scope.Scope
 
       const cache = yield* InstanceState.make(
@@ -138,7 +140,37 @@ export namespace SessionPrompt {
       })
 
       const resolvePromptParts = Effect.fn("SessionPrompt.resolvePromptParts")(function* (template: string) {
-        return yield* Effect.promise(() => resolvePromptPartsImpl(template))
+        const parts: PromptInput["parts"] = [{ type: "text", text: template }]
+        const files = ConfigMarkdown.files(template)
+        const seen = new Set<string>()
+        yield* Effect.forEach(
+          files,
+          (match) =>
+            Effect.gen(function* () {
+              const name = match[1]
+              if (seen.has(name)) return
+              seen.add(name)
+              const filepath = name.startsWith("~/")
+                ? path.join(os.homedir(), name.slice(2))
+                : path.resolve(Instance.worktree, name)
+
+              const info = yield* fsys.stat(filepath).pipe(Effect.option)
+              if (!info._tag || info._tag === "None") {
+                const found = yield* agents.get(name)
+                if (found) parts.push({ type: "agent", name: found.name })
+                return
+              }
+              const stat = info.value
+              parts.push({
+                type: "file",
+                url: pathToFileURL(filepath).href,
+                filename: name,
+                mime: stat.type === "Directory" ? "application/x-directory" : "text/plain",
+              })
+            }),
+          { concurrency: "unbounded" },
+        )
+        return parts
       })
 
       const prompt = Effect.fn("SessionPrompt.prompt")(function* (input: PromptInput) {
@@ -524,6 +556,7 @@ export namespace SessionPrompt {
         Layer.provide(SessionStatus.layer),
         Layer.provide(SessionCompaction.defaultLayer),
         Layer.provide(SessionProcessor.defaultLayer),
+        Layer.provide(AppFileSystem.defaultLayer),
         Layer.provide(Plugin.defaultLayer),
         Layer.provide(Session.defaultLayer),
         Layer.provide(Agent.defaultLayer),

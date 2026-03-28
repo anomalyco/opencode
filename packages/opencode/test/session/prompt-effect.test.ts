@@ -14,6 +14,7 @@ import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Session } from "../../src/session"
 import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
+import { AppFileSystem } from "../../src/filesystem"
 import { SessionCompaction } from "../../src/session/compaction"
 import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
@@ -167,6 +168,7 @@ const deps = Layer.mergeAll(
   Permission.layer,
   Plugin.defaultLayer,
   Config.defaultLayer,
+  AppFileSystem.defaultLayer,
   status,
   llm,
 ).pipe(Layer.provideMerge(infra))
