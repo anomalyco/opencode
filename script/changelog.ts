@@ -12,10 +12,12 @@ type Release = {
 }
 
 export async function getLatestRelease(skip?: string) {
-  const data = await fetch("https://api.github.com/repos/f5xc-salesdemos/opencode/releases?per_page=100").then((res) => {
-    if (!res.ok) throw new Error(res.statusText)
-    return res.json()
-  })
+  const data = await fetch("https://api.github.com/repos/f5xc-salesdemos/opencode/releases?per_page=100").then(
+    (res) => {
+      if (!res.ok) throw new Error(res.statusText)
+      return res.json()
+    },
+  )
 
   const releases = data as Release[]
   const target = skip?.replace(/^v/, "")

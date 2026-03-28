@@ -112,7 +112,8 @@ export function createMenu(deps: Deps) {
         },
         {
           label: "Report a Bug",
-          click: () => shell.openExternal("https://github.com/f5xc-salesdemos/opencode/issues/new?template=bug_report.yml"),
+          click: () =>
+            shell.openExternal("https://github.com/f5xc-salesdemos/opencode/issues/new?template=bug_report.yml"),
         },
       ],
     },
