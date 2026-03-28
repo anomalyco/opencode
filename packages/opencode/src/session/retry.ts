@@ -1,8 +1,6 @@
 import type { NamedError } from "@opencode-ai/util/error"
-import { Clock, Effect, Schedule } from "effect"
+import { Cause, Clock, Duration, Effect, Schedule } from "effect"
 import { MessageV2 } from "./message-v2"
-import type { SessionID } from "./schema"
-import { SessionStatus } from "./status"
 import { iife } from "@/util/iife"
 
 export namespace SessionRetry {
@@ -91,32 +89,22 @@ export namespace SessionRetry {
     }
   }
 
-  export function policy(opts: { sessionID: SessionID; parse: (error: unknown) => Err }) {
-    let attempt = 0
-    return Schedule.identity<unknown>().pipe(
-      Schedule.while(({ input }: Schedule.InputMetadata<unknown>) =>
-        Effect.succeed(retryable(opts.parse(input)) !== undefined),
-      ),
-      Schedule.addDelay((input) =>
-        Effect.gen(function* () {
-          const error = opts.parse(input)
-          const message = retryable(error)
-          attempt += 1
-          const wait = delay(attempt, MessageV2.APIError.isInstance(error) ? error : undefined)
+  export function policy(opts: {
+    parse: (error: unknown) => Err
+    set: (input: { attempt: number; message: string; next: number }) => Effect.Effect<void>
+  }) {
+    return Schedule.fromStepWithMetadata(
+      Effect.succeed((meta: Schedule.InputMetadata<unknown>) => {
+        const error = opts.parse(meta.input)
+        const message = retryable(error)
+        if (!message) return Cause.done(meta.attempt)
+        return Effect.gen(function* () {
+          const wait = delay(meta.attempt, MessageV2.APIError.isInstance(error) ? error : undefined)
           const now = yield* Clock.currentTimeMillis
-          if (message) {
-            yield* Effect.promise(() =>
-              SessionStatus.set(opts.sessionID, {
-                type: "retry",
-                attempt,
-                message,
-                next: now + wait,
-              }),
-            )
-          }
-          return wait
-        }),
-      ),
+          yield* opts.set({ attempt: meta.attempt, message, next: now + wait })
+          return [meta.attempt, Duration.millis(wait)] as [number, Duration.Duration]
+        })
+      }),
     )
   }
 }

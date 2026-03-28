@@ -1,5 +1,7 @@
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
+import { Effect, Layer, ServiceMap } from "effect"
+import * as Stream from "effect/Stream"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, jsonSchema } from "ai"
 import { mergeDeep, pipe } from "remeda"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
@@ -33,6 +35,35 @@ export namespace LLM {
     retries?: number
     toolChoice?: "auto" | "required" | "none"
   }
+
+  export type Event = Awaited<ReturnType<typeof stream>>["fullStream"] extends AsyncIterable<infer T> ? T : never
+
+  export interface Interface {
+    readonly stream: (input: StreamInput) => Stream.Stream<Event, unknown>
+  }
+
+  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/LLM") {}
+
+  export const layer = Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      return Service.of({
+        stream(input) {
+          return Stream.unwrap(
+            Effect.promise(() => LLM.stream(input)).pipe(
+              Effect.map((result) =>
+                Stream.fromAsyncIterable(result.fullStream, (err) => err).pipe(
+                  Stream.mapEffect((event) => Effect.succeed(event)),
+                ),
+              ),
+            ),
+          )
+        },
+      })
+    }),
+  )
+
+  export const defaultLayer = layer
 
   export async function stream(input: StreamInput) {
     const l = log

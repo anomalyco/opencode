@@ -14,10 +14,10 @@ import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 import { NotFoundError } from "@/storage/db"
-import { ProviderTransform } from "@/provider/transform"
 import { ModelID, ProviderID } from "@/provider/schema"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Cause, Effect, Exit, Layer, ServiceMap } from "effect"
 import { makeRuntime } from "@/effect/run-service"
+import { isOverflow as overflow } from "./overflow"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -31,7 +31,6 @@ export namespace SessionCompaction {
     ),
   }
 
-  const COMPACTION_BUFFER = 20_000
   export const PRUNE_MINIMUM = 20_000
   export const PRUNE_PROTECT = 40_000
   const PRUNE_PROTECTED_TOOLS = ["skill"]
@@ -64,7 +63,7 @@ export namespace SessionCompaction {
   export const layer: Layer.Layer<
     Service,
     never,
-    Bus.Service | Config.Service | Session.Service | Agent.Service | Plugin.Service
+    Bus.Service | Config.Service | Session.Service | Agent.Service | Plugin.Service | SessionProcessor.Service
   > = Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -73,26 +72,13 @@ export namespace SessionCompaction {
       const session = yield* Session.Service
       const agents = yield* Agent.Service
       const plugin = yield* Plugin.Service
+      const processors = yield* SessionProcessor.Service
 
       const isOverflow = Effect.fn("SessionCompaction.isOverflow")(function* (input: {
         tokens: MessageV2.Assistant["tokens"]
         model: Provider.Model
       }) {
-        const cfg = yield* config.get()
-        if (cfg.compaction?.auto === false) return false
-        const context = input.model.limit.context
-        if (context === 0) return false
-
-        const count =
-          input.tokens.total ||
-          input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
-
-        const reserved =
-          cfg.compaction?.reserved ?? Math.min(COMPACTION_BUFFER, ProviderTransform.maxOutputTokens(input.model))
-        const usable = input.model.limit.input
-          ? input.model.limit.input - reserved
-          : context - ProviderTransform.maxOutputTokens(input.model)
-        return count >= usable
+        return overflow({ cfg: yield* config.get(), tokens: input.tokens, model: input.model })
       })
 
       // goes backwards through parts until there are PRUNE_PROTECT tokens worth of tool
@@ -207,14 +193,12 @@ export namespace SessionCompaction {
             created: Date.now(),
           },
         })) as MessageV2.Assistant
-        const processor = yield* Effect.promise(() =>
-          SessionProcessor.create({
-            assistantMessage: msg,
-            sessionID: input.sessionID,
-            model,
-            abort: input.abort,
-          }),
-        )
+        const processor = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: input.sessionID,
+          model,
+          abort: input.abort,
+        })
         // Allow plugins to inject context or replace compaction prompt.
         const compacting = yield* plugin.trigger(
           "experimental.session.compacting",
@@ -253,24 +237,22 @@ When constructing the summary, try to stick to this template:
         const msgs = structuredClone(messages)
         yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
         const modelMessages = yield* Effect.promise(() => MessageV2.toModelMessages(msgs, model, { stripMedia: true }))
-        const result = yield* Effect.promise(() =>
-          processor.process({
-            user: userMessage,
-            agent,
-            abort: input.abort,
-            sessionID: input.sessionID,
-            tools: {},
-            system: [],
-            messages: [
-              ...modelMessages,
-              {
-                role: "user",
-                content: [{ type: "text", text: prompt }],
-              },
-            ],
-            model,
-          }),
-        )
+        const result = yield* processor.process({
+          user: userMessage,
+          agent,
+          abort: input.abort,
+          sessionID: input.sessionID,
+          tools: {},
+          system: [],
+          messages: [
+            ...modelMessages,
+            {
+              role: "user",
+              content: [{ type: "text", text: prompt }],
+            },
+          ],
+          model,
+        })
 
         if (result === "compact") {
           processor.message.error = new MessageV2.ContextOverflowError({
@@ -385,6 +367,7 @@ When constructing the summary, try to stick to this template:
     Effect.sync(() =>
       layer.pipe(
         Layer.provide(Session.defaultLayer),
+        Layer.provide(SessionProcessor.defaultLayer),
         Layer.provide(Agent.defaultLayer),
         Layer.provide(Plugin.defaultLayer),
         Layer.provide(Bus.layer),
@@ -393,7 +376,7 @@ When constructing the summary, try to stick to this template:
     ),
   )
 
-  const { runPromise } = makeRuntime(Service, defaultLayer)
+  const { runPromise, runPromiseExit } = makeRuntime(Service, defaultLayer)
 
   export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
     return runPromise((svc) => svc.isOverflow(input))
@@ -411,7 +394,12 @@ When constructing the summary, try to stick to this template:
     auto: boolean
     overflow?: boolean
   }) {
-    return runPromise((svc) => svc.process(input))
+    const exit = await runPromiseExit((svc) => svc.process(input), { signal: input.abort })
+    if (Exit.isFailure(exit)) {
+      if (Cause.hasInterrupts(exit.cause) && input.abort.aborted) return "stop"
+      throw Cause.squash(exit.cause)
+    }
+    return exit.value
   }
 
   export const create = fn(

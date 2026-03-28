@@ -11,9 +11,9 @@ import { Log } from "@/util/log"
 import { Session } from "."
 import { LLM } from "./llm"
 import { MessageV2 } from "./message-v2"
+import { isOverflow } from "./overflow"
 import { PartID } from "./schema"
 import type { SessionID } from "./schema"
-import { SessionCompaction } from "./compaction"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
@@ -25,6 +25,8 @@ export namespace SessionProcessor {
   const log = Log.create({ service: "session.processor" })
 
   export type Result = "compact" | "stop" | "continue"
+
+  export type Event = LLM.Event
 
   export interface Handle {
     readonly message: MessageV2.Assistant
@@ -59,8 +61,7 @@ export namespace SessionProcessor {
     reasoningMap: Record<string, MessageV2.ReasoningPart>
   }
 
-  type StreamResult = Awaited<ReturnType<typeof LLM.stream>>
-  type StreamEvent = StreamResult["fullStream"] extends AsyncIterable<infer T> ? T : never
+  type StreamEvent = Event
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/SessionProcessor") {}
 
@@ -72,6 +73,7 @@ export namespace SessionProcessor {
     | Bus.Service
     | Snapshot.Service
     | Agent.Service
+    | LLM.Service
     | Permission.Service
     | Plugin.Service
     | SessionStatus.Service
@@ -83,6 +85,7 @@ export namespace SessionProcessor {
       const bus = yield* Bus.Service
       const snapshot = yield* Snapshot.Service
       const agents = yield* Agent.Service
+      const llm = yield* LLM.Service
       const permission = yield* Permission.Service
       const plugin = yield* Plugin.Service
       const status = yield* SessionStatus.Service
@@ -292,15 +295,15 @@ export namespace SessionProcessor {
                 }
                 ctx.snapshot = undefined
               }
-              yield* Effect.sync(() => {
-                void SessionSummary.summarize({
+              yield* Effect.promise(() =>
+                SessionSummary.summarize({
                   sessionID: ctx.sessionID,
                   messageID: ctx.assistantMessage.parentID,
-                })
-              })
+                }),
+              ).pipe(Effect.ignoreCause({ log: true, message: "session summary failed" }), Effect.forkDetach)
               if (
                 !ctx.assistantMessage.summary &&
-                (yield* Effect.promise(() => SessionCompaction.isOverflow({ tokens: usage.tokens, model: ctx.model })))
+                isOverflow({ cfg: yield* config.get(), tokens: usage.tokens, model: ctx.model })
               ) {
                 ctx.needsCompaction = true
               }
@@ -416,29 +419,36 @@ export namespace SessionProcessor {
           yield* Effect.gen(function* () {
             ctx.currentText = undefined
             ctx.reasoningMap = {}
-            const stream = yield* Effect.promise(() => LLM.stream(streamInput))
+            const stream = llm.stream(streamInput)
 
-            yield* Stream.fromAsyncIterable(stream.fullStream, (e) => e).pipe(
-              Stream.runForEachWhile((event) =>
+            yield* stream.pipe(
+              Stream.tap((event) =>
                 Effect.gen(function* () {
-                  // TODO: Revisit this once more of handleEvent is Effect-native.
-                  // As local synchronous mutation shrinks, this guard and eventually the
-                  // raw AbortSignal plumbing should be removable.
                   input.abort.throwIfAborted()
                   yield* handleEvent(event)
-                  return !ctx.needsCompaction
                 }),
               ),
+              Stream.takeUntil(() => ctx.needsCompaction),
+              Stream.runDrain,
             )
           }).pipe(
-            Effect.catchCause((cause) => Effect.fail(Cause.squash(cause))),
-            Effect.retry(SessionRetry.policy({ sessionID: ctx.sessionID, parse })),
             Effect.catchCauseIf(
               (cause) => !Cause.hasInterruptsOnly(cause),
-              (cause) => halt(Cause.squash(cause)),
+              (cause) => Effect.fail(Cause.squash(cause)),
             ),
-            Effect.catchCause(() => Effect.interrupt),
-            Effect.onInterrupt(() => halt(new DOMException("Aborted", "AbortError"))),
+            Effect.retry(
+              SessionRetry.policy({
+                parse,
+                set: (info) =>
+                  status.set(ctx.sessionID, {
+                    type: "retry",
+                    attempt: info.attempt,
+                    message: info.message,
+                    next: info.next,
+                  }),
+              }),
+            ),
+            Effect.catchCause((cause) => (Cause.hasInterruptsOnly(cause) ? Effect.void : halt(Cause.squash(cause)))),
             Effect.ensuring(cleanup()),
           )
 
@@ -468,6 +478,7 @@ export namespace SessionProcessor {
         Layer.provide(Session.defaultLayer),
         Layer.provide(Snapshot.defaultLayer),
         Layer.provide(Agent.defaultLayer),
+        Layer.provide(LLM.defaultLayer),
         Layer.provide(Permission.layer),
         Layer.provide(Plugin.defaultLayer),
         Layer.provide(SessionStatus.layer.pipe(Layer.provide(Bus.layer))),
