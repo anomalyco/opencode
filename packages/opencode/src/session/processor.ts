@@ -16,7 +16,7 @@ import { Permission } from "@/permission"
 import { Question } from "@/question"
 import { PartID } from "./schema"
 import type { SessionID, MessageID } from "./schema"
-import { Effect } from "effect"
+import { Cause, Effect } from "effect"
 import * as Stream from "effect/Stream"
 
 export namespace SessionProcessor {
@@ -373,12 +373,24 @@ export namespace SessionProcessor {
           abort: input.abort,
           toolcalls,
           shouldBreak,
-          get snapshot() { return snapshot },
-          set snapshot(v) { snapshot = v },
-          get blocked() { return blocked },
-          set blocked(v) { blocked = v },
-          get needsCompaction() { return needsCompaction },
-          set needsCompaction(v) { needsCompaction = v },
+          get snapshot() {
+            return snapshot
+          },
+          set snapshot(v) {
+            snapshot = v
+          },
+          get blocked() {
+            return blocked
+          },
+          set blocked(v) {
+            blocked = v
+          },
+          get needsCompaction() {
+            return needsCompaction
+          },
+          set needsCompaction(v) {
+            needsCompaction = v
+          },
           currentText: undefined,
           reasoningMap: {},
         }
@@ -388,7 +400,7 @@ export namespace SessionProcessor {
           ctx.reasoningMap = {}
           const stream = yield* Effect.promise(() => LLM.stream(streamInput))
 
-          yield* Stream.fromAsyncIterable(stream.fullStream, (e) => e as Error).pipe(
+          yield* Stream.fromAsyncIterable(stream.fullStream, (e) => e).pipe(
             Stream.runForEachWhile((event) =>
               Effect.gen(function* () {
                 input.abort.throwIfAborted()
@@ -399,43 +411,48 @@ export namespace SessionProcessor {
           )
         })
 
-        const loop: Effect.Effect<void> = consumeStream.pipe(
-          Effect.catch((e: unknown) =>
-            Effect.gen(function* () {
-              log.error("process", { error: e, stack: JSON.stringify((e as any)?.stack) })
-              const error = MessageV2.fromError(e, {
-                providerID: input.model.providerID,
-                aborted: input.abort.aborted,
-              })
-              if (MessageV2.ContextOverflowError.isInstance(error)) {
-                needsCompaction = true
-                Bus.publish(Session.Event.Error, { sessionID: input.sessionID, error })
-              } else {
-                const retry = SessionRetry.retryable(error)
-                if (retry !== undefined) {
-                  attempt++
-                  const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
-                  yield* Effect.promise(() =>
-                    SessionStatus.set(input.sessionID, {
-                      type: "retry",
-                      attempt,
-                      message: retry,
-                      next: Date.now() + delay,
-                    }),
-                  )
-                  yield* Effect.promise(() => SessionRetry.sleep(delay, input.abort).catch(() => {}))
-                  yield* loop
-                  return
-                }
-                input.assistantMessage.error = error
-                Bus.publish(Session.Event.Error, {
-                  sessionID: input.assistantMessage.sessionID,
-                  error: input.assistantMessage.error,
-                })
-                yield* Effect.promise(() => SessionStatus.set(input.sessionID, { type: "idle" }))
+        const errorHandler = (e: unknown): Effect.Effect<void> =>
+          Effect.gen(function* () {
+            log.error("process", { error: e, stack: JSON.stringify((e as any)?.stack) })
+            const error = MessageV2.fromError(e, {
+              providerID: input.model.providerID,
+              aborted: input.abort.aborted,
+            })
+            if (MessageV2.ContextOverflowError.isInstance(error)) {
+              needsCompaction = true
+              Bus.publish(Session.Event.Error, { sessionID: input.sessionID, error })
+            } else {
+              const retry = SessionRetry.retryable(error)
+              if (retry !== undefined) {
+                attempt++
+                const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
+                yield* Effect.promise(() =>
+                  SessionStatus.set(input.sessionID, {
+                    type: "retry",
+                    attempt,
+                    message: retry,
+                    next: Date.now() + delay,
+                  }),
+                )
+                yield* Effect.promise(() => SessionRetry.sleep(delay, input.abort).catch(() => {}))
+                yield* loop
+                return
               }
-            }),
-          ),
+              input.assistantMessage.error = error
+              Bus.publish(Session.Event.Error, {
+                sessionID: input.assistantMessage.sessionID,
+                error: input.assistantMessage.error,
+              })
+              yield* Effect.promise(() => SessionStatus.set(input.sessionID, { type: "idle" }))
+            }
+          })
+
+        const loop: Effect.Effect<void> = consumeStream.pipe(
+          Effect.catchCause((cause) => {
+            const reason = cause.reasons[0]
+            const e = Cause.isDieReason(reason) ? reason.defect : Cause.isFailReason(reason) ? reason.error : cause
+            return errorHandler(e)
+          }),
         )
 
         await Effect.runPromise(loop.pipe(Effect.ensuring(cleanupEffect(ctx))))
