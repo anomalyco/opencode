@@ -3,10 +3,15 @@ import { spawn, type ChildProcess } from "node:child_process"
 import net from "node:net"
 import os from "node:os"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 import fs from "node:fs/promises"
 
 const BINARY_PATH =
-  "/home/jkang/cobuilder-opencode/packages/opencode/dist/opencode-linux-x64/bin/cobuilder"
+  process.env.COBUILDER_BINARY_PATH ??
+  path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../../../opencode/dist/opencode-linux-x64/bin/cobuilder",
+  )
 
 async function waitForPort(host: string, port: number, timeoutMs = 30_000): Promise<void> {
   const deadline = Date.now() + timeoutMs
@@ -47,6 +52,11 @@ async function freePort(): Promise<number> {
  * The binary is launched in headless server mode (`serve`) with a fresh sandbox
  * so it behaves like a brand-new installation.
  */
+// These tests spawn the cobuilder binary directly and require a local build.
+// Skip in CI where the binary is not pre-built.
+test.describe.configure({ mode: "serial" })
+test.skip(!!process.env.CI, "requires a locally built cobuilder binary — not available in CI")
+
 test.describe("cobuilder onboarding UX", () => {
   let proc: ChildProcess | undefined
   let webPort: number

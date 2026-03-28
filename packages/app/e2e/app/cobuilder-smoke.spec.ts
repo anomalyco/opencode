@@ -53,6 +53,11 @@ async function freePort(): Promise<number> {
  * The binary is launched with a temporary sandbox so it doesn't touch real
  * user config. The web UI port is picked dynamically to avoid conflicts.
  */
+// These tests spawn the cobuilder binary directly and require a local build.
+// Skip in CI where the binary is not pre-built.
+test.describe.configure({ mode: "serial" })
+test.skip(!!process.env.CI, "requires a locally built cobuilder binary — not available in CI")
+
 test.describe("cobuilder smoke", () => {
   let proc: ChildProcess | undefined
   let webPort: number
