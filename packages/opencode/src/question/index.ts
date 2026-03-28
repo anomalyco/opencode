@@ -1,15 +1,16 @@
 import { Deferred, Effect, Layer, Schema, ServiceMap } from "effect"
-import { runPromiseInstance } from "@/effect/runtime"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
+import { InstanceState } from "@/effect/instance-state"
+import { makeRuntime } from "@/effect/run-service"
 import { SessionID, MessageID } from "@/session/schema"
 import { Log } from "@/util/log"
 import z from "zod"
 import { QuestionID } from "./schema"
 
-const log = Log.create({ service: "question" })
-
 export namespace Question {
+  const log = Log.create({ service: "question" })
+
   // Schemas
 
   export const Option = z
@@ -86,6 +87,10 @@ export namespace Question {
     deferred: Deferred.Deferred<Answer[], RejectedError>
   }
 
+  interface State {
+    pending: Map<QuestionID, PendingEntry>
+  }
+
   // Service
 
   export interface Interface {
@@ -104,13 +109,31 @@ export namespace Question {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const pending = new Map<QuestionID, PendingEntry>()
+      const state = yield* InstanceState.make<State>(
+        Effect.fn("Question.state")(function* () {
+          const state = {
+            pending: new Map<QuestionID, PendingEntry>(),
+          }
+
+          yield* Effect.addFinalizer(() =>
+            Effect.gen(function* () {
+              for (const item of state.pending.values()) {
+                yield* Deferred.fail(item.deferred, new RejectedError())
+              }
+              state.pending.clear()
+            }),
+          )
+
+          return state
+        }),
+      )
 
       const ask = Effect.fn("Question.ask")(function* (input: {
         sessionID: SessionID
         questions: Info[]
         tool?: { messageID: MessageID; callID: string }
       }) {
+        const pending = (yield* InstanceState.get(state)).pending
         const id = QuestionID.ascending()
         log.info("asking", { id, questions: input.questions.length })
 
@@ -133,6 +156,7 @@ export namespace Question {
       })
 
       const reply = Effect.fn("Question.reply")(function* (input: { requestID: QuestionID; answers: Answer[] }) {
+        const pending = (yield* InstanceState.get(state)).pending
         const existing = pending.get(input.requestID)
         if (!existing) {
           log.warn("reply for unknown request", { requestID: input.requestID })
@@ -149,6 +173,7 @@ export namespace Question {
       })
 
       const reject = Effect.fn("Question.reject")(function* (requestID: QuestionID) {
+        const pending = (yield* InstanceState.get(state)).pending
         const existing = pending.get(requestID)
         if (!existing) {
           log.warn("reject for unknown request", { requestID })
@@ -164,6 +189,7 @@ export namespace Question {
       })
 
       const list = Effect.fn("Question.list")(function* () {
+        const pending = (yield* InstanceState.get(state)).pending
         return Array.from(pending.values(), (x) => x.info)
       })
 
@@ -171,23 +197,25 @@ export namespace Question {
     }),
   )
 
+  const { runPromise } = makeRuntime(Service, layer)
+
   export async function ask(input: {
     sessionID: SessionID
     questions: Info[]
     tool?: { messageID: MessageID; callID: string }
   }): Promise<Answer[]> {
-    return runPromiseInstance(Service.use((svc) => svc.ask(input)))
+    return runPromise((s) => s.ask(input))
   }
 
-  export async function reply(input: { requestID: QuestionID; answers: Answer[] }): Promise<void> {
-    return runPromiseInstance(Service.use((svc) => svc.reply(input)))
+  export async function reply(input: { requestID: QuestionID; answers: Answer[] }) {
+    return runPromise((s) => s.reply(input))
   }
 
-  export async function reject(requestID: QuestionID): Promise<void> {
-    return runPromiseInstance(Service.use((svc) => svc.reject(requestID)))
+  export async function reject(requestID: QuestionID) {
+    return runPromise((s) => s.reject(requestID))
   }
 
-  export async function list(): Promise<Request[]> {
-    return runPromiseInstance(Service.use((svc) => svc.list()))
+  export async function list() {
+    return runPromise((s) => s.list())
   }
 }

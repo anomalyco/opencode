@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/console-function",
-  "version": "1.2.27",
+  "version": "1.3.3",
   "$schema": "https://json.schemastore.org/package.json",
   "private": true,
   "type": "module",
@@ -17,9 +17,9 @@
     "@typescript/native-preview": "catalog:"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "2.0.0",
-    "@ai-sdk/openai": "2.0.2",
-    "@ai-sdk/openai-compatible": "1.0.1",
+    "@ai-sdk/anthropic": "3.0.64",
+    "@ai-sdk/openai": "3.0.48",
+    "@ai-sdk/openai-compatible": "2.0.37",
     "@hono/zod-validator": "catalog:",
     "@opencode-ai/console-core": "workspace:*",
     "@opencode-ai/console-resource": "workspace:*",

@@ -9,6 +9,7 @@ import { BunProc } from "../bun"
 import { Hash } from "../util/hash"
 import { Plugin } from "../plugin"
 import { NamedError } from "@opencode-ai/util/error"
+import { type LanguageModelV3 } from "@ai-sdk/provider"
 import { ModelsDev } from "./models"
 import { Auth } from "../auth"
 import { Env } from "../env"
@@ -28,7 +29,7 @@ import { createVertex } from "@ai-sdk/google-vertex"
 import { createVertexAnthropic } from "@ai-sdk/google-vertex/anthropic"
 import { createOpenAI } from "@ai-sdk/openai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
-import { createOpenRouter, type LanguageModelV2 } from "@openrouter/ai-sdk-provider"
+import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/copilot"
 import { createXai } from "@ai-sdk/xai"
 import { createMistral } from "@ai-sdk/mistral"
@@ -40,7 +41,12 @@ import { createGateway } from "@ai-sdk/gateway"
 import { createTogetherAI } from "@ai-sdk/togetherai"
 import { createPerplexity } from "@ai-sdk/perplexity"
 import { createVercel } from "@ai-sdk/vercel"
-import { createGitLab, VERSION as GITLAB_PROVIDER_VERSION } from "@gitlab/gitlab-ai-provider"
+import {
+  createGitLab,
+  VERSION as GITLAB_PROVIDER_VERSION,
+  isWorkflowModel,
+  discoverWorkflowModels,
+} from "gitlab-ai-provider"
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
@@ -104,7 +110,11 @@ export namespace Provider {
     })
   }
 
-  const BUNDLED_PROVIDERS: Record<string, (options: any) => SDK> = {
+  type BundledSDK = {
+    languageModel(modelId: string): LanguageModelV3
+  }
+
+  const BUNDLED_PROVIDERS: Record<string, (options: any) => BundledSDK> = {
     "@ai-sdk/amazon-bedrock": createAmazonBedrock,
     "@ai-sdk/anthropic": createAnthropic,
     "@ai-sdk/azure": createAzure,
@@ -124,18 +134,19 @@ export namespace Provider {
     "@ai-sdk/togetherai": createTogetherAI,
     "@ai-sdk/perplexity": createPerplexity,
     "@ai-sdk/vercel": createVercel,
-    "@gitlab/gitlab-ai-provider": createGitLab,
-    // @ts-ignore (TODO: kill this code so we dont have to maintain it)
+    "gitlab-ai-provider": createGitLab,
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
   }
 
   type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
   type CustomVarsLoader = (options: Record<string, any>) => Record<string, string>
+  type CustomDiscoverModels = () => Promise<Record<string, Model>>
   type CustomLoader = (provider: Info) => Promise<{
     autoload: boolean
     getModel?: CustomModelLoader
     vars?: CustomVarsLoader
     options?: Record<string, any>
+    discoverModels?: CustomDiscoverModels
   }>
 
   function useLanguageModel(sdk: any) {
@@ -533,27 +544,121 @@ export namespace Provider {
         ...(providerConfig?.options?.aiGatewayHeaders || {}),
       }
 
+      const featureFlags = {
+        duo_agent_platform_agentic_chat: true,
+        duo_agent_platform: true,
+        ...(providerConfig?.options?.featureFlags || {}),
+      }
+
       return {
         autoload: !!apiKey,
         options: {
           instanceUrl,
           apiKey,
           aiGatewayHeaders,
-          featureFlags: {
-            duo_agent_platform_agentic_chat: true,
-            duo_agent_platform: true,
-            ...(providerConfig?.options?.featureFlags || {}),
-          },
+          featureFlags,
         },
-        async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string) {
+        async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string, options?: Record<string, any>) {
+          if (modelID.startsWith("duo-workflow-")) {
+            const workflowRef = options?.workflowRef as string | undefined
+            // Use the static mapping if it exists, otherwise use duo-workflow with selectedModelRef
+            const sdkModelID = isWorkflowModel(modelID) ? modelID : "duo-workflow"
+            const model = sdk.workflowChat(sdkModelID, {
+              featureFlags,
+            })
+            if (workflowRef) {
+              model.selectedModelRef = workflowRef
+            }
+            return model
+          }
           return sdk.agenticChat(modelID, {
             aiGatewayHeaders,
-            featureFlags: {
-              duo_agent_platform_agentic_chat: true,
-              duo_agent_platform: true,
-              ...(providerConfig?.options?.featureFlags || {}),
-            },
+            featureFlags,
           })
+        },
+        async discoverModels(): Promise<Record<string, Model>> {
+          if (!apiKey) {
+            log.info("gitlab model discovery skipped: no apiKey")
+            return {}
+          }
+
+          try {
+            const token = apiKey
+            const getHeaders = (): Record<string, string> =>
+              auth?.type === "api" ? { "PRIVATE-TOKEN": token } : { Authorization: `Bearer ${token}` }
+
+            log.info("gitlab model discovery starting", { instanceUrl })
+            const result = await discoverWorkflowModels(
+              { instanceUrl, getHeaders },
+              { workingDirectory: Instance.directory },
+            )
+
+            if (!result.models.length) {
+              log.info("gitlab model discovery skipped: no models found", {
+                project: result.project
+                  ? {
+                      id: result.project.id,
+                      path: result.project.pathWithNamespace,
+                    }
+                  : null,
+              })
+              return {}
+            }
+
+            const models: Record<string, Model> = {}
+            for (const m of result.models) {
+              if (!input.models[m.id]) {
+                models[m.id] = {
+                  id: ModelID.make(m.id),
+                  providerID: ProviderID.make("gitlab"),
+                  name: `Agent Platform (${m.name})`,
+                  family: "",
+                  api: {
+                    id: m.id,
+                    url: instanceUrl,
+                    npm: "gitlab-ai-provider",
+                  },
+                  status: "active",
+                  headers: {},
+                  options: { workflowRef: m.ref },
+                  cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+                  limit: { context: m.context, output: m.output },
+                  capabilities: {
+                    temperature: false,
+                    reasoning: true,
+                    attachment: true,
+                    toolcall: true,
+                    input: {
+                      text: true,
+                      audio: false,
+                      image: true,
+                      video: false,
+                      pdf: true,
+                    },
+                    output: {
+                      text: true,
+                      audio: false,
+                      image: false,
+                      video: false,
+                      pdf: false,
+                    },
+                    interleaved: false,
+                  },
+                  release_date: "",
+                  variants: {},
+                }
+              }
+            }
+
+            log.info("gitlab model discovery complete", {
+              count: Object.keys(models).length,
+              models: Object.keys(models),
+            })
+            return models
+          } catch (e) {
+            log.warn("gitlab model discovery failed", { error: e })
+            return {}
+          }
         },
       }
     },
@@ -846,14 +951,17 @@ export namespace Provider {
     }
 
     const providers: Record<ProviderID, Info> = {} as Record<ProviderID, Info>
-    const languages = new Map<string, LanguageModelV2>()
+    const languages = new Map<string, LanguageModelV3>()
     const modelLoaders: {
       [providerID: string]: CustomModelLoader
     } = {}
     const varsLoaders: {
       [providerID: string]: CustomVarsLoader
     } = {}
-    const sdk = new Map<string, SDK>()
+    const sdk = new Map<string, BundledSDK>()
+    const discoveryLoaders: {
+      [providerID: string]: CustomDiscoverModels
+    } = {}
 
     log.info("init")
 
@@ -1009,6 +1117,7 @@ export namespace Provider {
       if (result && (result.autoload || providers[providerID])) {
         if (result.getModel) modelLoaders[providerID] = result.getModel
         if (result.vars) varsLoaders[providerID] = result.vars
+        if (result.discoverModels) discoveryLoaders[providerID] = result.discoverModels
         const opts = result.options ?? {}
         const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
         mergeProvider(providerID, patch)
@@ -1068,6 +1177,18 @@ export namespace Provider {
       }
 
       log.info("found", { providerID })
+    }
+
+    const gitlab = ProviderID.make("gitlab")
+    if (discoveryLoaders[gitlab] && providers[gitlab]) {
+      await (async () => {
+        const discovered = await discoveryLoaders[gitlab]()
+        for (const [modelID, model] of Object.entries(discovered)) {
+          if (!providers[gitlab].models[modelID]) {
+            providers[gitlab].models[modelID] = model
+          }
+        }
+      })().catch((e) => log.warn("state discovery error", { id: "gitlab", error: e }))
     }
 
     return {
@@ -1132,7 +1253,13 @@ export namespace Provider {
           ...model.headers,
         }
 
-      const key = Hash.fast(JSON.stringify({ providerID: model.providerID, npm: model.api.npm, options }))
+      const key = Hash.fast(
+        JSON.stringify({
+          providerID: model.providerID,
+          npm: model.api.npm,
+          options,
+        }),
+      )
       const existing = s.sdk.get(key)
       if (existing) return existing
 
@@ -1185,7 +1312,10 @@ export namespace Provider {
 
       const bundledFn = BUNDLED_PROVIDERS[model.api.npm]
       if (bundledFn) {
-        log.info("using bundled provider", { providerID: model.providerID, pkg: model.api.npm })
+        log.info("using bundled provider", {
+          providerID: model.providerID,
+          pkg: model.api.npm,
+        })
         const loaded = bundledFn({
           name: model.providerID,
           ...options,
@@ -1225,7 +1355,10 @@ export namespace Provider {
     const provider = s.providers[providerID]
     if (!provider) {
       const availableProviders = Object.keys(s.providers)
-      const matches = fuzzysort.go(providerID, availableProviders, { limit: 3, threshold: -10000 })
+      const matches = fuzzysort.go(providerID, availableProviders, {
+        limit: 3,
+        threshold: -10000,
+      })
       const suggestions = matches.map((m) => m.target)
       throw new ModelNotFoundError({ providerID, modelID, suggestions })
     }
@@ -1233,14 +1366,17 @@ export namespace Provider {
     const info = provider.models[modelID]
     if (!info) {
       const availableModels = Object.keys(provider.models)
-      const matches = fuzzysort.go(modelID, availableModels, { limit: 3, threshold: -10000 })
+      const matches = fuzzysort.go(modelID, availableModels, {
+        limit: 3,
+        threshold: -10000,
+      })
       const suggestions = matches.map((m) => m.target)
       throw new ModelNotFoundError({ providerID, modelID, suggestions })
     }
     return info
   }
 
-  export async function getLanguage(model: Model): Promise<LanguageModelV2> {
+  export async function getLanguage(model: Model): Promise<LanguageModelV3> {
     const s = await state()
     const key = `${model.providerID}/${model.id}`
     if (s.models.has(key)) return s.models.get(key)!
@@ -1250,7 +1386,10 @@ export namespace Provider {
 
     try {
       const language = s.modelLoaders[model.providerID]
-        ? await s.modelLoaders[model.providerID](sdk, model.api.id, provider.options)
+        ? await s.modelLoaders[model.providerID](sdk, model.api.id, {
+            ...provider.options,
+            ...model.options,
+          })
         : sdk.languageModel(model.api.id)
       s.models.set(key, language)
       return language
@@ -1357,9 +1496,9 @@ export namespace Provider {
     if (cfg.model) return parseModel(cfg.model)
 
     const providers = await list()
-    const recent = (await Filesystem.readJson<{ recent?: { providerID: ProviderID; modelID: ModelID }[] }>(
-      path.join(Global.Path.state, "model.json"),
-    )
+    const recent = (await Filesystem.readJson<{
+      recent?: { providerID: ProviderID; modelID: ModelID }[]
+    }>(path.join(Global.Path.state, "model.json"))
       .then((x) => (Array.isArray(x.recent) ? x.recent : []))
       .catch(() => [])) as { providerID: ProviderID; modelID: ModelID }[]
     for (const entry of recent) {

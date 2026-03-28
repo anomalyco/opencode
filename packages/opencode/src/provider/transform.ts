@@ -25,8 +25,9 @@ export namespace ProviderTransform {
     switch (npm) {
       case "@ai-sdk/github-copilot":
         return "copilot"
-      case "@ai-sdk/openai":
       case "@ai-sdk/azure":
+        return "azure"
+      case "@ai-sdk/openai":
         return "openai"
       case "@ai-sdk/amazon-bedrock":
         return "bedrock"
@@ -34,6 +35,7 @@ export namespace ProviderTransform {
       case "@ai-sdk/google-vertex/anthropic":
         return "anthropic"
       case "@ai-sdk/google-vertex":
+        return "vertex"
       case "@ai-sdk/google":
         return "google"
       case "@ai-sdk/gateway":
@@ -72,17 +74,29 @@ export namespace ProviderTransform {
     }
 
     if (model.api.id.includes("claude")) {
+      const scrub = (id: string) => id.replace(/[^a-zA-Z0-9_-]/g, "_")
       return msgs.map((msg) => {
-        if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
-          msg.content = msg.content.map((part) => {
-            if ((part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part) {
-              return {
-                ...part,
-                toolCallId: part.toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_"),
+        if (msg.role === "assistant" && Array.isArray(msg.content)) {
+          return {
+            ...msg,
+            content: msg.content.map((part) => {
+              if (part.type === "tool-call" || part.type === "tool-result") {
+                return { ...part, toolCallId: scrub(part.toolCallId) }
               }
-            }
-            return part
-          })
+              return part
+            }),
+          }
+        }
+        if (msg.role === "tool" && Array.isArray(msg.content)) {
+          return {
+            ...msg,
+            content: msg.content.map((part) => {
+              if (part.type === "tool-result") {
+                return { ...part, toolCallId: scrub(part.toolCallId) }
+              }
+              return part
+            }),
+          }
         }
         return msg
       })
@@ -92,29 +106,33 @@ export namespace ProviderTransform {
       model.api.id.toLowerCase().includes("mistral") ||
       model.api.id.toLocaleLowerCase().includes("devstral")
     ) {
+      const scrub = (id: string) => {
+        return id
+          .replace(/[^a-zA-Z0-9]/g, "") // Remove non-alphanumeric characters
+          .substring(0, 9) // Take first 9 characters
+          .padEnd(9, "0") // Pad with zeros if less than 9 characters
+      }
       const result: ModelMessage[] = []
       for (let i = 0; i < msgs.length; i++) {
         const msg = msgs[i]
         const nextMsg = msgs[i + 1]
 
-        if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
+        if (msg.role === "assistant" && Array.isArray(msg.content)) {
           msg.content = msg.content.map((part) => {
-            if ((part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part) {
-              // Mistral requires alphanumeric tool call IDs with exactly 9 characters
-              const normalizedId = part.toolCallId
-                .replace(/[^a-zA-Z0-9]/g, "") // Remove non-alphanumeric characters
-                .substring(0, 9) // Take first 9 characters
-                .padEnd(9, "0") // Pad with zeros if less than 9 characters
-
-              return {
-                ...part,
-                toolCallId: normalizedId,
-              }
+            if (part.type === "tool-call" || part.type === "tool-result") {
+              return { ...part, toolCallId: scrub(part.toolCallId) }
             }
             return part
           })
         }
-
+        if (msg.role === "tool" && Array.isArray(msg.content)) {
+          msg.content = msg.content.map((part) => {
+            if (part.type === "tool-result") {
+              return { ...part, toolCallId: scrub(part.toolCallId) }
+            }
+            return part
+          })
+        }
         result.push(msg)
 
         // Fix message sequence: tool messages cannot be followed by user messages
@@ -194,12 +212,20 @@ export namespace ProviderTransform {
     }
 
     for (const msg of unique([...system, ...final])) {
-      const useMessageLevelOptions = model.providerID === "anthropic" || model.providerID.includes("bedrock")
+      const useMessageLevelOptions =
+        model.providerID === "anthropic" ||
+        model.providerID.includes("bedrock") ||
+        model.api.npm === "@ai-sdk/amazon-bedrock"
       const shouldUseContentOptions = !useMessageLevelOptions && Array.isArray(msg.content) && msg.content.length > 0
 
       if (shouldUseContentOptions) {
         const lastContent = msg.content[msg.content.length - 1]
-        if (lastContent && typeof lastContent === "object") {
+        if (
+          lastContent &&
+          typeof lastContent === "object" &&
+          lastContent.type !== "tool-approval-request" &&
+          lastContent.type !== "tool-approval-response"
+        ) {
           lastContent.providerOptions = mergeDeep(lastContent.providerOptions ?? {}, providerOptions)
           continue
         }
@@ -281,7 +307,12 @@ export namespace ProviderTransform {
         return {
           ...msg,
           providerOptions: remap(msg.providerOptions),
-          content: msg.content.map((part) => ({ ...part, providerOptions: remap(part.providerOptions) })),
+          content: msg.content.map((part) => {
+            if (part.type === "tool-approval-request" || part.type === "tool-approval-response") {
+              return { ...part }
+            }
+            return { ...part, providerOptions: remap(part.providerOptions) }
+          }),
         } as typeof msg
       })
     }
@@ -755,11 +786,13 @@ export namespace ProviderTransform {
     }
 
     if (input.model.api.npm === "@ai-sdk/google" || input.model.api.npm === "@ai-sdk/google-vertex") {
-      result["thinkingConfig"] = {
-        includeThoughts: true,
-      }
-      if (input.model.api.id.includes("gemini-3")) {
-        result["thinkingConfig"]["thinkingLevel"] = "high"
+      if (input.model.capabilities.reasoning) {
+        result["thinkingConfig"] = {
+          includeThoughts: true,
+        }
+        if (input.model.api.id.includes("gemini-3")) {
+          result["thinkingConfig"]["thinkingLevel"] = "high"
+        }
       }
     }
 

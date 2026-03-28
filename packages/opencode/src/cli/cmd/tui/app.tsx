@@ -1,15 +1,30 @@
-import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
+import { render, TimeToFirstDraw, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { Selection } from "@tui/util/selection"
-import { MouseButton, TextAttributes } from "@opentui/core"
+import { createCliRenderer, MouseButton, type CliRendererConfig } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
-import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGuard } from "./win32"
-import { Installation } from "@/installation"
+import {
+  Switch,
+  Match,
+  createEffect,
+  createMemo,
+  ErrorBoundary,
+  createSignal,
+  onMount,
+  batch,
+  Show,
+  on,
+  onCleanup,
+} from "solid-js"
+import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { Flag } from "@/flag/flag"
+import semver from "semver"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
+import { ErrorComponent } from "@tui/component/error-component"
+import { PluginRouteMissing } from "@tui/component/plugin-route-missing"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
+import { StartupLoading } from "@tui/component/startup-loading"
 import { SyncProvider, useSync } from "@tui/context/sync"
 import { LocalProvider, useLocal } from "@tui/context/local"
 import { DialogModel, useConnected } from "@tui/component/dialog-model"
@@ -21,7 +36,7 @@ import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { DialogWorkspaceList } from "@tui/component/dialog-workspace-list"
-import { KeybindProvider } from "@tui/context/keybind"
+import { KeybindProvider, useKeybind } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
@@ -29,6 +44,7 @@ import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
+import { DialogConfirm } from "./ui/dialog-confirm"
 import { ToastProvider, useToast } from "./ui/toast"
 import { ExitProvider, useExit } from "./context/exit"
 import { Session as SessionApi } from "@/session"
@@ -39,8 +55,10 @@ import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
-import { TuiConfigProvider } from "./context/tui-config"
+import { TuiConfigProvider, useTuiConfig } from "./context/tui-config"
 import { TuiConfig } from "@/config/tui"
+import { createTuiApi, TuiPluginRuntime, type RouteMap } from "./plugin"
+import { FormatError, FormatUnknownError } from "@/cli/error"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -103,11 +121,49 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
 }
 
 import type { EventSource } from "./context/sdk"
+import { DialogVariant } from "./component/dialog-variant"
+
+function rendererConfig(_config: TuiConfig.Info): CliRendererConfig {
+  return {
+    targetFps: 60,
+    gatherStats: false,
+    exitOnCtrlC: false,
+    useKittyKeyboard: { events: process.platform === "win32" },
+    autoFocus: false,
+    openConsoleOnError: false,
+    consoleOptions: {
+      keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
+      onCopySelection: (text) => {
+        Clipboard.copy(text).catch((error) => {
+          console.error(`Failed to copy console selection to clipboard: ${error}`)
+        })
+      },
+    },
+  }
+}
+
+function errorMessage(error: unknown) {
+  const formatted = FormatError(error)
+  if (formatted !== undefined) return formatted
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "data" in error &&
+    typeof error.data === "object" &&
+    error.data !== null &&
+    "message" in error.data &&
+    typeof error.data.message === "string"
+  ) {
+    return error.data.message
+  }
+  return FormatUnknownError(error)
+}
 
 export function tui(input: {
   url: string
   args: Args
   config: TuiConfig.Info
+  onSnapshot?: () => Promise<string[]>
   directory?: string
   fetch?: typeof fetch
   headers?: RequestInit["headers"]
@@ -129,77 +185,68 @@ export function tui(input: {
       resolve()
     }
 
-    render(
-      () => {
-        return (
-          <ErrorBoundary
-            fallback={(error, reset) => <ErrorComponent error={error} reset={reset} onExit={onExit} mode={mode} />}
-          >
-            <ArgsProvider {...input.args}>
-              <ExitProvider onExit={onExit}>
-                <KVProvider>
-                  <ToastProvider>
-                    <RouteProvider>
-                      <TuiConfigProvider config={input.config}>
-                        <SDKProvider
-                          url={input.url}
-                          directory={input.directory}
-                          fetch={input.fetch}
-                          headers={input.headers}
-                          events={input.events}
-                        >
-                          <SyncProvider>
-                            <ThemeProvider mode={mode}>
-                              <LocalProvider>
-                                <KeybindProvider>
-                                  <PromptStashProvider>
-                                    <DialogProvider>
-                                      <CommandProvider>
-                                        <FrecencyProvider>
-                                          <PromptHistoryProvider>
-                                            <PromptRefProvider>
-                                              <App />
-                                            </PromptRefProvider>
-                                          </PromptHistoryProvider>
-                                        </FrecencyProvider>
-                                      </CommandProvider>
-                                    </DialogProvider>
-                                  </PromptStashProvider>
-                                </KeybindProvider>
-                              </LocalProvider>
-                            </ThemeProvider>
-                          </SyncProvider>
-                        </SDKProvider>
-                      </TuiConfigProvider>
-                    </RouteProvider>
-                  </ToastProvider>
-                </KVProvider>
-              </ExitProvider>
-            </ArgsProvider>
-          </ErrorBoundary>
-        )
-      },
-      {
-        targetFps: 60,
-        gatherStats: false,
-        exitOnCtrlC: false,
-        useKittyKeyboard: {},
-        autoFocus: false,
-        openConsoleOnError: false,
-        consoleOptions: {
-          keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
-          onCopySelection: (text) => {
-            Clipboard.copy(text).catch((error) => {
-              console.error(`Failed to copy console selection to clipboard: ${error}`)
-            })
-          },
-        },
-      },
-    )
+    const onBeforeExit = async () => {
+      await TuiPluginRuntime.dispose()
+    }
+
+    const renderer = await createCliRenderer(rendererConfig(input.config))
+
+    await render(() => {
+      return (
+        <ErrorBoundary
+          fallback={(error, reset) => (
+            <ErrorComponent error={error} reset={reset} onBeforeExit={onBeforeExit} onExit={onExit} mode={mode} />
+          )}
+        >
+          <ArgsProvider {...input.args}>
+            <ExitProvider onBeforeExit={onBeforeExit} onExit={onExit}>
+              <KVProvider>
+                <ToastProvider>
+                  <RouteProvider>
+                    <TuiConfigProvider config={input.config}>
+                      <SDKProvider
+                        url={input.url}
+                        directory={input.directory}
+                        fetch={input.fetch}
+                        headers={input.headers}
+                        events={input.events}
+                      >
+                        <SyncProvider>
+                          <ThemeProvider mode={mode}>
+                            <LocalProvider>
+                              <KeybindProvider>
+                                <PromptStashProvider>
+                                  <DialogProvider>
+                                    <CommandProvider>
+                                      <FrecencyProvider>
+                                        <PromptHistoryProvider>
+                                          <PromptRefProvider>
+                                            <App onSnapshot={input.onSnapshot} />
+                                          </PromptRefProvider>
+                                        </PromptHistoryProvider>
+                                      </FrecencyProvider>
+                                    </CommandProvider>
+                                  </DialogProvider>
+                                </PromptStashProvider>
+                              </KeybindProvider>
+                            </LocalProvider>
+                          </ThemeProvider>
+                        </SyncProvider>
+                      </SDKProvider>
+                    </TuiConfigProvider>
+                  </RouteProvider>
+                </ToastProvider>
+              </KVProvider>
+            </ExitProvider>
+          </ArgsProvider>
+        </ErrorBoundary>
+      )
+    }, renderer)
   })
 }
 
-function App() {
+function App(props: { onSnapshot?: () => Promise<string[]> }) {
+  const tuiConfig = useTuiConfig()
   const route = useRoute()
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
@@ -208,12 +255,47 @@ function App() {
   const local = useLocal()
   const kv = useKV()
   const command = useCommandDialog()
+  const keybind = useKeybind()
   const sdk = useSDK()
   const toast = useToast()
-  const { theme, mode, setMode } = useTheme()
+  const themeState = useTheme()
+  const { theme, mode, setMode, locked, lock, unlock } = themeState
   const sync = useSync()
   const exit = useExit()
   const promptRef = usePromptRef()
+  const routes: RouteMap = new Map()
+  const [routeRev, setRouteRev] = createSignal(0)
+  const routeView = (name: string) => {
+    routeRev()
+    return routes.get(name)?.at(-1)?.render
+  }
+
+  const api = createTuiApi({
+    command,
+    tuiConfig,
+    dialog,
+    keybind,
+    kv,
+    route,
+    routes,
+    bump: () => setRouteRev((x) => x + 1),
+    sdk,
+    sync,
+    theme: themeState,
+    toast,
+    renderer,
+  })
+  onCleanup(() => {
+    api.dispose()
+  })
+  const [ready, setReady] = createSignal(false)
+  TuiPluginRuntime.init(api)
+    .catch((error) => {
+      console.error("Failed to load TUI plugins", error)
+    })
+    .finally(() => {
+      setReady(true)
+    })
 
   useKeyboard((evt) => {
     if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
@@ -256,10 +338,6 @@ function App() {
   }
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
 
-  createEffect(() => {
-    console.log(JSON.stringify(route.data))
-  })
-
   // Update terminal window title based on current route and session
   createEffect(() => {
     if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
@@ -276,9 +354,13 @@ function App() {
         return
       }
 
-      // Truncate title to 40 chars max
       const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
       renderer.setTerminalTitle(`OC | ${title}`)
+      return
+    }
+
+    if (route.data.type === "plugin") {
+      renderer.setTerminalTitle(`OC | ${route.data.id}`)
     }
   })
 
@@ -499,13 +581,12 @@ function App() {
       },
     },
     {
-      title: "Variant cycle",
+      title: "Switch model variant",
       value: "variant.cycle",
       keybind: "variant_cycle",
       category: "Agent",
-      hidden: true,
       onSelect: () => {
-        local.model.variant.cycle()
+        dialog.replace(() => <DialogVariant />)
       },
     },
     {
@@ -555,10 +636,20 @@ function App() {
       category: "System",
     },
     {
-      title: "Toggle appearance",
+      title: "Toggle Theme Mode",
       value: "theme.switch_mode",
       onSelect: (dialog) => {
         setMode(mode() === "dark" ? "light" : "dark")
+        dialog.clear()
+      },
+      category: "System",
+    },
+    {
+      title: locked() ? "Unlock Theme Mode" : "Lock Theme Mode",
+      value: "theme.mode.lock",
+      onSelect: (dialog) => {
+        if (locked()) unlock()
+        else lock()
         dialog.clear()
       },
       category: "System",
@@ -615,11 +706,11 @@ function App() {
       title: "Write heap snapshot",
       category: "System",
       value: "app.heap_snapshot",
-      onSelect: (dialog) => {
-        const path = writeHeapSnapshot()
+      onSelect: async (dialog) => {
+        const files = await props.onSnapshot?.()
         toast.show({
           variant: "info",
-          message: `Heap snapshot written to ${path}`,
+          message: `Heap snapshot written to ${files?.join(", ")}`,
           duration: 5000,
         })
         dialog.clear()
@@ -697,7 +788,7 @@ function App() {
     })
   })
 
-  sdk.event.on(SessionApi.Event.Deleted.type, (evt) => {
+  sdk.event.on("session.deleted", (evt) => {
     if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
       route.navigate({ type: "home" })
       toast.show({
@@ -707,20 +798,10 @@ function App() {
     }
   })
 
-  sdk.event.on(SessionApi.Event.Error.type, (evt) => {
+  sdk.event.on("session.error", (evt) => {
     const error = evt.properties.error
     if (error && typeof error === "object" && error.name === "MessageAbortedError") return
-    const message = (() => {
-      if (!error) return "An error occurred"
-
-      if (typeof error === "object") {
-        const data = error.data
-        if ("message" in data && typeof data.message === "string") {
-          return data.message
-        }
-      }
-      return String(error)
-    })()
+    const message = errorMessage(error)
 
     toast.show({
       variant: "error",
@@ -729,13 +810,59 @@ function App() {
     })
   })
 
-  sdk.event.on(Installation.Event.UpdateAvailable.type, (evt) => {
+  sdk.event.on("installation.update-available", async (evt) => {
+    const version = evt.properties.version
+
+    const skipped = kv.get("skipped_version")
+    if (skipped && !semver.gt(version, skipped)) return
+
+    const choice = await DialogConfirm.show(
+      dialog,
+      `Update Available`,
+      `A new release v${version} is available. Would you like to update now?`,
+      "skip",
+    )
+
+    if (choice === false) {
+      kv.set("skipped_version", version)
+      return
+    }
+
+    if (choice !== true) return
+
     toast.show({
       variant: "info",
-      title: "Update Available",
-      message: `OpenCode v${evt.properties.version} is available. Run 'opencode upgrade' to update manually.`,
-      duration: 10000,
+      message: `Updating to v${version}...`,
+      duration: 30000,
     })
+
+    const result = await sdk.client.global.upgrade({ target: version })
+
+    if (result.error || !result.data?.success) {
+      toast.show({
+        variant: "error",
+        title: "Update Failed",
+        message: "Update failed",
+        duration: 10000,
+      })
+      return
+    }
+
+    await DialogAlert.show(
+      dialog,
+      "Update Complete",
+      `Successfully updated to OpenCode v${result.data.version}. Please restart the application.`,
+    )
+
+    exit()
+  })
+
+  const plugin = createMemo(() => {
+    if (!ready()) return
+    if (route.data.type !== "plugin") return
+    const render = routeView(route.data.id)
+    if (!render) return <PluginRouteMissing id={route.data.id} onHome={() => route.navigate({ type: "home" })} />
+    return render({ params: route.data.data })
   })
 
   return (
@@ -753,97 +880,22 @@ function App() {
       }}
       onMouseUp={Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? undefined : () => Selection.copy(renderer, toast)}
     >
-      <Switch>
-        <Match when={route.data.type === "home"}>
-          <Home />
-        </Match>
-        <Match when={route.data.type === "session"}>
-          <Session />
-        </Match>
-      </Switch>
-    </box>
-  )
-}
-
-function ErrorComponent(props: {
-  error: Error
-  reset: () => void
-  onExit: () => Promise<void>
-  mode?: "dark" | "light"
-}) {
-  const term = useTerminalDimensions()
-  const renderer = useRenderer()
-
-  const handleExit = async () => {
-    renderer.setTerminalTitle("")
-    renderer.destroy()
-    win32FlushInputBuffer()
-    await props.onExit()
-  }
-
-  useKeyboard((evt) => {
-    if (evt.ctrl && evt.name === "c") {
-      handleExit()
-    }
-  })
-  const [copied, setCopied] = createSignal(false)
-
-  const issueURL = new URL("https://github.com/anomalyco/opencode/issues/new?template=bug-report.yml")
-
-  // Choose safe fallback colors per mode since theme context may not be available
-  const isLight = props.mode === "light"
-  const colors = {
-    bg: isLight ? "#ffffff" : "#0a0a0a",
-    text: isLight ? "#1a1a1a" : "#eeeeee",
-    muted: isLight ? "#8a8a8a" : "#808080",
-    primary: isLight ? "#3b7dd8" : "#fab283",
-  }
-
-  if (props.error.message) {
-    issueURL.searchParams.set("title", `opentui: fatal: ${props.error.message}`)
-  }
-
-  if (props.error.stack) {
-    issueURL.searchParams.set(
-      "description",
-      "```\n" + props.error.stack.substring(0, 6000 - issueURL.toString().length) + "...\n```",
-    )
-  }
-
-  issueURL.searchParams.set("opencode-version", Installation.VERSION)
-
-  const copyIssueURL = () => {
-    Clipboard.copy(issueURL.toString()).then(() => {
-      setCopied(true)
-    })
-  }
-
-  return (
-    <box flexDirection="column" gap={1} backgroundColor={colors.bg}>
-      <box flexDirection="row" gap={1} alignItems="center">
-        <text attributes={TextAttributes.BOLD} fg={colors.text}>
-          Please report an issue.
-        </text>
-        <box onMouseUp={copyIssueURL} backgroundColor={colors.primary} padding={1}>
-          <text attributes={TextAttributes.BOLD} fg={colors.bg}>
-            Copy issue URL (exception info pre-filled)
-          </text>
-        </box>
-        {copied() && <text fg={colors.muted}>Successfully copied</text>}
-      </box>
-      <box flexDirection="row" gap={2} alignItems="center">
-        <text fg={colors.text}>A fatal error occurred!</text>
-        <box onMouseUp={props.reset} backgroundColor={colors.primary} padding={1}>
-          <text fg={colors.bg}>Reset TUI</text>
-        </box>
-        <box onMouseUp={handleExit} backgroundColor={colors.primary} padding={1}>
-          <text fg={colors.bg}>Exit</text>
-        </box>
-      </box>
-      <scrollbox height={Math.floor(term().height * 0.7)}>
-        <text fg={colors.muted}>{props.error.stack}</text>
-      </scrollbox>
-      <text fg={colors.text}>{props.error.message}</text>
+      <Show when={Flag.OPENCODE_SHOW_TTFD}>
+        <TimeToFirstDraw />
+      </Show>
+      <Show when={ready()}>
+        <Switch>
+          <Match when={route.data.type === "home"}>
+            <Home />
+          </Match>
+          <Match when={route.data.type === "session"}>
+            <Session />
+          </Match>
+        </Switch>
+      </Show>
+      {plugin()}
+      <TuiPluginRuntime.Slot name="app" />
+      <StartupLoading ready={ready} />
     </box>
   )
 }

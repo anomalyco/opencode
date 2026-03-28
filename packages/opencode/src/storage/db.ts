@@ -27,12 +27,20 @@ export const NotFoundError = NamedError.create(
 const log = Log.create({ service: "db" })
 
 export namespace Database {
-  export const Path = iife(() => {
+  export function getChannelPath() {
     const channel = Installation.CHANNEL
     if (["latest", "beta"].includes(channel) || Flag.OPENCODE_DISABLE_CHANNEL_DB)
       return path.join(Global.Path.data, "opencode.db")
     const safe = channel.replace(/[^a-zA-Z0-9._-]/g, "-")
     return path.join(Global.Path.data, `opencode-${safe}.db`)
+  }
+
+  export const Path = iife(() => {
+    if (Flag.OPENCODE_DB) {
+      if (Flag.OPENCODE_DB === ":memory:" || path.isAbsolute(Flag.OPENCODE_DB)) return Flag.OPENCODE_DB
+      return path.join(Global.Path.data, Flag.OPENCODE_DB)
+    }
+    return getChannelPath()
   })
 
   export type Transaction = SQLiteTransaction<"sync", void>
@@ -141,17 +149,27 @@ export namespace Database {
     }
   }
 
-  export function transaction<T>(callback: (tx: TxOrDb) => T): T {
+  type NotPromise<T> = T extends Promise<any> ? never : T
+
+  export function transaction<T>(
+    callback: (tx: TxOrDb) => NotPromise<T>,
+    options?: {
+      behavior?: "deferred" | "immediate" | "exclusive"
+    },
+  ): NotPromise<T> {
     try {
       return callback(ctx.use().tx)
     } catch (err) {
       if (err instanceof Context.NotFound) {
         const effects: (() => void | Promise<void>)[] = []
-        const result = (Client().transaction as any)((tx: TxOrDb) => {
-          return ctx.provide({ tx, effects }, () => callback(tx))
-        })
+        const result = Client().transaction(
+          (tx: TxOrDb) => {
+            return ctx.provide({ tx, effects }, () => callback(tx))
+          },
+          { behavior: options?.behavior },
+        )
         for (const effect of effects) effect()
-        return result
+        return result as NotPromise<T>
       }
       throw err
     }
