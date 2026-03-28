@@ -71,9 +71,18 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           if (found) return found
         }
 
-        return await Session.create({
-          parentID: ctx.sessionID,
-          title: params.description + ` (@${agent.name} subagent)`,
+        // Fork parent session to share context
+        // Cut off before current assistant message
+        const forked = await Session.fork({
+          sessionID: ctx.sessionID,
+          messageID: ctx.messageID,
+        })
+
+        // Mark as subagent session
+        await Session.setParentID({ sessionID: forked.id, parentID: ctx.sessionID })
+        await Session.setTitle({ sessionID: forked.id, title: params.description + ` (@${agent.name} subagent)` })
+        await Session.setPermission({
+          sessionID: forked.id,
           permission: [
             {
               permission: "todowrite",
@@ -101,6 +110,8 @@ export const TaskTool = Tool.define("task", async (ctx) => {
             })) ?? []),
           ],
         })
+
+        return forked
       })
       const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
@@ -125,7 +136,8 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       }
       ctx.abort.addEventListener("abort", cancel)
       using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
-      const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
+      const subagentPrompt = `You have now entered the subagent flow. You are a subagent. Proceed with: ${params.prompt}`
+      const promptParts = await SessionPrompt.resolvePromptParts(subagentPrompt)
 
       const result = await SessionPrompt.prompt({
         messageID,
