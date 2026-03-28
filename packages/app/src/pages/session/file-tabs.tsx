@@ -19,6 +19,8 @@ import { getSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 
+const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
+
 function FileCommentMenu(props: {
   moreLabel: string
   editLabel: string
@@ -224,7 +226,8 @@ export function FileTabContent(props: { tab: string }) {
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (activeFileTab() !== props.tab) return
-      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return
+      const mod = IS_MAC ? event.metaKey : event.ctrlKey
+      if (!mod || event.altKey || event.shiftKey) return
       if (event.key.toLowerCase() !== "f") return
 
       event.preventDefault()
