@@ -1,0 +1,77 @@
+diff --git a/index-e89anq5x.js b/index-e89anq5x.js
+index e3b6cf9f90b13698966eec991fa7a1b2e1e22d96..b57056beaa8659c0a294bf2778c03d24a422e9ac 100644
+--- a/index-e89anq5x.js
++++ b/index-e89anq5x.js
+@@ -6843,7 +6843,7 @@ var env = new Proxy({}, {
+ 
+ // src/lib/stdin-parser.ts
+ import { Buffer as Buffer3 } from "buffer";
+-var DEFAULT_TIMEOUT_MS = 10;
++var DEFAULT_TIMEOUT_MS = 25;
+ var DEFAULT_MAX_PENDING_BYTES = 64 * 1024;
+ var INITIAL_PENDING_CAPACITY = 256;
+ var ESC = 27;
+@@ -7133,6 +7133,7 @@ class StdinParser {
+   pendingSinceMs = null;
+   forceFlush = false;
+   justFlushedEsc = false;
++  justFlushedEscBracket = false;
+   state = { tag: "ground" };
+   cursor = 0;
+   unitStart = 0;
+@@ -7271,6 +7272,15 @@ class StdinParser {
+             }
+             this.justFlushedEsc = false;
+           }
++          if (this.justFlushedEscBracket) {
++            if (byte === 60) {
++              this.justFlushedEscBracket = false;
++              this.cursor += 1;
++              this.state = { tag: "esc_less_mouse" };
++              continue;
++            }
++            this.justFlushedEscBracket = false;
++          }
+           if (byte === ESC) {
+             this.cursor += 1;
+             this.state = { tag: "esc" };
+@@ -7397,7 +7407,8 @@ class StdinParser {
+               this.markPending();
+               return;
+             }
+-            this.emitKeyOrResponse("unknown", decodeUtf8(bytes.subarray(this.unitStart, this.cursor)));
++            this.emitOpaqueResponse("unknown", bytes.subarray(this.unitStart, this.cursor));
++            this.justFlushedEscBracket = true;
+             this.state = { tag: "ground" };
+             this.consumePrefix(this.cursor);
+             continue;
+@@ -7424,6 +7435,7 @@ class StdinParser {
+               return;
+             }
+             this.emitOpaqueResponse("unknown", bytes.subarray(this.unitStart, this.cursor));
++            this.justFlushedEscBracket = true;
+             this.state = { tag: "ground" };
+             this.consumePrefix(this.cursor);
+             continue;
+@@ -7894,10 +7906,9 @@ class StdinParser {
+               this.markPending();
+               return;
+             }
+-            this.emitOpaqueResponse("unknown", bytes.subarray(this.unitStart, this.cursor));
+-            this.state = { tag: "ground" };
+-            this.consumePrefix(this.cursor);
+-            continue;
++            this.pendingSinceMs = null;
++            this.forceFlush = false;
++            return;
+           }
+           if (byte >= 48 && byte <= 57 || byte === 59) {
+             this.cursor += 1;
+@@ -8098,6 +8109,7 @@ class StdinParser {
+     this.pendingSinceMs = null;
+     this.forceFlush = false;
+     this.justFlushedEsc = false;
++    this.justFlushedEscBracket = false;
+     this.state = { tag: "ground" };
+     this.cursor = 0;
+     this.unitStart = 0;
