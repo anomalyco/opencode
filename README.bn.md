@@ -116,6 +116,33 @@ OpenCode এ দুটি বিল্ট-ইন এজেন্ট রয়ে
 
 কিভাবে OpenCode কনফিগার করবেন সে সম্পর্কে আরও তথ্যের জন্য, [**আমাদের ডকস দেখুন**](https://opencode.ai/docs)।
 
+### Docker সার্ভার
+
+কন্টেইনারাইজড সার্ভিস হিসেবে OpenCode চালান:
+
+- [English](docs/docker-server.md)
+- [简体中文](docs/docker-server.zh.md)
+- [繁體中文](docs/docker-server.zht.md)
+- [한국어](docs/docker-server.ko.md)
+- [Deutsch](docs/docker-server.de.md)
+- [Español](docs/docker-server.es.md)
+- [Français](docs/docker-server.fr.md)
+- [Italiano](docs/docker-server.it.md)
+- [Dansk](docs/docker-server.da.md)
+- [日本語](docs/docker-server.ja.md)
+- [Polski](docs/docker-server.pl.md)
+- [Русский](docs/docker-server.ru.md)
+- [Bosanski](docs/docker-server.bs.md)
+- [العربية](docs/docker-server.ar.md)
+- [Norsk](docs/docker-server.no.md)
+- [Português (Brasil)](docs/docker-server.br.md)
+- [ไทย](docs/docker-server.th.md)
+- [Türkçe](docs/docker-server.tr.md)
+- [Українська](docs/docker-server.uk.md)
+- [বাংলা](docs/docker-server.bn.md)
+- [Ελληνικά](docs/docker-server.gr.md)
+- [Tiếng Việt](docs/docker-server.vi.md)
+
 ### অবদান (Contributing)
 
 আপনি যদি OpenCode এ অবদান রাখতে চান, অনুগ্রহ করে একটি পুল রিকোয়েস্ট সাবমিট করার আগে আমাদের [কন্ট্রিবিউটিং ডকস](./CONTRIBUTING.md) পড়ে নিন।

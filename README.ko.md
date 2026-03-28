@@ -116,6 +116,33 @@ OpenCode 에는 내장 에이전트 2개가 있으며 `Tab` 키로 전환할 수
 
 OpenCode 설정에 대한 자세한 내용은 [**문서**](https://opencode.ai/docs) 를 참고하세요.
 
+### Docker 서버
+
+컨테이너화된 서비스로 OpenCode 실행:
+
+- [English](docs/docker-server.md)
+- [简体中文](docs/docker-server.zh.md)
+- [繁體中文](docs/docker-server.zht.md)
+- [한국어](docs/docker-server.ko.md)
+- [Deutsch](docs/docker-server.de.md)
+- [Español](docs/docker-server.es.md)
+- [Français](docs/docker-server.fr.md)
+- [Italiano](docs/docker-server.it.md)
+- [Dansk](docs/docker-server.da.md)
+- [日本語](docs/docker-server.ja.md)
+- [Polski](docs/docker-server.pl.md)
+- [Русский](docs/docker-server.ru.md)
+- [Bosanski](docs/docker-server.bs.md)
+- [العربية](docs/docker-server.ar.md)
+- [Norsk](docs/docker-server.no.md)
+- [Português (Brasil)](docs/docker-server.br.md)
+- [ไทย](docs/docker-server.th.md)
+- [Türkçe](docs/docker-server.tr.md)
+- [Українська](docs/docker-server.uk.md)
+- [বাংলা](docs/docker-server.bn.md)
+- [Ελληνικά](docs/docker-server.gr.md)
+- [Tiếng Việt](docs/docker-server.vi.md)
+
 ### 기여하기
 
 OpenCode 에 기여하고 싶다면, Pull Request 를 제출하기 전에 [contributing docs](./CONTRIBUTING.md) 를 읽어주세요.

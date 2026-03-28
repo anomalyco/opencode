@@ -116,6 +116,33 @@ XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 
 لمزيد من المعلومات حول كيفية ضبط OpenCode، [**راجع التوثيق**](https://opencode.ai/docs).
 
+### خادم Docker
+
+قم بتشغيل OpenCode كخدمة حاويات:
+
+- [English](docs/docker-server.md)
+- [简体中文](docs/docker-server.zh.md)
+- [繁體中文](docs/docker-server.zht.md)
+- [한국어](docs/docker-server.ko.md)
+- [Deutsch](docs/docker-server.de.md)
+- [Español](docs/docker-server.es.md)
+- [Français](docs/docker-server.fr.md)
+- [Italiano](docs/docker-server.it.md)
+- [Dansk](docs/docker-server.da.md)
+- [日本語](docs/docker-server.ja.md)
+- [Polski](docs/docker-server.pl.md)
+- [Русский](docs/docker-server.ru.md)
+- [Bosanski](docs/docker-server.bs.md)
+- [العربية](docs/docker-server.ar.md)
+- [Norsk](docs/docker-server.no.md)
+- [Português (Brasil)](docs/docker-server.br.md)
+- [ไทย](docs/docker-server.th.md)
+- [Türkçe](docs/docker-server.tr.md)
+- [Українська](docs/docker-server.uk.md)
+- [বাংলা](docs/docker-server.bn.md)
+- [Ελληνικά](docs/docker-server.gr.md)
+- [Tiếng Việt](docs/docker-server.vi.md)
+
 ### المساهمة
 
 اذا كنت مهتما بالمساهمة في OpenCode، يرجى قراءة [contributing docs](./CONTRIBUTING.md) قبل ارسال pull request.

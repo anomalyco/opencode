@@ -116,6 +116,33 @@ Learn more about [agents](https://opencode.ai/docs/agents).
 
 For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
 
+### Docker Server
+
+Run OpenCode as a containerized service:
+
+- [English](docs/docker-server.md)
+- [简体中文](docs/docker-server.zh.md)
+- [繁體中文](docs/docker-server.zht.md)
+- [한국어](docs/docker-server.ko.md)
+- [Deutsch](docs/docker-server.de.md)
+- [Español](docs/docker-server.es.md)
+- [Français](docs/docker-server.fr.md)
+- [Italiano](docs/docker-server.it.md)
+- [Dansk](docs/docker-server.da.md)
+- [日本語](docs/docker-server.ja.md)
+- [Polski](docs/docker-server.pl.md)
+- [Русский](docs/docker-server.ru.md)
+- [Bosanski](docs/docker-server.bs.md)
+- [العربية](docs/docker-server.ar.md)
+- [Norsk](docs/docker-server.no.md)
+- [Português (Brasil)](docs/docker-server.br.md)
+- [ไทย](docs/docker-server.th.md)
+- [Türkçe](docs/docker-server.tr.md)
+- [Українська](docs/docker-server.uk.md)
+- [বাংলা](docs/docker-server.bn.md)
+- [Ελληνικά](docs/docker-server.gr.md)
+- [Tiếng Việt](docs/docker-server.vi.md)
+
 ### Contributing
 
 If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.
