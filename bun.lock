@@ -369,7 +369,7 @@
         "mime-types": "3.0.2",
         "minimatch": "10.0.3",
         "open": "10.1.2",
-        "opencode-gitlab-auth": "2.0.0",
+        "opencode-gitlab-auth": "2.0.1",
         "opencode-poe-auth": "0.0.1",
         "opentui-spinner": "0.0.6",
         "partial-json": "0.1.7",
@@ -3801,7 +3801,7 @@
 
     "opencode": ["opencode@workspace:packages/opencode"],
 
-    "opencode-gitlab-auth": ["opencode-gitlab-auth@2.0.0", "", { "dependencies": { "@fastify/rate-limit": "^10.2.0", "@opencode-ai/plugin": "*", "fastify": "^5.2.0", "open": "^10.0.0" } }, "sha512-jmZOOvYIurRScQCtdBqIW5HbP1JbmIiq7UtI7NGgn2vjke46g9d4NVPBg5/ZmFFVIBwZcgyFgJ7b8kGEOR9ujA=="],
+    "opencode-gitlab-auth": ["opencode-gitlab-auth@2.0.1", "", { "dependencies": { "@fastify/rate-limit": "^10.2.0", "@opencode-ai/plugin": "*", "fastify": "^5.2.0", "open": "^10.0.0" } }, "sha512-1EMZHdbADLMVaTVLQ6C/V8uVMDr6MP++osj2lmOecowtn46AafP/w6ADkV4AN/ddjA1rob5cWpMuf/iME6DI6A=="],
 
     "opencode-poe-auth": ["opencode-poe-auth@0.0.1", "", { "dependencies": { "open": "^10.0.0", "poe-oauth": "*" }, "peerDependencies": { "@opencode-ai/plugin": "*" } }, "sha512-cXqTlS6AXHzo1oBdosnxbT47ZJEZ9WXn050X8Re6wZ1vaNnTpB/l2fMQt90evT7RBK0fB8UjXQUDMKyd7bbiqg=="],
 
