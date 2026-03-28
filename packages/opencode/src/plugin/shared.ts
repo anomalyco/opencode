@@ -21,6 +21,7 @@ export function parsePluginSpecifier(spec: string) {
 
 export type PluginSource = "file" | "npm"
 export type PluginKind = "server" | "tui"
+type PluginMode = "strict" | "detect"
 
 export function pluginSource(spec: string): PluginSource {
   return spec.startsWith("file://") ? "file" : "npm"
@@ -123,6 +124,40 @@ export function readPluginId(id: unknown, spec: string) {
   return value
 }
 
+export function readV1Plugin(
+  mod: Record<string, unknown>,
+  spec: string,
+  kind: PluginKind,
+  mode: PluginMode = "strict",
+) {
+  const value = mod.default
+  if (!isRecord(value)) {
+    if (mode === "detect") return
+    throw new TypeError(`Plugin ${spec} must default export an object with ${kind}()`)
+  }
+  if (mode === "detect" && !("id" in value) && !("server" in value) && !("tui" in value)) return
+
+  const server = "server" in value ? value.server : undefined
+  const tui = "tui" in value ? value.tui : undefined
+  if (server !== undefined && typeof server !== "function") {
+    throw new TypeError(`Plugin ${spec} has invalid server export`)
+  }
+  if (tui !== undefined && typeof tui !== "function") {
+    throw new TypeError(`Plugin ${spec} has invalid tui export`)
+  }
+  if (server !== undefined && tui !== undefined) {
+    throw new TypeError(`Plugin ${spec} must default export either server() or tui(), not both`)
+  }
+  if (kind === "server" && server === undefined) {
+    throw new TypeError(`Plugin ${spec} must default export an object with server()`)
+  }
+  if (kind === "tui" && tui === undefined) {
+    throw new TypeError(`Plugin ${spec} must default export an object with tui()`)
+  }
+
+  return value
+}
+
 export async function resolvePluginId(source: PluginSource, spec: string, target: string, id: string | undefined) {
   if (source === "file") {
     if (id) return id
@@ -134,16 +169,4 @@ export async function resolvePluginId(source: PluginSource, spec: string, target
     throw new TypeError(`Plugin package ${pkg.pkg} is missing name`)
   }
   return pkg.json.name.trim()
-}
-
-export function getDefaultPlugin(mod: Record<string, unknown>) {
-  // A single default object keeps v1 detection explicit and avoids scanning exports.
-  const value = mod.default
-  if (!isRecord(value)) return
-  const server = "server" in value ? value.server : undefined
-  const tui = "tui" in value ? value.tui : undefined
-  if (server !== undefined && typeof server !== "function") return
-  if (tui !== undefined && typeof tui !== "function") return
-  if (server === undefined && tui === undefined) return
-  return value
 }

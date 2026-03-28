@@ -1,9 +1,9 @@
 import { Keybind } from "@/util/keybind"
-import type { TuiPlugin, TuiPluginApi, TuiPluginStatus } from "@opencode-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginApi, TuiPluginModule, TuiPluginStatus } from "@opencode-ai/plugin/tui"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { fileURLToPath } from "url"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
-import { createEffect, createMemo, createSignal } from "solid-js"
+import { Show, createEffect, createMemo, createSignal } from "solid-js"
 
 const id = "internal:plugin-manager"
 const key = Keybind.parse("space").at(0)
@@ -53,11 +53,17 @@ function Install(props: { api: TuiPluginApi }) {
     <props.api.ui.DialogPrompt
       title="Install plugin"
       placeholder="npm package name"
+      busy={busy()}
+      busyText="Installing plugin..."
       description={() => (
         <box flexDirection="row" gap={1}>
           <text fg={props.api.theme.current.textMuted}>scope:</text>
-          <text fg={props.api.theme.current.text}>{global() ? "global" : "local"}</text>
-          <text fg={props.api.theme.current.textMuted}>({Keybind.toString(tab)} toggle)</text>
+          <text fg={busy() ? props.api.theme.current.textMuted : props.api.theme.current.text}>
+            {global() ? "global" : "local"}
+          </text>
+          <Show when={!busy()}>
+            <text fg={props.api.theme.current.textMuted}>({Keybind.toString(tab)} toggle)</text>
+          </Show>
         </box>
       )}
       onConfirm={(raw) => {
@@ -256,7 +262,9 @@ const tui: TuiPlugin = async (api) => {
   ])
 }
 
-export default {
+const plugin: TuiPluginModule & { id: string } = {
   id,
   tui,
 }
+
+export default plugin
