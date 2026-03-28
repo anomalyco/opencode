@@ -16,6 +16,7 @@ import { Permission } from "@/permission"
 import { Question } from "@/question"
 import { PartID } from "./schema"
 import type { SessionID, MessageID } from "./schema"
+import { CallTrace } from "./call-trace"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -24,6 +25,24 @@ export namespace SessionProcessor {
   export type Info = Awaited<ReturnType<typeof create>>
   export type Result = Awaited<ReturnType<Info["process"]>>
 
+  function truncate(s: string | undefined, max: number): string | undefined {
+    if (!s) return undefined
+    if (s.length <= max) return s
+    return s.slice(0, max - 1) + "…"
+  }
+
+  function summarizeInput(obj: unknown): string | undefined {
+    if (!obj) return undefined
+    const s = typeof obj === "string" ? obj : JSON.stringify(obj)
+    return truncate(s, 80)
+  }
+
+  function summarizeOutput(obj: unknown): string | undefined {
+    if (!obj) return undefined
+    const s = typeof obj === "string" ? obj : JSON.stringify(obj)
+    return truncate(s, 120)
+  }
+
   export function create(input: {
     assistantMessage: MessageV2.Assistant
     sessionID: SessionID
@@ -31,6 +50,7 @@ export namespace SessionProcessor {
     abort: AbortSignal
   }) {
     const toolcalls: Record<string, MessageV2.ToolPart> = {}
+    const callIdToTraceID: Record<string, string> = {}
     let snapshot: string | undefined
     let blocked = false
     let attempt = 0
@@ -52,6 +72,19 @@ export namespace SessionProcessor {
             let currentText: MessageV2.TextPart | undefined
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
             const stream = await LLM.stream(streamInput)
+
+            const toolNames = Object.keys(streamInput.tools)
+            const llmTraceID = await CallTrace.start({
+              type: "llm",
+              source: "LLM",
+              name: `${streamInput.model.providerID}/${streamInput.model.id}`,
+              component: "llm.stream",
+              messageID: input.assistantMessage.id,
+              providerID: streamInput.model.providerID,
+              modelID: streamInput.model.id,
+              metadata: { agent: streamInput.agent.name, small: streamInput.small },
+              inputSummary: `agent=${streamInput.agent.name}, ${streamInput.messages.length} msgs, tools=[${toolNames.join(",")}]`,
+            })
 
             for await (const value of stream.fullStream) {
               input.abort.throwIfAborted()
@@ -149,6 +182,19 @@ export namespace SessionProcessor {
                     })
                     toolcalls[value.toolCallId] = part as MessageV2.ToolPart
 
+                    const toolTraceID = await CallTrace.start({
+                      type: "tool",
+                      source: "OC",
+                      name: value.toolName,
+                      component: `tool.${value.toolName}`,
+                      messageID: input.assistantMessage.id,
+                      toolName: value.toolName,
+                      input: value.input,
+                      metadata: { callId: value.toolCallId },
+                      inputSummary: summarizeInput(value.input),
+                    })
+                    callIdToTraceID[value.toolCallId] = toolTraceID
+
                     const parts = await MessageV2.parts(input.assistantMessage.id)
                     const lastThree = parts.slice(-DOOM_LOOP_THRESHOLD)
 
@@ -181,6 +227,20 @@ export namespace SessionProcessor {
                 case "tool-result": {
                   const match = toolcalls[value.toolCallId]
                   if (match && match.state.status === "running") {
+                    const toolTraceID = callIdToTraceID[value.toolCallId]
+                    if (toolTraceID) {
+                      const outputStr =
+                        typeof value.output.output === "string"
+                          ? value.output.output
+                          : JSON.stringify(value.output.output)
+                      await CallTrace.end(toolTraceID, {
+                        status: "completed",
+                        output: outputStr,
+                        outputSummary: summarizeOutput(outputStr),
+                      })
+                      delete callIdToTraceID[value.toolCallId]
+                    }
+
                     await Session.updatePart({
                       ...match,
                       state: {
@@ -218,6 +278,17 @@ export namespace SessionProcessor {
                       },
                     })
 
+                    const toolTraceID = callIdToTraceID[value.toolCallId]
+                    if (toolTraceID) {
+                      const errorMsg = value.error instanceof Error ? value.error.message : String(value.error)
+                      await CallTrace.end(toolTraceID, {
+                        status: "error",
+                        metadata: { error: errorMsg },
+                        outputSummary: summarizeOutput(errorMsg),
+                      })
+                      delete callIdToTraceID[value.toolCallId]
+                    }
+
                     if (
                       value.error instanceof Permission.RejectedError ||
                       value.error instanceof Question.RejectedError
@@ -251,6 +322,17 @@ export namespace SessionProcessor {
                   input.assistantMessage.finish = value.finishReason
                   input.assistantMessage.cost += usage.cost
                   input.assistantMessage.tokens = usage.tokens
+
+                  const llmTrace = CallTrace.findByMessageID(input.assistantMessage.id, "llm")
+                  if (llmTrace) {
+                    await CallTrace.end(llmTrace.id, {
+                      status: "completed",
+                      tokens: usage.tokens,
+                      cost: usage.cost,
+                      outputSummary: summarizeOutput(currentText?.text),
+                    })
+                  }
+
                   await Session.updatePart({
                     id: PartID.ascending(),
                     reason: value.finishReason,

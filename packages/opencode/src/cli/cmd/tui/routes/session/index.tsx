@@ -80,6 +80,7 @@ import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
+import { useCallTrace, type CallTraceItem, type TraceSource } from "../../context/call-trace"
 
 addDefaultParsers(parsers.parsers)
 
@@ -153,6 +154,7 @@ export function Session() {
   const [timestamps, setTimestamps] = kv.signal<"hide" | "show">("timestamps", "hide")
   const [showDetails, setShowDetails] = kv.signal("tool_details_visibility", true)
   const [showAssistantMetadata, setShowAssistantMetadata] = kv.signal("assistant_metadata_visibility", true)
+  const [showCallTrace, setShowCallTrace] = createSignal(true)
   const [showScrollbar, setShowScrollbar] = kv.signal("scrollbar_visible", true)
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [animationsEnabled, setAnimationsEnabled] = kv.signal("animations_enabled", true)
@@ -574,6 +576,16 @@ export function Session() {
           setSidebar(() => (isVisible ? "hide" : "auto"))
           setSidebarOpen(!isVisible)
         })
+        dialog.clear()
+      },
+    },
+    {
+      title: showCallTrace() ? "Hide CallTraceBar" : "Show CallTraceBar",
+      value: "session.calltrace.toggle",
+      keybind: "calltrace_toggle",
+      category: "Session",
+      onSelect: (dialog) => {
+        setShowCallTrace(() => !showCallTrace())
         dialog.clear()
       },
     },
@@ -1152,6 +1164,9 @@ export function Session() {
                 )}
               </For>
             </scrollbox>
+            <Show when={showCallTrace()}>
+              <CallTraceBar />
+            </Show>
             <box flexShrink={0}>
               <Show when={permissions().length > 0}>
                 <PermissionPrompt request={permissions()[0]} />
@@ -1215,6 +1230,123 @@ const MIME_BADGE: Record<string, string> = {
   "image/webp": "img",
   "application/pdf": "pdf",
   "application/x-directory": "dir",
+}
+
+function CallTraceBar() {
+  const callTrace = useCallTrace()
+  const sync = useSync()
+  const route = useRouteData("session")
+  const { theme } = useTheme()
+  const [expanded, setExpanded] = createSignal<Record<string, { in: boolean; out: boolean }>>({})
+  const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  const allTraces = createMemo(() => messages().flatMap((msg) => callTrace.getTraces(msg.id)))
+  const hasTraces = createMemo(() => allTraces().length > 0)
+  const isExpanded = (id: string, field: "in" | "out") => expanded()[id]?.[field] ?? false
+  const toggle = (id: string, field: "in" | "out") =>
+    setExpanded((prev) => ({ ...prev, [id]: { ...prev[id], [field]: !prev[id]?.[field] } }))
+  const sourceColor: Record<string, any> = { OC: theme.info, OMO: theme.warning, LLM: theme.success }
+  const formatDuration = (ms: number) => (ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`)
+  const formatTime = (ts: number) => new Date(ts).toTimeString().slice(0, 8)
+  const truncate = (s: string | undefined, max: number) => (!s ? "" : s.length <= max ? s : s.slice(0, max - 1) + "…")
+
+  return (
+    <box flexShrink={0}>
+      <Show
+        when={hasTraces()}
+        fallback={
+          <box
+            border={["left"]}
+            backgroundColor={theme.backgroundPanel}
+            customBorderChars={SplitBorder.customBorderChars}
+            borderColor={theme.warning}
+            paddingTop={1}
+            paddingBottom={1}
+            paddingLeft={2}
+          >
+            <text>
+              <span style={{ fg: theme.warning, attributes: TextAttributes.BOLD }}>◈ CallTraceBar</span>
+              <span style={{ fg: theme.textMuted }}> (no traces)</span>
+            </text>
+          </box>
+        }
+      >
+        <box
+          border={["left"]}
+          backgroundColor={theme.backgroundPanel}
+          customBorderChars={SplitBorder.customBorderChars}
+          borderColor={theme.warning}
+          paddingTop={1}
+          paddingBottom={1}
+          paddingLeft={2}
+          gap={1}
+        >
+          <text>
+            <span style={{ fg: theme.warning, attributes: TextAttributes.BOLD }}>◈ CallTraceBar</span>
+            <span style={{ fg: theme.textMuted }}>
+              {" "}
+              ({formatDuration(allTraces().reduce((sum, t) => sum + (t.duration ?? 0), 0))})
+            </span>
+            <span style={{ fg: theme.textMuted }}> [{allTraces().length}]</span>
+          </text>
+          <scrollbox
+            height={8}
+            stickyScroll={true}
+            stickyStart="bottom"
+            viewportOptions={{ paddingRight: 1 }}
+            verticalScrollbarOptions={{
+              paddingLeft: 1,
+              visible: true,
+              trackOptions: { backgroundColor: theme.backgroundPanel, foregroundColor: theme.textMuted },
+            }}
+          >
+            <For each={allTraces()}>
+              {(trace) => (
+                <box flexDirection="column" paddingBottom={1}>
+                  <text>
+                    <span> </span>
+                    <span style={{ fg: sourceColor[trace.source] }}>[{trace.source}]</span>
+                    <span style={{ fg: theme.text }}> {trace.name}</span>
+                    <Show when={trace.duration !== undefined}>
+                      <span style={{ fg: theme.textMuted }}> {formatDuration(trace.duration!)}</span>
+                    </Show>
+                    <span style={{ fg: theme.textMuted }}> {formatTime(trace.startTime)}</span>
+                  </text>
+                  <Show when={trace.inputSummary}>
+                    <box onMouseUp={() => toggle(trace.id, "in")}>
+                      <text paddingLeft={3}>
+                        <span style={{ fg: theme.textMuted }}>in: </span>
+                        <Show
+                          when={isExpanded(trace.id, "in")}
+                          fallback={<span style={{ fg: theme.text }}>{truncate(trace.inputSummary, 50)}</span>}
+                        >
+                          <span style={{ fg: theme.text }}>{trace.inputSummary}</span>
+                        </Show>
+                        <span style={{ fg: theme.textMuted }}>{isExpanded(trace.id, "in") ? " [-]" : " [+]"}</span>
+                      </text>
+                    </box>
+                  </Show>
+                  <Show when={trace.outputSummary}>
+                    <box onMouseUp={() => toggle(trace.id, "out")}>
+                      <text paddingLeft={3}>
+                        <span style={{ fg: theme.textMuted }}>out: </span>
+                        <Show
+                          when={isExpanded(trace.id, "out")}
+                          fallback={<span style={{ fg: theme.text }}>{truncate(trace.outputSummary, 50)}</span>}
+                        >
+                          <span style={{ fg: theme.text }}>{trace.outputSummary}</span>
+                        </Show>
+                        <span style={{ fg: theme.textMuted }}>{isExpanded(trace.id, "out") ? " [-]" : " [+]"}</span>
+                      </text>
+                    </box>
+                  </Show>
+                </box>
+              )}
+            </For>
+          </scrollbox>
+        </box>
+      </Show>
+    </box>
+  )
 }
 
 function UserMessage(props: {

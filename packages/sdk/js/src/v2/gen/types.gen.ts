@@ -223,6 +223,56 @@ export type EventQuestionRejected = {
   }
 }
 
+export type EventCallTraceStart = {
+  type: "call-trace.start"
+  properties: {
+    messageID: string
+    trace: {
+      id: string
+      type: "llm" | "tool" | "omo"
+      source: "OC" | "OMO" | "LLM"
+      name: string
+      component: string
+      startTime: number
+      status: "running"
+      metadata?: {
+        [key: string]: unknown
+      }
+      inputSummary?: string
+      providerID?: string
+      modelID?: string
+      toolName?: string
+      input?: {
+        [key: string]: unknown
+      }
+      agentName?: string
+      description?: string
+      sessionID?: string
+    }
+  }
+}
+
+export type EventCallTraceEnd = {
+  type: "call-trace.end"
+  properties: {
+    messageID: string
+    traceID: string
+    endTime: number
+    duration: number
+    status: "completed" | "error"
+    metadata?: {
+      [key: string]: unknown
+    }
+    tokens?: {
+      input: number
+      output: number
+    }
+    cost?: number
+    output?: string
+    outputSummary?: string
+  }
+}
+
 export type EventSessionCompacted = {
   type: "session.compacted"
   properties: {
@@ -980,6 +1030,8 @@ export type Event =
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
+  | EventCallTraceStart
+  | EventCallTraceEnd
   | EventSessionCompacted
   | EventFileEdited
   | EventFileWatcherUpdated
