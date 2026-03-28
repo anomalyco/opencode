@@ -35,6 +35,7 @@ import { spawn } from "child_process"
 import { Command } from "../command"
 import { pathToFileURL, fileURLToPath } from "url"
 import { ConfigMarkdown } from "../config/markdown"
+import { Config } from "../config/config"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/util/error"
 import { fn } from "@/util/fn"
@@ -1987,6 +1988,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   }) {
     if (input.session.parentID) return
     if (!Session.isDefaultTitle(input.session.title)) return
+    const cfg = await Config.get()
+    if (cfg.autoname === false) return
 
     // Find first non-synthetic user message
     const firstRealUserIdx = input.history.findIndex(

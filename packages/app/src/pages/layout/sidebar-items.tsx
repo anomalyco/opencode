@@ -6,6 +6,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { MessageNav } from "@opencode-ai/ui/message-nav"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { getFilename } from "@opencode-ai/util/path"
 import { A, useNavigate, useParams } from "@solidjs/router"
@@ -15,6 +16,7 @@ import { useLanguage } from "@/context/language"
 import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
+import { useSDK } from "@/context/sdk"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
 import { hasProjectPermissions } from "./helpers"
@@ -205,6 +207,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const notification = useNotification()
   const permission = usePermission()
   const globalSync = useGlobalSync()
+  const sdk = useSDK()
   const unseenCount = createMemo(() => notification.session.unseenCount(props.session.id))
   const hasError = createMemo(() => notification.session.unseenHasError(props.session.id))
   const [sessionStore] = globalSync.child(props.session.directory)
@@ -360,19 +363,50 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
             "group-focus-within/session:w-6 group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto": true,
           }}
         >
-          <Tooltip value={language.t("common.archive")} placement="top">
-            <IconButton
-              icon="archive"
-              variant="ghost"
-              class="size-6 rounded-md"
-              aria-label={language.t("common.archive")}
-              onClick={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-                void props.archiveSession(props.session)
-              }}
-            />
-          </Tooltip>
+          <div class="flex items-center gap-0.5">
+            <Tooltip value={language.t("common.rename")} placement="top">
+              <IconButton
+                icon="edit"
+                variant="ghost"
+                class="size-6 rounded-md"
+                aria-label={language.t("common.rename")}
+                onClick={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  const current = props.session.title
+                  const next = window.prompt(language.t("common.rename"), current)
+                  if (!next || next === current) return
+                  void sdk.client.session
+                    .update({ sessionID: props.session.id, title: next })
+                    .then(() =>
+                      showToast({
+                        title: language.t("toast.session.rename.success.title"),
+                        variant: "success",
+                      }),
+                    )
+                    .catch(() =>
+                      showToast({
+                        title: language.t("toast.session.rename.failed.title"),
+                        variant: "error",
+                      }),
+                    )
+                }}
+              />
+            </Tooltip>
+            <Tooltip value={language.t("common.archive")} placement="top">
+              <IconButton
+                icon="archive"
+                variant="ghost"
+                class="size-6 rounded-md"
+                aria-label={language.t("common.archive")}
+                onClick={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  void props.archiveSession(props.session)
+                }}
+              />
+            </Tooltip>
+          </div>
         </div>
       </div>
     </div>

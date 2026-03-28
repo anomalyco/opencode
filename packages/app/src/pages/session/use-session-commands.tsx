@@ -501,6 +501,34 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
           })
         },
       }),
+      sessionCommand({
+        id: "session.rename",
+        title: language.t("command.session.rename"),
+        description: language.t("command.session.rename.description"),
+        slash: "rename",
+        disabled: !params.id,
+        onSelect: async () => {
+          const sessionID = params.id
+          if (!sessionID) return
+          const current = info()?.title ?? ""
+          const next = window.prompt("Rename session", current)
+          if (!next || next === current) return
+          await sdk.client.session
+            .update({ sessionID, title: next })
+            .then(() =>
+              showToast({
+                title: language.t("toast.session.rename.success.title"),
+                variant: "success",
+              }),
+            )
+            .catch(() =>
+              showToast({
+                title: language.t("toast.session.rename.failed.title"),
+                variant: "error",
+              }),
+            )
+        },
+      }),
       ...share,
     ]
   })

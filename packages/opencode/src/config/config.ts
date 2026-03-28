@@ -936,6 +936,12 @@ export namespace Config {
         .describe(
           "Automatically update to the latest version. Set to true to auto-update, false to disable, or 'notify' to show update notifications",
         ),
+      autoname: z
+        .boolean()
+        .optional()
+        .describe(
+          "Automatically generate a meaningful name for new sessions from the first message. Set to false to keep default timestamp-based titles.",
+        ),
       disabled_providers: z.array(z.string()).optional().describe("Disable providers that are loaded automatically"),
       enabled_providers: z
         .array(z.string())
