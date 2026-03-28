@@ -7,6 +7,21 @@ import { BusEvent } from "@/bus/bus-event"
 import { EventSequenceTable, EventTable } from "./event.sql"
 import { EventID } from "./schema"
 import { Flag } from "@/flag/flag"
+import { ForeignKeyError } from "@/session/projectors"
+import { Log } from "@/util/log"
+
+const log = Log.create({ service: "sync" })
+
+// 重试配置
+const RETRY_MAX_ATTEMPTS = 5 // 最大重试次数
+const RETRY_DELAY_MS = 50 // 基础延迟时间（毫秒）
+
+// 同步延迟函数（用于阻塞等待）
+// 使用 Atomics.wait 实现真正的同步阻塞，避免异步带来的复杂性
+function syncDelay(ms: number): void {
+  const buffer = new Int32Array(new SharedArrayBuffer(4))
+  Atomics.wait(buffer, 0, 0, ms)
+}
 
 export namespace SyncEvent {
   export type Definition = {
@@ -204,26 +219,54 @@ export namespace SyncEvent {
       throw new Error(`SyncEvent.run: running old versions of events is not allowed: ${def.type}`)
     }
 
-    // Note that this is an "immediate" transaction which is critical.
-    // We need to make sure we can safely read and write with nothing
-    // else changing the data from under us
-    Database.transaction(
-      (tx) => {
-        const id = EventID.ascending()
-        const row = tx
-          .select({ seq: EventSequenceTable.seq })
-          .from(EventSequenceTable)
-          .where(eq(EventSequenceTable.aggregate_id, agg))
-          .get()
-        const seq = row?.seq != null ? row.seq + 1 : 0
+    let lastError: unknown
+    // 重试循环：捕获外键错误后延迟重试
+    for (let attempt = 0; attempt < RETRY_MAX_ATTEMPTS; attempt++) {
+      try {
+        // Note that this is an "immediate" transaction which is critical.
+        // We need to make sure we can safely read and write with nothing
+        // else changing the data from under us
+        Database.transaction(
+          (tx) => {
+            const id = EventID.ascending()
+            const row = tx
+              .select({ seq: EventSequenceTable.seq })
+              .from(EventSequenceTable)
+              .where(eq(EventSequenceTable.aggregate_id, agg))
+              .get()
+            const seq = row?.seq != null ? row.seq + 1 : 0
 
-        const event = { id, seq, aggregateID: agg, data }
-        process(def, event, { publish: true })
-      },
-      {
-        behavior: "immediate",
-      },
-    )
+            const event = { id, seq, aggregateID: agg, data }
+            process(def, event, { publish: true })
+          },
+          {
+            behavior: "immediate",
+          },
+        )
+        // 成功则返回
+        return
+      } catch (err) {
+        // 捕获外键错误，进行重试
+        if (ForeignKeyError.isInstance(err)) {
+          lastError = err
+          log.warn("foreign key constraint failed, retrying", {
+            type: def.type,
+            aggregateID: agg,
+            attempt: attempt + 1,
+            maxAttempts: RETRY_MAX_ATTEMPTS,
+          })
+          // 如果还有重试机会，延迟后继续
+          if (attempt < RETRY_MAX_ATTEMPTS - 1) {
+            syncDelay(RETRY_DELAY_MS * (attempt + 1)) // 指数退避：50ms, 100ms, 150ms, 200ms
+            continue
+          }
+        }
+        // 非外键错误或重试次数用尽，抛出异常
+        throw err
+      }
+    }
+    // 所有重试都失败，抛出最后一个错误
+    throw lastError
   }
 
   export function remove(aggregateID: string) {

@@ -5,10 +5,21 @@ import { MessageV2 } from "./message-v2"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
 import { Log } from "../util/log"
+import { NamedError } from "@opencode-ai/util/error"
+import z from "zod"
 
 const log = Log.create({ service: "session.projector" })
 
-function foreign(err: unknown) {
+// 定义外键错误类型，便于在 SyncEvent.run() 中识别和重试
+export const ForeignKeyError = NamedError.create(
+  "ForeignKeyError",
+  z.object({
+    message: z.string(),
+  }),
+)
+
+// 检测是否为 SQLite 外键约束错误
+export function isForeignKeyError(err: unknown): boolean {
   if (typeof err !== "object" || err === null) return false
   if ("code" in err && err.code === "SQLITE_CONSTRAINT_FOREIGNKEY") return true
   return "message" in err && typeof err.message === "string" && err.message.includes("FOREIGN KEY constraint failed")
@@ -96,8 +107,11 @@ export default [
         .onConflictDoUpdate({ target: MessageTable.id, set: { data: rest } })
         .run()
     } catch (err) {
-      if (!foreign(err)) throw err
-      log.warn("ignored late message update", { messageID: id, sessionID })
+      // 改为抛出 ForeignKeyError，让 SyncEvent.run() 可以重试
+      if (isForeignKeyError(err)) {
+        throw new ForeignKeyError({ message: `Foreign key constraint failed for message ${id}` })
+      }
+      throw err
     }
   }),
 
@@ -128,8 +142,11 @@ export default [
         .onConflictDoUpdate({ target: PartTable.id, set: { data: rest } })
         .run()
     } catch (err) {
-      if (!foreign(err)) throw err
-      log.warn("ignored late part update", { partID: id, messageID, sessionID })
+      // 改为抛出 ForeignKeyError，让 SyncEvent.run() 可以重试
+      if (isForeignKeyError(err)) {
+        throw new ForeignKeyError({ message: `Foreign key constraint failed for part ${id}` })
+      }
+      throw err
     }
   }),
 ]
