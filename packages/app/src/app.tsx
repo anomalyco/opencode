@@ -174,20 +174,26 @@ export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
   )
 }
 
-function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean }>) {
+const effectMinDuration =
+  (duration: Duration.Input) =>
+  <A, E, R>(e: Effect.Effect<A, E, R>) =>
+    Effect.all([e, Effect.sleep(duration)], { concurrency: "unbounded" }).pipe(Effect.map((v) => v[0]))
+
+function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean | Accessor<boolean> }>) {
   const server = useServer()
   const checkServerHealth = useCheckServerHealth()
   const [store, setStore] = createStore({
     message: "",
   })
   let sent = false
+  const disabled = () => (typeof props.disableHealthCheck === "function" ? props.disableHealthCheck() : props.disableHealthCheck)
 
   const [checkMode, setCheckMode] = createSignal<"blocking" | "background">("blocking")
 
   // performs repeated health check with a grace period for
   // non-http connections, otherwise fails instantly
   const [startupHealthCheck, healthCheckActions] = createResource(() =>
-    props.disableHealthCheck
+    disabled()
       ? true
       : Effect.gen(function* () {
           if (!server.current) return true
@@ -308,7 +314,7 @@ function ConnectionError(props: {
   )
 }
 
-function ServerScopedApp(props: ParentProps<{ disableHealthCheck?: boolean; router?: Component<BaseRouterProps> }>) {
+function ServerScopedApp(props: ParentProps<{ disableHealthCheck?: boolean | Accessor<boolean>; router?: Component<BaseRouterProps> }>) {
   const server = useServer()
   return (
     <Show when={server.current}>
@@ -338,7 +344,7 @@ export function AppInterface(props: {
   defaultServer: ServerConnection.Key
   servers?: Array<ServerConnection.Any>
   router?: Component<BaseRouterProps>
-  disableHealthCheck?: boolean
+  disableHealthCheck?: boolean | Accessor<boolean>
 }) {
   return (
     <ServerProvider defaultServer={props.defaultServer} servers={props.servers}>

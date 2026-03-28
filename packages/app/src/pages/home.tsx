@@ -500,7 +500,6 @@ function LegacyHome() {
   createEffect(() => {
     if (sent) return
     if (!sync.ready) return
-    if (warm.loading) return
     sent = true
     queueMicrotask(() => window.dispatchEvent(new CustomEvent("opencode:startup-interactive")))
   })
