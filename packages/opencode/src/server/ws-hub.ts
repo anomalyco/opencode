@@ -26,7 +26,8 @@ export const WsHub = {
       try {
         conn.ws.send(frame)
       } catch (err) {
-        log.error("ws-hub send failed", { err })
+        log.error("ws-hub send failed — evicting dead conn", { err })
+        conns.delete(conn)
       }
     }
   },
