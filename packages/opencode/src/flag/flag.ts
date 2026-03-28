@@ -79,6 +79,9 @@ export namespace Flag {
   // CoBuilder-specific flags
   export declare const COBUILDER_AUTOPILOT: boolean
 
+  // CoBuilder Wedge: WebSocket binary diff stream (COB-38)
+  export declare const OPENCODE_WS_SYNC: boolean
+
   function number(key: string) {
     const value = process.env[key]
     if (!value) return undefined
@@ -86,6 +89,17 @@ export namespace Flag {
     return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
   }
 }
+
+// Dynamic getter for OPENCODE_WS_SYNC
+// Evaluated at access time so the flag can be set before server init
+Object.defineProperty(Flag, "OPENCODE_WS_SYNC", {
+  get() {
+    const value = process.env["OPENCODE_WS_SYNC"]?.toLowerCase()
+    return value === "true" || value === "1"
+  },
+  enumerable: true,
+  configurable: false,
+})
 
 // Dynamic getter for COBUILDER_AUTOPILOT
 // Must be evaluated at access time so --autopilot CLI flag can set the env var at runtime
