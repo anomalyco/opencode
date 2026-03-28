@@ -22,6 +22,10 @@ export namespace Log {
     return levelPriority[input] >= levelPriority[level]
   }
 
+  function shouldServiceLog(service: unknown) {
+    return service === "plugin.openai.websocket"
+  }
+
   export type Logger = {
     debug(message?: any, extra?: Record<string, any>): void
     info(message?: any, extra?: Record<string, any>): void
@@ -62,8 +66,10 @@ export namespace Log {
     cleanup(Global.Path.log)
     if (options.print) return
     logpath = path.join(
-      Global.Path.log,
-      options.dev ? "dev.log" : new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log",
+      // TODO: STOP DOING THIS!!!!!
+      "dev.log",
+      // Global.Path.log,
+      // options.dev ? "dev.log" : new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log",
     )
     await fs.truncate(logpath).catch(() => {})
     const stream = createWriteStream(logpath, { flags: "a" })
@@ -109,6 +115,7 @@ export namespace Log {
     }
 
     function build(message: any, extra?: Record<string, any>) {
+      if (!shouldServiceLog(tags?.["service"])) return
       const prefix = Object.entries({
         ...tags,
         ...extra,

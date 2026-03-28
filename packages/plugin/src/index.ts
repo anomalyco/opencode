@@ -204,7 +204,14 @@ export interface Hooks {
     output: { temperature: number; topP: number; topK: number; options: Record<string, any> },
   ) => Promise<void>
   "chat.headers"?: (
-    input: { sessionID: string; agent: string; model: Model; provider: ProviderContext; message: UserMessage },
+    input: {
+      sessionID: string
+      agent: string
+      model: Model
+      provider: ProviderContext
+      message: UserMessage
+      small: boolean
+    },
     output: { headers: Record<string, string> },
   ) => Promise<void>
   "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void>

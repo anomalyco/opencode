@@ -144,6 +144,7 @@ export namespace LLM {
         model: input.model,
         provider,
         message: input.user,
+        small: input.small === true,
       },
       {
         headers: {},

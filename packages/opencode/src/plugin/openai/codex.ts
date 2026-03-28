@@ -1,11 +1,12 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
-import { Log } from "../util/log"
-import { Installation } from "../installation"
-import { Auth, OAUTH_DUMMY_KEY } from "../auth"
+import { Log } from "../../util/log"
+import { Installation } from "../../installation"
+import { OAUTH_DUMMY_KEY } from "../../auth"
 import os from "os"
 import { ProviderTransform } from "@/provider/transform"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { setTimeout as sleep } from "node:timers/promises"
+import { createWebSocketFetch } from "./websocket"
 
 const log = Log.create({ service: "plugin.codex" })
 
@@ -351,12 +352,18 @@ function waitForOAuthCallback(pkce: PkceCodes, state: string): Promise<TokenResp
 }
 
 export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
+  const ws = createWebSocketFetch()
   return {
     auth: {
       provider: "openai",
       async loader(getAuth, provider) {
         const auth = await getAuth()
-        if (auth.type !== "oauth") return {}
+        if (auth.type !== "oauth")
+          return {
+            async fetch(requestInput: RequestInfo | URL, init?: RequestInit) {
+              return ws(requestInput, init)
+            },
+          }
 
         // Filter models to only allowed Codex models for OAuth
         const allowedModels = new Set([
@@ -491,7 +498,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                 ? new URL(CODEX_API_ENDPOINT)
                 : parsed
 
-            return fetch(url, {
+            return ws(url, {
               ...init,
               headers,
             })
@@ -622,7 +629,14 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
       if (input.model.providerID !== "openai") return
       output.headers.originator = "opencode"
       output.headers["User-Agent"] = `opencode/${Installation.VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`
-      output.headers.session_id = input.sessionID
+
+      // TODO: this is kinda hacky, we need to move the transport creation to a later point so it can accept more arguments rather than just relying on whatever is passed to fetch...
+      // distinguish between title gen and actual chat session
+      if (!input.small) {
+        output.headers.session_id = input.sessionID
+      } else {
+        output.headers.session_id = input.sessionID + "_title"
+      }
     },
   }
 }

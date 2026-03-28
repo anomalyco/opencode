@@ -4,7 +4,7 @@ import {
   extractAccountIdFromClaims,
   extractAccountId,
   type IdTokenClaims,
-} from "../../src/plugin/codex"
+} from "../../src/plugin/openai/codex"
 
 function createTestJwt(payload: object): string {
   const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url")
