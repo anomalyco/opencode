@@ -79,6 +79,7 @@ jobs:
             git push origin "$tag" || true
           fi
 
+          gh release delete "$tag" --yes 2>/dev/null || true
           gh release create "$tag" \
             --title "opencode $tag (f5xc fork)" \
             --notes "Fork build of opencode with LiteLLM/empty content fixes.
