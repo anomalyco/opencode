@@ -31,6 +31,7 @@ export namespace SessionProcessor {
   export interface Handle {
     readonly message: MessageV2.Assistant
     readonly partFromToolCall: (toolCallID: string) => MessageV2.ToolPart | undefined
+    readonly abort: () => Effect.Effect<void>
     readonly process: (streamInput: LLM.StreamInput) => Effect.Effect<Result>
   }
 
@@ -465,14 +466,34 @@ export namespace SessionProcessor {
                   }),
               }),
             ),
-            Effect.catchCause((cause) => (Cause.hasInterruptsOnly(cause) ? Effect.void : halt(Cause.squash(cause)))),
+            Effect.catchCause((cause) =>
+              Cause.hasInterruptsOnly(cause)
+                ? halt(new DOMException("Aborted", "AbortError"))
+                : halt(Cause.squash(cause)),
+            ),
             Effect.ensuring(cleanup()),
           )
 
+          if (input.abort.aborted && !ctx.assistantMessage.error) {
+            yield* abort()
+          }
           if (ctx.needsCompaction) return "compact"
           if (ctx.blocked || ctx.assistantMessage.error || input.abort.aborted) return "stop"
           return "continue"
         })
+
+        const abort = Effect.fn("SessionProcessor.abort")(() =>
+          Effect.gen(function* () {
+            if (!ctx.assistantMessage.error) {
+              yield* halt(new DOMException("Aborted", "AbortError"))
+            }
+            if (!ctx.assistantMessage.time.completed) {
+              yield* cleanup()
+              return
+            }
+            yield* session.updateMessage(ctx.assistantMessage)
+          }),
+        )
 
         return {
           get message() {
@@ -481,6 +502,7 @@ export namespace SessionProcessor {
           partFromToolCall(toolCallID: string) {
             return ctx.toolcalls[toolCallID]
           },
+          abort,
           process,
         } satisfies Handle
       })
@@ -519,7 +541,10 @@ export namespace SessionProcessor {
       async process(streamInput: LLM.StreamInput) {
         const exit = await Effect.runPromiseExit(hit.process(streamInput), { signal: input.abort })
         if (Exit.isFailure(exit)) {
-          if (Cause.hasInterrupts(exit.cause) && input.abort.aborted) return "stop"
+          if (Cause.hasInterrupts(exit.cause) && input.abort.aborted) {
+            await Effect.runPromise(hit.abort())
+            return "stop"
+          }
           throw Cause.squash(exit.cause)
         }
         return exit.value

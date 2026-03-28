@@ -167,38 +167,6 @@ export namespace SessionCompaction {
             ? Provider.getModel(agent.model.providerID, agent.model.modelID)
             : Provider.getModel(userMessage.model.providerID, userMessage.model.modelID),
         )
-        const msg = (yield* session.updateMessage({
-          id: MessageID.ascending(),
-          role: "assistant",
-          parentID: input.parentID,
-          sessionID: input.sessionID,
-          mode: "compaction",
-          agent: "compaction",
-          variant: userMessage.variant,
-          summary: true,
-          path: {
-            cwd: Instance.directory,
-            root: Instance.worktree,
-          },
-          cost: 0,
-          tokens: {
-            output: 0,
-            input: 0,
-            reasoning: 0,
-            cache: { read: 0, write: 0 },
-          },
-          modelID: model.id,
-          providerID: model.providerID,
-          time: {
-            created: Date.now(),
-          },
-        })) as MessageV2.Assistant
-        const processor = yield* processors.create({
-          assistantMessage: msg,
-          sessionID: input.sessionID,
-          model,
-          abort: input.abort,
-        })
         // Allow plugins to inject context or replace compaction prompt.
         const compacting = yield* plugin.trigger(
           "experimental.session.compacting",
@@ -237,22 +205,63 @@ When constructing the summary, try to stick to this template:
         const msgs = structuredClone(messages)
         yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
         const modelMessages = yield* Effect.promise(() => MessageV2.toModelMessages(msgs, model, { stripMedia: true }))
-        const result = yield* processor.process({
-          user: userMessage,
-          agent,
-          abort: input.abort,
+        const msg = (yield* session.updateMessage({
+          id: MessageID.ascending(),
+          role: "assistant",
+          parentID: input.parentID,
           sessionID: input.sessionID,
-          tools: {},
-          system: [],
-          messages: [
-            ...modelMessages,
-            {
-              role: "user",
-              content: [{ type: "text", text: prompt }],
-            },
-          ],
+          mode: "compaction",
+          agent: "compaction",
+          variant: userMessage.variant,
+          summary: true,
+          path: {
+            cwd: Instance.directory,
+            root: Instance.worktree,
+          },
+          cost: 0,
+          tokens: {
+            output: 0,
+            input: 0,
+            reasoning: 0,
+            cache: { read: 0, write: 0 },
+          },
+          modelID: model.id,
+          providerID: model.providerID,
+          time: {
+            created: Date.now(),
+          },
+        })) as MessageV2.Assistant
+        const processor = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: input.sessionID,
           model,
+          abort: input.abort,
         })
+        const cancel = Effect.fn("SessionCompaction.cancel")(function* () {
+          if (!input.abort.aborted || msg.time.completed) return
+          msg.error = msg.error ?? new MessageV2.AbortedError({ message: "Aborted" }).toObject()
+          msg.finish = msg.finish ?? "error"
+          msg.time.completed = Date.now()
+          yield* session.updateMessage(msg)
+        })
+        const result = yield* processor
+          .process({
+            user: userMessage,
+            agent,
+            abort: input.abort,
+            sessionID: input.sessionID,
+            tools: {},
+            system: [],
+            messages: [
+              ...modelMessages,
+              {
+                role: "user",
+                content: [{ type: "text", text: prompt }],
+              },
+            ],
+            model,
+          })
+          .pipe(Effect.ensuring(cancel()))
 
         if (result === "compact") {
           processor.message.error = new MessageV2.ContextOverflowError({

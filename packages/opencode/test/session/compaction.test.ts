@@ -137,6 +137,7 @@ function fake(
     get message() {
       return msg
     },
+    abort: Effect.fn("TestSessionProcessor.abort")(() => Effect.void),
     partFromToolCall() {
       return {
         id: PartID.ascending(),
@@ -161,14 +162,14 @@ function layer(result: "continue" | "compact") {
   )
 }
 
-function runtime(result: "continue" | "compact") {
+function runtime(result: "continue" | "compact", plugin = Plugin.defaultLayer) {
   const bus = Bus.layer
   return ManagedRuntime.make(
     Layer.mergeAll(SessionCompaction.layer, bus).pipe(
       Layer.provide(Session.defaultLayer),
       Layer.provide(layer(result)),
       Layer.provide(Agent.defaultLayer),
-      Layer.provide(Plugin.defaultLayer),
+      Layer.provide(plugin),
       Layer.provide(bus),
       Layer.provide(Config.defaultLayer),
     ),
@@ -226,6 +227,17 @@ function defer() {
     resolve = done
   })
   return { promise, resolve }
+}
+
+function plugin(ready: ReturnType<typeof defer>) {
+  return Layer.mock(Plugin.Service)({
+    trigger: <Name extends string, Input, Output>(name: Name, _input: Input, output: Output) => {
+      if (name !== "experimental.session.compacting") return Effect.succeed(output)
+      return Effect.sync(() => ready.resolve()).pipe(Effect.andThen(Effect.never), Effect.as(output))
+    },
+    list: () => Effect.succeed([]),
+    init: () => Effect.void,
+  })
 }
 
 describe("session.compaction.isOverflow", () => {
@@ -815,6 +827,64 @@ describe("session.compaction.process", () => {
           }
         } finally {
           off?.()
+          abort.abort()
+          await rt.dispose()
+          await run?.catch(() => undefined)
+        }
+      },
+    })
+  })
+
+  test("does not leave a summary assistant when aborted before processor setup", async () => {
+    const ready = defer()
+
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        spyOn(ProviderModule.Provider, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
+
+        const session = await Session.create({})
+        const msg = await user(session.id, "hello")
+        const msgs = await Session.messages({ sessionID: session.id })
+        const abort = new AbortController()
+        const rt = runtime("continue", plugin(ready))
+        let run: Promise<"continue" | "stop"> | undefined
+        try {
+          run = rt
+            .runPromiseExit(
+              SessionCompaction.Service.use((svc) =>
+                svc.process({
+                  parentID: msg.id,
+                  messages: msgs,
+                  sessionID: session.id,
+                  abort: abort.signal,
+                  auto: false,
+                }),
+              ),
+              { signal: abort.signal },
+            )
+            .then((exit) => {
+              if (Exit.isFailure(exit)) {
+                if (Cause.hasInterrupts(exit.cause) && abort.signal.aborted) return "stop"
+                throw Cause.squash(exit.cause)
+              }
+              return exit.value
+            })
+
+          await Promise.race([
+            ready.promise,
+            wait(1000).then(() => {
+              throw new Error("timed out waiting for compaction hook")
+            }),
+          ])
+
+          abort.abort()
+          expect(await run).toBe("stop")
+
+          const all = await Session.messages({ sessionID: session.id })
+          expect(all.some((msg) => msg.info.role === "assistant" && msg.info.summary)).toBe(false)
+        } finally {
           abort.abort()
           await rt.dispose()
           await run?.catch(() => undefined)
