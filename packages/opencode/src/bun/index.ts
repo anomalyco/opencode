@@ -6,7 +6,7 @@ import { Filesystem } from "../util/filesystem"
 import { NamedError } from "@opencode-ai/util/error"
 import { Lock } from "../util/lock"
 import { PackageRegistry } from "./registry"
-import { online, proxied } from "@/util/network"
+import { proxied } from "@/util/network"
 import { Process } from "../util/process"
 
 export namespace BunProc {
