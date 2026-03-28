@@ -14,6 +14,7 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+import { Filesystem } from "@/util/filesystem"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
@@ -315,7 +316,7 @@ export namespace Project {
             d
               .update(SessionTable)
               .set({ project_id: data.id })
-              .where(and(eq(SessionTable.project_id, ProjectID.global), eq(SessionTable.directory, data.worktree)))
+              .where(and(eq(SessionTable.project_id, ProjectID.global), eq(SessionTable.directory, Filesystem.normalizePathSeparators(data.worktree))))
               .run(),
           )
         }

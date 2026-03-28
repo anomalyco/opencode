@@ -113,6 +113,15 @@ export namespace Filesystem {
     }
   }
 
+  /**
+   * Normalize path separators to forward slashes for consistent database queries.
+   * This fixes Windows path compatibility issues where paths might use backslashes
+   * in some cases and forward slashes in others.
+   */
+  export function normalizePathSeparators(p: string): string {
+    return p.replace(/\\/g, "/")
+  }
+
   // We cannot rely on path.resolve() here because git.exe may come from Git Bash, Cygwin, or MSYS2, so we need to translate these paths at the boundary.
   // Also resolves symlinks so that callers using the result as a cache key
   // always get the same canonical path for a given physical directory.

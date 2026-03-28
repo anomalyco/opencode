@@ -17,6 +17,7 @@ import { ProjectTable } from "../project/project.sql"
 import { Storage } from "@/storage/storage"
 import { Log } from "../util/log"
 import { updateSchema } from "../util/update-schema"
+import { Filesystem } from "@/util/filesystem"
 import { MessageV2 } from "./message-v2"
 import { Instance } from "../project/instance"
 import { SessionPrompt } from "./prompt"
@@ -400,7 +401,7 @@ export namespace Session {
           slug: Slug.create(),
           version: Installation.VERSION,
           projectID: Instance.project.id,
-          directory: input.directory,
+          directory: Filesystem.normalizePathSeparators(input.directory),
           workspaceID: input.workspaceID,
           parentID: input.parentID,
           title: input.title ?? createDefaultTitle(!!input.parentID),
@@ -768,7 +769,7 @@ export namespace Session {
       conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
     }
     if (input?.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
+      conditions.push(eq(SessionTable.directory, Filesystem.normalizePathSeparators(input.directory)))
     }
     if (input?.roots) {
       conditions.push(isNull(SessionTable.parent_id))
@@ -808,7 +809,7 @@ export namespace Session {
     const conditions: SQL[] = []
 
     if (input?.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
+      conditions.push(eq(SessionTable.directory, Filesystem.normalizePathSeparators(input.directory)))
     }
     if (input?.roots) {
       conditions.push(isNull(SessionTable.parent_id))
