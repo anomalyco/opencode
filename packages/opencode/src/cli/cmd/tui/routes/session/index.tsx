@@ -154,6 +154,7 @@ export function Session() {
   const [showDetails, setShowDetails] = kv.signal("tool_details_visibility", true)
   const [showAssistantMetadata, setShowAssistantMetadata] = kv.signal("assistant_metadata_visibility", true)
   const [showScrollbar, setShowScrollbar] = kv.signal("scrollbar_visible", true)
+  const [userScrolled, setUserScrolled] = createSignal(false)
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [animationsEnabled, setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
@@ -234,6 +235,19 @@ export function Session() {
   const keybind = useKeybind()
   const dialog = useDialog()
   const renderer = useRenderer()
+
+  const isAtBottom = () => {
+    if (!scroll || scroll.isDestroyed) return true
+    return scroll.scrollHeight - scroll.height - scroll.y < 5
+  }
+
+  createEffect(() => {
+    messages()
+    if (!scroll || scroll.isDestroyed) return
+    if (!isAtBottom()) {
+      setUserScrolled(true)
+    }
+  })
 
   // Allow exit when in child session (prompt is hidden)
   const exit = useExit()
@@ -1050,7 +1064,7 @@ export function Session() {
                   foregroundColor: theme.border,
                 },
               }}
-              stickyScroll={true}
+              stickyScroll={!userScrolled()}
               stickyStart="bottom"
               flexGrow={1}
               scrollAcceleration={scrollAcceleration()}
