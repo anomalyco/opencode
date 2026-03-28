@@ -889,8 +889,8 @@ export namespace SessionPrompt {
         await ctx.ask({
           permission: key,
           metadata: {},
-          patterns: ["*"],
-          always: ["*"],
+          patterns: [key],
+          always: [key],
         })
 
         const result = await execute(args, opts)
