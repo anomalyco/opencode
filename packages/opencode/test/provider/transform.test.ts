@@ -1080,14 +1080,14 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[0].content[0]).toEqual({ type: "text", text: "Hello" })
   })
 
-  test("filters out empty reasoning parts from array content", () => {
+  test("filters empty text/reasoning from non-assistant messages", () => {
     const msgs = [
       {
-        role: "assistant",
+        role: "user",
         content: [
-          { type: "reasoning", text: "" },
+          { type: "text", text: "" },
           { type: "text", text: "Answer" },
-          { type: "reasoning", text: "" },
+          { type: "text", text: "" },
         ],
       },
     ] as any[]
@@ -1099,14 +1099,14 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[0].content[0]).toEqual({ type: "text", text: "Answer" })
   })
 
-  test("removes entire message when all parts are empty", () => {
+  test("removes entire message when all parts are empty and no reasoning present", () => {
     const msgs = [
       { role: "user", content: "Hello" },
       {
         role: "assistant",
         content: [
           { type: "text", text: "" },
-          { type: "reasoning", text: "" },
+          { type: "text", text: "" },
         ],
       },
       { role: "user", content: "World" },
@@ -1142,7 +1142,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     })
   })
 
-  test("keeps messages with valid text alongside empty parts", () => {
+  test("preserves assistant messages with reasoning verbatim (signature safety)", () => {
     const msgs = [
       {
         role: "assistant",
@@ -1157,9 +1157,10 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     const result = ProviderTransform.message(msgs, anthropicModel, {})
 
     expect(result).toHaveLength(1)
-    expect(result[0].content).toHaveLength(2)
+    expect(result[0].content).toHaveLength(3)
     expect(result[0].content[0]).toEqual({ type: "reasoning", text: "Thinking..." })
-    expect(result[0].content[1]).toEqual({ type: "text", text: "Result" })
+    expect(result[0].content[1]).toEqual({ type: "text", text: "" })
+    expect(result[0].content[2]).toEqual({ type: "text", text: "Result" })
   })
 
   test("filters empty content for bedrock provider", () => {
@@ -1271,7 +1272,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[0].content).toBe("valid text")
   })
 
-  test("filters whitespace-only text parts in array content", () => {
+  test("filters whitespace-only text parts from assistant messages without reasoning", () => {
     const litellmModel = {
       ...anthropicModel,
       providerID: "litellm",
@@ -1289,7 +1290,6 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
           { type: "text", text: " " },
           { type: "text", text: "\n" },
           { type: "text", text: "valid" },
-          { type: "reasoning", text: "  " },
         ],
       },
     ] as any[]
@@ -1302,7 +1302,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect((result[0].content as any[])[0].text).toBe("valid")
   })
 
-  test("drops message when all parts are whitespace-only", () => {
+  test("drops assistant message when all text parts are whitespace and no reasoning present", () => {
     const litellmModel = {
       ...anthropicModel,
       providerID: "litellm",
@@ -1318,7 +1318,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
         role: "assistant",
         content: [
           { type: "text", text: " " },
-          { type: "reasoning", text: "\n\t" },
+          { type: "text", text: "\n\t" },
         ],
       },
     ] as any[]
@@ -1357,11 +1357,137 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
 
     const result = ProviderTransform.message(msgs, interleavedModel, {})
 
-    // The reasoning-only message should be dropped after interleaved filter
-    // strips reasoning parts, not sent as content: []
     expect(result).toHaveLength(2)
     expect(result[0].content).toBe("Hello")
     expect(result[1].content).toEqual([{ type: "text", text: "Answer" }])
+  })
+
+  test("preserves empty text parts between reasoning blocks in assistant messages", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "First thought",
+            providerOptions: { anthropic: { signature: "sig_abc123" } },
+          },
+          { type: "text", text: "" },
+          {
+            type: "reasoning",
+            text: "Second thought",
+            providerOptions: { anthropic: { signature: "sig_def456" } },
+          },
+          { type: "text", text: "Final answer" },
+          { type: "tool-call", toolCallId: "tc1", toolName: "test", args: {} },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(5)
+    expect((result[0].content as any[])[0].type).toBe("reasoning")
+    expect((result[0].content as any[])[1]).toEqual({ type: "text", text: "" })
+    expect((result[0].content as any[])[2].type).toBe("reasoning")
+  })
+
+  test("preserves whitespace-only text between reasoning blocks in assistant messages", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Thinking..." },
+          { type: "text", text: " " },
+          { type: "reasoning", text: "More thinking..." },
+          { type: "text", text: "Answer" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(4)
+    expect((result[0].content as any[])[1]).toEqual({ type: "text", text: " " })
+  })
+
+  test("still filters empty parts from assistant messages WITHOUT reasoning blocks", () => {
+    const litellmModel = {
+      ...anthropicModel,
+      providerID: "litellm",
+      api: {
+        id: "litellm/claude-sonnet",
+        url: "https://litellm.example.com",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    }
+
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "" },
+          { type: "text", text: "hello" },
+          { type: "tool-call", toolCallId: "tc1", toolName: "test", args: {} },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, litellmModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(2)
+    expect((result[0].content as any[])[0].text).toBe("hello")
+    expect((result[0].content as any[])[1].type).toBe("tool-call")
+  })
+
+  test("still filters empty user messages with whitespace", () => {
+    const msgs = [
+      { role: "user", content: "  " },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "" },
+          { type: "text", text: " " },
+        ],
+      },
+      { role: "user", content: "Hello" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toBe("Hello")
+  })
+
+  test("filters empty tool-result text content", () => {
+    const litellmModel = {
+      ...anthropicModel,
+      providerID: "litellm",
+      api: {
+        id: "litellm/claude-sonnet",
+        url: "https://litellm.example.com",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    }
+
+    const msgs = [
+      {
+        role: "tool",
+        content: [
+          { type: "text", text: "" },
+          { type: "text", text: "result data" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, litellmModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(1)
+    expect((result[0].content as any[])[0].text).toBe("result data")
   })
 })
 
