@@ -237,6 +237,49 @@ export namespace ProviderTransform {
     return msgs
   }
 
+  // Image MIME types supported by all major providers (Anthropic, OpenAI, Google)
+  const SUPPORTED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"])
+
+  // Anthropic enforces a 5 MB limit on base64-encoded image data
+  const IMAGE_MAX_BASE64_BYTES = 5 * 1024 * 1024
+
+  // Anthropic rejects images with any dimension > 2000px in multi-image requests
+  const IMAGE_MAX_DIMENSION_PX = 2000
+
+  /**
+   * Reads width and height from a PNG or JPEG data URL without a full decode.
+   * Returns [0, 0] if the format is unrecognised or the buffer is too short.
+   */
+  function imageDimensions(b64: string): [number, number] {
+    try {
+      // Only need the first ~32 bytes for PNG (IHDR) and JPEG (SOF marker)
+      const header = atob(b64.slice(0, 64))
+      const bytes = Uint8Array.from(header, (c) => c.charCodeAt(0))
+
+      // PNG: signature \x89PNG at offset 0, IHDR width at 16, height at 20
+      if (
+        bytes[0] === 0x89 &&
+        bytes[1] === 0x50 &&
+        bytes[2] === 0x4e &&
+        bytes[3] === 0x47
+      ) {
+        const w = (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19]
+        const h = (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23]
+        return [w >>> 0, h >>> 0]
+      }
+
+      // JPEG: signature \xFF\xD8
+      if (bytes[0] === 0xff && bytes[1] === 0xd8) {
+        // We can't reliably get dimensions from just 32 bytes of JPEG without
+        // scanning for the SOF marker, so skip dimension check for JPEG.
+        return [0, 0]
+      }
+    } catch {
+      // atob can throw on malformed input; treat as unknown dimensions
+    }
+    return [0, 0]
+  }
+
   function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
     return msgs.map((msg) => {
       if (msg.role !== "user" || !Array.isArray(msg.content)) return msg
@@ -244,15 +287,49 @@ export namespace ProviderTransform {
       const filtered = msg.content.map((part) => {
         if (part.type !== "file" && part.type !== "image") return part
 
-        // Check for empty base64 image data
         if (part.type === "image") {
           const imageStr = part.image.toString()
           if (imageStr.startsWith("data:")) {
             const match = imageStr.match(/^data:([^;]+);base64,(.*)$/)
+
+            // Empty / corrupted image
             if (match && (!match[2] || match[2].length === 0)) {
               return {
                 type: "text" as const,
                 text: "ERROR: Image file is empty or corrupted. Please provide a valid image.",
+              }
+            }
+
+            if (match) {
+              const rawMime = match[1].toLowerCase()
+              const b64 = match[2]
+
+              // Normalize image/jpg -> image/jpeg
+              const mime = rawMime === "image/jpg" ? "image/jpeg" : rawMime
+
+              // Unsupported MIME type
+              if (!SUPPORTED_IMAGE_MIMES.has(mime)) {
+                return {
+                  type: "text" as const,
+                  text: `ERROR: Image format "${mime}" is not supported. Supported formats: jpeg, png, gif, webp.`,
+                }
+              }
+
+              // Exceeds 5 MB base64 payload limit
+              if (b64.length > IMAGE_MAX_BASE64_BYTES) {
+                return {
+                  type: "text" as const,
+                  text: `ERROR: Image is too large (${Math.round(b64.length / 1024 / 1024 * 10) / 10} MB). Maximum allowed size is 5 MB. Please resize the image before attaching it.`,
+                }
+              }
+
+              // Exceeds 2000px dimension limit (PNG only — fast header read)
+              const [w, h] = imageDimensions(b64)
+              if (w > IMAGE_MAX_DIMENSION_PX || h > IMAGE_MAX_DIMENSION_PX) {
+                return {
+                  type: "text" as const,
+                  text: `ERROR: Image dimensions (${w}×${h}) exceed the maximum allowed size of ${IMAGE_MAX_DIMENSION_PX}px per side. Please resize the image before attaching it.`,
+                }
               }
             }
           }

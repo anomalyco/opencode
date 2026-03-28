@@ -1014,6 +1014,139 @@ describe("ProviderTransform.message - empty image handling", () => {
   })
 })
 
+describe("ProviderTransform.message - image sanitization", () => {
+  const mockModel = {
+    id: "anthropic/claude-3-5-sonnet",
+    providerID: "anthropic",
+    api: {
+      id: "claude-3-5-sonnet-20241022",
+      url: "https://api.anthropic.com",
+      npm: "@ai-sdk/anthropic",
+    },
+    name: "Claude 3.5 Sonnet",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: true },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0.003, output: 0.015, cache: { read: 0.0003, write: 0.00375 } },
+    limit: { context: 200000, output: 8192 },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  // Smallest valid 1×1 PNG as base64
+  const tiny1x1Png =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+
+  test("should reject unsupported MIME type (image/bmp)", () => {
+    const msgs = [
+      {
+        role: "user",
+        content: [{ type: "image", image: `data:image/bmp;base64,${tiny1x1Png}` }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, mockModel, {}) as any[]
+    expect(result[0].content[0].type).toBe("text")
+    expect(result[0].content[0].text).toMatch(/not supported/)
+    expect(result[0].content[0].text).toMatch(/image\/bmp/)
+  })
+
+  test("should normalize image/jpg to image/jpeg and accept it", () => {
+    const msgs = [
+      {
+        role: "user",
+        content: [{ type: "image", image: `data:image/jpg;base64,${tiny1x1Png}` }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, mockModel, {}) as any[]
+    // Should NOT be replaced with an error — image/jpg normalizes to image/jpeg which is supported
+    expect(result[0].content[0].type).toBe("image")
+  })
+
+  test("should reject image exceeding 5 MB base64 limit", () => {
+    // Generate a base64 string that exceeds 5 * 1024 * 1024 chars
+    const hugeb64 = "A".repeat(5 * 1024 * 1024 + 1)
+    const msgs = [
+      {
+        role: "user",
+        content: [{ type: "image", image: `data:image/png;base64,${hugeb64}` }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, mockModel, {}) as any[]
+    expect(result[0].content[0].type).toBe("text")
+    expect(result[0].content[0].text).toMatch(/too large/)
+    expect(result[0].content[0].text).toMatch(/5 MB/)
+  })
+
+  test("should reject PNG image with dimension exceeding 2000px", () => {
+    // Craft a fake PNG header with width=2001, height=100
+    // PNG signature: 89 50 4E 47 0D 0A 1A 0A
+    // IHDR chunk: length(4) + "IHDR"(4) + width(4) + height(4) + ...
+    const buf = new Uint8Array(32)
+    // PNG signature
+    buf[0] = 0x89; buf[1] = 0x50; buf[2] = 0x4e; buf[3] = 0x47
+    buf[4] = 0x0d; buf[5] = 0x0a; buf[6] = 0x1a; buf[7] = 0x0a
+    // IHDR length = 13
+    buf[8] = 0; buf[9] = 0; buf[10] = 0; buf[11] = 13
+    // "IHDR"
+    buf[12] = 0x49; buf[13] = 0x48; buf[14] = 0x44; buf[15] = 0x52
+    // width = 2001 = 0x000007D1
+    buf[16] = 0x00; buf[17] = 0x00; buf[18] = 0x07; buf[19] = 0xd1
+    // height = 100 = 0x00000064
+    buf[20] = 0x00; buf[21] = 0x00; buf[22] = 0x00; buf[23] = 0x64
+
+    const b64 = btoa(String.fromCharCode(...buf))
+    const msgs = [
+      {
+        role: "user",
+        content: [{ type: "image", image: `data:image/png;base64,${b64}` }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, mockModel, {}) as any[]
+    expect(result[0].content[0].type).toBe("text")
+    expect(result[0].content[0].text).toMatch(/dimensions/)
+    expect(result[0].content[0].text).toMatch(/2001/)
+    expect(result[0].content[0].text).toMatch(/2000px/)
+  })
+
+  test("should accept a valid small PNG image unchanged", () => {
+    const msgs = [
+      {
+        role: "user",
+        content: [{ type: "image", image: `data:image/png;base64,${tiny1x1Png}` }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, mockModel, {}) as any[]
+    expect(result[0].content[0].type).toBe("image")
+    expect(result[0].content[0].image).toContain(tiny1x1Png)
+  })
+
+  test("should accept supported MIME types: jpeg, png, gif, webp", () => {
+    for (const mime of ["image/jpeg", "image/png", "image/gif", "image/webp"]) {
+      const msgs = [
+        {
+          role: "user",
+          content: [{ type: "image", image: `data:${mime};base64,${tiny1x1Png}` }],
+        },
+      ] as any[]
+
+      const result = ProviderTransform.message(msgs, mockModel, {}) as any[]
+      expect(result[0].content[0].type).toBe("image")
+    }
+  })
+})
+
 describe("ProviderTransform.message - anthropic empty content filtering", () => {
   const anthropicModel = {
     id: "anthropic/claude-3-5-sonnet",
