@@ -134,6 +134,7 @@ OpenCode permissions are keyed by tool name, plus a couple of safety guards:
 - `glob` — file globbing (matches the glob pattern)
 - `grep` — content search (matches the regex pattern)
 - `bash` — running shell commands (matches parsed commands like `git status --porcelain`)
+- `bash:unsandboxed` — rerunning a shell command outside the sandbox after denial or after an explicit unsandboxed request
 - `task` — launching subagents (matches the subagent type)
 - `skill` — loading a skill (matches the skill name)
 - `lsp` — running LSP queries (currently non-granular)
@@ -234,3 +235,11 @@ Only analyze code and suggest changes.
 :::tip
 Use pattern matching for commands with arguments. `"grep *"` allows `grep pattern file.txt`, while `"grep"` alone would block it. Commands like `git status` work for default behavior but require explicit permission (like `"git status *"`) when arguments are passed.
 :::
+
+---
+
+## Sandbox Interaction
+
+When macOS sandboxing is enabled, a blocked bash command can trigger a separate `bash:unsandboxed` permission request.
+This happens when OpenCode detects a likely sandbox denial, or when the command explicitly asks to skip the sandbox with `# opencode:unsandboxed <reason>` on the first non-empty line.
+Configure the sandbox itself in [`experimental.sandbox`](/docs/config#sandbox).
