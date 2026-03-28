@@ -140,7 +140,7 @@ export function Prompt(props: PromptProps) {
     const pct = model?.limit.context ? `${Math.round((tokens / model.limit.context) * 100)}%` : undefined
     const cost = msg.reduce((sum, item) => sum + (item.role === "assistant" ? item.cost : 0), 0)
     return {
-      context: pct ? `${tokens.toLocaleString()} ${pct}` : tokens.toLocaleString(),
+      context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
       cost: cost > 0 ? money.format(cost) : undefined,
     }
   })
@@ -1180,28 +1180,25 @@ export function Prompt(props: PromptProps) {
             <box gap={2} flexDirection="row">
               <Switch>
                 <Match when={store.mode === "normal"}>
-                  <Show
-                    when={usage()}
-                    fallback={
-                      <>
-                        <Show when={local.model.variant.list().length > 0}>
-                          <text fg={theme.text}>
-                            {keybind.print("variant_cycle")} <span style={{ fg: theme.textMuted }}>variants</span>
-                          </text>
-                        </Show>
-                        <text fg={theme.text}>
-                          {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>agents</span>
+                  <Switch>
+                    <Match when={usage()}>
+                      {(item) => (
+                        <text fg={theme.textMuted} wrapMode="none">
+                          {[item().context, item().cost].filter(Boolean).join(" · ")}
                         </text>
-                      </>
-                    }
-                  >
-                    {(item) => (
-                      <text fg={theme.textMuted} wrapMode="none">
-                        {item().context}
-                        <Show when={item().cost}>{(c) => <> · {c()}</>}</Show> ·{" "}
+                      )}
+                    </Match>
+                    <Match when={true}>
+                      <Show when={local.model.variant.list().length > 0}>
+                        <text fg={theme.text}>
+                          {keybind.print("variant_cycle")} <span style={{ fg: theme.textMuted }}>variants</span>
+                        </text>
+                      </Show>
+                      <text fg={theme.text}>
+                        {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>agents</span>
                       </text>
-                    )}
-                  </Show>
+                    </Match>
+                  </Switch>
                   <text fg={theme.text}>
                     {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
                   </text>
