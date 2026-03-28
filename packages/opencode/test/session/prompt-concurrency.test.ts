@@ -1,5 +1,6 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import { Instance } from "../../src/project/instance"
+import { Provider } from "../../src/provider/provider"
 import { Session } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
@@ -9,6 +10,14 @@ import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
 
 Log.init({ print: false })
+
+function deferred() {
+  let resolve!: () => void
+  const promise = new Promise<void>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
 
 // Helper: seed a session with a user message + finished assistant message
 // so loop() exits immediately without calling any LLM
@@ -101,23 +110,44 @@ describe("session.prompt concurrency", () => {
       directory: tmp.path,
       fn: async () => {
         const session = await Session.create({})
-        await seed(session.id)
+        const userMsg: MessageV2.Info = {
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID: session.id,
+          time: { created: Date.now() },
+          agent: "build",
+          model: { providerID: "openai" as any, modelID: "gpt-5.2" as any },
+        }
+        await Session.updateMessage(userMsg)
+        await Session.updatePart({
+          id: PartID.ascending(),
+          messageID: userMsg.id,
+          sessionID: session.id,
+          type: "text",
+          text: "hello",
+        })
 
-        // Start loop — it'll finish fast but we can race assertNotBusy
-        const loopPromise = SessionPrompt.loop({ sessionID: session.id })
+        const ready = deferred()
+        const gate = deferred()
+        const getModel = spyOn(Provider, "getModel").mockImplementation(async () => {
+          ready.resolve()
+          await gate.promise
+          throw new Error("test stop")
+        })
 
-        // Give the loop fiber a tick to register in the map
-        await new Promise((r) => setTimeout(r, 5))
+        try {
+          const loopPromise = SessionPrompt.loop({ sessionID: session.id }).catch(() => undefined)
+          await ready.promise
 
-        // The loop may already be done on fast machines, so this test
-        // verifies the mechanism works — if the loop is still running,
-        // assertNotBusy should throw
-        const busyCheck = SessionPrompt.assertNotBusy(session.id).then(
-          () => "not-busy",
-          (e) => (e instanceof Session.BusyError ? "busy" : "other-error"),
-        )
+          await expect(SessionPrompt.assertNotBusy(session.id)).rejects.toBeInstanceOf(Session.BusyError)
 
-        await loopPromise
+          gate.resolve()
+          await loopPromise
+        } finally {
+          gate.resolve()
+          getModel.mockRestore()
+        }
+
         // After loop completes, assertNotBusy should succeed
         await SessionPrompt.assertNotBusy(session.id)
       },

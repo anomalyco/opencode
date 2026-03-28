@@ -90,6 +90,8 @@ export namespace SessionPrompt {
     Effect.gen(function* () {
       const bus = yield* Bus.Service
       const status = yield* SessionStatus.Service
+      const sessions = yield* Session.Service
+      const agents = yield* Agent.Service
       const scope = yield* Scope.Scope
 
       const cache = yield* InstanceState.make(
@@ -137,10 +139,10 @@ export namespace SessionPrompt {
       })
 
       const promptE = Effect.fn("SessionPrompt.prompt")(function* (input: PromptInput) {
-        const session = yield* Effect.promise(() => Session.get(input.sessionID))
+        const session = yield* sessions.get(input.sessionID)
         yield* Effect.promise(() => SessionRevert.cleanup(session))
         const message = yield* Effect.promise(() => createUserMessage(input))
-        yield* Effect.promise(() => Session.touch(input.sessionID))
+        yield* sessions.touch(input.sessionID)
 
         const permissions: Permission.Ruleset = []
         for (const [t, enabled] of Object.entries(input.tools ?? {})) {
@@ -148,7 +150,7 @@ export namespace SessionPrompt {
         }
         if (permissions.length > 0) {
           session.permission = permissions
-          yield* Effect.promise(() => Session.setPermission({ sessionID: session.id, permission: permissions }))
+          yield* sessions.setPermission({ sessionID: session.id, permission: permissions })
         }
 
         if (input.noReply === true) return message
@@ -158,7 +160,7 @@ export namespace SessionPrompt {
       const runLoop = Effect.fn("SessionPrompt.run")(function* (sessionID: SessionID) {
         let structured: unknown | undefined
         let step = 0
-        const session = yield* Effect.promise(() => Session.get(sessionID))
+        const session = yield* sessions.get(sessionID)
 
         while (true) {
           yield* status.set(sessionID, { type: "busy" })
@@ -251,11 +253,9 @@ export namespace SessionPrompt {
             continue
           }
 
-          const agent = yield* Effect.promise(() => Agent.get(lastUser!.agent))
+          const agent = yield* agents.get(lastUser!.agent)
           if (!agent) {
-            const available = yield* Effect.promise(() =>
-              Agent.list().then((agents) => agents.filter((a) => !a.hidden).map((a) => a.name)),
-            )
+            const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
             const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
             const error = new NamedError.Unknown({ message: `Agent not found: "${lastUser!.agent}".${hint}` })
             yield* bus.publish(Session.Event.Error, { sessionID, error: error.toObject() })
@@ -265,30 +265,28 @@ export namespace SessionPrompt {
           const isLastStep = step >= maxSteps
           msgs = yield* Effect.promise(() => insertReminders({ messages: msgs, agent, session }))
 
-          const msg = yield* Effect.promise(() =>
-            Session.updateMessage({
-              id: MessageID.ascending(),
-              parentID: lastUser!.id,
-              role: "assistant",
-              mode: agent.name,
-              agent: agent.name,
-              variant: lastUser!.variant,
-              path: { cwd: Instance.directory, root: Instance.worktree },
-              cost: 0,
-              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-              modelID: model.id,
-              providerID: model.providerID,
-              time: { created: Date.now() },
-              sessionID,
-            }),
-          )
+          const msg = yield* sessions.updateMessage({
+            id: MessageID.ascending(),
+            parentID: lastUser!.id,
+            role: "assistant",
+            mode: agent.name,
+            agent: agent.name,
+            variant: lastUser!.variant,
+            path: { cwd: Instance.directory, root: Instance.worktree },
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            modelID: model.id,
+            providerID: model.providerID,
+            time: { created: Date.now() },
+            sessionID,
+          })
           const processor = yield* Effect.promise((signal) =>
-            Promise.resolve(SessionProcessor.create({
+            SessionProcessor.create({
               assistantMessage: msg as MessageV2.Assistant,
               sessionID,
               model,
               abort: signal,
-            })),
+            }),
           )
 
           const outcome: "break" | "continue" = yield* Effect.ensuring(
@@ -363,7 +361,7 @@ export namespace SessionPrompt {
               if (structured !== undefined) {
                 processor.message.structured = structured
                 processor.message.finish = processor.message.finish ?? "stop"
-                yield* Effect.promise(() => Session.updateMessage(processor.message))
+                yield* sessions.updateMessage(processor.message)
                 return "break" as const
               }
 
@@ -374,7 +372,7 @@ export namespace SessionPrompt {
                     message: "Model did not produce structured output",
                     retries: 0,
                   }).toObject()
-                  yield* Effect.promise(() => Session.updateMessage(processor.message))
+                  yield* sessions.updateMessage(processor.message)
                   return "break" as const
                 }
               }
@@ -506,9 +504,15 @@ export namespace SessionPrompt {
     }),
   )
 
-  const defaultLayer = layer.pipe(
-    Layer.provide(SessionStatus.layer),
-    Layer.provide(Bus.layer),
+  const defaultLayer = Layer.unwrap(
+    Effect.sync(() =>
+      layer.pipe(
+        Layer.provide(SessionStatus.layer),
+        Layer.provide(Session.defaultLayer),
+        Layer.provide(Agent.defaultLayer),
+        Layer.provide(Bus.layer),
+      ),
+    ),
   )
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
