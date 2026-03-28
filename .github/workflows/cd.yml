@@ -10,6 +10,11 @@ on:
       - "assets/**"
       - "docs/**"
       - ".github/*.md"
+  # Auto-merge via GITHUB_TOKEN does not fire the push event above.
+  # pull_request_target fires for every merged PR regardless of merge method.
+  pull_request_target:
+    types: [closed]
+    branches: [main]
   workflow_run:
     workflows: ["CI"]
     types: [completed]
@@ -30,8 +35,10 @@ jobs:
     name: Release
     runs-on: ubuntu-latest
     if: |
-      github.event_name != 'workflow_run' ||
-      github.event.workflow_run.conclusion == 'success'
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'push') ||
+      (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true) ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     outputs:
       tag: ${{ steps.next_version.outputs.tag }}
       semver: ${{ steps.next_version.outputs.semver }}
