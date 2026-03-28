@@ -584,7 +584,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       value: "variant.cycle",
       keybind: "variant_cycle",
       category: "Agent",
-      hidden: true,
       onSelect: () => {
         local.model.variant.cycle()
       },
