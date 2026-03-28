@@ -116,7 +116,7 @@ jobs:
 
       - name: Update Homebrew tap
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           version="${{ steps.version.outputs.version }}"
           tag="${{ steps.version.outputs.tag }}"
