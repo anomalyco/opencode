@@ -784,7 +784,7 @@ export namespace SessionPrompt {
   async function flushInjectedMessages(
     inject: Array<{ role: "user" | "system"; text: string }> | undefined,
     sessionID: string,
-    lastUser: { agent: string; model: { providerID: string; modelID: string } },
+    lastUser: { agent: string; model: MessageV2.User["model"] },
   ) {
     if (!inject?.length) return
     for (const msg of inject) {
@@ -905,7 +905,7 @@ export namespace SessionPrompt {
             await flushInjectedMessages(
               (output as any).inject,
               ctx.sessionID,
-              { agent: input.agent.name, model: { providerID: input.model.providerID, modelID: input.model.api.id } },
+              { agent: input.agent.name, model: { providerID: input.model.providerID, modelID: ModelID.make(input.model.api.id) } },
             )
           }
           return output
@@ -959,7 +959,7 @@ export namespace SessionPrompt {
           await flushInjectedMessages(
             (result as any).inject,
             ctx.sessionID,
-            { agent: input.agent.name, model: { providerID: input.model.providerID, modelID: input.model.api.id } },
+            { agent: input.agent.name, model: { providerID: input.model.providerID, modelID: ModelID.make(input.model.api.id) } },
           )
         }
 
