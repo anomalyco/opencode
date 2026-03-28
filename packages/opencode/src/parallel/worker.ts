@@ -495,7 +495,7 @@ export namespace WorkerManager {
         ? rawMaxWorkers
         : undefined
     const spawnStartTime = Date.now()
-    const schedulerMode = cfg.parallel?.scheduler_mode ?? "off"
+    const schedulerMode = cfg.parallel?.scheduler_mode ?? "auto"
 
     if (rawMaxWorkers !== undefined && maxWorkers === undefined) {
       log.warn("invalid max_workers config, using unlimited", { raw: rawMaxWorkers })
@@ -529,10 +529,19 @@ export namespace WorkerManager {
       }
     }
 
-    // Track completion status
-    const completed = new Set<SubtaskID>()
-    const failed = new Set<SubtaskID>()
+    // Track completion status, preserving prior waves when a phase-gated plan resumes.
+    const completed = new Set<SubtaskID>(
+      plan.workers
+        .filter((worker) => worker.status === "done" || worker.status === "merged")
+        .map((worker) => worker.subtaskID),
+    )
+    const failed = new Set<SubtaskID>(
+      plan.workers
+        .filter((worker) => worker.status === "failed" || worker.status === "conflict")
+        .map((worker) => worker.subtaskID),
+    )
     const running = new Set<SubtaskID>()
+    const phaseMode = plan.approvalMode === "phase" || plan.approvalMode === "manual"
 
     // Wave-aware readiness: in auto mode, respect wave ordering
     // A subtask is ready if all its dependencies are completed AND
@@ -545,12 +554,17 @@ export namespace WorkerManager {
         }
       }
     }
+    const activeWave = phaseMode
+      ? waveAnalysis?.waves.find((wave) => wave.subtasks.some((id) => !completed.has(id) && !failed.has(id)))
+      : undefined
+    const allowed = activeWave ? new Set(activeWave.subtasks) : undefined
 
     function getReadySubtasks(): Subtask[] {
       return plan.subtasks.filter((st) => {
         if (completed.has(st.id) || failed.has(st.id) || running.has(st.id)) {
           return false
         }
+        if (allowed && !allowed.has(st.id)) return false
         // Check explicit dependencies
         const deps = dependencyGraph.get(st.id) ?? new Set()
         if (!Array.from(deps).every((dep) => completed.has(dep))) return false
@@ -585,8 +599,10 @@ export namespace WorkerManager {
       waves: waveAnalysis?.waves.length,
     })
 
-    // Initialize all workers as pending
-    const initialWorkers = plan.workers.map((w) => ({ ...w, status: "pending" as const }))
+    // Preserve terminal state so paused plans can resume from completed waves.
+    const initialWorkers = plan.workers.map((w) =>
+      ["done", "merged", "failed", "conflict"].includes(w.status) ? w : { ...w, status: "pending" as const },
+    )
     await PlanStore.update({ id: plan.id, workers: initialWorkers })
 
     // Spawn workers respecting dependencies, waves, and concurrency

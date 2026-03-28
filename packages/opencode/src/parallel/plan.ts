@@ -15,8 +15,15 @@ import type {
   Subtask,
   ModelRef,
   PublishMode,
+  ApprovalMode,
 } from "./schema"
-import { PlanID as PlanIDSchema, SubtaskID as SubtaskIDSchema, Plan as PlanSchema, PublishMode as PublishModeSchema } from "./schema"
+import {
+  PlanID as PlanIDSchema,
+  SubtaskID as SubtaskIDSchema,
+  Plan as PlanSchema,
+  PublishMode as PublishModeSchema,
+  ApprovalMode as ApprovalModeSchema,
+} from "./schema"
 import { SessionID } from "@/session/schema"
 import { ProjectID } from "@/project/schema"
 import { fn } from "@/util/fn"
@@ -67,6 +74,7 @@ function fromRow(row: PlanRow): Plan {
     conventions: row.conventions ?? undefined,
     integrationBranch: row.integration_branch ?? undefined,
     publishMode: row.publish_mode ?? undefined,
+    approvalMode: row.approval_mode ?? undefined,
     version: row.version,
     time: {
       created: row.time_created,
@@ -92,6 +100,7 @@ function toRow(plan: Plan) {
     conventions: plan.conventions ?? null,
     integration_branch: plan.integrationBranch ?? null,
     publish_mode: plan.publishMode ?? null,
+    approval_mode: plan.approvalMode ?? null,
     version: plan.version,
     time_created: plan.time.created,
     time_approved: plan.time.approved ?? null,
@@ -108,6 +117,7 @@ export namespace PlanStore {
       orchestratorModel: true,
       workerModel: true,
       publishMode: true,
+      approvalMode: true,
     }),
     async (input): Promise<Plan> => {
       const plan: Plan = {
@@ -122,6 +132,7 @@ export namespace PlanStore {
         subtasks: [],
         workers: [],
         publishMode: input.publishMode ?? "new-branch",
+        approvalMode: input.approvalMode ?? "plan",
         version: 0,
         time: {
           created: Date.now(),
@@ -170,6 +181,7 @@ export namespace PlanStore {
       conventions: PlanSchema.shape.conventions.nullable().optional(),
       integrationBranch: z.string().optional(),
       publishMode: PublishModeSchema.optional(),
+      approvalMode: ApprovalModeSchema.optional(),
     }),
     async (input): Promise<Plan> => {
       const existing = await get(input.id)
@@ -203,6 +215,9 @@ export namespace PlanStore {
       if (input.publishMode !== undefined) {
         updates.publish_mode = input.publishMode as any
       }
+      if (input.approvalMode !== undefined) {
+        updates.approval_mode = input.approvalMode as any
+      }
       if (input.sharedContracts !== undefined) {
         updates.shared_contracts = input.sharedContracts ?? null
       }
@@ -233,7 +248,7 @@ export namespace PlanStore {
         .where(
           and(
             eq(PlanTable.project_id, sql.placeholder("project_id")),
-            sql`${PlanTable.status} IN ('draft', 'proposed', 'approved', 'spawning', 'running', 'merging', 'integrating', 'recovering', 'integrated', 'publishing')`,
+            sql`${PlanTable.status} IN ('draft', 'proposed', 'paused', 'approved', 'spawning', 'running', 'merging', 'integrating', 'recovering', 'integrated', 'publishing')`,
           ),
         )
         .prepare(),

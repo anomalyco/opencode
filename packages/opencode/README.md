@@ -18,15 +18,31 @@ bun install
 
 OpenCode supports parallel task execution across multiple git worktrees, enabling concurrent development workflows with automatic integration.
 
+#### Git Flow
+
+Parallel execution has three separate git concepts:
+
+1. **Base branch**: each worker worktree is created from the current `HEAD` when the plan starts.
+2. **Worker branches**: each worker gets its own isolated `opencode/...` branch and worktree.
+3. **Integration branch**: completed worker branches merge into `parallel/<plan-id>` before anything is applied to your current branch.
+
+This distinction matters because the default flow does **not** modify your current branch. By default, OpenCode leaves the final integrated result on the integration branch and keeps your current branch as-is.
+
 #### Publish Modes
 
 When parallel execution completes, you can choose how to publish changes with three modes:
 
-| Mode         | Description                                          | Use Case                                |
-| ------------ | ---------------------------------------------------- | --------------------------------------- |
-| `new-branch` | Creates a new branch for each subtask and opens a PR | Collaborative review, CI/CD integration |
-| `unstaged`   | Leaves changes as unstaged files in current worktree | Manual review before committing         |
-| `direct`     | Commits changes directly to the current branch       | Quick fixes, trusted automation         |
+| Mode         | Description                                                                    | Use Case                        |
+| ------------ | ------------------------------------------------------------------------------ | ------------------------------- |
+| `new-branch` | Leaves the integrated result on `parallel/<plan-id>`. Current branch unchanged | Default and safest workflow     |
+| `unstaged`   | Applies the integration diff into the current worktree as uncommitted changes  | Manual review before committing |
+| `direct`     | Merges the integration branch into the current branch                          | Quick trusted landings          |
+
+Notes:
+
+- `new-branch` is the default publish mode.
+- `unstaged` and `direct` require a clean current worktree.
+- Worker branches are always isolated regardless of publish mode.
 
 #### Conflict-Aware Parallel Scheduler
 
@@ -217,7 +233,7 @@ opencode parallel --publish-mode=direct
 ## Parallel Execution
 
 - Default publish mode: `new-branch`
-- Integration branch naming: `parallel-{plan_id}`
+- Integration branch naming: `parallel/<plan_id>`
 - Auto-merge on success: false
 ```
 
@@ -226,13 +242,13 @@ opencode parallel --publish-mode=direct
 When using `new-branch` mode, integration branches follow this pattern:
 
 ```
-parallel-{plan_id}-{timestamp}
+parallel/<plan_id>
 ```
 
 Examples:
 
-- `parallel-abc123-20240320123456`
-- `parallel-fix-login-20240320150000`
+- `parallel/abc123`
+- `parallel/plan_01hxyz...`
 
 #### Migration from Staged Mode
 

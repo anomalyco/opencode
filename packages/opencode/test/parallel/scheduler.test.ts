@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { analyzeOverlaps, buildWaves, validatePlan } from "../../src/parallel/scheduler"
+import { analyzeOverlaps, buildWaves, summarizeWaves, validatePlan } from "../../src/parallel/scheduler"
 import { SubtaskID } from "../../src/parallel/schema"
 import type { Subtask } from "../../src/parallel/schema"
 
@@ -201,6 +201,41 @@ describe("Scheduler", () => {
       const result = validatePlan(subtasks, "off")
 
       expect(result.valid).toBe(true)
+    })
+  })
+
+  describe("summarizeWaves", () => {
+    test("reports current wave and blocked counts", () => {
+      const subtasks = [
+        createSubtask("a", ["src/a.ts"]),
+        createSubtask("b", ["src/b.ts"], ["a"]),
+        createSubtask("c", ["src/c.ts"], ["a"]),
+      ]
+
+      const summary = summarizeWaves(subtasks, [
+        { subtaskID: SubtaskID.make("a"), status: "merged" },
+        { subtaskID: SubtaskID.make("b"), status: "running" },
+        { subtaskID: SubtaskID.make("c"), status: "pending" },
+      ])
+
+      expect(summary.current?.index).toBe(1)
+      expect(summary.current?.state).toBe("active")
+      expect(summary.ready).toBe(1)
+      expect(summary.waiting).toBe(0)
+      expect(summary.blocked).toBe(0)
+    })
+
+    test("marks pending work blocked after failed dependency", () => {
+      const subtasks = [createSubtask("a", ["src/a.ts"]), createSubtask("b", ["src/b.ts"], ["a"])]
+
+      const summary = summarizeWaves(subtasks, [
+        { subtaskID: SubtaskID.make("a"), status: "failed" },
+        { subtaskID: SubtaskID.make("b"), status: "pending" },
+      ])
+
+      expect(summary.current?.index).toBe(1)
+      expect(summary.blocked).toBe(1)
+      expect(summary.waves[1].state).toBe("blocked")
     })
   })
 })

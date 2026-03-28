@@ -1,4 +1,4 @@
-import type { Subtask, SubtaskID } from "./schema"
+import type { Subtask, SubtaskID, WorkerState, WorkerStatus } from "./schema"
 
 export type WaveType = "parallel" | "serial"
 
@@ -20,6 +20,31 @@ export interface ConflictAnalysis {
   totalSubtasks: number
   parallelizableCount: number
   serialCount: number
+}
+
+export interface WaveSummary extends Wave {
+  state: "complete" | "active" | "ready" | "blocked" | "pending"
+  total: number
+  complete: number
+  running: number
+  failed: number
+  waiting: number
+  ready: number
+  blocked: number
+  reason?: string
+}
+
+export interface ExecutionSummary {
+  waves: WaveSummary[]
+  current?: WaveSummary
+  waiting: number
+  ready: number
+  blocked: number
+  complete: boolean
+}
+
+function terminal(status: WorkerStatus): boolean {
+  return status === "done" || status === "merged" || status === "failed" || status === "conflict"
 }
 
 /**
@@ -203,9 +228,91 @@ export function validatePlan(
   return { valid: true, analysis }
 }
 
+export function summarizeWaves(subtasks: Subtask[], workers: WorkerState[]): ExecutionSummary {
+  const analysis = buildWaves(subtasks)
+  const worker = new Map(workers.map((item) => [item.subtaskID, item]))
+  const subtask = new Map(subtasks.map((item) => [item.id, item]))
+  const failed = new Set(
+    workers
+      .filter((item) => item.status === "failed" || item.status === "conflict")
+      .map((item) => item.subtaskID),
+  )
+  let open = true
+
+  const waves = analysis.waves.map((wave) => {
+    let complete = 0
+    let running = 0
+    let broken = 0
+    let waiting = 0
+    let ready = 0
+    let blocked = 0
+
+    for (const id of wave.subtasks) {
+      const status = worker.get(id)?.status ?? "pending"
+      if (terminal(status)) complete += 1
+      if (status === "running" || status === "spawning" || status === "stopping") running += 1
+      if (status === "failed" || status === "conflict") broken += 1
+      if (status !== "pending") continue
+
+      const deps = subtask.get(id)?.dependencies ?? []
+      if (deps.some((dep) => failed.has(dep))) {
+        blocked += 1
+        continue
+      }
+      if (!open) {
+        waiting += 1
+        continue
+      }
+      if (deps.every((dep) => terminal(worker.get(dep)?.status ?? "pending"))) {
+        ready += 1
+        continue
+      }
+      waiting += 1
+    }
+
+    const total = wave.subtasks.length
+    const state =
+      complete === total
+        ? "complete"
+        : running > 0
+          ? "active"
+          : ready > 0
+            ? "ready"
+            : blocked > 0 && waiting === 0
+              ? "blocked"
+              : "pending"
+    const info: WaveSummary = {
+      ...wave,
+      state,
+      total,
+      complete,
+      running,
+      failed: broken,
+      waiting,
+      ready,
+      blocked,
+      reason: wave.type === "serial" ? "serial due to overlapping file scope" : undefined,
+    }
+
+    if (complete !== total) open = false
+    return info
+  })
+
+  return {
+    waves,
+    current: waves.find((wave) => wave.state !== "complete"),
+    waiting: waves.reduce((sum, wave) => sum + wave.waiting, 0),
+    ready: waves.reduce((sum, wave) => sum + wave.ready, 0),
+    blocked: waves.reduce((sum, wave) => sum + wave.blocked, 0),
+    complete: waves.every((wave) => wave.state === "complete"),
+  }
+}
+
 export namespace Scheduler {
   export type Wave = import("./scheduler").Wave
   export type WaveType = import("./scheduler").WaveType
   export type OverlapAnalysis = import("./scheduler").OverlapAnalysis
   export type ConflictAnalysis = import("./scheduler").ConflictAnalysis
+  export type WaveSummary = import("./scheduler").WaveSummary
+  export type ExecutionSummary = import("./scheduler").ExecutionSummary
 }

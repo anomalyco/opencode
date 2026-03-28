@@ -72,6 +72,7 @@ export type ProjectConventions = z.infer<typeof ProjectConventions>
 export const PlanStatus = z.enum([
   "draft",
   "proposed",
+  "paused",
   "approved",
   "spawning",
   "running",
@@ -89,6 +90,9 @@ export type PlanStatus = z.infer<typeof PlanStatus>
 
 export const PublishMode = z.enum(["new-branch", "unstaged", "direct"])
 export type PublishMode = z.infer<typeof PublishMode>
+
+export const ApprovalMode = z.enum(["plan", "phase", "manual"])
+export type ApprovalMode = z.infer<typeof ApprovalMode>
 
 export const PlanError = z.object({
   code: z.string(),
@@ -147,6 +151,7 @@ export const Plan = z.object({
   conventions: ProjectConventions.optional(),
   integrationBranch: z.string().optional(),
   publishMode: PublishMode.optional(),
+  approvalMode: ApprovalMode.optional(),
   version: z.number().default(0),
   time: z.object({
     created: z.number(),

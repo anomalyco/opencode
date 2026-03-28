@@ -14,9 +14,10 @@ export const InvalidTransitionError = NamedError.create(
 export const VALID_PLAN_TRANSITIONS: Record<PlanStatus, PlanStatus[]> = {
   draft: ["proposed", "failed"],
   proposed: ["draft", "approved", "cancelled", "failed"],
+  paused: ["approved", "cancelled", "failed"],
   approved: ["spawning", "cancelled", "failed"],
   spawning: ["running", "cancelled", "failed"],
-  running: ["merging", "partial_success", "cancelled", "failed"],
+  running: ["paused", "merging", "partial_success", "cancelled", "failed"],
   merging: ["integrating", "recovering", "partial_success", "failed"],
   integrating: ["integrated", "recovering", "failed"],
   recovering: ["integrating", "integrated", "publishing", "partial_success", "failed"],

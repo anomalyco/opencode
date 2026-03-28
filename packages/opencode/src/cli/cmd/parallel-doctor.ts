@@ -41,6 +41,10 @@ async function runChecks(): Promise<DoctorResult> {
       { name: "max_plans_per_project", value: parallel.max_plans_per_project },
       { name: "max_subtasks", value: parallel.max_subtasks },
       { name: "require_approval", value: parallel.require_approval },
+      { name: "approval_mode", value: parallel.approval_mode ?? "plan (default)" },
+      { name: "scheduler_mode", value: parallel.scheduler_mode ?? "auto (default)" },
+      { name: "lint_mode", value: parallel.lint_mode ?? "auto (default)" },
+      { name: "artifact_mode", value: parallel.artifact_mode ?? "auto (default)" },
     ]
 
     const configured = configFields.filter((f) => f.value !== undefined)

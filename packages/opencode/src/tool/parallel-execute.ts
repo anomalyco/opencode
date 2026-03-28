@@ -36,11 +36,13 @@ export const ParallelExecuteTool = Tool.define<typeof params, Meta>("parallel_ex
 
     if (!planID) {
       const plans = await PlanStore.list()
-      const proposed = plans.find((p) => p.projectID === projectID && p.status === "proposed")
+      const proposed = plans
+        .filter((p) => p.projectID === projectID && (p.status === "proposed" || p.status === "paused"))
+        .sort((a, b) => b.time.created - a.time.created)[0]
       if (!proposed) {
         return {
           title: "No plan found",
-          output: "No proposed plan found for this project. Create a plan first with parallel_plan.",
+          output: "No proposed or paused plan found for this project. Create a plan first with parallel_plan.",
           metadata: {},
         }
       }
@@ -58,10 +60,10 @@ export const ParallelExecuteTool = Tool.define<typeof params, Meta>("parallel_ex
       }
     }
 
-    if (plan.status !== "proposed") {
+    if (plan.status !== "proposed" && plan.status !== "paused") {
       return {
         title: "Plan not ready",
-        output: `Plan is in "${plan.status}" status. Only proposed plans can be executed.`,
+        output: `Plan is in "${plan.status}" status. Only proposed or paused plans can be executed.`,
         metadata: {},
       }
     }
@@ -88,7 +90,7 @@ export const ParallelExecuteTool = Tool.define<typeof params, Meta>("parallel_ex
     return {
       title: `Launched ${plan.subtasks.length} parallel workers`,
       output: [
-        `Plan ${planID} approved and execution started.`,
+        `Plan ${planID} approved and execution ${plan.status === "paused" ? "resumed" : "started"}.`,
         `${plan.subtasks.length} workers are spawning in isolated git worktrees.`,
         ``,
         live

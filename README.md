@@ -116,6 +116,16 @@ Learn more about [agents](https://opencode.ai/docs/agents).
 
 Run multiple agents in parallel on a single task. An orchestrator decomposes your task into independent subtasks, each executed in an isolated git worktree, then merges the results automatically.
 
+#### Git behavior
+
+Parallel execution has three distinct git stages:
+
+1. **Base** - Workers branch from the current `HEAD` when you start the plan. If you start from `dev`, workers branch from `dev`. If you start from a feature branch, workers branch from that feature branch.
+2. **Execution** - Each worker runs in its own isolated git worktree on its own `opencode/...` branch. Workers do not edit your current worktree directly.
+3. **Publish** - After worker branches are integrated, OpenCode decides how to expose the result based on the publish mode.
+
+By default, publish mode is `new-branch`. That means the orchestrator creates an integration branch named `parallel/<plan-id>` and leaves your current branch unchanged. It does **not** merge into your local branch unless you explicitly choose a different publish mode.
+
 #### From the TUI (Orchestrator agent)
 
 Press **Tab** to cycle to the **Orchestrator** agent. Then chat naturally:
@@ -153,8 +163,21 @@ opencode parallel "Add dark mode support" --auto-approve
 
 1. **Decompose** - The orchestrator agent breaks your task into file-disjoint subtasks
 2. **Approve** - You review the plan in the TUI: approve, edit, regenerate, or cancel
-3. **Execute** - Each subtask runs in its own git worktree with its own agent session
-4. **Merge** - Branches merge sequentially (smallest diff first), with AI-powered conflict resolution
+3. **Execute** - Each subtask runs in its own git worktree with its own agent session, branched from the current `HEAD`
+4. **Integrate** - Completed worker branches merge into an integration branch such as `parallel/<plan-id>`
+5. **Publish** - The integration result is exposed according to the publish mode
+
+#### Publish modes
+
+These modes control what happens after integration:
+
+| Mode         | Result                                                                 | When to use it                                |
+| ------------ | ---------------------------------------------------------------------- | --------------------------------------------- |
+| `new-branch` | Leave the merged result on `parallel/<plan-id>`. Your current branch stays unchanged. | Default and safest option                     |
+| `unstaged`   | Apply the integration diff into your current worktree as uncommitted changes.          | Review locally before committing              |
+| `direct`     | Merge the integration branch into your currently checked out branch.                   | You want the result landed immediately        |
+
+`unstaged` and `direct` require a clean current worktree. `new-branch` does not touch your current branch.
 
 #### Model selection
 

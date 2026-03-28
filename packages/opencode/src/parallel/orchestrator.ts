@@ -358,7 +358,7 @@ export namespace Orchestrator {
 
     // Validate file scope overlaps based on scheduler mode
     const cfg = await Config.get()
-    const schedulerMode = cfg.parallel?.scheduler_mode ?? "off"
+    const schedulerMode = cfg.parallel?.scheduler_mode ?? "auto"
     const validation = Scheduler.validatePlan(subtasks, schedulerMode)
 
     if (!validation.valid) {
@@ -380,7 +380,7 @@ export namespace Orchestrator {
     }
 
     // Validate and optionally rewrite based on lint_mode
-    const lintMode = cfg.parallel?.lint_mode ?? "off"
+    const lintMode = cfg.parallel?.lint_mode ?? "auto"
     if (lintMode !== "off") {
       const lintReport = lint(subtasks)
       const lintValidation = validate(subtasks, lintMode)
@@ -419,7 +419,7 @@ export namespace Orchestrator {
     }
 
     // Validate and optionally rewrite based on artifact_mode
-    const artifactMode = cfg.parallel?.artifact_mode ?? "off"
+    const artifactMode = cfg.parallel?.artifact_mode ?? "auto"
     if (artifactMode !== "off") {
       const artifactReport = analyzeArtifacts(subtasks)
       const artifactValidation = validateArtifacts(subtasks, artifactMode)
@@ -483,6 +483,7 @@ export namespace Orchestrator {
   export async function resolveModels(input?: {
     orchestratorModel?: ModelRef
     workerModel?: ModelRef
+    currentModel?: ModelRef
   }): Promise<{ orchestratorModel: ModelRef; workerModel: ModelRef }> {
     const cfg = await Config.get()
     const defaultModel = await Provider.defaultModel()
@@ -494,16 +495,18 @@ export namespace Orchestrator {
       return { providerID: parsed.providerID, modelID: parsed.modelID }
     }
 
+    const fallbackModel = input?.currentModel ?? defaultModel
+
     const orchestratorModel = input?.orchestratorModel ??
       parseConfigModel(cfg.parallel?.orchestrator_model) ?? {
-        providerID: defaultModel.providerID,
-        modelID: defaultModel.modelID,
+        providerID: fallbackModel.providerID,
+        modelID: fallbackModel.modelID,
       }
 
     const workerModel = input?.workerModel ??
       parseConfigModel(cfg.parallel?.worker_model) ?? {
-        providerID: defaultModel.providerID,
-        modelID: defaultModel.modelID,
+        providerID: fallbackModel.providerID,
+        modelID: fallbackModel.modelID,
       }
 
     return { orchestratorModel, workerModel }
@@ -522,6 +525,7 @@ export namespace Orchestrator {
   }
 
   export async function checkRunningPlan(projectID: Plan["projectID"]): Promise<void> {
+    const paused = await PlanStore.listByProjectAndStatus(projectID, "paused")
     const active = await PlanStore.listByProjectAndStatus(projectID, "running")
     const spawning = await PlanStore.listByProjectAndStatus(projectID, "spawning")
     const merging = await PlanStore.listByProjectAndStatus(projectID, "merging")
@@ -529,7 +533,7 @@ export namespace Orchestrator {
     const recovering = await PlanStore.listByProjectAndStatus(projectID, "recovering")
     const integrated = await PlanStore.listByProjectAndStatus(projectID, "integrated")
     const publishing = await PlanStore.listByProjectAndStatus(projectID, "publishing")
-    const running = [...active, ...spawning, ...merging, ...integrating, ...recovering, ...integrated, ...publishing]
+    const running = [...paused, ...active, ...spawning, ...merging, ...integrating, ...recovering, ...integrated, ...publishing]
 
     if (running.length > 0) {
       const existingPlan = running[0]
@@ -569,6 +573,7 @@ export namespace Orchestrator {
       orchestratorModel: PlanSchema.shape.orchestratorModel.optional(),
       workerModel: PlanSchema.shape.workerModel.optional(),
       publishMode: z.enum(["new-branch", "unstaged", "direct"]).optional(),
+      approvalMode: PlanSchema.shape.approvalMode.optional(),
     }),
     async (input): Promise<Plan> => {
       await checkPlanLimit(input.projectID)
@@ -580,6 +585,7 @@ export namespace Orchestrator {
       })
       const cfg = await Config.get()
       const publishMode = input.publishMode ?? cfg.parallel?.publish_mode ?? "new-branch"
+      const approvalMode = input.approvalMode ?? cfg.parallel?.approval_mode ?? "plan"
 
       const plan = await PlanStore.create({
         projectID: input.projectID,
@@ -587,6 +593,7 @@ export namespace Orchestrator {
         task: input.task,
         ...models,
         publishMode,
+        approvalMode,
       })
 
       const kind = Decomposition.profile(input.task)
@@ -623,7 +630,7 @@ export namespace Orchestrator {
       })
 
       const cfg2 = await Config.get()
-      const autoApprove = cfg2.parallel?.require_approval === false
+      const autoApprove = cfg2.parallel?.require_approval === false && approvalMode !== "manual"
       if (autoApprove) {
         await approve(updated.id)
       }
@@ -633,6 +640,7 @@ export namespace Orchestrator {
         subtaskCount: subtasks.length,
         autoApprove,
         publishMode,
+        approvalMode,
       })
       return updated
     },
@@ -682,6 +690,16 @@ export namespace Orchestrator {
           subtaskID: worker.subtaskID,
           status: worker.status,
         })),
+      })
+      return
+    }
+
+    const pending = afterWait.workers.filter((worker) => worker.status === "pending")
+    if (afterWait.approvalMode === "phase" && pending.length > 0) {
+      await PlanStore.transition({ id: planID, status: "paused" })
+      log.info("phase complete awaiting manual approval", {
+        planID,
+        pending: pending.length,
       })
       return
     }

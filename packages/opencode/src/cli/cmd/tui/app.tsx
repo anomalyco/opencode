@@ -557,6 +557,7 @@ function App() {
                 : undefined
           const run = plans.find(
             (p) =>
+              p.status === "paused" ||
               p.status === "approved" ||
               p.status === "spawning" ||
               p.status === "running" ||

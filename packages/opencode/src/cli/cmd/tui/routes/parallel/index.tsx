@@ -173,7 +173,7 @@ export function Parallel() {
           <Show when={plan.status === "proposed" || plan.status === "draft"}>
             <ParallelPlan plan={plan} onApproved={() => {}} onCancelled={back} />
           </Show>
-          <Show when={plan.status === "approved" || plan.status === "spawning" || plan.status === "running"}>
+          <Show when={plan.status === "paused" || plan.status === "approved" || plan.status === "spawning" || plan.status === "running"}>
             <ParallelStatus plan={plan} onCancelled={back} onBack={back} />
           </Show>
           <Show

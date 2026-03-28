@@ -27,8 +27,7 @@ Primary agents are the main assistants you interact with directly. You can cycle
 You can use the **Tab** key to switch between primary agents during a session.
 :::
 
-OpenCode comes with two built-in primary agents, **Build** and **Plan**. We'll
-look at these below.
+OpenCode comes with three built-in primary agents, **Build**, **Plan**, and **Orchestrator**. We'll look at these below.
 
 ---
 
@@ -42,7 +41,7 @@ OpenCode comes with two built-in subagents, **General** and **Explore**. We'll l
 
 ## Built-in
 
-OpenCode comes with two built-in primary agents and two built-in subagents.
+OpenCode comes with three built-in primary agents and two built-in subagents.
 
 ---
 
@@ -65,6 +64,23 @@ By default, all of the following are set to `ask`:
 - `bash`: All bash commands
 
 This agent is useful when you want the LLM to analyze code, suggest changes, or create plans without making any actual modifications to your codebase.
+
+---
+
+### Use orchestrator
+
+_Mode_: `primary`
+
+Orchestrator is the built-in primary agent for parallel execution. It plans a task, launches workers in isolated git worktrees, and integrates their results.
+
+Git behavior is:
+
+- Workers branch from the current `HEAD` when the plan starts.
+- Each worker runs on its own `opencode/...` branch in its own worktree.
+- Completed worker branches merge into an integration branch such as `parallel/<plan-id>`.
+- By default, the result stays on that integration branch. Your current branch is unchanged unless you publish with a mode such as `direct` or `unstaged`.
+
+Use this when the task can be split across mostly independent files or subsystems.
 
 ---
 

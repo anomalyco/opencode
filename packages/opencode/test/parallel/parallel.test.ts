@@ -1,8 +1,9 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import { Instance } from "../../src/project/instance"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { PlanStore } from "../../src/parallel/plan"
 import { Orchestrator } from "../../src/parallel/orchestrator"
+import { Provider } from "../../src/provider/provider"
 import { SubtaskID } from "../../src/parallel/schema"
 import type { WorkerState } from "../../src/parallel/schema"
 import { tmpdir } from "../fixture/fixture"
@@ -50,18 +51,22 @@ describe("Parallel Infrastructure", () => {
             orchestratorModel: { providerID: "test" as any, modelID: "test-model" as any },
             workerModel: { providerID: "test" as any, modelID: "test-model" as any },
             publishMode: "direct",
+            approvalMode: "phase",
           })
 
           expect(plan.publishMode).toBe("direct")
+          expect(plan.approvalMode).toBe("phase")
 
           const updated = await PlanStore.update({
             id: plan.id,
             integrationBranch: `parallel/${plan.id}`,
             publishMode: "unstaged",
+            approvalMode: "manual",
           })
 
           expect(updated.integrationBranch).toBe(`parallel/${plan.id}`)
           expect(updated.publishMode).toBe("unstaged")
+          expect(updated.approvalMode).toBe("manual")
 
           return updated
         },
@@ -142,7 +147,20 @@ describe("Parallel Infrastructure", () => {
           const running = await PlanStore.transition({ id: plan.id, status: "running" })
           expect(running.status).toBe("running")
 
-          // running -> merging
+          // running -> paused -> approved
+          const paused = await PlanStore.transition({ id: plan.id, status: "paused" })
+          expect(paused.status).toBe("paused")
+
+          const resumed = await PlanStore.transition({ id: plan.id, status: "approved" })
+          expect(resumed.status).toBe("approved")
+
+          // approved -> spawning -> running -> merging
+          const respawning = await PlanStore.transition({ id: plan.id, status: "spawning" })
+          expect(respawning.status).toBe("spawning")
+
+          const rerunning = await PlanStore.transition({ id: plan.id, status: "running" })
+          expect(rerunning.status).toBe("running")
+
           const merging = await PlanStore.transition({ id: plan.id, status: "merging" })
           expect(merging.status).toBe("merging")
 
@@ -326,12 +344,27 @@ describe("Parallel Infrastructure", () => {
         directory: tmp.path,
         init: InstanceBootstrap,
         fn: async () => {
-          const models = await Orchestrator.resolveModels()
-          expect(models.orchestratorModel).toBeDefined()
-          expect(models.workerModel).toBeDefined()
-          expect(models.orchestratorModel.providerID).toBeDefined()
-          expect(models.orchestratorModel.modelID).toBeDefined()
-          return models
+          const def = spyOn(Provider, "defaultModel").mockResolvedValue({
+            providerID: "test" as any,
+            modelID: "recent-model" as any,
+          })
+          const current = {
+            providerID: "test" as any,
+            modelID: "current-model" as any,
+          }
+
+          try {
+            const models = await Orchestrator.resolveModels({
+              currentModel: current,
+            })
+
+            expect(models.orchestratorModel).toEqual(current)
+            expect(models.workerModel).toEqual(current)
+            expect(def).toHaveBeenCalled()
+            return models
+          } finally {
+            def.mockRestore()
+          }
         },
       })
     })

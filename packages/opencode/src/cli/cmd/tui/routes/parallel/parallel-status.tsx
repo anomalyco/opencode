@@ -6,7 +6,7 @@ import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useToast } from "@tui/ui/toast"
 import type { Plan, WorkerState, Subtask } from "@/parallel/schema"
-import { buildWaves } from "@/parallel/scheduler"
+import { summarizeWaves } from "@/parallel/scheduler"
 import { TextAttributes } from "@opentui/core"
 import { pipe, sumBy } from "remeda"
 
@@ -26,6 +26,10 @@ function formatCost(cost: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 4,
   }).format(cost)
+}
+
+function waveLabel(index: number, type: "parallel" | "serial") {
+  return `${type === "parallel" ? "P" : "S"}${index + 1}`
 }
 
 function WorkerLane(props: {
@@ -407,8 +411,10 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
   // Compute execution waves from subtasks
   const waves = createMemo(() => {
     if (props.plan.subtasks.length === 0) return null
-    return buildWaves(props.plan.subtasks)
+    return summarizeWaves(props.plan.subtasks, props.plan.workers)
   })
+  const currentWave = createMemo(() => waves()?.current)
+  const wiring = createMemo(() => props.plan.subtasks.find((item) => item.title === "Final wiring (shared files)"))
 
   // Aggregate cost and tokens across all worker sessions
   const totals = createMemo(() => {
@@ -591,6 +597,27 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
         <text fg={theme.textMuted}>{formatDuration(elapsed())}</text>
       </box>
 
+      <Show when={currentWave()}>
+        <box flexDirection="row" gap={2} marginBottom={1}>
+          <text fg={theme.textMuted}>Current:</text>
+          <text fg={theme.accent}>
+            {waveLabel(currentWave()!.index, currentWave()!.type)} {currentWave()!.state}
+          </text>
+          <Show when={waves()!.ready > 0}>
+            <text fg={theme.success}>{waves()!.ready} ready</text>
+          </Show>
+          <Show when={waves()!.waiting > 0}>
+            <text fg={theme.textMuted}>{waves()!.waiting} waiting</text>
+          </Show>
+          <Show when={waves()!.blocked > 0}>
+            <text fg={theme.error}>{waves()!.blocked} blocked</text>
+          </Show>
+          <Show when={wiring()}>
+            <text fg={theme.warning}>wiring task queued</text>
+          </Show>
+        </box>
+      </Show>
+
       {/* Progress bar */}
       <box marginBottom={1}>
         <text fg={theme.success}>{"█".repeat(Math.floor((done() / Math.max(total(), 1)) * 30))}</text>
@@ -606,10 +633,17 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
           <text fg={theme.textMuted}>Waves:</text>
           <For each={waves()?.waves}>
             {(wave) => (
-              <text fg={wave.type === "parallel" ? theme.success : theme.warning}>
-                {wave.type === "parallel" ? "P" : "S"}
-                {wave.index + 1}({wave.subtasks.length})
-              </text>
+              <box flexDirection="row" gap={1}>
+                <text fg={wave.type === "parallel" ? theme.success : theme.warning}>
+                  {waveLabel(wave.index, wave.type)}({wave.subtasks.length})
+                </text>
+                <text fg={wave.state === "complete" ? theme.success : wave.state === "active" ? theme.accent : theme.textMuted}>
+                  {wave.state}
+                </text>
+                <Show when={wave.reason}>
+                  <text fg={theme.textMuted}>{wave.reason}</text>
+                </Show>
+              </box>
             )}
           </For>
         </box>

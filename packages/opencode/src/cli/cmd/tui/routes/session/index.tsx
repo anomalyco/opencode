@@ -2047,7 +2047,12 @@ function Task(props: ToolProps<typeof TaskTool>) {
 
 function ParallelExecute(props: ToolProps<typeof ParallelExecuteTool>) {
   const sdk = useSDK()
+  const bus = sdk.event as { on(type: string, handler: (evt: { properties: Record<string, unknown> }) => void): () => void }
   const [plan, setPlan] = createSignal<Plan | undefined>()
+  const [progress, setProgress] = createSignal<
+    Record<string, { files: number; additions: number; deletions: number; elapsedMs: number }>
+  >({})
+  const [warning, setWarning] = createSignal<Record<string, { remainingMs: number; timeoutMs: number }>>({})
 
   const id = createMemo(() => {
     const meta = props.metadata.planID
@@ -2097,7 +2102,15 @@ function ParallelExecute(props: ToolProps<typeof ParallelExecuteTool>) {
     const rows = p.workers
       .filter((x) => x.status === "spawning" || x.status === "running")
       .slice(0, 3)
-      .map((x) => p.subtasks.find((st) => st.id === x.subtaskID)?.title ?? String(x.subtaskID).slice(0, 12))
+      .map((x) => {
+        const name = p.subtasks.find((st) => st.id === x.subtaskID)?.title ?? String(x.subtaskID).slice(0, 12)
+        const stat = progress()[x.subtaskID]
+        const warn = warning()[x.subtaskID]
+        const parts = [name]
+        if (stat) parts.push(`+${stat.additions}/-${stat.deletions}`, `${stat.files} files`)
+        if (warn) parts.push(`${Math.max(1, Math.ceil(warn.remainingMs / 60000))}m left`)
+        return parts.join(" · ")
+      })
     if (rows.length === 0) return ""
     return rows.join(", ")
   })
@@ -2105,6 +2118,8 @@ function ParallelExecute(props: ToolProps<typeof ParallelExecuteTool>) {
   createEffect(() => {
     const planID = id()
     if (!planID) return
+    setProgress({})
+    setWarning({})
     let closed = false
     let timer: ReturnType<typeof setInterval> | undefined
 
@@ -2118,15 +2133,71 @@ function ParallelExecute(props: ToolProps<typeof ParallelExecuteTool>) {
 
     void load()
 
+    const offPlan = bus.on("parallel.plan.updated", (evt) => {
+      const value = evt.properties.plan
+      if (!value || typeof value !== "object" || !("id" in value) || value.id !== planID) return
+      setPlan(value as Plan)
+    })
+
+    const offWorker = bus.on("parallel.worker.updated", (evt) => {
+      if (evt.properties.planID !== planID) return
+      const value = evt.properties.worker
+      if (!value || typeof value !== "object" || !("subtaskID" in value)) return
+      setPlan((prev) => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          workers: prev.workers.map((worker) =>
+            worker.subtaskID === value.subtaskID ? (value as Plan["workers"][number]) : worker,
+          ),
+        }
+      })
+      setWarning((prev) => {
+        const next = { ...prev }
+        delete next[String(value.subtaskID)]
+        return next
+      })
+    })
+
+    const offProgress = bus.on("parallel.worker.progress", (evt) => {
+      if (evt.properties.planID !== planID) return
+      const subtask = String(evt.properties.subtaskID)
+      setProgress((prev) => ({
+        ...prev,
+        [subtask]: {
+          files: Number(evt.properties.files ?? 0),
+          additions: Number(evt.properties.additions ?? 0),
+          deletions: Number(evt.properties.deletions ?? 0),
+          elapsedMs: Number(evt.properties.elapsedMs ?? 0),
+        },
+      }))
+    })
+
+    const offTimeout = bus.on("parallel.worker.timeout_warning", (evt) => {
+      if (evt.properties.planID !== planID) return
+      const subtask = String(evt.properties.subtaskID)
+      setWarning((prev) => ({
+        ...prev,
+        [subtask]: {
+          remainingMs: Number(evt.properties.remainingMs ?? 0),
+          timeoutMs: Number(evt.properties.timeoutMs ?? 0),
+        },
+      }))
+    })
+
     if (live()) {
       timer = setInterval(() => {
-        if (!active()) return
+        if (plan()) return
         void load()
       }, 1000)
     }
 
     onCleanup(() => {
       closed = true
+      offPlan()
+      offWorker()
+      offProgress()
+      offTimeout()
       if (!timer) return
       clearInterval(timer)
     })

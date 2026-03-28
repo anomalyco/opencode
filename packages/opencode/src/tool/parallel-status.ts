@@ -1,6 +1,7 @@
 import z from "zod"
 import { Tool } from "./tool"
 import { PlanStore } from "@/parallel/plan"
+import { summarizeWaves } from "@/parallel/scheduler"
 import { Instance } from "@/project/instance"
 import { Session } from "@/session"
 import { SessionID } from "@/session/schema"
@@ -20,6 +21,10 @@ function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
   return String(n)
+}
+
+function waveLabel(index: number, type: "parallel" | "serial"): string {
+  return `${type === "parallel" ? "P" : "S"}${index + 1}`
 }
 
 export const ParallelStatusTool = Tool.define("parallel_status", {
@@ -98,18 +103,43 @@ export const ParallelStatusTool = Tool.define("parallel_status", {
     const done = plan.workers.filter((w) => ["done", "merged"].includes(w.status)).length
     const failed = plan.workers.filter((w) => ["failed", "conflict"].includes(w.status)).length
     const running = plan.workers.filter((w) => w.status === "running").length
+    const waves = summarizeWaves(plan.subtasks, plan.workers)
+    const current = waves.current
+    const wiring = plan.subtasks.find((st) => st.title === "Final wiring (shared files)")
 
     // Aggregate totals
     const totalCost = sumBy(workerStats, (s) => s.cost)
     const totalInputTokens = sumBy(workerStats, (s) => s.inputTokens)
     const totalOutputTokens = sumBy(workerStats, (s) => s.outputTokens)
+    const waveLines = waves.waves.map((wave) => {
+      const parts = [
+        `${waveLabel(wave.index, wave.type)} [${wave.state}]`,
+        `${wave.complete}/${wave.total} complete`,
+      ]
+      if (wave.running > 0) parts.push(`${wave.running} running`)
+      if (wave.ready > 0) parts.push(`${wave.ready} ready`)
+      if (wave.waiting > 0) parts.push(`${wave.waiting} waiting`)
+      if (wave.blocked > 0) parts.push(`${wave.blocked} blocked`)
+      if (wave.failed > 0) parts.push(`${wave.failed} failed`)
+      if (wave.reason) parts.push(wave.reason)
+      return `  - ${parts.join(" | ")}`
+    })
 
     const output = [
       `Plan: ${plan.id}`,
       `Status: ${plan.status}`,
+      `Approval mode: ${plan.approvalMode ?? "plan"}`,
       `Task: ${plan.task}`,
       `Progress: ${done} done, ${running} running, ${failed} failed (${plan.workers.length} total)`,
       `Cost: ${formatCost(totalCost)} (${formatTokens(totalInputTokens)} in / ${formatTokens(totalOutputTokens)} out)`,
+      current
+        ? `Current wave: ${waveLabel(current.index, current.type)} (${current.state})`
+        : `Current wave: complete`,
+      `Dependency queue: ${waves.ready} ready, ${waves.waiting} waiting, ${waves.blocked} blocked`,
+      wiring ? `Integration task: ${wiring.title}` : `Integration task: none`,
+      ``,
+      `Waves:`,
+      ...waveLines,
       ``,
       `Workers:`,
       ...workerLines,

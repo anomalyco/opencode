@@ -1252,6 +1252,12 @@ export namespace Config {
             .boolean()
             .optional()
             .describe("Require explicit approval before executing parallel plans (default: true)"),
+          approval_mode: z
+            .enum(["plan", "phase", "manual"])
+            .optional()
+            .describe(
+              "Approval policy for dependency waves: 'plan' approves the full DAG once, 'phase' pauses after each wave for approval, 'manual' also disables auto-approval of newly created plans (default: plan)",
+            ),
           publish_mode: z
             .enum(["new-branch", "unstaged", "direct"])
             .optional()
@@ -1262,19 +1268,19 @@ export namespace Config {
             .enum(["auto", "strict", "off"])
             .optional()
             .describe(
-              "Conflict-aware scheduler mode: 'auto' creates waves automatically and warns on overlaps, 'strict' fails plan approval if file overlaps exist, 'off' disables wave scheduling (default: off)",
+              "Conflict-aware scheduler mode: 'auto' creates waves automatically and warns on overlaps, 'strict' fails plan approval if file overlaps exist, 'off' disables wave scheduling (default: auto)",
             ),
           lint_mode: z
             .enum(["off", "warn", "auto", "strict"])
             .optional()
             .describe(
-              "Parallel plan lint mode: 'off' disables linting, 'warn' shows diagnostics only, 'auto' rewrites overlapping plans, 'strict' fails approval on any overlap (default: off)",
+              "Parallel plan lint mode: 'off' disables linting, 'warn' shows diagnostics only, 'auto' rewrites overlapping plans, 'strict' fails approval on any overlap (default: auto)",
             ),
           artifact_mode: z
             .enum(["off", "warn", "auto", "strict"])
             .optional()
             .describe(
-              "Artifact dependency analyzer mode: 'off' skips analysis, 'warn' reports only, 'auto' adds missing dependency edges, 'strict' fails if implicit deps found (default: off)",
+              "Artifact dependency analyzer mode: 'off' skips analysis, 'warn' reports only, 'auto' adds missing dependency edges, 'strict' fails if implicit deps found (default: auto)",
             ),
         })
         .optional()
