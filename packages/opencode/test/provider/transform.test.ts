@@ -1462,6 +1462,44 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[0].content).toBe("Hello")
   })
 
+  test("filters empty system messages to prevent LiteLLM proxy sanitization artifacts", () => {
+    const proxyModel = {
+      ...anthropicModel,
+      providerID: "anthropic-proxy",
+      api: {
+        id: "claude-opus-4-6",
+        url: "https://proxy.example.com/anthropic/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    }
+
+    const msgs = [
+      { role: "system", content: "" },
+      { role: "system", content: " " },
+      { role: "system", content: "\n" },
+      { role: "system", content: "You are a helpful assistant." },
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: "" },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "" },
+          { type: "tool-call", toolCallId: "tc1", toolName: "bash", input: { command: "ls" } },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, proxyModel, {})
+
+    expect(result).toHaveLength(3)
+    expect(result[0].role).toBe("system")
+    expect(result[0].content).toBe("You are a helpful assistant.")
+    expect(result[1].role).toBe("user")
+    expect(result[1].content).toBe("Hello")
+    expect(result[2].content).toHaveLength(1)
+    expect((result[2].content as any[])[0].type).toBe("tool-call")
+  })
+
   test("filters empty tool-result text content", () => {
     const litellmModel = {
       ...anthropicModel,
