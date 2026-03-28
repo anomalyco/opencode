@@ -2,12 +2,12 @@ import { $ } from "bun"
 import { afterEach, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Deferred, Effect, Option } from "effect"
+import { ConfigProvider, Deferred, Effect, Layer, ManagedRuntime, Option } from "effect"
 import { tmpdir } from "../fixture/fixture"
-import { watcherConfigLayer, withServices } from "../fixture/instance"
+import { Bus } from "../../src/bus"
+import { Config } from "../../src/config/config"
 import { FileWatcher } from "../../src/file/watcher"
 import { Instance } from "../../src/project/instance"
-import { GlobalBus } from "../../src/bus/global"
 
 // Native @parcel/watcher bindings aren't reliably available in CI (missing on Linux, flaky on Windows)
 const describeWatcher = FileWatcher.hasNativeBinding() && !process.env.CI ? describe : describe.skip
@@ -16,42 +16,50 @@ const describeWatcher = FileWatcher.hasNativeBinding() && !process.env.CI ? desc
 // Helpers
 // ---------------------------------------------------------------------------
 
-type BusUpdate = { directory?: string; payload: { type: string; properties: WatcherEvent } }
+const watcherConfigLayer = ConfigProvider.layer(
+  ConfigProvider.fromUnknown({
+    OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
+    OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "false",
+  }),
+)
+
 type WatcherEvent = { file: string; event: "add" | "change" | "unlink" }
 
 /** Run `body` with a live FileWatcher service. */
 function withWatcher<E>(directory: string, body: Effect.Effect<void, E>) {
-  return withServices(
+  return Instance.provide({
     directory,
-    FileWatcher.layer,
-    async (rt) => {
-      await rt.runPromise(FileWatcher.Service.use(() => Effect.void))
-      await Effect.runPromise(ready(directory))
-      await Effect.runPromise(body)
+    fn: async () => {
+      const layer: Layer.Layer<FileWatcher.Service, never, never> = FileWatcher.layer.pipe(
+        Layer.provide(Config.defaultLayer),
+        Layer.provide(watcherConfigLayer),
+      )
+      const rt = ManagedRuntime.make(layer)
+      try {
+        await rt.runPromise(FileWatcher.Service.use((s) => s.init()))
+        await Effect.runPromise(ready(directory))
+        await Effect.runPromise(body)
+      } finally {
+        await rt.dispose()
+      }
     },
-    { provide: [watcherConfigLayer] },
-  )
+  })
 }
 
 function listen(directory: string, check: (evt: WatcherEvent) => boolean, hit: (evt: WatcherEvent) => void) {
   let done = false
 
-  function on(evt: BusUpdate) {
+  const unsub = Bus.subscribe(FileWatcher.Event.Updated, (evt) => {
     if (done) return
-    if (evt.directory !== directory) return
-    if (evt.payload.type !== FileWatcher.Event.Updated.type) return
-    if (!check(evt.payload.properties)) return
-    hit(evt.payload.properties)
-  }
+    if (!check(evt.properties)) return
+    hit(evt.properties)
+  })
 
-  function cleanup() {
+  return () => {
     if (done) return
     done = true
-    GlobalBus.off("event", on)
+    unsub()
   }
-
-  GlobalBus.on("event", on)
-  return cleanup
 }
 
 function wait(directory: string, check: (evt: WatcherEvent) => boolean) {
@@ -136,7 +144,9 @@ function ready(directory: string) {
 // ---------------------------------------------------------------------------
 
 describeWatcher("FileWatcher", () => {
-  afterEach(() => Instance.disposeAll())
+  afterEach(async () => {
+    await Instance.disposeAll()
+  })
 
   test("publishes root create, update, and delete events", async () => {
     await using tmp = await tmpdir({ git: true })
@@ -181,13 +191,17 @@ describeWatcher("FileWatcher", () => {
     await withWatcher(tmp.path, Effect.void)
 
     // Now write a file — no watcher should be listening
-    await Effect.runPromise(
-      noUpdate(
-        tmp.path,
-        (e) => e.file === file,
-        Effect.promise(() => fs.writeFile(file, "gone")),
-      ),
-    )
+    await Instance.provide({
+      directory: tmp.path,
+      fn: () =>
+        Effect.runPromise(
+          noUpdate(
+            tmp.path,
+            (e) => e.file === file,
+            Effect.promise(() => fs.writeFile(file, "gone")),
+          ),
+        ),
+    })
   })
 
   test("ignores .git/index changes", async () => {

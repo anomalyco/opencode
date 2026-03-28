@@ -20,6 +20,7 @@ export const anthropicHelper: ProviderHelper = ({ reqModel, providerModel }) => 
   const isBedrockModelArn = providerModel.startsWith("arn:aws:bedrock:")
   const isBedrockModelID = providerModel.startsWith("global.anthropic.")
   const isBedrock = isBedrockModelArn || isBedrockModelID
+  const isDatabricks = providerModel.startsWith("databricks-claude-")
   const supports1m = reqModel.includes("sonnet") || reqModel.includes("opus-4-6")
   return {
     format: "anthropic",
@@ -28,7 +29,7 @@ export const anthropicHelper: ProviderHelper = ({ reqModel, providerModel }) => 
         ? `${providerApi}/model/${isBedrockModelArn ? encodeURIComponent(providerModel) : providerModel}/${isStream ? "invoke-with-response-stream" : "invoke"}`
         : providerApi + "/messages",
     modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => {
-      if (isBedrock) {
+      if (isBedrock || isDatabricks) {
         headers.set("Authorization", `Bearer ${apiKey}`)
       } else {
         headers.set("x-api-key", apiKey)
@@ -47,9 +48,14 @@ export const anthropicHelper: ProviderHelper = ({ reqModel, providerModel }) => 
             model: undefined,
             stream: undefined,
           }
-        : {
-            service_tier: "standard_only",
-          }),
+        : isDatabricks
+          ? {
+              anthropic_version: "bedrock-2023-05-31",
+              anthropic_beta: supports1m ? ["context-1m-2025-08-07"] : undefined,
+            }
+          : {
+              service_tier: "standard_only",
+            }),
     }),
     createBinaryStreamDecoder: () => {
       if (!isBedrock) return undefined
@@ -167,7 +173,6 @@ export const anthropicHelper: ProviderHelper = ({ reqModel, providerModel }) => 
           }
         },
         retrieve: () => usage,
-        buidlCostChunk: (cost: string) => `event: ping\ndata: ${JSON.stringify({ type: "ping", cost })}\n\n`,
       }
     },
     normalizeUsage: (usage: Usage) => ({
