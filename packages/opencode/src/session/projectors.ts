@@ -5,25 +5,9 @@ import { MessageV2 } from "./message-v2"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
 import { Log } from "../util/log"
-import { NamedError } from "@opencode-ai/util/error"
-import z from "zod"
+import { ForeignKeyError, isForeignKeyError } from "../sync/fk-error"
 
 const log = Log.create({ service: "session.projector" })
-
-// 定义外键错误类型，便于在 SyncEvent.run() 中识别和重试
-export const ForeignKeyError = NamedError.create(
-  "ForeignKeyError",
-  z.object({
-    message: z.string(),
-  }),
-)
-
-// 检测是否为 SQLite 外键约束错误
-export function isForeignKeyError(err: unknown): boolean {
-  if (typeof err !== "object" || err === null) return false
-  if ("code" in err && err.code === "SQLITE_CONSTRAINT_FOREIGNKEY") return true
-  return "message" in err && typeof err.message === "string" && err.message.includes("FOREIGN KEY constraint failed")
-}
 
 export type DeepPartial<T> = T extends object ? { [K in keyof T]?: DeepPartial<T[K]> | null } : T
 

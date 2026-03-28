@@ -7,7 +7,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { EventSequenceTable, EventTable } from "./event.sql"
 import { EventID } from "./schema"
 import { Flag } from "@/flag/flag"
-import { ForeignKeyError } from "@/session/projectors"
+import { ForeignKeyError } from "./fk-error"
 import { Log } from "@/util/log"
 
 const log = Log.create({ service: "sync" })
