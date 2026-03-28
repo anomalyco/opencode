@@ -31,6 +31,7 @@ import {
   type FileViewState,
   type SelectedLineRange,
 } from "./file/types"
+import { permissionNotice } from "@/utils/server-errors"
 
 export type { FileSelection, SelectedLineRange, FileViewState, FileState }
 export { selectionFromLines }
@@ -79,6 +80,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       onError: (message) => {
         const openclaw = server.current?.integration === "openclaw"
         if (openclaw) return
+        if (permissionNotice(message, language.t, "file")) return
         showToast({
           variant: "error",
           title: language.t("toast.file.listFailed.title"),

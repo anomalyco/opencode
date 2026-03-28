@@ -33,7 +33,8 @@ import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global
 import { trimSessions } from "./global-sync/session-trim"
 import type { ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
-import { formatServerError } from "@/utils/server-errors"
+import { sanitizeProject } from "./global-sync/utils"
+import { formatServerError, permissionNotice } from "@/utils/server-errors"
 import { useServer } from "./server"
 
 type GlobalStore = {
@@ -244,6 +245,7 @@ function createGlobalSync() {
     children.pin(key)
     const [store, setStore] = children.child(directory, { bootstrap: false })
     setStore("sessions", "loading")
+    setStore("session_error", undefined)
     const meta = sessionMeta.get(directory)
     if (meta && meta.limit >= store.limit) {
       const next = trimSessions(store.session, {
@@ -255,6 +257,7 @@ function createGlobalSync() {
         cleanupDroppedSessionCaches(store, setStore, next, setSessionTodo)
       }
       setStore("sessions", "ready")
+      setStore("session_error", undefined)
       children.unpin(directory)
       return
     }
@@ -288,11 +291,14 @@ function createGlobalSync() {
         cleanupDroppedSessionCaches(store, setStore, sessions, setSessionTodo)
         sessionMeta.set(directory, { limit })
         setStore("sessions", "ready")
+        setStore("session_error", undefined)
       })
       .catch((err) => {
         console.error("Failed to load sessions", err)
         setStore("sessions", "idle")
-        if (opts?.silent) return
+        const note = permissionNotice(err, language.t, "session")
+        setStore("session_error", note)
+        if (opts?.silent || note) return
         const project = getFilename(directory)
         const title =
           server.current?.integration === "openclaw"
