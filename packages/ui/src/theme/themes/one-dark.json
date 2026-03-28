@@ -6,6 +6,11 @@
     "seeds": {
       "neutral": "#fafafa",
       "primary": "#4078f2",
+    "palette": {
+      "neutral": "#fafafa",
+      "ink": "#383a42",
+      "primary": "#4078f2",
+      "accent": "#0184bc",
       "success": "#50a14f",
       "warning": "#c18401",
       "error": "#e45649",
@@ -28,6 +33,22 @@
       "syntax-type": "#c18401",
       "syntax-constant": "#a0a1a7",
       "syntax-info": "#a0a1a7",
+      "diffAdd": "#489447",
+      "diffDelete": "#d65145"
+    },
+    "overrides": {
+      "text-weak": "#a0a1a7",
+      "syntax-comment": "#a0a1a7",
+      "syntax-keyword": "#a626a4",
+      "syntax-string": "#50a14f",
+      "syntax-primitive": "#4078f2",
+      "syntax-variable": "#e45649",
+      "syntax-property": "#0184bc",
+      "syntax-type": "#c18401",
+      "syntax-constant": "#986801",
+      "syntax-operator": "#0184bc",
+      "syntax-punctuation": "#383a42",
+      "syntax-object": "#e45649",
       "markdown-heading": "#a626a4",
       "markdown-text": "#383a42",
       "markdown-link": "#4078f2",
@@ -50,6 +71,15 @@
     "seeds": {
       "neutral": "#282c34",
       "primary": "#61afef",
+      "markdown-code-block": "#383a42"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#282c34",
+      "ink": "#abb2bf",
+      "primary": "#61afef",
+      "accent": "#56b6c2",
       "success": "#98c379",
       "warning": "#e5c07b",
       "error": "#e06c75",
@@ -72,6 +102,22 @@
       "syntax-type": "#e5c07b",
       "syntax-constant": "#5c6370",
       "syntax-info": "#5c6370",
+      "diffAdd": "#aad482",
+      "diffDelete": "#e8828b"
+    },
+    "overrides": {
+      "text-weak": "#5c6370",
+      "syntax-comment": "#5c6370",
+      "syntax-keyword": "#c678dd",
+      "syntax-string": "#98c379",
+      "syntax-primitive": "#61afef",
+      "syntax-variable": "#e06c75",
+      "syntax-property": "#56b6c2",
+      "syntax-type": "#e5c07b",
+      "syntax-constant": "#d19a66",
+      "syntax-operator": "#56b6c2",
+      "syntax-punctuation": "#abb2bf",
+      "syntax-object": "#e06c75",
       "markdown-heading": "#c678dd",
       "markdown-text": "#abb2bf",
       "markdown-link": "#61afef",
@@ -88,6 +134,7 @@
       "markdown-code-block": "#abb2bf",
       "surface-diff-add-base": "#2c382b",
       "surface-diff-delete-base": "#3a2d2f"
+      "markdown-code-block": "#abb2bf"
     }
   }
 }

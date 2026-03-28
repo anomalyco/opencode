@@ -28,6 +28,29 @@
       "syntax-type": "#00acc1",
       "syntax-constant": "#5c6b7d",
       "syntax-info": "#5c6b7d",
+    "palette": {
+      "neutral": "#ffffff",
+      "ink": "#193549",
+      "primary": "#0066cc",
+      "accent": "#00acc1",
+      "success": "#4caf50",
+      "warning": "#ff9800",
+      "error": "#e91e63",
+      "info": "#ff5722"
+    },
+    "overrides": {
+      "text-weak": "#5c6b7d",
+      "syntax-comment": "#5c6b7d",
+      "syntax-keyword": "#ff5722",
+      "syntax-string": "#4caf50",
+      "syntax-primitive": "#ff9800",
+      "syntax-variable": "#193549",
+      "syntax-property": "#00acc1",
+      "syntax-type": "#00acc1",
+      "syntax-constant": "#e91e63",
+      "syntax-operator": "#ff5722",
+      "syntax-punctuation": "#193549",
+      "syntax-object": "#193549",
       "markdown-heading": "#ff9800",
       "markdown-text": "#193549",
       "markdown-link": "#0066cc",
@@ -50,6 +73,15 @@
     "seeds": {
       "neutral": "#193549",
       "primary": "#0088ff",
+      "markdown-code-block": "#193549"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#193549",
+      "ink": "#ffffff",
+      "primary": "#0088ff",
+      "accent": "#2affdf",
       "success": "#9eff80",
       "warning": "#ffc600",
       "error": "#ff0088",
@@ -72,6 +104,22 @@
       "syntax-type": "#2affdf",
       "syntax-constant": "#0088ff",
       "syntax-info": "#0088ff",
+      "diffAdd": "#b9ff9f",
+      "diffDelete": "#ff5fb3"
+    },
+    "overrides": {
+      "text-weak": "#adb7c9",
+      "syntax-comment": "#0088ff",
+      "syntax-keyword": "#ff9d00",
+      "syntax-string": "#9eff80",
+      "syntax-primitive": "#ffc600",
+      "syntax-variable": "#ffffff",
+      "syntax-property": "#2affdf",
+      "syntax-type": "#2affdf",
+      "syntax-constant": "#ff628c",
+      "syntax-operator": "#ff9d00",
+      "syntax-punctuation": "#ffffff",
+      "syntax-object": "#ffffff",
       "markdown-heading": "#ffc600",
       "markdown-text": "#ffffff",
       "markdown-link": "#0088ff",
@@ -88,6 +136,7 @@
       "markdown-code-block": "#ffffff",
       "surface-diff-add-base": "#1a3a2a",
       "surface-diff-delete-base": "#3a1a2a"
+      "markdown-code-block": "#ffffff"
     }
   }
 }

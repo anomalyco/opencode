@@ -8,6 +8,7 @@ type WatcherEvent = {
 type WatcherOps = {
   normalize: (input: string) => string
   hasFile: (path: string) => boolean
+  isOpen?: (path: string) => boolean
   loadFile: (path: string) => void
   node: (path: string) => FileNode | undefined
   isDirLoaded: (path: string) => boolean
@@ -27,7 +28,7 @@ export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
   if (!path) return
   if (path.startsWith(".git/")) return
 
-  if (ops.hasFile(path)) {
+  if (ops.hasFile(path) || ops.isOpen?.(path)) {
     ops.loadFile(path)
   }
 

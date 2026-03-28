@@ -1,44 +1,44 @@
 mod cli;
 mod constants;
-#[cfg(windows)]
-mod job_object;
+#[cfg(target_os = "linux")]
+pub mod linux_display;
+#[cfg(target_os = "linux")]
+pub mod linux_windowing;
+mod logging;
 mod markdown;
+mod os;
 mod server;
 mod window_customizer;
 mod windows;
 
-use futures::{
-    FutureExt, TryFutureExt,
-    future::{self, Shared},
-};
-#[cfg(windows)]
-use job_object::*;
+use crate::cli::CommandChild;
+use futures::{FutureExt, TryFutureExt};
 use std::{
-    collections::VecDeque,
     env,
+    future::Future,
     net::TcpListener,
     path::PathBuf,
+    process::Command,
     sync::{Arc, Mutex},
     time::Duration,
-    process::Command,
 };
-use tauri::{AppHandle, Manager, RunEvent, State, ipc::Channel};
+use tauri::{AppHandle, Listener, Manager, RunEvent, State, ipc::Channel};
 #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
 use tauri_plugin_deep_link::DeepLinkExt;
-use tauri_plugin_shell::process::CommandChild;
+use tauri_specta::Event;
 use tokio::{
     sync::{oneshot, watch},
     time::{sleep, timeout},
 };
 
-use crate::cli::sync_cli;
+use crate::cli::{sqlite_migration::SqliteMigrationProgress, sync_cli};
 use crate::constants::*;
-use crate::server::get_saved_server_url;
 use crate::windows::{LoadingWindow, MainWindow};
 
 #[derive(Clone, serde::Serialize, specta::Type, Debug)]
 struct ServerReadyData {
     url: String,
+    username: Option<String>,
     password: Option<String>,
 }
 
@@ -50,40 +50,29 @@ enum InitStep {
     Done,
 }
 
+#[derive(serde::Deserialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+enum WslPathMode {
+    Windows,
+    Linux,
+}
+
 struct InitState {
     current: watch::Receiver<InitStep>,
 }
 
-#[derive(Clone)]
 struct ServerState {
     child: Arc<Mutex<Option<CommandChild>>>,
-    status: future::Shared<oneshot::Receiver<Result<ServerReadyData, String>>>,
 }
 
-impl ServerState {
-    pub fn new(
-        child: Option<CommandChild>,
-        status: Shared<oneshot::Receiver<Result<ServerReadyData, String>>>,
-    ) -> Self {
-        Self {
-            child: Arc::new(Mutex::new(child)),
-            status,
-        }
-    }
-
-    pub fn set_child(&self, child: Option<CommandChild>) {
-        *self.child.lock().unwrap() = child;
-    }
-}
-
-#[derive(Clone)]
-struct LogState(Arc<Mutex<VecDeque<String>>>);
+/// Resolves with sidecar credentials as soon as the sidecar is spawned (before health check).
+struct SidecarReady(futures::future::Shared<oneshot::Receiver<ServerReadyData>>);
 
 #[tauri::command]
 #[specta::specta]
 fn kill_sidecar(app: AppHandle) {
     let Some(server_state) = app.try_state::<ServerState>() else {
-        println!("Server not running");
+        tracing::info!("Server not running");
         return;
     };
 
@@ -93,42 +82,30 @@ fn kill_sidecar(app: AppHandle) {
         .expect("Failed to acquire mutex lock")
         .take()
     else {
-        println!("Server state missing");
+        tracing::info!("Server state missing");
         return;
     };
 
     let _ = server_state.kill();
 
-    println!("Killed server");
-}
-
-async fn get_logs(app: AppHandle) -> Result<String, String> {
-    let log_state = app.try_state::<LogState>().ok_or("Log state not found")?;
-
-    let logs = log_state
-        .0
-        .lock()
-        .map_err(|_| "Failed to acquire log lock")?;
-
-    Ok(logs.iter().cloned().collect::<Vec<_>>().join(""))
+    tracing::info!("Killed server");
 }
 
 #[tauri::command]
 #[specta::specta]
 async fn await_initialization(
-    state: State<'_, ServerState>,
+    state: State<'_, SidecarReady>,
     init_state: State<'_, InitState>,
     events: Channel<InitStep>,
 ) -> Result<ServerReadyData, String> {
     let mut rx = init_state.current.clone();
 
-    let events = async {
-        let e = (*rx.borrow()).clone();
-        let _ = events.send(e).unwrap();
+    let stream = async {
+        let e = *rx.borrow();
+        let _ = events.send(e);
 
         while rx.changed().await.is_ok() {
             let step = *rx.borrow_and_update();
-
             let _ = events.send(step);
 
             if matches!(step, InitStep::Done) {
@@ -137,10 +114,18 @@ async fn await_initialization(
         }
     };
 
-    future::join(state.status.clone(), events)
-        .await
-        .0
-        .map_err(|_| "Failed to get server status".to_string())?
+    // Wait for sidecar credentials (available immediately after spawn, before health check)
+    let data = async {
+        state
+            .inner()
+            .0
+            .clone()
+            .await
+            .map_err(|_| "Failed to get sidecar data".to_string())
+    };
+
+    let (result, _) = futures::future::join(data, stream).await;
+    result
 }
 
 #[tauri::command]
@@ -148,24 +133,63 @@ async fn await_initialization(
 fn check_app_exists(app_name: &str) -> bool {
     #[cfg(target_os = "windows")]
     {
-        check_windows_app(app_name)
+        os::windows::check_windows_app(app_name)
     }
-    
+
     #[cfg(target_os = "macos")]
     {
         check_macos_app(app_name)
     }
-    
+
     #[cfg(target_os = "linux")]
     {
         check_linux_app(app_name)
     }
 }
 
-#[cfg(target_os = "windows")]
-fn check_windows_app(app_name: &str) -> bool {
-    // Check if command exists in PATH, including .exe
-    return true;
+#[tauri::command]
+#[specta::specta]
+fn resolve_app_path(app_name: &str) -> Option<String> {
+    #[cfg(target_os = "windows")]
+    {
+        os::windows::resolve_windows_app_path(app_name)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        // On macOS/Linux, just return the app_name as-is since
+        // the opener plugin handles them correctly
+        Some(app_name.to_string())
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+fn open_path(_app: AppHandle, path: String, app_name: Option<String>) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let app_name = app_name.map(|v| os::windows::resolve_windows_app_path(&v).unwrap_or(v));
+        let is_powershell = app_name.as_ref().is_some_and(|v| {
+            std::path::Path::new(v)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| {
+                    name.eq_ignore_ascii_case("powershell")
+                        || name.eq_ignore_ascii_case("powershell.exe")
+                })
+        });
+
+        if is_powershell {
+            return os::windows::open_in_powershell(path);
+        }
+
+        return tauri_plugin_opener::open_path(path, app_name.as_deref())
+            .map_err(|e| format!("Failed to open path: {e}"));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    tauri_plugin_opener::open_path(path, app_name.as_deref())
+        .map_err(|e| format!("Failed to open path: {e}"))
 }
 
 #[cfg(target_os = "macos")]
@@ -179,13 +203,13 @@ fn check_macos_app(app_name: &str) -> bool {
     if let Ok(home) = std::env::var("HOME") {
         app_locations.push(format!("{}/Applications/{}.app", home, app_name));
     }
-    
+
     for location in app_locations {
         if std::path::Path::new(&location).exists() {
             return true;
         }
     }
-    
+
     // Also check if command exists in PATH
     Command::new("which")
         .arg(app_name)
@@ -194,34 +218,92 @@ fn check_macos_app(app_name: &str) -> bool {
         .unwrap_or(false)
 }
 
+#[derive(serde::Serialize, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum LinuxDisplayBackend {
+    Wayland,
+    Auto,
+}
+
+#[tauri::command]
+#[specta::specta]
+fn get_display_backend() -> Option<LinuxDisplayBackend> {
+    #[cfg(target_os = "linux")]
+    {
+        let prefer = linux_display::read_wayland().unwrap_or(false);
+        return Some(if prefer {
+            LinuxDisplayBackend::Wayland
+        } else {
+            LinuxDisplayBackend::Auto
+        });
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    None
+}
+
+#[tauri::command]
+#[specta::specta]
+fn set_display_backend(_app: AppHandle, _backend: LinuxDisplayBackend) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        let prefer = matches!(_backend, LinuxDisplayBackend::Wayland);
+        return linux_display::write_wayland(&_app, prefer);
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    Ok(())
+}
+
 #[cfg(target_os = "linux")]
 fn check_linux_app(app_name: &str) -> bool {
     return true;
 }
 
+#[tauri::command]
+#[specta::specta]
+fn wsl_path(path: String, mode: Option<WslPathMode>) -> Result<String, String> {
+    if !cfg!(windows) {
+        return Ok(path);
+    }
+
+    let flag = match mode.unwrap_or(WslPathMode::Linux) {
+        WslPathMode::Windows => "-w",
+        WslPathMode::Linux => "-u",
+    };
+
+    let output = if path.starts_with('~') {
+        let suffix = path.strip_prefix('~').unwrap_or("");
+        let escaped = suffix.replace('"', "\\\"");
+        let cmd = format!("wslpath {flag} \"$HOME{escaped}\"");
+        Command::new("wsl")
+            .args(["-e", "sh", "-lc", &cmd])
+            .output()
+            .map_err(|e| format!("Failed to run wslpath: {e}"))?
+    } else {
+        Command::new("wsl")
+            .args(["-e", "wslpath", flag, &path])
+            .output()
+            .map_err(|e| format!("Failed to run wslpath: {e}"))?
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        if stderr.is_empty() {
+            return Err("wslpath failed".to_string());
+        }
+        return Err(stderr);
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let builder = tauri_specta::Builder::<tauri::Wry>::new()
-        // Then register them (separated by a comma)
-        .commands(tauri_specta::collect_commands![
-            kill_sidecar,
-            cli::install_cli,
-            await_initialization,
-            server::get_default_server_url,
-            server::set_default_server_url,
-            markdown::parse_markdown_command,
-            check_app_exists
-        ])
-        .events(tauri_specta::collect_events![LoadingWindowComplete])
-        .error_handling(tauri_specta::ErrorHandlingMode::Throw);
+    let builder = make_specta_builder();
 
     #[cfg(debug_assertions)] // <- Only export on non-release builds
-    builder
-        .export(
-            specta_typescript::Typescript::default(),
-            "../src/bindings.ts",
-        )
-        .expect("Failed to export typescript bindings");
+    export_types(&builder);
 
     #[cfg(all(target_os = "macos", not(debug_assertions)))]
     let _ = std::process::Command::new("killall")
@@ -256,10 +338,18 @@ pub fn run() {
         .plugin(tauri_plugin_decorum::init())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
-            let app = app.handle().clone();
+            let handle = app.handle().clone();
 
-            builder.mount_events(&app);
-            tauri::async_runtime::spawn(initialize(app));
+            let log_dir = app
+                .path()
+                .app_log_dir()
+                .expect("failed to resolve app log dir");
+            // Hold the guard in managed state so it lives for the app's lifetime,
+            // ensuring all buffered logs are flushed on shutdown.
+            handle.manage(logging::init(&log_dir));
+
+            builder.mount_events(&handle);
+            tauri::async_runtime::spawn(initialize(handle));
 
             Ok(())
         });
@@ -273,146 +363,169 @@ pub fn run() {
         .expect("error while running tauri application")
         .run(|app, event| {
             if let RunEvent::Exit = event {
-                println!("Received Exit");
+                tracing::info!("Received Exit");
 
                 kill_sidecar(app.clone());
             }
         });
 }
 
+fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
+    tauri_specta::Builder::<tauri::Wry>::new()
+        // Then register them (separated by a comma)
+        .commands(tauri_specta::collect_commands![
+            kill_sidecar,
+            cli::install_cli,
+            await_initialization,
+            server::get_default_server_url,
+            server::set_default_server_url,
+            server::get_wsl_config,
+            server::set_wsl_config,
+            get_display_backend,
+            set_display_backend,
+            markdown::parse_markdown_command,
+            check_app_exists,
+            wsl_path,
+            resolve_app_path,
+            open_path
+        ])
+        .events(tauri_specta::collect_events![
+            LoadingWindowComplete,
+            SqliteMigrationProgress
+        ])
+        .error_handling(tauri_specta::ErrorHandlingMode::Throw)
+}
+
+fn export_types(builder: &tauri_specta::Builder<tauri::Wry>) {
+    builder
+        .export(
+            specta_typescript::Typescript::default(),
+            "../src/bindings.ts",
+        )
+        .expect("Failed to export typescript bindings");
+}
+
+#[cfg(test)]
+#[test]
+fn test_export_types() {
+    let builder = make_specta_builder();
+    export_types(&builder);
+}
+
 #[derive(tauri_specta::Event, serde::Deserialize, specta::Type)]
 struct LoadingWindowComplete;
 
-// #[tracing::instrument(skip_all)]
 async fn initialize(app: AppHandle) {
-    println!("Initializing app");
+    tracing::info!("Initializing app");
 
     let (init_tx, init_rx) = watch::channel(InitStep::ServerWaiting);
 
     setup_app(&app, init_rx);
     spawn_cli_sync_task(app.clone());
 
-    let (server_ready_tx, server_ready_rx) = oneshot::channel();
-    let server_ready_rx = server_ready_rx.shared();
-    app.manage(ServerState::new(None, server_ready_rx.clone()));
+    // Spawn sidecar immediately - credentials are known before health check
+    let port = get_sidecar_port();
+    let hostname = "127.0.0.1";
+    let url = format!("http://{hostname}:{port}");
+    let password = uuid::Uuid::new_v4().to_string();
+
+    tracing::info!("Spawning sidecar on {url}");
+    let (child, health_check) =
+        server::spawn_local_server(app.clone(), hostname.to_string(), port, password.clone());
+
+    // Make sidecar credentials available immediately (before health check completes)
+    let (ready_tx, ready_rx) = oneshot::channel();
+    let _ = ready_tx.send(ServerReadyData {
+        url: url.clone(),
+        username: Some("opencode".to_string()),
+        password: Some(password),
+    });
+    app.manage(SidecarReady(ready_rx.shared()));
+    app.manage(ServerState {
+        child: Arc::new(Mutex::new(Some(child))),
+    });
 
     let loading_window_complete = event_once_fut::<LoadingWindowComplete>(&app);
 
-    println!("Main and loading windows created");
+    // SQLite migration handling:
+    // We only do this if the sqlite db doesn't exist, and we're expecting the sidecar to create it.
+    // A separate loading window is shown for long migrations.
+    let needs_migration = !sqlite_file_exists();
+    let sqlite_done = needs_migration.then(|| {
+        tracing::info!(
+            path = %opencode_db_path().expect("failed to get db path").display(),
+            "Sqlite file not found, waiting for it to be generated"
+        );
 
-    let sqlite_enabled = option_env!("OPENCODE_SQLITE").is_some();
+        let (done_tx, done_rx) = oneshot::channel::<()>();
+        let done_tx = Arc::new(Mutex::new(Some(done_tx)));
 
-    let loading_task = tokio::spawn({
         let init_tx = init_tx.clone();
+        let id = SqliteMigrationProgress::listen(&app, move |e| {
+            let _ = init_tx.send(InitStep::SqliteWaiting);
+
+            if matches!(e.payload, SqliteMigrationProgress::Done)
+                && let Some(done_tx) = done_tx.lock().unwrap().take()
+            {
+                let _ = done_tx.send(());
+            }
+        });
+
         let app = app.clone();
+        tokio::spawn(done_rx.map(async move |_| {
+            app.unlisten(id);
+        }))
+    });
 
+    // The loading task waits for SQLite migration (if needed) then for the sidecar health check.
+    // This is only used to drive the loading window progress - the main window is shown immediately.
+    let loading_task = tokio::spawn({
         async move {
-            let mut sqlite_exists = sqlite_file_exists();
-
-            println!("Setting up server connection");
-            let server_connection = setup_server_connection(app.clone()).await;
-
-            // we delay spawning this future so that the timeout is created lazily
-            let cli_health_check = match server_connection {
-                ServerConnection::CLI {
-                    child,
-                    health_check,
-                    url,
-                    password,
-                } => {
-                    let app = app.clone();
-                    Some(
-                        async move {
-                            let Ok(Ok(_)) = timeout(Duration::from_secs(30), health_check.0).await
-                            else {
-                                let _ = child.kill();
-                                return Err(format!(
-                                    "Failed to spawn OpenCode Server. Logs:\n{}",
-                                    get_logs(app.clone()).await.unwrap()
-                                ));
-                            };
-
-                            println!("CLI health check OK");
-
-                            #[cfg(windows)]
-                            {
-                                let job_state = app.state::<JobObjectState>();
-                                job_state.assign_pid(child.pid());
-                            }
-
-                            app.state::<ServerState>().set_child(Some(child));
-
-                            Ok(ServerReadyData { url, password })
-                        }
-                        .map(move |res| {
-                            let _ = server_ready_tx.send(res);
-                        }),
-                    )
-                }
-                ServerConnection::Existing { url } => {
-                    let _ = server_ready_tx.send(Ok(ServerReadyData {
-                        url: url.to_string(),
-                        password: None,
-                    }));
-                    None
-                }
-            };
-
-            if let Some(cli_health_check) = cli_health_check {
-                if sqlite_enabled {
-                    println!("Does sqlite file exist: {sqlite_exists}");
-                    if !sqlite_exists {
-                        println!(
-                            "Sqlite file not found at {}, waiting for it to be generated",
-                            opencode_db_path().expect("failed to get db path").display()
-                        );
-                        let _ = init_tx.send(InitStep::SqliteWaiting);
-
-                        while !sqlite_exists {
-                            sleep(Duration::from_secs(1)).await;
-                            sqlite_exists = sqlite_file_exists();
-                        }
-                    }
-                }
-
-                tokio::spawn(cli_health_check);
+            if let Some(sqlite_done_rx) = sqlite_done {
+                let _ = sqlite_done_rx.await;
             }
 
-            let _ = server_ready_rx.await;
+            // Wait for sidecar to become healthy (for loading window progress)
+            let res = timeout(Duration::from_secs(30), health_check.0).await;
+            match res {
+                Ok(Ok(Ok(()))) => tracing::info!("Sidecar health check OK"),
+                Ok(Ok(Err(e))) => tracing::error!("Sidecar health check failed: {e}"),
+                Ok(Err(e)) => tracing::error!("Sidecar health check task failed: {e}"),
+                Err(_) => tracing::error!("Sidecar health check timed out"),
+            }
+
+            tracing::info!("Loading task finished");
         }
     })
     .map_err(|_| ())
     .shared();
 
-    let loading_window = if sqlite_enabled
+    // Show loading window for SQLite migrations if they take >1s
+    let loading_window = if needs_migration
         && timeout(Duration::from_secs(1), loading_task.clone())
             .await
             .is_err()
     {
-        println!("Loading task timed out, showing loading window");
-        let app = app.clone();
+        tracing::debug!("Loading task timed out, showing loading window");
         let loading_window = LoadingWindow::create(&app).expect("Failed to create loading window");
         sleep(Duration::from_secs(1)).await;
         Some(loading_window)
     } else {
-        MainWindow::create(&app).expect("Failed to create main window");
-
         None
     };
 
+    // Create main window immediately - the web app handles its own loading/health gate
+    MainWindow::create(&app).expect("Failed to create main window");
+
     let _ = loading_task.await;
 
-    println!("Loading done, completing initialisation");
-
+    tracing::info!("Loading done, completing initialisation");
     let _ = init_tx.send(InitStep::Done);
 
     if loading_window.is_some() {
         loading_window_complete.await;
-
-        println!("Loading window completed");
+        tracing::info!("Loading window completed");
     }
-
-    MainWindow::create(&app).expect("Failed to create main window");
 
     if let Some(loading_window) = loading_window {
         let _ = loading_window.close();
@@ -423,70 +536,17 @@ fn setup_app(app: &tauri::AppHandle, init_rx: watch::Receiver<InitStep>) {
     #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
     app.deep_link().register_all().ok();
 
-    // Initialize log state
-    app.manage(LogState(Arc::new(Mutex::new(VecDeque::new()))));
-
-    #[cfg(windows)]
-    app.manage(JobObjectState::new());
-
     app.manage(InitState { current: init_rx });
 }
 
 fn spawn_cli_sync_task(app: AppHandle) {
     tokio::spawn(async move {
         if let Err(e) = sync_cli(app) {
-            eprintln!("Failed to sync CLI: {e}");
+            tracing::error!("Failed to sync CLI: {e}");
         }
     });
 }
 
-enum ServerConnection {
-    Existing {
-        url: String,
-    },
-    CLI {
-        url: String,
-        password: Option<String>,
-        child: CommandChild,
-        health_check: server::HealthCheck,
-    },
-}
-
-async fn setup_server_connection(app: AppHandle) -> ServerConnection {
-    let custom_url = get_saved_server_url(&app).await;
-
-    println!("Attempting server connection to custom url: {custom_url:?}");
-
-    if let Some(url) = custom_url
-        && server::check_health_or_ask_retry(&app, &url).await
-    {
-        println!("Connected to custom server: {}", url);
-        return ServerConnection::Existing { url: url.clone() };
-    }
-
-    let local_port = get_sidecar_port();
-    let hostname = "127.0.0.1";
-    let local_url = format!("http://{hostname}:{local_port}");
-
-    println!("Checking health of server '{}'", local_url);
-    if server::check_health(&local_url, None).await {
-        println!("Health check OK, using existing server");
-        return ServerConnection::Existing { url: local_url };
-    }
-
-    let password = uuid::Uuid::new_v4().to_string();
-
-    println!("Spawning new local server");
-    let (child, health_check) =
-        server::spawn_local_server(app, hostname.to_string(), local_port, password.clone());
-
-    ServerConnection::CLI {
-        url: local_url,
-        password: Some(password),
-        child,
-        health_check,
-    }
-}
 
 fn get_sidecar_port() -> u32 {
     option_env!("OPENCODE_PORT")

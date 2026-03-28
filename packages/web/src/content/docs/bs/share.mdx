@@ -1,0 +1,127 @@
+---
+title: Dijeljenje
+description: Dijelite OpenCode razgovore javnim linkovima.
+---
+
+OpenCode opcija dijeljenja vam omogucava da kreirate javne linkove za razgovore. Tako lakse saradujete s timom ili trazite pomoc od drugih.
+
+:::note
+Dijeljeni razgovori su javno dostupni svakome ko ima link.
+:::
+
+---
+
+## Kako radi
+
+Kada podijelite razgovor, OpenCode:
+
+1. Kreira jedinstveni javni URL za vasu sesiju
+2. Sinhronizuje historiju razgovora na nase servere
+3. Cini razgovor dostupnim preko linka za dijeljenje — `opncd.ai/s/<share-id>`
+
+---
+
+## Dijeljenje
+
+OpenCode podrzava tri nacina dijeljenja koji odreduju kako se razgovori dijele:
+
+---
+
+### Ručno (zadano)
+
+Po defaultu, OpenCode koristi rucni nacin dijeljenja. Sesije se ne dijele automatski, ali ih mozete rucno podijeliti komandom `/share`:
+
+```
+/share
+```
+
+Ovo ce generisati jedinstveni URL i kopirati ga u clipboard.
+
+Da eksplicitno postavite rucni nacin u [config datoteci](/docs/config):
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "manual"
+}
+```
+
+---
+
+### Automatsko dijeljenje
+
+Mozete ukljuciti automatsko dijeljenje za sve nove razgovore tako sto `share` postavite na `"auto"` u [config datoteci](/docs/config):
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "auto"
+}
+```
+
+Kada je auto-share ukljucen, svaki novi razgovor se automatski dijeli i kreira se link.
+
+---
+
+### Onemogućeno
+
+Dijeljenje mozete potpuno iskljuciti tako sto `share` postavite na `"disabled"` u [config datoteci](/docs/config):
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "disabled"
+}
+```
+
+Da ovo vazi za cijeli tim u odredenom projektu, dodajte postavku u projektni `opencode.json` i commitujte u Git.
+
+---
+
+## Uklanjanje dijeljenja
+
+Da prestanete dijeliti razgovor i uklonite javni pristup:
+
+```
+/unshare
+```
+
+Ovo uklanja link za dijeljenje i brise podatke povezane s razgovorom.
+
+---
+
+## Privatnost
+
+Imajte na umu nekoliko stvari prije dijeljenja razgovora.
+
+---
+
+### Čuvanje podataka
+
+Dijeljeni razgovori ostaju dostupni dok ih eksplicitno ne uklonite iz dijeljenja. Ovo ukljucuje:
+
+- Kompletnu historiju razgovora
+- Sve poruke i odgovore
+- Metapodatke sesije
+
+---
+
+### Preporuke
+
+- Dijelite samo razgovore koji ne sadrze osjetljive informacije.
+- Pregledajte sadrzaj razgovora prije dijeljenja.
+- Uklonite dijeljenje kad saradnja zavrsi.
+- Izbjegavajte dijeljenje razgovora s vlasnickim kodom ili povjerljivim podacima.
+- Za osjetljive projekte potpuno iskljucite dijeljenje.
+
+---
+
+## Za enterprise
+
+Za enterprise okruzenja, opcija dijeljenja moze biti:
+
+- **Iskljucena** u potpunosti radi sigurnosne uskladenosti
+- **Ogranicena** samo na korisnike autentifikovane kroz SSO
+- **Self-hosted** na vasoj infrastrukturi
+
+[Saznajte vise](/docs/enterprise) o koristenju opencode u organizaciji.

@@ -1,0 +1,344 @@
+---
+title: 소개
+description: OpenCode를 시작해 보세요.
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+import config from "../../../../config.mjs"
+export const console = config.console
+
+[**OpenCode**](/)는 오픈 소스 AI coding agent입니다. 터미널 기반 인터페이스, 데스크톱 앱, IDE 확장으로 사용할 수 있습니다.
+
+![opencode TUI with the opencode theme](../../../assets/lander/screenshot.png)
+
+바로 시작해 보겠습니다.
+
+---
+
+#### 사전 준비
+
+터미널에서 OpenCode를 사용하려면 다음이 필요합니다.
+
+1. 다음과 같은 최신 터미널 에뮬레이터
+   - [WezTerm](https://wezterm.org), 크로스 플랫폼
+   - [Alacritty](https://alacritty.org), 크로스 플랫폼
+   - [Ghostty](https://ghostty.org), Linux 및 macOS
+   - [Kitty](https://sw.kovidgoyal.net/kitty/), Linux 및 macOS
+
+2. 사용할 LLM 제공자의 API 키
+
+---
+
+## 설치
+
+OpenCode를 설치하는 가장 쉬운 방법은 설치 스크립트를 사용하는 것입니다.
+
+```bash
+curl -fsSL https://opencode.ai/install | bash
+```
+
+다음 명령으로도 설치할 수 있습니다.
+
+- **Node.js 사용**
+
+        <Tabs>
+
+      <TabItem label="npm">
+      ```bash
+      npm install -g opencode-ai
+      ```
+
+          </TabItem>
+
+        <TabItem label="Bun">
+        ```bash
+        bun install -g opencode-ai
+        ```
+
+          </TabItem>
+
+        <TabItem label="pnpm">
+        ```bash
+        pnpm install -g opencode-ai
+        ```
+
+          </TabItem>
+
+        <TabItem label="Yarn">
+        ```bash
+        yarn global add opencode-ai
+        ```
+
+      </TabItem>
+
+  </Tabs>
+
+- **macOS/Linux에서 Homebrew 사용**
+
+  ```bash
+  brew install anomalyco/tap/opencode
+  ```
+
+  > 최신 릴리스를 사용하려면 OpenCode tap 사용을 권장합니다. 공식 `brew install opencode` formula는 Homebrew 팀이 관리하며 업데이트 주기가 더 깁니다.
+
+- **Arch Linux에 설치**
+
+  ```bash
+  sudo pacman -S opencode           # Arch Linux (Stable)
+  paru -S opencode-bin              # Arch Linux (Latest from AUR)
+  ```
+
+#### Windows
+
+:::tip[권장: WSL 사용]
+Windows에서는 [Windows Subsystem for Linux (WSL)](/docs/windows-wsl) 사용을 권장합니다. 성능이 더 좋고 OpenCode 기능과의 완전한 호환성을 제공합니다.
+:::
+
+- **Chocolatey 사용**
+
+  ```bash
+  choco install opencode
+  ```
+
+- **Scoop 사용**
+
+  ```bash
+  scoop install opencode
+  ```
+
+- **NPM 사용**
+
+  ```bash
+  npm install -g opencode-ai
+  ```
+
+- **Mise 사용**
+
+  ```bash
+  mise use -g github:anomalyco/opencode
+  ```
+
+- **Docker 사용**
+
+  ```bash
+  docker run -it --rm ghcr.io/anomalyco/opencode
+  ```
+
+현재 Windows에서 Bun을 사용한 OpenCode 설치 지원은 준비 중입니다.
+
+[Releases](https://github.com/anomalyco/opencode/releases)에서 바이너리를 직접 받아 설치할 수도 있습니다.
+
+---
+
+## 구성
+
+OpenCode는 API 키를 설정하면 원하는 LLM 제공자를 사용할 수 있습니다.
+
+LLM 제공자를 처음 사용한다면 [OpenCode Zen](/docs/zen) 사용을 권장합니다.
+OpenCode 팀이 테스트하고 검증한 모델 목록입니다.
+
+1. TUI에서 `/connect` 명령을 실행하고 `opencode`를 선택한 다음 [opencode.ai/auth](https://opencode.ai/auth)로 이동합니다.
+
+   ```txt
+   /connect
+   ```
+
+2. 로그인하고 결제 정보를 추가한 뒤 API 키를 복사합니다.
+
+3. API 키를 붙여 넣습니다.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+또는 다른 제공자 중 하나를 선택할 수도 있습니다. [더 알아보기](/docs/providers#directory).
+
+---
+
+## 초기화
+
+이제 제공자 구성을 마쳤으니 작업하려는 프로젝트로 이동합니다.
+
+```bash
+cd /path/to/project
+```
+
+그리고 OpenCode를 실행합니다.
+
+```bash
+opencode
+```
+
+다음 명령을 실행해 프로젝트에서 OpenCode를 초기화합니다.
+
+```bash frame="none"
+/init
+```
+
+이 명령을 실행하면 OpenCode가 프로젝트를 분석하고 프로젝트 루트에 `AGENTS.md` 파일을 생성합니다.
+
+:::tip
+프로젝트의 `AGENTS.md` 파일은 Git에 커밋하는 것을 권장합니다.
+:::
+
+이렇게 하면 OpenCode가 프로젝트 구조와 사용 중인 코딩 패턴을 더 잘 이해할 수 있습니다.
+
+---
+
+## 사용법
+
+이제 OpenCode로 프로젝트 작업을 시작할 준비가 되었습니다. 무엇이든 물어보세요.
+
+AI coding agent를 처음 사용한다면 도움이 될 수 있는 예시를 소개합니다.
+
+---
+
+### 질문하기
+
+OpenCode에 코드베이스 설명을 요청할 수 있습니다.
+
+:::tip
+프로젝트 파일은 `@` 키로 퍼지 검색할 수 있습니다.
+:::
+
+```txt frame="none" "@packages/functions/src/api/index.ts"
+How is authentication handled in @packages/functions/src/api/index.ts
+```
+
+이 방법은 직접 작업하지 않은 코드 영역을 이해할 때 유용합니다.
+
+---
+
+### 기능 추가
+
+OpenCode에 프로젝트의 새 기능 추가를 요청할 수 있습니다. 다만 먼저 계획을 만들도록 요청하는 것을 권장합니다.
+
+1. **계획 만들기**
+
+   OpenCode에는 변경 작업 기능을 비활성화하고 기능을 구현할 방법만 제안하는 *Plan mode*가 있습니다.
+
+   **Tab** 키를 눌러 전환하세요. 화면 오른쪽 아래에서 모드 표시를 확인할 수 있습니다.
+
+   ```bash frame="none" title="Switch to Plan mode"
+   <TAB>
+   ```
+
+   이제 수행하길 원하는 작업을 설명해 보겠습니다.
+
+   ```txt frame="none"
+   When a user deletes a note, we'd like to flag it as deleted in the database.
+   Then create a screen that shows all the recently deleted notes.
+   From this screen, the user can undelete a note or permanently delete it.
+   ```
+
+   OpenCode가 원하는 작업을 이해할 수 있도록 충분한 세부 정보를 제공해야 합니다. 팀의 주니어 개발자에게 말하듯이 설명하면 도움이 됩니다.
+
+   :::tip
+   OpenCode가 원하는 작업을 이해하도록 충분한 맥락과 예시를 제공하세요.
+   :::
+
+2. **계획 다듬기**
+
+   계획이 나오면 피드백을 주거나 세부 사항을 더 추가할 수 있습니다.
+
+   ```txt frame="none"
+   We'd like to design this new screen using a design I've used before.
+   [Image #1] Take a look at this image and use it as a reference.
+   ```
+
+   :::tip
+   이미지를 터미널에 드래그 앤 드롭해 prompt에 추가하세요.
+   :::
+
+   OpenCode는 제공한 이미지를 스캔해 prompt에 추가할 수 있습니다. 이미지를 터미널에 드래그 앤 드롭하면 됩니다.
+
+3. **기능 구현**
+
+   계획이 충분히 마음에 들면 **Tab** 키를 다시 눌러 *Build mode*로 전환하세요.
+
+   ```bash frame="none"
+   <TAB>
+   ```
+
+   그리고 변경을 적용해 달라고 요청하세요.
+
+   ```bash frame="none"
+   Sounds good! Go ahead and make the changes.
+   ```
+
+---
+
+### 바로 변경하기
+
+비교적 간단한 변경은 계획을 먼저 검토하지 않고 바로 구현하도록 요청할 수 있습니다.
+
+```txt frame="none" "@packages/functions/src/settings.ts" "@packages/functions/src/notes.ts"
+We need to add authentication to the /settings route. Take a look at how this is
+handled in the /notes route in @packages/functions/src/notes.ts and implement
+the same logic in @packages/functions/src/settings.ts
+```
+
+OpenCode가 올바른 변경을 하도록 충분한 세부 정보를 제공해야 합니다.
+
+---
+
+### 변경 되돌리기
+
+예를 들어 OpenCode에 변경을 요청했다고 해보겠습니다.
+
+```txt frame="none" "@packages/functions/src/api/index.ts"
+Can you refactor the function in @packages/functions/src/api/index.ts?
+```
+
+그런데 원하는 결과가 아니었다면 `/undo` 명령으로 변경을 **되돌릴 수** 있습니다.
+
+```bash frame="none"
+/undo
+```
+
+OpenCode가 방금 적용한 변경을 되돌리고 원래 메시지를 다시 보여줍니다.
+
+```txt frame="none" "@packages/functions/src/api/index.ts"
+Can you refactor the function in @packages/functions/src/api/index.ts?
+```
+
+여기에서 prompt를 수정해 다시 요청할 수 있습니다.
+
+:::tip
+`/undo`는 여러 번 연속으로 실행할 수 있습니다.
+:::
+
+또는 `/redo` 명령으로 변경을 **다시 적용**할 수 있습니다.
+
+```bash frame="none"
+/redo
+```
+
+---
+
+## 공유
+
+OpenCode와의 대화는 [팀과 공유](/docs/share)할 수 있습니다.
+
+```bash frame="none"
+/share
+```
+
+이 명령을 실행하면 현재 대화 링크를 생성하고 클립보드에 복사합니다.
+
+:::note
+대화는 기본값으로 공유되지 않습니다.
+:::
+
+다음은 OpenCode [대화 예시](https://opencode.ai/s/4XP1fce5)입니다.
+
+---
+
+## 사용자 지정
+
+이제 OpenCode 사용법을 익혔습니다.
+
+원하는 방식에 맞추려면 [테마 선택](/docs/themes), [키바인드 사용자 지정](/docs/keybinds), [코드 formatter 설정](/docs/formatters), [custom command 만들기](/docs/commands), [OpenCode config 설정](/docs/config)을 권장합니다.

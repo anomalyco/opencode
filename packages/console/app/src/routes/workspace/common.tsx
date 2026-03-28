@@ -115,6 +115,8 @@ export const queryBillingInfo = query(async (workspaceID: string) => {
       subscriptionPlan: billing.subscriptionPlan,
       timeSubscriptionBooked: billing.timeSubscriptionBooked,
       timeSubscriptionSelected: billing.timeSubscriptionSelected,
+      lite: billing.lite,
+      liteSubscriptionID: billing.liteSubscriptionID,
     }
   }, workspaceID)
 }, "billing.get")

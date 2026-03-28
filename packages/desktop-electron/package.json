@@ -1,0 +1,53 @@
+{
+  "name": "@opencode-ai/desktop-electron",
+  "private": true,
+  "version": "1.3.3",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://opencode.ai",
+  "author": {
+    "name": "OpenCode",
+    "email": "hello@opencode.ai"
+  },
+  "scripts": {
+    "typecheck": "tsgo -b",
+    "predev": "bun ./scripts/predev.ts",
+    "dev": "electron-vite dev",
+    "prebuild": "bun ./scripts/copy-icons.ts",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "package": "electron-builder --config electron-builder.config.ts",
+    "package:mac": "electron-builder --mac --config electron-builder.config.ts",
+    "package:win": "electron-builder --win --config electron-builder.config.ts",
+    "package:linux": "electron-builder --linux --config electron-builder.config.ts",
+    "native:build": "bun install --cwd native"
+  },
+  "main": "./out/main/index.js",
+  "dependencies": {
+    "@opencode-ai/app": "workspace:*",
+    "@opencode-ai/ui": "workspace:*",
+    "@solid-primitives/i18n": "2.2.1",
+    "@solid-primitives/storage": "catalog:",
+    "@solidjs/meta": "catalog:",
+    "@solidjs/router": "0.15.4",
+    "effect": "catalog:",
+    "electron-log": "^5",
+    "electron-store": "^10",
+    "electron-updater": "^6",
+    "electron-window-state": "^5.0.3",
+    "marked": "^15",
+    "solid-js": "catalog:",
+    "tree-kill": "^1.2.2"
+  },
+  "devDependencies": {
+    "@actions/artifact": "4.0.0",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "electron": "40.4.1",
+    "electron-builder": "^26",
+    "electron-vite": "^5",
+    "typescript": "~5.6.2",
+    "vite": "catalog:"
+  }
+}

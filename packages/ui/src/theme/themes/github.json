@@ -28,6 +28,32 @@
       "syntax-type": "#bc4c00",
       "syntax-constant": "#57606a",
       "syntax-info": "#57606a",
+  "name": "GitHub",
+  "id": "github",
+  "light": {
+    "palette": {
+      "neutral": "#ffffff",
+      "ink": "#24292f",
+      "primary": "#0969da",
+      "accent": "#1b7c83",
+      "success": "#1a7f37",
+      "warning": "#9a6700",
+      "error": "#cf222e",
+      "info": "#bc4c00"
+    },
+    "overrides": {
+      "text-weak": "#57606a",
+      "syntax-comment": "#57606a",
+      "syntax-keyword": "#cf222e",
+      "syntax-string": "#0969da",
+      "syntax-primitive": "#8250df",
+      "syntax-variable": "#bc4c00",
+      "syntax-property": "#1b7c83",
+      "syntax-type": "#bc4c00",
+      "syntax-constant": "#1b7c83",
+      "syntax-operator": "#cf222e",
+      "syntax-punctuation": "#24292f",
+      "syntax-object": "#bc4c00",
       "markdown-heading": "#0969da",
       "markdown-text": "#24292f",
       "markdown-link": "#0969da",
@@ -72,6 +98,33 @@
       "syntax-type": "#d29922",
       "syntax-constant": "#8b949e",
       "syntax-info": "#8b949e",
+      "markdown-code-block": "#24292f"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#0d1117",
+      "ink": "#c9d1d9",
+      "primary": "#58a6ff",
+      "accent": "#39c5cf",
+      "success": "#3fb950",
+      "warning": "#e3b341",
+      "error": "#f85149",
+      "info": "#d29922"
+    },
+    "overrides": {
+      "text-weak": "#8b949e",
+      "syntax-comment": "#8b949e",
+      "syntax-keyword": "#ff7b72",
+      "syntax-string": "#39c5cf",
+      "syntax-primitive": "#bc8cff",
+      "syntax-variable": "#d29922",
+      "syntax-property": "#39c5cf",
+      "syntax-type": "#d29922",
+      "syntax-constant": "#58a6ff",
+      "syntax-operator": "#ff7b72",
+      "syntax-punctuation": "#c9d1d9",
+      "syntax-object": "#d29922",
       "markdown-heading": "#58a6ff",
       "markdown-text": "#c9d1d9",
       "markdown-link": "#58a6ff",
@@ -88,6 +141,7 @@
       "markdown-code-block": "#c9d1d9",
       "surface-diff-add-base": "#033a16",
       "surface-diff-delete-base": "#67060c"
+      "markdown-code-block": "#c9d1d9"
     }
   }
 }

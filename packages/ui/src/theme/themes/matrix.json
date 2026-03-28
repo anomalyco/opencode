@@ -6,6 +6,11 @@
     "seeds": {
       "neutral": "#eef3ea",
       "primary": "#1cc24b",
+    "palette": {
+      "neutral": "#eef3ea",
+      "ink": "#203022",
+      "primary": "#1cc24b",
+      "accent": "#c770ff",
       "success": "#1cc24b",
       "warning": "#e6ff57",
       "error": "#ff4b4b",
@@ -28,6 +33,23 @@
       "syntax-type": "#e6ff57",
       "syntax-constant": "#748476",
       "syntax-info": "#748476",
+      "interactive": "#30b3ff",
+      "diffAdd": "#5dac7e",
+      "diffDelete": "#d53a3a"
+    },
+    "overrides": {
+      "text-weak": "#748476",
+      "syntax-comment": "#748476",
+      "syntax-keyword": "#c770ff",
+      "syntax-string": "#1cc24b",
+      "syntax-primitive": "#30b3ff",
+      "syntax-variable": "#203022",
+      "syntax-property": "#24f6d9",
+      "syntax-type": "#e6ff57",
+      "syntax-constant": "#ffa83d",
+      "syntax-operator": "#24f6d9",
+      "syntax-punctuation": "#203022",
+      "syntax-object": "#203022",
       "markdown-heading": "#24f6d9",
       "markdown-text": "#203022",
       "markdown-link": "#30b3ff",
@@ -50,6 +72,15 @@
     "seeds": {
       "neutral": "#0a0e0a",
       "primary": "#2eff6a",
+      "markdown-code-block": "#203022"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#0a0e0a",
+      "ink": "#62ff94",
+      "primary": "#2eff6a",
+      "accent": "#c770ff",
       "success": "#62ff94",
       "warning": "#e6ff57",
       "error": "#ff4b4b",
@@ -72,6 +103,23 @@
       "syntax-type": "#e6ff57",
       "syntax-constant": "#8ca391",
       "syntax-info": "#8ca391",
+      "interactive": "#30b3ff",
+      "diffAdd": "#77ffaf",
+      "diffDelete": "#ff7171"
+    },
+    "overrides": {
+      "text-weak": "#8ca391",
+      "syntax-comment": "#8ca391",
+      "syntax-keyword": "#c770ff",
+      "syntax-string": "#1cc24b",
+      "syntax-primitive": "#30b3ff",
+      "syntax-variable": "#62ff94",
+      "syntax-property": "#24f6d9",
+      "syntax-type": "#e6ff57",
+      "syntax-constant": "#ffa83d",
+      "syntax-operator": "#24f6d9",
+      "syntax-punctuation": "#62ff94",
+      "syntax-object": "#62ff94",
       "markdown-heading": "#00efff",
       "markdown-text": "#62ff94",
       "markdown-link": "#30b3ff",
@@ -88,6 +136,7 @@
       "markdown-code-block": "#62ff94",
       "surface-diff-add-base": "#132616",
       "surface-diff-delete-base": "#261212"
+      "markdown-code-block": "#62ff94"
     }
   }
 }

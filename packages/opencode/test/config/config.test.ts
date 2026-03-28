@@ -1,12 +1,35 @@
-import { test, expect, describe, mock, afterEach } from "bun:test"
+import { test, expect, describe, mock, afterEach, spyOn } from "bun:test"
+import { Effect, Layer, Option } from "effect"
+import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Config } from "../../src/config/config"
 import { Instance } from "../../src/project/instance"
 import { Auth } from "../../src/auth"
+import { AccessToken, Account, AccountID, OrgID } from "../../src/account"
+import { AppFileSystem } from "../../src/filesystem"
+import { provideTmpdirInstance } from "../fixture/fixture"
 import { tmpdir } from "../fixture/fixture"
+import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+
+/** Infra layer that provides FileSystem, Path, ChildProcessSpawner for test fixtures */
+const infra = CrossSpawnSpawner.defaultLayer.pipe(
+  Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
+)
 import path from "path"
 import fs from "fs/promises"
 import { pathToFileURL } from "url"
 import { Global } from "../../src/global"
+import { ProjectID } from "../../src/project/schema"
+import { Filesystem } from "../../src/util/filesystem"
+import * as Network from "../../src/util/network"
+import { BunProc } from "../../src/bun"
+
+const emptyAccount = Layer.mock(Account.Service)({
+  active: () => Effect.succeed(Option.none()),
+})
+
+const emptyAuth = Layer.mock(Auth.Service)({
+  all: () => Effect.succeed({}),
+})
 
 // Get managed config directory from environment (set in preload.ts)
 const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
@@ -17,11 +40,39 @@ afterEach(async () => {
 
 async function writeManagedSettings(settings: object, filename = "opencode.json") {
   await fs.mkdir(managedConfigDir, { recursive: true })
-  await Bun.write(path.join(managedConfigDir, filename), JSON.stringify(settings))
+  await Filesystem.write(path.join(managedConfigDir, filename), JSON.stringify(settings))
 }
 
 async function writeConfig(dir: string, config: object, name = "opencode.json") {
-  await Bun.write(path.join(dir, name), JSON.stringify(config))
+  await Filesystem.write(path.join(dir, name), JSON.stringify(config))
+}
+
+async function check(map: (dir: string) => string) {
+  if (process.platform !== "win32") return
+  await using globalTmp = await tmpdir()
+  await using tmp = await tmpdir({ git: true, config: { snapshot: true } })
+  const prev = Global.Path.config
+  ;(Global.Path as { config: string }).config = globalTmp.path
+  await Config.invalidate()
+  try {
+    await writeConfig(globalTmp.path, {
+      $schema: "https://opencode.ai/config.json",
+      snapshot: false,
+    })
+    await Instance.provide({
+      directory: map(tmp.path),
+      fn: async () => {
+        const cfg = await Config.get()
+        expect(cfg.snapshot).toBe(true)
+        expect(Instance.directory).toBe(Filesystem.resolve(tmp.path))
+        expect(Instance.project.id).not.toBe(ProjectID.global)
+      },
+    })
+  } finally {
+    await Instance.disposeAll()
+    ;(Global.Path as { config: string }).config = prev
+    await Config.invalidate()
+  }
 }
 
 test("loads config with defaults when no files exist", async () => {
@@ -55,10 +106,49 @@ test("loads JSON config file", async () => {
   })
 })
 
+test("loads project config from Git Bash and MSYS2 paths on Windows", async () => {
+  // Git Bash and MSYS2 both use /<drive>/... paths on Windows.
+  await check((dir) => {
+    const drive = dir[0].toLowerCase()
+    const rest = dir.slice(2).replaceAll("\\", "/")
+    return `/${drive}${rest}`
+  })
+})
+
+test("loads project config from Cygwin paths on Windows", async () => {
+  await check((dir) => {
+    const drive = dir[0].toLowerCase()
+    const rest = dir.slice(2).replaceAll("\\", "/")
+    return `/cygdrive/${drive}${rest}`
+  })
+})
+
+test("ignores legacy tui keys in opencode config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        model: "test/model",
+        theme: "legacy",
+        tui: { scroll_speed: 4 },
+      })
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.model).toBe("test/model")
+      expect((config as Record<string, unknown>).theme).toBeUndefined()
+      expect((config as Record<string, unknown>).tui).toBeUndefined()
+    },
+  })
+})
+
 test("loads JSONC config file", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await Filesystem.write(
         path.join(dir, "opencode.jsonc"),
         `{
         // This is a comment
@@ -109,14 +199,14 @@ test("merges multiple config files with correct precedence", async () => {
 
 test("handles environment variable substitution", async () => {
   const originalEnv = process.env["TEST_VAR"]
-  process.env["TEST_VAR"] = "test_theme"
+  process.env["TEST_VAR"] = "test-user"
 
   try {
     await using tmp = await tmpdir({
       init: async (dir) => {
         await writeConfig(dir, {
           $schema: "https://opencode.ai/config.json",
-          theme: "{env:TEST_VAR}",
+          username: "{env:TEST_VAR}",
         })
       },
     })
@@ -124,7 +214,7 @@ test("handles environment variable substitution", async () => {
       directory: tmp.path,
       fn: async () => {
         const config = await Config.get()
-        expect(config.theme).toBe("test_theme")
+        expect(config.username).toBe("test-user")
       },
     })
   } finally {
@@ -144,10 +234,10 @@ test("preserves env variables when adding $schema to config", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
         // Config without $schema - should trigger auto-add
-        await Bun.write(
+        await Filesystem.write(
           path.join(dir, "opencode.json"),
           JSON.stringify({
-            theme: "{env:PRESERVE_VAR}",
+            username: "{env:PRESERVE_VAR}",
           }),
         )
       },
@@ -156,10 +246,10 @@ test("preserves env variables when adding $schema to config", async () => {
       directory: tmp.path,
       fn: async () => {
         const config = await Config.get()
-        expect(config.theme).toBe("secret_value")
+        expect(config.username).toBe("secret_value")
 
         // Read the file to verify the env variable was preserved
-        const content = await Bun.file(path.join(tmp.path, "opencode.json")).text()
+        const content = await Filesystem.readText(path.join(tmp.path, "opencode.json"))
         expect(content).toContain("{env:PRESERVE_VAR}")
         expect(content).not.toContain("secret_value")
         expect(content).toContain("$schema")
@@ -174,13 +264,60 @@ test("preserves env variables when adding $schema to config", async () => {
   }
 })
 
+test("resolves env templates in account config with account token", async () => {
+  const originalControlToken = process.env["OPENCODE_CONSOLE_TOKEN"]
+
+  const fakeAccount = Layer.mock(Account.Service)({
+    active: () =>
+      Effect.succeed(
+        Option.some({
+          id: AccountID.make("account-1"),
+          email: "user@example.com",
+          url: "https://control.example.com",
+          active_org_id: OrgID.make("org-1"),
+        }),
+      ),
+    config: () =>
+      Effect.succeed(
+        Option.some({
+          provider: { opencode: { options: { apiKey: "{env:OPENCODE_CONSOLE_TOKEN}" } } },
+        }),
+      ),
+    token: () => Effect.succeed(Option.some(AccessToken.make("st_test_token"))),
+  })
+
+  const layer = Config.layer.pipe(
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(emptyAuth),
+    Layer.provide(fakeAccount),
+    Layer.provideMerge(infra),
+  )
+
+  try {
+    await provideTmpdirInstance(() =>
+      Config.Service.use((svc) =>
+        Effect.gen(function* () {
+          const config = yield* svc.get()
+          expect(config.provider?.["opencode"]?.options?.apiKey).toBe("st_test_token")
+        }),
+      ),
+    ).pipe(Effect.scoped, Effect.provide(layer), Effect.runPromise)
+  } finally {
+    if (originalControlToken !== undefined) {
+      process.env["OPENCODE_CONSOLE_TOKEN"] = originalControlToken
+    } else {
+      delete process.env["OPENCODE_CONSOLE_TOKEN"]
+    }
+  }
+})
+
 test("handles file inclusion substitution", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(path.join(dir, "included.txt"), "test_theme")
+      await Filesystem.write(path.join(dir, "included.txt"), "test-user")
       await writeConfig(dir, {
         $schema: "https://opencode.ai/config.json",
-        theme: "{file:included.txt}",
+        username: "{file:included.txt}",
       })
     },
   })
@@ -188,7 +325,7 @@ test("handles file inclusion substitution", async () => {
     directory: tmp.path,
     fn: async () => {
       const config = await Config.get()
-      expect(config.theme).toBe("test_theme")
+      expect(config.username).toBe("test-user")
     },
   })
 })
@@ -196,10 +333,10 @@ test("handles file inclusion substitution", async () => {
 test("handles file inclusion with replacement tokens", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(path.join(dir, "included.md"), "const out = await Bun.$`echo hi`")
+      await Filesystem.write(path.join(dir, "included.md"), "const out = await Bun.$`echo hi`")
       await writeConfig(dir, {
         $schema: "https://opencode.ai/config.json",
-        theme: "{file:included.md}",
+        username: "{file:included.md}",
       })
     },
   })
@@ -207,7 +344,7 @@ test("handles file inclusion with replacement tokens", async () => {
     directory: tmp.path,
     fn: async () => {
       const config = await Config.get()
-      expect(config.theme).toBe("const out = await Bun.$`echo hi`")
+      expect(config.username).toBe("const out = await Bun.$`echo hi`")
     },
   })
 })
@@ -233,7 +370,7 @@ test("validates config schema and throws on invalid fields", async () => {
 test("throws error for invalid JSON", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(path.join(dir, "opencode.json"), "{ invalid json }")
+      await Filesystem.write(path.join(dir, "opencode.json"), "{ invalid json }")
     },
   })
   await Instance.provide({
@@ -336,7 +473,7 @@ test("handles command configuration", async () => {
 test("migrates autoshare to share field", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await Filesystem.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -358,7 +495,7 @@ test("migrates autoshare to share field", async () => {
 test("migrates mode field to agent field", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await Filesystem.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -395,7 +532,7 @@ test("loads config from .opencode directory", async () => {
       const agentDir = path.join(opencodeDir, "agent")
       await fs.mkdir(agentDir, { recursive: true })
 
-      await Bun.write(
+      await Filesystem.write(
         path.join(agentDir, "test.md"),
         `---
 model: test/model
@@ -428,7 +565,7 @@ test("loads agents from .opencode/agents (plural)", async () => {
       const agentsDir = path.join(opencodeDir, "agents")
       await fs.mkdir(path.join(agentsDir, "nested"), { recursive: true })
 
-      await Bun.write(
+      await Filesystem.write(
         path.join(agentsDir, "helper.md"),
         `---
 model: test/model
@@ -437,7 +574,7 @@ mode: subagent
 Helper agent prompt`,
       )
 
-      await Bun.write(
+      await Filesystem.write(
         path.join(agentsDir, "nested", "child.md"),
         `---
 model: test/model
@@ -479,7 +616,7 @@ test("loads commands from .opencode/command (singular)", async () => {
       const commandDir = path.join(opencodeDir, "command")
       await fs.mkdir(path.join(commandDir, "nested"), { recursive: true })
 
-      await Bun.write(
+      await Filesystem.write(
         path.join(commandDir, "hello.md"),
         `---
 description: Test command
@@ -487,7 +624,7 @@ description: Test command
 Hello from singular command`,
       )
 
-      await Bun.write(
+      await Filesystem.write(
         path.join(commandDir, "nested", "child.md"),
         `---
 description: Nested command
@@ -524,7 +661,7 @@ test("loads commands from .opencode/commands (plural)", async () => {
       const commandsDir = path.join(opencodeDir, "commands")
       await fs.mkdir(path.join(commandsDir, "nested"), { recursive: true })
 
-      await Bun.write(
+      await Filesystem.write(
         path.join(commandsDir, "hello.md"),
         `---
 description: Test command
@@ -532,7 +669,7 @@ description: Test command
 Hello from plural commands`,
       )
 
-      await Bun.write(
+      await Filesystem.write(
         path.join(commandsDir, "nested", "child.md"),
         `---
 description: Nested command
@@ -568,7 +705,7 @@ test("updates config and writes to file", async () => {
       const newConfig = { model: "updated/model" }
       await Config.update(newConfig as any)
 
-      const writtenConfig = JSON.parse(await Bun.file(path.join(tmp.path, "config.json")).text())
+      const writtenConfig = await Filesystem.readJson(path.join(tmp.path, "config.json"))
       expect(writtenConfig.model).toBe("updated/model")
     },
   })
@@ -629,6 +766,20 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
 
   const prev = process.env.OPENCODE_CONFIG_DIR
   process.env.OPENCODE_CONFIG_DIR = tmp.extra
+  const online = spyOn(Network, "online").mockReturnValue(false)
+  const run = spyOn(BunProc, "run").mockImplementation(async (_cmd, opts) => {
+    const mod = path.join(opts?.cwd ?? "", "node_modules", "@opencode-ai", "plugin")
+    await fs.mkdir(mod, { recursive: true })
+    await Filesystem.write(
+      path.join(mod, "package.json"),
+      JSON.stringify({ name: "@opencode-ai/plugin", version: "1.0.0" }),
+    )
+    return {
+      code: 0,
+      stdout: Buffer.alloc(0),
+      stderr: Buffer.alloc(0),
+    }
+  })
 
   try {
     await Instance.provide({
@@ -639,12 +790,142 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
       },
     })
 
-    expect(await Bun.file(path.join(tmp.extra, "package.json")).exists()).toBe(true)
-    expect(await Bun.file(path.join(tmp.extra, ".gitignore")).exists()).toBe(true)
+    expect(await Filesystem.exists(path.join(tmp.extra, "package.json"))).toBe(true)
+    expect(await Filesystem.exists(path.join(tmp.extra, ".gitignore"))).toBe(true)
   } finally {
+    online.mockRestore()
+    run.mockRestore()
     if (prev === undefined) delete process.env.OPENCODE_CONFIG_DIR
     else process.env.OPENCODE_CONFIG_DIR = prev
   }
+})
+
+test("dedupes concurrent config dependency installs for the same dir", async () => {
+  await using tmp = await tmpdir()
+  const dir = path.join(tmp.path, "a")
+  await fs.mkdir(dir, { recursive: true })
+
+  const ticks: number[] = []
+  let calls = 0
+  let start = () => {}
+  let done = () => {}
+  let blocked = () => {}
+  const ready = new Promise<void>((resolve) => {
+    start = resolve
+  })
+  const gate = new Promise<void>((resolve) => {
+    done = resolve
+  })
+  const waiting = new Promise<void>((resolve) => {
+    blocked = resolve
+  })
+  const online = spyOn(Network, "online").mockReturnValue(false)
+  const run = spyOn(BunProc, "run").mockImplementation(async (_cmd, opts) => {
+    const hit = path.normalize(opts?.cwd ?? "") === path.normalize(dir)
+    if (hit) {
+      calls += 1
+      start()
+      await gate
+    }
+    const mod = path.join(opts?.cwd ?? "", "node_modules", "@opencode-ai", "plugin")
+    await fs.mkdir(mod, { recursive: true })
+    await Filesystem.write(
+      path.join(mod, "package.json"),
+      JSON.stringify({ name: "@opencode-ai/plugin", version: "1.0.0" }),
+    )
+    return {
+      code: 0,
+      stdout: Buffer.alloc(0),
+      stderr: Buffer.alloc(0),
+    }
+  })
+
+  try {
+    const first = Config.installDependencies(dir)
+    await ready
+    const second = Config.installDependencies(dir, {
+      waitTick: (tick) => {
+        ticks.push(tick.attempt)
+        blocked()
+        blocked = () => {}
+      },
+    })
+    await waiting
+    done()
+    await Promise.all([first, second])
+  } finally {
+    online.mockRestore()
+    run.mockRestore()
+  }
+
+  expect(calls).toBe(1)
+  expect(ticks.length).toBeGreaterThan(0)
+  expect(await Filesystem.exists(path.join(dir, "package.json"))).toBe(true)
+})
+
+test("serializes config dependency installs across dirs", async () => {
+  if (process.platform !== "win32") return
+
+  await using tmp = await tmpdir()
+  const a = path.join(tmp.path, "a")
+  const b = path.join(tmp.path, "b")
+  await fs.mkdir(a, { recursive: true })
+  await fs.mkdir(b, { recursive: true })
+
+  let calls = 0
+  let open = 0
+  let peak = 0
+  let start = () => {}
+  let done = () => {}
+  const ready = new Promise<void>((resolve) => {
+    start = resolve
+  })
+  const gate = new Promise<void>((resolve) => {
+    done = resolve
+  })
+
+  const online = spyOn(Network, "online").mockReturnValue(false)
+  const run = spyOn(BunProc, "run").mockImplementation(async (_cmd, opts) => {
+    const cwd = path.normalize(opts?.cwd ?? "")
+    const hit = cwd === path.normalize(a) || cwd === path.normalize(b)
+    if (hit) {
+      calls += 1
+      open += 1
+      peak = Math.max(peak, open)
+      if (calls === 1) {
+        start()
+        await gate
+      }
+    }
+    const mod = path.join(opts?.cwd ?? "", "node_modules", "@opencode-ai", "plugin")
+    await fs.mkdir(mod, { recursive: true })
+    await Filesystem.write(
+      path.join(mod, "package.json"),
+      JSON.stringify({ name: "@opencode-ai/plugin", version: "1.0.0" }),
+    )
+    if (hit) {
+      open -= 1
+    }
+    return {
+      code: 0,
+      stdout: Buffer.alloc(0),
+      stderr: Buffer.alloc(0),
+    }
+  })
+
+  try {
+    const first = Config.installDependencies(a)
+    await ready
+    const second = Config.installDependencies(b)
+    done()
+    await Promise.all([first, second])
+  } finally {
+    online.mockRestore()
+    run.mockRestore()
+  }
+
+  expect(calls).toBe(2)
+  expect(peak).toBe(1)
 })
 
 test("resolves scoped npm plugins in config", async () => {
@@ -653,12 +934,12 @@ test("resolves scoped npm plugins in config", async () => {
       const pluginDir = path.join(dir, "node_modules", "@scope", "plugin")
       await fs.mkdir(pluginDir, { recursive: true })
 
-      await Bun.write(
+      await Filesystem.write(
         path.join(dir, "package.json"),
         JSON.stringify({ name: "config-fixture", version: "1.0.0", type: "module" }, null, 2),
       )
 
-      await Bun.write(
+      await Filesystem.write(
         path.join(pluginDir, "package.json"),
         JSON.stringify(
           {
@@ -672,9 +953,9 @@ test("resolves scoped npm plugins in config", async () => {
         ),
       )
 
-      await Bun.write(path.join(pluginDir, "index.js"), "export default {}\n")
+      await Filesystem.write(path.join(pluginDir, "index.js"), "export default {}\n")
 
-      await Bun.write(
+      await Filesystem.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({ $schema: "https://opencode.ai/config.json", plugin: ["@scope/plugin"] }, null, 2),
       )
@@ -686,15 +967,7 @@ test("resolves scoped npm plugins in config", async () => {
     fn: async () => {
       const config = await Config.get()
       const pluginEntries = config.plugin ?? []
-
-      const baseUrl = pathToFileURL(path.join(tmp.path, "opencode.json")).href
-      const expected = import.meta.resolve("@scope/plugin", baseUrl)
-
-      expect(pluginEntries.includes(expected)).toBe(true)
-
-      const scopedEntry = pluginEntries.find((entry) => entry === expected)
-      expect(scopedEntry).toBeDefined()
-      expect(scopedEntry?.includes("/node_modules/@scope/plugin/")).toBe(true)
+      expect(pluginEntries).toContain("@scope/plugin")
     },
   })
 })
@@ -708,7 +981,7 @@ test("merges plugin arrays from global and local configs", async () => {
       await fs.mkdir(opencodeDir, { recursive: true })
 
       // Global config with plugins
-      await Bun.write(
+      await Filesystem.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -717,7 +990,7 @@ test("merges plugin arrays from global and local configs", async () => {
       )
 
       // Local .opencode config with different plugins
-      await Bun.write(
+      await Filesystem.write(
         path.join(opencodeDir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -753,7 +1026,7 @@ test("does not error when only custom agent is a subagent", async () => {
       const agentDir = path.join(opencodeDir, "agent")
       await fs.mkdir(agentDir, { recursive: true })
 
-      await Bun.write(
+      await Filesystem.write(
         path.join(agentDir, "helper.md"),
         `---
 model: test/model
@@ -784,7 +1057,7 @@ test("merges instructions arrays from global and local configs", async () => {
       const opencodeDir = path.join(projectDir, ".opencode")
       await fs.mkdir(opencodeDir, { recursive: true })
 
-      await Bun.write(
+      await Filesystem.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -792,7 +1065,7 @@ test("merges instructions arrays from global and local configs", async () => {
         }),
       )
 
-      await Bun.write(
+      await Filesystem.write(
         path.join(opencodeDir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -823,7 +1096,7 @@ test("deduplicates duplicate instructions from global and local configs", async 
       const opencodeDir = path.join(projectDir, ".opencode")
       await fs.mkdir(opencodeDir, { recursive: true })
 
-      await Bun.write(
+      await Filesystem.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -831,7 +1104,7 @@ test("deduplicates duplicate instructions from global and local configs", async 
         }),
       )
 
-      await Bun.write(
+      await Filesystem.write(
         path.join(opencodeDir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -867,7 +1140,7 @@ test("deduplicates duplicate plugins from global and local configs", async () =>
       await fs.mkdir(opencodeDir, { recursive: true })
 
       // Global config with plugins
-      await Bun.write(
+      await Filesystem.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -876,7 +1149,7 @@ test("deduplicates duplicate plugins from global and local configs", async () =>
       )
 
       // Local .opencode config with some overlapping plugins
-      await Bun.write(
+      await Filesystem.write(
         path.join(opencodeDir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -915,7 +1188,7 @@ test("deduplicates duplicate plugins from global and local configs", async () =>
 test("migrates legacy tools config to permissions - allow", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await Filesystem.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -946,7 +1219,7 @@ test("migrates legacy tools config to permissions - allow", async () => {
 test("migrates legacy tools config to permissions - deny", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await Filesystem.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -977,7 +1250,7 @@ test("migrates legacy tools config to permissions - deny", async () => {
 test("migrates legacy write tool to edit permission", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await Filesystem.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1042,7 +1315,6 @@ test("managed settings override project settings", async () => {
         $schema: "https://opencode.ai/config.json",
         autoupdate: true,
         disabled_providers: [],
-        theme: "dark",
       })
     },
   })
@@ -1059,7 +1331,6 @@ test("managed settings override project settings", async () => {
       const config = await Config.get()
       expect(config.autoupdate).toBe(false)
       expect(config.disabled_providers).toEqual(["openai"])
-      expect(config.theme).toBe("dark")
     },
   })
 })
@@ -1086,7 +1357,7 @@ test("missing managed settings file is not an error", async () => {
 test("migrates legacy edit tool to edit permission", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await Filesystem.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1115,7 +1386,7 @@ test("migrates legacy edit tool to edit permission", async () => {
 test("migrates legacy patch tool to edit permission", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await Filesystem.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1144,7 +1415,7 @@ test("migrates legacy patch tool to edit permission", async () => {
 test("migrates legacy multiedit tool to edit permission", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await Filesystem.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1173,7 +1444,7 @@ test("migrates legacy multiedit tool to edit permission", async () => {
 test("migrates mixed legacy tools config", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await Filesystem.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1208,7 +1479,7 @@ test("migrates mixed legacy tools config", async () => {
 test("merges legacy tools with existing permission config", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await Filesystem.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1241,7 +1512,7 @@ test("merges legacy tools with existing permission config", async () => {
 test("permission config preserves key order", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await Filesystem.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1252,7 +1523,6 @@ test("permission config preserves key order", async () => {
             external_directory: "ask",
             read: "allow",
             todowrite: "allow",
-            todoread: "allow",
             "thoughts_*": "allow",
             "reasoning_model_*": "allow",
             "tools_*": "allow",
@@ -1273,7 +1543,6 @@ test("permission config preserves key order", async () => {
         "external_directory",
         "read",
         "todowrite",
-        "todoread",
         "thoughts_*",
         "reasoning_model_*",
         "tools_*",
@@ -1289,7 +1558,7 @@ test("project config can override MCP server enabled status", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       // Simulates a base config (like from remote .well-known) with disabled MCP
-      await Bun.write(
+      await Filesystem.write(
         path.join(dir, "opencode.jsonc"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1308,7 +1577,7 @@ test("project config can override MCP server enabled status", async () => {
         }),
       )
       // Project config enables just jira
-      await Bun.write(
+      await Filesystem.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1347,7 +1616,7 @@ test("MCP config deep merges preserving base config properties", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       // Base config with full MCP definition
-      await Bun.write(
+      await Filesystem.write(
         path.join(dir, "opencode.jsonc"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1364,7 +1633,7 @@ test("MCP config deep merges preserving base config properties", async () => {
         }),
       )
       // Override just enables it, should preserve other properties
-      await Bun.write(
+      await Filesystem.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1399,7 +1668,7 @@ test("local .opencode config can override MCP from project config", async () => 
   await using tmp = await tmpdir({
     init: async (dir) => {
       // Project config with disabled MCP
-      await Bun.write(
+      await Filesystem.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1415,7 +1684,7 @@ test("local .opencode config can override MCP from project config", async () => 
       // Local .opencode directory config enables it
       const opencodeDir = path.join(dir, ".opencode")
       await fs.mkdir(opencodeDir, { recursive: true })
-      await Bun.write(
+      await Filesystem.write(
         path.join(opencodeDir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1442,7 +1711,7 @@ test("local .opencode config can override MCP from project config", async () => 
 test("project config overrides remote well-known config", async () => {
   const originalFetch = globalThis.fetch
   let fetchedUrl: string | undefined
-  const mockFetch = mock((url: string | URL | Request) => {
+  globalThis.fetch = mock((url: string | URL | Request) => {
     const urlStr = url.toString()
     if (urlStr.includes(".well-known/opencode")) {
       fetchedUrl = urlStr
@@ -1450,13 +1719,7 @@ test("project config overrides remote well-known config", async () => {
         new Response(
           JSON.stringify({
             config: {
-              mcp: {
-                jira: {
-                  type: "remote",
-                  url: "https://jira.example.com/mcp",
-                  enabled: false,
-                },
-              },
+              mcp: { jira: { type: "remote", url: "https://jira.example.com/mcp", enabled: false } },
             },
           }),
           { status: 200 },
@@ -1464,77 +1727,130 @@ test("project config overrides remote well-known config", async () => {
       )
     }
     return originalFetch(url)
-  })
-  globalThis.fetch = mockFetch as unknown as typeof fetch
+  }) as unknown as typeof fetch
 
-  const originalAuthAll = Auth.all
-  Auth.all = mock(() =>
-    Promise.resolve({
-      "https://example.com": {
-        type: "wellknown" as const,
-        key: "TEST_TOKEN",
-        token: "test-token",
-      },
-    }),
+  const fakeAuth = Layer.mock(Auth.Service)({
+    all: () =>
+      Effect.succeed({
+        "https://example.com": new Auth.WellKnown({ type: "wellknown", key: "TEST_TOKEN", token: "test-token" }),
+      }),
+  })
+
+  const layer = Config.layer.pipe(
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(fakeAuth),
+    Layer.provide(emptyAccount),
+    Layer.provideMerge(infra),
   )
 
   try {
-    await using tmp = await tmpdir({
-      git: true,
-      init: async (dir) => {
-        // Project config enables jira (overriding remote default)
-        await Bun.write(
-          path.join(dir, "opencode.json"),
-          JSON.stringify({
-            $schema: "https://opencode.ai/config.json",
-            mcp: {
-              jira: {
-                type: "remote",
-                url: "https://jira.example.com/mcp",
-                enabled: true,
-              },
-            },
+    await provideTmpdirInstance(
+      () =>
+        Config.Service.use((svc) =>
+          Effect.gen(function* () {
+            const config = yield* svc.get()
+            expect(fetchedUrl).toBe("https://example.com/.well-known/opencode")
+            expect(config.mcp?.jira?.enabled).toBe(true)
           }),
-        )
+        ),
+      {
+        git: true,
+        config: { mcp: { jira: { type: "remote", url: "https://jira.example.com/mcp", enabled: true } } },
       },
-    })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const config = await Config.get()
-        // Verify fetch was called for wellknown config
-        expect(fetchedUrl).toBe("https://example.com/.well-known/opencode")
-        // Project config (enabled: true) should override remote (enabled: false)
-        expect(config.mcp?.jira?.enabled).toBe(true)
-      },
-    })
+    ).pipe(Effect.scoped, Effect.provide(layer), Effect.runPromise)
   } finally {
     globalThis.fetch = originalFetch
-    Auth.all = originalAuthAll
   }
 })
 
-describe("getPluginName", () => {
-  test("extracts name from file:// URL", () => {
-    expect(Config.getPluginName("file:///path/to/plugin/foo.js")).toBe("foo")
-    expect(Config.getPluginName("file:///path/to/plugin/bar.ts")).toBe("bar")
-    expect(Config.getPluginName("file:///some/path/my-plugin.js")).toBe("my-plugin")
+test("wellknown URL with trailing slash is normalized", async () => {
+  const originalFetch = globalThis.fetch
+  let fetchedUrl: string | undefined
+  globalThis.fetch = mock((url: string | URL | Request) => {
+    const urlStr = url.toString()
+    if (urlStr.includes(".well-known/opencode")) {
+      fetchedUrl = urlStr
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            config: {
+              mcp: { slack: { type: "remote", url: "https://slack.example.com/mcp", enabled: true } },
+            },
+          }),
+          { status: 200 },
+        ),
+      )
+    }
+    return originalFetch(url)
+  }) as unknown as typeof fetch
+
+  const fakeAuth = Layer.mock(Auth.Service)({
+    all: () =>
+      Effect.succeed({
+        "https://example.com/": new Auth.WellKnown({ type: "wellknown", key: "TEST_TOKEN", token: "test-token" }),
+      }),
   })
 
-  test("extracts name from npm package with version", () => {
-    expect(Config.getPluginName("oh-my-opencode@2.4.3")).toBe("oh-my-opencode")
-    expect(Config.getPluginName("some-plugin@1.0.0")).toBe("some-plugin")
-    expect(Config.getPluginName("plugin@latest")).toBe("plugin")
+  const layer = Config.layer.pipe(
+    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(fakeAuth),
+    Layer.provide(emptyAccount),
+    Layer.provideMerge(infra),
+  )
+
+  try {
+    await provideTmpdirInstance(
+      () =>
+        Config.Service.use((svc) =>
+          Effect.gen(function* () {
+            yield* svc.get()
+            expect(fetchedUrl).toBe("https://example.com/.well-known/opencode")
+          }),
+        ),
+      { git: true },
+    ).pipe(Effect.scoped, Effect.provide(layer), Effect.runPromise)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+describe("resolvePluginSpec", () => {
+  test("keeps package specs unchanged", async () => {
+    await using tmp = await tmpdir()
+    const file = path.join(tmp.path, "opencode.json")
+    expect(await Config.resolvePluginSpec("oh-my-opencode@2.4.3", file)).toBe("oh-my-opencode@2.4.3")
+    expect(await Config.resolvePluginSpec("@scope/pkg", file)).toBe("@scope/pkg")
   })
 
-  test("extracts name from scoped npm package", () => {
-    expect(Config.getPluginName("@scope/pkg@1.0.0")).toBe("@scope/pkg")
-    expect(Config.getPluginName("@opencode/plugin@2.0.0")).toBe("@opencode/plugin")
+  test("resolves relative file plugin paths to file urls", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Filesystem.write(path.join(dir, "plugin.ts"), "export default {}")
+      },
+    })
+
+    const file = path.join(tmp.path, "opencode.json")
+    const hit = await Config.resolvePluginSpec("./plugin.ts", file)
+    expect(Config.pluginSpecifier(hit)).toBe(pathToFileURL(path.join(tmp.path, "plugin.ts")).href)
   })
 
-  test("returns full string for package without version", () => {
-    expect(Config.getPluginName("some-plugin")).toBe("some-plugin")
-    expect(Config.getPluginName("@scope/pkg")).toBe("@scope/pkg")
+  test("resolves plugin directory paths to package main files", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const plugin = path.join(dir, "plugin")
+        await fs.mkdir(plugin, { recursive: true })
+        await Filesystem.writeJson(path.join(plugin, "package.json"), {
+          name: "demo-plugin",
+          type: "module",
+          main: "./index.ts",
+        })
+        await Filesystem.write(path.join(plugin, "index.ts"), "export default {}")
+      },
+    })
+
+    const file = path.join(tmp.path, "opencode.json")
+    const hit = await Config.resolvePluginSpec("./plugin", file)
+    expect(Config.pluginSpecifier(hit)).toBe(pathToFileURL(path.join(tmp.path, "plugin", "index.ts")).href)
   })
 })
 
@@ -1551,13 +1867,20 @@ describe("deduplicatePlugins", () => {
     expect(result.length).toBe(3)
   })
 
-  test("prefers local file over npm package with same name", () => {
+  test("keeps path plugins separate from package plugins", () => {
     const plugins = ["oh-my-opencode@2.4.3", "file:///project/.opencode/plugin/oh-my-opencode.js"]
 
     const result = Config.deduplicatePlugins(plugins)
 
-    expect(result.length).toBe(1)
-    expect(result[0]).toBe("file:///project/.opencode/plugin/oh-my-opencode.js")
+    expect(result).toEqual(plugins)
+  })
+
+  test("deduplicates direct path plugins by exact spec", () => {
+    const plugins = ["file:///project/.opencode/plugin/demo.ts", "file:///project/.opencode/plugin/demo.ts"]
+
+    const result = Config.deduplicatePlugins(plugins)
+
+    expect(result).toEqual(["file:///project/.opencode/plugin/demo.ts"])
   })
 
   test("preserves order of remaining plugins", () => {
@@ -1568,7 +1891,7 @@ describe("deduplicatePlugins", () => {
     expect(result).toEqual(["a-plugin@1.0.0", "b-plugin@1.0.0", "c-plugin@1.0.0"])
   })
 
-  test("local plugin directory overrides global opencode.json plugin", async () => {
+  test("loads auto-discovered local plugins as file urls", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
         const projectDir = path.join(dir, "project")
@@ -1576,7 +1899,7 @@ describe("deduplicatePlugins", () => {
         const pluginDir = path.join(opencodeDir, "plugin")
         await fs.mkdir(pluginDir, { recursive: true })
 
-        await Bun.write(
+        await Filesystem.write(
           path.join(dir, "opencode.json"),
           JSON.stringify({
             $schema: "https://opencode.ai/config.json",
@@ -1584,7 +1907,7 @@ describe("deduplicatePlugins", () => {
           }),
         )
 
-        await Bun.write(path.join(pluginDir, "my-plugin.js"), "export default {}")
+        await Filesystem.write(path.join(pluginDir, "my-plugin.js"), "export default {}")
       },
     })
 
@@ -1594,9 +1917,8 @@ describe("deduplicatePlugins", () => {
         const config = await Config.get()
         const plugins = config.plugin ?? []
 
-        const myPlugins = plugins.filter((p) => Config.getPluginName(p) === "my-plugin")
-        expect(myPlugins.length).toBe(1)
-        expect(myPlugins[0].startsWith("file://")).toBe(true)
+        expect(plugins.some((p) => Config.pluginSpecifier(p) === "my-plugin@1.0.0")).toBe(true)
+        expect(plugins.some((p) => Config.pluginSpecifier(p).startsWith("file://"))).toBe(true)
       },
     })
   })
@@ -1611,7 +1933,7 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
       await using tmp = await tmpdir({
         init: async (dir) => {
           // Create a project config that would normally be loaded
-          await Bun.write(
+          await Filesystem.write(
             path.join(dir, "opencode.json"),
             JSON.stringify({
               $schema: "https://opencode.ai/config.json",
@@ -1649,7 +1971,7 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
           // Create a .opencode directory with a command
           const opencodeDir = path.join(dir, ".opencode", "command")
           await fs.mkdir(opencodeDir, { recursive: true })
-          await Bun.write(path.join(opencodeDir, "test-cmd.md"), "# Test Command\nThis is a test command.")
+          await Filesystem.write(path.join(opencodeDir, "test-cmd.md"), "# Test Command\nThis is a test command.")
         },
       })
       await Instance.provide({
@@ -1706,7 +2028,7 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
       await using tmp = await tmpdir({
         init: async (dir) => {
           // Create a config with relative instruction path
-          await Bun.write(
+          await Filesystem.write(
             path.join(dir, "opencode.json"),
             JSON.stringify({
               $schema: "https://opencode.ai/config.json",
@@ -1714,7 +2036,7 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
             }),
           )
           // Create the instruction file (should be skipped)
-          await Bun.write(path.join(dir, "CUSTOM.md"), "# Custom Instructions")
+          await Filesystem.write(path.join(dir, "CUSTOM.md"), "# Custom Instructions")
         },
       })
 
@@ -1752,7 +2074,7 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
       await using configDirTmp = await tmpdir({
         init: async (dir) => {
           // Create config in the custom config dir
-          await Bun.write(
+          await Filesystem.write(
             path.join(dir, "opencode.json"),
             JSON.stringify({
               $schema: "https://opencode.ai/config.json",
@@ -1765,7 +2087,7 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
       await using projectTmp = await tmpdir({
         init: async (dir) => {
           // Create config in project (should be ignored)
-          await Bun.write(
+          await Filesystem.write(
             path.join(dir, "opencode.json"),
             JSON.stringify({
               $schema: "https://opencode.ai/config.json",
@@ -1796,6 +2118,69 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
         delete process.env["OPENCODE_CONFIG_DIR"]
       } else {
         process.env["OPENCODE_CONFIG_DIR"] = originalConfigDir
+      }
+    }
+  })
+})
+
+describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
+  test("substitutes {env:} tokens in OPENCODE_CONFIG_CONTENT", async () => {
+    const originalEnv = process.env["OPENCODE_CONFIG_CONTENT"]
+    const originalTestVar = process.env["TEST_CONFIG_VAR"]
+    process.env["TEST_CONFIG_VAR"] = "test_api_key_12345"
+    process.env["OPENCODE_CONFIG_CONTENT"] = JSON.stringify({
+      $schema: "https://opencode.ai/config.json",
+      username: "{env:TEST_CONFIG_VAR}",
+    })
+
+    try {
+      await using tmp = await tmpdir()
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          expect(config.username).toBe("test_api_key_12345")
+        },
+      })
+    } finally {
+      if (originalEnv !== undefined) {
+        process.env["OPENCODE_CONFIG_CONTENT"] = originalEnv
+      } else {
+        delete process.env["OPENCODE_CONFIG_CONTENT"]
+      }
+      if (originalTestVar !== undefined) {
+        process.env["TEST_CONFIG_VAR"] = originalTestVar
+      } else {
+        delete process.env["TEST_CONFIG_VAR"]
+      }
+    }
+  })
+
+  test("substitutes {file:} tokens in OPENCODE_CONFIG_CONTENT", async () => {
+    const originalEnv = process.env["OPENCODE_CONFIG_CONTENT"]
+
+    try {
+      await using tmp = await tmpdir({
+        init: async (dir) => {
+          await Filesystem.write(path.join(dir, "api_key.txt"), "secret_key_from_file")
+          process.env["OPENCODE_CONFIG_CONTENT"] = JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            username: "{file:./api_key.txt}",
+          })
+        },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          expect(config.username).toBe("secret_key_from_file")
+        },
+      })
+    } finally {
+      if (originalEnv !== undefined) {
+        process.env["OPENCODE_CONFIG_CONTENT"] = originalEnv
+      } else {
+        delete process.env["OPENCODE_CONFIG_CONTENT"]
       }
     }
   })

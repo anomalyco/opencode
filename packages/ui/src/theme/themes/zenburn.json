@@ -28,6 +28,29 @@
       "syntax-type": "#5f8f8f",
       "syntax-constant": "#6f6f6f",
       "syntax-info": "#6f6f6f",
+    "palette": {
+      "neutral": "#ffffef",
+      "ink": "#3f3f3f",
+      "primary": "#5f7f8f",
+      "accent": "#5f8f8f",
+      "success": "#5f8f5f",
+      "warning": "#8f8f5f",
+      "error": "#8f5f5f",
+      "info": "#8f7f5f"
+    },
+    "overrides": {
+      "text-weak": "#6f6f6f",
+      "syntax-comment": "#5f7f5f",
+      "syntax-keyword": "#8f8f5f",
+      "syntax-string": "#8f5f5f",
+      "syntax-primitive": "#5f7f8f",
+      "syntax-variable": "#3f3f3f",
+      "syntax-property": "#5f8f8f",
+      "syntax-type": "#5f8f8f",
+      "syntax-constant": "#5f8f5f",
+      "syntax-operator": "#8f8f5f",
+      "syntax-punctuation": "#3f3f3f",
+      "syntax-object": "#3f3f3f",
       "markdown-heading": "#8f8f5f",
       "markdown-text": "#3f3f3f",
       "markdown-link": "#5f7f8f",
@@ -50,6 +73,15 @@
     "seeds": {
       "neutral": "#3f3f3f",
       "primary": "#8cd0d3",
+      "markdown-code-block": "#3f3f3f"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#3f3f3f",
+      "ink": "#dcdccc",
+      "primary": "#8cd0d3",
+      "accent": "#93e0e3",
       "success": "#7f9f7f",
       "warning": "#f0dfaf",
       "error": "#cc9393",
@@ -72,6 +104,22 @@
       "syntax-type": "#93e0e3",
       "syntax-constant": "#9f9f9f",
       "syntax-info": "#9f9f9f",
+      "diffAdd": "#8fb28f",
+      "diffDelete": "#dca3a3"
+    },
+    "overrides": {
+      "text-weak": "#9f9f9f",
+      "syntax-comment": "#7f9f7f",
+      "syntax-keyword": "#f0dfaf",
+      "syntax-string": "#cc9393",
+      "syntax-primitive": "#8cd0d3",
+      "syntax-variable": "#dcdccc",
+      "syntax-property": "#93e0e3",
+      "syntax-type": "#93e0e3",
+      "syntax-constant": "#8fb28f",
+      "syntax-operator": "#f0dfaf",
+      "syntax-punctuation": "#dcdccc",
+      "syntax-object": "#dcdccc",
       "markdown-heading": "#f0dfaf",
       "markdown-text": "#dcdccc",
       "markdown-link": "#8cd0d3",
@@ -88,6 +136,7 @@
       "markdown-code-block": "#dcdccc",
       "surface-diff-add-base": "#4f5f4f",
       "surface-diff-delete-base": "#5f4f4f"
+      "markdown-code-block": "#dcdccc"
     }
   }
 }
