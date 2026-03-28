@@ -220,12 +220,33 @@ export interface Hooks {
     input: { cwd: string; sessionID?: string; callID?: string },
     output: { env: Record<string, string> },
   ) => Promise<void>
+  /**
+   * Called after a tool finishes execution. Plugins can modify the tool
+   * result (title, output, metadata) before the AI sees it.
+   *
+   * Use `inject` to append extra messages that the AI will see on the
+   * **next** loop iteration. This is the primary mechanism for behavioral
+   * enforcement — e.g. reminding the AI to update planning files after
+   * every edit, or warning about security policy violations.
+   *
+   * ```ts
+   * "tool.execute.after": async (input, output) => {
+   *   if (input.tool === "edit") {
+   *     output.inject = [
+   *       { role: "user", text: "Remember to update progress.md." },
+   *     ]
+   *   }
+   * }
+   * ```
+   */
   "tool.execute.after"?: (
     input: { tool: string; sessionID: string; callID: string; args: any },
     output: {
       title: string
       output: string
       metadata: any
+      /** Messages to inject into the conversation after this tool call. */
+      inject?: Array<{ role: "user" | "system"; text: string }>
     },
   ) => Promise<void>
   "experimental.chat.messages.transform"?: (
