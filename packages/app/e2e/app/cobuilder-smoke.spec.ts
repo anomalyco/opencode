@@ -3,10 +3,16 @@ import { spawn, type ChildProcess } from "node:child_process"
 import net from "node:net"
 import os from "node:os"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
+import { dirname, resolve } from "node:path"
 import fs from "node:fs/promises"
 
 const BINARY_PATH =
-  "/home/jkang/cobuilder-opencode/packages/opencode/dist/opencode-linux-x64/bin/cobuilder"
+  process.env.COBUILDER_BINARY_PATH ??
+  resolve(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../../../opencode/dist/opencode-linux-x64/bin/cobuilder",
+  )
 
 async function waitForPort(host: string, port: number, timeoutMs = 30_000): Promise<void> {
   const deadline = Date.now() + timeoutMs
@@ -58,7 +64,7 @@ test.describe("cobuilder smoke", () => {
 
     proc = spawn(
       BINARY_PATH,
-      ["--port", String(webPort)],
+      ["serve", "--port", String(webPort)],
       {
         env: {
           ...process.env,
