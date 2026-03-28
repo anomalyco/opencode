@@ -10,7 +10,6 @@ import { ThemeProvider } from "@opencode-ai/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
 import { type BaseRouterProps, Navigate, Route, Router } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
-import { type Duration, Effect } from "effect"
 import {
   type Component,
   createMemo,
@@ -47,8 +46,13 @@ import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 
 const HomeRoute = lazy(() => import("@/pages/home"))
-const Session = lazy(() => import("@/pages/session"))
+const loadSession = () => import("@/pages/session")
+const Session = lazy(loadSession)
 const Loading = () => <div class="size-full" />
+
+if (typeof location === "object" && /\/session(?:\/|$)/.test(location.pathname)) {
+  void loadSession()
+}
 
 const SessionRoute = () => (
   <SessionProviders>
@@ -151,10 +155,9 @@ export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
   )
 }
 
-const effectMinDuration =
-  (duration: Duration.Input) =>
-  <A, E, R>(e: Effect.Effect<A, E, R>) =>
-    Effect.all([e, Effect.sleep(duration)], { concurrency: "unbounded" }).pipe(Effect.map((v) => v[0]))
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms))
+}
 
 function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean }>) {
   const server = useServer()
@@ -167,21 +170,28 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean }>) {
   const [startupHealthCheck, healthCheckActions] = createResource(() =>
     props.disableHealthCheck
       ? true
-      : Effect.gen(function* () {
-          if (!server.current) return true
-          const { http, type } = server.current
+      : (async () => {
+          const current = server.current
+          if (!current) return true
 
-          while (true) {
-            const res = yield* Effect.promise(() => checkServerHealth(http))
-            if (res.healthy) return true
-            if (checkMode() === "background" || type === "http") return false
+          const task = async () => {
+            while (true) {
+              const res = await checkServerHealth(current.http)
+              if (res.healthy) return true
+              if (checkMode() === "background" || current.type === "http") return false
+            }
           }
-        }).pipe(
-          effectMinDuration(checkMode() === "blocking" ? "1.2 seconds" : 0),
-          Effect.timeoutOrElse({ duration: "10 seconds", onTimeout: () => Effect.succeed(false) }),
-          Effect.ensuring(Effect.sync(() => setCheckMode("background"))),
-          Effect.runPromise,
-        ),
+
+          try {
+            const [result] = await Promise.all([
+              Promise.race([task(), sleep(10_000).then(() => false)]),
+              sleep(checkMode() === "blocking" ? 1_200 : 0),
+            ])
+            return result
+          } finally {
+            setCheckMode("background")
+          }
+        })(),
   )
 
   return (
@@ -278,7 +288,11 @@ export function AppInterface(props: {
   disableHealthCheck?: boolean
 }) {
   return (
-    <ServerProvider defaultServer={props.defaultServer} servers={props.servers}>
+    <ServerProvider
+      defaultServer={props.defaultServer}
+      disableHealthCheck={props.disableHealthCheck}
+      servers={props.servers}
+    >
       <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
         <ServerKey>
           <GlobalSDKProvider>

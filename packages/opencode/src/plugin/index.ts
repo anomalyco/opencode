@@ -17,12 +17,15 @@ import { errorMessage } from "@/util/error"
 import { Installation } from "@/installation"
 import {
   checkPluginCompatibility,
-  getDefaultPlugin,
   isDeprecatedPlugin,
   parsePluginSpecifier,
   pluginSource,
+  readPluginId,
+  readV1Plugin,
   resolvePluginEntrypoint,
+  resolvePluginId,
   resolvePluginTarget,
+  type PluginSource,
 } from "./shared"
 
 export namespace Plugin {
@@ -35,6 +38,8 @@ export namespace Plugin {
   type Loaded = {
     item: Config.PluginSpec
     spec: string
+    target: string
+    source: PluginSource
     mod: Record<string, unknown>
   }
 
@@ -112,7 +117,8 @@ export namespace Plugin {
     const resolved = await resolvePlugin(spec)
     if (!resolved) return
 
-    if (pluginSource(spec) === "npm") {
+    const source = pluginSource(spec)
+    if (source === "npm") {
       const incompatible = await checkPluginCompatibility(resolved, Installation.VERSION)
         .then(() => false)
         .catch((err) => {
@@ -156,14 +162,17 @@ export namespace Plugin {
     return {
       item,
       spec,
+      target,
+      source,
       mod,
     }
   }
 
   async function applyPlugin(load: Loaded, input: PluginInput, hooks: Hooks[]) {
-    const plugin = getDefaultPlugin(load.mod) as PluginModule | undefined
-    if (plugin?.server) {
-      hooks.push(await plugin.server(input, Config.pluginOptions(load.item)))
+    const plugin = readV1Plugin(load.mod, load.spec, "server", "detect")
+    if (plugin) {
+      await resolvePluginId(load.source, load.spec, load.target, readPluginId(plugin.id, load.spec))
+      hooks.push(await (plugin as PluginModule).server(input, Config.pluginOptions(load.item)))
       return
     }
 
