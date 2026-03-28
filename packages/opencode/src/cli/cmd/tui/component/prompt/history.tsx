@@ -4,7 +4,7 @@ import { Filesystem } from "@/util/filesystem"
 import { onMount } from "solid-js"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { createSimpleContext } from "../../context/helper"
-import { appendFile, writeFile } from "fs/promises"
+import { writeFile } from "fs/promises"
 import type { AgentPart, FilePart, TextPart } from "@opencode-ai/sdk/v2"
 
 export type PromptInfo = {
@@ -31,9 +31,8 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
   name: "PromptHistory",
   init: () => {
     const historyPath = path.join(Global.Path.state, "prompt-history.jsonl")
-    onMount(async () => {
-      const text = await Filesystem.readText(historyPath).catch(() => "")
-      const lines = text
+    const parse = (text: string) =>
+      text
         .split("\n")
         .filter(Boolean)
         .map((line) => {
@@ -44,7 +43,9 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
           }
         })
         .filter((line): line is PromptInfo => line !== null)
-        .slice(-MAX_HISTORY_ENTRIES)
+
+    onMount(async () => {
+      const lines = parse(await Filesystem.readText(historyPath).catch(() => "")).slice(-MAX_HISTORY_ENTRIES)
 
       setStore("history", lines)
 
@@ -83,25 +84,25 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
       },
       append(item: PromptInfo) {
         const entry = structuredClone(unwrap(item))
-        let trimmed = false
         setStore(
           produce((draft) => {
             draft.history.push(entry)
             if (draft.history.length > MAX_HISTORY_ENTRIES) {
               draft.history = draft.history.slice(-MAX_HISTORY_ENTRIES)
-              trimmed = true
             }
             draft.index = 0
           }),
         )
 
-        if (trimmed) {
-          const content = store.history.map((line) => JSON.stringify(line)).join("\n") + "\n"
-          writeFile(historyPath, content).catch(() => {})
-          return
-        }
-
-        appendFile(historyPath, JSON.stringify(entry) + "\n").catch(() => {})
+        Filesystem.readText(historyPath)
+          .catch(() => "")
+          .then((text) => {
+            const lines = parse(text)
+            const next = lines.length >= MAX_HISTORY_ENTRIES ? lines.slice(-(MAX_HISTORY_ENTRIES - 1)) : lines
+            const content = [...next, entry].map((line) => JSON.stringify(line)).join("\n") + "\n"
+            return writeFile(historyPath, content)
+          })
+          .catch(() => {})
       },
     }
   },
