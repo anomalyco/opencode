@@ -70,23 +70,19 @@ export namespace SessionRetry {
         return undefined
       }
     })
-    try {
-      if (!json || typeof json !== "object") return undefined
-      const code = typeof json.code === "string" ? json.code : ""
+    if (!json || typeof json !== "object") return undefined
+    const code = typeof json.code === "string" ? json.code : ""
 
-      if (json.type === "error" && json.error?.type === "too_many_requests") {
-        return "Too Many Requests"
-      }
-      if (code.includes("exhausted") || code.includes("unavailable")) {
-        return "Provider is overloaded"
-      }
-      if (json.type === "error" && json.error?.code?.includes("rate_limit")) {
-        return "Rate Limited"
-      }
-      return JSON.stringify(json)
-    } catch {
-      return undefined
+    if (json.type === "error" && json.error?.type === "too_many_requests") {
+      return "Too Many Requests"
     }
+    if (code.includes("exhausted") || code.includes("unavailable")) {
+      return "Provider is overloaded"
+    }
+    if (json.type === "error" && typeof json.error?.code === "string" && json.error.code.includes("rate_limit")) {
+      return "Rate Limited"
+    }
+    return undefined
   }
 
   export function policy(opts: {

@@ -378,6 +378,23 @@ export namespace SessionProcessor {
             }
             ctx.snapshot = undefined
           }
+
+          if (ctx.currentText) {
+            const end = Date.now()
+            ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }
+            yield* session.updatePart(ctx.currentText)
+            ctx.currentText = undefined
+          }
+
+          for (const part of Object.values(ctx.reasoningMap)) {
+            const end = Date.now()
+            yield* session.updatePart({
+              ...part,
+              time: { start: part.time.start ?? end, end },
+            })
+          }
+          ctx.reasoningMap = {}
+
           const parts = yield* Effect.promise(() => MessageV2.parts(ctx.assistantMessage.id))
           for (const part of parts) {
             if (part.type !== "tool" || part.state.status === "completed" || part.state.status === "error") continue
