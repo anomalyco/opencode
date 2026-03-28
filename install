@@ -20,8 +20,8 @@ Options:
         --no-modify-path    Don't modify shell config files (.zshrc, .bashrc, etc.)
 
 Examples:
-    curl -fsSL https://opencode.ai/install | bash
-    curl -fsSL https://opencode.ai/install | bash -s -- --version 1.0.180
+    curl -fsSL https://raw.githubusercontent.com/f5xc-salesdemos/opencode/dev/install | bash
+    curl -fsSL https://raw.githubusercontent.com/f5xc-salesdemos/opencode/dev/install | bash -s -- --version 1.3.3-f5xc.3
     ./install --binary /path/to/opencode
 EOF
 }
