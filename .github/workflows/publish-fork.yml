@@ -31,18 +31,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git remote add upstream https://github.com/anomalyco/opencode.git 2>/dev/null || true
-          git fetch upstream --tags
-
-          # Get latest upstream release tag
-          base=$(git tag -l 'v[0-9]*' --sort=-v:refname | grep -v "$FORK_SUFFIX" | head -1 | sed 's/^v//')
-          if [ -z "$base" ]; then
-            base=$(gh api repos/anomalyco/opencode/releases/latest --jq '.tag_name' | sed 's/^v//')
-          fi
+          base=$(gh api repos/anomalyco/opencode/releases/latest --jq '.tag_name' | sed 's/^v//')
           echo "Upstream base: $base"
 
-          # Count existing fork releases for this base to auto-increment
-          existing=$(gh release list --limit 100 --json tagName --jq "[.[] | select(.tagName | startswith(\"v${base}-${FORK_SUFFIX}.\"))] | length")
+          existing=$(gh release list --limit 100 --json tagName \
+            --jq "[.[] | select(.tagName | startswith(\"v${base}-${FORK_SUFFIX}.\"))] | length")
           next=$((existing + 1))
 
           version="${base}-${FORK_SUFFIX}.${next}"
