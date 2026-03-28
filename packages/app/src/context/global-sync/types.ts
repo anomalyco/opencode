@@ -32,6 +32,7 @@ export type ProjectMeta = {
 
 export type State = {
   status: "loading" | "partial" | "complete"
+  sessions: "idle" | "loading" | "ready"
   agent: Agent[]
   command: Command[]
   project: string

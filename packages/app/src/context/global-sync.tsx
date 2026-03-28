@@ -226,14 +226,25 @@ function createGlobalSync() {
     },
   })
 
-  async function loadSessions(directory: string) {
-    const key = directoryKey(directory)
-    const pending = sessionLoads.get(key)
+  const sdkFor = (directory: string) => {
+    const cached = sdkCache.get(directory)
+    if (cached) return cached
+    const sdk = globalSDK.createClient({
+      directory,
+      throwOnError: true,
+    })
+    sdkCache.set(directory, sdk)
+    return sdk
+  }
+
+  async function loadSessions(directory: string, opts?: { silent?: boolean }) {
+    const pending = sessionLoads.get(directory)
     if (pending) return pending
 
     children.pin(key)
     const [store, setStore] = children.child(directory, { bootstrap: false })
-    const meta = sessionMeta.get(key)
+    setStore("sessions", "loading")
+    const meta = sessionMeta.get(directory)
     if (meta && meta.limit >= store.limit) {
       const next = trimSessions(store.session, {
         limit: store.limit,
@@ -243,7 +254,8 @@ function createGlobalSync() {
         setStore("session", reconcile(next, { key: "id" }))
         cleanupDroppedSessionCaches(store, setStore, next, setSessionTodo)
       }
-      children.unpin(key)
+      setStore("sessions", "ready")
+      children.unpin(directory)
       return
     }
 
@@ -275,9 +287,12 @@ function createGlobalSync() {
         setStore("session", reconcile(sessions, { key: "id" }))
         cleanupDroppedSessionCaches(store, setStore, sessions, setSessionTodo)
         sessionMeta.set(directory, { limit })
+        setStore("sessions", "ready")
       })
       .catch((err) => {
         console.error("Failed to load sessions", err)
+        setStore("sessions", "idle")
+        if (opts?.silent) return
         const project = getFilename(directory)
         const title =
           server.current?.integration === "openclaw"
@@ -323,7 +338,6 @@ function createGlobalSync() {
         store: child[0],
         setStore: child[1],
         vcsCache: cache,
-        loadSessions,
         translate: language.t,
         queryClient,
       })
