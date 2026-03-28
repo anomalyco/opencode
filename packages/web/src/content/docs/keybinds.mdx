@@ -193,3 +193,47 @@ Add this to the root-level `keybindings` array:
 ```
 
 Save the file and restart Windows Terminal or open a new tab.
+
+---
+
+## Ctrl+V In Windows Terminal (WSL)
+
+If OpenCode is running inside WSL, Windows Terminal may intercept `ctrl+v` before the app can process clipboard events. This can cause inconsistent behavior where plain text paste works but image paste does not.
+
+You can keep using `ctrl+v` by binding it to a custom action that:
+
+1. performs normal paste, then
+2. sends an empty bracketed-paste marker (`\u001b[200~\u001b[201~`).
+
+Add this to the root-level `actions` array:
+
+```json
+"actions": [
+  {
+    "command": {
+      "action": "multipleActions",
+      "actions": [
+        "paste",
+        {
+          "action": "sendInput",
+          "input": "\u001b[200~\u001b[201~"
+        }
+      ]
+    },
+    "id": "User.pasteAndNotify"
+  }
+]
+```
+
+Then bind `ctrl+v` to that action in the root-level `keybindings` array:
+
+```json
+"keybindings": [
+  {
+    "keys": "ctrl+v",
+    "id": "User.pasteAndNotify"
+  }
+]
+```
+
+Save the file and restart Windows Terminal.
