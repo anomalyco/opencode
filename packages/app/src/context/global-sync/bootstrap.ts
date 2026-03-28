@@ -43,8 +43,10 @@ function waitForPaint() {
     const timer = setTimeout(finish, 50)
     if (typeof requestAnimationFrame !== "function") return
     requestAnimationFrame(() => {
-      clearTimeout(timer)
-      finish()
+      setTimeout(() => {
+        clearTimeout(timer)
+        finish()
+      }, 0)
     })
   })
 }
@@ -89,12 +91,6 @@ export async function bootstrapGlobal(input: {
   const fast = [
     () =>
       retry(() =>
-        input.globalSDK.path.get().then((x) => {
-          input.setGlobalStore("path", x.data!)
-        }),
-      ),
-    () =>
-      retry(() =>
         input.globalSDK.global.config.get().then((x) => {
           input.setGlobalStore("config", x.data!)
         }),
@@ -108,6 +104,12 @@ export async function bootstrapGlobal(input: {
   ]
 
   const slow = [
+    () =>
+      retry(() =>
+        input.globalSDK.path.get().then((x) => {
+          input.setGlobalStore("path", x.data!)
+        }),
+      ),
     () =>
       retry(() =>
         input.globalSDK.project.list().then((x) => {
@@ -221,12 +223,16 @@ export async function bootstrapDirectory(input: {
   if (loading) input.setStore("status", "partial")
 
   const fast = [
+    () => retry(() => input.sdk.app.agents().then((x) => input.setStore("agent", normalizeAgentList(x.data)))),
+    () => retry(() => input.sdk.config.get().then((x) => input.setStore("config", x.data!))),
+    () => retry(() => input.sdk.session.status().then((x) => input.setStore("session_status", x.data!))),
+  ]
+
+  const slow = [
     () =>
       seededProject
         ? Promise.resolve()
         : retry(() => input.sdk.project.current()).then((x) => input.setStore("project", x.data!.id)),
-    () => retry(() => input.sdk.app.agents().then((x) => input.setStore("agent", normalizeAgentList(x.data)))),
-    () => retry(() => input.sdk.config.get().then((x) => input.setStore("config", x.data!))),
     () =>
       seededPath
         ? Promise.resolve()
@@ -237,7 +243,6 @@ export async function bootstrapDirectory(input: {
               if (next) input.setStore("project", next)
             }),
           ),
-    () => retry(() => input.sdk.session.status().then((x) => input.setStore("session_status", x.data!))),
     () =>
       retry(() =>
         input.sdk.vcs.get().then((x) => {
@@ -299,9 +304,6 @@ export async function bootstrapDirectory(input: {
           )
         }),
       ),
-  ]
-
-  const slow = [
     () => Promise.resolve(input.loadSessions(input.directory)),
     () =>
       retry(() =>

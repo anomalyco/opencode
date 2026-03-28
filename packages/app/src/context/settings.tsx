@@ -32,8 +32,8 @@ export interface Settings {
   }
   appearance: {
     fontSize: number
-    font: string
-    uiFont: string
+    mono: string
+    sans: string
   }
   keybinds: Record<string, string>
   permissions: {
@@ -43,20 +43,18 @@ export interface Settings {
   sounds: SoundSettings
 }
 
-export const monoDefault = "IBM Plex Mono"
-export const sansDefault = "Inter"
+export const monoDefault = "System Mono"
+export const sansDefault = "System Sans"
 
 const monoFallback =
   'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
 const sansFallback = 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
 
-const monoBase = `"${monoDefault}", "IBM Plex Mono Fallback", ${monoFallback}`
-const sansBase = `"${sansDefault}", "Inter Fallback", ${sansFallback}`
-const monoKey = "ibm-plex-mono"
+const monoBase = monoFallback
+const sansBase = sansFallback
 
-function input(font: string | undefined, key?: string) {
-  if (!font || font === key || !font.trim()) return ""
-  return font
+function input(font: string | undefined) {
+  return font ?? ""
 }
 
 function family(font: string) {
@@ -64,14 +62,14 @@ function family(font: string) {
   return `"${font.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`
 }
 
-function stack(font: string | undefined, base: string, key?: string) {
-  const value = input(font, key).trim()
+function stack(font: string | undefined, base: string) {
+  const value = font?.trim() ?? ""
   if (!value) return base
   return `${family(value)}, ${base}`
 }
 
 export function monoInput(font: string | undefined) {
-  return input(font, monoKey)
+  return input(font)
 }
 
 export function sansInput(font: string | undefined) {
@@ -79,7 +77,7 @@ export function sansInput(font: string | undefined) {
 }
 
 export function monoFontFamily(font: string | undefined) {
-  return stack(font, monoBase, monoKey)
+  return stack(font, monoBase)
 }
 
 export function sansFontFamily(font: string | undefined) {
@@ -100,8 +98,8 @@ const defaultSettings: Settings = {
   },
   appearance: {
     fontSize: 14,
-    font: "",
-    uiFont: "",
+    mono: "",
+    sans: "",
   },
   keybinds: {},
   permissions: {
@@ -134,8 +132,8 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     createEffect(() => {
       if (typeof document === "undefined") return
       const root = document.documentElement
-      root.style.setProperty("--font-family-mono", monoFontFamily(store.appearance?.font))
-      root.style.setProperty("--font-family-sans", sansFontFamily(store.appearance?.uiFont))
+      root.style.setProperty("--font-family-mono", monoFontFamily(store.appearance?.mono))
+      root.style.setProperty("--font-family-sans", sansFontFamily(store.appearance?.sans))
     })
 
     return {
@@ -189,13 +187,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setFontSize(value: number) {
           setStore("appearance", "fontSize", value)
         },
-        font: withFallback(() => store.appearance?.font, defaultSettings.appearance.font),
+        font: withFallback(() => store.appearance?.mono, defaultSettings.appearance.mono),
         setFont(value: string) {
-          setStore("appearance", "font", value.trim() ? value : "")
+          setStore("appearance", "mono", value.trim() ? value : "")
         },
-        uiFont: withFallback(() => store.appearance?.uiFont, defaultSettings.appearance.uiFont),
+        uiFont: withFallback(() => store.appearance?.sans, defaultSettings.appearance.sans),
         setUIFont(value: string) {
-          setStore("appearance", "uiFont", value.trim() ? value : "")
+          setStore("appearance", "sans", value.trim() ? value : "")
         },
       },
       keybinds: {
