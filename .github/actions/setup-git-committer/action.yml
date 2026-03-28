@@ -1,35 +1,31 @@
 name: "Setup Git Committer"
-description: "Create app token and configure git user"
+description: "Configure git user for automated commits using GITHUB_TOKEN"
 inputs:
-  opencode-app-id:
-    description: "OpenCode GitHub App ID"
-    required: true
-  opencode-app-secret:
-    description: "OpenCode GitHub App private key"
-    required: true
+  token:
+    description: "GitHub token (defaults to github.token)"
+    required: false
+    default: ""
 outputs:
   token:
-    description: "GitHub App token"
-    value: ${{ steps.apptoken.outputs.token }}
-  app-slug:
-    description: "GitHub App slug"
-    value: ${{ steps.apptoken.outputs.app-slug }}
+    description: "GitHub token used"
+    value: ${{ steps.token.outputs.token }}
 runs:
   using: "composite"
   steps:
-    - name: Create app token
-      id: apptoken
-      uses: actions/create-github-app-token@v2
-      with:
-        app-id: ${{ inputs.opencode-app-id }}
-        private-key: ${{ inputs.opencode-app-secret }}
-        owner: ${{ github.repository_owner }}
+    - name: Resolve token
+      id: token
+      run: |
+        if [ -n "${{ inputs.token }}" ]; then
+          echo "token=${{ inputs.token }}" >> "$GITHUB_OUTPUT"
+        else
+          echo "token=${{ github.token }}" >> "$GITHUB_OUTPUT"
+        fi
+      shell: bash
 
     - name: Configure git user
       run: |
-        slug="${{ steps.apptoken.outputs.app-slug }}"
-        git config --global user.name "${slug}[bot]"
-        git config --global user.email "${slug}[bot]@users.noreply.github.com"
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
       shell: bash
 
     - name: Clear checkout auth
@@ -39,5 +35,5 @@ runs:
 
     - name: Configure git remote
       run: |
-        git remote set-url origin https://x-access-token:${{ steps.apptoken.outputs.token }}@github.com/${{ github.repository }}
+        git remote set-url origin https://x-access-token:${{ steps.token.outputs.token }}@github.com/${{ github.repository }}
       shell: bash
