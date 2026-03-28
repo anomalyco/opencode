@@ -2,6 +2,8 @@ import { getFilename } from "@opencode-ai/util/path"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import { workspaceKey } from "@/utils/workspace-key"
 
+export { workspaceKey }
+
 type SessionStore = {
   session?: Session[]
   path: { directory: string }
