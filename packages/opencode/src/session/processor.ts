@@ -123,11 +123,11 @@ export namespace SessionProcessor {
             ctx.toolcalls[value.toolCallId] = part as MessageV2.ToolPart
 
             const parts = await MessageV2.parts(ctx.assistantMessage.id)
-            const lastThree = parts.slice(-DOOM_LOOP_THRESHOLD)
+            const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
 
             if (
-              lastThree.length === DOOM_LOOP_THRESHOLD &&
-              lastThree.every(
+              recentParts.length === DOOM_LOOP_THRESHOLD &&
+              recentParts.every(
                 (p) =>
                   p.type === "tool" &&
                   p.tool === value.toolName &&
@@ -435,6 +435,9 @@ export namespace SessionProcessor {
                   }),
                 )
                 yield* Effect.promise(() => SessionRetry.sleep(delay, input.abort).catch(() => {}))
+                // Retrying here re-enters `loop` before the outer `ensuring(cleanupEffect(ctx))`
+                // runs, so any partial state from this attempt stays live unless cleanup moves
+                // inside the per-attempt boundary.
                 yield* loop
                 return
               }
