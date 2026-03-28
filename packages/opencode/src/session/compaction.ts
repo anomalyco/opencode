@@ -207,12 +207,14 @@ export namespace SessionCompaction {
             created: Date.now(),
           },
         })) as MessageV2.Assistant
-        const processor = await SessionProcessor.create({
-          assistantMessage: msg,
-          sessionID: input.sessionID,
-          model,
-          abort: input.abort,
-        })
+        const processor = yield* Effect.promise(() =>
+          SessionProcessor.create({
+            assistantMessage: msg,
+            sessionID: input.sessionID,
+            model,
+            abort: input.abort,
+          }),
+        )
         // Allow plugins to inject context or replace compaction prompt.
         const compacting = yield* plugin.trigger(
           "experimental.session.compacting",

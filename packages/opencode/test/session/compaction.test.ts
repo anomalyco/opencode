@@ -123,7 +123,7 @@ function fake(
   result: "continue" | "compact",
 ): ReturnType<(typeof SessionProcessorModule.SessionProcessor)["create"]> {
   const msg = input.assistantMessage
-  return {
+  return Promise.resolve({
     get message() {
       return msg
     },
@@ -139,7 +139,7 @@ function fake(
       }
     },
     process: async () => result,
-  }
+  })
 }
 
 function wait(ms = 50) {
