@@ -362,7 +362,8 @@ VS Code などの一部のエディターは、`--wait` フラグを使用して
   "scroll_acceleration": {
     "enabled": true
   },
-  "diff_style": "auto"
+  "diff_style": "auto",
+  "sidebar_position": "left"
 }
 ```
 
@@ -375,6 +376,7 @@ VS Code などの一部のエディターは、`--wait` フラグを使用して
 - `scroll_acceleration.enabled` - macOS スタイルのスクロールアクセラレーションを有効にして、スムーズで自然なスクロールを実現します。有効にすると、高速スクロールジェスチャではスクロール速度が向上し、ゆっくりとした動きでは正確なままになります。 **この設定は `scroll_speed` よりも優先され、有効になっている場合は上書きされます。**
 - `scroll_speed` - スクロールコマンドを使用するときに TUI がスクロールする速度を制御します (最小: `0.001`、小数をサポート)。デフォルトは `3` です。 **注: `scroll_acceleration.enabled` が `true` に設定されている場合、これは無視されます。**
 - `diff_style` - 差分レンダリングを制御します。 `"auto"` はターミナルの幅に適応し、`"stacked"` は常に 1 列のレイアウトを表示します。
+- `sidebar_position` - サイドバーの位置を制御します。`"right"`（デフォルト）はサイドバーを右側に、`"left"` は左側に移動します。
 
 カスタム TUI 設定パスをロードするには、`OPENCODE_TUI_CONFIG` を使用します。
 

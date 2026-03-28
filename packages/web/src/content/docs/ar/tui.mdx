@@ -352,25 +352,34 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## الإعداد
 
-يمكنك تخصيص سلوك واجهة TUI عبر ملف إعدادات OpenCode.
+يمكنك تخصيص سلوك واجهة TUI عبر `tui.json` (أو `tui.jsonc`).
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "tui": {
-    "scroll_speed": 3,
-    "scroll_acceleration": {
-      "enabled": true
-    }
-  }
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "opencode",
+  "keybinds": {
+    "leader": "ctrl+x"
+  },
+  "scroll_speed": 3,
+  "scroll_acceleration": {
+    "enabled": true
+  },
+  "diff_style": "auto",
+  "sidebar_position": "left"
 }
 ```
 
+هذا منفصل عن `opencode.json`، الذي يقوم بتكوين سلوك الخادم/وقت التشغيل.
+
 ### الخيارات
 
+- `theme` - يحدد سمة واجهة المستخدم. [تعرف على المزيد](/docs/themes).
+- `keybinds` - يخصص اختصارات لوحة المفاتيح. [تعرف على المزيد](/docs/keybinds).
 - `scroll_acceleration` - فعّل تسارع التمرير على نمط macOS لتمرير سلس وطبيعي. عند تفعيله، تزداد سرعة التمرير مع إيماءات التمرير السريعة وتبقى دقيقة للحركات الأبطأ. **يتقدّم هذا الإعداد على `scroll_speed` ويستبدله عند تفعيله.**
 - `scroll_speed` - يتحكم في سرعة تمرير واجهة TUI عند استخدام أوامر التمرير (الحد الأدنى: `1`). القيمة الافتراضية هي `3`. **ملاحظة: يتم تجاهل هذا إذا تم ضبط `scroll_acceleration.enabled` على `true`.**
 - `diff_style` - يتحكم في عرض الفروقات (diff). القيمة `"auto"` تتكيف مع عرض terminal، و`"stacked"` تعرض عمودًا واحدًا دائمًا.
+- `sidebar_position` - يتحكم في موضع الشريط الجانبي. `"right"` (الافتراضي) يبقيه على اليمين، `"left"` ينقله إلى اليسار.
 
 استخدم `OPENCODE_TUI_CONFIG` لتحميل مسار إعدادات TUI مخصص.
 

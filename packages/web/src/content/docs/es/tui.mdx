@@ -368,7 +368,8 @@ Puede personalizar el comportamiento de TUI a través de `tui.json` (o `tui.json
   "scroll_acceleration": {
     "enabled": true
   },
-  "diff_style": "auto"
+  "diff_style": "auto",
+  "sidebar_position": "left"
 }
 ```
 
@@ -381,6 +382,7 @@ Esto es independiente de `opencode.json`, que configura el comportamiento del se
 - `scroll_acceleration.enabled`: habilite la aceleración de desplazamiento estilo macOS para un desplazamiento suave y natural. Cuando está habilitado, la velocidad de desplazamiento aumenta con gestos de desplazamiento rápido y se mantiene precisa para movimientos más lentos. **Esta configuración tiene prioridad sobre `scroll_speed` y la anula cuando está habilitada.**
 - `scroll_speed`: controla la rapidez con la que se desplaza el TUI cuando se utilizan comandos de desplazamiento (mínimo: `0.001`, admite valores decimales). El valor predeterminado es `3`. **Nota: Esto se ignora si `scroll_acceleration.enabled` está configurado en `true`.**
 - `diff_style`: controla la representación de diferencias. `"auto"` se adapta al ancho del terminal, `"stacked"` siempre muestra un diseño de una sola columna.
+- `sidebar_position`: controla la posición de la barra lateral. `"right"` (predeterminado) mantiene la barra lateral a la derecha, `"left"` la mueve a la izquierda.
 
 Utilice `OPENCODE_TUI_CONFIG` para cargar una ruta de configuración de TUI personalizada.
 

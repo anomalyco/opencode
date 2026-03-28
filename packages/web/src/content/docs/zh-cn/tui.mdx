@@ -352,24 +352,34 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## 配置
 
-您可以通过 OpenCode 配置文件自定义 TUI 行为。
+您可以通过 `tui.json`（或 `tui.jsonc`）自定义 TUI 行为。
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "tui": {
-    "scroll_speed": 3,
-    "scroll_acceleration": {
-      "enabled": true
-    }
-  }
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "opencode",
+  "keybinds": {
+    "leader": "ctrl+x"
+  },
+  "scroll_speed": 3,
+  "scroll_acceleration": {
+    "enabled": true
+  },
+  "diff_style": "auto",
+  "sidebar_position": "left"
 }
 ```
 
+此文件独立于 `opencode.json`，后者用于配置服务器/运行时行为。
+
 ### 选项
 
+- `theme` - 设置 UI 主题。[了解更多](/docs/themes)。
+- `keybinds` - 自定义键盘快捷键。[了解更多](/docs/keybinds)。
 - `scroll_acceleration` - 启用 macOS 风格的滚动加速，实现平滑、自然的滚动体验。启用后，快速滚动时速度会增加，慢速移动时保持精确。**此设置优先于 `scroll_speed`，启用时会覆盖它。**
 - `scroll_speed` - 控制使用滚动命令时 TUI 的滚动速度（最小值：`1`）。默认为 `3`。**注意：如果 `scroll_acceleration.enabled` 设置为 `true`，则此设置会被忽略。**
+- `diff_style` - 控制差异渲染方式。`"auto"` 根据终端宽度自适应，`"stacked"` 始终显示单列。
+- `sidebar_position` - 控制侧边栏位置。`"right"`（默认）将侧边栏放在右侧，`"left"` 将其移到左侧。
 
 ---
 

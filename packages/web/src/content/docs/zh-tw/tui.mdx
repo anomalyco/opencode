@@ -365,7 +365,8 @@ How is auth handled in @packages/functions/src/api/index.ts?
   "scroll_acceleration": {
     "enabled": true
   },
-  "diff_style": "auto"
+  "diff_style": "auto",
+  "sidebar_position": "left"
 }
 ```
 
@@ -378,6 +379,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 - `scroll_acceleration.enabled` - 啟用 macOS 風格的捲動加速，實現平滑、自然的捲動體驗。啟用後，快速捲動時速度會增加，慢速移動時保持精確。**此設定優先於 `scroll_speed`，啟用時會覆蓋它。**
 - `scroll_speed` - 控制使用捲動指令時 TUI 的捲動速度（最小值：`0.001`，支援小數值）。預設為 `3`。**注意：如果 `scroll_acceleration.enabled` 設定為 `true`，則此設定會被忽略。**
 - `diff_style` - 控制差異呈現方式。`"auto"` 根據終端機寬度自適應，`"stacked"` 始終顯示單列。
+- `sidebar_position` - 控制側邊欄位置。`"right"`（預設）將側邊欄放在右側，`"left"` 將其移到左側。
 
 使用 `OPENCODE_TUI_CONFIG` 載入自訂 TUI 設定路徑。
 

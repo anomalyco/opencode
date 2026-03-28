@@ -401,6 +401,38 @@ test("does not derive tui path from OPENCODE_CONFIG", async () => {
   })
 })
 
+test("sidebar_position is available through tui config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "tui.json"), JSON.stringify({ sidebar_position: "left" }))
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await TuiConfig.get()
+      expect(config.sidebar_position).toBe("left")
+    },
+  })
+})
+
+test("sidebar_position defaults to undefined when not set", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "tui.json"), JSON.stringify({ theme: "test" }))
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await TuiConfig.get()
+      expect(config.sidebar_position).toBeUndefined()
+    },
+  })
+})
+
 test("applies env and file substitutions in tui.json", async () => {
   const original = process.env.TUI_THEME_TEST
   process.env.TUI_THEME_TEST = "env-theme"
