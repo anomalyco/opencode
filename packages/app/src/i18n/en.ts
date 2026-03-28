@@ -823,6 +823,9 @@ export const dict = {
   "settings.general.sounds.permissions.description": "Play sound when a permission is required",
   "settings.general.sounds.errors.title": "Errors",
   "settings.general.sounds.errors.description": "Play sound when an error occurs",
+  "settings.general.sounds.custom.upload": "Upload sound",
+  "settings.general.sounds.custom.replace": "Replace sound",
+  "settings.general.sounds.custom.invalid": "Choose a valid audio file to use as a custom sound",
 
   "settings.shortcuts.title": "Keyboard shortcuts",
   "settings.shortcuts.reset.button": "Reset to defaults",

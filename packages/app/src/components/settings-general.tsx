@@ -1,4 +1,4 @@
-import { Component, Show, createMemo, createResource, onMount, type JSX } from "solid-js"
+import { Component, Show, createMemo, createResource, onCleanup, onMount, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -19,7 +19,7 @@ import {
   sansInput,
   useSettings,
 } from "@/context/settings"
-import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
+import { customSound, customSoundSrc, playSoundById, SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "./link"
 import { SettingsList } from "./settings-list"
 
@@ -27,6 +27,24 @@ let demoSoundState = {
   cleanup: undefined as (() => void) | undefined,
   timeout: undefined as NodeJS.Timeout | undefined,
   run: 0,
+}
+
+const AUDIO_TYPES = new Set(["audio/aac", "audio/flac", "audio/m4a", "audio/mp3", "audio/mp4", "audio/mpeg", "audio/ogg", "audio/opus", "audio/wav", "audio/webm", "audio/x-aac", "audio/x-m4a"])
+
+function audio(file: File) {
+  return new Promise<string>((resolve) => {
+    const reader = new FileReader()
+    reader.addEventListener("error", () => resolve(""))
+    reader.addEventListener("load", () => {
+      const value = typeof reader.result === "string" ? reader.result : ""
+      resolve(value)
+    })
+    reader.readAsDataURL(file)
+  })
+}
+
+function custom(id: string | undefined) {
+  return !!customSoundSrc(id)
 }
 
 type ThemeOption = {
@@ -155,6 +173,67 @@ export const SettingsGeneral: Component = () => {
   const soundOptions = [noneSound, ...SOUND_OPTIONS]
   const mono = () => monoInput(settings.appearance.font())
   const sans = () => sansInput(settings.appearance.uiFont())
+  onCleanup(stopDemoSound)
+
+  const pick = async (file: File | undefined, set: (id: string) => void, setEnabled: (value: boolean) => void) => {
+    if (!file) return
+    if (!AUDIO_TYPES.has(file.type) && !file.type.startsWith("audio/")) {
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description: language.t("settings.general.sounds.custom.invalid"),
+      })
+      return
+    }
+    const src = await audio(file)
+    if (!src.startsWith("data:audio/")) {
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description: language.t("settings.general.sounds.custom.invalid"),
+      })
+      return
+    }
+    const id = customSound(src)
+    setEnabled(true)
+    set(id)
+    playDemoSound(id)
+  }
+
+  const uploader = (current: () => string, set: (id: string) => void, setEnabled: (value: boolean) => void) => {
+    let input: HTMLInputElement | undefined
+    return (
+      <div class="flex items-center gap-2">
+        <Show when={custom(current())}>
+          <Button
+            size="small"
+            variant="ghost"
+            onClick={() => {
+              setEnabled(false)
+              stopDemoSound()
+            }}
+          >
+            {language.t("sound.option.none")}
+          </Button>
+        </Show>
+        <Button size="small" variant="secondary" onClick={() => input?.click()}>
+          {language.t(custom(current()) ? "settings.general.sounds.custom.replace" : "settings.general.sounds.custom.upload")}
+        </Button>
+        <input
+          ref={(el) => {
+            input = el
+          }}
+          type="file"
+          accept="audio/*,.aac,.flac,.m4a,.mp3,.ogg,.opus,.wav,.webm"
+          class="hidden"
+          onChange={(event) => {
+            void pick(event.currentTarget.files?.[0], set, setEnabled)
+            event.currentTarget.value = ""
+          }}
+        />
+      </div>
+    )
+  }
 
   const soundSelectProps = (
     enabled: () => boolean,
@@ -423,45 +502,66 @@ export const SettingsGeneral: Component = () => {
           title={language.t("settings.general.sounds.agent.title")}
           description={language.t("settings.general.sounds.agent.description")}
         >
-          <Select
-            data-action="settings-sounds-agent"
-            {...soundSelectProps(
-              () => settings.sounds.agentEnabled(),
+          <div class="flex flex-wrap justify-end gap-2">
+            <Select
+              data-action="settings-sounds-agent"
+              {...soundSelectProps(
+                () => settings.sounds.agentEnabled(),
+                () => settings.sounds.agent(),
+                (value) => settings.sounds.setAgentEnabled(value),
+                (id) => settings.sounds.setAgent(id),
+              )}
+            />
+            {uploader(
               () => settings.sounds.agent(),
-              (value) => settings.sounds.setAgentEnabled(value),
               (id) => settings.sounds.setAgent(id),
+              (value) => settings.sounds.setAgentEnabled(value),
             )}
-          />
+          </div>
         </SettingsRow>
 
         <SettingsRow
           title={language.t("settings.general.sounds.permissions.title")}
           description={language.t("settings.general.sounds.permissions.description")}
         >
-          <Select
-            data-action="settings-sounds-permissions"
-            {...soundSelectProps(
-              () => settings.sounds.permissionsEnabled(),
+          <div class="flex flex-wrap justify-end gap-2">
+            <Select
+              data-action="settings-sounds-permissions"
+              {...soundSelectProps(
+                () => settings.sounds.permissionsEnabled(),
+                () => settings.sounds.permissions(),
+                (value) => settings.sounds.setPermissionsEnabled(value),
+                (id) => settings.sounds.setPermissions(id),
+              )}
+            />
+            {uploader(
               () => settings.sounds.permissions(),
-              (value) => settings.sounds.setPermissionsEnabled(value),
               (id) => settings.sounds.setPermissions(id),
+              (value) => settings.sounds.setPermissionsEnabled(value),
             )}
-          />
+          </div>
         </SettingsRow>
 
         <SettingsRow
           title={language.t("settings.general.sounds.errors.title")}
           description={language.t("settings.general.sounds.errors.description")}
         >
-          <Select
-            data-action="settings-sounds-errors"
-            {...soundSelectProps(
-              () => settings.sounds.errorsEnabled(),
+          <div class="flex flex-wrap justify-end gap-2">
+            <Select
+              data-action="settings-sounds-errors"
+              {...soundSelectProps(
+                () => settings.sounds.errorsEnabled(),
+                () => settings.sounds.errors(),
+                (value) => settings.sounds.setErrorsEnabled(value),
+                (id) => settings.sounds.setErrors(id),
+              )}
+            />
+            {uploader(
               () => settings.sounds.errors(),
-              (value) => settings.sounds.setErrorsEnabled(value),
               (id) => settings.sounds.setErrors(id),
+              (value) => settings.sounds.setErrorsEnabled(value),
             )}
-          />
+          </div>
         </SettingsRow>
       </SettingsList>
     </div>

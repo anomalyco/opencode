@@ -1,6 +1,8 @@
 let files: Record<string, () => Promise<string>> | undefined
 let loads: Record<SoundID, () => Promise<string>> | undefined
 
+export const CUSTOM_SOUND_PREFIX = "custom:"
+
 function getFiles() {
   if (files) return files
   files = import.meta.glob("../../../ui/src/assets/audio/*.aac", { import: "default" }) as Record<
@@ -61,6 +63,15 @@ export const SOUND_OPTIONS = [
 export type SoundOption = (typeof SOUND_OPTIONS)[number]
 export type SoundID = SoundOption["id"]
 
+export function customSound(src: string) {
+  return `${CUSTOM_SOUND_PREFIX}${src}`
+}
+
+export function customSoundSrc(id: string | undefined) {
+  if (!id?.startsWith(CUSTOM_SOUND_PREFIX)) return
+  return id.slice(CUSTOM_SOUND_PREFIX.length) || undefined
+}
+
 function getLoads() {
   if (loads) return loads
   loads = Object.fromEntries(
@@ -76,6 +87,8 @@ function getLoads() {
 const cache = new Map<SoundID, Promise<string | undefined>>()
 
 export function soundSrc(id: string | undefined) {
+  const custom = customSoundSrc(id)
+  if (custom) return Promise.resolve(custom)
   const loads = getLoads()
   if (!id || !(id in loads)) return Promise.resolve(undefined)
   const key = id as SoundID
