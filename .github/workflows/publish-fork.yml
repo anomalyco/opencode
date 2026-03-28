@@ -1,0 +1,183 @@
+name: publish-fork
+
+on:
+  push:
+    tags:
+      - "v*-f5xc.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (e.g. 1.3.3-f5xc.1)"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  FORK_TAP_REPO: f5xc-salesdemos/homebrew-tap
+
+jobs:
+  build:
+    name: build and release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            version="${{ github.event.inputs.version }}"
+          else
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "Version: $version"
+
+      - name: Build binaries
+        working-directory: packages/opencode
+        env:
+          OPENCODE_VERSION: ${{ steps.version.outputs.version }}
+          OPENCODE_CHANNEL: latest
+        run: bun run build
+
+      - name: Run tests
+        working-directory: packages/opencode
+        run: bun test test/provider/transform.test.ts --timeout 60000
+
+      - name: Typecheck
+        run: bun turbo typecheck
+
+      - name: Package binaries
+        working-directory: packages/opencode/dist
+        run: |
+          for dir in opencode-darwin-arm64 opencode-darwin-x64; do
+            (cd "$dir/bin" && zip -r "../../${dir}.zip" opencode)
+          done
+          for dir in opencode-linux-arm64 opencode-linux-x64; do
+            (cd "$dir/bin" && tar czf "../../${dir}.tar.gz" opencode)
+          done
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          tag="${{ steps.version.outputs.tag }}"
+
+          # Create tag if not from tag push
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            git tag "$tag" || true
+            git push origin "$tag" || true
+          fi
+
+          gh release create "$tag" \
+            --title "opencode $tag (f5xc fork)" \
+            --notes "Fork build of opencode with LiteLLM/empty content fixes.
+
+          Based on upstream v$(echo $version | cut -d- -f1) + fork patches.
+
+          ## Install
+
+          \`\`\`bash
+          brew tap f5xc-salesdemos/tap
+          brew install f5xc-salesdemos/tap/opencode
+          \`\`\`
+
+          ## Changes from upstream
+
+          - fix: role-aware empty/whitespace content filtering for all providers
+          - fix: preserve Anthropic thinking block signatures in assistant messages
+          - fix: filter empty text/reasoning parts at DB load time (message-v2)
+          - fix: post-interleaved-filter empty content guard
+          - Various lint fixes (switch clauses, forEach callbacks)" \
+            --prerelease \
+            packages/opencode/dist/opencode-darwin-arm64.zip \
+            packages/opencode/dist/opencode-darwin-x64.zip \
+            packages/opencode/dist/opencode-linux-arm64.tar.gz \
+            packages/opencode/dist/opencode-linux-x64.tar.gz
+
+      - name: Compute SHA256 checksums
+        id: sha
+        working-directory: packages/opencode/dist
+        run: |
+          echo "darwin_arm64=$(sha256sum opencode-darwin-arm64.zip | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "darwin_x64=$(sha256sum opencode-darwin-x64.zip | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "linux_arm64=$(sha256sum opencode-linux-arm64.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "linux_x64=$(sha256sum opencode-linux-x64.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Update Homebrew tap
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          tag="${{ steps.version.outputs.tag }}"
+          repo="f5xc-salesdemos/opencode"
+
+          formula=$(cat <<RUBY
+          # typed: false
+          # frozen_string_literal: true
+
+          class Opencode < Formula
+            desc "AI coding agent for the terminal (f5xc fork with LiteLLM fixes)"
+            homepage "https://github.com/${repo}"
+            version "${version}"
+
+            depends_on "ripgrep"
+
+            on_macos do
+              if Hardware::CPU.intel?
+                url "https://github.com/${repo}/releases/download/${tag}/opencode-darwin-x64.zip"
+                sha256 "${{ steps.sha.outputs.darwin_x64 }}"
+
+                def install
+                  bin.install "opencode"
+                end
+              end
+              if Hardware::CPU.arm?
+                url "https://github.com/${repo}/releases/download/${tag}/opencode-darwin-arm64.zip"
+                sha256 "${{ steps.sha.outputs.darwin_arm64 }}"
+
+                def install
+                  bin.install "opencode"
+                end
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.intel? and Hardware::CPU.is_64_bit?
+                url "https://github.com/${repo}/releases/download/${tag}/opencode-linux-x64.tar.gz"
+                sha256 "${{ steps.sha.outputs.linux_x64 }}"
+                def install
+                  bin.install "opencode"
+                end
+              end
+              if Hardware::CPU.arm? and Hardware::CPU.is_64_bit?
+                url "https://github.com/${repo}/releases/download/${tag}/opencode-linux-arm64.tar.gz"
+                sha256 "${{ steps.sha.outputs.linux_arm64 }}"
+                def install
+                  bin.install "opencode"
+                end
+              end
+            end
+          end
+          RUBY
+          )
+
+          # Clone tap, update formula, push
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${FORK_TAP_REPO}.git" /tmp/homebrew-tap
+          echo "$formula" > /tmp/homebrew-tap/opencode.rb
+          cd /tmp/homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add opencode.rb
+          git commit -m "Update opencode to ${tag}"
+          git push
