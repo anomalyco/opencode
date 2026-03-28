@@ -207,7 +207,7 @@ export namespace SessionCompaction {
             created: Date.now(),
           },
         })) as MessageV2.Assistant
-        const processor = SessionProcessor.create({
+        const processor = await SessionProcessor.create({
           assistantMessage: msg,
           sessionID: input.sessionID,
           model,
