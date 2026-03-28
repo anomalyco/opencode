@@ -18,6 +18,12 @@ type TuiRequest = z.infer<typeof TuiRequest>
 const request = new AsyncQueue<TuiRequest>()
 const response = new AsyncQueue<any>()
 
+const PromptState = z.object({
+  input: z.string(),
+})
+
+let prompt: z.infer<typeof PromptState> = { input: "" }
+
 export async function callTui(ctx: Context) {
   const body = await ctx.req.json()
   request.push({
@@ -77,6 +83,51 @@ const TuiControlRoutes = new Hono()
 
 export const TuiRoutes = lazy(() =>
   new Hono()
+    .get(
+      "/prompt",
+      describeRoute({
+        summary: "Get TUI prompt",
+        description: "Get the current prompt content.",
+        operationId: "tui.prompt",
+        responses: {
+          200: {
+            description: "Current prompt content",
+            content: {
+              "application/json": {
+                schema: resolver(PromptState),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        return c.json(prompt)
+      },
+    )
+    .post(
+      "/prompt",
+      describeRoute({
+        summary: "Update TUI prompt",
+        description: "Update the current prompt content.",
+        operationId: "tui.updatePrompt",
+        responses: {
+          200: {
+            description: "Prompt updated successfully",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", PromptState),
+      async (c) => {
+        prompt = c.req.valid("json")
+        return c.json(true)
+      },
+    )
     .post(
       "/append-prompt",
       describeRoute({
@@ -97,7 +148,9 @@ export const TuiRoutes = lazy(() =>
       }),
       validator("json", TuiEvent.PromptAppend.properties),
       async (c) => {
-        await Bus.publish(TuiEvent.PromptAppend, c.req.valid("json"))
+        const body = c.req.valid("json")
+        prompt = { input: prompt.input + body.text }
+        await Bus.publish(TuiEvent.PromptAppend, body)
         return c.json(true)
       },
     )
@@ -215,6 +268,7 @@ export const TuiRoutes = lazy(() =>
         },
       }),
       async (c) => {
+        prompt = { input: "" }
         await Bus.publish(TuiEvent.CommandExecute, {
           command: "prompt.submit",
         })
@@ -239,6 +293,7 @@ export const TuiRoutes = lazy(() =>
         },
       }),
       async (c) => {
+        prompt = { input: "" }
         await Bus.publish(TuiEvent.CommandExecute, {
           command: "prompt.clear",
         })
