@@ -1,41 +1,65 @@
 ---
 title: Desktop
-description: Use OpenCode Desktop and open projects with deep links.
+description: Use OpenCode Desktop shortcuts, dialogs, and project deep links.
 ---
 
-OpenCode Desktop supports `opencode://` links for opening a specific local project.
+OpenCode Desktop supports `opencode://` links for opening projects, jumping back into sessions, and opening desktop-specific dialogs.
 
-## Open from links
+## Deep links
 
-Supported links:
+### Project links
 
 - `opencode://open-project?directory=<absolute-path>`
 - `opencode://new-session?directory=<absolute-path>&prompt=<optional prompt>`
+- `opencode://open-session?directory=<absolute-path>&id=<session-id>&message=<optional message-id>`
 
-Notes:
+These links require Desktop to be using its built-in local server mode.
 
-- `directory` must be an absolute path.
+- Use an absolute path for `directory`.
 - Query values should be URL-encoded.
-- `new-session` opens the project and routes to a new session page.
+- `open-project` opens the project and resumes the last or latest session when one is available.
+- If no session exists, `open-project` falls back to the new session page.
+- `new-session` opens the project and routes directly to a new session page.
 - If `prompt` is present, it prefills the composer.
+- `open-session` routes to an existing session.
+- If `message` is present, Desktop scrolls to `#message-<message-id>` after opening the session.
 
-Examples:
+### Desktop dialogs
+
+- `opencode://edit-project?directory=<project-or-workspace-path>`
+- `opencode://settings`
+- `opencode://server`
+- `opencode://provider`
+
+These links work even when Desktop is connected to a remote server.
+
+- `edit-project` opens the same project editor shown from the project right-click menu.
+- `directory` can be the project root or one of its workspaces.
+- `edit-project` only works when Desktop already knows that project or workspace path.
+
+### Examples
 
 ```text
 # macOS / Linux
 opencode://open-project?directory=%2FUsers%2Falice%2Fcode%2Fmy-app
 opencode://new-session?directory=%2FUsers%2Falice%2Fcode%2Fmy-app&prompt=Review%20the%20auth%20flow
+opencode://open-session?directory=%2FUsers%2Falice%2Fcode%2Fmy-app&id=session_123&message=msg_456
+opencode://edit-project?directory=%2FUsers%2Falice%2Fcode%2Fmy-app
+opencode://settings
+opencode://server
+opencode://provider
 
 # Windows
 opencode://open-project?directory=C%3A%2FUsers%2FAlice%2Fcode%2Fmy-app
 opencode://new-session?directory=C%3A%2FUsers%2FAlice%2Fcode%2Fmy-app&prompt=Summarize%20the%20build%20setup
+opencode://open-session?directory=C%3A%2FUsers%2FAlice%2Fcode%2Fmy-app&id=session_123
 ```
 
 ## Troubleshooting
 
 ### Deep links do nothing
 
-OpenCode Desktop only handles `opencode://` links while it is using its built-in local server mode.
+Project and session deep links require OpenCode Desktop to be using its built-in local server mode. Desktop dialog links like `settings`, `server`, `provider`, and `edit-project` also work when connected to a remote server.
 
 If a deep link does nothing:
 
@@ -45,6 +69,6 @@ If a deep link does nothing:
 
 Other things to check:
 
-- `directory` must be an absolute path.
-- Query values such as `directory` and `prompt` should be URL-encoded.
+- Use an absolute path for `directory` in project and session links.
+- Query values such as `directory`, `prompt`, `id`, and `message` should be URL-encoded when needed.
 - If `OpenCode`, `OpenCode Beta`, or `OpenCode Dev` are all installed, your OS may send `opencode://` links to whichever app most recently claimed the protocol handler.

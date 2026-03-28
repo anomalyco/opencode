@@ -76,12 +76,7 @@ import {
   sortedRootSessions,
   workspaceKey,
 } from "./layout/helpers"
-import {
-  collectNewSessionDeepLinks,
-  collectOpenProjectDeepLinks,
-  deepLinkEvent,
-  drainPendingDeepLinks,
-} from "./layout/deep-links"
+import { collectDeepLinks, deepLinkEvent, drainPendingDeepLinks } from "./layout/deep-links"
 import { createInlineEditorController } from "./layout/inline-editor"
 import {
   LocalWorkspace,
@@ -1308,20 +1303,49 @@ export default function Layout(props: ParentProps) {
   }
 
   const handleDeepLinks = (urls: string[]) => {
-    if (!server.isLocal()) return
+    for (const link of collectDeepLinks(urls)) {
+      if (link.type === "settings") {
+        openSettings()
+        continue
+      }
 
-    for (const directory of collectOpenProjectDeepLinks(urls)) {
-      openProject(directory)
-    }
+      if (link.type === "server") {
+        openServer()
+        continue
+      }
 
-    for (const link of collectNewSessionDeepLinks(urls)) {
+      if (link.type === "provider") {
+        connectProvider()
+        continue
+      }
+
+      if (link.type === "edit-project") {
+        editProject(link.directory)
+        continue
+      }
+
+      if (!server.isLocal()) continue
+
+      if (link.type === "open-project") {
+        openProject(link.directory)
+        continue
+      }
+
+      if (link.type === "new-session") {
+        openProject(link.directory, false)
+        const slug = base64Encode(link.directory)
+        if (link.prompt) {
+          setSessionHandoff(slug, { prompt: link.prompt })
+        }
+        const href = link.prompt ? `/${slug}/session?prompt=${encodeURIComponent(link.prompt)}` : `/${slug}/session`
+        navigateWithSidebarReset(href)
+        continue
+      }
+
       openProject(link.directory, false)
       const slug = base64Encode(link.directory)
-      if (link.prompt) {
-        setSessionHandoff(slug, { prompt: link.prompt })
-      }
-      const href = link.prompt ? `/${slug}/session?prompt=${encodeURIComponent(link.prompt)}` : `/${slug}/session`
-      navigateWithSidebarReset(href)
+      const hash = link.message ? `#message-${link.message}` : ""
+      navigateWithSidebarReset(`/${slug}/session/${link.id}${hash}`)
     }
   }
 
@@ -1394,6 +1418,18 @@ export default function Layout(props: ParentProps) {
   }
 
   const showEditProjectDialog = (project: LocalProject) => dialog.show(() => <DialogEditProject project={project} />)
+
+  const editProject = (directory: string) => {
+    const key = workspaceKey(directory)
+    const project = layout.projects
+      .list()
+      .find(
+        (item) =>
+          workspaceKey(item.worktree) === key || item.sandboxes?.some((sandbox) => workspaceKey(sandbox) === key),
+      )
+    if (!project) return
+    showEditProjectDialog(project)
+  }
 
   async function chooseProject() {
     function resolve(result: string | string[] | null) {

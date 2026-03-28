@@ -1,11 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import {
-  collectNewSessionDeepLinks,
-  collectOpenProjectDeepLinks,
-  drainPendingDeepLinks,
-  parseDeepLink,
-  parseNewSessionDeepLink,
-} from "./deep-links"
+import { collectDeepLinks, drainPendingDeepLinks, parseDeepLink } from "./deep-links"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import {
   displayName,
@@ -29,7 +23,10 @@ const session = (input: Partial<Session> & Pick<Session, "id" | "directory">) =>
 
 describe("layout deep links", () => {
   test("parses open-project deep links", () => {
-    expect(parseDeepLink("opencode://open-project?directory=/tmp/demo")).toBe("/tmp/demo")
+    expect(parseDeepLink("opencode://open-project?directory=/tmp/demo")).toEqual({
+      type: "open-project",
+      directory: "/tmp/demo",
+    })
   })
 
   test("ignores non-project deep links", () => {
@@ -46,7 +43,10 @@ describe("layout deep links", () => {
     const original = Object.getOwnPropertyDescriptor(URL, "canParse")
     Object.defineProperty(URL, "canParse", { configurable: true, value: undefined })
     try {
-      expect(parseDeepLink("opencode://open-project?directory=/tmp/demo")).toBe("/tmp/demo")
+      expect(parseDeepLink("opencode://open-project?directory=/tmp/demo")).toEqual({
+        type: "open-project",
+        directory: "/tmp/demo",
+      })
     } finally {
       if (original) Object.defineProperty(URL, "canParse", original)
       if (!original) Reflect.deleteProperty(URL, "canParse")
@@ -58,35 +58,74 @@ describe("layout deep links", () => {
     expect(parseDeepLink("opencode://open-project?directory=")).toBeUndefined()
   })
 
-  test("collects only valid open-project directories", () => {
-    const result = collectOpenProjectDeepLinks([
-      "opencode://open-project?directory=/a",
-      "opencode://other?directory=/b",
-      "opencode://open-project?directory=/c",
-    ])
-    expect(result).toEqual(["/a", "/c"])
-  })
-
   test("parses new-session deep links with optional prompt", () => {
-    expect(parseNewSessionDeepLink("opencode://new-session?directory=/tmp/demo")).toEqual({ directory: "/tmp/demo" })
-    expect(parseNewSessionDeepLink("opencode://new-session?directory=/tmp/demo&prompt=hello%20world")).toEqual({
+    expect(parseDeepLink("opencode://new-session?directory=/tmp/demo")).toEqual({
+      type: "new-session",
+      directory: "/tmp/demo",
+    })
+    expect(parseDeepLink("opencode://new-session?directory=/tmp/demo&prompt=hello%20world")).toEqual({
+      type: "new-session",
       directory: "/tmp/demo",
       prompt: "hello world",
     })
   })
 
-  test("ignores new-session deep links without directory", () => {
-    expect(parseNewSessionDeepLink("opencode://new-session")).toBeUndefined()
-    expect(parseNewSessionDeepLink("opencode://new-session?directory=")).toBeUndefined()
+  test("parses open-session deep links with optional message", () => {
+    expect(parseDeepLink("opencode://open-session?directory=/tmp/demo&id=session-1")).toEqual({
+      type: "open-session",
+      directory: "/tmp/demo",
+      id: "session-1",
+    })
+    expect(parseDeepLink("opencode://open-session?directory=/tmp/demo&id=session-1&message=msg-1")).toEqual({
+      type: "open-session",
+      directory: "/tmp/demo",
+      id: "session-1",
+      message: "msg-1",
+    })
   })
 
-  test("collects only valid new-session deep links", () => {
-    const result = collectNewSessionDeepLinks([
-      "opencode://new-session?directory=/a",
-      "opencode://open-project?directory=/b",
+  test("parses desktop dialog deep links", () => {
+    expect(parseDeepLink("opencode://settings")).toEqual({ type: "settings" })
+    expect(parseDeepLink("opencode://server")).toEqual({ type: "server" })
+    expect(parseDeepLink("opencode://provider")).toEqual({ type: "provider" })
+    expect(parseDeepLink("opencode://edit-project?directory=/tmp/demo")).toEqual({
+      type: "edit-project",
+      directory: "/tmp/demo",
+    })
+  })
+
+  test("ignores new-session deep links without directory", () => {
+    expect(parseDeepLink("opencode://new-session")).toBeUndefined()
+    expect(parseDeepLink("opencode://new-session?directory=")).toBeUndefined()
+  })
+
+  test("ignores open-session deep links without required params", () => {
+    expect(parseDeepLink("opencode://open-session")).toBeUndefined()
+    expect(parseDeepLink("opencode://open-session?directory=/tmp/demo")).toBeUndefined()
+    expect(parseDeepLink("opencode://open-session?id=session-1")).toBeUndefined()
+  })
+
+  test("ignores edit-project deep links without directory", () => {
+    expect(parseDeepLink("opencode://edit-project")).toBeUndefined()
+    expect(parseDeepLink("opencode://edit-project?directory=")).toBeUndefined()
+  })
+
+  test("collects only valid deep links", () => {
+    const result = collectDeepLinks([
+      "opencode://open-project?directory=/a",
+      "opencode://other?directory=/b",
       "opencode://new-session?directory=/c&prompt=ship%20it",
+      "opencode://open-session?directory=/d&id=session-1&message=msg-1",
+      "opencode://settings",
+      "opencode://edit-project?directory=/e",
     ])
-    expect(result).toEqual([{ directory: "/a" }, { directory: "/c", prompt: "ship it" }])
+    expect(result).toEqual([
+      { type: "open-project", directory: "/a" },
+      { type: "new-session", directory: "/c", prompt: "ship it" },
+      { type: "open-session", directory: "/d", id: "session-1", message: "msg-1" },
+      { type: "settings" },
+      { type: "edit-project", directory: "/e" },
+    ])
   })
 
   test("drains global deep links once", () => {

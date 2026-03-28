@@ -3,6 +3,7 @@ import { type Accessor, batch, createEffect, createMemo, onCleanup } from "solid
 import { createStore } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 import { useCheckServerHealth } from "@/utils/server-health"
+import { workspaceKey } from "@/utils/workspace-key"
 
 type StoredProject = { worktree: string; expanded: boolean }
 type StoredServer = string | ServerConnection.HttpBase | ServerConnection.Http
@@ -13,6 +14,11 @@ export function normalizeServerUrl(input: string) {
   if (!trimmed) return
   const withProtocol = /^https?:\/\//.test(trimmed) ? trimmed : `http://${trimmed}`
   return withProtocol.replace(/\/+$/, "")
+}
+
+export const projectIndex = (list: Array<{ worktree: string }>, directory: string) => {
+  const key = workspaceKey(directory)
+  return list.findIndex((item) => workspaceKey(item.worktree) === key)
 }
 
 export function serverName(conn?: ServerConnection.Any, ignoreDisplayName = false) {
@@ -241,7 +247,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           const key = origin()
           if (!key) return
           const current = store.projects[key] ?? []
-          if (current.find((x) => x.worktree === directory)) return
+          if (projectIndex(current, directory) !== -1) return
           setStore("projects", key, [{ worktree: directory, expanded: true }, ...current])
         },
         close(directory: string) {
@@ -251,28 +257,28 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           setStore(
             "projects",
             key,
-            current.filter((x) => x.worktree !== directory),
+            current.filter((x) => workspaceKey(x.worktree) !== workspaceKey(directory)),
           )
         },
         expand(directory: string) {
           const key = origin()
           if (!key) return
           const current = store.projects[key] ?? []
-          const index = current.findIndex((x) => x.worktree === directory)
+          const index = projectIndex(current, directory)
           if (index !== -1) setStore("projects", key, index, "expanded", true)
         },
         collapse(directory: string) {
           const key = origin()
           if (!key) return
           const current = store.projects[key] ?? []
-          const index = current.findIndex((x) => x.worktree === directory)
+          const index = projectIndex(current, directory)
           if (index !== -1) setStore("projects", key, index, "expanded", false)
         },
         move(directory: string, toIndex: number) {
           const key = origin()
           if (!key) return
           const current = store.projects[key] ?? []
-          const fromIndex = current.findIndex((x) => x.worktree === directory)
+          const fromIndex = projectIndex(current, directory)
           if (fromIndex === -1 || fromIndex === toIndex) return
           const result = [...current]
           const [item] = result.splice(fromIndex, 1)
