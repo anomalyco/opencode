@@ -20,7 +20,7 @@ export interface ThemeSeedColors {
 
 export interface ThemePaletteColors {
   neutral: HexColor
-  ink?: HexColor
+  ink: HexColor
   primary: HexColor
   success: HexColor
   warning: HexColor

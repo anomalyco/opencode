@@ -61,7 +61,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "พิจารณาขั้นตอนถัดไป",
 
   "ui.messagePart.questions.dismissed": "ละทิ้งคำถามแล้ว",
-  "ui.messagePart.compaction": "ประวัติถูกบีบอัด",
+  "ui.messagePart.compaction": "บีบอัดเซสชันแล้ว",
   "ui.messagePart.context.read.one": "อ่าน {{count}} รายการ",
   "ui.messagePart.context.read.other": "อ่าน {{count}} รายการ",
   "ui.messagePart.context.search.one": "ค้นหา {{count}} รายการ",
@@ -146,4 +146,16 @@ export const dict = {
   "ui.question.multiHint": "เลือกทั้งหมดที่ใช้",
   "ui.question.singleHint": "เลือกหนึ่งคำตอบ",
   "ui.question.custom.placeholder": "พิมพ์คำตอบของคุณ...",
+
+  "ui.fileSearch.placeholder": "ค้นหา",
+  "ui.fileSearch.previousMatch": "ก่อนหน้า",
+  "ui.fileSearch.nextMatch": "ถัดไป",
+  "ui.fileSearch.close": "ปิดการค้นหา",
+  "ui.tool.task": "งาน",
+  "ui.tool.skill": "ทักษะ",
+  "ui.basicTool.called": "เรียกใช้ `{{tool}}`",
+  "ui.toolErrorCard.failed": "ล้มเหลว",
+  "ui.toolErrorCard.copyError": "คัดลอกข้อผิดพลาด",
+  "ui.message.duration.seconds": "{{count}}วิ",
+  "ui.message.duration.minutesSeconds": "{{minutes}}นาที {{seconds}}วิ",
 }

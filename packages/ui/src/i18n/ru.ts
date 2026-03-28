@@ -59,7 +59,7 @@ export const dict = {
   "ui.sessionTurn.status.consideringNextSteps": "Рассмотрение следующих шагов",
 
   "ui.messagePart.questions.dismissed": "Вопросы отклонены",
-  "ui.messagePart.compaction": "История сжата",
+  "ui.messagePart.compaction": "Сессия сжата",
   "ui.messagePart.context.read.one": "{{count}} чтение",
   "ui.messagePart.context.read.other": "{{count}} чтений",
   "ui.messagePart.context.search.one": "{{count}} поиск",
@@ -144,4 +144,16 @@ export const dict = {
   "ui.question.multiHint": "Выберите все подходящие",
   "ui.question.singleHint": "Выберите один ответ",
   "ui.question.custom.placeholder": "Введите ваш ответ...",
+
+  "ui.fileSearch.placeholder": "Найти",
+  "ui.fileSearch.previousMatch": "Предыдущее",
+  "ui.fileSearch.nextMatch": "Следующее",
+  "ui.fileSearch.close": "Закрыть поиск",
+  "ui.tool.task": "Задача",
+  "ui.tool.skill": "Навык",
+  "ui.basicTool.called": "Вызван `{{tool}}`",
+  "ui.toolErrorCard.failed": "Ошибка",
+  "ui.toolErrorCard.copyError": "Скопировать ошибку",
+  "ui.message.duration.seconds": "{{count}}с",
+  "ui.message.duration.minutesSeconds": "{{minutes}}м {{seconds}}с",
 }

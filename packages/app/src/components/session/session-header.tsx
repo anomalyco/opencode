@@ -16,9 +16,11 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
+import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { focusTerminalById } from "@/pages/session/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { messageAgentColor } from "@/utils/agent"
 import { decode64 } from "@/utils/base64"
 import { Persist, persisted } from "@/utils/persist"
 import { StatusPopover } from "../status-popover"
@@ -46,63 +48,63 @@ type OS = "macos" | "windows" | "linux" | "unknown"
 const MAC_APPS = [
   {
     id: "vscode",
-    label: "VS Code",
+    label: "session.header.open.app.vscode",
     icon: "vscode",
     openWith: "Visual Studio Code",
   },
-  { id: "cursor", label: "Cursor", icon: "cursor", openWith: "Cursor" },
-  { id: "zed", label: "Zed", icon: "zed", openWith: "Zed" },
-  { id: "textmate", label: "TextMate", icon: "textmate", openWith: "TextMate" },
+  { id: "cursor", label: "session.header.open.app.cursor", icon: "cursor", openWith: "Cursor" },
+  { id: "zed", label: "session.header.open.app.zed", icon: "zed", openWith: "Zed" },
+  { id: "textmate", label: "session.header.open.app.textmate", icon: "textmate", openWith: "TextMate" },
   {
     id: "antigravity",
-    label: "Antigravity",
+    label: "session.header.open.app.antigravity",
     icon: "antigravity",
     openWith: "Antigravity",
   },
-  { id: "terminal", label: "Terminal", icon: "terminal", openWith: "Terminal" },
-  { id: "iterm2", label: "iTerm2", icon: "iterm2", openWith: "iTerm" },
-  { id: "ghostty", label: "Ghostty", icon: "ghostty", openWith: "Ghostty" },
-  { id: "warp", label: "Warp", icon: "warp", openWith: "Warp" },
-  { id: "xcode", label: "Xcode", icon: "xcode", openWith: "Xcode" },
+  { id: "terminal", label: "session.header.open.app.terminal", icon: "terminal", openWith: "Terminal" },
+  { id: "iterm2", label: "session.header.open.app.iterm2", icon: "iterm2", openWith: "iTerm" },
+  { id: "ghostty", label: "session.header.open.app.ghostty", icon: "ghostty", openWith: "Ghostty" },
+  { id: "warp", label: "session.header.open.app.warp", icon: "warp", openWith: "Warp" },
+  { id: "xcode", label: "session.header.open.app.xcode", icon: "xcode", openWith: "Xcode" },
   {
     id: "android-studio",
-    label: "Android Studio",
+    label: "session.header.open.app.androidStudio",
     icon: "android-studio",
     openWith: "Android Studio",
   },
   {
     id: "sublime-text",
-    label: "Sublime Text",
+    label: "session.header.open.app.sublimeText",
     icon: "sublime-text",
     openWith: "Sublime Text",
   },
 ] as const
 
 const WINDOWS_APPS = [
-  { id: "vscode", label: "VS Code", icon: "vscode", openWith: "code" },
-  { id: "cursor", label: "Cursor", icon: "cursor", openWith: "cursor" },
-  { id: "zed", label: "Zed", icon: "zed", openWith: "zed" },
+  { id: "vscode", label: "session.header.open.app.vscode", icon: "vscode", openWith: "code" },
+  { id: "cursor", label: "session.header.open.app.cursor", icon: "cursor", openWith: "cursor" },
+  { id: "zed", label: "session.header.open.app.zed", icon: "zed", openWith: "zed" },
   {
     id: "powershell",
-    label: "PowerShell",
+    label: "session.header.open.app.powershell",
     icon: "powershell",
     openWith: "powershell",
   },
   {
     id: "sublime-text",
-    label: "Sublime Text",
+    label: "session.header.open.app.sublimeText",
     icon: "sublime-text",
     openWith: "Sublime Text",
   },
 ] as const
 
 const LINUX_APPS = [
-  { id: "vscode", label: "VS Code", icon: "vscode", openWith: "code" },
-  { id: "cursor", label: "Cursor", icon: "cursor", openWith: "cursor" },
-  { id: "zed", label: "Zed", icon: "zed", openWith: "zed" },
+  { id: "vscode", label: "session.header.open.app.vscode", icon: "vscode", openWith: "code" },
+  { id: "cursor", label: "session.header.open.app.cursor", icon: "cursor", openWith: "cursor" },
+  { id: "zed", label: "session.header.open.app.zed", icon: "zed", openWith: "zed" },
   {
     id: "sublime-text",
-    label: "Sublime Text",
+    label: "session.header.open.app.sublimeText",
     icon: "sublime-text",
     openWith: "Sublime Text",
   },
@@ -132,6 +134,7 @@ export function SessionHeader() {
   const server = useServer()
   const platform = usePlatform()
   const language = useLanguage()
+  const sync = useSync()
   const terminal = useTerminal()
   const { params, view } = useSessionLayout()
 
@@ -160,9 +163,9 @@ export function SessionHeader() {
   })
 
   const fileManager = createMemo(() => {
-    if (os() === "macos") return { label: "Finder", icon: "finder" as const }
-    if (os() === "windows") return { label: "File Explorer", icon: "file-explorer" as const }
-    return { label: "File Manager", icon: "finder" as const }
+    if (os() === "macos") return { label: "session.header.open.finder", icon: "finder" as const }
+    if (os() === "windows") return { label: "session.header.open.fileExplorer", icon: "file-explorer" as const }
+    return { label: "session.header.open.fileManager", icon: "finder" as const }
   })
 
   createEffect(() => {
@@ -187,8 +190,10 @@ export function SessionHeader() {
 
   const options = createMemo(() => {
     return [
-      { id: "finder", label: fileManager().label, icon: fileManager().icon },
-      ...apps().filter((app) => exists[app.id]),
+      { id: "finder", label: language.t(fileManager().label), icon: fileManager().icon },
+      ...apps()
+        .filter((app) => exists[app.id])
+        .map((app) => ({ ...app, label: language.t(app.label) })),
     ] as const
   })
 
@@ -216,6 +221,9 @@ export function SessionHeader() {
       ({ id: "finder", label: fileManager().label, icon: fileManager().icon } as const),
   )
   const opening = createMemo(() => openRequest.app !== undefined)
+  const tint = createMemo(() =>
+    messageAgentColor(params.id ? sync.data.message[params.id] : undefined, sync.data.agent),
+  )
 
   const selectApp = (app: OpenApp) => {
     if (!options().some((item) => item.id === app)) return
@@ -266,12 +274,11 @@ export function SessionHeader() {
               type="button"
               variant="ghost"
               size="small"
-              class="hidden md:flex w-[240px] max-w-full min-w-0 pl-0.5 pr-2 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-panel shadow-none cursor-default"
+              class="hidden md:flex w-[240px] max-w-full min-w-0 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-panel shadow-none cursor-default"
               onClick={() => command.trigger("file.open")}
               aria-label={language.t("session.header.searchFiles")}
             >
-              <div class="flex min-w-0 flex-1 items-center gap-1.5 overflow-visible">
-                <Icon name="magnifying-glass" size="small" class="icon-base shrink-0 size-4" />
+              <div class="flex min-w-0 flex-1 items-center overflow-visible">
                 <span class="flex-1 min-w-0 text-12-regular text-text-weak truncate text-left">
                   {language.t("session.header.search.placeholder", {
                     project: name(),
@@ -318,7 +325,7 @@ export function SessionHeader() {
                       <div class="flex h-[24px] box-border items-center rounded-md border border-border-weak-base bg-surface-panel overflow-hidden">
                         <Button
                           variant="ghost"
-                          class="rounded-none h-full py-0 pr-1.5 pl-px gap-1.5 border-none shadow-none disabled:!cursor-default"
+                          class="rounded-none h-full px-0.5 border-none shadow-none disabled:!cursor-default"
                           classList={{
                             "bg-surface-raised-base-active": opening(),
                           }}
@@ -328,10 +335,9 @@ export function SessionHeader() {
                         >
                           <div class="flex size-5 shrink-0 items-center justify-center [&_[data-component=app-icon]]:size-5">
                             <Show when={opening()} fallback={<AppIcon id={current().icon} />}>
-                              <Spinner class="size-3.5 text-icon-base" />
+                              <Spinner class="size-3.5" style={{ color: tint() ?? "var(--icon-base)" }} />
                             </Show>
                           </div>
-                          <span class="text-12-regular text-text-strong">{language.t("common.open")}</span>
                         </Button>
                         <DropdownMenu
                           gutter={4}

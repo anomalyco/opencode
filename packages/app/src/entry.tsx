@@ -1,6 +1,5 @@
 // @refresh reload
 
-import { iife } from "@opencode-ai/util/iife"
 import { render } from "solid-js/web"
 import { AppBaseProviders, AppInterface } from "@/app"
 import { type Platform, PlatformProvider } from "@/context/platform"
@@ -132,7 +131,11 @@ if (root instanceof HTMLElement) {
     () => (
       <PlatformProvider value={platform}>
         <AppBaseProviders>
-          <AppInterface defaultServer={ServerConnection.Key.make(getDefaultUrl())} servers={[server]} />
+          <AppInterface
+            defaultServer={ServerConnection.Key.make(getDefaultUrl())}
+            servers={[server]}
+            disableHealthCheck
+          />
         </AppBaseProviders>
       </PlatformProvider>
     ),
