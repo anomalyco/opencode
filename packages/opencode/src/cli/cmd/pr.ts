@@ -6,7 +6,7 @@ import { git } from "@/util/git"
 
 export const PrCommand = cmd({
   command: "pr <number>",
-  describe: "fetch and checkout a GitHub PR branch, then run opencode",
+  describe: "fetch and checkout a GitHub PR branch, then run securecode",
   builder: (yargs) =>
     yargs.positional("number", {
       type: "number",
@@ -82,15 +82,16 @@ export const PrCommand = cmd({
               })
             }
 
-            // Check for opencode session link in PR body
+            // Check for session link in PR body
             if (prInfo && prInfo.body) {
               const sessionMatch = prInfo.body.match(/https:\/\/opncd\.ai\/s\/([a-zA-Z0-9_-]+)/)
               if (sessionMatch) {
                 const sessionUrl = sessionMatch[0]
-                UI.println(`Found opencode session: ${sessionUrl}`)
+                const bin = Bun.which("securecode") ? "securecode" : "opencode"
+                UI.println(`Found securecode session: ${sessionUrl}`)
                 UI.println(`Importing session...`)
 
-                const importResult = await Process.text(["opencode", "import", sessionUrl], {
+                const importResult = await Process.text([bin, "import", sessionUrl], {
                   nothrow: true,
                 })
                 if (importResult.code === 0) {
@@ -109,23 +110,24 @@ export const PrCommand = cmd({
 
         UI.println(`Successfully checked out PR #${prNumber} as branch '${localBranchName}'`)
         UI.println()
-        UI.println("Starting opencode...")
+        UI.println("Starting securecode...")
         UI.println()
 
-        // Launch opencode TUI with session ID if available
+        // Launch securecode TUI with session ID if available
         const { spawn } = await import("child_process")
-        const opencodeArgs = sessionId ? ["-s", sessionId] : []
-        const opencodeProcess = spawn("opencode", opencodeArgs, {
+        const bin = Bun.which("securecode") ? "securecode" : "opencode"
+        const cliArgs = sessionId ? ["-s", sessionId] : []
+        const proc = spawn(bin, cliArgs, {
           stdio: "inherit",
           cwd: process.cwd(),
         })
 
         await new Promise<void>((resolve, reject) => {
-          opencodeProcess.on("exit", (code) => {
+          proc.on("exit", (code) => {
             if (code === 0) resolve()
-            else reject(new Error(`opencode exited with code ${code}`))
+            else reject(new Error(`${bin} exited with code ${code}`))
           })
-          opencodeProcess.on("error", reject)
+          proc.on("error", reject)
         })
       },
     })

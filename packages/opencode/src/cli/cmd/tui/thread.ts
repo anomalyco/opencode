@@ -64,12 +64,12 @@ async function input(value?: string) {
 
 export const TuiThreadCommand = cmd({
   command: "$0 [project]",
-  describe: "start SecreCode tui",
+  describe: "start securecode tui",
   builder: (yargs) =>
     withNetworkOptions(yargs)
       .positional("project", {
         type: "string",
-        describe: "path to start SecreCode in",
+        describe: "path to start securecode in",
       })
       .option("model", {
         type: "string",
