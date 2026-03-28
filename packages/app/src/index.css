@@ -32,6 +32,26 @@
     border-color: rgba(201, 138, 109, 0.28);
   }
 
+  [data-component="sidebar-session-loading"] {
+    background: color-mix(in srgb, var(--surface-raised-base) 72%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 48%, transparent);
+  }
+
+  [data-component="sidebar-session-loading"] [data-slot="sheen"] {
+    background: linear-gradient(
+      110deg,
+      transparent 0%,
+      transparent 34%,
+      rgba(255, 255, 255, 0.02) 44%,
+      rgba(255, 255, 255, 0.18) 50%,
+      rgba(255, 255, 255, 0.02) 56%,
+      transparent 66%,
+      transparent 100%
+    );
+    transform: translateX(-140%);
+    animation: sidebar-session-loading-sheen 1.8s linear infinite;
+  }
+
   [data-dock-surface="shell"][data-slot="prompt-shell"] {
     border-top-left-radius: 28px;
     border-top-right-radius: 28px;
@@ -116,6 +136,12 @@
 
     [data-component="getting-started-actions"] > [data-component="button"] {
       width: auto;
+    }
+  }
+
+  @keyframes sidebar-session-loading-sheen {
+    to {
+      transform: translateX(140%);
     }
   }
 }

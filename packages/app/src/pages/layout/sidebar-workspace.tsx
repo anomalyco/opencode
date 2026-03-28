@@ -271,9 +271,15 @@ const WorkspaceSessionList = (props: {
         />
       </Show>
       <Show when={props.loading()}>
-        <div class="px-2 py-2 text-12-regular text-text-weak">
-          {props.language.t("common.loading")}
-          {props.language.t("common.loading.ellipsis")}
+        <div
+          data-component="sidebar-session-loading"
+          class="relative flex h-8 items-center justify-center overflow-hidden rounded-lg px-2 text-14-regular text-text-weak"
+        >
+          <div data-slot="sheen" class="pointer-events-none absolute inset-0" />
+          <span class="relative z-10">
+            {props.language.t("common.loading")}
+            {props.language.t("common.loading.ellipsis")}
+          </span>
         </div>
       </Show>
       <For each={props.sessions()}>
