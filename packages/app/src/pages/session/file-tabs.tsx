@@ -10,7 +10,6 @@ import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
-import { showToast } from "@opencode-ai/ui/toast"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
@@ -421,13 +420,6 @@ export function FileTabContent(props: { tab: string }) {
           path: path(),
           current: state()?.content,
           onLoad: queueRestore,
-          onError: (args: { kind: "image" | "audio" | "svg" }) => {
-            if (args.kind !== "svg") return
-            showToast({
-              variant: "error",
-              title: language.t("toast.file.loadFailed.title"),
-            })
-          },
         }}
       />
     </div>

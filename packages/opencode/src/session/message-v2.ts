@@ -728,11 +728,12 @@ export namespace MessageV2 {
         }
         for (const part of msg.parts) {
           if (part.type === "text")
-            assistantMessage.parts.push({
-              type: "text",
-              text: part.text,
-              ...(differentModel ? {} : { providerMetadata: part.metadata }),
-            })
+            if (part.text !== "")
+              assistantMessage.parts.push({
+                type: "text",
+                text: part.text,
+                ...(differentModel ? {} : { providerMetadata: part.metadata }),
+              })
           if (part.type === "step-start")
             assistantMessage.parts.push({
               type: "step-start",
@@ -792,11 +793,12 @@ export namespace MessageV2 {
               })
           }
           if (part.type === "reasoning") {
-            assistantMessage.parts.push({
-              type: "reasoning",
-              text: part.text,
-              ...(differentModel ? {} : { providerMetadata: part.metadata }),
-            })
+            if (part.text !== "")
+              assistantMessage.parts.push({
+                type: "reasoning",
+                text: part.text,
+                ...(differentModel ? {} : { providerMetadata: part.metadata }),
+              })
           }
         }
         if (assistantMessage.parts.length > 0) {

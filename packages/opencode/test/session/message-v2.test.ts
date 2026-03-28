@@ -903,6 +903,42 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ])
   })
+
+  test("drops crash-recovery assistant messages that only contain empty content", () => {
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent"),
+        parts: [
+          {
+            ...basePart(assistantID, "p1"),
+            type: "step-start",
+          },
+          {
+            ...basePart(assistantID, "p2"),
+            type: "step-start",
+          },
+          {
+            ...basePart(assistantID, "p3"),
+            type: "reasoning",
+            text: "",
+            time: { start: 0, end: 1 },
+            metadata: { openai: { itemId: "item-1", reasoningEncryptedContent: "secret" } },
+          },
+          {
+            ...basePart(assistantID, "p4"),
+            type: "text",
+            text: "",
+            time: { start: 0 },
+            metadata: { openai: { itemId: "item-2" } },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(MessageV2.toModelMessages(input, model)).toStrictEqual([])
+  })
 })
 
 describe("session.message-v2.fromError", () => {
