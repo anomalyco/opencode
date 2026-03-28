@@ -34,6 +34,13 @@ export namespace ModelsDev {
           .strict(),
       ])
       .optional(),
+    preserveInterruptedResponse: z
+      .boolean()
+      .optional()
+      .describe(
+        "When enabled, interrupted responses are saved with their partial content instead of being discarded. " +
+          "This preserves the token sequence for local inference backends with KV cache, avoiding expensive reprocessing.",
+      ),
     cost: z
       .object({
         input: z.number(),

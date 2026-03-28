@@ -24,6 +24,7 @@ describe("ProviderTransform.options - setCacheKey", () => {
       input: { text: true, audio: false, image: true, video: false, pdf: true },
       output: { text: true, audio: false, image: false, video: false, pdf: false },
       interleaved: false,
+          preserveInterruptedResponse: false,
     },
     cost: {
       input: 0.003,
@@ -125,6 +126,7 @@ describe("ProviderTransform.options - google thinkingConfig gating", () => {
         input: { text: true, audio: false, image: true, video: false, pdf: true },
         output: { text: true, audio: false, image: false, video: false, pdf: false },
         interleaved: false,
+          preserveInterruptedResponse: false,
       },
       cost: {
         input: 0.001,
@@ -191,6 +193,7 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
         input: { text: true, audio: false, image: true, video: false, pdf: false },
         output: { text: true, audio: false, image: false, video: false, pdf: false },
         interleaved: false,
+          preserveInterruptedResponse: false,
       },
       cost: { input: 0.03, output: 0.06, cache: { read: 0.001, write: 0.002 } },
       limit: { context: 128000, output: 4096 },
@@ -263,6 +266,7 @@ describe("ProviderTransform.options - gateway", () => {
         input: { text: true, audio: false, image: true, video: false, pdf: true },
         output: { text: true, audio: false, image: false, video: false, pdf: false },
         interleaved: false,
+          preserveInterruptedResponse: false,
       },
       cost: {
         input: 0.001,
@@ -309,6 +313,7 @@ describe("ProviderTransform.providerOptions", () => {
         input: { text: true, audio: false, image: true, video: false, pdf: false },
         output: { text: true, audio: false, image: false, video: false, pdf: false },
         interleaved: false,
+          preserveInterruptedResponse: false,
       },
       cost: {
         input: 0.001,
@@ -825,6 +830,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
           interleaved: {
             field: "reasoning_content",
           },
+          preserveInterruptedResponse: false,
         },
         cost: {
           input: 0.001,
@@ -885,6 +891,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
           input: { text: true, audio: false, image: true, video: false, pdf: false },
           output: { text: true, audio: false, image: false, video: false, pdf: false },
           interleaved: false,
+          preserveInterruptedResponse: false,
         },
         cost: {
           input: 0.03,
@@ -929,6 +936,7 @@ describe("ProviderTransform.message - empty image handling", () => {
       input: { text: true, audio: false, image: true, video: false, pdf: true },
       output: { text: true, audio: false, image: false, video: false, pdf: false },
       interleaved: false,
+          preserveInterruptedResponse: false,
     },
     cost: {
       input: 0.003,
@@ -1032,6 +1040,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
       input: { text: true, audio: false, image: true, video: false, pdf: true },
       output: { text: true, audio: false, image: false, video: false, pdf: false },
       interleaved: false,
+          preserveInterruptedResponse: false,
     },
     cost: {
       input: 0.003,
@@ -1239,6 +1248,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
       input: { text: true, audio: false, image: true, video: false, pdf: false },
       output: { text: true, audio: false, image: false, video: false, pdf: false },
       interleaved: false,
+          preserveInterruptedResponse: false,
     },
     cost: { input: 0.03, output: 0.06, cache: { read: 0.001, write: 0.002 } },
     limit: { context: 128000, output: 4096 },
@@ -1531,6 +1541,7 @@ describe("ProviderTransform.message - providerOptions key remapping", () => {
         input: { text: true, audio: false, image: true, video: false, pdf: true },
         output: { text: true, audio: false, image: false, video: false, pdf: false },
         interleaved: false,
+          preserveInterruptedResponse: false,
       },
       cost: { input: 0.001, output: 0.002, cache: { read: 0.0001, write: 0.0002 } },
       limit: { context: 128000, output: 8192 },
@@ -1685,6 +1696,7 @@ describe("ProviderTransform.message - cache control on gateway", () => {
         input: { text: true, audio: false, image: true, video: false, pdf: true },
         output: { text: true, audio: false, image: false, video: false, pdf: false },
         interleaved: false,
+          preserveInterruptedResponse: false,
       },
       cost: { input: 0.001, output: 0.002, cache: { read: 0.0001, write: 0.0002 } },
       limit: { context: 200_000, output: 8192 },
@@ -1783,6 +1795,7 @@ describe("ProviderTransform.variants", () => {
       input: { text: true, audio: false, image: true, video: false, pdf: false },
       output: { text: true, audio: false, image: false, video: false, pdf: false },
       interleaved: false,
+          preserveInterruptedResponse: false,
     },
     cost: {
       input: 0.001,

@@ -393,6 +393,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
               input: { text: true, audio: false, image: true, video: false, pdf: false },
               output: { text: true, audio: false, image: false, video: false, pdf: false },
               interleaved: false,
+              preserveInterruptedResponse: false,
             },
             cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
             limit: { context: 400_000, input: 272_000, output: 128_000 },

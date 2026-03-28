@@ -643,6 +643,7 @@ export namespace Provider {
                       pdf: false,
                     },
                     interleaved: false,
+                    preserveInterruptedResponse: false,
                   },
                   release_date: "",
                   variants: {},
@@ -807,6 +808,7 @@ export namespace Provider {
             field: z.enum(["reasoning_content", "reasoning_details"]),
           }),
         ]),
+        preserveInterruptedResponse: z.boolean(),
       }),
       cost: z.object({
         input: z.number(),
@@ -914,6 +916,7 @@ export namespace Provider {
           pdf: model.modalities?.output?.includes("pdf") ?? false,
         },
         interleaved: model.interleaved ?? false,
+        preserveInterruptedResponse: model.preserveInterruptedResponse ?? false,
       },
       release_date: model.release_date,
       variants: {},
@@ -1034,6 +1037,10 @@ export namespace Provider {
               pdf: model.modalities?.output?.includes("pdf") ?? existingModel?.capabilities.output.pdf ?? false,
             },
             interleaved: model.interleaved ?? false,
+            preserveInterruptedResponse:
+              model.preserveInterruptedResponse ??
+              existingModel?.capabilities.preserveInterruptedResponse ??
+              false,
           },
           cost: {
             input: model?.cost?.input ?? existingModel?.cost?.input ?? 0,

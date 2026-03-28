@@ -48,9 +48,10 @@ export namespace SessionProcessor {
         needsCompaction = false
         const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
         while (true) {
+          // Moved outside try block so they're accessible in catch for preserveInterruptedResponse
+          let currentText: MessageV2.TextPart | undefined
+          let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
           try {
-            let currentText: MessageV2.TextPart | undefined
-            let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
             const stream = await LLM.stream(streamInput)
 
             for await (const value of stream.fullStream) {
@@ -383,6 +384,34 @@ export namespace SessionProcessor {
                 error: input.assistantMessage.error,
               })
               await SessionStatus.set(input.sessionID, { type: "idle" })
+            }
+
+            // Preserve partial response content when interrupted and option is enabled
+            // This maintains token sequence consistency for local inference backends with KV cache
+            if (input.abort.aborted && input.model.capabilities.preserveInterruptedResponse) {
+              log.info("preserving interrupted response", { sessionID: input.sessionID })
+
+              // Finalize any partial text with interrupt marker
+              if (currentText && currentText.text) {
+                currentText.text = currentText.text.trimEnd() + "\n\n[interrupted]"
+                currentText.time = {
+                  start: currentText.time?.start ?? Date.now(),
+                  end: Date.now(),
+                }
+                await Session.updatePart(currentText)
+              }
+
+              // Finalize any pending reasoning parts with interrupt marker
+              for (const [id, part] of Object.entries(reasoningMap)) {
+                if (part.text) {
+                  part.text = part.text.trimEnd() + "\n\n[interrupted]"
+                  part.time = {
+                    start: part.time?.start ?? Date.now(),
+                    end: Date.now(),
+                  }
+                  await Session.updatePart(part)
+                }
+              }
             }
           }
           if (snapshot) {

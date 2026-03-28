@@ -37,6 +37,7 @@ const model: Provider.Model = {
       pdf: false,
     },
     interleaved: false,
+    preserveInterruptedResponse: false,
   },
   cost: {
     input: 0,
