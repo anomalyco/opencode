@@ -85,7 +85,7 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
   return fallback
 }
 
-const hidden = new Set(["todowrite", "todoread"])
+const hidden = new Set(["todowrite"])
 
 function partState(part: PartType, showReasoningSummaries: boolean) {
   if (part.type === "tool") {
@@ -142,6 +142,7 @@ export function SessionTurn(
   props: ParentProps<{
     sessionID: string
     messageID: string
+    messages?: MessageType[]
     actions?: UserActions
     showReasoningSummaries?: boolean
     shellToolDefaultOpen?: boolean
@@ -166,7 +167,7 @@ export function SessionTurn(
   const emptyDiffs: FileDiff[] = []
   const idle = { type: "idle" as const }
 
-  const allMessages = createMemo(() => list(data.store.message?.[props.sessionID], emptyMessages))
+  const allMessages = createMemo(() => props.messages ?? list(data.store.message?.[props.sessionID], emptyMessages))
 
   const messageIndex = createMemo(() => {
     const messages = allMessages() ?? emptyMessages
@@ -340,30 +341,28 @@ export function SessionTurn(
     if (end < start) return undefined
     return end - start
   })
-  const assistantVisible = createMemo(() =>
-    assistantMessages().reduce((count, message) => {
-      const parts = list(data.store.part?.[message.id], emptyParts)
-      return count + parts.filter((part) => partState(part, showReasoningSummaries()) === "visible").length
-    }, 0),
-  )
-  const assistantTailVisible = createMemo(() =>
-    assistantMessages()
-      .flatMap((message) => list(data.store.part?.[message.id], emptyParts))
-      .flatMap((part) => {
-        if (partState(part, showReasoningSummaries()) !== "visible") return []
-        if (part.type === "text") return ["text" as const]
-        return ["other" as const]
-      })
-      .at(-1),
-  )
-  const reasoningHeading = createMemo(() =>
-    assistantMessages()
-      .flatMap((message) => list(data.store.part?.[message.id], emptyParts))
-      .filter((part): part is PartType & { type: "reasoning"; text: string } => part.type === "reasoning")
-      .map((part) => heading(part.text))
-      .filter((text): text is string => !!text)
-      .at(-1),
-  )
+  const assistantDerived = createMemo(() => {
+    let visible = 0
+    let tail: "text" | "other" | undefined
+    let reason: string | undefined
+    const show = showReasoningSummaries()
+    for (const message of assistantMessages()) {
+      for (const part of list(data.store.part?.[message.id], emptyParts)) {
+        if (partState(part, show) === "visible") {
+          visible++
+          tail = part.type === "text" ? "text" : "other"
+        }
+        if (part.type === "reasoning" && part.text) {
+          const h = heading(part.text)
+          if (h) reason = h
+        }
+      }
+    }
+    return { visible, tail, reason }
+  })
+  const assistantVisible = createMemo(() => assistantDerived().visible)
+  const assistantTailVisible = createMemo(() => assistantDerived().tail)
+  const reasoningHeading = createMemo(() => assistantDerived().reason)
   const showThinking = createMemo(() => {
     if (!working() || !!error()) return false
     if (status().type === "retry") return false
