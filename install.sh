@@ -46,18 +46,6 @@ info "Platform: ${PLATFORM}-${ARCH}"
 # Primary path: download pre-built binary — no bun required at runtime
 # bun is only needed as a dev tool for contributors
 
-# ── Fetch latest release ─────────────────────────────────────────────────────
-step "Fetching latest release…"
-
-LATEST=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
-  | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"\(.*\)".*/\1/')
-
-if [[ -z "$LATEST" ]]; then
-  error "Could not determine latest release. Check your internet connection."
-fi
-
-info "Latest release: ${LATEST}"
-
 # ── Build asset name ─────────────────────────────────────────────────────────
 # Asset naming: opencode-<platform>-<arch>.tar.gz (linux) or .zip (others)
 PKG_NAME="opencode-${PLATFORM}-${ARCH}"
@@ -72,7 +60,32 @@ else
   ASSET="${PKG_NAME}.zip"
 fi
 
-DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${LATEST}/${ASSET}"
+# ── Fetch latest release that contains the CLI asset ─────────────────────────
+step "Fetching latest release…"
+
+LATEST=""
+DOWNLOAD_URL=""
+PAGE=1
+while [[ -z "$LATEST" && $PAGE -le 3 ]]; do
+  RELEASES=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases?per_page=10&page=${PAGE}")
+  while IFS= read -r line; do
+    TAG=$(echo "$line" | grep '"tag_name"' | sed 's/.*"tag_name": *"\(.*\)".*/\1/')
+    [[ -z "$TAG" ]] && continue
+    URL="https://github.com/${REPO}/releases/download/${TAG}/${ASSET}"
+    if curl -fsSL --head "$URL" -o /dev/null 2>/dev/null; then
+      LATEST="$TAG"
+      DOWNLOAD_URL="$URL"
+      break
+    fi
+  done < <(echo "$RELEASES" | grep '"tag_name"')
+  PAGE=$((PAGE + 1))
+done
+
+if [[ -z "$LATEST" ]]; then
+  error "Could not find a release with asset '${ASSET}'. Check your internet connection or try again later."
+fi
+
+info "Latest release: ${LATEST}"
 
 # ── Download ─────────────────────────────────────────────────────────────────
 step "Downloading ${ASSET}…"

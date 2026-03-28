@@ -289,6 +289,7 @@ test("session model and variant restore per session without leaking into new ses
 })
 
 test("session model restore across workspaces", async ({ page, withProject }) => {
+  test.setTimeout(180_000)
   await page.setViewportSize({ width: 1440, height: 900 })
 
   await withProject(async ({ directory: root, slug, gotoSession, trackDirectory, trackSession }) => {

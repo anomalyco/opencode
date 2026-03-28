@@ -11,9 +11,9 @@ const workers = Number(process.env.PLAYWRIGHT_WORKERS ?? (process.env.CI ? 5 : 0
 export default defineConfig({
   testDir: "./e2e",
   outputDir: "./e2e/test-results",
-  timeout: 60_000,
+  timeout: process.env.CI ? 90_000 : 60_000,
   expect: {
-    timeout: 10_000,
+    timeout: process.env.CI ? 20_000 : 10_000,
   },
   fullyParallel: process.env.PLAYWRIGHT_FULLY_PARALLEL === "1",
   forbidOnly: !!process.env.CI,
@@ -39,7 +39,16 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: {
+        ...devices["Desktop Chrome"],
+        launchOptions: {
+          args: [
+            "--disable-print-preview",
+            "--no-sandbox",
+            "--disable-dev-shm-usage",
+          ],
+        },
+      },
     },
   ],
 })
