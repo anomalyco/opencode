@@ -1,6 +1,13 @@
 name: publish-fork
 
 on:
+  push:
+    branches:
+      - dev
+    paths:
+      - "packages/opencode/src/**"
+      - "packages/opencode/test/**"
+      - ".github/workflows/publish-fork.yml"
   workflow_call:
   workflow_dispatch:
 
