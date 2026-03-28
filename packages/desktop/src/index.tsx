@@ -738,6 +738,7 @@ render(() => {
     })
   })
   const [locale] = createResource(loadLocale)
+  const local = ServerConnection.Key.make("sidecar")
 
   // Build the sidecar server connection once credentials arrive
   const servers = () => {
@@ -814,6 +815,7 @@ render(() => {
   const boot = () => !defaultServer.loading && !sidecar.loading && !locale.loading
 
   const ready = () => !!sidecar() && !locale.loading
+  const skipHealth = () => (defaultServer.latest ?? local) === local
 
   createEffect(() => {
     if (!ready()) return
@@ -846,6 +848,7 @@ render(() => {
                 <AppInterface
                   defaultServer={defaultServer.latest ?? ServerConnection.Key.make("sidecar")}
                   servers={servers()}
+                  disableHealthCheck={skipHealth}
                 >
                   <Inner />
                 </AppInterface>

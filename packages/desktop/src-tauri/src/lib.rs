@@ -12,7 +12,7 @@ mod window_customizer;
 mod windows;
 
 use crate::cli::CommandChild;
-use futures::{FutureExt, TryFutureExt};
+use futures::FutureExt;
 use serde_json::json;
 use std::{
     env, fs,
@@ -1589,53 +1589,12 @@ async fn initialize(app: AppHandle) {
         })
     });
 
-    // The loading task waits for SQLite migration (if needed) then for the sidecar health check.
-    // The native loading window only covers the pre-webview gap. After that, the main window's
-    // HTML startup shell takes over until the first click can react immediately.
-    let loading_task = tokio::spawn({
-        let app = app.clone();
-        async move {
-            if let Some(sqlite_done_rx) = sqlite_done {
-                let _ = sqlite_done_rx.await;
-                startup_mark(&app, "native", "sqlite.ready", None, None);
-            }
+    if let Some(sqlite_done_rx) = sqlite_done {
+        let _ = sqlite_done_rx.await;
+        startup_mark(&app, "native", "sqlite.ready", None, None);
+    }
 
-            // Wait for sidecar to become healthy (for loading window progress)
-            startup_mark(&app, "native", "health.waiting", None, None);
-            let res = timeout(Duration::from_secs(30), health_check.0).await;
-            match res {
-                Ok(Ok(Ok(()))) => {
-                    tracing::info!("Sidecar health check OK");
-                    startup_mark(&app, "native", "health.ready", None, None);
-                }
-                Ok(Ok(Err(e))) => {
-                    tracing::error!("Sidecar health check failed: {e}");
-                    startup_mark(&app, "native", "health.failed", Some(e), None);
-                }
-                Ok(Err(e)) => {
-                    tracing::error!("Sidecar health check task failed: {e}");
-                    startup_mark(&app, "native", "health.task_failed", Some(e.to_string()), None);
-                }
-                Err(_) => {
-                    tracing::error!("Sidecar health check timed out");
-                    startup_mark(&app, "native", "health.timed_out", None, None);
-                }
-            }
-
-            tracing::info!("Loading task finished");
-            startup_mark(&app, "native", "loading.task_done", None, None);
-        }
-    })
-    .map_err(|_| ())
-    .shared();
-
-    let _ = loading_task.await;
-
-    tracing::info!("Loading done, completing initialisation");
-    let _ = init_tx.send(InitStep::Done);
-    startup_mark(&app, "native", "initialize.done", None, None);
-
-    tracing::info!("Showing main window after startup loading");
+    tracing::info!("Showing main window after sqlite gating");
 
     // The window-state plugin can restore the main window onto a stale monitor
     // during startup. The loading window consistently appears on the visible
@@ -1668,6 +1627,34 @@ async fn initialize(app: AppHandle) {
     sleep(Duration::from_millis(120)).await;
     let _ = loading_window.close();
     startup_mark(&app, "native", "loading_window.closed", None, None);
+
+    startup_mark(&app, "native", "health.waiting", None, None);
+    let res = timeout(Duration::from_secs(30), health_check.0).await;
+    match res {
+        Ok(Ok(Ok(()))) => {
+            tracing::info!("Sidecar health check OK");
+            startup_mark(&app, "native", "health.ready", None, None);
+        }
+        Ok(Ok(Err(e))) => {
+            tracing::error!("Sidecar health check failed: {e}");
+            startup_mark(&app, "native", "health.failed", Some(e), None);
+        }
+        Ok(Err(e)) => {
+            tracing::error!("Sidecar health check task failed: {e}");
+            startup_mark(&app, "native", "health.task_failed", Some(e.to_string()), None);
+        }
+        Err(_) => {
+            tracing::error!("Sidecar health check timed out");
+            startup_mark(&app, "native", "health.timed_out", None, None);
+        }
+    }
+
+    tracing::info!("Loading task finished");
+    startup_mark(&app, "native", "loading.task_done", None, None);
+
+    tracing::info!("Loading done, completing initialisation");
+    let _ = init_tx.send(InitStep::Done);
+    startup_mark(&app, "native", "initialize.done", None, None);
 }
 
 fn setup_app(app: &tauri::AppHandle, init_rx: watch::Receiver<InitStep>) {
