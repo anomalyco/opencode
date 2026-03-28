@@ -121,6 +121,7 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
 }
 
 import type { EventSource } from "./context/sdk"
+import { DialogVariant } from "./component/dialog-variant"
 
 function rendererConfig(_config: TuiConfig.Info): CliRendererConfig {
   return {
@@ -580,12 +581,12 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
     },
     {
-      title: "Variant cycle",
+      title: "Switch model variant",
       value: "variant.cycle",
       keybind: "variant_cycle",
       category: "Agent",
       onSelect: () => {
-        local.model.variant.cycle()
+        dialog.replace(() => <DialogVariant />)
       },
     },
     {
