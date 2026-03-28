@@ -421,6 +421,9 @@ export namespace SessionProcessor {
             yield* Stream.fromAsyncIterable(stream.fullStream, (e) => e).pipe(
               Stream.runForEachWhile((event) =>
                 Effect.gen(function* () {
+                  // TODO: Revisit this once more of handleEvent is Effect-native.
+                  // As local synchronous mutation shrinks, this guard and eventually the
+                  // raw AbortSignal plumbing should be removable.
                   input.abort.throwIfAborted()
                   yield* handleEvent(event)
                   return !ctx.needsCompaction
@@ -440,7 +443,7 @@ export namespace SessionProcessor {
           )
 
           if (ctx.needsCompaction) return "compact"
-          if (ctx.blocked || ctx.assistantMessage.error) return "stop"
+          if (ctx.blocked || ctx.assistantMessage.error || input.abort.aborted) return "stop"
           return "continue"
         })
 
