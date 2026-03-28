@@ -1,0 +1,68 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <johnny.kang101@gmail.com>
+Date: Sat, 28 Mar 2026 00:00:00 -0700
+Subject: [PATCH 132/132] fix(install): restore /dev/tty stdin re-attach lost
+ in Mar-28 release-scan rewrite
+
+## RCA
+
+The Mar 28 commit that fixed release scanning (equivalent to patch 0032)
+was authored against the pre-0023 version of install.sh. Patches 0023,
+0038, 0039, 0040 had progressively refined a /dev/tty stdin fix for the
+`curl | bash` onboard flow, but the Mar 28 direct edit to install.sh
+was based on an older baseline that predated those fixes.
+
+**Root cause:** Direct edits to install.sh bypass the patch chain. When
+a direct edit rewrites a section, any intervening patches in the chain
+that touched the same section are silently lost.
+
+**Symptom:** Arrow keys in the provider-selection prompt print as raw
+escape sequences (`^[[A`, `^[[B`) because @clack/prompts can't enter raw
+mode when stdin is a pipe (as it is in `curl | bash`).
+
+## Fix
+
+Restore the `stty </dev/tty` guard (final form from patch 0040) around
+the `cobuilder onboard` call:
+- stdin is a TTY  → run directly
+- /dev/tty works  → redirect stdin from /dev/tty
+- headless/CI     → print manual instructions
+
+`stty` is used (not `true </dev/tty`) because the latter succeeds even
+when the device is non-functional — stty actually interrogates terminal
+attributes and fails correctly in headless containers.
+
+## Prevention
+
+Any future rewrite of install.sh MUST verify that the /dev/tty onboard
+block is present. The CI e2e test (test-e2e.sh) covers the `curl | bash`
+path and will catch regressions.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ install.sh | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/install.sh b/install.sh
+index <old>..<new> 100755
+--- a/install.sh
++++ b/install.sh
+@@ -141,4 +141,15 @@ echo ""
+ # ── Onboard ──────────────────────────────────────────────────────────────────
+-"$COBUILDER_BIN" onboard
++# When piped via `curl | bash`, stdin is not a TTY — re-attach to /dev/tty
++# so interactive prompts (arrow keys etc.) work seamlessly.
++# Use `stty` (not a plain redirect) because `true </dev/tty` succeeds even
++# in headless containers where reads would fail.
++if [ -t 0 ]; then
++  "$COBUILDER_BIN" onboard
++elif (stty </dev/tty) 2>/dev/null; then
++  "$COBUILDER_BIN" onboard </dev/tty
++else
++  echo ""
++  echo -e "  ${bold}Run this to complete setup:${reset}"
++  echo -e "  ${bold}${green}cobuilder onboard${reset}"
++  echo ""
++fi
+--
+2.43.0

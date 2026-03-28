@@ -139,4 +139,17 @@ echo -e "  ${bold}${green}CoBuilder installed successfully!${reset}"
 echo ""
 
 # ── Onboard ──────────────────────────────────────────────────────────────────
-"$COBUILDER_BIN" onboard
+# When piped via `curl | bash`, stdin is not a TTY — re-attach to /dev/tty
+# so interactive prompts (arrow keys etc.) work seamlessly.
+# Use `stty` (not a plain redirect) because `true </dev/tty` succeeds even
+# in headless containers where reads would fail.
+if [ -t 0 ]; then
+  "$COBUILDER_BIN" onboard
+elif (stty </dev/tty) 2>/dev/null; then
+  "$COBUILDER_BIN" onboard </dev/tty
+else
+  echo ""
+  echo -e "  ${bold}Run this to complete setup:${reset}"
+  echo -e "  ${bold}${green}cobuilder onboard${reset}"
+  echo ""
+fi
