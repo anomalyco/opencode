@@ -1,7 +1,14 @@
 /** @jsxImportSource @opentui/solid */
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { RGBA, VignetteEffect } from "@opentui/core"
-import type { TuiKeybindSet, TuiPluginApi, TuiPluginMeta, TuiSlotPlugin } from "@opencode-ai/plugin/tui"
+import type {
+  TuiKeybindSet,
+  TuiPlugin,
+  TuiPluginApi,
+  TuiPluginMeta,
+  TuiPluginModule,
+  TuiSlotPlugin,
+} from "@opencode-ai/plugin/tui"
 
 const tabs = ["overview", "counter", "help"]
 const bind = {
@@ -813,7 +820,7 @@ const reg = (api: TuiPluginApi, input: Cfg, keys: Keys) => {
   ])
 }
 
-const tui = async (api: TuiPluginApi, options: Record<string, unknown> | null, meta: TuiPluginMeta) => {
+const tui: TuiPlugin = async (api, options, meta) => {
   if (options?.enabled === false) return
 
   await api.theme.install("./smoke-theme.json")
@@ -846,7 +853,9 @@ const tui = async (api: TuiPluginApi, options: Record<string, unknown> | null, m
   }
 }
 
-export default {
+const plugin: TuiPluginModule & { id: string } = {
   id: "tui-smoke",
   tui,
 }
+
+export default plugin
