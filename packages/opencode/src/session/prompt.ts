@@ -100,10 +100,10 @@ export namespace SessionPrompt {
           const loops = new Map<string, LoopEntry>()
           const shells = new Map<string, Fiber.Fiber<MessageV2.WithParts, unknown>>()
           yield* Effect.addFinalizer(() =>
-            Effect.forEach(
-              [...loops.values().flatMap((e) => e.fiber ? [e.fiber] : []), ...shells.values()],
-              (fiber) => Fiber.interrupt(fiber),
-            ),
+            Fiber.interruptAll([
+              ...loops.values().flatMap((e) => e.fiber ? [e.fiber] : []),
+              ...shells.values(),
+            ]),
           )
           return { loops, shells }
         }),
@@ -135,11 +135,11 @@ export namespace SessionPrompt {
         yield* status.set(sessionID, { type: "idle" })
       })
 
-      const resolvePromptPartsE = Effect.fn("SessionPrompt.resolvePromptParts")(function* (template: string) {
+      const resolvePromptParts = Effect.fn("SessionPrompt.resolvePromptParts")(function* (template: string) {
         return yield* Effect.promise(() => resolvePromptPartsImpl(template))
       })
 
-      const promptE = Effect.fn("SessionPrompt.prompt")(function* (input: PromptInput) {
+      const prompt = Effect.fn("SessionPrompt.prompt")(function* (input: PromptInput) {
         const session = yield* sessions.get(input.sessionID)
         yield* Effect.promise(() => SessionRevert.cleanup(session))
         const message = yield* Effect.promise(() => createUserMessage(input))
@@ -155,7 +155,7 @@ export namespace SessionPrompt {
         }
 
         if (input.noReply === true) return message
-        return yield* loopE({ sessionID: input.sessionID })
+        return yield* loop({ sessionID: input.sessionID })
       })
 
       const lastAssistant = (sessionID: SessionID) =>
@@ -450,7 +450,7 @@ export namespace SessionPrompt {
         return yield* awaitFiber(fiber, lastAssistant(sessionID))
       })
 
-      const loopE = Effect.fn("SessionPrompt.loop")(function* (input: z.infer<typeof LoopInput>) {
+      const loop = Effect.fn("SessionPrompt.loop")(function* (input: z.infer<typeof LoopInput>) {
         const s = yield* InstanceState.get(cache)
         const existing = s.loops.get(input.sessionID)
 
@@ -470,7 +470,7 @@ export namespace SessionPrompt {
         return yield* startLoop(s, input.sessionID)
       })
 
-      const shellE = Effect.fn("SessionPrompt.shell")(function* (input: ShellInput) {
+      const shell = Effect.fn("SessionPrompt.shell")(function* (input: ShellInput) {
         const s = yield* InstanceState.get(cache)
         if (s.loops.has(input.sessionID) || s.shells.has(input.sessionID)) {
           throw new Session.BusyError(input.sessionID)
@@ -496,9 +496,9 @@ export namespace SessionPrompt {
         return yield* awaitFiber(fiber, lastAssistant(input.sessionID))
       })
 
-      const commandE = Effect.fn("SessionPrompt.command")(function* (input: CommandInput) {
+      const command = Effect.fn("SessionPrompt.command")(function* (input: CommandInput) {
         const resolved = yield* Effect.promise(() => resolveCommand(input))
-        const result = yield* promptE(resolved.promptInput)
+        const result = yield* prompt(resolved.promptInput)
         yield* bus.publish(Command.Event.Executed, {
           name: input.command,
           sessionID: input.sessionID,
@@ -511,11 +511,11 @@ export namespace SessionPrompt {
       return Service.of({
         assertNotBusy,
         cancel,
-        prompt: promptE,
-        loop: loopE,
-        shell: shellE,
-        command: commandE,
-        resolvePromptParts: resolvePromptPartsE,
+        prompt,
+        loop,
+        shell,
+        command,
+        resolvePromptParts,
       })
     }),
   )
