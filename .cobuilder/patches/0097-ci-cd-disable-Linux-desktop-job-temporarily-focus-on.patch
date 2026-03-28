@@ -1,0 +1,83 @@
+From 576779f468a0d69fa4a1408d85a8a367556a6939 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Fri, 27 Mar 2026 10:08:33 -0700
+Subject: [PATCH 097/131] =?UTF-8?q?ci(cd):=20disable=20Linux=20desktop=20j?=
+ =?UTF-8?q?ob=20temporarily=20=E2=80=94=20focus=20on=20Windows?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ .github/workflows/cd.yml | 56 ++--------------------------------------
+ 1 file changed, 2 insertions(+), 54 deletions(-)
+
+diff --git a/.github/workflows/cd.yml b/.github/workflows/cd.yml
+index 2d33ea13a..0dda22c0f 100644
+--- a/.github/workflows/cd.yml
++++ b/.github/workflows/cd.yml
+@@ -159,60 +159,8 @@ jobs:
+           cd packages/opencode
+           bun run build
+ 
+-  desktop-linux:
+-    name: Desktop (Linux)
+-    needs: release
+-    runs-on: ubuntu-latest
+-    timeout-minutes: 30
+-    steps:
+-      - uses: actions/checkout@v4
+-
+-      - uses: oven-sh/setup-bun@v2
+-        with:
+-          bun-version: ${{ env.BUN_VERSION }}
+-
+-      - name: Cache bun dependencies
+-        uses: actions/cache@v4
+-        with:
+-          path: |
+-            ~/.bun/install/cache
+-            node_modules
+-            packages/*/node_modules
+-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lockb') }}
+-          restore-keys: bun-${{ runner.os }}-
+-
+-      - name: Install dependencies
+-        run: bun install --frozen-lockfile
+-
+-      - name: Set desktop version
+-        run: |
+-          cd packages/desktop-electron
+-          node -e "
+-            const fs = require('fs');
+-            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+-            pkg.version = '${{ needs.release.outputs.semver }}';
+-            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+-          "
+-
+-      - name: Build
+-        run: cd packages/desktop-electron && bun run build
+-        env:
+-          OPENCODE_CHANNEL: prod
+-
+-      - name: Package
+-        run: cd packages/desktop-electron && bun run package:linux -- --publish never
+-        env:
+-          OPENCODE_CHANNEL: prod
+-
+-      - name: Upload to release
+-        env:
+-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+-        run: |
+-          gh release upload "${{ needs.release.outputs.tag }}" \
+-            packages/desktop-electron/dist/*.AppImage \
+-            packages/desktop-electron/dist/*.deb \
+-            packages/desktop-electron/dist/*.rpm \
+-            --repo CobuilderLabs/opencode --clobber
++  # desktop-linux: temporarily disabled — focus on Windows first
++  # TODO: re-enable once Windows build is confirmed stable
+ 
+   desktop-windows:
+     name: Desktop (Windows)
+-- 
+2.43.0
+

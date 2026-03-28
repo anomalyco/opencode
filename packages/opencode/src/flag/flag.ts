@@ -76,6 +76,9 @@ export namespace Flag {
   export const OPENCODE_SKIP_MIGRATIONS = truthy("OPENCODE_SKIP_MIGRATIONS")
   export const OPENCODE_STRICT_CONFIG_DEPS = truthy("OPENCODE_STRICT_CONFIG_DEPS")
 
+  // CoBuilder-specific flags
+  export declare const COBUILDER_AUTOPILOT: boolean
+
   function number(key: string) {
     const value = process.env[key]
     if (!value) return undefined
@@ -83,6 +86,17 @@ export namespace Flag {
     return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
   }
 }
+
+// Dynamic getter for COBUILDER_AUTOPILOT
+// Must be evaluated at access time so --autopilot CLI flag can set the env var at runtime
+Object.defineProperty(Flag, "COBUILDER_AUTOPILOT", {
+  get() {
+    const value = process.env["COBUILDER_AUTOPILOT"]?.toLowerCase()
+    return value === "true" || value === "1"
+  },
+  enumerable: true,
+  configurable: false,
+})
 
 // Dynamic getter for OPENCODE_DISABLE_PROJECT_CONFIG
 // This must be evaluated at access time, not module load time,

@@ -1,0 +1,64 @@
+From 820b126e3c60a65dc7a73f4551f9559084164648 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Fri, 27 Mar 2026 08:32:14 -0700
+Subject: [PATCH 081/131] fix: replace OpenCode branding with CoBuilder in TUI
+ and fix update check endpoint (#27)
+
+* fix: replace OpenCode branding with CoBuilder in TUI sidebar and update check endpoint
+
+- Change 'OpenCode' styled text to 'CoBuilder' in session sidebar bottom-right version display
+- Point GitHub releases update check to CobuilderLabs/opencode (was anomalyco/opencode)
+- Strip 'cb-v' prefix from CoBuilder release tags when parsing version strings
+
+* ci: retrigger checks
+
+* fix(desktop): add picocolors as explicit devDependency to fix electron-vite module resolution on Windows
+
+* fix(cd): copy picocolors into electron-vite Bun cache dir on Windows
+
+---------
+
+Co-authored-by: CoBuilder CEO <ceo@cobuilder.ai>
+---
+ packages/opencode/src/cli/cmd/tui/routes/session/sidebar.tsx | 4 ++--
+ packages/opencode/src/installation/index.ts                  | 4 ++--
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/packages/opencode/src/cli/cmd/tui/routes/session/sidebar.tsx b/packages/opencode/src/cli/cmd/tui/routes/session/sidebar.tsx
+index a7259ca79..18451f3d1 100644
+--- a/packages/opencode/src/cli/cmd/tui/routes/session/sidebar.tsx
++++ b/packages/opencode/src/cli/cmd/tui/routes/session/sidebar.tsx
+@@ -308,9 +308,9 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
+             <span style={{ fg: theme.text }}>{directory().split("/").at(-1)}</span>
+           </text>
+           <text fg={theme.textMuted}>
+-            <span style={{ fg: theme.success }}>•</span> <b>Open</b>
++            <span style={{ fg: theme.success }}>•</span>{" "}
+             <span style={{ fg: theme.text }}>
+-              <b>Code</b>
++              <b>CoBuilder</b>
+             </span>{" "}
+             <span>{Installation.VERSION}</span>
+           </text>
+diff --git a/packages/opencode/src/installation/index.ts b/packages/opencode/src/installation/index.ts
+index 52c149c4f..a64cf483a 100644
+--- a/packages/opencode/src/installation/index.ts
++++ b/packages/opencode/src/installation/index.ts
+@@ -257,12 +257,12 @@ export namespace Installation {
+           }
+ 
+           const response = yield* httpOk.execute(
+-            HttpClientRequest.get("https://api.github.com/repos/anomalyco/opencode/releases/latest").pipe(
++            HttpClientRequest.get("https://api.github.com/repos/CobuilderLabs/opencode/releases/latest").pipe(
+               HttpClientRequest.acceptJson,
+             ),
+           )
+           const data = yield* HttpClientResponse.schemaBodyJson(GitHubRelease)(response)
+-          return data.tag_name.replace(/^v/, "")
++          return data.tag_name.replace(/^cb-v/, "").replace(/^v/, "")
+         }, Effect.orDie)
+ 
+         const upgradeImpl = Effect.fn("Installation.upgrade")(function* (m: Method, target: string) {
+-- 
+2.43.0
+

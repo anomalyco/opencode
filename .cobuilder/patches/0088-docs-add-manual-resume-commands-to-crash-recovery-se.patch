@@ -1,0 +1,37 @@
+From 81610b986687d67f59bc7bcd91dcaace24ae2003 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <johnny.kang101@gmail.com>
+Date: Fri, 27 Mar 2026 09:06:10 -0700
+Subject: [PATCH 088/131] docs: add manual resume commands to crash recovery
+ section
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ README.md | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/README.md b/README.md
+index 20b3c897f..6625b9709 100644
+--- a/README.md
++++ b/README.md
+@@ -115,6 +115,18 @@ At the end of each session, CoBuilder summarizes what happened — files touched
+ 
+ If the CoBuilder server exits unexpectedly, the next launch detects the interrupted session and offers to resume it exactly where it left off. No work is lost. This uses a checkpoint written at each user turn — lightweight, fast, and stored locally.
+ 
++You can also resume sessions manually:
++
++```bash
++# Resume the last session
++cobuilder --continue
++
++# Resume a specific session by ID
++cobuilder -s <session-id>
++```
++
++The session ID is shown when you exit the TUI: `cobuilder -s ses_xxx`.
++
+ ### LSP integration
+ 
+ Language server diagnostics (errors, warnings, type information) flow directly into the AI's context window. The agent sees the same problems your editor sees, in real time.
+-- 
+2.43.0
+

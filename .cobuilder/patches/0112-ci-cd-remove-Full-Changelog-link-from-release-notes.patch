@@ -1,0 +1,25 @@
+From a3de4c485e6cf6b2f0b82be7806030b2f84e63fb Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Fri, 27 Mar 2026 12:43:48 -0700
+Subject: [PATCH 112/131] ci(cd): remove Full Changelog link from release notes
+
+---
+ .github/workflows/cd.yml | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/.github/workflows/cd.yml b/.github/workflows/cd.yml
+index e95b95be3..dd895acdb 100644
+--- a/.github/workflows/cd.yml
++++ b/.github/workflows/cd.yml
+@@ -127,8 +127,6 @@ jobs:
+           [[ -n "$DESKTOP" ]]  && NOTES+=$'\n'"## Desktop"$'\n'"${DESKTOP}"$'\n'
+           [[ -n "$CORE" ]]     && NOTES+=$'\n'"## Core"$'\n'"${CORE}"$'\n'
+           [[ -n "$MISC" ]]     && NOTES+=$'\n'"## Misc"$'\n'"${MISC}"$'\n'
+-          NOTES+=$'\n'"**Full Changelog**: https://github.com/CobuilderLabs/opencode/compare/${TAG}...${NEXT_TAG}"
+-
+           echo "$NOTES" > /tmp/release-notes.md
+           cat /tmp/release-notes.md
+           echo "Next release: ${NEXT_TAG}"
+-- 
+2.43.0
+

@@ -1,0 +1,45 @@
+From f80ca55e0c3adcbc5ba850a342e1e90a968abb38 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Thu, 26 Mar 2026 15:22:45 -0700
+Subject: [PATCH 021/131] fix: guard Config.get() against missing instance
+ context on startup
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The security headers middleware called Config.get() after next(), but early
+TUI worker requests arrive before the instance AsyncLocalStorage context is
+initialised, causing an UnknownError crash on every startup.
+
+Fix: wrap in try/catch and apply headers unconditionally when config is not
+yet available — which is the secure default.
+
+Co-authored-by: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ packages/opencode/src/server/server.ts | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/packages/opencode/src/server/server.ts b/packages/opencode/src/server/server.ts
+index a909edbbd..3b99f77b1 100644
+--- a/packages/opencode/src/server/server.ts
++++ b/packages/opencode/src/server/server.ts
+@@ -117,8 +117,14 @@ export namespace Server {
+       })
+       .use(async (c, next) => {
+         await next()
+-        const cfg = await Config.get()
+-        if (cfg.security?.headers?.enabled !== false) {
++        let headersEnabled = true
++        try {
++          const cfg = await Config.get()
++          headersEnabled = cfg.security?.headers?.enabled !== false
++        } catch {
++          // Instance context not yet available (early startup requests) — apply headers by default
++        }
++        if (headersEnabled) {
+           const headers = getSecurityHeaders()
+           for (const [key, value] of Object.entries(headers)) {
+             c.res.headers.set(key, value)
+-- 
+2.43.0
+

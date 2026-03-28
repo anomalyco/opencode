@@ -1,0 +1,87 @@
+From 9f94bdb49634bda90a2804585b8d739228dde876 Mon Sep 17 00:00:00 2001
+From: "opencode-agent[bot]" <opencode-agent[bot]@users.noreply.github.com>
+Date: Thu, 26 Mar 2026 17:08:33 +0000
+Subject: [PATCH 003/131] chore: generate
+
+---
+ packages/opencode/specs/effect-migration.md |  5 +++--
+ packages/opencode/src/config/config.ts      | 17 ++++-------------
+ 2 files changed, 7 insertions(+), 15 deletions(-)
+
+diff --git a/packages/opencode/specs/effect-migration.md b/packages/opencode/specs/effect-migration.md
+index a73f8ea39..176190437 100644
+--- a/packages/opencode/specs/effect-migration.md
++++ b/packages/opencode/specs/effect-migration.md
+@@ -127,10 +127,10 @@ Use `Effect.cached` when multiple concurrent callers should share a single in-fl
+ 
+ ```ts
+ // Inside the layer — yield* to initialize the memo
+-let cached = yield* Effect.cached(loadExpensive())
++let cached = yield * Effect.cached(loadExpensive())
+ 
+ const get = Effect.fn("Foo.get")(function* () {
+-  return yield* cached  // concurrent callers share the same fiber
++  return yield* cached // concurrent callers share the same fiber
+ })
+ 
+ // To invalidate: swap in a fresh memo
+@@ -140,6 +140,7 @@ const invalidate = Effect.fn("Foo.invalidate")(function* () {
+ ```
+ 
+ Prefer `Effect.cached` over these patterns:
++
+ - Storing a `Fiber.Fiber | undefined` with manual check-and-fork (e.g. `file/index.ts` `ensure`)
+ - Storing a `Promise<void>` task for deduplication (e.g. `skill/index.ts` `ensure`)
+ - `let cached: X | undefined` with check-and-load (races when two callers see `undefined` before either resolves)
+diff --git a/packages/opencode/src/config/config.ts b/packages/opencode/src/config/config.ts
+index c398d4219..645ae8814 100644
+--- a/packages/opencode/src/config/config.ts
++++ b/packages/opencode/src/config/config.ts
+@@ -1231,10 +1231,7 @@ export namespace Config {
+                 if (provider && model) result.model = `${provider}/${model}`
+                 result["$schema"] = "https://opencode.ai/config.json"
+                 result = mergeDeep(result, rest)
+-                await fsNode.writeFile(
+-                  path.join(Global.Path.config, "config.json"),
+-                  JSON.stringify(result, null, 2),
+-                )
++                await fsNode.writeFile(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
+                 await fsNode.unlink(legacy)
+               })
+               .catch(() => {}),
+@@ -1244,9 +1241,7 @@ export namespace Config {
+         return result
+       })
+ 
+-      let cachedGlobal = yield* Effect.cached(
+-        loadGlobal().pipe(Effect.orElseSucceed(() => ({}) as Info)),
+-      )
++      let cachedGlobal = yield* Effect.cached(loadGlobal().pipe(Effect.orElseSucceed(() => ({}) as Info)))
+ 
+       const getGlobal = Effect.fn("Config.getGlobal")(function* () {
+         return yield* cachedGlobal
+@@ -1440,9 +1435,7 @@ export namespace Config {
+       })
+ 
+       const waitForDependencies = Effect.fn("Config.waitForDependencies")(function* () {
+-        yield* InstanceState.useEffect(state, (s) =>
+-          Effect.promise(() => Promise.all(s.deps).then(() => undefined)),
+-        )
++        yield* InstanceState.useEffect(state, (s) => Effect.promise(() => Promise.all(s.deps).then(() => undefined)))
+       })
+ 
+       const update = Effect.fn("Config.update")(function* (config: Info) {
+@@ -1453,9 +1446,7 @@ export namespace Config {
+       })
+ 
+       const invalidate = Effect.fn("Config.invalidate")(function* (wait?: boolean) {
+-        cachedGlobal = yield* Effect.cached(
+-          loadGlobal().pipe(Effect.orElseSucceed(() => ({}) as Info)),
+-        )
++        cachedGlobal = yield* Effect.cached(loadGlobal().pipe(Effect.orElseSucceed(() => ({}) as Info)))
+         const task = Instance.disposeAll()
+           .catch(() => undefined)
+           .finally(() =>
+-- 
+2.43.0
+

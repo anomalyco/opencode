@@ -1,0 +1,43 @@
+From 246d1735fa1738874da038879f94c451f985c401 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <johnny.kang101@gmail.com>
+Date: Thu, 26 Mar 2026 19:52:28 -0700
+Subject: [PATCH 125/131] fix(ui): add missing turnUsage memo used by tok/s
+ streaming feature
+
+The tok/s streaming effect references turnUsage() but the memo was
+never declared in this branch. Ported from feat/ux-parity-claude-code.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ packages/ui/src/components/session-turn.tsx | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/packages/ui/src/components/session-turn.tsx b/packages/ui/src/components/session-turn.tsx
+index 7a32074cb..55c6c0b1d 100644
+--- a/packages/ui/src/components/session-turn.tsx
++++ b/packages/ui/src/components/session-turn.tsx
+@@ -341,6 +341,21 @@ export function SessionTurn(
+     if (end < start) return undefined
+     return end - start
+   })
++  const turnUsage = createMemo(() => {
++    const msgs = assistantMessages()
++    if (!msgs.length) return undefined
++    let input = 0
++    let output = 0
++    let cost = 0
++    for (const msg of msgs) {
++      if (typeof msg.tokens?.input === "number") input += msg.tokens.input
++      if (typeof msg.tokens?.output === "number") output += msg.tokens.output
++      if (typeof msg.cost === "number") cost += msg.cost
++    }
++    if (input === 0 && output === 0) return undefined
++    return { input, output, cost }
++  })
++
+   const assistantDerived = createMemo(() => {
+     let visible = 0
+     let tail: "text" | "other" | undefined
+-- 
+2.43.0
+

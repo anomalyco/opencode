@@ -1,0 +1,40 @@
+From 4280c5b8234ff0033e0ece0584bbb1fcf67d2e2d Mon Sep 17 00:00:00 2001
+From: johnnykang101 <johnny.kang101@gmail.com>
+Date: Thu, 26 Mar 2026 16:15:46 -0700
+Subject: [PATCH 035/131] fix(cd): add --publish never to electron-builder
+ package steps
+
+Prevents electron-builder from auto-publishing in CI (it detects CI env
+and tries to publish, failing without GH_TOKEN). The explicit gh release
+upload step handles all artifact publishing.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ .github/workflows/cd.yml | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/.github/workflows/cd.yml b/.github/workflows/cd.yml
+index 3ac99d58a..87f19015d 100644
+--- a/.github/workflows/cd.yml
++++ b/.github/workflows/cd.yml
+@@ -185,7 +185,7 @@ jobs:
+           OPENCODE_CHANNEL: prod
+ 
+       - name: Package
+-        run: cd packages/desktop-electron && bun run package:linux
++        run: cd packages/desktop-electron && bun run package:linux -- --publish never
+         env:
+           OPENCODE_CHANNEL: prod
+ 
+@@ -229,7 +229,7 @@ jobs:
+           OPENCODE_CHANNEL: prod
+ 
+       - name: Package
+-        run: cd packages/desktop-electron && bun run package:win
++        run: cd packages/desktop-electron && bun run package:win -- --publish never
+         env:
+           OPENCODE_CHANNEL: prod
+ 
+-- 
+2.43.0
+

@@ -1,0 +1,68 @@
+From abdd8498096328a8650eeb0e27a0e4299a3b86e9 Mon Sep 17 00:00:00 2001
+From: CoBuilder CEO <ceo@cobuilder.ai>
+Date: Thu, 26 Mar 2026 22:32:35 -0700
+Subject: [PATCH 066/131] fix(ci): change pr-standards workflow ref from dev to
+ main
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+TEAM_MEMBERS lookup and CONTRIBUTING.md links used ref 'dev' which
+does not exist on CobuilderLabs/opencode — causing both check-compliance
+and check-standards jobs to fail with 'No commit found for the ref dev'.
+---
+ .github/workflows/pr-standards.yml | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/.github/workflows/pr-standards.yml b/.github/workflows/pr-standards.yml
+index 9db5f4363..3a18fc040 100644
+--- a/.github/workflows/pr-standards.yml
++++ b/.github/workflows/pr-standards.yml
+@@ -36,7 +36,7 @@ jobs:
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+               path: '.github/TEAM_MEMBERS',
+-              ref: 'dev'
++              ref: 'main'
+             });
+             const members = Buffer.from(file.content, 'base64').toString().split('\n').map(l => l.trim()).filter(Boolean);
+             if (members.includes(login)) {
+@@ -106,7 +106,7 @@ jobs:
+ 
+             Where \`scope\` is the package name (e.g., \`app\`, \`desktop\`, \`opencode\`).
+ 
+-            See [CONTRIBUTING.md](../blob/dev/CONTRIBUTING.md#pr-titles) for details.`);
++            See [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md#pr-titles) for details.`);
+               return;
+             }
+ 
+@@ -149,7 +149,7 @@ jobs:
+             1. Open an issue describing the bug/feature (if one doesn't exist)
+             2. Add \`Fixes #<number>\` or \`Closes #<number>\` to this PR description
+ 
+-            See [CONTRIBUTING.md](../blob/dev/CONTRIBUTING.md#issue-first-policy) for details.`);
++            See [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md#issue-first-policy) for details.`);
+               return;
+             }
+ 
+@@ -183,7 +183,7 @@ jobs:
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+               path: '.github/TEAM_MEMBERS',
+-              ref: 'dev'
++              ref: 'main'
+             });
+             const members = Buffer.from(file.content, 'base64').toString().split('\n').map(l => l.trim()).filter(Boolean);
+             if (members.includes(login)) {
+@@ -297,7 +297,7 @@ jobs:
+               const existing = comments.find(c => c.body.includes(marker));
+ 
+               const body_text = `${marker}
+-            This PR doesn't fully meet our [contributing guidelines](../blob/dev/CONTRIBUTING.md) and [PR template](../blob/dev/.github/pull_request_template.md).
++            This PR doesn't fully meet our [contributing guidelines](../blob/main/CONTRIBUTING.md) and [PR template](../blob/main/.github/pull_request_template.md).
+ 
+             **What needs to be fixed:**
+             ${issues.map(i => `- ${i}`).join('\n')}
+-- 
+2.43.0
+

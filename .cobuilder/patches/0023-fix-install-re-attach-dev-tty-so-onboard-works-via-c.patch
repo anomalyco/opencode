@@ -1,0 +1,43 @@
+From 16cd513d1637e783f9d34d2e6723bf16e4cf5e09 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <johnny.kang101@gmail.com>
+Date: Thu, 26 Mar 2026 15:40:32 -0700
+Subject: [PATCH 023/131] fix(install): re-attach /dev/tty so onboard works via
+ curl | bash
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+When the script is piped (curl | bash), stdin is a pipe not a TTY,
+so @clack/prompts can't read arrow keys — they print as raw escape
+sequences. Redirect stdin from /dev/tty when available so interactive
+onboarding works seamlessly from the one-liner install command.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ install.sh | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/install.sh b/install.sh
+index b9817d3e7..41ca79642 100755
+--- a/install.sh
++++ b/install.sh
+@@ -126,4 +126,15 @@ echo -e "  ${bold}${green}CoBuilder installed successfully!${reset}"
+ echo ""
+ 
+ # ── Onboard ──────────────────────────────────────────────────────────────────
+-"$COBUILDER_BIN" onboard
++# When piped via `curl | bash`, stdin is not a TTY — re-attach to /dev/tty
++# so interactive prompts (arrow keys etc.) work seamlessly.
++if [ -t 0 ]; then
++  "$COBUILDER_BIN" onboard
++elif [ -e /dev/tty ]; then
++  "$COBUILDER_BIN" onboard </dev/tty
++else
++  echo ""
++  echo -e "  ${bold}Run this to complete setup:${reset}"
++  echo -e "  ${bold}${green}cobuilder onboard${reset}"
++  echo ""
++fi
+-- 
+2.43.0
+

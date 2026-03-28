@@ -1,0 +1,115 @@
+From c8983bae7a568f13d393f5044596e860c279d2bf Mon Sep 17 00:00:00 2001
+From: johnnykang101 <johnny.kang101@gmail.com>
+Date: Thu, 26 Mar 2026 16:25:55 -0700
+Subject: [PATCH 040/131] fix(install): use stty to verify /dev/tty is a
+ functional terminal
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+true </dev/tty passes even when the device is non-functional because the
+open() syscall succeeds but reads fail. stty requires an actual terminal
+and correctly fails in headless containers, falling through to the
+manual instructions path.
+
+Also adds test-e2e.sh: install → version → commands → skills → uninstall → reinstall
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ install.sh  |  2 +-
+ test-e2e.sh | 70 +++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 71 insertions(+), 1 deletion(-)
+ create mode 100644 test-e2e.sh
+
+diff --git a/install.sh b/install.sh
+index 74e72aa34..c2c55b540 100755
+--- a/install.sh
++++ b/install.sh
+@@ -132,7 +132,7 @@ echo ""
+ # so interactive prompts (arrow keys etc.) work seamlessly.
+ if [ -t 0 ]; then
+   "$COBUILDER_BIN" onboard
+-elif { true </dev/tty; } 2>/dev/null; then
++elif (stty </dev/tty) 2>/dev/null; then
+   "$COBUILDER_BIN" onboard </dev/tty
+ else
+   echo ""
+diff --git a/test-e2e.sh b/test-e2e.sh
+new file mode 100644
+index 000000000..cb1f7f81a
+--- /dev/null
++++ b/test-e2e.sh
+@@ -0,0 +1,70 @@
++#!/usr/bin/env bash
++# End-to-end test: install → use cases → uninstall → reinstall
++# Usage: bash test-e2e.sh
++# Designed to run in a fresh environment (CI or Docker).
++set -euo pipefail
++
++bold="\033[1m"
++green="\033[32m"
++red="\033[31m"
++reset="\033[0m"
++
++pass() { echo -e "  ${bold}${green}✔${reset}  $*"; }
++fail() { echo -e "  ${bold}${red}✘${reset}  $*"; exit 1; }
++section() { echo -e "\n${bold}▶ $*${reset}"; }
++
++INSTALL_DIR="${COBUILDER_INSTALL_DIR:-$HOME/.local/bin}"
++export PATH="$INSTALL_DIR:$PATH"
++
++# ── 1. Install ────────────────────────────────────────────────────────────────
++section "1 / 7  Install via curl | bash"
++curl -fsSL https://raw.githubusercontent.com/CobuilderLabs/opencode/main/install.sh | bash
++[[ -x "$INSTALL_DIR/cobuilder" ]] || fail "Binary not found at $INSTALL_DIR/cobuilder"
++pass "Binary installed"
++
++# ── 2. Version ───────────────────────────────────────────────────────────────
++section "2 / 7  cobuilder --version shows proper semver"
++VERSION=$(cobuilder --version 2>&1)
++echo "  Version: $VERSION"
++[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "Version '$VERSION' is not semver (expected X.Y.Z)"
++pass "Version is $VERSION"
++
++# ── 3. Help / command surface ─────────────────────────────────────────────────
++section "3 / 7  Core commands present in --help"
++HELP=$(cobuilder --help 2>&1)
++for CMD in onboard skills workflow providers run; do
++  echo "$HELP" | grep -q "$CMD" || fail "Command '$CMD' missing from --help"
++  pass "Command '$CMD' present"
++done
++
++# ── 4. skills list (empty) ───────────────────────────────────────────────────
++section "4 / 7  cobuilder skills list (clean state)"
++cobuilder skills list 2>&1 | grep -qiE "no skills|install" || fail "Expected 'no skills' message"
++pass "skills list reports empty"
++
++# ── 5. skills install gsd ────────────────────────────────────────────────────
++section "5 / 7  cobuilder skills install gsd"
++cobuilder skills install gsd 2>&1 | grep -qi "installed" || fail "skills install gsd did not report success"
++pass "gsd installed"
++
++# ── 6. skills list shows gsd ─────────────────────────────────────────────────
++section "6 / 7  cobuilder skills list shows gsd"
++cobuilder skills list 2>&1 | grep -q "gsd" || fail "gsd not found in skills list"
++pass "gsd visible in skills list"
++
++# ── 7. Uninstall then reinstall ───────────────────────────────────────────────
++section "7 / 7  Uninstall → reinstall"
++rm -f "$INSTALL_DIR/cobuilder"
++[[ ! -x "$INSTALL_DIR/cobuilder" ]] || fail "Binary still present after removal"
++pass "Uninstalled"
++
++curl -fsSL https://raw.githubusercontent.com/CobuilderLabs/opencode/main/install.sh | bash
++[[ -x "$INSTALL_DIR/cobuilder" ]] || fail "Binary missing after reinstall"
++VERSION2=$(cobuilder --version 2>&1)
++[[ "$VERSION2" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "Version after reinstall '$VERSION2' is not semver"
++pass "Reinstalled — version $VERSION2"
++
++# ── Summary ───────────────────────────────────────────────────────────────────
++echo ""
++echo -e "${bold}${green}All tests passed.${reset}"
++echo ""
+-- 
+2.43.0
+

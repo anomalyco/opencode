@@ -165,6 +165,12 @@ export namespace Config {
       result.plugin.push(...(await loadPlugin(dir)))
     }
 
+    // Inject installed workflow plugin paths into directory scan (CoBuilder feature)
+    for (const item of result.workflow?.paths ?? []) {
+      result.command = mergeDeep(result.command ?? {}, await loadCommand(item))
+      result.plugin.push(...(await loadPlugin(item)))
+    }
+
     // Inline config content overrides all non-managed config sources.
     if (process.env.OPENCODE_CONFIG_CONTENT) {
       result = mergeConfigConcatArrays(
@@ -1226,6 +1232,12 @@ export namespace Config {
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
         })
         .optional(),
+      workflow: z
+        .object({
+          paths: z.array(z.string()).optional().describe("Additional directories to scan for commands, hooks, and plugins"),
+        })
+        .optional()
+        .describe("CoBuilder workflow plugin paths"),
     })
     .strict()
     .meta({

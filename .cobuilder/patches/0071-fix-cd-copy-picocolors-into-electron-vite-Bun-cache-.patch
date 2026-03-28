@@ -1,0 +1,38 @@
+From 3e7673fc69e4fde66a3555acb39e15799d786f98 Mon Sep 17 00:00:00 2001
+From: CoBuilder CEO <ceo@cobuilder.ai>
+Date: Thu, 26 Mar 2026 22:51:21 -0700
+Subject: [PATCH 071/131] fix(cd): copy picocolors into electron-vite Bun cache
+ dir on Windows
+
+---
+ .github/workflows/cd.yml | 12 ++++++++----
+ 1 file changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/.github/workflows/cd.yml b/.github/workflows/cd.yml
+index 1c643389d..05cd07101 100644
+--- a/.github/workflows/cd.yml
++++ b/.github/workflows/cd.yml
+@@ -265,12 +265,16 @@ jobs:
+             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+           "
+ 
+-      - name: Build
++      - name: Fix electron-vite missing deps on Windows
+         shell: pwsh
+         run: |
+-          $env:NODE_PATH = "${{ github.workspace }}\node_modules"
+-          cd packages/desktop-electron
+-          bun run build
++          $evite = (Get-ChildItem "${{ github.workspace }}\node_modules\.bun" -Filter "electron-vite*" -Directory | Select-Object -First 1).FullName
++          $target = "$evite\node_modules\electron-vite\node_modules"
++          New-Item -ItemType Directory -Force -Path $target | Out-Null
++          Copy-Item -Recurse -Force "${{ github.workspace }}\node_modules\.bun\picocolors*\node_modules\picocolors" "$target\picocolors"
++
++      - name: Build
++        run: cd packages/desktop-electron && bun run build
+         env:
+           OPENCODE_CHANNEL: prod
+ 
+-- 
+2.43.0
+

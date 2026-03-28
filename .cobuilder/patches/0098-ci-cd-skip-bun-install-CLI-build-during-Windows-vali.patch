@@ -1,0 +1,84 @@
+From 3e3ecc6aa3fc529b485df7aeb85e6f5c61fc4f22 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Fri, 27 Mar 2026 10:12:31 -0700
+Subject: [PATCH 098/131] ci(cd): skip bun install + CLI build during Windows
+ validation
+
+---
+ .github/workflows/cd.yml | 45 ++++++++++++++++++----------------------
+ 1 file changed, 20 insertions(+), 25 deletions(-)
+
+diff --git a/.github/workflows/cd.yml b/.github/workflows/cd.yml
+index 0dda22c0f..209212cf5 100644
+--- a/.github/workflows/cd.yml
++++ b/.github/workflows/cd.yml
+@@ -40,12 +40,12 @@ jobs:
+         with:
+           fetch-depth: 0
+ 
+-      - uses: oven-sh/setup-bun@v2
+-        with:
+-          bun-version: ${{ env.BUN_VERSION }}
+-
+-      - name: Install dependencies
+-        run: bun install --frozen-lockfile
++      # TODO: restore bun setup + install once Windows Desktop is confirmed stable
++      # - uses: oven-sh/setup-bun@v2
++      #   with:
++      #     bun-version: ${{ env.BUN_VERSION }}
++      # - name: Install dependencies
++      #   run: bun install --frozen-lockfile
+ 
+       - name: Get latest CoBuilder tag
+         id: latest_tag
+@@ -129,17 +129,11 @@ jobs:
+           cat /tmp/release-notes.md
+           echo "Next release: ${NEXT_TAG}"
+ 
+-      - name: Update package version
+-        run: |
+-          cd packages/opencode
+-          node -e "
+-            const fs = require('fs');
+-            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+-            pkg.version = '${{ steps.next_version.outputs.semver }}';
+-            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+-          "
++      # TODO: restore once Windows Desktop confirmed stable
++      # - name: Update package version
++      #   run: |
++      #     cd packages/opencode && node -e "..."
+ 
+-      # Create release BEFORE build so build.ts can upload assets to it via gh release upload
+       - name: Create GitHub release
+         env:
+           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+@@ -149,15 +143,16 @@ jobs:
+             --notes-file /tmp/release-notes.md \
+             --latest
+ 
+-      - name: Build and upload binaries
+-        env:
+-          OPENCODE_RELEASE: "1"
+-          COBUILDER_RELEASE_TAG: ${{ steps.next_version.outputs.tag }}
+-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+-          GH_REPO: CobuilderLabs/opencode
+-        run: |
+-          cd packages/opencode
+-          bun run build
++      # TODO: restore once Windows Desktop confirmed stable
++      # - name: Build and upload binaries
++      #   env:
++      #     OPENCODE_RELEASE: "1"
++      #     COBUILDER_RELEASE_TAG: ${{ steps.next_version.outputs.tag }}
++      #     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
++      #     GH_REPO: CobuilderLabs/opencode
++      #   run: |
++      #     cd packages/opencode
++      #     bun run build
+ 
+   # desktop-linux: temporarily disabled — focus on Windows first
+   # TODO: re-enable once Windows build is confirmed stable
+-- 
+2.43.0
+

@@ -1,0 +1,183 @@
+From ecafcbb31f4545220ce239da4d2ad5d6783a5fdb Mon Sep 17 00:00:00 2001
+From: johnnykang101 <johnny.kang101@gmail.com>
+Date: Thu, 26 Mar 2026 15:51:20 -0700
+Subject: [PATCH 027/131] feat(skills): add cobuilder skills
+ install/list/remove command
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Mirrors how Claude Code installs skills — clones the repo and drops
+command markdown files into ~/.config/opencode/commands/<skill>/
+so they are available as /<skill>:<command> slash commands.
+
+Usage: cobuilder skills install gsd
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ packages/opencode/src/cli/cmd/skills.ts | 132 ++++++++++++++++++++++++
+ packages/opencode/src/index.ts          |   2 +
+ 2 files changed, 134 insertions(+)
+ create mode 100644 packages/opencode/src/cli/cmd/skills.ts
+
+diff --git a/packages/opencode/src/cli/cmd/skills.ts b/packages/opencode/src/cli/cmd/skills.ts
+new file mode 100644
+index 000000000..833f94d7e
+--- /dev/null
++++ b/packages/opencode/src/cli/cmd/skills.ts
+@@ -0,0 +1,132 @@
++import { cmd } from "./cmd"
++import * as prompts from "@clack/prompts"
++import { Global } from "../../global"
++import path from "path"
++import fs from "fs/promises"
++
++const REGISTRY: Record<string, string> = {
++  gsd: "https://github.com/CobuilderLabs/gsd-workflow",
++}
++
++const skillsInstallCmd = cmd({
++  command: "install <name>",
++  describe: "install a skill by alias or GitHub URL",
++  builder: (yargs) =>
++    yargs.positional("name", {
++      type: "string",
++      describe: 'skill alias (e.g. "gsd") or full GitHub URL',
++      demandOption: true,
++    }),
++  async handler(args) {
++    const input = args.name as string
++    const url =
++      input in REGISTRY
++        ? REGISTRY[input]!
++        : input.startsWith("https://") || input.startsWith("git@")
++          ? input
++          : null
++
++    if (!url) {
++      prompts.log.error(
++        `Unknown skill "${input}". Available aliases: ${Object.keys(REGISTRY).join(", ")}`,
++      )
++      process.exit(1)
++    }
++
++    const skillName =
++      input in REGISTRY ? input : url.split("/").pop()?.replace(/\.git$/, "") ?? input
++    const tmpDir = path.join(Global.Path.config, ".skill-install-tmp")
++    const destDir = path.join(Global.Path.config, "commands", skillName)
++
++    const spin = prompts.spinner()
++    spin.start(`Installing skill: ${skillName}`)
++
++    try {
++      await fs.rm(tmpDir, { recursive: true, force: true })
++      const proc = Bun.spawnSync(["git", "clone", "--depth=1", url, tmpDir], { stderr: "pipe" })
++      if (proc.exitCode !== 0) {
++        throw new Error(`git clone failed: ${new TextDecoder().decode(proc.stderr)}`)
++      }
++
++      const srcCommands = path.join(tmpDir, "commands")
++      await fs.mkdir(destDir, { recursive: true })
++      const files = await fs.readdir(srcCommands).catch(() => [] as string[])
++      for (const file of files) {
++        if (file.endsWith(".md")) {
++          await fs.copyFile(path.join(srcCommands, file), path.join(destDir, file))
++        }
++      }
++
++      await fs.rm(tmpDir, { recursive: true, force: true })
++      spin.stop(`Skill "${skillName}" installed`)
++      prompts.log.info(`Run /${skillName}:<command> in CoBuilder to use it.`)
++    } catch (e) {
++      await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {})
++      spin.stop("Installation failed")
++      prompts.log.error(e instanceof Error ? e.message : String(e))
++      process.exit(1)
++    }
++  },
++})
++
++const skillsListCmd = cmd({
++  command: "list",
++  describe: "list installed skills",
++  handler: async () => {
++    const commandsDir = path.join(Global.Path.config, "commands")
++    let entries: string[] = []
++    try {
++      entries = await fs.readdir(commandsDir)
++    } catch {
++      prompts.log.info("No skills installed.")
++      return
++    }
++    const skills: string[] = []
++    for (const entry of entries) {
++      const stat = await fs.stat(path.join(commandsDir, entry)).catch(() => null)
++      if (stat?.isDirectory()) skills.push(entry)
++    }
++    if (skills.length === 0) {
++      prompts.log.info("No skills installed. Run: cobuilder skills install <name>")
++    } else {
++      for (const s of skills) prompts.log.info(`  ${s}`)
++    }
++  },
++})
++
++const skillsRemoveCmd = cmd({
++  command: "remove <name>",
++  describe: "remove an installed skill",
++  builder: (yargs) =>
++    yargs.positional("name", {
++      type: "string",
++      describe: "skill name to remove",
++      demandOption: true,
++    }),
++  async handler(args) {
++    const name = args.name as string
++    const destDir = path.join(Global.Path.config, "commands", name)
++    const spin = prompts.spinner()
++    spin.start(`Removing skill: ${name}`)
++    try {
++      await fs.rm(destDir, { recursive: true, force: true })
++      spin.stop(`Skill "${name}" removed`)
++    } catch (e) {
++      spin.stop("Removal failed")
++      prompts.log.error(e instanceof Error ? e.message : String(e))
++      process.exit(1)
++    }
++  },
++})
++
++export const SkillsCommand = cmd({
++  command: "skills <action>",
++  describe: "manage skills (install, list, remove)",
++  builder: (yargs) =>
++    yargs
++      .command(skillsInstallCmd)
++      .command(skillsListCmd)
++      .command(skillsRemoveCmd)
++      .demandCommand(1, "Specify a subcommand: install, list, or remove"),
++  handler: () => {},
++})
+diff --git a/packages/opencode/src/index.ts b/packages/opencode/src/index.ts
+index 96119160b..d00b401d0 100644
+--- a/packages/opencode/src/index.ts
++++ b/packages/opencode/src/index.ts
+@@ -32,6 +32,7 @@ import { SessionCommand } from "./cli/cmd/session"
+ import { DbCommand } from "./cli/cmd/db"
+ import { OnboardCommand } from "./cli/cmd/onboard"
+ import { WorkflowCommand } from "./cli/cmd/workflow"
++import { SkillsCommand } from "./cli/cmd/skills"
+ import path from "path"
+ import { Global } from "./global"
+ import { JsonMigration } from "./storage/json-migration"
+@@ -154,6 +155,7 @@ let cli = yargs(hideBin(process.argv))
+   .command(DbCommand)
+   .command(OnboardCommand)
+   .command(WorkflowCommand)
++  .command(SkillsCommand)
+ 
+ if (Installation.isLocal()) {
+   cli = cli.command(WorkspaceServeCommand)
+-- 
+2.43.0
+

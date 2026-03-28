@@ -1,0 +1,65 @@
+From 41f2bec9e09bb784ecda5047cda973532b79ceea Mon Sep 17 00:00:00 2001
+From: CoBuilder CEO <ceo@cobuilder.ai>
+Date: Thu, 26 Mar 2026 22:56:42 -0700
+Subject: [PATCH 072/131] feat(ci): auto-approve PRs from repo collaborators
+ via GitHub App bot
+
+---
+ .github/workflows/auto-approve.yml | 45 ++++++++++++++++++++++++++++++
+ 1 file changed, 45 insertions(+)
+ create mode 100644 .github/workflows/auto-approve.yml
+
+diff --git a/.github/workflows/auto-approve.yml b/.github/workflows/auto-approve.yml
+new file mode 100644
+index 000000000..bcb300b75
+--- /dev/null
++++ b/.github/workflows/auto-approve.yml
+@@ -0,0 +1,45 @@
++name: auto-approve
++
++on:
++  pull_request_target:
++    types: [opened, synchronize, reopened]
++
++jobs:
++  auto-approve:
++    runs-on: ubuntu-latest
++    permissions:
++      pull-requests: write
++    steps:
++      - name: Get bot token
++        id: bot-token
++        uses: actions/create-github-app-token@v1
++        with:
++          app-id: ${{ secrets.AUTOBOT_APP_ID }}
++          private-key: ${{ secrets.AUTOBOT_PRIVATE_KEY }}
++
++      - name: Approve if author has write access
++        uses: actions/github-script@v7
++        with:
++          github-token: ${{ steps.bot-token.outputs.token }}
++          script: |
++            const login = context.payload.pull_request.user.login;
++            const pr = context.payload.pull_request.number;
++
++            const { data: perm } = await github.rest.repos.getCollaboratorPermissionLevel({
++              owner: context.repo.owner,
++              repo: context.repo.repo,
++              username: login.replace('[bot]', '')
++            }).catch(() => ({ data: { permission: 'none' } }));
++
++            if (!['write', 'admin'].includes(perm.permission)) {
++              console.log(`Skipping: ${login} does not have write access`);
++              return;
++            }
++
++            await github.rest.pulls.createReview({
++              owner: context.repo.owner,
++              repo: context.repo.repo,
++              pull_number: pr,
++              event: 'APPROVE'
++            });
++            console.log(`Approved PR #${pr} for ${login}`);
+-- 
+2.43.0
+

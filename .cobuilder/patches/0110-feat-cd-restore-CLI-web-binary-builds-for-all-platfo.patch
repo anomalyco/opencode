@@ -1,0 +1,79 @@
+From a0cda713591d407d0745d6949840e3f83284a4a7 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Fri, 27 Mar 2026 12:36:15 -0700
+Subject: [PATCH 110/131] feat(cd): restore CLI + web binary builds for all
+ platforms (#41)
+
+* feat(cd): add macOS desktop build job (unsigned)
+
+Adds desktop-mac job to CD workflow using macos-latest runner.
+Builds without code signing (CSC_IDENTITY_AUTO_DISCOVERY=false) and
+disables notarize/dmg signing until Apple certs are available.
+Uploads .dmg and .zip artifacts to the release.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* fix(cd): disable desktop-mac job until Apple certs are available
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* feat(ci): auto-enable squash merge on every new PR
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* feat(cd): restore CLI + web binary builds for all platforms
+
+Adds bun setup/install to release job and restores the
+packages/opencode build step that produces cross-platform CLI
+and web binaries (darwin, linux, windows) uploaded to the release.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+---------
+
+Co-authored-by: CoBuilder CEO <ceo@cobuilder.ai>
+Co-authored-by: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ .github/workflows/cd.yml | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
+
+diff --git a/.github/workflows/cd.yml b/.github/workflows/cd.yml
+index 8824ca524..5143f4902 100644
+--- a/.github/workflows/cd.yml
++++ b/.github/workflows/cd.yml
+@@ -40,6 +40,13 @@ jobs:
+         with:
+           fetch-depth: 0
+ 
++      - uses: oven-sh/setup-bun@v2
++        with:
++          bun-version: ${{ env.BUN_VERSION }}
++
++      - name: Install dependencies
++        run: bun install --frozen-lockfile
++
+       - name: Get latest CoBuilder tag
+         id: latest_tag
+         run: |
+@@ -131,6 +138,18 @@ jobs:
+             --notes-file /tmp/release-notes.md \
+             --latest
+ 
++      - name: Build and upload CLI + web binaries
++        env:
++          OPENCODE_RELEASE: "1"
++          OPENCODE_VERSION: ${{ steps.next_version.outputs.semver }}
++          OPENCODE_CHANNEL: latest
++          COBUILDER_RELEASE_TAG: ${{ steps.next_version.outputs.tag }}
++          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
++          GH_REPO: CobuilderLabs/opencode
++        run: |
++          cd packages/opencode
++          bun run build
++
+   desktop-linux:
+     name: Desktop (Linux)
+     needs: release
+-- 
+2.43.0
+

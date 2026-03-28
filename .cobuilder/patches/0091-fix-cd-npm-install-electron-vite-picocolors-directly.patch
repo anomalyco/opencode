@@ -1,0 +1,62 @@
+From 2733967d8a071dfd66f6b64a895759b0c7eb691a Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Fri, 27 Mar 2026 09:34:39 -0700
+Subject: [PATCH 091/131] =?UTF-8?q?fix(cd):=20npm-install=20electron-vite+?=
+ =?UTF-8?q?picocolors=20directly=20on=20Windows=20=E2=80=94=20no=20catalog?=
+ =?UTF-8?q?=20juggling=20(#35)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Bun's symlink linker breaks on Windows (symlinks need elevated permissions),
+causing electron-vite to fail finding picocolors at runtime. Instead of
+manipulating package.json to resolve catalog: entries, just npm-install
+electron-vite and picocolors directly with --no-save. bun install still
+handles all workspace: deps; npx then uses the flat npm copy of electron-vite.
+
+Co-authored-by: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ .github/workflows/cd.yml | 27 ++++++---------------------
+ 1 file changed, 6 insertions(+), 21 deletions(-)
+
+diff --git a/.github/workflows/cd.yml b/.github/workflows/cd.yml
+index f69a3f1f3..2b07718fd 100644
+--- a/.github/workflows/cd.yml
++++ b/.github/workflows/cd.yml
+@@ -292,27 +292,12 @@ jobs:
+             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+           "
+ 
+-      # Bun runs electron-vite from an isolated .bun cache dir that lacks
+-      # peer deps (picocolors) on Windows. Use npm+npx instead.
+-      # catalog: entries must be resolved first since npm doesn't understand them.
+-      - name: Resolve catalog deps and install with npm (Windows)
+-        shell: pwsh
+-        run: |
+-          $catalog = (Get-Content package.json | ConvertFrom-Json).catalog
+-          $pkg = Get-Content packages/desktop-electron/package.json | ConvertFrom-Json
+-          foreach ($section in @("dependencies","devDependencies")) {
+-            $deps = $pkg.$section
+-            if (-not $deps) { continue }
+-            $deps.PSObject.Properties | ForEach-Object {
+-              if ($_.Value -eq "catalog:") {
+-                $resolved = $catalog.($_.Name)
+-                if ($resolved) { $deps.($_.Name) = $resolved }
+-              }
+-            }
+-          }
+-          $pkg | ConvertTo-Json -Depth 10 | Set-Content packages/desktop-electron/package.json
+-          cd packages/desktop-electron
+-          npm install --legacy-peer-deps
++      # Bun resolves electron-vite through its symlink linker, which breaks on
++      # Windows (symlinks require elevated permissions). Fix: npm-install just
++      # electron-vite + picocolors so npx uses a flat, working copy. No need to
++      # touch package.json or resolve catalog: entries.
++      - name: Install electron-vite with npm (Windows symlink fix)
++        run: cd packages/desktop-electron && npm install electron-vite picocolors --no-save --legacy-peer-deps
+ 
+       - name: Build
+         run: cd packages/desktop-electron && npx electron-vite build
+-- 
+2.43.0
+

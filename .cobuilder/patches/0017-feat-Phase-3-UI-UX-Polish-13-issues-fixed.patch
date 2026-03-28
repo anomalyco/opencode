@@ -1,0 +1,2223 @@
+From bb1a5243b75e28321fa1e0b93e2578cb0b6571f7 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Thu, 26 Mar 2026 15:13:51 -0700
+Subject: [PATCH 017/131] =?UTF-8?q?feat:=20Phase=203=20=E2=80=94=20UI/UX?=
+ =?UTF-8?q?=20Polish=20(13=20issues=20fixed)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+* fix(03-01): fix TUI home tips logic, debug log, and once-guard
+
+- UX-02: invert tips logic — first-time users now see tips
+- UX-10: remove debug console.log(JSON.stringify(route.data)) createEffect
+- UX-13: remove module-level once/TODO hack, onMount runs once per mount naturally
+
+* fix(03-01): fix Electron loading bar color, add product name, persistent footer hint
+
+- UX-07: change progress bar from bg-icon-warning-base to bg-accent-base
+- UX-12: add CoBuilder product name text above progress bar in loading screen
+- UX-11: replace timer-cycling /connect hint with persistent createEffect reactive pattern
+
+* docs(03-01): complete UI/UX quick wins plan — SUMMARY and STATE updated
+
+- 6 issues resolved: UX-02, UX-07, UX-10, UX-11, UX-12, UX-13
+- Phase 3 Plan 1 complete
+
+* feat(03-02): rebrand TUI — replace OpenCode with CoBuilder in all user-visible strings
+
+- setTerminalTitle: "OpenCode" -> "CoBuilder" (home + session fallback)
+- Update success message and issue URL to CobuilderLabs org
+- tips.tsx: 7 strings updated (auto-handles, auto-formats, LSP, plugin, serve, docker, Zen)
+- dialog-provider.tsx: Zen and Go descriptions rebranded
+- permission.tsx: 3 restarted/do-differently strings rebranded
+- sidebar.tsx: free models getting-started text rebranded
+
+* feat(03-02): rebrand Web/Electron — __COBUILDER__ global, i18n, cross-platform menu
+
+- Rename window.__OPENCODE__ -> __COBUILDER__ in app.tsx, deep-links.ts, windows.ts,
+  renderer/index.tsx, renderer/updater.ts, renderer/env.d.ts, helpers.test.ts
+- en.ts: 18 strings rebranded (freeModels, apiKey, zen, server, update, error, settings)
+- es.ts: 18 Spanish strings rebranded (same keys)
+- menu.ts: remove darwin-only early return; add cross-platform template with isMac
+  conditional for macOS app menu, Ctrl accelerators on Win/Linux, Quit in File menu,
+  Check for Updates in Help menu on Win/Linux; rename OpenCode -> CoBuilder labels;
+  update issue URLs to CobuilderLabs org
+
+* docs(03-02): complete rebrand plan — SUMMARY.md + STATE.md updated
+
+- 03-02-SUMMARY.md: full rebrand across TUI, Web, Electron documented
+- STATE.md: advanced to Plan 2 complete, decisions logged
+
+* feat(03-03): reactive onboarding check and no-provider session guard
+
+- Replace setTimeout 800ms race in app.tsx with createEffect reactive check (UX-04)
+- Add no-provider banner in session.tsx with connect action (UX-05)
+- Import DialogSelectProvider in session.tsx for banner action
+
+* feat(03-03): add composer loading spinner and tab drag handles
+
+- Add animate-spin SVG spinner to prompt.ready() fallback in composer (UX-06)
+- Add group class + 6-dot grip icon to SortableTab with hover opacity (UX-09)
+
+* docs(03-03): complete UX polish plan 03 — reactive onboarding, no-provider guard, spinner, drag handles
+
+* docs(04-ui-ux-polish-ii): create phase plan
+
+* fix(desktop): add env.d.ts and rename __OPENCODE__ to __COBUILDER__
+
+Adds missing Window interface declaration for the Tauri desktop package
+and renames the global from __OPENCODE__ to __COBUILDER__ to match the
+Electron renderer and the rest of the codebase rebrand.
+
+Fixes typecheck CI failure.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+---------
+
+Co-authored-by: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ .planning/ROADMAP.md                          |  27 ++-
+ .planning/STATE.md                            |  19 +-
+ .../phases/03-ui-ux-polish/03-01-SUMMARY.md   |  71 ++++++
+ .../phases/03-ui-ux-polish/03-02-SUMMARY.md   |  85 +++++++
+ .../phases/03-ui-ux-polish/03-03-SUMMARY.md   | 111 +++++++++
+ .../phases/04-ui-ux-polish-ii/04-01-PLAN.md   | 183 +++++++++++++++
+ .../phases/04-ui-ux-polish-ii/04-02-PLAN.md   | 211 +++++++++++++++++
+ .../phases/04-ui-ux-polish-ii/04-03-PLAN.md   | 221 ++++++++++++++++++
+ packages/app/src/app.tsx                      |  14 +-
+ .../session/session-sortable-tab.tsx          |  15 +-
+ packages/app/src/i18n/en.ts                   |  36 +--
+ packages/app/src/i18n/es.ts                   |  36 +--
+ packages/app/src/pages/layout/deep-links.ts   |   6 +-
+ packages/app/src/pages/layout/helpers.test.ts |   4 +-
+ packages/app/src/pages/session.tsx            |  18 ++
+ .../composer/session-composer-region.tsx      |   8 +-
+ packages/desktop-electron/src/main/menu.ts    | 147 +++++++-----
+ packages/desktop-electron/src/main/windows.ts |   2 +-
+ .../desktop-electron/src/renderer/env.d.ts    |   2 +-
+ .../desktop-electron/src/renderer/index.tsx   |  16 +-
+ .../desktop-electron/src/renderer/loading.tsx |   3 +-
+ .../desktop-electron/src/renderer/updater.ts  |   2 +-
+ packages/desktop/src/env.d.ts                 |  11 +
+ packages/desktop/src/index.tsx                |  12 +-
+ packages/desktop/src/updater.ts               |   2 +-
+ packages/opencode/src/cli/cmd/tui/app.tsx     |  12 +-
+ .../cli/cmd/tui/component/dialog-provider.tsx |   6 +-
+ .../src/cli/cmd/tui/component/tips.tsx        |  14 +-
+ .../opencode/src/cli/cmd/tui/routes/home.tsx  |  10 +-
+ .../src/cli/cmd/tui/routes/session/footer.tsx |  28 +--
+ .../cli/cmd/tui/routes/session/permission.tsx |   6 +-
+ .../cli/cmd/tui/routes/session/sidebar.tsx    |   2 +-
+ 32 files changed, 1160 insertions(+), 180 deletions(-)
+ create mode 100644 .planning/phases/03-ui-ux-polish/03-01-SUMMARY.md
+ create mode 100644 .planning/phases/03-ui-ux-polish/03-02-SUMMARY.md
+ create mode 100644 .planning/phases/03-ui-ux-polish/03-03-SUMMARY.md
+ create mode 100644 .planning/phases/04-ui-ux-polish-ii/04-01-PLAN.md
+ create mode 100644 .planning/phases/04-ui-ux-polish-ii/04-02-PLAN.md
+ create mode 100644 .planning/phases/04-ui-ux-polish-ii/04-03-PLAN.md
+ create mode 100644 packages/desktop/src/env.d.ts
+
+diff --git a/.planning/ROADMAP.md b/.planning/ROADMAP.md
+index a1d2d037b..de946c711 100644
+--- a/.planning/ROADMAP.md
++++ b/.planning/ROADMAP.md
+@@ -7,7 +7,8 @@
+ 
+ - [ ] **Phase 1: Modular Security System** — Configurable security modules via opencode.json
+ - [ ] **Phase 2: Workflow Plugin System** — Installable methodology plugins (GSD, Ralph, GStack)
+-- [ ] **Phase 3: UI/UX Polish** — Fix 13 identified UI/UX issues across TUI, Web app, and Electron shell
++- [x] **Phase 3: UI/UX Polish** — Fix 13 identified UI/UX issues across TUI, Web app, and Electron shell (completed 2026-03-26)
++- [ ] **Phase 4: UI/UX Polish II** — First-run guidance, connection error UX, update flow, onboarding progress
+ 
+ ---
+ 
+@@ -49,7 +50,7 @@
+ 
+ **Requirements:** UX-01, UX-02, UX-03, UX-04, UX-05, UX-06, UX-07, UX-08, UX-09, UX-10, UX-11, UX-12, UX-13
+ 
+-**Plans:** 3 plans
++**Plans:** 3/3 plans complete
+ 
+ Plans:
+ - [ ] 03-01-PLAN.md — Safe isolated fixes: tips logic, debug log, footer hint, Electron loading polish
+@@ -73,4 +74,26 @@ Plans:
+ 
+ ---
+ 
++## Phase 4: UI/UX Polish II
++
++**Goal:** Fix the next tier of UI/UX issues — add first-run guidance to TUI and Web home screens, make connection errors actionable, improve the TUI update flow to avoid abrupt exit, and add step progress to the onboarding wizard.
++
++**Requirements:** UX2-01, UX2-02, UX2-03, UX2-04
++
++**Plans:** 3 plans
++
++Plans:
++- [ ] 04-01-PLAN.md — Onboarding step progress + ConnectionError elapsed timer and guidance
++- [ ] 04-02-PLAN.md — First-run home screens: TUI hint block + Web Getting Started panel
++- [ ] 04-03-PLAN.md — TUI update flow: background download + persistent badge
++
++**Success Criteria:**
++1. TUI home screen shows contextual getting-started hints beneath the prompt for first-time users
++2. Web home screen shows a "Getting started" panel for users with no sessions
++3. ConnectionError screen shows elapsed retry time and actionable instructions (e.g. "Run `cobuilder serve`")
++4. TUI update flow downloads in background and shows a "Restart to update" badge instead of exiting
++5. `cobuilder onboard` shows step progress (e.g. "Step 2 of 4")
++
++---
++
+ *Roadmap created: 2026-03-26*
+diff --git a/.planning/STATE.md b/.planning/STATE.md
+index d874cd28b..38a1a90c9 100644
+--- a/.planning/STATE.md
++++ b/.planning/STATE.md
+@@ -1,22 +1,23 @@
+ # CoBuilder — Project State
+ 
+ **Last updated:** 2026-03-26
+-**Current phase:** Phase 2 — Workflow Plugin System
+-**Stopped at:** Phase 1 merged to main — Phase 2 PR #11 open
++**Current phase:** Phase 3 — UI/UX Polish
++**Stopped at:** Phase 3 Plan 3 complete — 03-03-SUMMARY.md written, branch feat/phase3-ui-ux-polish
+ 
+ ## Project Reference
+ 
+ See: `.planning/PROJECT.md` (updated 2026-03-26)
+ 
+ **Core value:** A coding agent that teams can actually trust in production — secure by default, provider-flexible, and extensible with team workflows.
+-**Current focus:** Phase 1 — Modular Security System
++**Current focus:** Phase 3 — UI/UX Polish
+ 
+ ## Phase Status
+ 
+ | Phase | Name | Status |
+ |-------|------|--------|
+-| 1 | Modular Security System | ✅ Complete — merged to main |
+-| 2 | Workflow Plugin System | 🔄 In progress — PR #11 open |
++| 1 | Modular Security System | ✅ Complete — PR #10 open |
++| 2 | Workflow Plugin System | ✅ Complete |
++| 3 | UI/UX Polish | 🔄 In progress — Plan 3 complete |
+ 
+ ## What's Shipped (Phase 0 — already in main)
+ 
+@@ -48,3 +49,11 @@ See: `.planning/PROJECT.md` (updated 2026-03-26)
+ | 2026-03-26 | GSD ships as separate plugin, not bundled | Keeps core lean; users opt in |
+ | 2026-03-26 | !== false guard pattern for all security modules | Absent key = enabled (SEC-07 default-on) |
+ | 2026-03-26 | security Zod schema inserted before .strict() | Required for TypeScript to accept the key |
++| 2026-03-26 | onMount once-guard removed (UX-13) | onMount runs once per mount — module-level flag was redundant |
++| 2026-03-26 | footer /connect hint made reactive (UX-11) | createEffect replaces timer cycling — deterministic visibility |
++| 2026-03-26 | __OPENCODE__ renamed to __COBUILDER__ across all 8 referencing files | Consistent global rename; plan only specified 2 files but grep found 8 |
++| 2026-03-26 | Electron menu cross-platform via isMac conditional (UX-03) | darwin: app submenu + hide roles; Win/Linux: Quit in File, Check for Updates in Help |
++| 2026-03-26 | createEffect one-shot gate for onboarding check (UX-04) | checked flag prevents re-firing; replaces 800ms setTimeout race |
++| 2026-03-26 | No-provider banner above SessionComposerRegion (UX-05) | banner placed above, not instead of, composer so structure is preserved |
++| 2026-03-26 | Inline SVG spinner for composer loading (UX-06) | avoids unknown UI component dependency; animate-spin Tailwind class |
++| 2026-03-26 | group+group-hover drag handle on SortableTab (UX-09) | opacity-0/group-hover:opacity-40 for unobtrusive progressive disclosure |
+diff --git a/.planning/phases/03-ui-ux-polish/03-01-SUMMARY.md b/.planning/phases/03-ui-ux-polish/03-01-SUMMARY.md
+new file mode 100644
+index 000000000..5a7ce872f
+--- /dev/null
++++ b/.planning/phases/03-ui-ux-polish/03-01-SUMMARY.md
+@@ -0,0 +1,71 @@
++---
++phase: 03-ui-ux-polish
++plan: 01
++subsystem: tui, electron
++tags: [ux, polish, tips, loading, footer, debug-cleanup]
++dependency_graph:
++  requires: []
++  provides: [ux-tips-logic, ux-loading-screen, ux-footer-hint]
++  affects: [tui-home, tui-footer, electron-loading]
++tech_stack:
++  added: []
++  patterns: [solidjs-createEffect-reactive, onMount-scoped]
++key_files:
++  created: []
++  modified:
++    - packages/opencode/src/cli/cmd/tui/routes/home.tsx
++    - packages/opencode/src/cli/cmd/tui/app.tsx
++    - packages/opencode/src/cli/cmd/tui/routes/session/footer.tsx
++    - packages/desktop-electron/src/renderer/loading.tsx
++decisions:
++  - "onMount once-guard replaced by removing module-level flag; onMount runs once per component mount so guard was redundant"
++  - "footer /connect hint made always-visible-when-disconnected via createEffect instead of timer cycling"
++metrics:
++  duration: ~10m
++  completed: 2026-03-26
++  tasks_completed: 2
++  files_modified: 4
++---
++
++# Phase 3 Plan 1: UI/UX Quick Wins Summary
++
++**One-liner:** Fixed 6 isolated UI/UX issues — inverted tips logic for first-time users, removed debug log, replaced module-level once-guard with proper SolidJS pattern, made footer /connect hint persistent, changed Electron loading bar to accent color, added CoBuilder product name.
++
++## Tasks Completed
++
++| Task | Name | Commit | Files |
++|------|------|--------|-------|
++| 1 | Fix TUI home tips, debug log, and TODO hack | b194c2d | home.tsx, app.tsx |
++| 2 | Fix Electron loading bar color, product name, footer hint | 3ce9b7b | loading.tsx, footer.tsx |
++
++## Requirements Resolved
++
++| ID | Description | Verification |
++|----|-------------|--------------|
++| UX-02 | Tips shown to first-time users | `grep "isFirstTimeUser.*return true" home.tsx` matches |
++| UX-07 | Loading bar uses accent color | `grep "bg-accent-base" loading.tsx` matches |
++| UX-10 | Debug console.log removed | `grep "console.log.*JSON.stringify.*route" app.tsx` no match |
++| UX-11 | Footer /connect hint persistent, no timer | `grep "setTimeout" footer.tsx` no match |
++| UX-12 | CoBuilder product name on loading screen | `grep "CoBuilder" loading.tsx` matches |
++| UX-13 | No TODO hack / module-level once guard | `grep "let once = false" home.tsx` no match |
++
++## Decisions Made
++
++1. **onMount once-guard removal:** The `let once = false` module-level flag was intended to prevent `prompt.set()` from firing on re-renders. Since `onMount` runs exactly once per component mount in SolidJS, the guard was fully redundant. Removed the flag and TODO comment entirely.
++
++2. **footer reactive pattern:** The timer-cycling approach (show for 5s, hide for 10s) was replaced with `createEffect(() => setStore("welcome", !connected()))`. This makes the hint deterministic and permanently visible when disconnected — no timing-dependent behavior.
++
++## Deviations from Plan
++
++None — plan executed exactly as written.
++
++## Known Stubs
++
++None.
++
++## Self-Check: PASSED
++
++- `b194c2d` exists in git log
++- `3ce9b7b` exists in git log
++- All 4 modified files present on disk
++- All 6 grep acceptance criteria verified
+diff --git a/.planning/phases/03-ui-ux-polish/03-02-SUMMARY.md b/.planning/phases/03-ui-ux-polish/03-02-SUMMARY.md
+new file mode 100644
+index 000000000..eacb8b7b2
+--- /dev/null
++++ b/.planning/phases/03-ui-ux-polish/03-02-SUMMARY.md
+@@ -0,0 +1,85 @@
++---
++phase: 03-ui-ux-polish
++plan: "02"
++subsystem: branding
++tags: [rebrand, tui, web, electron, i18n, cross-platform]
++dependency_graph:
++  requires: []
++  provides: [cobuilder-brand-complete, cross-platform-electron-menu]
++  affects: [packages/opencode/src/cli/cmd/tui, packages/app/src, packages/desktop-electron/src]
++tech_stack:
++  added: []
++  patterns: [isMac conditional menu template, __COBUILDER__ window global]
++key_files:
++  created: []
++  modified:
++    - packages/opencode/src/cli/cmd/tui/app.tsx
++    - packages/opencode/src/cli/cmd/tui/component/tips.tsx
++    - packages/opencode/src/cli/cmd/tui/component/dialog-provider.tsx
++    - packages/opencode/src/cli/cmd/tui/routes/session/permission.tsx
++    - packages/opencode/src/cli/cmd/tui/routes/session/sidebar.tsx
++    - packages/app/src/app.tsx
++    - packages/app/src/pages/layout/deep-links.ts
++    - packages/app/src/pages/layout/helpers.test.ts
++    - packages/app/src/i18n/en.ts
++    - packages/app/src/i18n/es.ts
++    - packages/desktop-electron/src/main/menu.ts
++    - packages/desktop-electron/src/main/windows.ts
++    - packages/desktop-electron/src/renderer/env.d.ts
++    - packages/desktop-electron/src/renderer/index.tsx
++    - packages/desktop-electron/src/renderer/updater.ts
++decisions:
++  - "Replace __OPENCODE__ window global with __COBUILDER__ across all 8 files that reference it (app.tsx, deep-links.ts, helpers.test.ts, windows.ts, env.d.ts, index.tsx, updater.ts)"
++  - "Cross-platform menu uses isMac conditional: darwin gets app submenu + hide/unhide roles; Win/Linux gets Quit in File and Check for Updates in Help"
++  - "Issue URLs updated to CobuilderLabs org in both TUI app.tsx error reporter and Electron menu"
++metrics:
++  duration: "~25 minutes"
++  completed: "2026-03-26"
++  tasks_completed: 2
++  files_modified: 15
++---
++
++# Phase 3 Plan 02: CoBuilder Full Rebrand + Cross-Platform Menu Summary
++
++Complete rebrand of all three surfaces (TUI, Web, Electron) from OpenCode to CoBuilder, plus cross-platform Electron menu support for Windows and Linux.
++
++## What Was Built
++
++**TUI rebrand (5 files):** All user-visible "OpenCode" strings replaced with "CoBuilder" across the terminal UI — terminal title, update toast, issue reporter URL, tips (7 strings), dialog-provider Zen/Go descriptions, permission dialogs, and sidebar getting-started text.
++
++**Web app rebrand (5 files):** `window.__OPENCODE__` renamed to `window.__COBUILDER__` in the global type declaration and all usages. English and Spanish i18n files fully rebranded (18 strings each) covering free models title, API key descriptions, Zen provider copy, server dialog, update toast, error report prefix, MCP error, sidebar, app name, WSL setting, and all settings descriptions.
++
++**Electron rebrand + cross-platform menu (5 files):** Removed the `if (process.platform !== "darwin") return` early exit. New `isMac` conditional builds a unified menu template — macOS gets the CoBuilder app submenu with `hide/hideOthers/unhide` roles; Windows/Linux get `Quit` appended to File menu and `Check for Updates` + `Install CLI` in Help. All accelerators use `isMac ? "Cmd" : "Ctrl"` pattern. Issue URLs updated to CobuilderLabs org.
++
++## Tasks
++
++| # | Name | Commit | Status |
++|---|------|--------|--------|
++| 1 | Rebrand TUI | 8feb3d9 | Done |
++| 2 | Rebrand Web + Electron cross-platform menu | d085af1 | Done |
++
++## Deviations from Plan
++
++### Auto-fixed Issues
++
++**1. [Rule 2 - Missing] Extended __OPENCODE__ rename to all 8 referencing files**
++- **Found during:** Task 2
++- **Issue:** Plan specified only `packages/app/src/app.tsx` and `packages/desktop-electron/src/` for the `__OPENCODE__` rename, but `grep` found 8 files total including `deep-links.ts`, `helpers.test.ts`, `renderer/env.d.ts`, `renderer/index.tsx`, `renderer/updater.ts`
++- **Fix:** Applied `replace_all` to all 8 files so the global rename is complete and consistent
++- **Files modified:** packages/app/src/pages/layout/deep-links.ts, packages/app/src/pages/layout/helpers.test.ts, packages/desktop-electron/src/renderer/env.d.ts, packages/desktop-electron/src/renderer/index.tsx, packages/desktop-electron/src/renderer/updater.ts
++- **Commit:** d085af1
++
++## Verification Results
++
++- `grep -r "__OPENCODE__" packages/app/src/ packages/desktop-electron/src/` → CLEAN (exit 1)
++- `grep "OpenCode" packages/app/src/i18n/en.ts` → 0 matches
++- `grep "OpenCode" packages/app/src/i18n/es.ts` → 0 matches
++- TUI files: all (clean)
++- `grep "isMac" packages/desktop-electron/src/main/menu.ts` → 11 matches
++- `bun run typecheck` → 13/13 tasks successful
++
++## Known Stubs
++
++None — all branding changes are complete string replacements with no stubs or placeholders.
++
++## Self-Check: PASSED
+diff --git a/.planning/phases/03-ui-ux-polish/03-03-SUMMARY.md b/.planning/phases/03-ui-ux-polish/03-03-SUMMARY.md
+new file mode 100644
+index 000000000..245ab1ab5
+--- /dev/null
++++ b/.planning/phases/03-ui-ux-polish/03-03-SUMMARY.md
+@@ -0,0 +1,111 @@
++---
++phase: 03-ui-ux-polish
++plan: "03"
++subsystem: ui
++tags: [solidjs, reactive, createEffect, spinner, drag-handle, tailwind]
++
++requires:
++  - phase: 03-ui-ux-polish
++    provides: Plan 02 UX fixes (footer hint reactive, onMount guard removal, Electron menu cross-platform)
++
++provides:
++  - Reactive onboarding check (createEffect replaces 800ms setTimeout) in app.tsx
++  - No-provider inline banner in session.tsx with connect action
++  - Visual loading spinner in composer region prompt fallback
++  - Drag handle grip icon on sortable session tabs
++
++affects:
++  - 03-ui-ux-polish (subsequent plans)
++  - Any plan touching provider connection flow or session composer
++
++tech-stack:
++  added: []
++  patterns:
++    - "createEffect one-shot reactive gate: checked flag prevents re-firing after first evaluation"
++    - "Tailwind animate-spin + SVG for inline loading spinners (no component dependency)"
++    - "group/group-hover visibility pattern for contextual affordances (drag handles)"
++
++key-files:
++  created: []
++  modified:
++    - packages/app/src/app.tsx
++    - packages/app/src/pages/session.tsx
++    - packages/app/src/pages/session/composer/session-composer-region.tsx
++    - packages/app/src/components/session/session-sortable-tab.tsx
++
++key-decisions:
++  - "Used createEffect with checked flag instead of createRoot/dispose pattern — simpler, avoids manual memory management"
++  - "No-provider banner placed above SessionComposerRegion (not replacing it) — allows composer to remain accessible"
++  - "Inline SVG spinner used instead of Spinner component — avoids unknown UI library dependency"
++  - "Drag handle opacity-0/group-hover:opacity-40 pattern — unobtrusive but discoverable on hover"
++
++patterns-established:
++  - "Reactive gate pattern: createEffect + boolean flag for one-shot side effects after sync data loads"
++  - "group + group-hover on sortable wrappers for progressive affordance disclosure"
++
++requirements-completed: [UX-04, UX-05, UX-06, UX-09]
++
++duration: 18min
++completed: 2026-03-26
++---
++
++# Phase 3 Plan 03: UX Polish — Reactive Onboarding, No-Provider Guard, Composer Spinner, Tab Drag Handles
++
++**Eliminated 800ms onboarding setTimeout race with a reactive createEffect gate; added no-provider session banner, composer loading spinner, and sortable tab drag handle affordance**
++
++## Performance
++
++- **Duration:** ~18 min
++- **Started:** 2026-03-26T00:00:00Z
++- **Completed:** 2026-03-26T00:18:00Z
++- **Tasks:** 2 of 2
++- **Files modified:** 4
++
++## Accomplishments
++
++- UX-04: `onMount` + `setTimeout(800)` in `OnboardingCheck` replaced with `createEffect` + `checked` flag — provider data evaluated reactively on first sync population, not after an arbitrary delay
++- UX-05: Inline no-provider banner added above `SessionComposerRegion` in session.tsx — shows when `connected.length === 0 && messagesReady()`, offers "Connect a provider" button that opens `DialogSelectProvider`
++- UX-06: Composer loading fallback enhanced with `animate-spin` SVG spinner alongside the handoff/loading text
++- UX-09: `SortableTab` gains a `group` class and a 6-dot grip SVG that appears on hover (`opacity-0 group-hover:opacity-40`) with `cursor-grab` affordance
++
++## Task Commits
++
++1. **Task 1: Reactive onboarding + no-provider guard** — `ce9b056` (feat)
++2. **Task 2: Composer spinner + tab drag handles** — `c702e06` (feat)
++
++**Plan metadata:** (docs commit — see below)
++
++## Files Created/Modified
++
++- `packages/app/src/app.tsx` — `createEffect` added to imports; `OnboardingCheck` uses reactive one-shot check
++- `packages/app/src/pages/session.tsx` — `DialogSelectProvider` import added; no-provider `<Show>` banner above composer
++- `packages/app/src/pages/session/composer/session-composer-region.tsx` — Loading fallback div enhanced with inline SVG spinner
++- `packages/app/src/components/session/session-sortable-tab.tsx` — `group` class + 6-dot grip `<span>` with hover opacity added
++
++## Decisions Made
++
++- `createEffect` with a `checked` boolean flag chosen over `createRoot`/`dispose` — the dispose pattern requires tracking a cleanup function and is more error-prone; the flag approach is idiomatic and equally correct
++- No-provider banner placed above (not instead of) the composer so the input area remains structurally present even when no provider is connected
++- Inline SVG spinner used to avoid coupling to an unknown `@opencode-ai/ui` spinner component path — Tailwind `animate-spin` is already available everywhere in the app
++
++## Deviations from Plan
++
++None — plan executed exactly as written. UX-08 was pre-existing as noted in the plan (onLoadEarlier in message-timeline.tsx). No additional scope was needed.
++
++## Issues Encountered
++
++None.
++
++## User Setup Required
++
++None - no external service configuration required.
++
++## Next Phase Readiness
++
++- All 4 active UX issues in this plan resolved (UX-04, UX-05, UX-06, UX-09)
++- TypeScript typecheck: 13/13 tasks passing, 0 errors
++- Branch `feat/phase3-ui-ux-polish` ready for further Phase 3 plans or PR
++
++---
++*Phase: 03-ui-ux-polish*
++*Completed: 2026-03-26*
+diff --git a/.planning/phases/04-ui-ux-polish-ii/04-01-PLAN.md b/.planning/phases/04-ui-ux-polish-ii/04-01-PLAN.md
+new file mode 100644
+index 000000000..1b5033ace
+--- /dev/null
++++ b/.planning/phases/04-ui-ux-polish-ii/04-01-PLAN.md
+@@ -0,0 +1,183 @@
++---
++phase: 04-ui-ux-polish-ii
++plan: 01
++type: execute
++wave: 1
++depends_on: []
++files_modified:
++  - packages/opencode/src/cli/cmd/onboard.ts
++  - packages/app/src/app.tsx
++  - packages/app/src/i18n/en.ts
++autonomous: true
++requirements: [UX2-02, UX2-04]
++
++must_haves:
++  truths:
++    - "cobuilder onboard shows 'Step N of 4' prefix on each step heading"
++    - "ConnectionError screen shows elapsed retry seconds"
++    - "ConnectionError screen shows actionable guidance text"
++  artifacts:
++    - path: "packages/opencode/src/cli/cmd/onboard.ts"
++      provides: "Step progress prefixes on all 4 onboarding steps"
++      contains: "Step 1 of 4"
++    - path: "packages/app/src/app.tsx"
++      provides: "Enhanced ConnectionError with elapsed timer and guidance"
++      contains: "elapsedSeconds"
++    - path: "packages/app/src/i18n/en.ts"
++      provides: "New i18n keys for connection error guidance"
++      contains: "app.server.retryElapsed"
++  key_links:
++    - from: "packages/app/src/app.tsx"
++      to: "packages/app/src/i18n/en.ts"
++      via: "language.t() calls"
++      pattern: "language\\.t\\(\"app\\.server\\."
++---
++
++<objective>
++Add step progress indicators to the onboarding wizard and improve the ConnectionError component with elapsed time and actionable guidance.
++
++Purpose: New users currently have no sense of progress during onboarding (4 steps with no counter), and connection failures show only "Retrying..." with no help.
++Output: Enhanced onboard.ts with step prefixes, enhanced ConnectionError with elapsed timer and troubleshooting hints.
++</objective>
++
++<execution_context>
++@$HOME/.claude/get-shit-done/workflows/execute-plan.md
++@$HOME/.claude/get-shit-done/templates/summary.md
++</execution_context>
++
++<context>
++@.planning/PROJECT.md
++@.planning/ROADMAP.md
++@.planning/STATE.md
++@packages/opencode/src/cli/cmd/onboard.ts
++@packages/app/src/app.tsx
++@packages/app/src/i18n/en.ts
++</context>
++
++<tasks>
++
++<task type="auto">
++  <name>Task 1: Add step progress to onboarding wizard</name>
++  <read_first>packages/opencode/src/cli/cmd/onboard.ts</read_first>
++  <files>packages/opencode/src/cli/cmd/onboard.ts</files>
++  <action>
++    Add "Step N of 4" prefix to each step in the OnboardCommand handler. The 4 steps are:
++    1. Provider selection (line 32 area)
++    2. Security modules (setupSecurity)
++    3. Workflow plugins (setupWorkflows)
++    4. Recommended tools (setupRecommendedTools)
++
++    Specific changes:
++
++    a) In handler() before the provider select (line 32), add:
++       `prompts.log.step("Step 1 of 4 — Choose your provider")`
++
++    b) In setupSecurity() (line 226), change:
++       `prompts.log.step("Security modules — configure which are active")`
++       to:
++       `prompts.log.step("Step 2 of 4 — Security modules")`
++
++    c) In setupWorkflows() (line 270), change:
++       `prompts.log.step("Workflow plugins — install methodology tooling (optional)")`
++       to:
++       `prompts.log.step("Step 3 of 4 — Workflow plugins (optional)")`
++
++    d) In setupRecommendedTools() (line 320), change:
++       `prompts.log.step("Recommended tools — extend CoBuilder with community extensions")`
++       to:
++       `prompts.log.step("Step 4 of 4 — Recommended tools (optional)")`
++
++    Do NOT change the prompts.intro() or prompts.outro() calls — only the step headings.
++  </action>
++  <verify>
++    <automated>cd /home/jkang/cobuilder-opencode && grep -c "Step [1-4] of 4" packages/opencode/src/cli/cmd/onboard.ts | grep -q "4"</automated>
++  </verify>
++  <done>All 4 steps show "Step N of 4" prefix. No other onboarding logic changed.</done>
++</task>
++
++<task type="auto">
++  <name>Task 2: Enhance ConnectionError with elapsed timer and actionable guidance</name>
++  <read_first>packages/app/src/app.tsx, packages/app/src/i18n/en.ts</read_first>
++  <files>packages/app/src/app.tsx, packages/app/src/i18n/en.ts</files>
++  <action>
++    Part A — Add i18n keys to en.ts (after line 313 "app.server.retrying"):
++    ```
++    "app.server.retryElapsed": "Retrying... {{seconds}}s",
++    "app.server.hint.serve": "Try running: cobuilder serve",
++    "app.server.hint.url": "Check that the server is running at {{url}}",
++    ```
++    Note: Also add corresponding keys to es.ts, zh.ts, zht.ts, no.ts with reasonable translations. For es: "Reintentando... {{seconds}}s", "Intenta ejecutar: cobuilder serve", "Verifica que el servidor esté corriendo en {{url}}". For zh: "重试中... {{seconds}}秒", "尝试运行: cobuilder serve", "检查服务器是否在 {{url}} 运行". For zht: "重試中... {{seconds}}秒", "嘗試執行: cobuilder serve", "檢查伺服器是否在 {{url}} 執行". For no: "Prover pa nytt... {{seconds}}s", "Prov a kjore: cobuilder serve", "Sjekk at serveren kjorer pa {{url}}".
++
++    Part B — Rewrite the ConnectionError component in app.tsx (lines 251-296):
++
++    1. Add an elapsed seconds signal at the top of the component:
++       ```tsx
++       const [elapsedSeconds, setElapsedSeconds] = createSignal(0)
++       ```
++
++    2. Change the existing setInterval (line 259) to also increment elapsed:
++       ```tsx
++       const timer = setInterval(() => {
++         setElapsedSeconds((s) => s + 1)
++         props.onRetry?.()
++       }, 1000)
++       ```
++
++    3. Derive connection hints based on server type. After `const name = ...` line, add:
++       ```tsx
++       const serverUrl = createMemo(() => {
++         const current = server.list.find((s) => ServerConnection.key(s) === server.key)
++         if (!current) return undefined
++         return "http" in current ? current.http : undefined
++       })
++       ```
++
++    4. Replace the "Retrying..." paragraph (line 271) with:
++       ```tsx
++       <p class="mt-1 text-12-regular text-text-weak">
++         {language.t("app.server.retryElapsed", { seconds: String(elapsedSeconds()) })}
++       </p>
++       ```
++
++    5. After the closing `</p>` of the retry line and before `</div>` (end of the max-w-md container), add guidance hints:
++       ```tsx
++       <div class="mt-3 flex flex-col gap-1 text-12-regular text-text-weak">
++         <Show when={!serverUrl()}>
++           <p>{language.t("app.server.hint.serve")}</p>
++         </Show>
++         <Show when={serverUrl()}>
++           <p>{language.t("app.server.hint.url", { url: serverUrl()! })}</p>
++         </Show>
++       </div>
++       ```
++
++    Do NOT change ConnectionGate, ServerKey, or any other component. Only modify ConnectionError and i18n files.
++  </action>
++  <verify>
++    <automated>cd /home/jkang/cobuilder-opencode && grep -q "elapsedSeconds" packages/app/src/app.tsx && grep -q "app.server.retryElapsed" packages/app/src/i18n/en.ts && grep -q "app.server.hint.serve" packages/app/src/i18n/en.ts</automated>
++  </verify>
++  <done>ConnectionError shows "Retrying... Ns" with incrementing counter. Actionable hints visible below retry text: "Try running: cobuilder serve" when no URL known, or "Check that the server is running at <url>" when URL is known.</done>
++</task>
++
++</tasks>
++
++<verification>
++- `grep -c "Step [1-4] of 4" packages/opencode/src/cli/cmd/onboard.ts` returns 4
++- `grep "elapsedSeconds" packages/app/src/app.tsx` finds the signal and usage
++- `grep "app.server.retryElapsed" packages/app/src/i18n/en.ts` finds the key
++- `grep "app.server.hint" packages/app/src/i18n/en.ts` finds both hint keys
++- `cd packages/opencode && bun run typecheck` passes
++- `cd packages/app && bun run typecheck` passes
++</verification>
++
++<success_criteria>
++1. `cobuilder onboard` displays "Step 1 of 4", "Step 2 of 4", "Step 3 of 4", "Step 4 of 4" at each stage
++2. Web ConnectionError shows elapsed seconds counting up from 0
++3. Web ConnectionError shows actionable guidance based on connection type
++4. All i18n files updated (en, es, zh, zht, no)
++5. TypeScript compiles cleanly
++</success_criteria>
++
++<output>
++After completion, create `.planning/phases/04-ui-ux-polish-ii/04-01-SUMMARY.md`
++</output>
+diff --git a/.planning/phases/04-ui-ux-polish-ii/04-02-PLAN.md b/.planning/phases/04-ui-ux-polish-ii/04-02-PLAN.md
+new file mode 100644
+index 000000000..ec739e60f
+--- /dev/null
++++ b/.planning/phases/04-ui-ux-polish-ii/04-02-PLAN.md
+@@ -0,0 +1,211 @@
++---
++phase: 04-ui-ux-polish-ii
++plan: 02
++type: execute
++wave: 1
++depends_on: []
++files_modified:
++  - packages/opencode/src/cli/cmd/tui/routes/home.tsx
++  - packages/app/src/pages/home.tsx
++  - packages/app/src/i18n/en.ts
++  - packages/app/src/i18n/es.ts
++  - packages/app/src/i18n/zh.ts
++  - packages/app/src/i18n/zht.ts
++  - packages/app/src/i18n/no.ts
++autonomous: true
++requirements: [UX2-01]
++
++must_haves:
++  truths:
++    - "TUI home screen shows contextual getting-started hints for first-time users"
++    - "Web home screen shows a Getting Started panel when user has zero sessions/projects"
++    - "Hints disappear once user has sessions/projects"
++  artifacts:
++    - path: "packages/opencode/src/cli/cmd/tui/routes/home.tsx"
++      provides: "First-run hint block beneath prompt for new users"
++      contains: "isFirstTimeUser"
++    - path: "packages/app/src/pages/home.tsx"
++      provides: "Getting Started panel for zero-project state"
++      contains: "home.gettingStarted"
++    - path: "packages/app/src/i18n/en.ts"
++      provides: "i18n keys for getting started panel"
++      contains: "home.gettingStarted.title"
++  key_links:
++    - from: "packages/opencode/src/cli/cmd/tui/routes/home.tsx"
++      to: "sync.data.session"
++      via: "isFirstTimeUser memo"
++      pattern: "isFirstTimeUser"
++    - from: "packages/app/src/pages/home.tsx"
++      to: "sync.data.project"
++      via: "project length check"
++      pattern: "sync\\.data\\.project\\.length"
++---
++
++<objective>
++Add first-run guidance to both TUI and Web home screens so new users are not greeted by a blank prompt with zero context.
++
++Purpose: Both TUI and Web currently show minimal UI for new users — TUI shows tips but no actionable guidance, Web shows "No recent projects" with just an open button. New users need orientation.
++Output: TUI home with contextual hint block, Web home with Getting Started panel.
++</objective>
++
++<execution_context>
++@$HOME/.claude/get-shit-done/workflows/execute-plan.md
++@$HOME/.claude/get-shit-done/templates/summary.md
++</execution_context>
++
++<context>
++@.planning/PROJECT.md
++@.planning/ROADMAP.md
++@.planning/STATE.md
++@packages/opencode/src/cli/cmd/tui/routes/home.tsx
++@packages/app/src/pages/home.tsx
++@packages/app/src/i18n/en.ts
++</context>
++
++<interfaces>
++<!-- From TUI home.tsx — key signals already available -->
++From packages/opencode/src/cli/cmd/tui/routes/home.tsx:
++```tsx
++const isFirstTimeUser = createMemo(() => sync.data.session.length === 0)
++// useTheme() provides: theme.text, theme.textMuted, theme.success, theme.primary
++// TUI primitives: <box>, <text>, <span style={}>
++```
++
++<!-- From Web home.tsx — key signals already available -->
++From packages/app/src/pages/home.tsx:
++```tsx
++const sync = useGlobalSync()
++// sync.data.project — array of projects
++// sync.ready — boolean
++// language.t() for i18n
++// Components: Button, Logo, Icon from @opencode-ai/ui
++```
++
++<!-- Existing i18n pattern from en.ts -->
++From packages/app/src/i18n/en.ts:
++```
++"home.empty.title": "No recent projects",
++"home.empty.description": "Get started by opening a local project",
++```
++</interfaces>
++
++<tasks>
++
++<task type="auto">
++  <name>Task 1: Add first-run hint block to TUI home screen</name>
++  <read_first>packages/opencode/src/cli/cmd/tui/routes/home.tsx</read_first>
++  <files>packages/opencode/src/cli/cmd/tui/routes/home.tsx</files>
++  <action>
++    Add a contextual hint block that appears ONLY for first-time users (isFirstTimeUser() already exists at line 35). This block sits between the Prompt and the Tips section.
++
++    After the closing `</box>` of the Prompt container (line 120) and before the Tips container (line 121), insert a new conditional block:
++
++    ```tsx
++    <Show when={isFirstTimeUser()}>
++      <box width="100%" maxWidth={75} paddingTop={1} flexShrink={0}>
++        <box flexDirection="column" gap={0}>
++          <text fg={theme.textMuted}>
++            <span style={{ fg: theme.primary }}>{">"}</span> Type a message to start a new session
++          </text>
++          <text fg={theme.textMuted}>
++            <span style={{ fg: theme.primary }}>{">"}</span> Press <span style={{ fg: theme.text }}>Ctrl+X</span> to open the command palette
++          </text>
++          <text fg={theme.textMuted}>
++            <span style={{ fg: theme.primary }}>{">"}</span> Run <span style={{ fg: theme.text }}>/help</span> for all available commands
++          </text>
++        </box>
++      </box>
++    </Show>
++    ```
++
++    This uses the same maxWidth={75} as the Prompt for visual alignment. The hints use theme.primary for the ">" bullets to match the app's accent color, and theme.text for emphasized tokens.
++
++    Do NOT modify the existing Tips component or its Show wrapper. The hints block is separate — it provides actionable "how to start" guidance while Tips provides rotating informational tips.
++  </action>
++  <verify>
++    <automated>cd /home/jkang/cobuilder-opencode && grep -q "Type a message to start a new session" packages/opencode/src/cli/cmd/tui/routes/home.tsx && grep -q "command palette" packages/opencode/src/cli/cmd/tui/routes/home.tsx</automated>
++  </verify>
++  <done>TUI home shows 3 contextual hints beneath the prompt for first-time users. Hints disappear once user has sessions. Existing Tips component untouched.</done>
++</task>
++
++<task type="auto">
++  <name>Task 2: Add Getting Started panel to Web home screen</name>
++  <read_first>packages/app/src/pages/home.tsx, packages/app/src/i18n/en.ts</read_first>
++  <files>packages/app/src/pages/home.tsx, packages/app/src/i18n/en.ts, packages/app/src/i18n/es.ts, packages/app/src/i18n/zh.ts, packages/app/src/i18n/zht.ts, packages/app/src/i18n/no.ts</files>
++  <action>
++    Part A — Add i18n keys to en.ts (after the "home.empty.description" line ~520):
++    ```
++    "home.gettingStarted.title": "Getting started",
++    "home.gettingStarted.step1": "Open a project folder to begin",
++    "home.gettingStarted.step2": "Start a session by typing a message",
++    "home.gettingStarted.step3": "Use slash commands like /help for more options",
++    ```
++
++    Add equivalent keys to es.ts, zh.ts, zht.ts, no.ts with translations:
++    - es: "Primeros pasos", "Abre una carpeta de proyecto para comenzar", "Inicia una sesion escribiendo un mensaje", "Usa comandos con barra como /help para mas opciones"
++    - zh: "开始使用", "打开一个项目文件夹开始", "输入消息开始一个会话", "使用斜杠命令如 /help 获取更多选项"
++    - zht: "開始使用", "開啟一個專案資料夾開始", "輸入訊息開始一個會話", "使用斜線命令如 /help 獲取更多選項"
++    - no: "Kom i gang", "Apne en prosjektmappe for a begynne", "Start en sesjon ved a skrive en melding", "Bruk skrastrek-kommandoer som /help for flere valg"
++
++    Part B — Enhance the empty state in home.tsx. The current "no projects" Match (line 124-135) shows just an icon, title, description, and button. Replace this Match block's inner content with a richer Getting Started panel:
++
++    ```tsx
++    <Match when={true}>
++      <div class="mt-20 mx-auto flex flex-col items-center gap-6 max-w-sm">
++        <div class="flex flex-col gap-1 items-center justify-center">
++          <div class="text-16-medium text-text-strong">{language.t("home.gettingStarted.title")}</div>
++        </div>
++        <div class="flex flex-col gap-3 w-full">
++          <div class="flex items-start gap-3 px-3">
++            <div class="flex items-center justify-center size-6 rounded-full bg-surface-raised-base text-12-medium text-text-strong shrink-0 mt-0.5">1</div>
++            <div class="text-14-regular text-text-base">{language.t("home.gettingStarted.step1")}</div>
++          </div>
++          <div class="flex items-start gap-3 px-3">
++            <div class="flex items-center justify-center size-6 rounded-full bg-surface-raised-base text-12-medium text-text-strong shrink-0 mt-0.5">2</div>
++            <div class="text-14-regular text-text-base">{language.t("home.gettingStarted.step2")}</div>
++          </div>
++          <div class="flex items-start gap-3 px-3">
++            <div class="flex items-center justify-center size-6 rounded-full bg-surface-raised-base text-12-medium text-text-strong shrink-0 mt-0.5">3</div>
++            <div class="text-14-regular text-text-base">{language.t("home.gettingStarted.step3")}</div>
++          </div>
++        </div>
++        <Button class="px-3 mt-1" onClick={chooseProject}>
++          {language.t("command.project.open")}
++        </Button>
++      </div>
++    </Match>
++    ```
++
++    This replaces the final `<Match when={true}>` block (lines 124-135). The numbered steps use rounded circles with bg-surface-raised-base for the step numbers, matching the existing design system.
++
++    Do NOT modify the `<Match when={sync.data.project.length > 0}>` block or the `<Match when={!sync.ready}>` block.
++  </action>
++  <verify>
++    <automated>cd /home/jkang/cobuilder-opencode && grep -q "home.gettingStarted.title" packages/app/src/pages/home.tsx && grep -q "home.gettingStarted.title" packages/app/src/i18n/en.ts && grep -q "home.gettingStarted.step3" packages/app/src/i18n/en.ts</automated>
++  </verify>
++  <done>Web home shows numbered Getting Started panel (3 steps) for users with zero projects. Panel replaced the minimal empty state. All 5 i18n files updated.</done>
++</task>
++
++</tasks>
++
++<verification>
++- `grep "isFirstTimeUser" packages/opencode/src/cli/cmd/tui/routes/home.tsx` confirms signal still drives hints
++- `grep "Type a message" packages/opencode/src/cli/cmd/tui/routes/home.tsx` confirms TUI hints exist
++- `grep "gettingStarted" packages/app/src/pages/home.tsx` confirms Web panel wired
++- `grep "gettingStarted" packages/app/src/i18n/en.ts` confirms i18n keys exist
++- `cd packages/opencode && bun run typecheck` passes
++- `cd packages/app && bun run typecheck` passes
++</verification>
++
++<success_criteria>
++1. TUI home shows 3 actionable hints for first-time users (zero sessions)
++2. TUI hints disappear once user has sessions
++3. Web home shows numbered Getting Started panel for users with zero projects
++4. Web Getting Started panel replaced the old minimal empty state
++5. All 5 i18n files have the new keys
++6. TypeScript compiles cleanly
++</success_criteria>
++
++<output>
++After completion, create `.planning/phases/04-ui-ux-polish-ii/04-02-SUMMARY.md`
++</output>
+diff --git a/.planning/phases/04-ui-ux-polish-ii/04-03-PLAN.md b/.planning/phases/04-ui-ux-polish-ii/04-03-PLAN.md
+new file mode 100644
+index 000000000..ab5642df6
+--- /dev/null
++++ b/.planning/phases/04-ui-ux-polish-ii/04-03-PLAN.md
+@@ -0,0 +1,221 @@
++---
++phase: 04-ui-ux-polish-ii
++plan: 03
++type: execute
++wave: 1
++depends_on: []
++files_modified:
++  - packages/opencode/src/cli/cmd/tui/app.tsx
++autonomous: true
++requirements: [UX2-03]
++
++must_haves:
++  truths:
++    - "TUI does NOT exit after update download — user stays in the app"
++    - "A persistent badge appears in the footer/header after update downloads"
++    - "Update installs on next natural quit (exit command)"
++  artifacts:
++    - path: "packages/opencode/src/cli/cmd/tui/app.tsx"
++      provides: "Background update download, persistent badge, install-on-quit"
++      contains: "pendingUpdate"
++  key_links:
++    - from: "packages/opencode/src/cli/cmd/tui/app.tsx"
++      to: "sdk.client.global.upgrade"
++      via: "background upgrade call"
++      pattern: "sdk\\.client\\.global\\.upgrade"
++    - from: "packages/opencode/src/cli/cmd/tui/app.tsx"
++      to: "exit()"
++      via: "install-on-quit hook"
++      pattern: "pendingUpdate"
++---
++
++<objective>
++Replace the abrupt TUI update flow (confirm -> download -> exit) with a non-disruptive background download + persistent badge + install-on-quit pattern.
++
++Purpose: Currently the update flow interrupts the user's work — a dialog appears, and if they accept, the app downloads and then force-exits. This is hostile UX. Instead: download silently in background, show a badge, and apply on next natural quit.
++Output: Modified app.tsx with background update, persistent "Update ready" signal, and exit hook.
++</objective>
++
++<execution_context>
++@$HOME/.claude/get-shit-done/workflows/execute-plan.md
++@$HOME/.claude/get-shit-done/templates/summary.md
++</execution_context>
++
++<context>
++@.planning/PROJECT.md
++@.planning/ROADMAP.md
++@.planning/STATE.md
++@packages/opencode/src/cli/cmd/tui/app.tsx
++@packages/opencode/src/installation/index.ts
++</context>
++
++<interfaces>
++<!-- From app.tsx — current update flow (lines 741-786) -->
++From packages/opencode/src/cli/cmd/tui/app.tsx:
++```tsx
++// Current flow: event -> confirm dialog -> upgrade -> alert dialog -> exit()
++sdk.event.on("installation.update-available", async (evt) => {
++  const version = evt.properties.version
++  const skipped = kv.get("skipped_version")
++  if (skipped && !semver.gt(version, skipped)) return
++  const choice = await DialogConfirm.show(...)
++  // ... upgrade ... exit()
++})
++```
++
++<!-- From app.tsx — exit context -->
++```tsx
++const exit = useExit()  // line 218
++// Footer is rendered inside Home and Session components, not in App
++```
++
++<!-- From installation/index.ts — upgrade API -->
++```tsx
++sdk.client.global.upgrade({ target: version })
++// Returns: { data?: { success: boolean, version: string }, error?: ... }
++```
++
++<!-- KV store pattern used throughout app.tsx -->
++```tsx
++const kv = useKV()
++kv.get("key", defaultValue)
++kv.set("key", value)
++```
++</interfaces>
++
++<tasks>
++
++<task type="auto">
++  <name>Task 1: Replace update flow with background download + persistent badge</name>
++  <read_first>packages/opencode/src/cli/cmd/tui/app.tsx</read_first>
++  <files>packages/opencode/src/cli/cmd/tui/app.tsx</files>
++  <action>
++    This task rewrites the update event handler (lines 741-786) and adds a persistent update badge to the App component.
++
++    Step 1 — Add a pendingUpdate signal near the top of the App function (after line 219, near other signal declarations):
++    ```tsx
++    const [pendingUpdate, setPendingUpdate] = createSignal<string | null>(null)
++    ```
++
++    Step 2 — Replace the entire "installation.update-available" event handler (lines 741-786) with:
++    ```tsx
++    sdk.event.on("installation.update-available", async (evt) => {
++      const version = evt.properties.version
++
++      const skipped = kv.get("skipped_version")
++      if (skipped && !semver.gt(version, skipped)) return
++
++      // Download in background — no dialog, no interruption
++      toast.show({
++        variant: "info",
++        message: `Downloading update v${version}...`,
++        duration: 5000,
++      })
++
++      const result = await sdk.client.global.upgrade({ target: version })
++
++      if (result.error || !result.data?.success) {
++        toast.show({
++          variant: "warning",
++          title: "Update failed",
++          message: `Could not download v${version}. Will retry next launch.`,
++          duration: 8000,
++        })
++        return
++      }
++
++      // Mark update as ready — badge will appear
++      setPendingUpdate(result.data.version)
++      toast.show({
++        variant: "info",
++        message: `Update v${result.data.version} ready — restart to apply`,
++        duration: 10000,
++      })
++    })
++    ```
++
++    Step 3 — Add a persistent update badge to the App component's root box. Inside the `<box>` that wraps the Switch (lines 788-812), add a Show block BEFORE the Switch:
++    ```tsx
++    <Show when={pendingUpdate()}>
++      <box
++        flexDirection="row"
++        justifyContent="center"
++        paddingTop={0}
++        paddingBottom={0}
++        flexShrink={0}
++      >
++        <text fg={theme.primary}>
++          {"  Update v"}{pendingUpdate()}{" ready — restart to apply  "}
++        </text>
++      </box>
++    </Show>
++    ```
++
++    This renders a single centered line at the top of the app area. It uses theme.primary (the accent color) so it's noticeable but not alarming.
++
++    Step 4 — NO exit hook needed. The upgrade has already been applied by `sdk.client.global.upgrade()` — it runs the package manager install command. The new version will be active on next launch. The old flow called exit() to force a restart; we simply remove that and let the user quit naturally.
++
++    IMPORTANT: Do NOT remove the `semver` import or the `DialogConfirm` import (other code may use them). Do NOT modify any other event handler. The `DialogAlert` import can stay too — it's used by the error component.
++  </action>
++  <verify>
++    <automated>cd /home/jkang/cobuilder-opencode && grep -q "pendingUpdate" packages/opencode/src/cli/cmd/tui/app.tsx && grep -q "restart to apply" packages/opencode/src/cli/cmd/tui/app.tsx && ! grep -q "Please restart the application" packages/opencode/src/cli/cmd/tui/app.tsx</automated>
++  </verify>
++  <done>
++    - Update event handler downloads in background with toast notification (no dialog)
++    - pendingUpdate signal set on success
++    - Persistent "Update vX.Y.Z ready — restart to apply" badge visible at top of app
++    - No exit() call after update — user stays in app
++    - Old "Please restart the application" dialog removed
++  </done>
++</task>
++
++<task type="auto">
++  <name>Task 2: Verify typecheck and clean up unused imports</name>
++  <read_first>packages/opencode/src/cli/cmd/tui/app.tsx</read_first>
++  <files>packages/opencode/src/cli/cmd/tui/app.tsx</files>
++  <action>
++    After Task 1's changes, check if DialogAlert and DialogConfirm are still used elsewhere in app.tsx:
++
++    1. Search for `DialogAlert.show` — it's used in the old update flow. If the old flow is the ONLY usage, the import can stay (it's used by ErrorComponent for issue URL copy). Actually check: DialogAlert is NOT used by ErrorComponent. Search carefully.
++
++    2. Search for `DialogConfirm.show` — if the old update handler was the only call site, the import is now unused. Remove it if so.
++
++    3. Run typecheck:
++       ```
++       cd /home/jkang/cobuilder-opencode && bun run --cwd packages/opencode typecheck
++       ```
++
++    4. If DialogConfirm is unused, remove only its import line:
++       `import { DialogConfirm } from "./ui/dialog-confirm"`
++       But ONLY if no other reference to DialogConfirm exists in the file.
++
++    5. Similarly check if DialogAlert is still referenced. Keep it if used, remove if not.
++
++    Do NOT remove semver — it's still used for the skipped_version check.
++  </action>
++  <verify>
++    <automated>cd /home/jkang/cobuilder-opencode && bun run --cwd packages/opencode typecheck 2>&1 | tail -5</automated>
++  </verify>
++  <done>TypeScript compiles cleanly. No unused imports remain. semver still imported for version comparison.</done>
++</task>
++
++</tasks>
++
++<verification>
++- `grep "pendingUpdate" packages/opencode/src/cli/cmd/tui/app.tsx` finds signal and badge
++- `grep "restart to apply" packages/opencode/src/cli/cmd/tui/app.tsx` finds badge text
++- `grep -c "exit()" packages/opencode/src/cli/cmd/tui/app.tsx` — exit() should NOT appear in the update handler (may still appear in the "Exit the app" command)
++- `bun run --cwd packages/opencode typecheck` passes
++</verification>
++
++<success_criteria>
++1. No confirm dialog shown when update is available — downloads silently
++2. Toast notification shows download progress and completion
++3. Persistent badge "Update vX.Y.Z ready — restart to apply" visible at top of app after download
++4. App does NOT exit after update — user continues working
++5. TypeScript compiles cleanly
++</success_criteria>
++
++<output>
++After completion, create `.planning/phases/04-ui-ux-polish-ii/04-03-SUMMARY.md`
++</output>
+diff --git a/packages/app/src/app.tsx b/packages/app/src/app.tsx
+index 78fd6ce26..0f3846398 100644
+--- a/packages/app/src/app.tsx
++++ b/packages/app/src/app.tsx
+@@ -13,6 +13,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
+ import { type Duration, Effect } from "effect"
+ import {
+   type Component,
++  createEffect,
+   createMemo,
+   createResource,
+   createSignal,
+@@ -69,7 +70,7 @@ function UiI18nBridge(props: ParentProps) {
+ 
+ declare global {
+   interface Window {
+-    __OPENCODE__?: {
++    __COBUILDER__?: {
+       updaterEnabled?: boolean
+       deepLinks?: string[]
+       wsl?: boolean
+@@ -128,13 +129,18 @@ function OnboardingCheck() {
+ 
+   onMount(() => {
+     if (wasOnboardingShown()) return
+-    // Give sync a moment to populate connected providers
+-    setTimeout(() => {
++    // Use a reactive createEffect that fires when provider data is first loaded
++    // from the server — avoids the 800ms setTimeout race condition where the
++    // check runs before sync has populated provider data.
++    let checked = false
++    createEffect(() => {
+       const connected = globalSync.data.provider.connected
++      if (checked) return
++      checked = true
+       if (connected.length === 0) {
+         dialog.show(() => <DialogOnboarding />)
+       }
+-    }, 800)
++    })
+   })
+ 
+   return null
+diff --git a/packages/app/src/components/session/session-sortable-tab.tsx b/packages/app/src/components/session/session-sortable-tab.tsx
+index dfda91c16..4e1cbbb41 100644
+--- a/packages/app/src/components/session/session-sortable-tab.tsx
++++ b/packages/app/src/components/session/session-sortable-tab.tsx
+@@ -39,7 +39,20 @@ export function SortableTab(props: { tab: string; onTabClose: (tab: string) => v
+     return <FileVisual path={value} />
+   })
+   return (
+-    <div use:sortable class="h-full flex items-center" classList={{ "opacity-0": sortable.isActiveDraggable }}>
++    <div use:sortable class="group h-full flex items-center" classList={{ "opacity-0": sortable.isActiveDraggable }}>
++      <span
++        class="shrink-0 opacity-0 group-hover:opacity-40 hover:!opacity-70 cursor-grab active:cursor-grabbing px-0.5 text-text-weak"
++        aria-hidden="true"
++      >
++        <svg class="size-3" viewBox="0 0 16 16" fill="currentColor">
++          <circle cx="5" cy="3" r="1.5" />
++          <circle cx="11" cy="3" r="1.5" />
++          <circle cx="5" cy="8" r="1.5" />
++          <circle cx="11" cy="8" r="1.5" />
++          <circle cx="5" cy="13" r="1.5" />
++          <circle cx="11" cy="13" r="1.5" />
++        </svg>
++      </span>
+       <div class="relative">
+         <Tabs.Trigger
+           value={props.tab}
+diff --git a/packages/app/src/i18n/en.ts b/packages/app/src/i18n/en.ts
+index dde092511..6bb16350c 100644
+--- a/packages/app/src/i18n/en.ts
++++ b/packages/app/src/i18n/en.ts
+@@ -117,7 +117,7 @@ export const dict = {
+   "dialog.model.manage.description": "Customize which models appear in the model selector.",
+   "dialog.model.manage.provider.toggle": "Toggle all {{provider}} models",
+ 
+-  "dialog.model.unpaid.freeModels.title": "Free models provided by OpenCode",
++  "dialog.model.unpaid.freeModels.title": "Free models provided by CoBuilder",
+   "dialog.model.unpaid.addMore.title": "Add more models from popular providers",
+ 
+   "dialog.provider.viewAll": "Show more providers",
+@@ -130,12 +130,12 @@ export const dict = {
+   "provider.connect.status.waiting": "Waiting for authorization...",
+   "provider.connect.status.failed": "Authorization failed: {{error}}",
+   "provider.connect.apiKey.description":
+-    "Enter your {{provider}} API key to connect your account and use {{provider}} models in OpenCode.",
++    "Enter your {{provider}} API key to connect your account and use {{provider}} models in CoBuilder.",
+   "provider.connect.apiKey.label": "{{provider}} API key",
+   "provider.connect.apiKey.placeholder": "API key",
+   "provider.connect.apiKey.required": "API key is required",
+   "provider.connect.opencodeZen.line1":
+-    "OpenCode Zen gives you access to a curated set of reliable optimized models for coding agents.",
++    "CoBuilder Zen gives you access to a curated set of reliable optimized models for coding agents.",
+   "provider.connect.opencodeZen.line2":
+     "With a single API key you'll get access to models such as Claude, GPT, Gemini, GLM and more.",
+   "provider.connect.opencodeZen.visit.prefix": "Visit ",
+@@ -144,7 +144,7 @@ export const dict = {
+   "provider.connect.oauth.code.visit.prefix": "Visit ",
+   "provider.connect.oauth.code.visit.link": "this link",
+   "provider.connect.oauth.code.visit.suffix":
+-    " to collect your authorization code to connect your account and use {{provider}} models in OpenCode.",
++    " to collect your authorization code to connect your account and use {{provider}} models in CoBuilder.",
+   "provider.connect.oauth.code.label": "{{method}} authorization code",
+   "provider.connect.oauth.code.placeholder": "Authorization code",
+   "provider.connect.oauth.code.required": "Authorization code is required",
+@@ -152,7 +152,7 @@ export const dict = {
+   "provider.connect.oauth.auto.visit.prefix": "Visit ",
+   "provider.connect.oauth.auto.visit.link": "this link",
+   "provider.connect.oauth.auto.visit.suffix":
+-    " and enter the code below to connect your account and use {{provider}} models in OpenCode.",
++    " and enter the code below to connect your account and use {{provider}} models in CoBuilder.",
+   "provider.connect.oauth.auto.confirmationCode": "Confirmation code",
+   "provider.connect.toast.connected.title": "{{provider}} connected",
+   "provider.connect.toast.connected.description": "{{provider}} models are now available to use.",
+@@ -314,7 +314,7 @@ export const dict = {
+   "app.server.otherServers": "Other servers",
+ 
+   "dialog.server.title": "Servers",
+-  "dialog.server.description": "Switch which OpenCode server this app connects to.",
++  "dialog.server.description": "Switch which CoBuilder server this app connects to.",
+   "dialog.server.search.placeholder": "Search servers",
+   "dialog.server.empty": "No servers yet",
+   "dialog.server.add.title": "Add server",
+@@ -455,7 +455,7 @@ export const dict = {
+   "toast.project.reloadFailed.title": "Failed to reload {{project}}",
+ 
+   "toast.update.title": "Update available",
+-  "toast.update.description": "A new version of OpenCode ({{version}}) is now available to install.",
++  "toast.update.description": "A new version of CoBuilder ({{version}}) is now available to install.",
+   "toast.update.action.installRestart": "Install and restart",
+   "toast.update.action.notYet": "Not yet",
+ 
+@@ -467,7 +467,7 @@ export const dict = {
+   "error.page.action.checkUpdates": "Check for updates",
+   "error.page.action.updateTo": "Update to {{version}}",
+   "error.page.circular": "[Circular]",
+-  "error.page.report.prefix": "Please report this error to the OpenCode team",
++  "error.page.report.prefix": "Please report this error to the CoBuilder team",
+   "error.page.report.discord": "on Discord",
+   "error.page.version": "Version: {{version}}",
+ 
+@@ -493,7 +493,7 @@ export const dict = {
+   "error.chain.didYouMean": "Did you mean: {{suggestions}}",
+   "error.chain.modelNotFound": "Model not found: {{provider}}/{{model}}",
+   "error.chain.checkConfig": "Check your config (opencode.json) provider/model names",
+-  "error.chain.mcpFailed": 'MCP server "{{name}}" failed. Note, OpenCode does not support MCP authentication yet.',
++  "error.chain.mcpFailed": 'MCP server "{{name}}" failed. Note, CoBuilder does not support MCP authentication yet.',
+   "error.chain.providerAuthFailed": "Provider authentication failed ({{provider}}): {{message}}",
+   "error.chain.providerInitFailed":
+     'Failed to initialize provider "{{provider}}". Check credentials and configuration.',
+@@ -672,7 +672,7 @@ export const dict = {
+   "sidebar.workspaces.enable": "Enable workspaces",
+   "sidebar.workspaces.disable": "Disable workspaces",
+   "sidebar.gettingStarted.title": "Getting started",
+-  "sidebar.gettingStarted.line1": "OpenCode includes free models so you can start immediately.",
++  "sidebar.gettingStarted.line1": "CoBuilder includes free models so you can start immediately.",
+   "sidebar.gettingStarted.line2": "Connect any provider to use models, inc. Claude, GPT, Gemini etc.",
+   "sidebar.project.recentSessions": "Recent sessions",
+   "sidebar.project.viewAllSessions": "View all sessions",
+@@ -704,7 +704,7 @@ export const dict = {
+   "debugBar.mem.tipUnavailable": "Used JS heap vs heap limit. Chromium only.",
+   "debugBar.mem.tip": "Used JS heap vs heap limit. {{used}} of {{limit}}.",
+ 
+-  "app.name.desktop": "OpenCode Desktop",
++  "app.name.desktop": "CoBuilder Desktop",
+ 
+   "settings.section.desktop": "Desktop",
+   "settings.section.server": "Server",
+@@ -712,7 +712,7 @@ export const dict = {
+   "settings.tab.shortcuts": "Shortcuts",
+   "settings.desktop.section.wsl": "WSL",
+   "settings.desktop.wsl.title": "WSL integration",
+-  "settings.desktop.wsl.description": "Run the OpenCode server inside WSL on Windows.",
++  "settings.desktop.wsl.description": "Run the CoBuilder server inside WSL on Windows.",
+ 
+   "settings.general.section.appearance": "Appearance",
+   "settings.general.section.notifications": "System notifications",
+@@ -722,13 +722,13 @@ export const dict = {
+   "settings.general.section.display": "Display",
+ 
+   "settings.general.row.language.title": "Language",
+-  "settings.general.row.language.description": "Change the display language for OpenCode",
++  "settings.general.row.language.description": "Change the display language for CoBuilder",
+   "settings.general.row.appearance.title": "Appearance",
+-  "settings.general.row.appearance.description": "Customise how OpenCode looks on your device",
++  "settings.general.row.appearance.description": "Customise how CoBuilder looks on your device",
+   "settings.general.row.colorScheme.title": "Color scheme",
+-  "settings.general.row.colorScheme.description": "Choose whether OpenCode follows the system, light, or dark theme",
++  "settings.general.row.colorScheme.description": "Choose whether CoBuilder follows the system, light, or dark theme",
+   "settings.general.row.theme.title": "Theme",
+-  "settings.general.row.theme.description": "Customise how OpenCode is themed.",
++  "settings.general.row.theme.description": "Customise how CoBuilder is themed.",
+   "settings.general.row.font.title": "Font",
+   "settings.general.row.font.description": "Customise the mono font used in code blocks",
+   "settings.general.row.followup.title": "Follow-up behavior",
+@@ -753,13 +753,13 @@ export const dict = {
+   "settings.general.row.releaseNotes.description": "Show What's New popups after updates",
+ 
+   "settings.updates.row.startup.title": "Check for updates on startup",
+-  "settings.updates.row.startup.description": "Automatically check for updates when OpenCode launches",
++  "settings.updates.row.startup.description": "Automatically check for updates when CoBuilder launches",
+   "settings.updates.row.check.title": "Check for updates",
+   "settings.updates.row.check.description": "Manually check for updates and install if available",
+   "settings.updates.action.checkNow": "Check now",
+   "settings.updates.action.checking": "Checking...",
+   "settings.updates.toast.latest.title": "You're up to date",
+-  "settings.updates.toast.latest.description": "You're running the latest version of OpenCode.",
++  "settings.updates.toast.latest.description": "You're running the latest version of CoBuilder.",
+   "font.option.ibmPlexMono": "IBM Plex Mono",
+   "font.option.cascadiaCode": "Cascadia Code",
+   "font.option.firaCode": "Fira Code",
+diff --git a/packages/app/src/i18n/es.ts b/packages/app/src/i18n/es.ts
+index 31fd71c04..b0e40b541 100644
+--- a/packages/app/src/i18n/es.ts
++++ b/packages/app/src/i18n/es.ts
+@@ -115,7 +115,7 @@ export const dict = {
+   "dialog.model.manage.description": "Personalizar qué modelos aparecen en el selector de modelos.",
+   "dialog.model.manage.provider.toggle": "Alternar todos los modelos de {{provider}}",
+ 
+-  "dialog.model.unpaid.freeModels.title": "Modelos gratuitos proporcionados por OpenCode",
++  "dialog.model.unpaid.freeModels.title": "Modelos gratuitos proporcionados por CoBuilder",
+   "dialog.model.unpaid.addMore.title": "Añadir más modelos de proveedores populares",
+ 
+   "dialog.provider.viewAll": "Ver más proveedores",
+@@ -128,12 +128,12 @@ export const dict = {
+   "provider.connect.status.waiting": "Esperando autorización...",
+   "provider.connect.status.failed": "Autorización fallida: {{error}}",
+   "provider.connect.apiKey.description":
+-    "Introduce tu clave API de {{provider}} para conectar tu cuenta y usar modelos de {{provider}} en OpenCode.",
++    "Introduce tu clave API de {{provider}} para conectar tu cuenta y usar modelos de {{provider}} en CoBuilder.",
+   "provider.connect.apiKey.label": "Clave API de {{provider}}",
+   "provider.connect.apiKey.placeholder": "Clave API",
+   "provider.connect.apiKey.required": "La clave API es obligatoria",
+   "provider.connect.opencodeZen.line1":
+-    "OpenCode Zen te da acceso a un conjunto curado de modelos fiables optimizados para agentes de programación.",
++    "CoBuilder Zen te da acceso a un conjunto curado de modelos fiables optimizados para agentes de programación.",
+   "provider.connect.opencodeZen.line2":
+     "Con una sola clave API obtendrás acceso a modelos como Claude, GPT, Gemini, GLM y más.",
+   "provider.connect.opencodeZen.visit.prefix": "Visita ",
+@@ -142,7 +142,7 @@ export const dict = {
+   "provider.connect.oauth.code.visit.prefix": "Visita ",
+   "provider.connect.oauth.code.visit.link": "este enlace",
+   "provider.connect.oauth.code.visit.suffix":
+-    " para obtener tu código de autorización para conectar tu cuenta y usar modelos de {{provider}} en OpenCode.",
++    " para obtener tu código de autorización para conectar tu cuenta y usar modelos de {{provider}} en CoBuilder.",
+   "provider.connect.oauth.code.label": "Código de autorización {{method}}",
+   "provider.connect.oauth.code.placeholder": "Código de autorización",
+   "provider.connect.oauth.code.required": "El código de autorización es obligatorio",
+@@ -150,7 +150,7 @@ export const dict = {
+   "provider.connect.oauth.auto.visit.prefix": "Visita ",
+   "provider.connect.oauth.auto.visit.link": "este enlace",
+   "provider.connect.oauth.auto.visit.suffix":
+-    " e introduce el código a continuación para conectar tu cuenta y usar modelos de {{provider}} en OpenCode.",
++    " e introduce el código a continuación para conectar tu cuenta y usar modelos de {{provider}} en CoBuilder.",
+   "provider.connect.oauth.auto.confirmationCode": "Código de confirmación",
+   "provider.connect.toast.connected.title": "{{provider}} conectado",
+   "provider.connect.toast.connected.description": "Los modelos de {{provider}} ahora están disponibles para usar.",
+@@ -307,7 +307,7 @@ export const dict = {
+   "dialog.directory.empty": "No se encontraron carpetas",
+ 
+   "dialog.server.title": "Servidores",
+-  "dialog.server.description": "Cambiar a qué servidor de OpenCode se conecta esta app.",
++  "dialog.server.description": "Cambiar a qué servidor de CoBuilder se conecta esta app.",
+   "dialog.server.search.placeholder": "Buscar servidores",
+   "dialog.server.empty": "No hay servidores aún",
+   "dialog.server.add.title": "Añadir un servidor",
+@@ -441,7 +441,7 @@ export const dict = {
+   "toast.session.listFailed.title": "Fallo al cargar sesiones para {{project}}",
+ 
+   "toast.update.title": "Actualización disponible",
+-  "toast.update.description": "Una nueva versión de OpenCode ({{version}}) está disponible para instalar.",
++  "toast.update.description": "Una nueva versión de CoBuilder ({{version}}) está disponible para instalar.",
+   "toast.update.action.installRestart": "Instalar y reiniciar",
+   "toast.update.action.notYet": "Todavía no",
+ 
+@@ -452,7 +452,7 @@ export const dict = {
+   "error.page.action.checking": "Comprobando...",
+   "error.page.action.checkUpdates": "Buscar actualizaciones",
+   "error.page.action.updateTo": "Actualizar a {{version}}",
+-  "error.page.report.prefix": "Por favor reporta este error al equipo de OpenCode",
++  "error.page.report.prefix": "Por favor reporta este error al equipo de CoBuilder",
+   "error.page.report.discord": "en Discord",
+   "error.page.version": "Versión: {{version}}",
+ 
+@@ -471,7 +471,7 @@ export const dict = {
+   "error.chain.didYouMean": "¿Quisiste decir: {{suggestions}}",
+   "error.chain.modelNotFound": "Modelo no encontrado: {{provider}}/{{model}}",
+   "error.chain.checkConfig": "Comprueba los nombres de proveedor/modelo en tu configuración (opencode.json)",
+-  "error.chain.mcpFailed": 'El servidor MCP "{{name}}" falló. Nota, OpenCode no soporta autenticación MCP todavía.',
++  "error.chain.mcpFailed": 'El servidor MCP "{{name}}" falló. Nota, CoBuilder no soporta autenticación MCP todavía.',
+   "error.chain.providerAuthFailed": "Autenticación de proveedor fallida ({{provider}}): {{message}}",
+   "error.chain.providerInitFailed":
+     'Fallo al inicializar proveedor "{{provider}}". Comprueba credenciales y configuración.',
+@@ -608,13 +608,13 @@ export const dict = {
+   "sidebar.workspaces.enable": "Habilitar espacios de trabajo",
+   "sidebar.workspaces.disable": "Deshabilitar espacios de trabajo",
+   "sidebar.gettingStarted.title": "Empezando",
+-  "sidebar.gettingStarted.line1": "OpenCode incluye modelos gratuitos para que puedas empezar inmediatamente.",
++  "sidebar.gettingStarted.line1": "CoBuilder incluye modelos gratuitos para que puedas empezar inmediatamente.",
+   "sidebar.gettingStarted.line2": "Conecta cualquier proveedor para usar modelos, inc. Claude, GPT, Gemini etc.",
+   "sidebar.project.recentSessions": "Sesiones recientes",
+   "sidebar.project.viewAllSessions": "Ver todas las sesiones",
+   "sidebar.project.clearNotifications": "Borrar notificaciones",
+ 
+-  "app.name.desktop": "OpenCode Desktop",
++  "app.name.desktop": "CoBuilder Desktop",
+ 
+   "settings.section.desktop": "Escritorio",
+   "settings.section.server": "Servidor",
+@@ -622,7 +622,7 @@ export const dict = {
+   "settings.tab.shortcuts": "Atajos",
+   "settings.desktop.section.wsl": "WSL",
+   "settings.desktop.wsl.title": "Integración con WSL",
+-  "settings.desktop.wsl.description": "Ejecutar el servidor OpenCode dentro de WSL en Windows.",
++  "settings.desktop.wsl.description": "Ejecutar el servidor CoBuilder dentro de WSL en Windows.",
+ 
+   "settings.general.section.appearance": "Apariencia",
+   "settings.general.section.notifications": "Notificaciones del sistema",
+@@ -632,13 +632,13 @@ export const dict = {
+   "settings.general.section.display": "Pantalla",
+ 
+   "settings.general.row.language.title": "Idioma",
+-  "settings.general.row.language.description": "Cambiar el idioma de visualización para OpenCode",
++  "settings.general.row.language.description": "Cambiar el idioma de visualización para CoBuilder",
+   "settings.general.row.appearance.title": "Apariencia",
+-  "settings.general.row.appearance.description": "Personaliza cómo se ve OpenCode en tu dispositivo",
++  "settings.general.row.appearance.description": "Personaliza cómo se ve CoBuilder en tu dispositivo",
+   "settings.general.row.colorScheme.title": "Esquema de color",
+-  "settings.general.row.colorScheme.description": "Elige si OpenCode sigue el tema del sistema, claro u oscuro",
++  "settings.general.row.colorScheme.description": "Elige si CoBuilder sigue el tema del sistema, claro u oscuro",
+   "settings.general.row.theme.title": "Tema",
+-  "settings.general.row.theme.description": "Personaliza el tema de OpenCode.",
++  "settings.general.row.theme.description": "Personaliza el tema de CoBuilder.",
+   "settings.general.row.font.title": "Fuente",
+   "settings.general.row.font.description": "Personaliza la fuente monoespaciada usada en bloques de código",
+   "settings.general.row.followup.title": "Comportamiento de seguimiento",
+@@ -665,13 +665,13 @@ export const dict = {
+     'Mostrar ventanas emergentes de "Novedades" después de las actualizaciones',
+ 
+   "settings.updates.row.startup.title": "Buscar actualizaciones al iniciar",
+-  "settings.updates.row.startup.description": "Buscar actualizaciones automáticamente cuando se inicia OpenCode",
++  "settings.updates.row.startup.description": "Buscar actualizaciones automáticamente cuando se inicia CoBuilder",
+   "settings.updates.row.check.title": "Buscar actualizaciones",
+   "settings.updates.row.check.description": "Buscar actualizaciones manualmente e instalarlas si hay alguna",
+   "settings.updates.action.checkNow": "Buscar ahora",
+   "settings.updates.action.checking": "Buscando...",
+   "settings.updates.toast.latest.title": "Estás al día",
+-  "settings.updates.toast.latest.description": "Estás usando la última versión de OpenCode.",
++  "settings.updates.toast.latest.description": "Estás usando la última versión de CoBuilder.",
+   "font.option.ibmPlexMono": "IBM Plex Mono",
+   "font.option.cascadiaCode": "Cascadia Code",
+   "font.option.firaCode": "Fira Code",
+diff --git a/packages/app/src/pages/layout/deep-links.ts b/packages/app/src/pages/layout/deep-links.ts
+index 5dca421f7..013aa3f36 100644
+--- a/packages/app/src/pages/layout/deep-links.ts
++++ b/packages/app/src/pages/layout/deep-links.ts
+@@ -37,14 +37,14 @@ export const collectNewSessionDeepLinks = (urls: string[]) =>
+   urls.map(parseNewSessionDeepLink).filter((link): link is { directory: string; prompt?: string } => !!link)
+ 
+ type OpenCodeWindow = Window & {
+-  __OPENCODE__?: {
++  __COBUILDER__?: {
+     deepLinks?: string[]
+   }
+ }
+ 
+ export const drainPendingDeepLinks = (target: OpenCodeWindow) => {
+-  const pending = target.__OPENCODE__?.deepLinks ?? []
++  const pending = target.__COBUILDER__?.deepLinks ?? []
+   if (pending.length === 0) return []
+-  if (target.__OPENCODE__) target.__OPENCODE__.deepLinks = []
++  if (target.__COBUILDER__) target.__COBUILDER__.deepLinks = []
+   return pending
+ }
+diff --git a/packages/app/src/pages/layout/helpers.test.ts b/packages/app/src/pages/layout/helpers.test.ts
+index 1fe52d47a..ddb0795a8 100644
+--- a/packages/app/src/pages/layout/helpers.test.ts
++++ b/packages/app/src/pages/layout/helpers.test.ts
+@@ -91,10 +91,10 @@ describe("layout deep links", () => {
+ 
+   test("drains global deep links once", () => {
+     const target = {
+-      __OPENCODE__: {
++      __COBUILDER__: {
+         deepLinks: ["opencode://open-project?directory=/a"],
+       },
+-    } as unknown as Window & { __OPENCODE__?: { deepLinks?: string[] } }
++    } as unknown as Window & { __COBUILDER__?: { deepLinks?: string[] } }
+ 
+     expect(drainPendingDeepLinks(target)).toEqual(["opencode://open-project?directory=/a"])
+     expect(drainPendingDeepLinks(target)).toEqual([])
+diff --git a/packages/app/src/pages/session.tsx b/packages/app/src/pages/session.tsx
+index 2d3e31355..23f8dd9a4 100644
+--- a/packages/app/src/pages/session.tsx
++++ b/packages/app/src/pages/session.tsx
+@@ -29,6 +29,7 @@ import { showToast } from "@opencode-ai/ui/toast"
+ import { base64Encode, checksum } from "@opencode-ai/util/encode"
+ import { useNavigate, useSearchParams } from "@solidjs/router"
+ import { NewSessionView, SessionHeader } from "@/components/session"
++import { DialogSelectProvider } from "@/components/dialog-select-provider"
+ import { useComments } from "@/context/comments"
+ import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
+ import { useGlobalSync } from "@/context/global-sync"
+@@ -1761,6 +1762,23 @@ export default function Page() {
+             </Switch>
+           </div>
+ 
++          <Show when={globalSync.data.provider.connected.length === 0 && messagesReady()}>
++            <div class="flex flex-col items-center gap-3 py-8 text-center px-4">
++              <p class="text-sm text-text-weak">
++                {language.t("session.noProvider.message", {
++                  fallback: "No AI provider connected. Connect a provider to start chatting.",
++                })}
++              </p>
++              <button
++                type="button"
++                class="text-sm text-accent-base hover:underline cursor-pointer"
++                onClick={() => dialog.show(() => <DialogSelectProvider />)}
++              >
++                {language.t("session.noProvider.connect", { fallback: "Connect a provider" })}
++              </button>
++            </div>
++          </Show>
++
+           <SessionComposerRegion
+             state={composer}
+             ready={!store.deferRender && messagesReady()}
+diff --git a/packages/app/src/pages/session/composer/session-composer-region.tsx b/packages/app/src/pages/session/composer/session-composer-region.tsx
+index a5263cd74..b491ff9a7 100644
+--- a/packages/app/src/pages/session/composer/session-composer-region.tsx
++++ b/packages/app/src/pages/session/composer/session-composer-region.tsx
+@@ -176,8 +176,12 @@ export function SessionComposerRegion(props: {
+                     </div>
+                   )}
+                 </Show>
+-                <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
+-                  {handoffPrompt() || language.t("prompt.loading")}
++                <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none flex items-start gap-2">
++                  <svg class="animate-spin size-4 shrink-0 mt-0.5 opacity-60" viewBox="0 0 24 24" fill="none" aria-hidden="true">
++                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
++                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
++                  </svg>
++                  <span>{handoffPrompt() || language.t("prompt.loading")}</span>
+                 </div>
+               </>
+             }
+diff --git a/packages/desktop-electron/src/main/menu.ts b/packages/desktop-electron/src/main/menu.ts
+index d8997be31..1d1a980e0 100644
+--- a/packages/desktop-electron/src/main/menu.ts
++++ b/packages/desktop-electron/src/main/menu.ts
+@@ -12,88 +12,116 @@ type Deps = {
+ }
+ 
+ export function createMenu(deps: Deps) {
+-  if (process.platform !== "darwin") return
++  const isMac = process.platform === "darwin"
+ 
+   const template: Electron.MenuItemConstructorOptions[] = [
++    // macOS app menu (darwin only)
++    ...(isMac
++      ? [
++          {
++            label: "CoBuilder",
++            submenu: [
++              { role: "about" as const },
++              {
++                label: "Check for Updates...",
++                enabled: UPDATER_ENABLED,
++                click: () => deps.checkForUpdates(),
++              },
++              {
++                label: "Install CLI...",
++                click: () => deps.installCli(),
++              },
++              {
++                label: "Reload Webview",
++                click: () => deps.reload(),
++              },
++              {
++                label: "Restart",
++                click: () => deps.relaunch(),
++              },
++              { type: "separator" as const },
++              { role: "hide" as const },
++              { role: "hideOthers" as const },
++              { role: "unhide" as const },
++              { type: "separator" as const },
++              { role: "quit" as const },
++            ],
++          },
++        ]
++      : []),
+     {
+-      label: "OpenCode",
++      label: "File",
+       submenu: [
+-        { role: "about" },
+-        {
+-          label: "Check for Updates...",
+-          enabled: UPDATER_ENABLED,
+-          click: () => deps.checkForUpdates(),
+-        },
+         {
+-          label: "Install CLI...",
+-          click: () => deps.installCli(),
++          label: "New Session",
++          accelerator: isMac ? "Shift+Cmd+S" : "Shift+Ctrl+S",
++          click: () => deps.trigger("session.new"),
+         },
+         {
+-          label: "Reload Webview",
+-          click: () => deps.reload(),
++          label: "Open Project...",
++          accelerator: isMac ? "Cmd+O" : "Ctrl+O",
++          click: () => deps.trigger("project.open"),
+         },
+-        {
+-          label: "Restart",
+-          click: () => deps.relaunch(),
+-        },
+-        { type: "separator" },
+-        { role: "hide" },
+-        { role: "hideOthers" },
+-        { role: "unhide" },
+-        { type: "separator" },
+-        { role: "quit" },
+-      ],
+-    },
+-    {
+-      label: "File",
+-      submenu: [
+-        { label: "New Session", accelerator: "Shift+Cmd+S", click: () => deps.trigger("session.new") },
+-        { label: "Open Project...", accelerator: "Cmd+O", click: () => deps.trigger("project.open") },
+         {
+           label: "New Window",
+-          accelerator: "Cmd+Shift+N",
++          accelerator: isMac ? "Cmd+Shift+N" : "Ctrl+Shift+N",
+           click: () => createMainWindow({ updaterEnabled: UPDATER_ENABLED }),
+         },
+-        { type: "separator" },
+-        { role: "close" },
++        { type: "separator" as const },
++        { role: "close" as const },
++        // Quit in File menu on Windows/Linux
++        ...(!isMac
++          ? [
++              { type: "separator" as const },
++              { role: "quit" as const },
++            ]
++          : []),
+       ],
+     },
+     {
+       label: "Edit",
+       submenu: [
+-        { role: "undo" },
+-        { role: "redo" },
+-        { type: "separator" },
+-        { role: "cut" },
+-        { role: "copy" },
+-        { role: "paste" },
+-        { role: "selectAll" },
++        { role: "undo" as const },
++        { role: "redo" as const },
++        { type: "separator" as const },
++        { role: "cut" as const },
++        { role: "copy" as const },
++        { role: "paste" as const },
++        { role: "selectAll" as const },
+       ],
+     },
+     {
+       label: "View",
+       submenu: [
+-        { label: "Toggle Sidebar", accelerator: "Cmd+B", click: () => deps.trigger("sidebar.toggle") },
+-        { label: "Toggle Terminal", accelerator: "Ctrl+`", click: () => deps.trigger("terminal.toggle") },
++        {
++          label: "Toggle Sidebar",
++          accelerator: isMac ? "Cmd+B" : "Ctrl+B",
++          click: () => deps.trigger("sidebar.toggle"),
++        },
++        {
++          label: "Toggle Terminal",
++          accelerator: "Ctrl+`",
++          click: () => deps.trigger("terminal.toggle"),
++        },
+         { label: "Toggle File Tree", click: () => deps.trigger("fileTree.toggle") },
+-        { type: "separator" },
++        { type: "separator" as const },
+         { label: "Back", click: () => deps.trigger("common.goBack") },
+         { label: "Forward", click: () => deps.trigger("common.goForward") },
+-        { type: "separator" },
++        { type: "separator" as const },
+         {
+           label: "Previous Session",
+-          accelerator: "Option+ArrowUp",
++          accelerator: isMac ? "Option+ArrowUp" : "Alt+ArrowUp",
+           click: () => deps.trigger("session.previous"),
+         },
+         {
+           label: "Next Session",
+-          accelerator: "Option+ArrowDown",
++          accelerator: isMac ? "Option+ArrowDown" : "Alt+ArrowDown",
+           click: () => deps.trigger("session.next"),
+         },
+-        { type: "separator" },
++        { type: "separator" as const },
+         {
+           label: "Toggle Developer Tools",
+-          accelerator: "Alt+Cmd+I",
++          accelerator: isMac ? "Alt+Cmd+I" : "Ctrl+Shift+I",
+           click: () => BrowserWindow.getFocusedWindow()?.webContents.toggleDevTools(),
+         },
+       ],
+@@ -101,19 +129,34 @@ export function createMenu(deps: Deps) {
+     {
+       label: "Help",
+       submenu: [
+-        { label: "OpenCode Documentation", click: () => shell.openExternal("https://opencode.ai/docs") },
++        { label: "CoBuilder Documentation", click: () => shell.openExternal("https://opencode.ai/docs") },
+         { label: "Support Forum", click: () => shell.openExternal("https://discord.com/invite/opencode") },
+-        { type: "separator" },
+-        { type: "separator" },
++        { type: "separator" as const },
+         {
+           label: "Share Feedback",
+           click: () =>
+-            shell.openExternal("https://github.com/anomalyco/opencode/issues/new?template=feature_request.yml"),
++            shell.openExternal("https://github.com/CobuilderLabs/opencode/issues/new?template=feature_request.yml"),
+         },
+         {
+           label: "Report a Bug",
+-          click: () => shell.openExternal("https://github.com/anomalyco/opencode/issues/new?template=bug_report.yml"),
++          click: () =>
++            shell.openExternal("https://github.com/CobuilderLabs/opencode/issues/new?template=bug_report.yml"),
+         },
++        // Windows/Linux: show Check for Updates and Install CLI in Help
++        ...(!isMac
++          ? [
++              { type: "separator" as const },
++              {
++                label: "Check for Updates...",
++                enabled: UPDATER_ENABLED,
++                click: () => deps.checkForUpdates(),
++              },
++              {
++                label: "Install CLI...",
++                click: () => deps.installCli(),
++              },
++            ]
++          : []),
+       ],
+     },
+   ]
+diff --git a/packages/desktop-electron/src/main/windows.ts b/packages/desktop-electron/src/main/windows.ts
+index 0b7783f28..0ef8ec948 100644
+--- a/packages/desktop-electron/src/main/windows.ts
++++ b/packages/desktop-electron/src/main/windows.ts
+@@ -145,7 +145,7 @@ function injectGlobals(win: BrowserWindow, globals: Globals) {
+       deepLinks: Array.isArray(deepLinks) ? deepLinks.splice(0) : deepLinks,
+     }
+     void win.webContents.executeJavaScript(
+-      `window.__OPENCODE__ = Object.assign(window.__OPENCODE__ ?? {}, ${JSON.stringify(data)})`,
++      `window.__COBUILDER__ = Object.assign(window.__COBUILDER__ ?? {}, ${JSON.stringify(data)})`,
+     )
+   })
+ }
+diff --git a/packages/desktop-electron/src/renderer/env.d.ts b/packages/desktop-electron/src/renderer/env.d.ts
+index d1590ff04..817b4f42b 100644
+--- a/packages/desktop-electron/src/renderer/env.d.ts
++++ b/packages/desktop-electron/src/renderer/env.d.ts
+@@ -3,7 +3,7 @@ import type { ElectronAPI } from "../preload/types"
+ declare global {
+   interface Window {
+     api: ElectronAPI
+-    __OPENCODE__?: {
++    __COBUILDER__?: {
+       updaterEnabled?: boolean
+       wsl?: boolean
+       deepLinks?: string[]
+diff --git a/packages/desktop-electron/src/renderer/index.tsx b/packages/desktop-electron/src/renderer/index.tsx
+index 44f2e6360..c649f0234 100644
+--- a/packages/desktop-electron/src/renderer/index.tsx
++++ b/packages/desktop-electron/src/renderer/index.tsx
+@@ -36,14 +36,14 @@ const deepLinkEvent = "opencode:deep-link"
+ 
+ const emitDeepLinks = (urls: string[]) => {
+   if (urls.length === 0) return
+-  window.__OPENCODE__ ??= {}
+-  const pending = window.__OPENCODE__.deepLinks ?? []
+-  window.__OPENCODE__.deepLinks = [...pending, ...urls]
++  window.__COBUILDER__ ??= {}
++  const pending = window.__COBUILDER__.deepLinks ?? []
++  window.__COBUILDER__.deepLinks = [...pending, ...urls]
+   window.dispatchEvent(new CustomEvent(deepLinkEvent, { detail: { urls } }))
+ }
+ 
+ const listenForDeepLinks = () => {
+-  const startUrls = window.__OPENCODE__?.deepLinks ?? []
++  const startUrls = window.__COBUILDER__?.deepLinks ?? []
+   if (startUrls.length) emitDeepLinks(startUrls)
+   return window.api.onDeepLink((urls) => emitDeepLinks(urls))
+ }
+@@ -58,12 +58,12 @@ const createPlatform = (): Platform => {
+   })()
+ 
+   const wslHome = async () => {
+-    if (os !== "windows" || !window.__OPENCODE__?.wsl) return undefined
++    if (os !== "windows" || !window.__COBUILDER__?.wsl) return undefined
+     return window.api.wslPath("~", "windows").catch(() => undefined)
+   }
+ 
+   const handleWslPicker = async <T extends string | string[]>(result: T | null): Promise<T | null> => {
+-    if (!result || !window.__OPENCODE__?.wsl) return result
++    if (!result || !window.__COBUILDER__?.wsl) return result
+     if (Array.isArray(result)) {
+       return Promise.all(result.map((path) => window.api.wslPath(path, "linux").catch(() => path))) as any
+     }
+@@ -137,7 +137,7 @@ const createPlatform = (): Platform => {
+       if (os === "windows") {
+         const resolvedApp = app ? await window.api.resolveAppPath(app).catch(() => null) : null
+         const resolvedPath = await (async () => {
+-          if (window.__OPENCODE__?.wsl) {
++          if (window.__COBUILDER__?.wsl) {
+             const converted = await window.api.wslPath(path, "windows").catch(() => null)
+             if (converted) return converted
+           }
+@@ -197,7 +197,7 @@ const createPlatform = (): Platform => {
+     getWslEnabled: async () => {
+       const next = await window.api.getWslConfig().catch(() => null)
+       if (next) return next.enabled
+-      return window.__OPENCODE__!.wsl ?? false
++      return window.__COBUILDER__!.wsl ?? false
+     },
+ 
+     setWslEnabled: async (enabled) => {
+diff --git a/packages/desktop-electron/src/renderer/loading.tsx b/packages/desktop-electron/src/renderer/loading.tsx
+index 000057e0a..cdd5dff0e 100644
+--- a/packages/desktop-electron/src/renderer/loading.tsx
++++ b/packages/desktop-electron/src/renderer/loading.tsx
+@@ -65,13 +65,14 @@ render(() => {
+         <Font />
+         <div class="flex flex-col items-center gap-11">
+           <Splash class="w-20 h-25 opacity-15" />
++          <span class="text-lg font-semibold text-text-strong tracking-tight">CoBuilder</span>
+           <div class="w-60 flex flex-col items-center gap-4" aria-live="polite">
+             <span class="w-full overflow-hidden text-center text-ellipsis whitespace-nowrap text-text-strong text-14-normal">
+               {status()}
+             </span>
+             <Progress
+               value={value()}
+-              class="w-20 [&_[data-slot='progress-track']]:h-1 [&_[data-slot='progress-track']]:border-0 [&_[data-slot='progress-track']]:rounded-none [&_[data-slot='progress-track']]:bg-surface-weak [&_[data-slot='progress-fill']]:rounded-none [&_[data-slot='progress-fill']]:bg-icon-warning-base"
++              class="w-20 [&_[data-slot='progress-track']]:h-1 [&_[data-slot='progress-track']]:border-0 [&_[data-slot='progress-track']]:rounded-none [&_[data-slot='progress-track']]:bg-surface-weak [&_[data-slot='progress-fill']]:rounded-none [&_[data-slot='progress-fill']]:bg-accent-base"
+               aria-label="Database migration progress"
+               getValueLabel={({ value }) => `${Math.round(value)}%`}
+             />
+diff --git a/packages/desktop-electron/src/renderer/updater.ts b/packages/desktop-electron/src/renderer/updater.ts
+index ba2b458ec..df82dee2d 100644
+--- a/packages/desktop-electron/src/renderer/updater.ts
++++ b/packages/desktop-electron/src/renderer/updater.ts
+@@ -1,6 +1,6 @@
+ import { initI18n, t } from "./i18n"
+ 
+-export const UPDATER_ENABLED = () => window.__OPENCODE__?.updaterEnabled ?? false
++export const UPDATER_ENABLED = () => window.__COBUILDER__?.updaterEnabled ?? false
+ 
+ export async function runUpdater({ alertOnFail }: { alertOnFail: boolean }) {
+   await initI18n()
+diff --git a/packages/desktop/src/env.d.ts b/packages/desktop/src/env.d.ts
+new file mode 100644
+index 000000000..e49ffbad4
+--- /dev/null
++++ b/packages/desktop/src/env.d.ts
+@@ -0,0 +1,11 @@
++declare global {
++  interface Window {
++    __COBUILDER__?: {
++      updaterEnabled?: boolean
++      wsl?: boolean
++      deepLinks?: string[]
++    }
++  }
++}
++
++export {}
+diff --git a/packages/desktop/src/index.tsx b/packages/desktop/src/index.tsx
+index 5fe88d501..80aa3436d 100644
+--- a/packages/desktop/src/index.tsx
++++ b/packages/desktop/src/index.tsx
+@@ -50,9 +50,9 @@ const deepLinkEvent = "opencode:deep-link"
+ 
+ const emitDeepLinks = (urls: string[]) => {
+   if (urls.length === 0) return
+-  window.__OPENCODE__ ??= {}
+-  const pending = window.__OPENCODE__.deepLinks ?? []
+-  window.__OPENCODE__.deepLinks = [...pending, ...urls]
++  window.__COBUILDER__ ??= {}
++  const pending = window.__COBUILDER__.deepLinks ?? []
++  window.__COBUILDER__.deepLinks = [...pending, ...urls]
+   window.dispatchEvent(new CustomEvent(deepLinkEvent, { detail: { urls } }))
+ }
+ 
+@@ -70,12 +70,12 @@ const createPlatform = (): Platform => {
+   })()
+ 
+   const wslHome = async () => {
+-    if (os !== "windows" || !window.__OPENCODE__?.wsl) return undefined
++    if (os !== "windows" || !window.__COBUILDER__?.wsl) return undefined
+     return commands.wslPath("~", "windows").catch(() => undefined)
+   }
+ 
+   const handleWslPicker = async <T extends string | string[]>(result: T | null): Promise<T | null> => {
+-    if (!result || !window.__OPENCODE__?.wsl) return result
++    if (!result || !window.__COBUILDER__?.wsl) return result
+     if (Array.isArray(result)) {
+       return Promise.all(result.map((path) => commands.wslPath(path, "linux").catch(() => path))) as any
+     }
+@@ -346,7 +346,7 @@ const createPlatform = (): Platform => {
+     getWslEnabled: async () => {
+       const next = await commands.getWslConfig().catch(() => null)
+       if (next) return next.enabled
+-      return window.__OPENCODE__!.wsl ?? false
++      return window.__COBUILDER__!.wsl ?? false
+     },
+ 
+     setWslEnabled: async (enabled) => {
+diff --git a/packages/desktop/src/updater.ts b/packages/desktop/src/updater.ts
+index 732669633..c098505dc 100644
+--- a/packages/desktop/src/updater.ts
++++ b/packages/desktop/src/updater.ts
+@@ -6,7 +6,7 @@ import { type as ostype } from "@tauri-apps/plugin-os"
+ import { initI18n, t } from "./i18n"
+ import { commands } from "./bindings"
+ 
+-export const UPDATER_ENABLED = window.__OPENCODE__?.updaterEnabled ?? false
++export const UPDATER_ENABLED = window.__COBUILDER__?.updaterEnabled ?? false
+ 
+ export async function runUpdater({ alertOnFail }: { alertOnFail: boolean }) {
+   await initI18n()
+diff --git a/packages/opencode/src/cli/cmd/tui/app.tsx b/packages/opencode/src/cli/cmd/tui/app.tsx
+index 4897cb7e8..0b1020c22 100644
+--- a/packages/opencode/src/cli/cmd/tui/app.tsx
++++ b/packages/opencode/src/cli/cmd/tui/app.tsx
+@@ -259,23 +259,19 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
+   }
+   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
+ 
+-  createEffect(() => {
+-    console.log(JSON.stringify(route.data))
+-  })
+-
+   // Update terminal window title based on current route and session
+   createEffect(() => {
+     if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
+ 
+     if (route.data.type === "home") {
+-      renderer.setTerminalTitle("OpenCode")
++      renderer.setTerminalTitle("CoBuilder")
+       return
+     }
+ 
+     if (route.data.type === "session") {
+       const session = sync.session.get(route.data.sessionID)
+       if (!session || SessionApi.isDefaultTitle(session.title)) {
+-        renderer.setTerminalTitle("OpenCode")
++        renderer.setTerminalTitle("CoBuilder")
+         return
+       }
+ 
+@@ -783,7 +779,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
+     await DialogAlert.show(
+       dialog,
+       "Update Complete",
+-      `Successfully updated to OpenCode v${result.data.version}. Please restart the application.`,
++      `Successfully updated to CoBuilder v${result.data.version}. Please restart the application.`,
+     )
+ 
+     exit()
+@@ -839,7 +835,7 @@ function ErrorComponent(props: {
+   })
+   const [copied, setCopied] = createSignal(false)
+ 
+-  const issueURL = new URL("https://github.com/anomalyco/opencode/issues/new?template=bug-report.yml")
++  const issueURL = new URL("https://github.com/CobuilderLabs/opencode/issues/new?template=bug-report.yml")
+ 
+   // Choose safe fallback colors per mode since theme context may not be available
+   const isLight = props.mode === "light"
+diff --git a/packages/opencode/src/cli/cmd/tui/component/dialog-provider.tsx b/packages/opencode/src/cli/cmd/tui/component/dialog-provider.tsx
+index 635ed71f5..20293e6c5 100644
+--- a/packages/opencode/src/cli/cmd/tui/component/dialog-provider.tsx
++++ b/packages/opencode/src/cli/cmd/tui/component/dialog-provider.tsx
+@@ -240,7 +240,7 @@ function ApiMethod(props: ApiMethodProps) {
+           opencode: (
+             <box gap={1}>
+               <text fg={theme.textMuted}>
+-                OpenCode Zen gives you access to all the best coding models at the cheapest prices with a single API
++                CoBuilder Zen gives you access to all the best coding models at the cheapest prices with a single API
+                 key.
+               </text>
+               <text fg={theme.text}>
+@@ -251,11 +251,11 @@ function ApiMethod(props: ApiMethodProps) {
+           "opencode-go": (
+             <box gap={1}>
+               <text fg={theme.textMuted}>
+-                OpenCode Go is a $10 per month subscription that provides reliable access to popular open coding models
++                CoBuilder Go is a $10 per month subscription that provides reliable access to popular open coding models
+                 with generous usage limits.
+               </text>
+               <text fg={theme.text}>
+-                Go to <span style={{ fg: theme.primary }}>https://opencode.ai/zen</span> and enable OpenCode Go
++                Go to <span style={{ fg: theme.primary }}>https://opencode.ai/zen</span> and enable CoBuilder Go
+               </text>
+             </box>
+           ),
+diff --git a/packages/opencode/src/cli/cmd/tui/component/tips.tsx b/packages/opencode/src/cli/cmd/tui/component/tips.tsx
+index 73d82248a..9aefa130b 100644
+--- a/packages/opencode/src/cli/cmd/tui/component/tips.tsx
++++ b/packages/opencode/src/cli/cmd/tui/component/tips.tsx
+@@ -87,7 +87,7 @@ const TIPS = [
+   "Override any keybind in {highlight}tui.json{/highlight} via the {highlight}keybinds{/highlight} section",
+   "Set any keybind to {highlight}none{/highlight} to disable it completely",
+   "Configure local or remote MCP servers in the {highlight}mcp{/highlight} config section",
+-  "OpenCode auto-handles OAuth for remote MCP servers requiring auth",
++  "CoBuilder auto-handles OAuth for remote MCP servers requiring auth",
+   "Add {highlight}.md{/highlight} files to {highlight}.opencode/command/{/highlight} to define reusable custom prompts",
+   "Use {highlight}$ARGUMENTS{/highlight}, {highlight}$1{/highlight}, {highlight}$2{/highlight} in custom commands for dynamic input",
+   "Use backticks in commands to inject shell output (e.g., {highlight}`git status`{/highlight})",
+@@ -96,20 +96,20 @@ const TIPS = [
+   'Use patterns like {highlight}"git *": "allow"{/highlight} for granular bash permissions',
+   'Set {highlight}"rm -rf *": "deny"{/highlight} to block destructive commands',
+   'Configure {highlight}"git push": "ask"{/highlight} to require approval before pushing',
+-  "OpenCode auto-formats files using prettier, gofmt, ruff, and more",
++  "CoBuilder auto-formats files using prettier, gofmt, ruff, and more",
+   'Set {highlight}"formatter": false{/highlight} in config to disable all auto-formatting',
+   "Define custom formatter commands with file extensions in config",
+-  "OpenCode uses LSP servers for intelligent code analysis",
++  "CoBuilder uses LSP servers for intelligent code analysis",
+   "Create {highlight}.ts{/highlight} files in {highlight}.opencode/tools/{/highlight} to define new LLM tools",
+   "Tool definitions can invoke scripts written in Python, Go, etc",
+   "Add {highlight}.ts{/highlight} files to {highlight}.opencode/plugin/{/highlight} for event hooks",
+   "Use plugins to send OS notifications when sessions complete",
+-  "Create a plugin to prevent OpenCode from reading sensitive files",
++  "Create a plugin to prevent CoBuilder from reading sensitive files",
+   "Use {highlight}opencode run{/highlight} for non-interactive scripting",
+   "Use {highlight}opencode --continue{/highlight} to resume the last session",
+   "Use {highlight}opencode run -f file.ts{/highlight} to attach files via CLI",
+   "Use {highlight}--format json{/highlight} for machine-readable output in scripts",
+-  "Run {highlight}opencode serve{/highlight} for headless API access to OpenCode",
++  "Run {highlight}opencode serve{/highlight} for headless API access to CoBuilder",
+   "Use {highlight}opencode run --attach{/highlight} to connect to a running server",
+   "Run {highlight}opencode upgrade{/highlight} to update to the latest version",
+   "Run {highlight}opencode auth list{/highlight} to see all configured providers",
+@@ -142,8 +142,8 @@ const TIPS = [
+   "Press {highlight}Ctrl+X S{/highlight} or {highlight}/status{/highlight} to see system status info",
+   "Enable {highlight}scroll_acceleration{/highlight} in {highlight}tui.json{/highlight} for smooth macOS-style scrolling",
+   "Toggle username display in chat via command palette ({highlight}Ctrl+P{/highlight})",
+-  "Run {highlight}docker run -it --rm ghcr.io/anomalyco/opencode{/highlight} for containerized use",
+-  "Use {highlight}/connect{/highlight} with OpenCode Zen for curated, tested models",
++  "Run {highlight}docker run -it --rm ghcr.io/cobuilderlabs/opencode{/highlight} for containerized use",
++  "Use {highlight}/connect{/highlight} with CoBuilder Zen for curated, tested models",
+   "Commit your project's {highlight}AGENTS.md{/highlight} file to Git for team sharing",
+   "Use {highlight}/review{/highlight} to review uncommitted changes, branches, or PRs",
+   "Run {highlight}/help{/highlight} or {highlight}Ctrl+X H{/highlight} to show the help dialog",
+diff --git a/packages/opencode/src/cli/cmd/tui/routes/home.tsx b/packages/opencode/src/cli/cmd/tui/routes/home.tsx
+index e76e165b2..02d7bcdd1 100644
+--- a/packages/opencode/src/cli/cmd/tui/routes/home.tsx
++++ b/packages/opencode/src/cli/cmd/tui/routes/home.tsx
+@@ -16,9 +16,6 @@ import { useKV } from "../context/kv"
+ import { useCommandDialog } from "../component/dialog-command"
+ import { useLocal } from "../context/local"
+ 
+-// TODO: what is the best way to do this?
+-let once = false
+-
+ export function Home() {
+   const sync = useSync()
+   const kv = useKV()
+@@ -38,8 +35,8 @@ export function Home() {
+   const isFirstTimeUser = createMemo(() => sync.data.session.length === 0)
+   const tipsHidden = createMemo(() => kv.get("tips_hidden", false))
+   const showTips = createMemo(() => {
+-    // Don't show tips for first-time users
+-    if (isFirstTimeUser()) return false
++    // Show tips to first-time users to help them get started
++    if (isFirstTimeUser()) return true
+     return !tipsHidden()
+   })
+ 
+@@ -79,13 +76,10 @@ export function Home() {
+   const args = useArgs()
+   const local = useLocal()
+   onMount(() => {
+-    if (once) return
+     if (route.initialPrompt) {
+       prompt.set(route.initialPrompt)
+-      once = true
+     } else if (args.prompt) {
+       prompt.set({ input: args.prompt, parts: [] })
+-      once = true
+     }
+   })
+ 
+diff --git a/packages/opencode/src/cli/cmd/tui/routes/session/footer.tsx b/packages/opencode/src/cli/cmd/tui/routes/session/footer.tsx
+index 8ace2fff3..12f30aa54 100644
+--- a/packages/opencode/src/cli/cmd/tui/routes/session/footer.tsx
++++ b/packages/opencode/src/cli/cmd/tui/routes/session/footer.tsx
+@@ -1,4 +1,4 @@
+-import { createMemo, Match, onCleanup, onMount, Show, Switch } from "solid-js"
++import { createEffect, createMemo, Match, Show, Switch } from "solid-js"
+ import { useTheme } from "../../context/theme"
+ import { useSync } from "../../context/sync"
+ import { useDirectory } from "../../context/directory"
+@@ -24,29 +24,9 @@ export function Footer() {
+     welcome: false,
+   })
+ 
+-  onMount(() => {
+-    // Track all timeouts to ensure proper cleanup
+-    const timeouts: ReturnType<typeof setTimeout>[] = []
+-
+-    function tick() {
+-      if (connected()) return
+-      if (!store.welcome) {
+-        setStore("welcome", true)
+-        timeouts.push(setTimeout(() => tick(), 5000))
+-        return
+-      }
+-
+-      if (store.welcome) {
+-        setStore("welcome", false)
+-        timeouts.push(setTimeout(() => tick(), 10_000))
+-        return
+-      }
+-    }
+-    timeouts.push(setTimeout(() => tick(), 10_000))
+-
+-    onCleanup(() => {
+-      timeouts.forEach(clearTimeout)
+-    })
++  // Show /connect hint persistently when no provider is connected
++  createEffect(() => {
++    setStore("welcome", !connected())
+   })
+ 
+   return (
+diff --git a/packages/opencode/src/cli/cmd/tui/routes/session/permission.tsx b/packages/opencode/src/cli/cmd/tui/routes/session/permission.tsx
+index a50cd96fc..72efa7141 100644
+--- a/packages/opencode/src/cli/cmd/tui/routes/session/permission.tsx
++++ b/packages/opencode/src/cli/cmd/tui/routes/session/permission.tsx
+@@ -157,11 +157,11 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
+           body={
+             <Switch>
+               <Match when={props.request.always.length === 1 && props.request.always[0] === "*"}>
+-                <TextBody title={"This will allow " + props.request.permission + " until OpenCode is restarted."} />
++                <TextBody title={"This will allow " + props.request.permission + " until CoBuilder is restarted."} />
+               </Match>
+               <Match when={true}>
+                 <box paddingLeft={1} gap={1}>
+-                  <text fg={theme.textMuted}>This will allow the following patterns until OpenCode is restarted</text>
++                  <text fg={theme.textMuted}>This will allow the following patterns until CoBuilder is restarted</text>
+                   <box>
+                     <For each={props.request.always}>
+                       {(pattern) => (
+@@ -501,7 +501,7 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
+           <text fg={theme.text}>Reject permission</text>
+         </box>
+         <box paddingLeft={1}>
+-          <text fg={theme.textMuted}>Tell OpenCode what to do differently</text>
++          <text fg={theme.textMuted}>Tell CoBuilder what to do differently</text>
+         </box>
+       </box>
+       <box
+diff --git a/packages/opencode/src/cli/cmd/tui/routes/session/sidebar.tsx b/packages/opencode/src/cli/cmd/tui/routes/session/sidebar.tsx
+index 42ac5fbe0..a7259ca79 100644
+--- a/packages/opencode/src/cli/cmd/tui/routes/session/sidebar.tsx
++++ b/packages/opencode/src/cli/cmd/tui/routes/session/sidebar.tsx
+@@ -292,7 +292,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
+                     ✕
+                   </text>
+                 </box>
+-                <text fg={theme.textMuted}>OpenCode includes free models so you can start immediately.</text>
++                <text fg={theme.textMuted}>CoBuilder includes free models so you can start immediately.</text>
+                 <text fg={theme.textMuted}>
+                   Connect from 75+ providers to use other models, including Claude, GPT, Gemini etc
+                 </text>
+-- 
+2.43.0
+

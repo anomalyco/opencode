@@ -1,0 +1,30 @@
+From 2a358971160608d4f1686dcb76dcb4ccf3055390 Mon Sep 17 00:00:00 2001
+From: CoBuilder CEO <ceo@cobuilder.ai>
+Date: Fri, 27 Mar 2026 13:10:53 -0700
+Subject: [PATCH 117/131] fix(ci): use bunx turbo instead of bun turbo for unit
+ tests
+
+bun turbo attempts to run turbo.json directly; bunx turbo correctly
+invokes the turbo binary.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ .github/workflows/test.yml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/.github/workflows/test.yml b/.github/workflows/test.yml
+index 0cfc1168c..6957b3cbe 100644
+--- a/.github/workflows/test.yml
++++ b/.github/workflows/test.yml
+@@ -45,7 +45,7 @@ jobs:
+           git config --global user.name "opencode"
+ 
+       - name: Run unit tests
+-        run: bun turbo test
++        run: bunx turbo test
+ 
+   e2e:
+     name: e2e (${{ matrix.settings.name }})
+-- 
+2.43.0
+

@@ -1,0 +1,72 @@
+From b0ac6bebede0bdf0128537960afc172eb698533e Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Fri, 27 Mar 2026 08:41:45 -0700
+Subject: [PATCH 085/131] fix: comment out anomalyco Homebrew tap references
+ (#30)
+
+CobuilderLabs does not have a Homebrew tap yet. Commenting out
+the tap detection and upgrade logic to avoid errors.
+
+Co-authored-by: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ packages/opencode/src/installation/index.ts | 37 +++++++++++----------
+ 1 file changed, 19 insertions(+), 18 deletions(-)
+
+diff --git a/packages/opencode/src/installation/index.ts b/packages/opencode/src/installation/index.ts
+index a64cf483a..d630e9572 100644
+--- a/packages/opencode/src/installation/index.ts
++++ b/packages/opencode/src/installation/index.ts
+@@ -141,8 +141,8 @@ export namespace Installation {
+         )
+ 
+         const getBrewFormula = Effect.fnUntraced(function* () {
+-          const tapFormula = yield* text(["brew", "list", "--formula", "anomalyco/tap/opencode"])
+-          if (tapFormula.includes("opencode")) return "anomalyco/tap/opencode"
++          // const tapFormula = yield* text(["brew", "list", "--formula", "anomalyco/tap/opencode"])
++          // if (tapFormula.includes("opencode")) return "anomalyco/tap/opencode"
+           const coreFormula = yield* text(["brew", "list", "--formula", "opencode"])
+           if (coreFormula.includes("opencode")) return "opencode"
+           return "opencode"
+@@ -283,22 +283,23 @@ export namespace Installation {
+             case "brew": {
+               const formula = yield* getBrewFormula()
+               const env = { HOMEBREW_NO_AUTO_UPDATE: "1" }
+-              if (formula.includes("/")) {
+-                const tap = yield* run(["brew", "tap", "anomalyco/tap"], { env })
+-                if (tap.code !== 0) {
+-                  result = tap
+-                  break
+-                }
+-                const repo = yield* text(["brew", "--repo", "anomalyco/tap"])
+-                const dir = repo.trim()
+-                if (dir) {
+-                  const pull = yield* run(["git", "pull", "--ff-only"], { cwd: dir, env })
+-                  if (pull.code !== 0) {
+-                    result = pull
+-                    break
+-                  }
+-                }
+-              }
++              // Tap support commented out until CobuilderLabs has its own Homebrew tap
++              // if (formula.includes("/")) {
++              //   const tap = yield* run(["brew", "tap", "anomalyco/tap"], { env })
++              //   if (tap.code !== 0) {
++              //     result = tap
++              //     break
++              //   }
++              //   const repo = yield* text(["brew", "--repo", "anomalyco/tap"])
++              //   const dir = repo.trim()
++              //   if (dir) {
++              //     const pull = yield* run(["git", "pull", "--ff-only"], { cwd: dir, env })
++              //     if (pull.code !== 0) {
++              //       result = pull
++              //       break
++              //     }
++              //   }
++              // }
+               result = yield* run(["brew", "upgrade", formula], { env })
+               break
+             }
+-- 
+2.43.0
+

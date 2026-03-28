@@ -1,0 +1,33 @@
+From 7526d3a8077f9c07775f3423ec8929a1059241e7 Mon Sep 17 00:00:00 2001
+From: CoBuilder CEO <ceo@cobuilder.ai>
+Date: Thu, 26 Mar 2026 23:00:21 -0700
+Subject: [PATCH 074/131] fix(cd): use npm install + npx electron-vite on
+ Windows to fix picocolors resolution
+
+---
+ .github/workflows/cd.yml | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/.github/workflows/cd.yml b/.github/workflows/cd.yml
+index 55d64590d..821305bd7 100644
+--- a/.github/workflows/cd.yml
++++ b/.github/workflows/cd.yml
+@@ -265,11 +265,11 @@ jobs:
+             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+           "
+ 
++      - name: Install desktop dependencies with npm
++        run: cd packages/desktop-electron && npm install --legacy-peer-deps
++
+       - name: Build
+-        shell: pwsh
+-        run: |
+-          cd packages/desktop-electron
+-          bun x electron-vite build
++        run: cd packages/desktop-electron && npx electron-vite build
+         env:
+           OPENCODE_CHANNEL: prod
+ 
+-- 
+2.43.0
+

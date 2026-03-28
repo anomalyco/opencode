@@ -1,0 +1,52 @@
+From cfc3005cbca4d0c578b5a4a87b83b6c88e6ee04e Mon Sep 17 00:00:00 2001
+From: CoBuilder CEO <ceo@cobuilder.ai>
+Date: Thu, 26 Mar 2026 23:08:30 -0700
+Subject: [PATCH 077/131] fix(cd): resolve catalog: entries before npm install
+ on Windows desktop build
+
+---
+ .github/workflows/cd.yml | 28 ++++++++++++++++++++++------
+ 1 file changed, 22 insertions(+), 6 deletions(-)
+
+diff --git a/.github/workflows/cd.yml b/.github/workflows/cd.yml
+index af1b7f564..12d1e3f19 100644
+--- a/.github/workflows/cd.yml
++++ b/.github/workflows/cd.yml
+@@ -282,12 +282,28 @@ jobs:
+             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+           "
+ 
+-      # DO NOT change to 'bun x electron-vite' — Bun runs electron-vite from
+-      # its isolated cache (node_modules/.bun/electron-vite*/) which lacks
+-      # picocolors as a peer dep on Windows, causing ERR_MODULE_NOT_FOUND.
+-      # npm install + npx is the only approach that resolves deps correctly.
+-      - name: Install desktop dependencies with npm
+-        run: cd packages/desktop-electron && npm install --legacy-peer-deps
++      # npm cannot handle Bun's catalog: protocol. We resolve catalog: entries
++      # from the root package.json before running npm install + npx electron-vite.
++      # bun run / bun x cannot be used here — Bun resolves electron-vite from an
++      # isolated .bun cache path that lacks peer deps (picocolors, vite) on Windows.
++      - name: Resolve catalog: deps and install with npm (Windows)
++        shell: pwsh
++        run: |
++          $catalog = (Get-Content package.json | ConvertFrom-Json).catalog
++          $pkg = Get-Content packages/desktop-electron/package.json | ConvertFrom-Json
++          foreach ($section in @("dependencies","devDependencies")) {
++            $deps = $pkg.$section
++            if (-not $deps) { continue }
++            $deps.PSObject.Properties | ForEach-Object {
++              if ($_.Value -eq "catalog:") {
++                $resolved = $catalog.($_.Name)
++                if ($resolved) { $deps.($_.Name) = $resolved }
++              }
++            }
++          }
++          $pkg | ConvertTo-Json -Depth 10 | Set-Content packages/desktop-electron/package.json
++          cd packages/desktop-electron
++          npm install --legacy-peer-deps
+ 
+       - name: Build
+         run: cd packages/desktop-electron && npx electron-vite build
+-- 
+2.43.0
+

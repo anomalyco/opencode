@@ -1,0 +1,37 @@
+From a28d9da2e4c2f77800fc747fad7757b7d2d8888c Mon Sep 17 00:00:00 2001
+From: CoBuilder CEO <ceo@cobuilder.ai>
+Date: Thu, 26 Mar 2026 22:59:43 -0700
+Subject: [PATCH 073/131] fix(cd): use bun x electron-vite on Windows to fix
+ module resolution
+
+---
+ .github/workflows/cd.yml | 11 +++--------
+ 1 file changed, 3 insertions(+), 8 deletions(-)
+
+diff --git a/.github/workflows/cd.yml b/.github/workflows/cd.yml
+index 05cd07101..55d64590d 100644
+--- a/.github/workflows/cd.yml
++++ b/.github/workflows/cd.yml
+@@ -265,16 +265,11 @@ jobs:
+             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+           "
+ 
+-      - name: Fix electron-vite missing deps on Windows
++      - name: Build
+         shell: pwsh
+         run: |
+-          $evite = (Get-ChildItem "${{ github.workspace }}\node_modules\.bun" -Filter "electron-vite*" -Directory | Select-Object -First 1).FullName
+-          $target = "$evite\node_modules\electron-vite\node_modules"
+-          New-Item -ItemType Directory -Force -Path $target | Out-Null
+-          Copy-Item -Recurse -Force "${{ github.workspace }}\node_modules\.bun\picocolors*\node_modules\picocolors" "$target\picocolors"
+-
+-      - name: Build
+-        run: cd packages/desktop-electron && bun run build
++          cd packages/desktop-electron
++          bun x electron-vite build
+         env:
+           OPENCODE_CHANNEL: prod
+ 
+-- 
+2.43.0
+

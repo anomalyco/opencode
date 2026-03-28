@@ -1,0 +1,126 @@
+From 389a3f381ef85516dbfa401bfbb5d75d73f5675a Mon Sep 17 00:00:00 2001
+From: johnnykang101 <johnny.kang101@gmail.com>
+Date: Thu, 26 Mar 2026 20:48:57 -0700
+Subject: [PATCH 055/131] ci: fix sync-upstream to target main and protect
+ CoBuilder files
+
+- Targets main (not dev) since main is now the active branch
+- Adds concurrency to prevent pile-up
+- After every upstream merge, restores CoBuilder-owned files:
+  .github/, install.sh, AGENTS.md, onboard.ts, .planning/
+  so upstream can never overwrite our branding/CLI/CI
+- Opens a PR on conflict instead of failing silently
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ .github/workflows/sync-upstream.yml | 61 +++++++++++++++++++++--------
+ 1 file changed, 45 insertions(+), 16 deletions(-)
+
+diff --git a/.github/workflows/sync-upstream.yml b/.github/workflows/sync-upstream.yml
+index 4aef9a29d..7a125ad7d 100644
+--- a/.github/workflows/sync-upstream.yml
++++ b/.github/workflows/sync-upstream.yml
+@@ -5,18 +5,22 @@ on:
+     - cron: "0 6 * * 1" # Every Monday at 6am UTC
+   workflow_dispatch: # Allow manual trigger
+ 
++concurrency:
++  group: sync-upstream
++  cancel-in-progress: true
++
+ permissions:
+   contents: write
+   pull-requests: write
+ 
+ jobs:
+   sync:
+-    name: Sync upstream/dev → dev
++    name: Sync upstream/dev → main
+     runs-on: ubuntu-latest
+     steps:
+       - uses: actions/checkout@v4
+         with:
+-          ref: dev
++          ref: main
+           fetch-depth: 0
+           token: ${{ secrets.GITHUB_TOKEN }}
+ 
+@@ -32,36 +36,61 @@ jobs:
+           echo "behind=${BEHIND}" >> "$GITHUB_OUTPUT"
+           echo "Upstream is ${BEHIND} commits ahead"
+ 
+-      - name: Merge upstream into dev
++      - name: Merge upstream and protect CoBuilder files
+         if: steps.check.outputs.behind != '0'
+         id: merge
+         run: |
+           git config user.name "github-actions[bot]"
+           git config user.email "github-actions[bot]@users.noreply.github.com"
+-          if git merge upstream/dev --no-edit --allow-unrelated-histories; then
++
++          # Attempt merge without committing so we can restore protected files first
++          if git merge upstream/dev --no-commit --no-ff --allow-unrelated-histories; then
++            MERGE_OK=true
++          else
++            # Conflicts — stage what resolved cleanly, we'll restore protected files below
++            MERGE_OK=conflict
++          fi
++
++          # Always restore CoBuilder-owned files regardless of merge outcome.
++          # This prevents upstream from overwriting our branding, CLI, CI, and scripts.
++          PROTECTED=(
++            ".github"
++            "install.sh"
++            "AGENTS.md"
++            ".planning"
++            "packages/opencode/src/cli/cmd/onboard.ts"
++          )
++          for f in "${PROTECTED[@]}"; do
++            if git ls-files --error-unmatch "$f" 2>/dev/null || [ -e "$f" ]; then
++              git checkout HEAD -- "$f" 2>/dev/null || true
++            fi
++          done
++
++          # Re-stage after restoring
++          git add -A
++
++          if [ "$MERGE_OK" = "true" ]; then
++            git commit -m "chore: sync upstream/dev into main (CoBuilder files preserved)" || true
+             echo "merged=true" >> "$GITHUB_OUTPUT"
+           else
+-            echo "merged=false" >> "$GITHUB_OUTPUT"
+-            git merge --abort
++            git commit -m "chore: sync upstream/dev into main (conflicts need review)" || true
++            echo "merged=conflict" >> "$GITHUB_OUTPUT"
+           fi
+ 
+-      - name: Push updated dev
++      - name: Push updated main
+         if: steps.check.outputs.behind != '0' && steps.merge.outputs.merged == 'true'
+-        run: git push origin dev
++        run: git push origin main
+ 
+-      - name: Open PR if merge conflict
+-        if: steps.check.outputs.behind != '0' && steps.merge.outputs.merged == 'false'
++      - name: Open PR if merge had conflicts
++        if: steps.check.outputs.behind != '0' && steps.merge.outputs.merged == 'conflict'
+         env:
+           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+         run: |
+           BRANCH="sync/upstream-$(date +%Y%m%d)"
+           git checkout -b "$BRANCH"
+-          git merge upstream/dev --no-edit --allow-unrelated-histories || true
+-          git add -A
+-          git commit -m "chore: sync upstream/dev (conflicts need resolution)" || true
+           git push origin "$BRANCH"
+           gh pr create \
+-            --title "chore: sync upstream dev (manual conflict resolution needed)" \
+-            --body "Upstream anomalyco/opencode has new commits that conflict with our \`dev\` branch. Please resolve conflicts and merge this PR." \
+-            --base dev \
++            --title "chore: sync upstream/dev — conflicts need review" \
++            --body "Upstream anomalyco/opencode has new commits that could not be cleanly merged into \`main\`. CoBuilder-owned files (.github/, install.sh, AGENTS.md, onboard.ts, .planning/) have been preserved. Please review remaining conflicts and merge." \
++            --base main \
+             --head "$BRANCH"
+-- 
+2.43.0
+

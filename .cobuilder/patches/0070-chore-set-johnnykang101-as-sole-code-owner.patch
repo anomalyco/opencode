@@ -1,0 +1,23 @@
+From 95d5112c771a22eb226e3b642eab631bc1559550 Mon Sep 17 00:00:00 2001
+From: CoBuilder CEO <ceo@cobuilder.ai>
+Date: Thu, 26 Mar 2026 22:42:21 -0700
+Subject: [PATCH 070/131] chore: set johnnykang101 as sole code owner
+
+---
+ .github/CODEOWNERS | 6 +-----
+ 1 file changed, 1 insertion(+), 5 deletions(-)
+
+diff --git a/.github/CODEOWNERS b/.github/CODEOWNERS
+index 3aeef82d6..b26757e1f 100644
+--- a/.github/CODEOWNERS
++++ b/.github/CODEOWNERS
+@@ -1,5 +1 @@
+-# web + desktop packages
+-packages/app/      @adamdotdevin
+-packages/tauri/    @adamdotdevin
+-packages/desktop/src-tauri/  @brendonovich
+-packages/desktop/  @adamdotdevin
++* @johnnykang101
+-- 
+2.43.0
+

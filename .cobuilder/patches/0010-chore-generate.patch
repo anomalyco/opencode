@@ -1,0 +1,37 @@
+From 590523dcd15e8011c86732f5bbd44f1b64342a12 Mon Sep 17 00:00:00 2001
+From: "opencode-agent[bot]" <opencode-agent[bot]@users.noreply.github.com>
+Date: Thu, 26 Mar 2026 19:03:22 +0000
+Subject: [PATCH 010/131] chore: generate
+
+---
+ packages/app/src/i18n/tr.ts | 1 -
+ packages/app/src/i18n/zh.ts | 1 -
+ 2 files changed, 2 deletions(-)
+
+diff --git a/packages/app/src/i18n/tr.ts b/packages/app/src/i18n/tr.ts
+index e50b40832..6a3ade0d0 100644
+--- a/packages/app/src/i18n/tr.ts
++++ b/packages/app/src/i18n/tr.ts
+@@ -679,7 +679,6 @@ export const dict = {
+   "settings.updates.toast.latest.title": "Güncelsiniz",
+   "settings.updates.toast.latest.description": "OpenCode'un en son sürümünü kullanıyorsunuz.",
+ 
+-
+   "sound.option.none": "Yok",
+   "sound.option.alert01": "Uyarı 01",
+   "sound.option.alert02": "Uyarı 02",
+diff --git a/packages/app/src/i18n/zh.ts b/packages/app/src/i18n/zh.ts
+index 74f74513d..28231733e 100644
+--- a/packages/app/src/i18n/zh.ts
++++ b/packages/app/src/i18n/zh.ts
+@@ -659,7 +659,6 @@ export const dict = {
+   "settings.updates.toast.latest.title": "已是最新版本",
+   "settings.updates.toast.latest.description": "你正在使用最新版本的 OpenCode。",
+ 
+-
+   "sound.option.none": "无",
+   "sound.option.alert01": "警报 01",
+   "sound.option.alert02": "警报 02",
+-- 
+2.43.0
+

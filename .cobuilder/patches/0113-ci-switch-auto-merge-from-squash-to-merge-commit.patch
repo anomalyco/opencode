@@ -1,0 +1,31 @@
+From f98e6af659978c2c2552d53a6abbfffa92271ca3 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Fri, 27 Mar 2026 12:56:23 -0700
+Subject: [PATCH 113/131] ci: switch auto-merge from squash to merge commit
+
+---
+ .github/workflows/pr-management.yml | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/.github/workflows/pr-management.yml b/.github/workflows/pr-management.yml
+index 00c57b2c3..62483fa56 100644
+--- a/.github/workflows/pr-management.yml
++++ b/.github/workflows/pr-management.yml
+@@ -77,12 +77,12 @@ jobs:
+       pull-requests: write
+       contents: write
+     steps:
+-      - name: Enable auto-merge (squash)
++      - name: Enable auto-merge (merge commit)
+         env:
+           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+         run: |
+           gh pr merge "${{ github.event.pull_request.number }}" \
+-            --auto --squash \
++            --auto --merge \
+             --repo ${{ github.repository }}
+ 
+   add-contributor-label:
+-- 
+2.43.0
+

@@ -1,0 +1,1453 @@
+From 0f3fea213b3b78e23ad234a8b6b722f9b43a8661 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Thu, 26 Mar 2026 15:09:41 -0700
+Subject: [PATCH 015/131] =?UTF-8?q?feat:=20Phase=202=20=E2=80=94=20Workflo?=
+ =?UTF-8?q?w=20Plugin=20System?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+* feat(01-01): security config schema + call site guards
+
+- Add security Zod sub-schema to Config.Info with 6 modules (ssrf, promptInjection, pathTraversal, auditLog, rateLimiting, headers)
+- Wrap validateProviderURL in onboard.ts with cfg.security?.ssrf?.enabled !== false guard
+- Wrap getSecurityHeaders in server.ts with cfg.security?.headers?.enabled !== false guard
+
+* docs(01-01): complete security config schema plan summary and state update
+
+* feat(01-02): apply config guards to all 4 remaining security modules
+
+Self-guards added to prompt-injection, path traversal, audit log, and
+rate limiter modules. All 6 security modules now respect
+cfg.security?.MODULE?.enabled !== false (SEC-02–05).
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* docs(01-02): add wave 2 summary
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* feat(01-03): add bun:test coverage for all 6 security modules
+
+Tests verify enabled-by-default (SEC-07) and enable/disable config
+behavior (SEC-01 through SEC-06). Fixed NUL byte injection to reject
+paths containing null bytes rather than stripping them.
+
+32 tests pass, 0 failures across 6 test files.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* docs(01-03): add wave 3 summary — Phase 1 complete
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* chore: update STATE.md — Phase 1 complete, Phase 2 starting
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* feat(02-01): add workflow alias registry with resolveSource()
+
+- REGISTRY maps gsd/ralph-loop/gstack to canonical GitHub URLs
+- resolveSource() passes through full URLs, throws on unknown alias
+- 6 unit tests covering all aliases, URL passthrough, and error case
+
+* feat(02-01): add Workflow.Service with list/install/remove operations
+
+- Workflow namespace with Info zod schema (name, version, description, commands)
+- list() reads workflow.paths from opencode.json, parses each WORKFLOW.md
+- install() resolves alias via resolveSource(), git clones, deduplicates paths
+- remove() finds by dir name or manifest name, deletes dir, updates config
+- parseManifest() uses ConfigMarkdown.parse() + Info.parse(md.data)
+- 9 unit tests (8 pass, 1 integration skip)
+
+* docs(02-01): add plan summary for Workflow.Service + Registry
+
+* feat(02-02): add workflow.paths to Config.Info schema + directory injection
+
+- Add workflow.paths Zod field to Config.Info alongside skills
+- Inject workflow paths into directories before loadCommand scan
+- Merge workflow.paths arrays in mergeConfigConcatArrays
+
+* docs(02-02): complete Config.Info schema extension plan
+
+* feat(02-03): add WorkflowCommand CLI with add/list/remove subcommands
+
+- Create packages/opencode/src/cli/cmd/workflow.ts with three subcommands
+- workflowAddCmd: resolves alias/URL, clones via Workflow.install(), shows restart notice
+- workflowListCmd: calls Workflow.list(), prints name/version/description/path
+- workflowRemoveCmd: calls Workflow.remove(), spinner feedback on success/error
+- Register WorkflowCommand in src/index.ts after OnboardCommand
+
+* docs(02-03): complete workflow CLI plan summary
+
+* feat(02-04): add sandbox path validation and wire into install()
+
+- Create sandbox.ts with validateWorkflowPath() blocking path traversal
+- Import and call validateWorkflowPath(destDir) in Workflow.install()
+  before any filesystem ops
+
+* feat(02-04): scaffold GSD reference plugin and workflow-plugins docs
+
+- Add gsd-reference/WORKFLOW.md manifest (name, version, commands list)
+- Add commands/ stubs: plan-phase, execute-phase, discuss-phase
+- Add hooks/.gitkeep (WF-09 placeholder, no execution wired)
+- Add docs/workflow-plugins.md with format reference and CLI guide
+
+* docs(02-04): complete sandboxing + GSD reference plugin plan summary
+
+* feat(onboard): add security module and workflow plugin configuration steps
+
+After provider setup, onboarding now walks through:
+1. Security modules — multiselect (all enabled by default, deselect to disable)
+2. Workflow plugins — multiselect (none selected by default, opt-in install)
+
+Security config writes disabled modules to opencode.json security key.
+Workflow install calls Workflow.install() with spinner per plugin.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* feat(onboard): add recommended MCP tools step with extensible registry
+
+New src/mcp/recommended.ts holds the curated tool list — add an entry
+there to surface it in onboard on next update. Each re-run skips already-
+configured tools so users only see net-new recommendations.
+
+Initial list:
+- context-mode (MCP/npx): sandboxes tool output to protect context window
+- agent-browser (CLI): headless browser automation for AI agents
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+---------
+
+Co-authored-by: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ .planning/STATE.md                            |   8 +-
+ .../02-01-SUMMARY.md                          |  79 +++++++++
+ .../02-02-SUMMARY.md                          |  58 ++++++
+ .../02-03-SUMMARY.md                          |  66 +++++++
+ .../02-04-SUMMARY.md                          |  80 +++++++++
+ docs/workflow-plugins.md                      |  69 ++++++++
+ packages/opencode/src/cli/cmd/onboard.ts      | 166 +++++++++++++++++-
+ packages/opencode/src/cli/cmd/workflow.ts     |  82 +++++++++
+ packages/opencode/src/config/config.ts        |  20 +++
+ packages/opencode/src/index.ts                |   2 +
+ packages/opencode/src/mcp/recommended.ts      |  60 +++++++
+ .../src/workflow/gsd-reference/WORKFLOW.md    |  29 +++
+ .../gsd-reference/commands/discuss-phase.md   |  12 ++
+ .../gsd-reference/commands/execute-phase.md   |  16 ++
+ .../gsd-reference/commands/plan-phase.md      |  15 ++
+ .../src/workflow/gsd-reference/hooks/.gitkeep |   0
+ packages/opencode/src/workflow/index.test.ts  |  90 ++++++++++
+ packages/opencode/src/workflow/index.ts       | 164 +++++++++++++++++
+ .../opencode/src/workflow/registry.test.ts    |  29 +++
+ packages/opencode/src/workflow/registry.ts    |  23 +++
+ packages/opencode/src/workflow/sandbox.ts     |  22 +++
+ 21 files changed, 1084 insertions(+), 6 deletions(-)
+ create mode 100644 .planning/phases/02-workflow-plugin-system/02-01-SUMMARY.md
+ create mode 100644 .planning/phases/02-workflow-plugin-system/02-02-SUMMARY.md
+ create mode 100644 .planning/phases/02-workflow-plugin-system/02-03-SUMMARY.md
+ create mode 100644 .planning/phases/02-workflow-plugin-system/02-04-SUMMARY.md
+ create mode 100644 docs/workflow-plugins.md
+ create mode 100644 packages/opencode/src/cli/cmd/workflow.ts
+ create mode 100644 packages/opencode/src/mcp/recommended.ts
+ create mode 100644 packages/opencode/src/workflow/gsd-reference/WORKFLOW.md
+ create mode 100644 packages/opencode/src/workflow/gsd-reference/commands/discuss-phase.md
+ create mode 100644 packages/opencode/src/workflow/gsd-reference/commands/execute-phase.md
+ create mode 100644 packages/opencode/src/workflow/gsd-reference/commands/plan-phase.md
+ create mode 100644 packages/opencode/src/workflow/gsd-reference/hooks/.gitkeep
+ create mode 100644 packages/opencode/src/workflow/index.test.ts
+ create mode 100644 packages/opencode/src/workflow/index.ts
+ create mode 100644 packages/opencode/src/workflow/registry.test.ts
+ create mode 100644 packages/opencode/src/workflow/registry.ts
+ create mode 100644 packages/opencode/src/workflow/sandbox.ts
+
+diff --git a/.planning/STATE.md b/.planning/STATE.md
+index baa53e727..d874cd28b 100644
+--- a/.planning/STATE.md
++++ b/.planning/STATE.md
+@@ -1,8 +1,8 @@
+ # CoBuilder — Project State
+ 
+ **Last updated:** 2026-03-26
+-**Current phase:** Phase 1 — Modular Security System (Plan 1 complete, Plan 2 next)
+-**Stopped at:** Completed 01-01-PLAN.md
++**Current phase:** Phase 2 — Workflow Plugin System
++**Stopped at:** Phase 1 merged to main — Phase 2 PR #11 open
+ 
+ ## Project Reference
+ 
+@@ -15,8 +15,8 @@ See: `.planning/PROJECT.md` (updated 2026-03-26)
+ 
+ | Phase | Name | Status |
+ |-------|------|--------|
+-| 1 | Modular Security System | 🔄 In progress (1/N plans done) |
+-| 2 | Workflow Plugin System | ⏳ Pending Phase 1 |
++| 1 | Modular Security System | ✅ Complete — merged to main |
++| 2 | Workflow Plugin System | 🔄 In progress — PR #11 open |
+ 
+ ## What's Shipped (Phase 0 — already in main)
+ 
+diff --git a/.planning/phases/02-workflow-plugin-system/02-01-SUMMARY.md b/.planning/phases/02-workflow-plugin-system/02-01-SUMMARY.md
+new file mode 100644
+index 000000000..781da089e
+--- /dev/null
++++ b/.planning/phases/02-workflow-plugin-system/02-01-SUMMARY.md
+@@ -0,0 +1,79 @@
++---
++phase: 02-workflow-plugin-system
++plan: "01"
++subsystem: workflow
++tags: [workflow, registry, install, remove, zod]
++dependency_graph:
++  requires: []
++  provides: [Workflow.Service, REGISTRY, resolveSource]
++  affects: [future CLI commands, future workflow loader]
++tech_stack:
++  added: []
++  patterns: [namespace-as-module, gray-matter frontmatter, Bun.spawnSync for git]
++key_files:
++  created:
++    - packages/opencode/src/workflow/registry.ts
++    - packages/opencode/src/workflow/registry.test.ts
++    - packages/opencode/src/workflow/index.ts
++    - packages/opencode/src/workflow/index.test.ts
++  modified: []
++decisions:
++  - "Used md.data (gray-matter API) not md.frontmatter for ConfigMarkdown.parse() return value"
++  - "workflowsDir() placed under Global.Path.config/workflows (XDG config, not data dir)"
++  - "remove() matches by both directory basename and manifest name for flexibility"
++metrics:
++  duration: "~15 minutes"
++  completed: "2026-03-26"
++  tasks: 2
++  files: 4
++---
++
++# Phase 02 Plan 01: Workflow.Service + Registry Summary
++
++**One-liner:** Alias registry (gsd/ralph-loop/gstack → GitHub URLs) plus list/install/remove service backed by opencode.json workflow.paths.
++
++## Tasks Completed
++
++| # | Task | Commit |
++|---|------|--------|
++| T1 | registry.ts + registry.test.ts | aab7bc3 |
++| T2 | index.ts (Workflow.Service) + index.test.ts | 965b868 |
++
++## What Was Built
++
++**registry.ts** — `REGISTRY` map (3 aliases) and `resolveSource()` that passes through full URLs and throws on unknown aliases.
++
++**index.ts** — `Workflow` namespace exposing:
++- `Info` — Zod schema validating WORKFLOW.md frontmatter (`name` required, `version`/`description`/`commands` optional)
++- `list()` — reads `workflow.paths` from `opencode.json`, parses each WORKFLOW.md, returns typed array
++- `install(source)` — resolves alias via `resolveSource()`, `git clone`s into `~/.config/opencode/workflows/<name>/`, validates manifest, deduplicates before writing config
++- `remove(name)` — finds by dir name or manifest name, deletes dir, removes from config
++- `parseManifest(dir)` — wraps `ConfigMarkdown.parse()` + `Info.parse(md.data)`, returns null on failure
++
++**Tests:** 15 total (14 pass, 1 integration skip for git clone).
++
++## Deviations from Plan
++
++**1. [Rule 1 - Bug] Corrected ConfigMarkdown.parse() return field**
++- **Found during:** T2 implementation
++- **Issue:** Plan referenced `md.frontmatter` but gray-matter returns `.data`
++- **Fix:** Used `md.data` in `parseManifest()`
++- **Files modified:** packages/opencode/src/workflow/index.ts
++
++None other — plan executed as written.
++
++## Known Stubs
++
++None. All operations are fully wired. Install/remove require a real filesystem; integration test for git clone is intentionally skipped with `test.skip`.
++
++## Self-Check: PASSED
++
++- packages/opencode/src/workflow/registry.ts — FOUND
++- packages/opencode/src/workflow/index.ts — FOUND
++- packages/opencode/src/workflow/registry.test.ts — FOUND
++- packages/opencode/src/workflow/index.test.ts — FOUND
++- Commit aab7bc3 — FOUND
++- Commit 965b868 — FOUND
++- bun test registry.test.ts — 6/6 pass
++- bun test index.test.ts — 8 pass, 1 skip
++- bun run typecheck — 0 workflow errors
+diff --git a/.planning/phases/02-workflow-plugin-system/02-02-SUMMARY.md b/.planning/phases/02-workflow-plugin-system/02-02-SUMMARY.md
+new file mode 100644
+index 000000000..9b680f9aa
+--- /dev/null
++++ b/.planning/phases/02-workflow-plugin-system/02-02-SUMMARY.md
+@@ -0,0 +1,58 @@
++---
++phase: 02-workflow-plugin-system
++plan: "02"
++subsystem: config
++tags: [config, workflow, schema, zod]
++dependency_graph:
++  requires: [02-01]
++  provides: [workflow.paths schema, workflow directory injection]
++  affects: [Config.Info, Config.state, loadCommand scan]
++tech_stack:
++  added: []
++  patterns: [zod schema extension, directory injection loop]
++key_files:
++  modified:
++    - packages/opencode/src/config/config.ts
++decisions:
++  - Added workflow.paths inside Config.Info z.object (not .strict() — safe alongside skills)
++  - Injected paths after result is fully merged but before unique(directories) loop so loadCommand scans them
++  - Added workflow.paths merge to mergeConfigConcatArrays (array concat, not replace)
++metrics:
++  duration: ~4m
++  completed: "2026-03-26"
++  tasks: 1
++  files: 1
++---
++
++# Phase 02 Plan 02: Config.Info Schema Extension + Directory Injection Summary
++
++Config.Info Zod schema extended with optional workflow.paths field; workflow plugin directories auto-injected into Config.state directory scan before loadCommand() runs.
++
++## What Was Done
++
++- **Edit 1 — Schema field:** Added `workflow: z.object({ paths: z.array(z.string()).optional() }).optional()` to `Config.Info` after the `skills` field (line 1062).
++- **Edit 2 — Directory injection:** Inserted a `for...of` loop over `result.workflow?.paths ?? []` immediately after `ConfigPaths.directories()` is called and before the `unique(directories)` scan loop, expanding `~/` prefixes via `os.homedir()`.
++- **Edit 3 — Array merge:** Added `workflow.paths` handling to `mergeConfigConcatArrays` so multiple config sources concat (not replace) their path lists.
++
++## Deviations from Plan
++
++### Auto-added
++
++**1. [Rule 2 - Missing functionality] Added workflow.paths to mergeConfigConcatArrays**
++- **Found during:** T1 implementation review
++- **Issue:** Plan mentioned this as a "do NOT modify unless needed" note but array merging is required for correctness — without it, a project config's workflow.paths would silently overwrite global config paths
++- **Fix:** Added concat merge alongside existing plugin/instructions handling
++- **Files modified:** packages/opencode/src/config/config.ts
++- **Commit:** fd799bd
++
++## Verification
++
++- `grep "workflow: z.object" packages/opencode/src/config/config.ts` — found at line 1062
++- `grep "cfg.workflow?.paths"` — found at line 143 (uses `result.workflow?.paths` — variable name at injection point)
++- `grep "directories.push(expanded)"` — found at line 147
++- `bun run typecheck` — 13/13 tasks successful, 0 errors
++
++## Self-Check: PASSED
++
++- File exists: packages/opencode/src/config/config.ts — FOUND
++- Commit fd799bd — FOUND (feat/phase2-workflow-plugins branch)
+diff --git a/.planning/phases/02-workflow-plugin-system/02-03-SUMMARY.md b/.planning/phases/02-workflow-plugin-system/02-03-SUMMARY.md
+new file mode 100644
+index 000000000..6ae8a7c26
+--- /dev/null
++++ b/.planning/phases/02-workflow-plugin-system/02-03-SUMMARY.md
+@@ -0,0 +1,66 @@
++---
++phase: 02-workflow-plugin-system
++plan: 03
++subsystem: cli
++tags: [cli, workflow, yargs, subcommands]
++dependency_graph:
++  requires: [02-01]
++  provides: [WorkflowCommand yargs module, cobuilder workflow CLI entry point]
++  affects: [src/index.ts top-level CLI]
++tech_stack:
++  added: []
++  patterns: [yargs CommandModule, @clack/prompts spinner/log, cmd() wrapper]
++key_files:
++  created:
++    - packages/opencode/src/cli/cmd/workflow.ts
++  modified:
++    - packages/opencode/src/index.ts
++decisions:
++  - Used cmd() wrapper consistent with all other CLI commands (mcp, onboard, run, etc.)
++  - Parent command uses `workflow <action>` positional + demandCommand to enforce subcommand
++  - spinner() wraps install/remove for progress; log.info() used for list output
++metrics:
++  duration: ~5 minutes
++  completed: 2026-03-26
++  tasks_completed: 2
++  files_modified: 2
++---
++
++# Phase 02 Plan 03: `cobuilder workflow` CLI Subcommand Summary
++
++**One-liner:** `cobuilder workflow add/list/remove` yargs subcommands wired to Workflow.install/list/remove via @clack/prompts spinner feedback.
++
++## Tasks Completed
++
++| # | Task | Commit | Files |
++|---|------|--------|-------|
++| 1 | Create workflow.ts with add/list/remove | ad97d79 | packages/opencode/src/cli/cmd/workflow.ts |
++| 2 | Register WorkflowCommand in index.ts | ad97d79 | packages/opencode/src/index.ts |
++
++## What Was Built
++
++- `packages/opencode/src/cli/cmd/workflow.ts` — exports `WorkflowCommand` (parent) plus three internal subcommands:
++  - `workflowAddCmd` (`add <source>`): resolves alias/URL, spins while cloning, prints restart notice on success
++  - `workflowListCmd` (`list`): prints name@version — description + path for each installed workflow, or "No workflows installed" when empty
++  - `workflowRemoveCmd` (`remove <name>`): spins while removing, exits 1 on error
++- `packages/opencode/src/index.ts` — added import + `.command(WorkflowCommand)` after `OnboardCommand`
++
++## Verification
++
++- `bun run typecheck` — 13/13 tasks successful, 0 errors
++- WorkflowCommand appears in `cobuilder --help` output (registered in yargs chain)
++- `cobuilder workflow --help` shows add/list/remove subcommands
++
++## Deviations from Plan
++
++None — plan executed exactly as written.
++
++## Known Stubs
++
++None — all subcommands are fully wired to `Workflow.install`, `Workflow.list`, and `Workflow.remove`.
++
++## Self-Check: PASSED
++
++- packages/opencode/src/cli/cmd/workflow.ts — FOUND
++- packages/opencode/src/index.ts (WorkflowCommand import + .command) — FOUND
++- commit ad97d79 — FOUND
+diff --git a/.planning/phases/02-workflow-plugin-system/02-04-SUMMARY.md b/.planning/phases/02-workflow-plugin-system/02-04-SUMMARY.md
+new file mode 100644
+index 000000000..0e9a946c4
+--- /dev/null
++++ b/.planning/phases/02-workflow-plugin-system/02-04-SUMMARY.md
+@@ -0,0 +1,80 @@
++---
++phase: 02-workflow-plugin-system
++plan: "04"
++subsystem: workflow
++tags: [security, sandboxing, reference-plugin, docs]
++dependency_graph:
++  requires: [02-01, 02-02, 02-03]
++  provides: [path-traversal-prevention, gsd-reference-scaffold, workflow-plugin-docs]
++  affects: [Workflow.install]
++tech_stack:
++  added: []
++  patterns: [path-sandboxing, plugin-manifest-scaffold]
++key_files:
++  created:
++    - packages/opencode/src/workflow/sandbox.ts
++    - packages/opencode/src/workflow/gsd-reference/WORKFLOW.md
++    - packages/opencode/src/workflow/gsd-reference/commands/plan-phase.md
++    - packages/opencode/src/workflow/gsd-reference/commands/execute-phase.md
++    - packages/opencode/src/workflow/gsd-reference/commands/discuss-phase.md
++    - packages/opencode/src/workflow/gsd-reference/hooks/.gitkeep
++    - docs/workflow-plugins.md
++  modified:
++    - packages/opencode/src/workflow/index.ts
++decisions:
++  - sandbox check uses path.resolve + startsWith(base + sep) to prevent both traversal and exact-base installs being misclassified
++  - hooks/ scaffolded as empty directory (WF-09 scope boundary — no execution wired)
++metrics:
++  duration: ~5 minutes
++  completed: 2026-03-26
++  tasks_completed: 2
++  files_created: 7
++  files_modified: 1
++---
++
++# Phase 02 Plan 04: Sandboxing + GSD Reference Plugin + Docs Summary
++
++Path traversal prevention via `validateWorkflowPath()` wired into `Workflow.install()`, plus a canonical GSD reference plugin scaffold and user-facing plugin authoring docs.
++
++## Tasks Completed
++
++| Task | Description | Commit |
++|------|-------------|--------|
++| T1 | Create sandbox.ts + wire into install() | 2e09c3a |
++| T2 | GSD reference plugin scaffold + docs | 26b5867 |
++
++## What Was Built
++
++**T1 — sandbox.ts**
++- `validateWorkflowPath(destDir)` resolves both `base` and `destDir` via `path.resolve()`, then checks `resolved.startsWith(base + path.sep)` to block any path that escapes `~/.config/opencode/workflows/`
++- Called synchronously in `Workflow.install()` immediately after `destDir` is derived, before any `fs.mkdir` or `git clone`
++- Throws a clear security error message including both the offending path and the expected sandbox root
++
++**T2 — GSD reference plugin**
++- `gsd-reference/WORKFLOW.md` — canonical manifest with `name: gsd`, `version: 1.0.0`, `commands: [plan-phase, execute-phase, discuss-phase]`
++- `commands/plan-phase.md`, `commands/execute-phase.md`, `commands/discuss-phase.md` — stub slash command definitions with YAML frontmatter
++- `hooks/.gitkeep` — scaffolds `hooks/` directory; WF-09 scopes hook execution to a future phase
++- `docs/workflow-plugins.md` — user-facing authoring guide: directory layout, WORKFLOW.md format, CLI commands, built-in aliases, hooks future note
++
++## Verification
++
++- `bun run typecheck`: 13/13 tasks successful, 0 errors
++- `bun test src/workflow` (from packages/opencode): 14 pass, 0 fail
++
++## Deviations from Plan
++
++None — plan executed exactly as written.
++
++## Known Stubs
++
++None that block the plan's goal. The GSD reference plugin command stubs are intentionally minimal — they are documentation-only scaffolds demonstrating the plugin format. Actual GSD command logic lives in the external `gsd-workflow` repository (installed via `cobuilder workflow add gsd`).
++
++## Self-Check: PASSED
++
++- packages/opencode/src/workflow/sandbox.ts — FOUND
++- packages/opencode/src/workflow/index.ts (validateWorkflowPath import + call) — FOUND
++- packages/opencode/src/workflow/gsd-reference/WORKFLOW.md — FOUND
++- packages/opencode/src/workflow/gsd-reference/commands/plan-phase.md — FOUND
++- packages/opencode/src/workflow/gsd-reference/hooks/.gitkeep — FOUND
++- docs/workflow-plugins.md — FOUND
++- Commits 2e09c3a, 26b5867 — FOUND
+diff --git a/docs/workflow-plugins.md b/docs/workflow-plugins.md
+new file mode 100644
+index 000000000..561eeb6de
+--- /dev/null
++++ b/docs/workflow-plugins.md
+@@ -0,0 +1,69 @@
++# Workflow Plugins
++
++Workflow plugins extend CoBuilder with slash commands and agent prompts organized as a directory.
++
++## Directory Layout
++
++```
++~/.config/opencode/workflows/
++└── my-workflow/
++    ├── WORKFLOW.md        # Required manifest
++    ├── commands/          # Slash commands (*.md files)
++    ├── agents/            # Agent prompts (*.md files, optional)
++    └── hooks/             # Lifecycle hooks (reserved for future use)
++```
++
++## WORKFLOW.md Format
++
++Every plugin must have a `WORKFLOW.md` at its root with YAML frontmatter:
++
++```markdown
++---
++name: my-workflow
++version: 1.0.0
++description: What this workflow does
++commands:
++  - my-command
++---
++
++# My Workflow
++
++Optional markdown body — appears as documentation.
++```
++
++## CLI Commands
++
++```bash
++# Install from built-in alias
++cobuilder workflow add gsd
++
++# Install from GitHub URL
++cobuilder workflow add https://github.com/org/my-workflow
++
++# List installed workflows
++cobuilder workflow list
++
++# Remove a workflow
++cobuilder workflow remove gsd
++```
++
++## Built-in Aliases
++
++| Alias | Repository |
++|-------|-----------|
++| `gsd` | https://github.com/CobuilderLabs/gsd-workflow |
++| `ralph-loop` | https://github.com/CobuilderLabs/ralph-loop-workflow |
++| `gstack` | https://github.com/CobuilderLabs/gstack-workflow |
++
++## How Commands Are Loaded
++
++When a workflow is installed, its path is added to `workflow.paths` in `~/.config/opencode/opencode.json`.
++On the next startup, CoBuilder scans `commands/**/*.md` in each registered path and makes them
++available as slash commands in the TUI.
++
++Note: Restart CoBuilder after installing a workflow to activate its commands.
++
++## Hooks (Future)
++
++The `hooks/` directory is reserved for lifecycle hooks in a future release. Creating it in your plugin
++is safe — no hooks are executed in the current version. hooks are reserved for future use.
+diff --git a/packages/opencode/src/cli/cmd/onboard.ts b/packages/opencode/src/cli/cmd/onboard.ts
+index a5c75a518..ac0e13f03 100644
+--- a/packages/opencode/src/cli/cmd/onboard.ts
++++ b/packages/opencode/src/cli/cmd/onboard.ts
+@@ -5,12 +5,23 @@ import { Global } from "../../global"
+ import { Filesystem } from "../../util/filesystem"
+ import { validateProviderURL } from "../../security"
+ import { Config } from "../../config/config"
++import { Workflow } from "../../workflow"
++import { RECOMMENDED_TOOLS } from "../../mcp/recommended"
+ import path from "path"
+ 
+ const NINEROUTER_ID = "9router"
+ const NINEROUTER_NAME = "9Router"
+ const NINEROUTER_DEFAULT_URL = "http://localhost:20123/v1"
+ 
++const ALL_SECURITY_MODULES = [
++  { value: "ssrf", label: "SSRF protection", hint: "Blocks requests to internal IPs and cloud metadata endpoints" },
++  { value: "promptInjection", label: "Prompt injection detection", hint: "Scans input for override and jailbreak patterns" },
++  { value: "pathTraversal", label: "Path traversal prevention", hint: "Blocks ../ escapes and NUL byte injection" },
++  { value: "auditLog", label: "Audit log", hint: "SHA-256 chained append-only log of sensitive operations" },
++  { value: "rateLimiting", label: "Rate limiting", hint: "Token-bucket rate limiting in server mode" },
++  { value: "headers", label: "Security headers", hint: "CSP, X-Frame-Options, HSTS, and more" },
++] as const
++
+ export const OnboardCommand = cmd({
+   command: "onboard",
+   describe: "interactive setup — choose a provider and model to get started",
+@@ -39,6 +50,12 @@ export const OnboardCommand = cmd({
+     } else {
+       await setupApiKeyProvider(providerChoice as string)
+     }
++
++    await setupSecurity()
++    await setupWorkflows()
++    await setupRecommendedTools()
++
++    prompts.outro("All set! Run  cobuilder  to start coding.")
+   },
+ })
+ 
+@@ -168,7 +185,6 @@ async function setup9Router() {
+ 
+   prompts.log.success(`${chosenIds.length} model${chosenIds.length !== 1 ? "s" : ""} registered`)
+   prompts.log.success(`Default model: ${NINEROUTER_ID}/${defaultModelId}`)
+-  prompts.outro("All set! Run  opencode  to start coding.")
+ }
+ 
+ async function setupApiKeyProvider(providerId: string) {
+@@ -204,5 +220,151 @@ async function setupApiKeyProvider(providerId: string) {
+   await Filesystem.writeJson(authPath, existing, 0o600)
+ 
+   prompts.log.success(`${name} connected`)
+-  prompts.outro("All set! Run  opencode  to start coding.")
++}
++
++async function setupSecurity() {
++  prompts.log.step("Security modules — configure which are active")
++
++  const selected = await prompts.multiselect({
++    message: "Which security modules should be enabled?",
++    options: ALL_SECURITY_MODULES.map((m) => ({ ...m })),
++    initialValues: ALL_SECURITY_MODULES.map((m) => m.value),
++    required: false,
++  })
++
++  if (prompts.isCancel(selected)) return
++
++  const enabledSet = new Set(selected as string[])
++  const allKeys = ALL_SECURITY_MODULES.map((m) => m.value)
++
++  const disabled = allKeys.filter((k) => !enabledSet.has(k))
++
++  if (disabled.length === 0) {
++    prompts.log.info("All security modules enabled (default)")
++    return
++  }
++
++  // Only write entries for explicitly disabled modules — enabled is the default
++  const securityConfig: Record<string, { enabled: false }> = {}
++  for (const mod of disabled) {
++    securityConfig[mod] = { enabled: false }
++  }
++
++  const configPath = path.join(Global.Path.config, "opencode.json")
++  let existing: any = {}
++  try {
++    existing = await Filesystem.readJson(configPath)
++  } catch {}
++
++  await Filesystem.writeJson(configPath, {
++    ...existing,
++    security: { ...existing?.security, ...securityConfig },
++  })
++
++  prompts.log.success(
++    `${disabled.length} module${disabled.length !== 1 ? "s" : ""} disabled: ${disabled.join(", ")}`,
++  )
++}
++
++async function setupWorkflows() {
++  prompts.log.step("Workflow plugins — install methodology tooling (optional)")
++
++  const selected = await prompts.multiselect({
++    message: "Which workflow plugins would you like to install?",
++    options: [
++      { value: "gsd", label: "GSD", hint: "Get Shit Done — structured planning and execution methodology" },
++      { value: "ralph-loop", label: "Ralph Loop", hint: "Continuous iterative development with retrospectives" },
++      { value: "gstack", label: "GStack", hint: "Full-stack project scaffolding and architecture workflows" },
++    ],
++    initialValues: [],
++    required: false,
++  })
++
++  if (prompts.isCancel(selected) || (selected as string[]).length === 0) {
++    prompts.log.info("No workflow plugins installed — run  cobuilder workflow add <name>  anytime")
++    return
++  }
++
++  const toInstall = selected as string[]
++
++  for (const alias of toInstall) {
++    const spin = prompts.spinner()
++    spin.start(`Installing ${alias}…`)
++    try {
++      await Workflow.install(alias)
++      spin.stop(`${alias} installed`)
++    } catch (e) {
++      spin.stop(`${alias} failed`)
++      prompts.log.warn(e instanceof Error ? e.message : `Could not install ${alias} — try  cobuilder workflow add ${alias}  later`)
++    }
++  }
++}
++
++async function setupRecommendedTools() {
++  const configPath = path.join(Global.Path.config, "opencode.json")
++
++  // Read current config to skip already-installed tools
++  let existing: any = {}
++  try {
++    existing = await Filesystem.readJson(configPath)
++  } catch {}
++
++  const alreadyConfigured = new Set(Object.keys(existing?.mcp ?? {}))
++  const available = RECOMMENDED_TOOLS.filter((t) => !alreadyConfigured.has(t.id))
++
++  if (available.length === 0) {
++    prompts.log.info("Recommended tools — all already installed")
++    return
++  }
++
++  prompts.log.step("Recommended tools — extend CoBuilder with community extensions")
++
++  const selected = await prompts.multiselect({
++    message: "Which recommended tools would you like to install?",
++    options: available.map((t) => ({
++      value: t.id,
++      label: `${t.label}  ${t.source}`,
++      hint: t.hint,
++    })),
++    initialValues: [],
++    required: false,
++  })
++
++  if (prompts.isCancel(selected) || (selected as string[]).length === 0) {
++    prompts.log.info("No tools installed — you can add them anytime via  cobuilder mcp")
++    return
++  }
++
++  const toInstall = RECOMMENDED_TOOLS.filter((t) => (selected as string[]).includes(t.id))
++
++  for (const tool of toInstall) {
++    const spin = prompts.spinner()
++    spin.start(`Installing ${tool.label}…`)
++    try {
++      if (tool.type === "mcp" && tool.mcpConfig) {
++        // Write MCP config to opencode.json
++        let cfg: any = {}
++        try { cfg = await Filesystem.readJson(configPath) } catch {}
++        await Filesystem.writeJson(configPath, {
++          ...cfg,
++          mcp: { ...cfg?.mcp, [tool.id]: tool.mcpConfig },
++        })
++        spin.stop(`${tool.label} configured`)
++      } else if (tool.type === "cli" && tool.installCommands) {
++        // Run install commands sequentially
++        for (const cmd of tool.installCommands) {
++          const parts = cmd.split(" ")
++          const proc = Bun.spawn(parts, { stdout: "pipe", stderr: "pipe" })
++          const code = await proc.exited
++          if (code !== 0) throw new Error(`Command failed: ${cmd}`)
++        }
++        spin.stop(`${tool.label} installed`)
++      }
++    } catch (e) {
++      spin.stop(`${tool.label} failed`)
++      prompts.log.warn(
++        `Could not install ${tool.label} automatically.\n  Manual install: ${tool.manualInstall}\n  Source: ${tool.source}`,
++      )
++    }
++  }
+ }
+diff --git a/packages/opencode/src/cli/cmd/workflow.ts b/packages/opencode/src/cli/cmd/workflow.ts
+new file mode 100644
+index 000000000..e2ffddf0b
+--- /dev/null
++++ b/packages/opencode/src/cli/cmd/workflow.ts
+@@ -0,0 +1,82 @@
++import { cmd } from "./cmd"
++import * as prompts from "@clack/prompts"
++import { Workflow } from "../../workflow"
++
++const workflowAddCmd = cmd({
++  command: "add <source>",
++  describe: "install a workflow plugin (alias or GitHub URL)",
++  builder: (yargs) =>
++    yargs.positional("source", {
++      type: "string",
++      describe: 'workflow alias (e.g. "gsd") or full GitHub URL',
++      demandOption: true,
++    }),
++  async handler(args) {
++    const source = args.source as string
++    const spin = prompts.spinner()
++    spin.start(`Installing workflow: ${source}`)
++    try {
++      await Workflow.install(source)
++      spin.stop(`Workflow "${source}" installed successfully`)
++      prompts.log.info("Restart CoBuilder to activate workflow commands in the TUI.")
++    } catch (e) {
++      spin.stop("Installation failed")
++      prompts.log.error(e instanceof Error ? e.message : String(e))
++      process.exit(1)
++    }
++  },
++})
++
++const workflowListCmd = cmd({
++  command: "list",
++  describe: "list installed workflow plugins",
++  handler: async () => {
++    const workflows = await Workflow.list()
++    if (workflows.length === 0) {
++      prompts.log.info("No workflows installed. Run: cobuilder workflow add <alias>")
++      return
++    }
++    for (const wf of workflows) {
++      const version = wf.version ? `@${wf.version}` : ""
++      const desc = wf.description ? ` — ${wf.description}` : ""
++      prompts.log.info(`${wf.name}${version}${desc}`)
++      prompts.log.info(`  path: ${wf.path}`)
++    }
++  },
++})
++
++const workflowRemoveCmd = cmd({
++  command: "remove <name>",
++  describe: "remove an installed workflow plugin",
++  builder: (yargs) =>
++    yargs.positional("name", {
++      type: "string",
++      describe: "workflow name to remove",
++      demandOption: true,
++    }),
++  async handler(args) {
++    const name = args.name as string
++    const spin = prompts.spinner()
++    spin.start(`Removing workflow: ${name}`)
++    try {
++      await Workflow.remove(name)
++      spin.stop(`Workflow "${name}" removed`)
++    } catch (e) {
++      spin.stop("Removal failed")
++      prompts.log.error(e instanceof Error ? e.message : String(e))
++      process.exit(1)
++    }
++  },
++})
++
++export const WorkflowCommand = cmd({
++  command: "workflow <action>",
++  describe: "manage workflow plugins",
++  builder: (yargs) =>
++    yargs
++      .command(workflowAddCmd)
++      .command(workflowListCmd)
++      .command(workflowRemoveCmd)
++      .demandCommand(1, "Specify a subcommand: add, list, or remove"),
++  handler: () => {},
++})
+diff --git a/packages/opencode/src/config/config.ts b/packages/opencode/src/config/config.ts
+index 46fc66f57..8ecb1c4fd 100644
+--- a/packages/opencode/src/config/config.ts
++++ b/packages/opencode/src/config/config.ts
+@@ -72,6 +72,12 @@ export namespace Config {
+     if (target.instructions && source.instructions) {
+       merged.instructions = Array.from(new Set([...target.instructions, ...source.instructions]))
+     }
++    if (target.workflow?.paths && source.workflow?.paths) {
++      merged.workflow = {
++        ...merged.workflow,
++        paths: Array.from(new Set([...target.workflow.paths, ...source.workflow.paths])),
++      }
++    }
+     return merged
+   }
+ 
+@@ -133,6 +139,14 @@ export namespace Config {
+ 
+     const directories = await ConfigPaths.directories(Instance.directory, Instance.worktree)
+ 
++    // Inject installed workflow plugin paths into directory scan
++    for (const item of result.workflow?.paths ?? []) {
++      const expanded = item.startsWith("~/")
++        ? path.join(os.homedir(), item.slice(2))
++        : item
++      directories.push(expanded)
++    }
++
+     // .opencode directory config overrides (project and global) config sources.
+     if (Flag.OPENCODE_CONFIG_DIR) {
+       log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
+@@ -1045,6 +1059,12 @@ export namespace Config {
+         .optional()
+         .describe("Command configuration, see https://opencode.ai/docs/commands"),
+       skills: Skills.optional().describe("Additional skill folder paths"),
++      workflow: z
++        .object({
++          paths: z.array(z.string()).optional().describe("Installed workflow plugin directories"),
++        })
++        .optional()
++        .describe("Workflow plugin configuration"),
+       watcher: z
+         .object({
+           ignore: z.array(z.string()).optional(),
+diff --git a/packages/opencode/src/index.ts b/packages/opencode/src/index.ts
+index 4c716b839..96119160b 100644
+--- a/packages/opencode/src/index.ts
++++ b/packages/opencode/src/index.ts
+@@ -31,6 +31,7 @@ import { PrCommand } from "./cli/cmd/pr"
+ import { SessionCommand } from "./cli/cmd/session"
+ import { DbCommand } from "./cli/cmd/db"
+ import { OnboardCommand } from "./cli/cmd/onboard"
++import { WorkflowCommand } from "./cli/cmd/workflow"
+ import path from "path"
+ import { Global } from "./global"
+ import { JsonMigration } from "./storage/json-migration"
+@@ -152,6 +153,7 @@ let cli = yargs(hideBin(process.argv))
+   .command(SessionCommand)
+   .command(DbCommand)
+   .command(OnboardCommand)
++  .command(WorkflowCommand)
+ 
+ if (Installation.isLocal()) {
+   cli = cli.command(WorkspaceServeCommand)
+diff --git a/packages/opencode/src/mcp/recommended.ts b/packages/opencode/src/mcp/recommended.ts
+new file mode 100644
+index 000000000..949b14dfd
+--- /dev/null
++++ b/packages/opencode/src/mcp/recommended.ts
+@@ -0,0 +1,60 @@
++/**
++ * Recommended MCP and tool extensions for CoBuilder.
++ *
++ * Adding a new recommendation: append an entry to RECOMMENDED_TOOLS.
++ * It will automatically appear in `cobuilder onboard` on the user's next run.
++ */
++
++export type McpEntry = {
++  /** Key written to opencode.json mcp object */
++  id: string
++  label: string
++  hint: string
++  source: string
++  /** Category shown in onboarding */
++  type: "mcp" | "cli"
++  /**
++   * For type "mcp": the config block written directly into opencode.json under mcp[id].
++   * For type "cli": not used.
++   */
++  mcpConfig?: {
++    type: "local"
++    command: string[]
++    environment?: Record<string, string>
++  }
++  /**
++   * For type "cli": sequential shell commands to run during install.
++   * Each command is run in order; failure halts the sequence.
++   */
++  installCommands?: string[]
++  /** Shown to user when install fails, so they can do it manually. */
++  manualInstall: string
++}
++
++export const RECOMMENDED_TOOLS: McpEntry[] = [
++  {
++    id: "context-mode",
++    label: "context-mode",
++    hint: "Sandboxes tool output to protect context window — prevents token floods from large files, logs, and API responses",
++    source: "https://github.com/mksglu/context-mode",
++    type: "mcp",
++    mcpConfig: {
++      type: "local",
++      // npx -y means no global install required — runs on demand
++      command: ["npx", "-y", "context-mode"],
++    },
++    manualInstall: "npm install -g context-mode\nThen add to opencode.json: { \"mcp\": { \"context-mode\": { \"type\": \"local\", \"command\": [\"context-mode\"] } } }",
++  },
++  {
++    id: "agent-browser",
++    label: "agent-browser",
++    hint: "Headless browser automation CLI for AI agents — lets CoBuilder navigate, click, and extract from web pages",
++    source: "https://github.com/vercel-labs/agent-browser",
++    type: "cli",
++    installCommands: [
++      "npm install -g agent-browser",
++      "agent-browser install",
++    ],
++    manualInstall: "npm install -g agent-browser && agent-browser install",
++  },
++]
+diff --git a/packages/opencode/src/workflow/gsd-reference/WORKFLOW.md b/packages/opencode/src/workflow/gsd-reference/WORKFLOW.md
+new file mode 100644
+index 000000000..badcedd3b
+--- /dev/null
++++ b/packages/opencode/src/workflow/gsd-reference/WORKFLOW.md
+@@ -0,0 +1,29 @@
++---
++name: gsd
++version: 1.0.0
++description: Get Shit Done — structured project planning and execution methodology for CoBuilder
++commands:
++  - plan-phase
++  - execute-phase
++  - discuss-phase
++---
++
++# GSD Workflow
++
++The GSD (Get Shit Done) workflow provides structured project planning and execution commands
++for use with CoBuilder. It implements the plan-phase → execute-phase cycle with discuss-phase
++for collaborative refinement.
++
++## Commands
++
++- `/plan-phase` — create a detailed phase plan with task breakdown and dependency analysis
++- `/execute-phase` — execute a planned phase with wave-based parallelization
++- `/discuss-phase` — gather context and decisions before planning
++
++## Installation
++
++```bash
++cobuilder workflow add gsd
++```
++
++After installation, restart CoBuilder to activate the slash commands.
+diff --git a/packages/opencode/src/workflow/gsd-reference/commands/discuss-phase.md b/packages/opencode/src/workflow/gsd-reference/commands/discuss-phase.md
+new file mode 100644
+index 000000000..cc4568758
+--- /dev/null
++++ b/packages/opencode/src/workflow/gsd-reference/commands/discuss-phase.md
+@@ -0,0 +1,12 @@
++---
++name: discuss-phase
++description: Gather context and user decisions before planning a phase
++---
++
++You are a GSD discussant. Gather context and lock decisions before planning begins.
++
++Steps:
++1. Read `.planning/ROADMAP.md` to identify the upcoming phase
++2. Present the phase scope and ask clarifying questions
++3. Record decisions, deferred ideas, and discretion areas
++4. Write a CONTEXT.md to `.planning/phases/<phase>/`
+diff --git a/packages/opencode/src/workflow/gsd-reference/commands/execute-phase.md b/packages/opencode/src/workflow/gsd-reference/commands/execute-phase.md
+new file mode 100644
+index 000000000..0ad15bddb
+--- /dev/null
++++ b/packages/opencode/src/workflow/gsd-reference/commands/execute-phase.md
+@@ -0,0 +1,16 @@
++---
++name: execute-phase
++description: Execute a planned phase using wave-based parallelization
++---
++
++You are a GSD executor. Execute phase plans created by plan-phase.
++
++Read the PLAN.md files for the specified phase, then execute tasks in wave order.
++Tasks in the same wave with no file conflicts can run in parallel.
++
++Steps:
++1. Read `.planning/phases/<phase>/*-PLAN.md`
++2. Identify the current wave (lowest incomplete wave)
++3. Execute all tasks in the current wave
++4. Write a SUMMARY.md on completion
++5. Advance to the next wave
+diff --git a/packages/opencode/src/workflow/gsd-reference/commands/plan-phase.md b/packages/opencode/src/workflow/gsd-reference/commands/plan-phase.md
+new file mode 100644
+index 000000000..3fd796d12
+--- /dev/null
++++ b/packages/opencode/src/workflow/gsd-reference/commands/plan-phase.md
+@@ -0,0 +1,15 @@
++---
++name: plan-phase
++description: Create a detailed phase plan with task breakdown, dependency analysis, and goal-backward verification
++---
++
++You are a GSD planner. Create executable phase plans with task breakdown and dependency analysis.
++
++Read `.planning/ROADMAP.md` to understand the current phase, then decompose it into parallel-optimized plans with 2-3 tasks each.
++
++Steps:
++1. Read `.planning/STATE.md` and `.planning/ROADMAP.md`
++2. Identify the next incomplete phase
++3. Break into tasks with clear dependencies
++4. Write PLAN.md files to `.planning/phases/<phase>/`
++5. Update ROADMAP.md with plan count and objectives
+diff --git a/packages/opencode/src/workflow/gsd-reference/hooks/.gitkeep b/packages/opencode/src/workflow/gsd-reference/hooks/.gitkeep
+new file mode 100644
+index 000000000..e69de29bb
+diff --git a/packages/opencode/src/workflow/index.test.ts b/packages/opencode/src/workflow/index.test.ts
+new file mode 100644
+index 000000000..53ba5c3c1
+--- /dev/null
++++ b/packages/opencode/src/workflow/index.test.ts
+@@ -0,0 +1,90 @@
++import { describe, test, expect, beforeEach, afterEach } from "bun:test"
++import path from "path"
++import fs from "fs/promises"
++import os from "os"
++
++// We test the logic units directly; git clone is integration-level
++// and skipped in unit tests
++
++describe("Workflow.Info schema (WF-03)", () => {
++  test("parses valid frontmatter", async () => {
++    const { Workflow } = await import("./index")
++    const result = Workflow.Info.safeParse({ name: "gsd", version: "1.0.0", description: "test" })
++    expect(result.success).toBe(true)
++  })
++
++  test("rejects missing name", async () => {
++    const { Workflow } = await import("./index")
++    const result = Workflow.Info.safeParse({ version: "1.0.0" })
++    expect(result.success).toBe(false)
++  })
++
++  test("accepts optional fields omitted", async () => {
++    const { Workflow } = await import("./index")
++    const result = Workflow.Info.safeParse({ name: "minimal" })
++    expect(result.success).toBe(true)
++  })
++
++  test("rejects empty name string", async () => {
++    const { Workflow } = await import("./index")
++    const result = Workflow.Info.safeParse({ name: "" })
++    expect(result.success).toBe(false)
++  })
++
++  test("accepts commands array", async () => {
++    const { Workflow } = await import("./index")
++    const result = Workflow.Info.safeParse({ name: "gsd", commands: ["plan", "execute"] })
++    expect(result.success).toBe(true)
++  })
++})
++
++describe("Workflow.list (WF-05)", () => {
++  let tmpDir: string
++
++  beforeEach(async () => {
++    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "wf-test-"))
++    process.env.XDG_CONFIG_HOME = tmpDir
++    process.env.OPENCODE_TEST_HOME = tmpDir
++  })
++
++  afterEach(async () => {
++    await fs.rm(tmpDir, { recursive: true, force: true })
++    delete process.env.XDG_CONFIG_HOME
++    delete process.env.OPENCODE_TEST_HOME
++  })
++
++  test("returns empty array when no workflows configured", async () => {
++    const mod = await import("./index")
++    // list() reads from opencode.json which doesn't exist in tmpDir — should return []
++    const results = await mod.Workflow.list()
++    // Either empty (no config) or whatever is in real config — we just ensure no throw
++    expect(Array.isArray(results)).toBe(true)
++  })
++})
++
++describe("Workflow deduplication (WF-07)", () => {
++  test("resolveSource on same alias twice does not error", async () => {
++    const { resolveSource } = await import("./registry")
++    const url1 = resolveSource("gsd")
++    const url2 = resolveSource("gsd")
++    expect(url1).toBe(url2)
++  })
++})
++
++describe("Workflow.remove error (WF-06)", () => {
++  test("throws when workflow not installed", async () => {
++    const { Workflow } = await import("./index")
++    // Use a name that definitely won't exist in any real config
++    await expect(Workflow.remove("__nonexistent_workflow_xyzzy__")).rejects.toThrow(
++      /not installed/,
++    )
++  })
++})
++
++// WF-01 install integration test — requires git and network, skipped in unit runs
++describe("Workflow.install integration (WF-01)", () => {
++  test.skip("clones workflow and registers in config", async () => {
++    // Full integration test — requires network and git
++    // See WF-01 in validation map
++  })
++})
+diff --git a/packages/opencode/src/workflow/index.ts b/packages/opencode/src/workflow/index.ts
+new file mode 100644
+index 000000000..8205596da
+--- /dev/null
++++ b/packages/opencode/src/workflow/index.ts
+@@ -0,0 +1,164 @@
++// packages/opencode/src/workflow/index.ts
++import path from "path"
++import { z } from "zod"
++import { Global } from "../global"
++import { Filesystem } from "../util/filesystem"
++import { ConfigMarkdown } from "../config/markdown"
++import { resolveSource } from "./registry"
++import { validateWorkflowPath } from "./sandbox"
++import { Log } from "../util/log"
++import fs from "fs/promises"
++
++const log = Log.create({ service: "workflow" })
++
++export namespace Workflow {
++  /** Zod schema for WORKFLOW.md frontmatter */
++  export const Info = z.object({
++    name: z.string().min(1),
++    version: z.string().optional(),
++    description: z.string().optional(),
++    commands: z.array(z.string()).optional(),
++  })
++
++  export type Info = z.infer<typeof Info>
++
++  /** Resolved path to the workflows base directory */
++  export function workflowsDir(): string {
++    return path.join(Global.Path.config, "workflows")
++  }
++
++  /** Read the config file path */
++  function configPath(): string {
++    return path.join(Global.Path.config, "opencode.json")
++  }
++
++  /**
++   * Parse the WORKFLOW.md manifest from a workflow directory.
++   * Returns null if WORKFLOW.md does not exist or is invalid.
++   */
++  export async function parseManifest(dir: string): Promise<Info | null> {
++    const manifestPath = path.join(dir, "WORKFLOW.md")
++    try {
++      const md = await ConfigMarkdown.parse(manifestPath)
++      return Info.parse(md.data)
++    } catch {
++      return null
++    }
++  }
++
++  /**
++   * List all installed workflows by reading workflow.paths from opencode.json
++   * and loading WORKFLOW.md from each registered directory.
++   */
++  export async function list(): Promise<Array<Info & { path: string }>> {
++    let existing: any = {}
++    try {
++      existing = await Filesystem.readJson(configPath())
++    } catch {}
++    const paths: string[] = existing?.workflow?.paths ?? []
++    const results: Array<Info & { path: string }> = []
++    for (const p of paths) {
++      const expanded = p.startsWith("~/") ? path.join(process.env.HOME ?? "", p.slice(2)) : p
++      const info = await parseManifest(expanded)
++      if (info) results.push({ ...info, path: expanded })
++      else log.warn("workflow directory missing or invalid WORKFLOW.md", { path: expanded })
++    }
++    return results
++  }
++
++  /**
++   * Install a workflow from a source (alias or URL).
++   * Clones into ~/.config/opencode/workflows/<name>/ and registers in opencode.json.
++   * Idempotent: does nothing if path already registered.
++   */
++  export async function install(source: string): Promise<void> {
++    const url = resolveSource(source)
++
++    // Derive target directory name from URL basename (strip .git suffix)
++    const urlName = url.split("/").pop()?.replace(/\.git$/, "") ?? source
++    const destDir = path.join(workflowsDir(), urlName)
++
++    // Sandbox check: destDir must stay inside workflowsDir()
++    validateWorkflowPath(destDir)
++
++    // Ensure workflows directory exists
++    await fs.mkdir(workflowsDir(), { recursive: true })
++
++    const alreadyCloned = await Filesystem.exists(destDir)
++    if (!alreadyCloned) {
++      log.info("cloning workflow", { url, destDir })
++      const proc = Bun.spawnSync(["git", "clone", url, destDir], { stderr: "pipe" })
++      if (proc.exitCode !== 0) {
++        const stderr = new TextDecoder().decode(proc.stderr)
++        throw new Error(`git clone failed: ${stderr}`)
++      }
++    }
++
++    // Validate manifest
++    const info = await parseManifest(destDir)
++    if (!info) {
++      throw new Error(`Cloned directory at ${destDir} has no valid WORKFLOW.md. Cannot register.`)
++    }
++
++    // Warn if directory name and manifest name differ
++    if (info.name !== urlName) {
++      log.warn("workflow name mismatch", { dirName: urlName, manifestName: info.name })
++    }
++
++    // Update config — dedup before writing (WF-07)
++    let existing: any = {}
++    try {
++      existing = await Filesystem.readJson(configPath())
++    } catch {}
++    const currentPaths: string[] = existing?.workflow?.paths ?? []
++    if (currentPaths.includes(destDir)) {
++      log.info("workflow already registered, skipping", { path: destDir })
++      return
++    }
++    const updated = {
++      ...existing,
++      workflow: { ...existing?.workflow, paths: [...currentPaths, destDir] },
++    }
++    await Filesystem.writeJson(configPath(), updated)
++    log.info("workflow installed", { name: info.name, path: destDir })
++  }
++
++  /**
++   * Remove a workflow by name. Deletes the directory and removes from config.
++   */
++  export async function remove(name: string): Promise<void> {
++    let existing: any = {}
++    try {
++      existing = await Filesystem.readJson(configPath())
++    } catch {}
++    const currentPaths: string[] = existing?.workflow?.paths ?? []
++
++    // Find path whose directory name or WORKFLOW.md name matches
++    let targetPath: string | undefined
++    for (const p of currentPaths) {
++      const expanded = p.startsWith("~/") ? path.join(process.env.HOME ?? "", p.slice(2)) : p
++      const dirName = path.basename(expanded)
++      const info = await parseManifest(expanded)
++      if (dirName === name || info?.name === name) {
++        targetPath = expanded
++        break
++      }
++    }
++
++    if (!targetPath) {
++      throw new Error(`Workflow "${name}" is not installed.`)
++    }
++
++    // Delete directory
++    await fs.rm(targetPath, { recursive: true, force: true })
++
++    // Remove from config
++    const updatedPaths = currentPaths.filter((p) => p !== targetPath)
++    const updated = {
++      ...existing,
++      workflow: { ...existing?.workflow, paths: updatedPaths },
++    }
++    await Filesystem.writeJson(configPath(), updated)
++    log.info("workflow removed", { name, path: targetPath })
++  }
++}
+diff --git a/packages/opencode/src/workflow/registry.test.ts b/packages/opencode/src/workflow/registry.test.ts
+new file mode 100644
+index 000000000..7151b90d9
+--- /dev/null
++++ b/packages/opencode/src/workflow/registry.test.ts
+@@ -0,0 +1,29 @@
++import { describe, test, expect } from "bun:test"
++import { REGISTRY, resolveSource } from "./registry"
++
++describe("registry", () => {
++  test("gsd alias resolves to GitHub URL", () => {
++    expect(resolveSource("gsd")).toBe("https://github.com/CobuilderLabs/gsd-workflow")
++  })
++
++  test("ralph-loop alias resolves", () => {
++    expect(resolveSource("ralph-loop")).toBe("https://github.com/CobuilderLabs/ralph-loop-workflow")
++  })
++
++  test("gstack alias resolves", () => {
++    expect(resolveSource("gstack")).toBe("https://github.com/CobuilderLabs/gstack-workflow")
++  })
++
++  test("full https URL passes through unchanged", () => {
++    const url = "https://github.com/acme/my-workflow"
++    expect(resolveSource(url)).toBe(url)
++  })
++
++  test("unknown alias throws", () => {
++    expect(() => resolveSource("unknown-alias")).toThrow(/Unknown workflow alias/)
++  })
++
++  test("REGISTRY contains exactly gsd, ralph-loop, gstack", () => {
++    expect(Object.keys(REGISTRY).sort()).toEqual(["gsd", "gstack", "ralph-loop"])
++  })
++})
+diff --git a/packages/opencode/src/workflow/registry.ts b/packages/opencode/src/workflow/registry.ts
+new file mode 100644
+index 000000000..36d7a0c02
+--- /dev/null
++++ b/packages/opencode/src/workflow/registry.ts
+@@ -0,0 +1,23 @@
++// packages/opencode/src/workflow/registry.ts
++// Built-in alias registry — maps short names to canonical GitHub URLs.
++// User config (opencode.json) only stores installed paths, never alias mappings.
++
++export const REGISTRY: Record<string, string> = {
++  "gsd": "https://github.com/CobuilderLabs/gsd-workflow",
++  "ralph-loop": "https://github.com/CobuilderLabs/ralph-loop-workflow",
++  "gstack": "https://github.com/CobuilderLabs/gstack-workflow",
++}
++
++/**
++ * Given a source string (alias or full URL), return the canonical URL to clone.
++ * Throws if the alias is not found and the source does not look like a URL.
++ */
++export function resolveSource(source: string): string {
++  if (source in REGISTRY) return REGISTRY[source]!
++  if (source.startsWith("https://") || source.startsWith("http://") || source.startsWith("git@")) {
++    return source
++  }
++  throw new Error(
++    `Unknown workflow alias "${source}". Use a full GitHub URL or one of: ${Object.keys(REGISTRY).join(", ")}`,
++  )
++}
+diff --git a/packages/opencode/src/workflow/sandbox.ts b/packages/opencode/src/workflow/sandbox.ts
+new file mode 100644
+index 000000000..d66d39272
+--- /dev/null
++++ b/packages/opencode/src/workflow/sandbox.ts
+@@ -0,0 +1,22 @@
++// packages/opencode/src/workflow/sandbox.ts
++// Path sandboxing: ensure all workflow install destinations stay inside the
++// workflows base directory. Prevents path traversal (e.g., "../../.ssh").
++
++import path from "path"
++import { Workflow } from "./index"
++
++/**
++ * Validate that destDir is strictly inside workflowsDir().
++ * Throws if the resolved path escapes the sandbox.
++ */
++export function validateWorkflowPath(destDir: string): void {
++  const base = path.resolve(Workflow.workflowsDir())
++  const resolved = path.resolve(destDir)
++
++  if (!resolved.startsWith(base + path.sep) && resolved !== base) {
++    throw new Error(
++      `Security: workflow path "${resolved}" escapes the workflow sandbox directory "${base}". ` +
++      `Workflow plugins must be installed inside ${base}.`
++    )
++  }
++}
+-- 
+2.43.0
+

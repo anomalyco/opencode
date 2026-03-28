@@ -45,6 +45,7 @@ test("smoke file viewer renders real file content", async ({ page, gotoSession }
   await tab.click()
 
   const viewer = page.locator('[data-component="file"][data-mode="text"]').first()
+  await viewer.scrollIntoViewIfNeeded()
   await expect(viewer).toBeVisible()
   await expect(viewer.getByText(/"name"\s*:\s*"@opencode-ai\/app"/)).toBeVisible()
 })
@@ -92,6 +93,7 @@ test("cmd+f opens text viewer search while prompt is focused", async ({ page, go
   await tab.click()
 
   const viewer = page.locator('[data-component="file"][data-mode="text"]').first()
+  await viewer.scrollIntoViewIfNeeded()
   await expect(viewer).toBeVisible()
 
   await page.locator(promptSelector).click()
@@ -145,6 +147,7 @@ test("cmd+f opens text viewer search while prompt is not focused", async ({ page
   await tab.click()
 
   const viewer = page.locator('[data-component="file"][data-mode="text"]').first()
+  await viewer.scrollIntoViewIfNeeded()
   await expect(viewer).toBeVisible()
 
   await viewer.click()

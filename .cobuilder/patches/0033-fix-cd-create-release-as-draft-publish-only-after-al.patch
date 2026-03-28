@@ -1,0 +1,54 @@
+From 23c8826284b80b08c9d6f378fc3cfc65715c7abd Mon Sep 17 00:00:00 2001
+From: johnnykang101 <johnny.kang101@gmail.com>
+Date: Thu, 26 Mar 2026 16:10:46 -0700
+Subject: [PATCH 033/131] fix(cd): create release as draft, publish only after
+ all binaries uploaded
+
+Prevents the "latest" tag from pointing to an empty release during the
+build window. Also adds branch protection context for PRs.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ .github/workflows/cd.yml | 13 +++++++++++--
+ 1 file changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/.github/workflows/cd.yml b/.github/workflows/cd.yml
+index bdb1099ef..3ac99d58a 100644
+--- a/.github/workflows/cd.yml
++++ b/.github/workflows/cd.yml
+@@ -125,14 +125,14 @@ jobs:
+           "
+ 
+       # Create release BEFORE build so build.ts can upload assets to it via gh release upload
+-      - name: Create GitHub release
++      - name: Create GitHub release (draft)
+         env:
+           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+         run: |
+           gh release create "${{ steps.next_version.outputs.tag }}" \
+             --title "CoBuilder ${{ steps.next_version.outputs.display }}" \
+             --notes-file /tmp/release-notes.md \
+-            --latest
++            --draft
+ 
+       - name: Build and upload binaries
+         env:
+@@ -146,6 +146,15 @@ jobs:
+           cd packages/opencode
+           bun run build
+ 
++      - name: Publish release
++        env:
++          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
++        run: |
++          gh release edit "${{ steps.next_version.outputs.tag }}" \
++            --draft=false \
++            --latest \
++            --repo CobuilderLabs/opencode
++
+   desktop-linux:
+     name: Desktop (Linux)
+     needs: release
+-- 
+2.43.0
+

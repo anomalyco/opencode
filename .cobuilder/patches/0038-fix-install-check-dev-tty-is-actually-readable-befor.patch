@@ -1,0 +1,30 @@
+From bc1b83aa37b6130846da9565a22930612502fffa Mon Sep 17 00:00:00 2001
+From: johnnykang101 <johnny.kang101@gmail.com>
+Date: Thu, 26 Mar 2026 16:21:19 -0700
+Subject: [PATCH 038/131] fix(install): check /dev/tty is actually readable
+ before redirecting
+
+/dev/tty may exist as a device node in containers but fail to open.
+Use a subshell exec test to confirm it's accessible before using it.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ install.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/install.sh b/install.sh
+index 0bd66217b..9d323324a 100755
+--- a/install.sh
++++ b/install.sh
+@@ -132,7 +132,7 @@ echo ""
+ # so interactive prompts (arrow keys etc.) work seamlessly.
+ if [ -t 0 ]; then
+   "$COBUILDER_BIN" onboard
+-elif [ -e /dev/tty ]; then
++elif [ -e /dev/tty ] && (exec </dev/tty) 2>/dev/null; then
+   "$COBUILDER_BIN" onboard </dev/tty
+ else
+   echo ""
+-- 
+2.43.0
+

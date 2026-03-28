@@ -1,0 +1,36 @@
+From e7ac8b60bc3702f471fc3bd32958dbb8324c635c Mon Sep 17 00:00:00 2001
+From: CoBuilder CEO <ceo@cobuilder.ai>
+Date: Fri, 27 Mar 2026 13:45:50 -0700
+Subject: [PATCH 121/131] fix(onboard): force stdin raw mode for Bun compiled
+ binary
+
+Bun's process.stdin is not instanceof tty.ReadStream, so @clack/core's
+instanceof check silently skips setRawMode, causing arrow keys to print
+escape sequences instead of navigating the select prompt.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ packages/opencode/src/cli/cmd/onboard.ts | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/packages/opencode/src/cli/cmd/onboard.ts b/packages/opencode/src/cli/cmd/onboard.ts
+index 40e5daa3a..ae6d23fc2 100644
+--- a/packages/opencode/src/cli/cmd/onboard.ts
++++ b/packages/opencode/src/cli/cmd/onboard.ts
+@@ -14,6 +14,13 @@ export const OnboardCommand = cmd({
+   command: "onboard",
+   describe: "interactive setup — choose a provider and model to get started",
+   async handler() {
++    // Bun compiled binaries: process.stdin is not instanceof tty.ReadStream,
++    // so @clack/core's instanceof check skips setRawMode. Force it manually.
++    if (process.stdin.isTTY) {
++      process.stdin.setRawMode(true)
++      process.stdin.resume()
++    }
++
+     prompts.intro(UI.logo() + "\n  Welcome to CoBuilder — let's get you set up")
+ 
+     // Step 1: Provider selection
+-- 
+2.43.0
+

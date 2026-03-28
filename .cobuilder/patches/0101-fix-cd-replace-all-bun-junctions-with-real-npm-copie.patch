@@ -1,0 +1,48 @@
+From 7eb2489ae5bb98fce285e9c4fadb5102f60a1721 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Fri, 27 Mar 2026 10:23:54 -0700
+Subject: [PATCH 101/131] fix(cd): replace all bun junctions with real npm
+ copies on Windows
+
+---
+ .github/workflows/test-windows-build.yml | 22 +++++++++++++---------
+ 1 file changed, 13 insertions(+), 9 deletions(-)
+
+diff --git a/.github/workflows/test-windows-build.yml b/.github/workflows/test-windows-build.yml
+index e4546daed..e0fe29a8e 100644
+--- a/.github/workflows/test-windows-build.yml
++++ b/.github/workflows/test-windows-build.yml
+@@ -41,17 +41,21 @@ jobs:
+             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+           "
+ 
+-      # Bun's virtual store uses symlinks on Windows (requires elevated perms), so Node.js
+-      # can't resolve peer deps (vite, picocolors) from electron-vite's bun store path.
+-      # Fix: npm-install vite + deps into a clean temp dir, copy as real files into
+-      # root node_modules so Node's resolution walk finds them normally.
+-      - name: Install vite peer deps as real files (Windows symlink workaround)
++      # Bun creates directory junctions on Windows which Node.js ESM can't traverse.
++      # Fix: npm-install electron-vite + ALL its deps into RUNNER_TEMP, then replace
++      # every bun junction in node_modules with a real copy that Node.js can resolve.
++      - name: Replace bun junctions with real npm copies (Windows fix)
+         shell: bash
+         run: |
+-          mkdir -p "$RUNNER_TEMP/peer-deps"
+-          echo '{}' > "$RUNNER_TEMP/peer-deps/package.json"
+-          npm install --prefix "$RUNNER_TEMP/peer-deps" vite picocolors --legacy-peer-deps --silent
+-          cp -r "$RUNNER_TEMP/peer-deps/node_modules/." node_modules/
++          mkdir -p "$RUNNER_TEMP/evite"
++          echo '{}' > "$RUNNER_TEMP/evite/package.json"
++          npm install --prefix "$RUNNER_TEMP/evite" electron-vite vite --legacy-peer-deps --silent
++          for pkg in "$RUNNER_TEMP/evite/node_modules"/*/; do
++            name=$(basename "$pkg")
++            [[ "$name" == .* ]] && continue
++            rm -rf "node_modules/$name"
++            cp -r "$pkg" "node_modules/$name"
++          done
+ 
+       - name: Build
+         shell: bash
+-- 
+2.43.0
+

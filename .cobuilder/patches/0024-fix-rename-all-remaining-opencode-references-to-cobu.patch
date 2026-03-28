@@ -1,0 +1,201 @@
+From 3092881e5c96cfd4dc8d68831d25d3cae73604d4 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <johnny.kang101@gmail.com>
+Date: Thu, 26 Mar 2026 15:44:57 -0700
+Subject: [PATCH 024/131] fix: rename all remaining opencode references to
+ cobuilder
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- bin/cobuilder: OPENCODE_BIN_PATH → COBUILDER_BIN_PATH env var
+- pr.ts: spawn cobuilder binary instead of opencode (runtime fix)
+- uninstall.ts: brew/choco/scoop package names, intro/outro text
+- run.ts/worker.ts/plugin/index.ts/server.ts: default auth username
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ packages/opencode/bin/cobuilder             |  2 +-
+ packages/opencode/src/cli/cmd/pr.ts         | 12 ++++++------
+ packages/opencode/src/cli/cmd/run.ts        |  2 +-
+ packages/opencode/src/cli/cmd/tui/worker.ts |  2 +-
+ packages/opencode/src/cli/cmd/uninstall.ts  | 16 ++++++++--------
+ packages/opencode/src/plugin/index.ts       |  2 +-
+ packages/opencode/src/server/server.ts      |  2 +-
+ 7 files changed, 19 insertions(+), 19 deletions(-)
+
+diff --git a/packages/opencode/bin/cobuilder b/packages/opencode/bin/cobuilder
+index a3979389a..4bb55f0f4 100755
+--- a/packages/opencode/bin/cobuilder
++++ b/packages/opencode/bin/cobuilder
+@@ -17,7 +17,7 @@ function run(target) {
+   process.exit(code)
+ }
+ 
+-const envPath = process.env.OPENCODE_BIN_PATH
++const envPath = process.env.COBUILDER_BIN_PATH
+ if (envPath) {
+   run(envPath)
+ }
+diff --git a/packages/opencode/src/cli/cmd/pr.ts b/packages/opencode/src/cli/cmd/pr.ts
+index 8826fe343..339845a7f 100644
+--- a/packages/opencode/src/cli/cmd/pr.ts
++++ b/packages/opencode/src/cli/cmd/pr.ts
+@@ -6,7 +6,7 @@ import { git } from "@/util/git"
+ 
+ export const PrCommand = cmd({
+   command: "pr <number>",
+-  describe: "fetch and checkout a GitHub PR branch, then run opencode",
++  describe: "fetch and checkout a GitHub PR branch, then run cobuilder",
+   builder: (yargs) =>
+     yargs.positional("number", {
+       type: "number",
+@@ -87,10 +87,10 @@ export const PrCommand = cmd({
+               const sessionMatch = prInfo.body.match(/https:\/\/opncd\.ai\/s\/([a-zA-Z0-9_-]+)/)
+               if (sessionMatch) {
+                 const sessionUrl = sessionMatch[0]
+-                UI.println(`Found opencode session: ${sessionUrl}`)
++                UI.println(`Found cobuilder session: ${sessionUrl}`)
+                 UI.println(`Importing session...`)
+ 
+-                const importResult = await Process.text(["opencode", "import", sessionUrl], {
++                const importResult = await Process.text(["cobuilder", "import", sessionUrl], {
+                   nothrow: true,
+                 })
+                 if (importResult.code === 0) {
+@@ -109,18 +109,18 @@ export const PrCommand = cmd({
+ 
+         UI.println(`Successfully checked out PR #${prNumber} as branch '${localBranchName}'`)
+         UI.println()
+-        UI.println("Starting opencode...")
++        UI.println("Starting cobuilder...")
+         UI.println()
+ 
+         const opencodeArgs = sessionId ? ["-s", sessionId] : []
+-        const opencodeProcess = Process.spawn(["opencode", ...opencodeArgs], {
++        const opencodeProcess = Process.spawn(["cobuilder", ...opencodeArgs], {
+           stdin: "inherit",
+           stdout: "inherit",
+           stderr: "inherit",
+           cwd: process.cwd(),
+         })
+         const code = await opencodeProcess.exited
+-        if (code !== 0) throw new Error(`opencode exited with code ${code}`)
++        if (code !== 0) throw new Error(`cobuilder exited with code ${code}`)
+       },
+     })
+   },
+diff --git a/packages/opencode/src/cli/cmd/run.ts b/packages/opencode/src/cli/cmd/run.ts
+index f2a04027e..931841d8e 100644
+--- a/packages/opencode/src/cli/cmd/run.ts
++++ b/packages/opencode/src/cli/cmd/run.ts
+@@ -693,7 +693,7 @@ export const RunCommand = cmd({
+       const headers = (() => {
+         const password = args.password ?? process.env.OPENCODE_SERVER_PASSWORD
+         if (!password) return undefined
+-        const username = process.env.OPENCODE_SERVER_USERNAME ?? "opencode"
++        const username = process.env.OPENCODE_SERVER_USERNAME ?? "cobuilder"
+         const auth = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`
+         return { Authorization: auth }
+       })()
+diff --git a/packages/opencode/src/cli/cmd/tui/worker.ts b/packages/opencode/src/cli/cmd/tui/worker.ts
+index 3d8c00cc5..9e79b9fc7 100644
+--- a/packages/opencode/src/cli/cmd/tui/worker.ts
++++ b/packages/opencode/src/cli/cmd/tui/worker.ts
+@@ -175,6 +175,6 @@ Rpc.listen(rpc)
+ function getAuthorizationHeader(): string | undefined {
+   const password = Flag.OPENCODE_SERVER_PASSWORD
+   if (!password) return undefined
+-  const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
++  const username = Flag.OPENCODE_SERVER_USERNAME ?? "cobuilder"
+   return `Basic ${btoa(`${username}:${password}`)}`
+ }
+diff --git a/packages/opencode/src/cli/cmd/uninstall.ts b/packages/opencode/src/cli/cmd/uninstall.ts
+index de41f32a0..030e8ab51 100644
+--- a/packages/opencode/src/cli/cmd/uninstall.ts
++++ b/packages/opencode/src/cli/cmd/uninstall.ts
+@@ -24,7 +24,7 @@ interface RemovalTargets {
+ 
+ export const UninstallCommand = {
+   command: "uninstall",
+-  describe: "uninstall opencode and remove all related files",
++  describe: "uninstall cobuilder and remove all related files",
+   builder: (yargs: Argv) =>
+     yargs
+       .option("keep-config", {
+@@ -55,7 +55,7 @@ export const UninstallCommand = {
+     UI.empty()
+     UI.println(UI.logo("  "))
+     UI.empty()
+-    prompts.intro("Uninstall OpenCode")
++    prompts.intro("Uninstall CoBuilder")
+ 
+     const method = await Installation.method()
+     prompts.log.info(`Installation method: ${method}`)
+@@ -133,9 +133,9 @@ async function showRemovalSummary(targets: RemovalTargets, method: Installation.
+       pnpm: "pnpm uninstall -g opencode-ai",
+       bun: "bun remove -g opencode-ai",
+       yarn: "yarn global remove opencode-ai",
+-      brew: "brew uninstall opencode",
+-      choco: "choco uninstall opencode",
+-      scoop: "scoop uninstall opencode",
++      brew: "brew uninstall cobuilder",
++      choco: "choco uninstall cobuilder",
++      scoop: "scoop uninstall cobuilder",
+     }
+     prompts.log.info(`  ✓ Package: ${cmds[method] || method}`)
+   }
+@@ -185,14 +185,14 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
+       bun: ["bun", "remove", "-g", "opencode-ai"],
+       yarn: ["yarn", "global", "remove", "opencode-ai"],
+       brew: ["brew", "uninstall", "opencode"],
+-      choco: ["choco", "uninstall", "opencode"],
++      choco: ["choco", "uninstall", "cobuilder"],
+       scoop: ["scoop", "uninstall", "opencode"],
+     }
+ 
+     const cmd = cmds[method]
+     if (cmd) {
+       spinner.start(`Running ${cmd.join(" ")}...`)
+-      const result = await Process.run(method === "choco" ? ["choco", "uninstall", "opencode", "-y", "-r"] : cmd, {
++      const result = await Process.run(method === "choco" ? ["choco", "uninstall", "cobuilder", "-y", "-r"] : cmd, {
+         nothrow: true,
+       })
+       if (result.code !== 0) {
+@@ -229,7 +229,7 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
+   }
+ 
+   UI.empty()
+-  prompts.log.success("Thank you for using OpenCode!")
++  prompts.log.success("Thank you for using CoBuilder!")
+ }
+ 
+ async function getShellConfigFile(): Promise<string | null> {
+diff --git a/packages/opencode/src/plugin/index.ts b/packages/opencode/src/plugin/index.ts
+index 9804169a4..9fe3cc0bc 100644
+--- a/packages/opencode/src/plugin/index.ts
++++ b/packages/opencode/src/plugin/index.ts
+@@ -66,7 +66,7 @@ export namespace Plugin {
+               directory: ctx.directory,
+               headers: Flag.OPENCODE_SERVER_PASSWORD
+                 ? {
+-                    Authorization: `Basic ${Buffer.from(`${Flag.OPENCODE_SERVER_USERNAME ?? "opencode"}:${Flag.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`,
++                    Authorization: `Basic ${Buffer.from(`${Flag.OPENCODE_SERVER_USERNAME ?? "cobuilder"}:${Flag.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`,
+                   }
+                 : undefined,
+               fetch: async (...args) => Server.Default().fetch(...args),
+diff --git a/packages/opencode/src/server/server.ts b/packages/opencode/src/server/server.ts
+index 3b99f77b1..7dab0d716 100644
+--- a/packages/opencode/src/server/server.ts
++++ b/packages/opencode/src/server/server.ts
+@@ -95,7 +95,7 @@ export namespace Server {
+         if (c.req.method === "OPTIONS") return next()
+         const password = Flag.OPENCODE_SERVER_PASSWORD
+         if (!password) return next()
+-        const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
++        const username = Flag.OPENCODE_SERVER_USERNAME ?? "cobuilder"
+         return basicAuth({ username, password })(c, next)
+       })
+       .use(async (c, next) => {
+-- 
+2.43.0
+

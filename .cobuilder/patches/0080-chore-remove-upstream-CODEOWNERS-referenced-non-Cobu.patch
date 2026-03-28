@@ -1,0 +1,25 @@
+From 0cc82c2061f2ed4a78a5fa47f12e0e2ebee710af Mon Sep 17 00:00:00 2001
+From: johnnykang101 <johnny.kang101@gmail.com>
+Date: Fri, 27 Mar 2026 08:26:45 -0700
+Subject: [PATCH 080/131] =?UTF-8?q?chore:=20remove=20upstream=20CODEOWNERS?=
+ =?UTF-8?q?=20=E2=80=94=20referenced=20non-CobuilderLabs=20contributors?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ .github/CODEOWNERS | 1 -
+ 1 file changed, 1 deletion(-)
+ delete mode 100644 .github/CODEOWNERS
+
+diff --git a/.github/CODEOWNERS b/.github/CODEOWNERS
+deleted file mode 100644
+index b26757e1f..000000000
+--- a/.github/CODEOWNERS
++++ /dev/null
+@@ -1 +0,0 @@
+-* @johnnykang101
+-- 
+2.43.0
+

@@ -1,0 +1,58 @@
+From 15966ac82f0a1fb983fb79f1247a208ad421344c Mon Sep 17 00:00:00 2001
+From: CoBuilder CEO <ceo@cobuilder.ai>
+Date: Fri, 27 Mar 2026 13:30:09 -0700
+Subject: [PATCH 120/131] fix(tests): update installation tests for cb-v prefix
+ and fix NUL byte rejection
+
+- Update GitHub release tag_name in tests to use cb-v prefix matching CoBuilder format
+- Fix safePath to reject inputs with NUL bytes instead of silently stripping them
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ packages/opencode/src/security/path.ts                   | 4 ++--
+ packages/opencode/test/installation/installation.test.ts | 6 +++---
+ 2 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/packages/opencode/src/security/path.ts b/packages/opencode/src/security/path.ts
+index 083dda47b..611ec2558 100644
+--- a/packages/opencode/src/security/path.ts
++++ b/packages/opencode/src/security/path.ts
+@@ -1,9 +1,9 @@
+ import path from "path"
+ 
+ export function safePath(base: string, userInput: string): string | null {
+-  const clean = userInput.replace(/\0/g, "")
++  if (userInput.includes("\0")) return null
+   const resolvedBase = path.resolve(base)
+-  const joined = path.resolve(base, clean)
++  const joined = path.resolve(base, userInput)
+   if (!joined.startsWith(resolvedBase + path.sep) && joined !== resolvedBase) {
+     return null
+   }
+diff --git a/packages/opencode/test/installation/installation.test.ts b/packages/opencode/test/installation/installation.test.ts
+index f301309ee..fc70c250b 100644
+--- a/packages/opencode/test/installation/installation.test.ts
++++ b/packages/opencode/test/installation/installation.test.ts
+@@ -50,7 +50,7 @@ function testLayer(
+ describe("installation", () => {
+   describe("latest", () => {
+     test("reads release version from GitHub releases", async () => {
+-      const layer = testLayer(() => jsonResponse({ tag_name: "v1.2.3" }))
++      const layer = testLayer(() => jsonResponse({ tag_name: "cb-v1.2.3" }))
+ 
+       const result = await Effect.runPromise(
+         Installation.Service.use((svc) => svc.latest("unknown")).pipe(Effect.provide(layer)),
+@@ -58,8 +58,8 @@ describe("installation", () => {
+       expect(result).toBe("1.2.3")
+     })
+ 
+-    test("strips v prefix from GitHub release tag", async () => {
+-      const layer = testLayer(() => jsonResponse({ tag_name: "v4.0.0-beta.1" }))
++    test("strips cb-v prefix from GitHub release tag", async () => {
++      const layer = testLayer(() => jsonResponse({ tag_name: "cb-v4.0.0-beta.1" }))
+ 
+       const result = await Effect.runPromise(
+         Installation.Service.use((svc) => svc.latest("curl")).pipe(Effect.provide(layer)),
+-- 
+2.43.0
+

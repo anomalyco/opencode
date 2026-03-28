@@ -1,0 +1,218 @@
+From a76740aa744136d34a4507608174eedc4630e028 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Thu, 26 Mar 2026 20:40:38 -0700
+Subject: [PATCH 049/131] fix: onboard wizard, Claude trailing message fix,
+ skills in system prompt (#21)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+* fix(onboard): replace multi-select model input with single select
+
+Users select one default model during onboard — they can switch to any
+other model from the same provider inside the app. The comma-separated
+number input was confusing and unnecessary.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* fix(onboard): restore security step, single-select model, fix instance crash
+
+- Remove Config.get() call that crashed with "No context found for instance"
+  during onboarding (instance ALS not initialized in CLI context)
+- Replace comma-separated multi-select model input with single select
+- Restore security modules step (inline, no missing module deps)
+- Move prompts.outro to main handler after all steps complete
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* fix(tips): rebrand all opencode references to cobuilder
+
+Replace opencode CLI commands, /opencode slash commands, OpenCode product
+name, and .opencode/ config paths with their cobuilder equivalents.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* fix(system-prompt): tell model not to use which/shell to check for skills
+
+Skills are CoBuilder-native and accessed via the skill tool, not system
+binaries. Without this hint models run `which gsd` and report it as
+not installed.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* fix(system-prompt): list installed skills in env block
+
+Adds 'Installed skills: gsd:plan-phase, ...' to the <env> section so
+the model knows upfront what skills are available without needing to
+run which/command -v shell checks.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* test(e2e): validate all onboard wizard selections — providers + security modules
+
+Step 8 now covers both wizard steps:
+- Step 1: all 5 providers (Anthropic, OpenAI, OpenRouter, Google, 9Router)
+- Step 2: all 6 security modules — each individually disabled, all disabled,
+  and combined provider+security state
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* fix(prompt): rebrand OpenCode→CoBuilder, add mandatory GSD workflow
+
+CoBuilder is the product name throughout the system prompt. Added
+mandatory GSD section so the model proactively routes non-trivial
+tasks through the structured workflow without user having to ask.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* fix(prompt): broaden CoBuilder identity beyond coding agent
+
+CoBuilder builds software, products, automations, content, plans,
+and more — not just code. Update system prompt to reflect this.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* fix(prompt): rebrand all model prompts — CoBuilder is a general AI agent
+
+Update all 6 remaining prompt files (default, gemini, gpt, beast,
+trinity, codex) to use CoBuilder identity and broaden scope beyond
+software engineering to "build anything".
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* feat: add --autopilot flag to auto-approve all permission requests
+
+Adds `cobuilder --autopilot` (or env var COBUILDER_AUTOPILOT=1) which
+skips permission confirmation prompts — useful for CI, scripts, and
+non-interactive runs.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* fix(tui,prompt): cleaner tool output + autonomous GSD behavior
+
+- TUI: show only first input value (truncated to 60 chars) instead of
+  dumping all key=value pairs for generic/MCP tool calls
+- Prompt: remove gsd:do/sub-skill references that caused double skill
+  load; instruct model to complete full GSD flow autonomously without
+  asking follow-up questions when intent is clear
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* feat(tui): show autopilot badge in prompt mode line
+
+When --autopilot is active, displays "autopilot ·" in warning color
+next to the agent name in the prompt area so the user can see at a
+glance that permission prompts are being auto-approved.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* fix(provider): strip trailing assistant messages for Claude models
+
+claude-sonnet-4-6 and newer Claude models reject requests where the last
+message is an assistant role ("assistant message prefill"). Strip any
+trailing assistant messages before sending to Anthropic/Claude endpoints.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* feat(onboard): add CoBuilder Zen and GitHub Copilot to onboard wizard
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+* fix(onboard): CoBuilder Zen works without API key, prompt is optional
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+---------
+
+Co-authored-by: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ packages/opencode/src/cli/cmd/onboard.ts | 59 ++++++++++++++++++++++++
+ 1 file changed, 59 insertions(+)
+
+diff --git a/packages/opencode/src/cli/cmd/onboard.ts b/packages/opencode/src/cli/cmd/onboard.ts
+index b05f38c6c..2a5ad1a10 100644
+--- a/packages/opencode/src/cli/cmd/onboard.ts
++++ b/packages/opencode/src/cli/cmd/onboard.ts
+@@ -35,6 +35,8 @@ export const OnboardCommand = cmd({
+       message: "Which provider would you like to use?",
+       options: [
+         { value: "9router", label: "9Router", hint: "Local OpenAI-compatible proxy" },
++        { value: "opencode", label: "CoBuilder Zen", hint: "Curated, tested models via API key" },
++        { value: "github-copilot", label: "GitHub Copilot", hint: "Free for GitHub subscribers (OAuth)" },
+         { value: "anthropic", label: "Anthropic", hint: "Claude models via API key" },
+         { value: "openai", label: "OpenAI", hint: "GPT models via API key" },
+         { value: "openrouter", label: "OpenRouter", hint: "Many providers via one API key" },
+@@ -49,6 +51,10 @@ export const OnboardCommand = cmd({
+ 
+     if (providerChoice === NINEROUTER_ID) {
+       await setup9Router()
++    } else if (providerChoice === "github-copilot") {
++      await setupGitHubCopilot()
++    } else if (providerChoice === "opencode") {
++      await setupOpencode()
+     } else {
+       await setupApiKeyProvider(providerChoice as string)
+     }
+@@ -158,6 +164,59 @@ async function setup9Router() {
+   prompts.log.success(`Default model: ${NINEROUTER_ID}/${defaultModelId}`)
+ }
+ 
++async function setupOpencode() {
++  prompts.log.info("CoBuilder Zen works out of the box — free models are available with no API key required.")
++
++  const wantKey = await prompts.confirm({
++    message: "Do you have a CoBuilder Zen API key for full model access?",
++    initialValue: false,
++  })
++
++  if (!prompts.isCancel(wantKey) && wantKey) {
++    const apiKey = await prompts.text({
++      message: "Enter your CoBuilder Zen API key",
++      placeholder: "zen-...",
++      validate: (v) => {
++        if (!v?.trim()) return "API key is required"
++      },
++    })
++
++    if (!prompts.isCancel(apiKey)) {
++      const authPath = path.join(Global.Path.data, "auth.json")
++      let existing: any = {}
++      try {
++        existing = await Filesystem.readJson(authPath)
++      } catch {}
++      existing["opencode"] = { type: "api", key: (apiKey as string).trim() }
++      await Filesystem.writeJson(authPath, existing, 0o600)
++      prompts.log.success("CoBuilder Zen connected with API key")
++      return
++    }
++  }
++
++  prompts.log.success("CoBuilder Zen ready — using free models")
++}
++
++async function setupGitHubCopilot() {
++  prompts.log.info(
++    "GitHub Copilot uses GitHub OAuth — this requires the interactive login flow.\n" +
++    "  After setup completes, run:  cobuilder providers connect github-copilot",
++  )
++
++  const configPath = path.join(Global.Path.config, "opencode.json")
++  let existing: any = {}
++  try {
++    existing = await Filesystem.readJson(configPath)
++  } catch {}
++
++  await Filesystem.writeJson(configPath, {
++    ...existing,
++    model: "github-copilot/gpt-4o",
++  })
++
++  prompts.log.success("GitHub Copilot selected — run  cobuilder providers connect github-copilot  to complete OAuth")
++}
++
+ async function setupApiKeyProvider(providerId: string) {
+   const names: Record<string, string> = {
+     anthropic: "Anthropic",
+-- 
+2.43.0
+

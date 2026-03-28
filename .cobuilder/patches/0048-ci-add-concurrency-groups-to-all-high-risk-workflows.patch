@@ -1,0 +1,116 @@
+From 9786556e3cd701dac9242be68dc6bbf96941fbd9 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <johnny.kang101@gmail.com>
+Date: Thu, 26 Mar 2026 20:39:51 -0700
+Subject: [PATCH 048/131] ci: add concurrency groups to all high-risk workflows
+
+Scheduled workflows (beta, daily-issues-recap, daily-pr-recap) now use a
+fixed concurrency group so new runs cancel any stale queued ones instead
+of piling up.
+
+PR-triggered workflows (typecheck, pr-management, pr-standards,
+vouch-check-pr) now use per-PR concurrency groups so stale runs are
+cancelled when new pushes/edits arrive.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ .github/workflows/daily-issues-recap.yml | 4 ++++
+ .github/workflows/daily-pr-recap.yml     | 4 ++++
+ .github/workflows/pr-management.yml      | 4 ++++
+ .github/workflows/pr-standards.yml       | 4 ++++
+ .github/workflows/typecheck.yml          | 4 ++++
+ .github/workflows/vouch-check-pr.yml     | 4 ++++
+ 6 files changed, 24 insertions(+)
+
+diff --git a/.github/workflows/daily-issues-recap.yml b/.github/workflows/daily-issues-recap.yml
+index 31cf08233..19a81e913 100644
+--- a/.github/workflows/daily-issues-recap.yml
++++ b/.github/workflows/daily-issues-recap.yml
+@@ -6,6 +6,10 @@ on:
+     - cron: "0 23 * * *"
+   workflow_dispatch: # Allow manual trigger for testing
+ 
++concurrency:
++  group: daily-issues-recap
++  cancel-in-progress: true
++
+ jobs:
+   daily-recap:
+     runs-on: blacksmith-4vcpu-ubuntu-2404
+diff --git a/.github/workflows/daily-pr-recap.yml b/.github/workflows/daily-pr-recap.yml
+index 2f0f023cf..ad0166ee4 100644
+--- a/.github/workflows/daily-pr-recap.yml
++++ b/.github/workflows/daily-pr-recap.yml
+@@ -6,6 +6,10 @@ on:
+     - cron: "0 22 * * *"
+   workflow_dispatch: # Allow manual trigger for testing
+ 
++concurrency:
++  group: daily-pr-recap
++  cancel-in-progress: true
++
+ jobs:
+   pr-recap:
+     runs-on: blacksmith-4vcpu-ubuntu-2404
+diff --git a/.github/workflows/pr-management.yml b/.github/workflows/pr-management.yml
+index 35bd7ae36..365e65a98 100644
+--- a/.github/workflows/pr-management.yml
++++ b/.github/workflows/pr-management.yml
+@@ -4,6 +4,10 @@ on:
+   pull_request_target:
+     types: [opened]
+ 
++concurrency:
++  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
++  cancel-in-progress: true
++
+ jobs:
+   check-duplicates:
+     runs-on: blacksmith-4vcpu-ubuntu-2404
+diff --git a/.github/workflows/pr-standards.yml b/.github/workflows/pr-standards.yml
+index 1edbd5d06..9db5f4363 100644
+--- a/.github/workflows/pr-standards.yml
++++ b/.github/workflows/pr-standards.yml
+@@ -4,6 +4,10 @@ on:
+   pull_request_target:
+     types: [opened, edited, synchronize]
+ 
++concurrency:
++  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
++  cancel-in-progress: true
++
+ jobs:
+   check-standards:
+     runs-on: ubuntu-latest
+diff --git a/.github/workflows/typecheck.yml b/.github/workflows/typecheck.yml
+index b247d24b4..24d567cab 100644
+--- a/.github/workflows/typecheck.yml
++++ b/.github/workflows/typecheck.yml
+@@ -7,6 +7,10 @@ on:
+     branches: [dev]
+   workflow_dispatch:
+ 
++concurrency:
++  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
++  cancel-in-progress: true
++
+ jobs:
+   typecheck:
+     runs-on: blacksmith-4vcpu-ubuntu-2404
+diff --git a/.github/workflows/vouch-check-pr.yml b/.github/workflows/vouch-check-pr.yml
+index 51816dfb7..83088f6db 100644
+--- a/.github/workflows/vouch-check-pr.yml
++++ b/.github/workflows/vouch-check-pr.yml
+@@ -4,6 +4,10 @@ on:
+   pull_request_target:
+     types: [opened]
+ 
++concurrency:
++  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
++  cancel-in-progress: true
++
+ permissions:
+   contents: read
+   issues: write
+-- 
+2.43.0
+

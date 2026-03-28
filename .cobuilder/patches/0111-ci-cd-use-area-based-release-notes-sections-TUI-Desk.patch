@@ -1,0 +1,83 @@
+From 0af2e276e935541b656c0e116dc513e80a9420bd Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Fri, 27 Mar 2026 12:41:43 -0700
+Subject: [PATCH 111/131] ci(cd): use area-based release notes sections (TUI,
+ Desktop, Core, Misc)
+
+---
+ .github/workflows/cd.yml | 44 ++++++++++++++++++++++------------------
+ 1 file changed, 24 insertions(+), 20 deletions(-)
+
+diff --git a/.github/workflows/cd.yml b/.github/workflows/cd.yml
+index 5143f4902..e95b95be3 100644
+--- a/.github/workflows/cd.yml
++++ b/.github/workflows/cd.yml
+@@ -88,41 +88,45 @@ jobs:
+           echo "semver=${MAJOR}.${MINOR}.${PATCH}" >> "$GITHUB_OUTPUT"
+           echo "prev_tag=${TAG}" >> "$GITHUB_OUTPUT"
+ 
+-          # Strip conventional commit prefix and capitalize first letter
++          # Strip conventional commit prefix/scope and capitalize first letter
+           strip_prefix() {
+             echo "$1" | sed -E 's/^(feat|fix|chore|ci|docs|refactor|perf|test|style|build|revert)(\([^)]+\))?!?:[[:space:]]*//' | sed 's/\(.\)/\u\1/'
+           }
+ 
++          # Extract scope from conventional commit (e.g. feat(tui): ... -> tui)
++          get_scope() {
++            echo "$1" | sed -nE 's/^[a-z]+\(([^)]+)\)!?:.*/\1/p'
++          }
++
+           BREAKING=""
+-          ADDED=""
+-          FIXED=""
+-          CHANGED=""
+-          SECURITY=""
++          TUI=""
++          DESKTOP=""
++          CORE=""
++          MISC=""
+ 
+           while IFS='|||' read -r subject hash; do
+             [[ -z "$subject" ]] && continue
+             CLEAN=$(strip_prefix "$subject")
++            SCOPE=$(get_scope "$subject")
+             if echo "$subject" | grep -qE '^.+(\(.+\))?!:|^BREAKING CHANGE'; then
+               BREAKING="${BREAKING}"$'\n'"- ${CLEAN}"
+-            elif echo "$subject" | grep -qE '^feat(\(.+\))?:'; then
+-              ADDED="${ADDED}"$'\n'"- ${CLEAN}"
+-            elif echo "$subject" | grep -qE '^fix(\(.+\))?:'; then
+-              FIXED="${FIXED}"$'\n'"- ${CLEAN}"
+-            elif echo "$subject" | grep -qE '^(perf|refactor)(\(.+\))?:'; then
+-              CHANGED="${CHANGED}"$'\n'"- ${CLEAN}"
+-            elif echo "$subject" | grep -qE '^(security|sec)(\(.+\))?:'; then
+-              SECURITY="${SECURITY}"$'\n'"- ${CLEAN}"
++            elif echo "$SCOPE" | grep -qiE '^tui$'; then
++              TUI="${TUI}"$'\n'"- ${CLEAN}"
++            elif echo "$SCOPE" | grep -qiE '^(desktop|electron|app)$'; then
++              DESKTOP="${DESKTOP}"$'\n'"- ${CLEAN}"
++            elif echo "$SCOPE" | grep -qiE '^(core|server|db|mcp|auth|lsp)$'; then
++              CORE="${CORE}"$'\n'"- ${CLEAN}"
+             else
+-              CHANGED="${CHANGED}"$'\n'"- ${CLEAN}"
++              MISC="${MISC}"$'\n'"- ${CLEAN}"
+             fi
+           done <<< "$COMMITS"
+ 
+-          NOTES="## CoBuilder ${NEXT_DISPLAY} — ${RELEASE_DATE}"$'\n'
+-          [[ -n "$BREAKING" ]] && NOTES+=$'\n'"### ⚠️ Breaking Changes"$'\n'"${BREAKING}"$'\n'
+-          [[ -n "$SECURITY" ]] && NOTES+=$'\n'"### 🔒 Security"$'\n'"${SECURITY}"$'\n'
+-          [[ -n "$ADDED" ]]    && NOTES+=$'\n'"### Added"$'\n'"${ADDED}"$'\n'
+-          [[ -n "$FIXED" ]]    && NOTES+=$'\n'"### Fixed"$'\n'"${FIXED}"$'\n'
+-          [[ -n "$CHANGED" ]]  && NOTES+=$'\n'"### Changed"$'\n'"${CHANGED}"$'\n'
++          NOTES=""
++          [[ -n "$BREAKING" ]] && NOTES+=$'\n'"## ⚠️ Breaking Changes"$'\n'"${BREAKING}"$'\n'
++          [[ -n "$TUI" ]]      && NOTES+=$'\n'"## TUI"$'\n'"${TUI}"$'\n'
++          [[ -n "$DESKTOP" ]]  && NOTES+=$'\n'"## Desktop"$'\n'"${DESKTOP}"$'\n'
++          [[ -n "$CORE" ]]     && NOTES+=$'\n'"## Core"$'\n'"${CORE}"$'\n'
++          [[ -n "$MISC" ]]     && NOTES+=$'\n'"## Misc"$'\n'"${MISC}"$'\n'
+           NOTES+=$'\n'"**Full Changelog**: https://github.com/CobuilderLabs/opencode/compare/${TAG}...${NEXT_TAG}"
+ 
+           echo "$NOTES" > /tmp/release-notes.md
+-- 
+2.43.0
+

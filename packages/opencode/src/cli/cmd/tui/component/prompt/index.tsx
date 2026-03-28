@@ -22,6 +22,7 @@ import { useKeyboard, useRenderer } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
+import { Flag } from "@/flag/flag"
 import type { FilePart } from "@opencode-ai/sdk/v2"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
@@ -783,7 +784,7 @@ export function Prompt(props: PromptProps) {
       const example = SHELL_PLACEHOLDERS[store.placeholder % SHELL_PLACEHOLDERS.length]
       return `Run a command... "${example}"`
     }
-    return `Ask anything... "${PLACEHOLDERS[store.placeholder % PLACEHOLDERS.length]}"`
+    return `What do you want to build?`
   })
 
   const spinnerDef = createMemo(() => {
@@ -1028,8 +1029,15 @@ export function Prompt(props: PromptProps) {
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
               <text fg={highlight()}>
-                {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
+                {Flag.COBUILDER_AUTOPILOT
+                  ? ""
+                  : store.mode === "shell"
+                    ? "Shell "
+                    : Locale.titlecase(local.agent.current().name) + " "}
               </text>
+              <Show when={Flag.COBUILDER_AUTOPILOT}>
+                <text><span style={{ fg: theme.warning, bold: true }}>Autopilot</span>{" "}</text>
+              </Show>
               <Show when={store.mode === "normal"}>
                 <box flexDirection="row" gap={1}>
                   <text flexShrink={0} fg={keybind.leader ? theme.textMuted : theme.text}>

@@ -1,0 +1,44 @@
+From 75ef17a25b4d09861499bde0023e6ba688e4815c Mon Sep 17 00:00:00 2001
+From: CoBuilder CEO <ceo@cobuilder.ai>
+Date: Thu, 26 Mar 2026 22:02:33 -0700
+Subject: [PATCH 062/131] =?UTF-8?q?fix(cd):=20handle=20existing=20release?=
+ =?UTF-8?q?=20tag=20gracefully=20=E2=80=94=20re-upload=20assets=20if=20rel?=
+ =?UTF-8?q?ease=20already=20exists?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ .github/workflows/cd.yml | 16 ++++++++++++----
+ 1 file changed, 12 insertions(+), 4 deletions(-)
+
+diff --git a/.github/workflows/cd.yml b/.github/workflows/cd.yml
+index 4166b7b28..327829fb2 100644
+--- a/.github/workflows/cd.yml
++++ b/.github/workflows/cd.yml
+@@ -143,10 +143,18 @@ jobs:
+         env:
+           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+         run: |
+-          gh release create "${{ steps.next_version.outputs.tag }}" \
+-            --title "CoBuilder ${{ steps.next_version.outputs.display }}" \
+-            --notes-file /tmp/release-notes.md \
+-            --draft
++          if gh release view "${{ steps.next_version.outputs.tag }}" --repo CobuilderLabs/opencode > /dev/null 2>&1; then
++            echo "Release ${{ steps.next_version.outputs.tag }} already exists — updating notes and ensuring draft state"
++            gh release edit "${{ steps.next_version.outputs.tag }}" \
++              --notes-file /tmp/release-notes.md \
++              --draft \
++              --repo CobuilderLabs/opencode
++          else
++            gh release create "${{ steps.next_version.outputs.tag }}" \
++              --title "CoBuilder ${{ steps.next_version.outputs.display }}" \
++              --notes-file /tmp/release-notes.md \
++              --draft
++          fi
+ 
+       - name: Build and upload binaries
+         env:
+-- 
+2.43.0
+

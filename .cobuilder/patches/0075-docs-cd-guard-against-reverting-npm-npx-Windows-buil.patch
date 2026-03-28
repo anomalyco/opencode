@@ -1,0 +1,28 @@
+From 7ac03b6f3966eddec1cb8814d396e73e4b28d4e2 Mon Sep 17 00:00:00 2001
+From: CoBuilder CEO <ceo@cobuilder.ai>
+Date: Thu, 26 Mar 2026 23:03:27 -0700
+Subject: [PATCH 075/131] docs(cd): guard against reverting npm+npx Windows
+ build fix
+
+---
+ .github/workflows/cd.yml | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/.github/workflows/cd.yml b/.github/workflows/cd.yml
+index 821305bd7..2e838fa50 100644
+--- a/.github/workflows/cd.yml
++++ b/.github/workflows/cd.yml
+@@ -265,6 +265,10 @@ jobs:
+             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+           "
+ 
++      # DO NOT change to 'bun x electron-vite' — Bun runs electron-vite from
++      # its isolated cache (node_modules/.bun/electron-vite*/) which lacks
++      # picocolors as a peer dep on Windows, causing ERR_MODULE_NOT_FOUND.
++      # npm install + npx is the only approach that resolves deps correctly.
+       - name: Install desktop dependencies with npm
+         run: cd packages/desktop-electron && npm install --legacy-peer-deps
+ 
+-- 
+2.43.0
+

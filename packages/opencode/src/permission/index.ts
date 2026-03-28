@@ -1,4 +1,5 @@
 import { Bus } from "@/bus"
+import { Flag } from "@/flag/flag"
 import { BusEvent } from "@/bus/bus-event"
 import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
@@ -181,6 +182,12 @@ export namespace Permission {
         }
 
         if (!needsAsk) return
+
+        // --autopilot: auto-approve without prompting
+        if (Flag.COBUILDER_AUTOPILOT) {
+          log.info("autopilot: auto-approving permission", { permission: request.permission, patterns: request.patterns })
+          return
+        }
 
         const id = request.id ?? PermissionID.ascending()
         const info: Request = {

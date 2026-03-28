@@ -1,0 +1,36 @@
+From 79f20f98545507771b7eb26cbee152eb5e80bfd7 Mon Sep 17 00:00:00 2001
+From: CoBuilder CEO <ceo@cobuilder.ai>
+Date: Thu, 26 Mar 2026 22:14:49 -0700
+Subject: [PATCH 064/131] fix(cd): use npm install + npx electron-vite on
+ Windows to resolve picocolors module not found
+
+---
+ .github/workflows/cd.yml | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/.github/workflows/cd.yml b/.github/workflows/cd.yml
+index 327829fb2..c6b4d6063 100644
+--- a/.github/workflows/cd.yml
++++ b/.github/workflows/cd.yml
+@@ -255,6 +255,9 @@ jobs:
+       - name: Install dependencies
+         run: bun install --frozen-lockfile
+ 
++      - name: Install desktop dependencies with npm (Windows node_modules compat)
++        run: cd packages/desktop-electron && npm install --legacy-peer-deps
++
+       - name: Set desktop version
+         run: |
+           cd packages/desktop-electron
+@@ -266,7 +269,7 @@ jobs:
+           "
+ 
+       - name: Build
+-        run: cd packages/desktop-electron && bun run build
++        run: cd packages/desktop-electron && npx electron-vite build
+         env:
+           OPENCODE_CHANNEL: prod
+ 
+-- 
+2.43.0
+

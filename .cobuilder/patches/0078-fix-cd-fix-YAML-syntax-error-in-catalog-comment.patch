@@ -1,0 +1,31 @@
+From 31e63d002fbac1e923d9f36ecf424e279ef6b319 Mon Sep 17 00:00:00 2001
+From: CoBuilder CEO <ceo@cobuilder.ai>
+Date: Thu, 26 Mar 2026 23:09:42 -0700
+Subject: [PATCH 078/131] fix(cd): fix YAML syntax error in catalog comment
+
+---
+ .github/workflows/cd.yml | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/.github/workflows/cd.yml b/.github/workflows/cd.yml
+index 12d1e3f19..3be9928ef 100644
+--- a/.github/workflows/cd.yml
++++ b/.github/workflows/cd.yml
+@@ -282,11 +282,11 @@ jobs:
+             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+           "
+ 
+-      # npm cannot handle Bun's catalog: protocol. We resolve catalog: entries
++      # npm cannot handle Bun catalog protocol. We resolve catalog entries
+       # from the root package.json before running npm install + npx electron-vite.
+-      # bun run / bun x cannot be used here — Bun resolves electron-vite from an
++      # bun run / bun x cannot be used here - Bun resolves electron-vite from an
+       # isolated .bun cache path that lacks peer deps (picocolors, vite) on Windows.
+-      - name: Resolve catalog: deps and install with npm (Windows)
++      - name: Resolve catalog deps and install with npm (Windows)
+         shell: pwsh
+         run: |
+           $catalog = (Get-Content package.json | ConvertFrom-Json).catalog
+-- 
+2.43.0
+

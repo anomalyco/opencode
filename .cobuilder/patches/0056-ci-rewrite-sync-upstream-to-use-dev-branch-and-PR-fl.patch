@@ -1,0 +1,131 @@
+From 9f9f0a1974cef636899ec400e0dd6b7a7c1e141a Mon Sep 17 00:00:00 2001
+From: johnnykang101 <johnny.kang101@gmail.com>
+Date: Thu, 26 Mar 2026 20:54:52 -0700
+Subject: [PATCH 056/131] =?UTF-8?q?ci:=20rewrite=20sync-upstream=20to=20us?=
+ =?UTF-8?q?e=20dev=20branch=20and=20PR=20flow=20(upstream=20=E2=86=92=20de?=
+ =?UTF-8?q?v=20=E2=86=92=20PR=20to=20main)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ .github/workflows/sync-upstream.yml | 60 ++++++++++++++++++-----------
+ 1 file changed, 37 insertions(+), 23 deletions(-)
+
+diff --git a/.github/workflows/sync-upstream.yml b/.github/workflows/sync-upstream.yml
+index 7a125ad7d..325b070b7 100644
+--- a/.github/workflows/sync-upstream.yml
++++ b/.github/workflows/sync-upstream.yml
+@@ -15,12 +15,12 @@ permissions:
+ 
+ jobs:
+   sync:
+-    name: Sync upstream/dev → main
++    name: Sync upstream/dev → dev → PR to main
+     runs-on: ubuntu-latest
+     steps:
+       - uses: actions/checkout@v4
+         with:
+-          ref: main
++          ref: dev
+           fetch-depth: 0
+           token: ${{ secrets.GITHUB_TOKEN }}
+ 
+@@ -34,9 +34,9 @@ jobs:
+         run: |
+           BEHIND=$(git rev-list HEAD..upstream/dev --count)
+           echo "behind=${BEHIND}" >> "$GITHUB_OUTPUT"
+-          echo "Upstream is ${BEHIND} commits ahead"
++          echo "Upstream is ${BEHIND} commits ahead of dev"
+ 
+-      - name: Merge upstream and protect CoBuilder files
++      - name: Merge upstream into dev (protect CoBuilder files)
+         if: steps.check.outputs.behind != '0'
+         id: merge
+         run: |
+@@ -47,12 +47,11 @@ jobs:
+           if git merge upstream/dev --no-commit --no-ff --allow-unrelated-histories; then
+             MERGE_OK=true
+           else
+-            # Conflicts — stage what resolved cleanly, we'll restore protected files below
+             MERGE_OK=conflict
+           fi
+ 
+           # Always restore CoBuilder-owned files regardless of merge outcome.
+-          # This prevents upstream from overwriting our branding, CLI, CI, and scripts.
++          # Prevents upstream from overwriting our branding, CLI, CI, and scripts.
+           PROTECTED=(
+             ".github"
+             "install.sh"
+@@ -61,36 +60,51 @@ jobs:
+             "packages/opencode/src/cli/cmd/onboard.ts"
+           )
+           for f in "${PROTECTED[@]}"; do
+-            if git ls-files --error-unmatch "$f" 2>/dev/null || [ -e "$f" ]; then
+-              git checkout HEAD -- "$f" 2>/dev/null || true
+-            fi
++            git checkout HEAD -- "$f" 2>/dev/null || true
+           done
+ 
+-          # Re-stage after restoring
+           git add -A
+ 
+           if [ "$MERGE_OK" = "true" ]; then
+-            git commit -m "chore: sync upstream/dev into main (CoBuilder files preserved)" || true
++            git commit -m "chore: sync upstream/dev into dev (CoBuilder files preserved)" || true
+             echo "merged=true" >> "$GITHUB_OUTPUT"
+           else
+-            git commit -m "chore: sync upstream/dev into main (conflicts need review)" || true
++            git commit -m "chore: sync upstream/dev into dev (conflicts need review)" || true
+             echo "merged=conflict" >> "$GITHUB_OUTPUT"
+           fi
+ 
+-      - name: Push updated main
+-        if: steps.check.outputs.behind != '0' && steps.merge.outputs.merged == 'true'
+-        run: git push origin main
++      - name: Push updated dev
++        if: steps.check.outputs.behind != '0'
++        run: git push origin dev
+ 
+-      - name: Open PR if merge had conflicts
+-        if: steps.check.outputs.behind != '0' && steps.merge.outputs.merged == 'conflict'
++      - name: Open PR from dev → main
++        if: steps.check.outputs.behind != '0'
+         env:
+           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+         run: |
+-          BRANCH="sync/upstream-$(date +%Y%m%d)"
+-          git checkout -b "$BRANCH"
+-          git push origin "$BRANCH"
++          MERGE_STATUS="${{ steps.merge.outputs.merged }}"
++          DATE=$(date +%Y-%m-%d)
++
++          # Check if a sync PR already exists
++          EXISTING=$(gh pr list --repo "$GITHUB_REPOSITORY" --base main --head dev --json number --jq '.[0].number' 2>/dev/null || echo "")
++
++          if [ -n "$EXISTING" ]; then
++            echo "PR #$EXISTING from dev → main already open, dev branch updated."
++            exit 0
++          fi
++
++          if [ "$MERGE_STATUS" = "true" ]; then
++            TITLE="chore: sync upstream ${DATE} — upstream fixes merged into dev"
++            BODY="Upstream [anomalyco/opencode](https://github.com/anomalyco/opencode) has new commits. They have been merged into \`dev\` with CoBuilder-owned files preserved (.github/, install.sh, AGENTS.md, onboard.ts, .planning/).
++
++          **Review this PR** to confirm no upstream changes broke CoBuilder customizations before merging to \`main\`."
++          else
++            TITLE="chore: sync upstream ${DATE} — conflicts in dev need review"
++            BODY="Upstream [anomalyco/opencode](https://github.com/anomalyco/opencode) has new commits that had merge conflicts. CoBuilder-owned files have been preserved but **remaining conflicts need manual review** before merging to \`main\`."
++          fi
++
+           gh pr create \
+-            --title "chore: sync upstream/dev — conflicts need review" \
+-            --body "Upstream anomalyco/opencode has new commits that could not be cleanly merged into \`main\`. CoBuilder-owned files (.github/, install.sh, AGENTS.md, onboard.ts, .planning/) have been preserved. Please review remaining conflicts and merge." \
++            --title "$TITLE" \
++            --body "$BODY" \
+             --base main \
+-            --head "$BRANCH"
++            --head dev
+-- 
+2.43.0
+

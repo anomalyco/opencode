@@ -70,7 +70,12 @@ let cli = yargs(hideBin(process.argv))
     type: "string",
     choices: ["DEBUG", "INFO", "WARN", "ERROR"],
   })
+  .option("autopilot", {
+    describe: "auto-approve all permission requests without prompting",
+    type: "boolean",
+  })
   .middleware(async (opts) => {
+    if (opts.autopilot) process.env.COBUILDER_AUTOPILOT = "1"
     await Log.init({
       print: process.argv.includes("--print-logs"),
       dev: Installation.isLocal(),

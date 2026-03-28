@@ -1,0 +1,43 @@
+From 800792bc8874352a977ddd82cdddb6f77965a7fc Mon Sep 17 00:00:00 2001
+From: johnnykang101 <johnny.kang101@gmail.com>
+Date: Fri, 27 Mar 2026 08:38:27 -0700
+Subject: [PATCH 084/131] =?UTF-8?q?ci:=20fix=20auto-approve=20=E2=80=94=20?=
+ =?UTF-8?q?use=20GITHUB=5FTOKEN=20for=20auto-merge,=20catch=20errors=20gra?=
+ =?UTF-8?q?cefully?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ .github/workflows/auto-approve.yml | 11 +++++++++--
+ 1 file changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/.github/workflows/auto-approve.yml b/.github/workflows/auto-approve.yml
+index 19b0cd758..835bcef5b 100644
+--- a/.github/workflows/auto-approve.yml
++++ b/.github/workflows/auto-approve.yml
+@@ -51,11 +51,18 @@ jobs:
+               pull_number: pr,
+             }).catch(() => console.log('Branch already up to date'));
+ 
++      - name: Enable auto-merge
++        uses: actions/github-script@v7
++        with:
++          github-token: ${{ secrets.GITHUB_TOKEN }}
++          script: |
++            const pr = context.payload.pull_request.number;
+             await github.graphql(`
+               mutation EnableAutoMerge($prId: ID!) {
+                 enablePullRequestAutoMerge(input: { pullRequestId: $prId, mergeMethod: SQUASH }) {
+                   pullRequest { autoMergeRequest { mergeMethod } }
+                 }
+               }
+-            `, { prId: context.payload.pull_request.node_id });
+-            console.log(`Enabled auto-merge (squash) on PR #${pr}`);
++            `, { prId: context.payload.pull_request.node_id })
++              .then(() => console.log(`Enabled auto-merge (squash) on PR #${pr}`))
++              .catch(e => console.log(`Auto-merge not enabled: ${e.message}`));
+-- 
+2.43.0
+

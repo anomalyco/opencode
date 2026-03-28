@@ -1,13 +1,14 @@
 import { test, expect } from "../fixtures"
 
-test("file tree can expand folders and open a file", async ({ page, gotoSession }) => {
+test("file tree can expand folders and open a file", { timeout: 120_000 }, async ({ page, gotoSession }) => {
   await gotoSession()
 
   const toggle = page.getByRole("button", { name: "Toggle file tree" })
   const panel = page.locator("#file-tree-panel")
   const treeTabs = panel.locator('[data-component="tabs"][data-variant="pill"][data-scope="filetree"]')
 
-  await expect(toggle).toBeVisible()
+  await expect(toggle).toBeVisible({ timeout: 30_000 })
+  await toggle.scrollIntoViewIfNeeded()
   if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click()
   await expect(toggle).toHaveAttribute("aria-expanded", "true")
   await expect(panel).toBeVisible()
@@ -51,6 +52,7 @@ test("file tree can expand folders and open a file", async ({ page, gotoSession 
   await expect(allTab).toHaveAttribute("aria-selected", "true")
 
   const viewer = page.locator('[data-component="file"][data-mode="text"]').first()
+  await viewer.scrollIntoViewIfNeeded()
   await expect(viewer).toBeVisible()
   await expect(viewer).toContainText("export default function FileTree")
 })

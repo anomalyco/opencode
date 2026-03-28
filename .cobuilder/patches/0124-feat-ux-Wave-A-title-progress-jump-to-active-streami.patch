@@ -1,0 +1,142 @@
+From 11a1bcfb063d5017156493099b3749cbc8802fbe Mon Sep 17 00:00:00 2001
+From: CoBuilder CEO <ceo@cobuilder.ai>
+Date: Thu, 26 Mar 2026 19:37:09 -0700
+Subject: [PATCH 124/131] =?UTF-8?q?feat(ux):=20Wave=20A=20=E2=80=94=20titl?=
+ =?UTF-8?q?e=20progress,=20jump-to-active,=20streaming=20tok/s?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+A.1 - Ambient title bar progress: document.title shows ⟳ prefix while
+  generation is active, resets to plain title on cleanup
+
+A.2 - Jump-to-active scroll button: scroll button changes from ↓ to
+  ↑ active while generation is running, scrolling to the active turn
+  element instead of scrolling to absolute bottom
+
+A.3 - Streaming tok/s indicator: shows ~340 tok/s below the thinking
+  shimmer while output tokens are arriving, hidden at rest
+---
+ packages/app/src/pages/session.tsx            |  6 ++++
+ .../src/pages/session/message-timeline.tsx    | 20 +++++++++--
+ packages/ui/src/components/session-turn.tsx   | 36 ++++++++++++++++++-
+ 3 files changed, 58 insertions(+), 4 deletions(-)
+
+diff --git a/packages/app/src/pages/session.tsx b/packages/app/src/pages/session.tsx
+index 2d3e31355..72a4be0e0 100644
+--- a/packages/app/src/pages/session.tsx
++++ b/packages/app/src/pages/session.tsx
+@@ -1654,11 +1654,17 @@ export default function Page() {
+     consumePendingMessage: layout.pendingMessage.consume,
+   })
+ 
++  createEffect(() => {
++    const title = info()?.title ?? "CoBuilder"
++    document.title = busy(params.id ?? "") ? `⟳ ${title}` : title
++  })
++
+   onMount(() => {
+     document.addEventListener("keydown", handleKeyDown)
+   })
+ 
+   onCleanup(() => {
++    document.title = "CoBuilder"
+     document.removeEventListener("keydown", handleKeyDown)
+     if (reviewFrame !== undefined) cancelAnimationFrame(reviewFrame)
+     if (refreshFrame !== undefined) cancelAnimationFrame(refreshFrame)
+diff --git a/packages/app/src/pages/session/message-timeline.tsx b/packages/app/src/pages/session/message-timeline.tsx
+index 33437ce9c..35242f05c 100644
+--- a/packages/app/src/pages/session/message-timeline.tsx
++++ b/packages/app/src/pages/session/message-timeline.tsx
+@@ -575,10 +575,24 @@ export function MessageTimeline(props: {
+           }}
+         >
+           <button
+-            class="pointer-events-auto size-8 flex items-center justify-center rounded-full bg-background-base border border-border-base shadow-sm text-text-base hover:bg-background-stronger transition-colors"
+-            onClick={props.onResumeScroll}
++            class="pointer-events-auto flex items-center justify-center rounded-full bg-background-base border border-border-base shadow-sm text-text-base hover:bg-background-stronger transition-colors"
++            classList={{
++              "size-8": !(working() && activeMessageID()),
++              "h-8 px-3 gap-1.5 text-[11px] font-medium": !!(working() && activeMessageID()),
++            }}
++            onClick={() => {
++              const id = activeMessageID()
++              if (working() && id) {
++                document.querySelector(`[data-message="${id}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" })
++              } else {
++                props.onResumeScroll()
++              }
++            }}
+           >
+-            <Icon name="arrow-down-to-line" />
++            <Icon name={working() && activeMessageID() ? "arrow-up" : "arrow-down-to-line"} class="size-3.5" />
++            <Show when={working() && activeMessageID()}>
++              <span>active</span>
++            </Show>
+           </button>
+         </div>
+         <ScrollView
+diff --git a/packages/ui/src/components/session-turn.tsx b/packages/ui/src/components/session-turn.tsx
+index ed4c0e914..7a32074cb 100644
+--- a/packages/ui/src/components/session-turn.tsx
++++ b/packages/ui/src/components/session-turn.tsx
+@@ -5,7 +5,7 @@ import { useFileComponent } from "../context/file"
+ 
+ import { Binary } from "@opencode-ai/util/binary"
+ import { getDirectory, getFilename } from "@opencode-ai/util/path"
+-import { createEffect, createMemo, createSignal, For, on, ParentProps, Show } from "solid-js"
++import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, ParentProps, Show } from "solid-js"
+ import { createStore } from "solid-js/store"
+ import { Dynamic } from "solid-js/web"
+ import { AssistantParts, Message, MessageDivider, PART_MAPPING, type UserActions } from "./message-part"
+@@ -370,6 +370,35 @@ export function SessionTurn(
+     return true
+   })
+ 
++  const [tokSec, setTokSec] = createSignal<number | undefined>(undefined)
++  let startMs = 0
++  let startTokens = 0
++  let ticker: ReturnType<typeof setInterval> | undefined
++
++  createEffect(
++    on(working, (active) => {
++      if (active) {
++        startMs = Date.now()
++        startTokens = turnUsage()?.output ?? 0
++        setTokSec(undefined)
++        ticker = setInterval(() => {
++          const elapsed = (Date.now() - startMs) / 1000
++          if (elapsed < 0.5) return
++          const out = (turnUsage()?.output ?? 0) - startTokens
++          setTokSec(Math.round(out / elapsed))
++        }, 1000)
++      } else {
++        if (ticker !== undefined) clearInterval(ticker)
++        ticker = undefined
++        setTokSec(undefined)
++      }
++    }),
++  )
++
++  onCleanup(() => {
++    if (ticker !== undefined) clearInterval(ticker)
++  })
++
+   const autoScroll = createAutoScroll({
+     working,
+     onUserInteracted: props.onUserInteracted,
+@@ -426,6 +455,11 @@ export function SessionTurn(
+                   </Show>
+                 </div>
+               </Show>
++              <Show when={working() && (tokSec() ?? 0) > 0}>
++                <div data-slot="session-turn-toksec" class="px-4 md:px-5 pt-0.5 pb-0 text-[11px] text-text-weakest select-none tabular-nums">
++                  ~{tokSec()} tok/s
++                </div>
++              </Show>
+               <SessionRetry status={status()} show={active()} />
+               <Show when={edited() > 0 && !working()}>
+                 <div data-slot="session-turn-diffs">
+-- 
+2.43.0
+

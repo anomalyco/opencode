@@ -1,0 +1,29 @@
+From 15ef00cd23c40035ca39a57e00fbeabaff3d0fe0 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <56775858+johnnykang101@users.noreply.github.com>
+Date: Fri, 27 Mar 2026 10:43:54 -0700
+Subject: [PATCH 104/131] =?UTF-8?q?ci:=20fix=20cache=20key=20bun.lockb?=
+ =?UTF-8?q?=E2=86=92bun.lock,=20delete=20stale=20Windows=20cache?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ .github/workflows/test-windows-build.yml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/.github/workflows/test-windows-build.yml b/.github/workflows/test-windows-build.yml
+index ca76b1589..e04f069f6 100644
+--- a/.github/workflows/test-windows-build.yml
++++ b/.github/workflows/test-windows-build.yml
+@@ -25,7 +25,7 @@ jobs:
+             ~\AppData\Local\bun\install\cache
+             node_modules
+             packages\*\node_modules
+-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lockb') }}
++          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+           restore-keys: bun-${{ runner.os }}-
+ 
+       - name: Install dependencies
+-- 
+2.43.0
+

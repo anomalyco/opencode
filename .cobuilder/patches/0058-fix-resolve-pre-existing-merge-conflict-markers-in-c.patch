@@ -1,0 +1,72 @@
+From de55f6c8a1264bdefaf0ce47d6f53ca485faef45 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <johnny.kang101@gmail.com>
+Date: Thu, 26 Mar 2026 21:03:17 -0700
+Subject: [PATCH 058/131] fix: resolve pre-existing merge conflict markers in
+ config.ts and index.ts
+
+---
+ packages/opencode/src/config/config.ts | 3 ---
+ packages/opencode/src/index.ts         | 7 -------
+ 2 files changed, 10 deletions(-)
+
+diff --git a/packages/opencode/src/config/config.ts b/packages/opencode/src/config/config.ts
+index 17b1bbe0f..efbd490c1 100644
+--- a/packages/opencode/src/config/config.ts
++++ b/packages/opencode/src/config/config.ts
+@@ -84,7 +84,6 @@ export namespace Config {
+     return merged
+   }
+ 
+-<<<<<<< HEAD
+   export const state = Instance.state(async () => {
+     const auth = await Auth.all()
+ 
+@@ -288,8 +287,6 @@ export namespace Config {
+     await Promise.all(deps)
+   }
+ 
+-=======
+->>>>>>> upstream/dev
+   export async function installDependencies(dir: string) {
+     const pkg = path.join(dir, "package.json")
+     const targetVersion = Installation.isLocal() ? "*" : Installation.VERSION
+diff --git a/packages/opencode/src/index.ts b/packages/opencode/src/index.ts
+index ddd23b89e..c0983330e 100644
+--- a/packages/opencode/src/index.ts
++++ b/packages/opencode/src/index.ts
+@@ -50,15 +50,11 @@ process.on("uncaughtException", (e) => {
+   })
+ })
+ 
+-<<<<<<< HEAD
+ process.on("exit", (code) => {
+   if (code === 0) SessionCheckpoint.clearSync()
+ })
+ 
+ let cli = yargs(hideBin(process.argv))
+-=======
+-const cli = yargs(hideBin(process.argv))
+->>>>>>> upstream/dev
+   .parserConfiguration({ "populate--": true })
+   .scriptName("cobuilder")
+   .wrap(100)
+@@ -161,7 +157,6 @@ const cli = yargs(hideBin(process.argv))
+   .command(PrCommand)
+   .command(SessionCommand)
+   .command(DbCommand)
+-<<<<<<< HEAD
+   .command(OnboardCommand)
+   .command(WorkflowCommand)
+   .command(SkillsCommand)
+@@ -171,8 +166,6 @@ if (Installation.isLocal()) {
+ }
+ 
+ cli = cli
+-=======
+->>>>>>> upstream/dev
+   .fail((msg, err) => {
+     if (
+       msg?.startsWith("Unknown argument") ||
+-- 
+2.43.0
+

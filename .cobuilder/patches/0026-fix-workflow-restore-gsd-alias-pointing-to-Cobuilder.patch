@@ -1,0 +1,31 @@
+From 608a6b7fc705483368a1e651700a8a29cf796ed3 Mon Sep 17 00:00:00 2001
+From: johnnykang101 <johnny.kang101@gmail.com>
+Date: Thu, 26 Mar 2026 15:48:29 -0700
+Subject: [PATCH 026/131] fix(workflow): restore gsd alias pointing to
+ CobuilderLabs/gsd-workflow
+
+Repo now exists at https://github.com/CobuilderLabs/gsd-workflow.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ packages/opencode/src/workflow/registry.ts | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/packages/opencode/src/workflow/registry.ts b/packages/opencode/src/workflow/registry.ts
+index 0fbf96241..6474921d2 100644
+--- a/packages/opencode/src/workflow/registry.ts
++++ b/packages/opencode/src/workflow/registry.ts
+@@ -2,7 +2,9 @@
+ // Built-in alias registry — maps short names to canonical GitHub URLs.
+ // User config (opencode.json) only stores installed paths, never alias mappings.
+ 
+-export const REGISTRY: Record<string, string> = {}
++export const REGISTRY: Record<string, string> = {
++  "gsd": "https://github.com/CobuilderLabs/gsd-workflow",
++}
+ 
+ /**
+  * Given a source string (alias or full URL), return the canonical URL to clone.
+-- 
+2.43.0
+
