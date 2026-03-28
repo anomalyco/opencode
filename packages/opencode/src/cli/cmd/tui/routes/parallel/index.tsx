@@ -9,6 +9,7 @@ import { ParallelPlan } from "./parallel-plan"
 import { ParallelStatus } from "./parallel-status"
 import { ParallelMerge } from "./parallel-merge"
 import { TextAttributes } from "@opentui/core"
+import type { Plan } from "@/parallel/schema"
 
 export function Parallel() {
   const { theme } = useTheme()
@@ -17,6 +18,7 @@ export function Parallel() {
   const parallel = useParallel()
   const local = useLocal()
   const sdk = useSDK()
+  const bus = sdk.event as { on(type: string, handler: (evt: { properties: Record<string, unknown> }) => void): () => void }
   const [loading, setLoading] = createSignal(true)
   const [error, setError] = createSignal<string | null>(null)
   const [switchedOnComplete, setSwitchedOnComplete] = createSignal(false)
@@ -65,55 +67,33 @@ export function Parallel() {
       .finally(() => setLoading(false))
   })
 
-  // Poll for plan updates every 3s (SSE not available in Bun/TUI)
   createEffect(() => {
     const id = planID()
     if (!id) return
+    const offPlan = bus.on("parallel.plan.updated", (evt) => {
+      const value = evt.properties.plan
+      if (!value || typeof value !== "object" || !("id" in value) || value.id !== id) return
+      parallel.setPlan(value as Plan)
+    })
 
-    // Try SSE first, fall back to polling
-    let es: any = null
-    let pollTimer: ReturnType<typeof setInterval> | null = null
-
-    const handleUpdate = (data: any) => {
-      if (data.type === "parallel.plan.updated") {
-        parallel.setPlan(data.payload.plan)
-      }
-    }
-
-    // Check if EventSource is available (browser) or use polling (Bun/TUI)
-    if (typeof EventSource !== "undefined") {
-      try {
-        es = new EventSource(`${sdk.url}/parallel/${id}/events`)
-        es.addEventListener("message", (e: MessageEvent) => {
-          try {
-            handleUpdate(JSON.parse(e.data))
-          } catch {}
-        })
-        es.addEventListener("error", () => {
-          // Will reconnect automatically
-        })
-      } catch {
-        // Fall through to polling
-        es = null
-      }
-    }
-
-    // Fallback polling if SSE failed or unavailable
-    if (!es) {
-      pollTimer = setInterval(async () => {
-        try {
-          const res = await sdk.fetch(`${sdk.url}/parallel/${id}`)
-          if (res.ok) {
-            const plan = await res.json()
-            parallel.setPlan(plan)
-          }
-        } catch {}
-      }, 3000)
-    }
+    const offWorker = bus.on("parallel.worker.updated", (evt) => {
+      if (evt.properties.planID !== id) return
+      const value = evt.properties.worker
+      if (!value || typeof value !== "object" || !("subtaskID" in value)) return
+      parallel.setPlan((prev) => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          workers: prev.workers.map((worker) =>
+            worker.subtaskID === value.subtaskID ? (value as typeof prev.workers[number]) : worker,
+          ),
+        }
+      })
+    })
 
     onCleanup(() => {
-      if (es) es.close()
-      if (pollTimer) clearInterval(pollTimer)
+      offPlan()
+      offWorker()
     })
   })
 

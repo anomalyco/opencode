@@ -20,7 +20,11 @@ export const { use: useParallel, provider: ParallelProvider } = createSimpleCont
       get plan() {
         return store.plan
       },
-      setPlan(plan: Plan | null) {
+      setPlan(plan: Plan | null | ((prev: Plan | null) => Plan | null)) {
+        if (typeof plan === "function") {
+          setStore("plan", plan(store.plan))
+          return
+        }
         setStore("plan", plan)
       },
     }

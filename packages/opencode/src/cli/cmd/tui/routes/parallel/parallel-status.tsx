@@ -1,16 +1,17 @@
 import { useTheme } from "@tui/context/theme"
 import { useTerminalDimensions, useKeyboard } from "@opentui/solid"
-import { For, Show, createSignal, createMemo, createEffect, onCleanup } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useToast } from "@tui/ui/toast"
+import { useRoute } from "@tui/context/route"
 import type { Plan, WorkerState, Subtask } from "@/parallel/schema"
 import { summarizeWaves } from "@/parallel/scheduler"
 import { TextAttributes } from "@opentui/core"
 import { pipe, sumBy } from "remeda"
 
-function formatDuration(ms: number): string {
+function formatDuration(ms: number) {
   const seconds = Math.floor(ms / 1000)
   if (seconds < 60) return `${seconds}s`
   const minutes = Math.floor(seconds / 60)
@@ -18,7 +19,7 @@ function formatDuration(ms: number): string {
   return `${minutes}m ${secs}s`
 }
 
-function formatCost(cost: number): string {
+function formatCost(cost: number) {
   if (cost === 0) return "$0.00"
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -28,21 +29,121 @@ function formatCost(cost: number): string {
   }).format(cost)
 }
 
+function formatTokens(n: number) {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return String(n)
+}
+
+function formatTime(ts: number) {
+  const date = new Date(ts)
+  return date.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })
+}
+
 function waveLabel(index: number, type: "parallel" | "serial") {
   return `${type === "parallel" ? "P" : "S"}${index + 1}`
+}
+
+function statusRank(status: WorkerState["status"]) {
+  switch (status) {
+    case "running":
+      return 0
+    case "spawning":
+      return 1
+    case "failed":
+    case "conflict":
+      return 2
+    case "pending":
+      return 3
+    case "stopping":
+      return 4
+    case "done":
+      return 5
+    case "merged":
+      return 6
+  }
+}
+
+function statusLabel(worker: WorkerState) {
+  if ((worker.status === "merged" || worker.status === "conflict") && worker.resolutionMode) {
+    return `${worker.status} (${worker.resolutionMode})`
+  }
+  return worker.status
+}
+
+function statusIcon(status: WorkerState["status"]) {
+  switch (status) {
+    case "pending":
+      return "○"
+    case "spawning":
+      return "◐"
+    case "running":
+      return "●"
+    case "done":
+    case "merged":
+      return "✓"
+    case "failed":
+    case "conflict":
+      return "✗"
+    default:
+      return "○"
+  }
 }
 
 function WorkerLane(props: {
   worker: WorkerState
   subtask: Subtask | undefined
   selected: boolean
-  expanded: boolean
   planWorkerModel: string
+  onSelect: () => void
 }) {
   const { theme } = useTheme()
   const sync = useSync()
 
-  const statusColor = () => {
+  const messages = createMemo(() => {
+    if (!props.worker.sessionID) return []
+    return sync.data.message[props.worker.sessionID] ?? []
+  })
+
+  const cost = createMemo(() =>
+    pipe(
+      messages(),
+      sumBy((msg) => (msg.role === "assistant" ? msg.cost : 0)),
+    ),
+  )
+
+  const stats = createMemo(() => {
+    let tools = 0
+    let inputTokens = 0
+    let outputTokens = 0
+    for (const msg of messages()) {
+      if (msg.role !== "assistant") continue
+      inputTokens += msg.tokens?.input ?? 0
+      outputTokens += msg.tokens?.output ?? 0
+      const parts = sync.data.part[msg.id] ?? []
+      tools += parts.filter((part) => part.type === "tool").length
+    }
+    return { tools, inputTokens, outputTokens }
+  })
+
+  const activity = createMemo(() => {
+    const msgs = messages()
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const msg = msgs[i]
+      if (msg.role !== "assistant") continue
+      const parts = sync.data.part[msg.id] ?? []
+      for (let j = parts.length - 1; j >= 0; j--) {
+        const part = parts[j]
+        if (part.type === "tool" && part.state.status === "running") return `Running ${part.tool}`
+        if (part.type === "tool" && part.state.status === "pending") return `Pending ${part.tool}`
+        if (part.type === "text" && part.text) return part.text.slice(0, 60).replace(/\n/g, " ")
+      }
+    }
+    if (props.worker.status === "running") return "Thinking..."
+    return ""
+  })
+
+  const tone = () => {
     switch (props.worker.status) {
       case "running":
         return theme.warning
@@ -59,33 +160,95 @@ function WorkerLane(props: {
     }
   }
 
-  const statusIcon = () => {
-    switch (props.worker.status) {
-      case "pending":
-        return "○"
-      case "spawning":
-        return "◐"
-      case "running":
-        return "●"
-      case "done":
-      case "merged":
-        return "✓"
-      case "failed":
-      case "conflict":
-        return "✗"
+  const model = () => props.subtask?.model?.modelID ?? props.planWorkerModel
+
+  return (
+    <box
+      flexDirection="column"
+      backgroundColor={props.selected ? theme.backgroundElement : theme.background}
+      padding={1}
+      borderStyle="rounded"
+      borderColor={tone()}
+      onMouseUp={props.onSelect}
+    >
+      <box flexDirection="row" gap={1}>
+        <text fg={tone()}>{statusIcon(props.worker.status)}</text>
+        <text fg={theme.text} attributes={TextAttributes.BOLD}>
+          {props.subtask?.title?.slice(0, 28) ?? "Unknown"}
+        </text>
+      </box>
+
+      <text fg={tone()}>{statusLabel(props.worker)}</text>
+
+      <Show when={activity()}>
+        <text fg={theme.accent} wrapMode="word">
+          {activity()}
+        </text>
+      </Show>
+
+      <box flexDirection="row" gap={1} marginTop={1}>
+        <text fg={theme.textMuted}>{stats().tools} tools</text>
+        <text fg={theme.accent}>{formatCost(cost())}</text>
+        <text fg={theme.textMuted}>[{model()}]</text>
+      </box>
+
+      <Show when={stats().inputTokens > 0 || stats().outputTokens > 0}>
+        <text fg={theme.textMuted}>
+          {formatTokens(stats().inputTokens)} in / {formatTokens(stats().outputTokens)} out
+        </text>
+      </Show>
+
+      <Show when={props.worker.diffStat}>
+        <text fg={theme.success}>
+          +{props.worker.diffStat!.additions} -{props.worker.diffStat!.deletions} ({props.worker.diffStat!.files} files)
+        </text>
+      </Show>
+
+      <Show when={props.worker.error}>
+        <text fg={theme.error} wrapMode="word">
+          {props.worker.error!.slice(0, 80)}
+        </text>
+      </Show>
+    </box>
+  )
+}
+
+function Action(props: { label: string; onMouseUp: () => void; tone?: "primary" | "accent" | "warning" | "error" }) {
+  const { theme } = useTheme()
+  const bg = () => {
+    switch (props.tone) {
+      case "primary":
+        return theme.primary
+      case "accent":
+        return theme.accent
+      case "warning":
+        return theme.warning
+      case "error":
+        return theme.error
       default:
-        return "○"
+        return theme.backgroundElement
     }
   }
 
-  const statusText = () => {
-    if ((props.worker.status === "merged" || props.worker.status === "conflict") && props.worker.resolutionMode) {
-      return `${props.worker.status} (${props.worker.resolutionMode})`
-    }
-    return props.worker.status
-  }
+  return (
+    <box backgroundColor={bg()} paddingX={1} onMouseUp={props.onMouseUp}>
+      <text fg={theme.background}>{props.label}</text>
+    </box>
+  )
+}
 
-  // Get live session data from sync store
+function WorkerDetail(props: {
+  plan: Plan
+  worker: WorkerState
+  subtask: Subtask | undefined
+  width: number
+  onLogs: () => void
+  onOpen: () => void
+  onRetry: () => void
+}) {
+  const { theme } = useTheme()
+  const sync = useSync()
+
   const messages = createMemo(() => {
     if (!props.worker.sessionID) return []
     return sync.data.message[props.worker.sessionID] ?? []
@@ -96,29 +259,34 @@ function WorkerLane(props: {
     return sync.data.session_status[props.worker.sessionID]
   })
 
-  const cost = createMemo(() => {
-    return pipe(
-      messages(),
-      sumBy((m) => (m.role === "assistant" ? m.cost : 0)),
-    )
-  })
-
   const stats = createMemo(() => {
-    let tools = 0
+    let cost = 0
     let inputTokens = 0
     let outputTokens = 0
+    let tools = 0
+    const recent = [] as { name: string; status: string; duration?: number }[]
+
     for (const msg of messages()) {
       if (msg.role !== "assistant") continue
+      cost += msg.cost ?? 0
       inputTokens += msg.tokens?.input ?? 0
       outputTokens += msg.tokens?.output ?? 0
       const parts = sync.data.part[msg.id] ?? []
-      tools += parts.filter((p) => p.type === "tool").length
+      for (const part of parts) {
+        if (part.type !== "tool") continue
+        tools += 1
+        const duration =
+          part.state.status === "completed" && part.state.time?.start && part.state.time?.end
+            ? part.state.time.end - part.state.time.start
+            : undefined
+        recent.push({ name: part.tool, status: part.state.status, duration })
+      }
     }
-    return { tools, inputTokens, outputTokens }
+
+    return { cost, inputTokens, outputTokens, tools, recent: recent.slice(-10) }
   })
 
-  // Current activity — find the latest running tool
-  const currentActivity = createMemo(() => {
+  const activity = createMemo(() => {
     const msgs = messages()
     for (let i = msgs.length - 1; i >= 0; i--) {
       const msg = msgs[i]
@@ -126,135 +294,171 @@ function WorkerLane(props: {
       const parts = sync.data.part[msg.id] ?? []
       for (let j = parts.length - 1; j >= 0; j--) {
         const part = parts[j]
-        if (part.type === "tool") {
-          if (part.state.status === "running") {
-            return `Running: ${part.tool}`
-          }
-          if (part.state.status === "pending") {
-            return `Pending: ${part.tool}`
-          }
-        }
-        if (part.type === "text" && part.text) {
-          return part.text.slice(0, 60).replace(/\n/g, " ")
-        }
+        if (part.type === "tool" && part.state.status === "running") return `Running ${part.tool}`
+        if (part.type === "tool" && part.state.status === "pending") return `Pending ${part.tool}`
+        if (part.type === "text" && part.text) return part.text.slice(0, 180).replace(/\n/g, " ")
       }
     }
     if (props.worker.status === "running") return "Thinking..."
-    return undefined
+    return "Idle"
   })
 
-  // Recent tool history for expanded view
-  const recentTools = createMemo(() => {
-    const tools: { name: string; status: string; duration?: number }[] = []
-    for (const msg of messages()) {
-      if (msg.role !== "assistant") continue
-      const parts = sync.data.part[msg.id] ?? []
-      for (const part of parts) {
-        if (part.type === "tool") {
-          const duration =
-            part.state.status === "completed" && part.state.time?.start && part.state.time?.end
-              ? part.state.time.end - part.state.time.start
-              : undefined
-          tools.push({
-            name: part.tool,
-            status: part.state.status,
-            duration,
-          })
-        }
-      }
-    }
-    return tools.slice(-8) // last 8 tools
-  })
+  const deps = createMemo(() =>
+    (props.subtask?.dependencies ?? [])
+      .map((id) => props.plan.subtasks.find((item) => item.id === id)?.title)
+      .filter((item): item is string => !!item),
+  )
 
-  const modelLabel = () => {
-    const subtaskModel = props.subtask?.model
-    if (subtaskModel) return subtaskModel.modelID
-    return props.planWorkerModel
-  }
+  const consumers = createMemo(() =>
+    props.plan.subtasks
+      .filter((item) => item.dependencies.includes(props.worker.subtaskID))
+      .map((item) => item.title),
+  )
+
+  const model = () => props.subtask?.model?.modelID ?? props.plan.workerModel.modelID
 
   return (
     <box
       flexDirection="column"
-      backgroundColor={props.selected ? theme.backgroundElement : theme.background}
-      padding={1}
+      width={props.width}
+      backgroundColor={theme.background}
       borderStyle="rounded"
-      borderColor={statusColor()}
+      borderColor={theme.border}
+      padding={1}
+      gap={1}
     >
-      {/* Header: status icon + title */}
-      <box flexDirection="row" gap={1} marginBottom={props.expanded ? 1 : 0}>
-        <text fg={statusColor()}>{statusIcon()}</text>
-        <text fg={theme.text} attributes={TextAttributes.BOLD}>
-          {props.subtask?.title?.slice(0, 20) ?? "Unknown"}
+      <box flexDirection="row" gap={1}>
+        <text fg={theme.primary} attributes={TextAttributes.BOLD}>
+          Worker Details
         </text>
+        <text fg={theme.text}>{props.subtask?.title ?? "Unknown"}</text>
       </box>
 
-      {/* Status line */}
-      <text fg={statusColor()}>{statusText()}</text>
+      <box flexDirection="row" gap={1}>
+        <Action label="open session" tone="primary" onMouseUp={props.onOpen} />
+        <Action label="logs" tone="accent" onMouseUp={props.onLogs} />
+        <Show when={props.worker.status === "failed"}>
+          <Action label="retry" tone="warning" onMouseUp={props.onRetry} />
+        </Show>
+      </box>
 
-      {/* Current activity */}
-      <Show when={currentActivity()}>
+      <box flexDirection="column">
+        <text fg={theme.textMuted}>status</text>
+        <text fg={theme.text}>{statusLabel(props.worker)}</text>
+      </box>
+
+      <box flexDirection="column">
+        <text fg={theme.textMuted}>activity</text>
         <text fg={theme.accent} wrapMode="word">
-          {currentActivity()!.slice(0, 50)}
+          {activity()}
         </text>
-      </Show>
-
-      {/* Stats row */}
-      <box flexDirection="row" gap={1} marginTop={1}>
-        <text fg={theme.textMuted}>{stats().tools} tools</text>
-        <text fg={theme.accent}>{formatCost(cost())}</text>
       </box>
-      <Show when={stats().inputTokens > 0 || stats().outputTokens > 0}>
+
+      <box flexDirection="row" gap={2}>
+        <text fg={theme.textMuted}>model</text>
+        <text fg={theme.text}>{model()}</text>
+        <text fg={theme.textMuted}>session</text>
+        <text fg={theme.text}>{sessionStatus()?.type ?? "n/a"}</text>
+      </box>
+
+      <box flexDirection="row" gap={2}>
+        <text fg={theme.textMuted}>cost</text>
+        <text fg={theme.accent}>{formatCost(stats().cost)}</text>
         <text fg={theme.textMuted}>
           {formatTokens(stats().inputTokens)} in / {formatTokens(stats().outputTokens)} out
         </text>
+      </box>
+
+      <box flexDirection="row" gap={2}>
+        <text fg={theme.textMuted}>tools</text>
+        <text fg={theme.text}>{stats().tools}</text>
+        <Show when={props.worker.diffStat}>
+          <text fg={theme.success}>
+            +{props.worker.diffStat!.additions} -{props.worker.diffStat!.deletions} ({props.worker.diffStat!.files} files)
+          </text>
+        </Show>
+      </box>
+
+      <Show when={props.worker.branch}>
+        <box flexDirection="column">
+          <text fg={theme.textMuted}>branch</text>
+          <text fg={theme.text} wrapMode="word">
+            {props.worker.branch}
+          </text>
+        </box>
       </Show>
 
-      {/* Model */}
-      <text fg={theme.textMuted}>[{modelLabel()}]</text>
+      <Show when={props.worker.worktreeDir}>
+        <box flexDirection="column">
+          <text fg={theme.textMuted}>worktree</text>
+          <text fg={theme.text} wrapMode="word">
+            {props.worker.worktreeDir}
+          </text>
+        </box>
+      </Show>
 
-      {/* Error */}
+      <Show when={props.subtask?.description}>
+        <box flexDirection="column">
+          <text fg={theme.textMuted}>summary</text>
+          <text fg={theme.text} wrapMode="word">
+            {props.subtask!.description}
+          </text>
+        </box>
+      </Show>
+
+      <Show when={(props.subtask?.fileScope.length ?? 0) > 0}>
+        <box flexDirection="column">
+          <text fg={theme.textMuted}>file scope</text>
+          <For each={props.subtask?.fileScope ?? []}>
+            {(item) => (
+              <text fg={theme.text} wrapMode="word">
+                {item}
+              </text>
+            )}
+          </For>
+        </box>
+      </Show>
+
+      <Show when={deps().length > 0}>
+        <box flexDirection="column">
+          <text fg={theme.textMuted}>depends on</text>
+          <For each={deps()}>{(item) => <text fg={theme.text}>{item}</text>}</For>
+        </box>
+      </Show>
+
+      <Show when={consumers().length > 0}>
+        <box flexDirection="column">
+          <text fg={theme.textMuted}>unblocks</text>
+          <For each={consumers()}>{(item) => <text fg={theme.text}>{item}</text>}</For>
+        </box>
+      </Show>
+
+      <Show when={(props.subtask?.constraints?.length ?? 0) > 0}>
+        <box flexDirection="column">
+          <text fg={theme.textMuted}>constraints</text>
+          <For each={props.subtask?.constraints ?? []}>{(item) => <text fg={theme.warning}>{item}</text>}</For>
+        </box>
+      </Show>
+
       <Show when={props.worker.error}>
-        <text fg={theme.error} wrapMode="word">
-          {props.worker.error!.slice(0, 60)}
-        </text>
+        <box flexDirection="column">
+          <text fg={theme.textMuted}>error</text>
+          <text fg={theme.error} wrapMode="word">
+            {props.worker.error!}
+          </text>
+        </box>
       </Show>
 
-      {/* Diff stats */}
-      <Show when={props.worker.diffStat}>
-        <text fg={theme.success}>
-          +{props.worker.diffStat!.additions} -{props.worker.diffStat!.deletions} ({props.worker.diffStat!.files} files)
-        </text>
-      </Show>
-
-      {/* Expanded: recent tool history */}
-      <Show when={props.expanded && recentTools().length > 0}>
-        <box flexDirection="column" marginTop={1} borderStyle="single" borderColor={theme.border} paddingTop={1}>
+      <Show when={stats().recent.length > 0}>
+        <box flexDirection="column" borderStyle="single" borderColor={theme.border} paddingTop={1}>
           <text fg={theme.textMuted} attributes={TextAttributes.UNDERLINE}>
             Recent tools
           </text>
-          <For each={recentTools()}>
+          <For each={stats().recent}>
             {(tool) => (
               <box flexDirection="row" gap={1}>
-                <text
-                  fg={
-                    tool.status === "completed"
-                      ? theme.success
-                      : tool.status === "running"
-                        ? theme.warning
-                        : tool.status === "error"
-                          ? theme.error
-                          : theme.textMuted
-                  }
-                >
-                  {tool.status === "completed"
-                    ? "✓"
-                    : tool.status === "running"
-                      ? "●"
-                      : tool.status === "error"
-                        ? "✗"
-                        : "○"}
-                </text>
                 <text fg={theme.text}>{tool.name}</text>
+                <text fg={theme.textMuted}>{tool.status}</text>
                 <Show when={tool.duration}>
                   <text fg={theme.textMuted}>{formatDuration(tool.duration!)}</text>
                 </Show>
@@ -267,17 +471,6 @@ function WorkerLane(props: {
   )
 }
 
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-  return String(n)
-}
-
-function formatTime(ts: number): string {
-  const date = new Date(ts)
-  return date.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })
-}
-
 function WorkerLogs(props: { worker: WorkerState; subtask: Subtask | undefined; width: number }) {
   const { theme } = useTheme()
   const sync = useSync()
@@ -287,20 +480,17 @@ function WorkerLogs(props: { worker: WorkerState; subtask: Subtask | undefined; 
     return sync.data.message[props.worker.sessionID] ?? []
   })
 
-  const formattedMessages = createMemo(() => {
-    const msgs = messages()
-    const result: { role: string; preview: string; time: string; index: number }[] = []
-    for (let i = 0; i < msgs.length; i++) {
-      const msg = msgs[i]
+  const rows = createMemo(() => {
+    const out = [] as { role: string; preview: string; time: string }[]
+    for (const msg of messages()) {
       const parts = sync.data.part[msg.id] ?? []
       let preview = ""
       if (msg.role === "user") {
-        const textPart = parts.find((p) => p.type === "text")
-        preview = textPart?.text?.slice(0, 100) ?? "User message"
+        preview = parts.find((part) => part.type === "text")?.text?.slice(0, 120) ?? "User message"
       } else {
         for (const part of parts) {
           if (part.type === "text" && part.text) {
-            preview = part.text.slice(0, 100)
+            preview = part.text.slice(0, 120)
             break
           }
           if (part.type === "tool") {
@@ -310,46 +500,44 @@ function WorkerLogs(props: { worker: WorkerState; subtask: Subtask | undefined; 
         }
         if (!preview) preview = "Assistant response"
       }
-      result.push({
+      out.push({
         role: msg.role,
         preview: preview.replace(/\n/g, " "),
         time: formatTime(msg.time.created),
-        index: i + 1,
       })
     }
-    return result.slice(-20)
+    return out.slice(-20)
   })
 
   return (
     <box
       flexDirection="column"
       width={props.width}
-      backgroundColor={theme.backgroundPanel}
+      backgroundColor={theme.background}
       borderStyle="rounded"
       borderColor={theme.border}
       padding={1}
-      marginTop={1}
+      gap={1}
     >
-      <box flexDirection="row" gap={1} marginBottom={1}>
+      <box flexDirection="row" gap={1}>
         <text fg={theme.primary} attributes={TextAttributes.BOLD}>
-          Logs: {props.subtask?.title ?? "Unknown"}
+          Logs
         </text>
+        <text fg={theme.text}>{props.subtask?.title ?? "Unknown"}</text>
         <text fg={theme.textMuted}>({messages().length} messages)</text>
       </box>
-      <For each={formattedMessages()}>
-        {(msg) => (
-          <box flexDirection="row" gap={1} marginBottom={0}>
-            <text fg={theme.textMuted}>{msg.time}</text>
-            <text fg={msg.role === "user" ? theme.accent : theme.success} attributes={TextAttributes.BOLD}>
-              {msg.role === "user" ? "U" : "A"}
-            </text>
+      <For each={rows()}>
+        {(row) => (
+          <box flexDirection="row" gap={1}>
+            <text fg={theme.textMuted}>{row.time}</text>
+            <text fg={row.role === "user" ? theme.accent : theme.success}>{row.role === "user" ? "U" : "A"}</text>
             <text fg={theme.text} wrapMode="word">
-              {msg.preview.slice(0, props.width - 20)}
+              {row.preview.slice(0, Math.max(40, props.width - 18))}
             </text>
           </box>
         )}
       </For>
-      <Show when={messages().length === 0}>
+      <Show when={rows().length === 0}>
         <text fg={theme.textMuted}>No messages yet</text>
       </Show>
     </box>
@@ -362,20 +550,17 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
   const sync = useSync()
   const dialog = useDialog()
   const toast = useToast()
+  const route = useRoute()
   const [selected, setSelected] = createSignal(0)
-  const [expanded, setExpanded] = createSignal<number | null>(null)
-  const [showLogs, setShowLogs] = createSignal<number | null>(null)
+  const [showLogs, setShowLogs] = createSignal(false)
   const [elapsed, setElapsed] = createSignal(0)
+  const [view, setView] = createSignal<"active" | "all" | "failed" | "done">("active")
+  const [sort, setSort] = createSignal<"status" | "title" | "cost">("status")
+
   const workerSessions = createMemo(() =>
     props.plan.workers.flatMap((worker) => (worker.sessionID ? [worker.sessionID] : [])),
   )
-  const activeSessions = createMemo(() =>
-    props.plan.workers.flatMap((worker) =>
-      worker.sessionID && (worker.status === "spawning" || worker.status === "running") ? [worker.sessionID] : [],
-    ),
-  )
 
-  // Elapsed time timer
   const startTime = props.plan.time.approved ?? props.plan.time.created
   createEffect(() => {
     const timer = setInterval(() => {
@@ -384,31 +569,21 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
     onCleanup(() => clearInterval(timer))
   })
 
-  // Ensure worker sessions are synced so timeline/stats can render immediately.
   createEffect(() => {
     for (const sessionID of workerSessions()) {
       void sync.session.sync(sessionID).catch(() => {})
     }
   })
 
-  // Poll active workers to keep stats live even if message events are delayed/missed.
-  createEffect(() => {
-    if (activeSessions().length === 0) return
-    const timer = setInterval(() => {
-      for (const sessionID of activeSessions()) {
-        void sync.session.refresh(sessionID).catch(() => {})
-      }
-    }, 2000)
-    onCleanup(() => clearInterval(timer))
-  })
-
-  const running = () => props.plan.workers.filter((w) => w.status === "running").length
-  const done = () => props.plan.workers.filter((w) => w.status === "done" || w.status === "merged").length
-  const failed = () => props.plan.workers.filter((w) => w.status === "failed" || w.status === "conflict").length
+  const running = () => props.plan.workers.filter((worker) => worker.status === "running").length
+  const done = () => props.plan.workers.filter((worker) => worker.status === "done" || worker.status === "merged").length
+  const failed = () => props.plan.workers.filter((worker) => worker.status === "failed" || worker.status === "conflict").length
   const total = () => props.plan.workers.length
-  const width = () => Math.min(100, dim().width - 2)
+  const width = () => Math.min(120, dim().width - 2)
+  const wide = () => width() >= 110
+  const listWidth = () => (wide() ? Math.min(44, Math.floor(width() * 0.4)) : width())
+  const detailWidth = () => (wide() ? width() - listWidth() - 1 : width())
 
-  // Compute execution waves from subtasks
   const waves = createMemo(() => {
     if (props.plan.subtasks.length === 0) return null
     return summarizeWaves(props.plan.subtasks, props.plan.workers)
@@ -416,27 +591,24 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
   const currentWave = createMemo(() => waves()?.current)
   const wiring = createMemo(() => props.plan.subtasks.find((item) => item.title === "Final wiring (shared files)"))
 
-  // Aggregate cost and tokens across all worker sessions
   const totals = createMemo(() => {
-    let totalCost = 0
-    let totalInput = 0
-    let totalOutput = 0
-    let totalTools = 0
-
+    let cost = 0
+    let input = 0
+    let output = 0
+    let tools = 0
     for (const worker of props.plan.workers) {
       if (!worker.sessionID) continue
       const msgs = sync.data.message[worker.sessionID] ?? []
       for (const msg of msgs) {
         if (msg.role !== "assistant") continue
-        totalCost += msg.cost ?? 0
-        totalInput += msg.tokens?.input ?? 0
-        totalOutput += msg.tokens?.output ?? 0
+        cost += msg.cost ?? 0
+        input += msg.tokens?.input ?? 0
+        output += msg.tokens?.output ?? 0
         const parts = sync.data.part[msg.id] ?? []
-        totalTools += parts.filter((p) => p.type === "tool").length
+        tools += parts.filter((part) => part.type === "tool").length
       }
     }
-
-    return { cost: totalCost, input: totalInput, output: totalOutput, tools: totalTools }
+    return { cost, input, output, tools }
   })
 
   const timeline = createMemo(() => {
@@ -462,51 +634,88 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
       const subtask = props.plan.subtasks.find((item) => item.id === worker.subtaskID)
       const title = subtask?.title ?? String(worker.subtaskID).slice(0, 8)
       const user = msgs.find((msg) => msg.role === "user")
-      if (user) {
-        items.push({
-          time: user.time.created,
-          text: `Prompt sent: ${title}`,
-          tone: "accent",
-        })
-      }
+      if (user) items.push({ time: user.time.created, text: `Prompt sent: ${title}`, tone: "accent" })
       const assistant = msgs.find((msg) => msg.role === "assistant")
-      if (assistant) {
-        items.push({
-          time: assistant.time.created,
-          text: `Worker active: ${title}`,
-          tone: "success",
-        })
-      }
+      if (assistant) items.push({ time: assistant.time.created, text: `Worker active: ${title}`, tone: "success" })
     }
 
     return items.toSorted((a, b) => b.time - a.time).slice(0, 8)
   })
 
-  // Responsive columns: expanded=1, wide=3, medium=2, narrow=1
-  const columns = () => {
-    if (showLogs() !== null) return 1
-    if (expanded() !== null) return 1
-    const w = width()
-    if (w >= 100 && total() >= 3) return 3
-    if (w >= 60 && total() >= 2) return 2
-    return 1
+  const costOf = (worker: WorkerState) =>
+    pipe(
+      worker.sessionID ? (sync.data.message[worker.sessionID] ?? []) : [],
+      sumBy((msg) => (msg.role === "assistant" ? msg.cost : 0)),
+    )
+
+  const items = createMemo(() =>
+    props.plan.workers
+      .map((worker, index) => ({
+        index,
+        worker,
+        subtask: props.plan.subtasks.find((item) => item.id === worker.subtaskID),
+        cost: costOf(worker),
+      }))
+      .filter((item) => {
+        const mode = view()
+        if (mode === "all") return true
+        if (mode === "failed") return item.worker.status === "failed" || item.worker.status === "conflict"
+        if (mode === "done") return item.worker.status === "done" || item.worker.status === "merged"
+        return item.worker.status !== "done" && item.worker.status !== "merged"
+      })
+      .toSorted((a, b) => {
+        if (sort() === "title") return (a.subtask?.title ?? "").localeCompare(b.subtask?.title ?? "")
+        if (sort() === "cost") return b.cost - a.cost
+        return statusRank(a.worker.status) - statusRank(b.worker.status)
+      }),
+  )
+
+  createEffect(() => {
+    const max = Math.max(0, items().length - 1)
+    if (selected() > max) setSelected(max)
+  })
+
+  const current = createMemo(() => items()[selected()])
+
+  const nextView = () => {
+    const list = ["active", "all", "failed", "done"] as const
+    const index = list.indexOf(view())
+    setView(list[(index + 1) % list.length])
+    setSelected(0)
+    setShowLogs(false)
   }
 
-  // Split workers into rows
-  const rows = createMemo(() => {
-    const cols = columns()
-    const workers =
-      showLogs() !== null
-        ? [props.plan.workers[showLogs()!]]
-        : expanded() !== null
-          ? [props.plan.workers[expanded()!]]
-          : props.plan.workers
-    const result: (typeof workers)[] = []
-    for (let i = 0; i < workers.length; i += cols) {
-      result.push(workers.slice(i, i + cols))
+  const nextSort = () => {
+    const list = ["status", "title", "cost"] as const
+    const index = list.indexOf(sort())
+    setSort(list[(index + 1) % list.length])
+    setSelected(0)
+  }
+
+  const openCurrent = () => {
+    const item = current()
+    if (!item?.worker.sessionID) {
+      toast.show({ message: "Selected worker has no session yet", variant: "info" })
+      return
     }
-    return result
-  })
+    route.navigate({ type: "session", sessionID: item.worker.sessionID })
+  }
+
+  const retryCurrent = async () => {
+    const item = current()
+    if (!item) return
+    if (item.worker.status !== "failed") {
+      toast.show({ message: "Only failed workers can be retried", variant: "info" })
+      return
+    }
+    try {
+      const { Orchestrator } = await import("@/parallel/orchestrator")
+      await Orchestrator.retryWorker({ planID: props.plan.id, subtaskID: item.worker.subtaskID })
+      toast.show({ message: "Worker retry started", variant: "info" })
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to retry worker")
+    }
+  }
 
   const handleCancel = () => {
     dialog.replace(() => (
@@ -544,34 +753,60 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
     if (dialog.stack.length > 0) return
     if (evt.defaultPrevented) return
     if (evt.name === "up" || evt.sequence === "k") {
+      if (items().length === 0) return
       evt.preventDefault()
       evt.stopPropagation()
-      setSelected((s) => Math.max(0, s - 1))
-    } else if (evt.name === "down" || evt.sequence === "j") {
+      setSelected((value) => Math.max(0, value - 1))
+      return
+    }
+    if (evt.name === "down" || evt.sequence === "j") {
+      if (items().length === 0) return
       evt.preventDefault()
       evt.stopPropagation()
-      setSelected((s) => Math.min(total() - 1, s + 1))
-    } else if (evt.name === "return") {
+      setSelected((value) => Math.min(items().length - 1, value + 1))
+      return
+    }
+    if (evt.name === "escape") {
       evt.preventDefault()
       evt.stopPropagation()
-      setExpanded((e) => (e === selected() ? null : selected()))
-    } else if (evt.name === "escape") {
-      evt.preventDefault()
-      evt.stopPropagation()
-      if (showLogs() !== null) {
-        setShowLogs(null)
-        return
-      }
-      if (expanded() !== null) {
-        setExpanded(null)
+      if (showLogs()) {
+        setShowLogs(false)
         return
       }
       props.onBack?.()
-    } else if (evt.name === "l" || (evt.sequence === "l" && !evt.ctrl)) {
+      return
+    }
+    if (evt.name === "l" || (evt.sequence === "l" && !evt.ctrl)) {
       evt.preventDefault()
       evt.stopPropagation()
-      setShowLogs((l) => (l === selected() ? null : selected()))
-    } else if (evt.name === "c" || (evt.sequence === "c" && !evt.ctrl)) {
+      setShowLogs((value) => !value)
+      return
+    }
+    if (evt.name === "o" || (evt.sequence === "o" && !evt.ctrl)) {
+      evt.preventDefault()
+      evt.stopPropagation()
+      openCurrent()
+      return
+    }
+    if (evt.name === "r" || (evt.sequence === "r" && !evt.ctrl)) {
+      evt.preventDefault()
+      evt.stopPropagation()
+      void retryCurrent()
+      return
+    }
+    if (evt.name === "f" || (evt.sequence === "f" && !evt.ctrl)) {
+      evt.preventDefault()
+      evt.stopPropagation()
+      nextView()
+      return
+    }
+    if (evt.name === "s" || (evt.sequence === "s" && !evt.ctrl)) {
+      evt.preventDefault()
+      evt.stopPropagation()
+      nextSort()
+      return
+    }
+    if (evt.name === "c" || (evt.sequence === "c" && !evt.ctrl)) {
       evt.preventDefault()
       evt.stopPropagation()
       handleCancel()
@@ -580,7 +815,6 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
 
   return (
     <box flexDirection="column" width={width()} backgroundColor={theme.backgroundPanel} padding={1}>
-      {/* Header */}
       <box flexDirection="row" gap={2} marginBottom={1}>
         <text attributes={TextAttributes.BOLD} fg={theme.primary}>
           Agent Manager
@@ -595,6 +829,16 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
           <text fg={theme.error}>{failed()} failed</text>
         </Show>
         <text fg={theme.textMuted}>{formatDuration(elapsed())}</text>
+      </box>
+
+      <box flexDirection="row" gap={2} marginBottom={1}>
+        <text fg={theme.textMuted}>view</text>
+        <text fg={theme.accent}>{view()}</text>
+        <text fg={theme.textMuted}>sort</text>
+        <text fg={theme.accent}>{sort()}</text>
+        <text fg={theme.textMuted}>
+          showing {items().length} of {total()}
+        </text>
       </box>
 
       <Show when={currentWave()}>
@@ -618,7 +862,6 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
         </box>
       </Show>
 
-      {/* Progress bar */}
       <box marginBottom={1}>
         <text fg={theme.success}>{"█".repeat(Math.floor((done() / Math.max(total(), 1)) * 30))}</text>
         <text fg={theme.warning}>{"█".repeat(Math.floor((running() / Math.max(total(), 1)) * 30))}</text>
@@ -627,7 +870,6 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
         </text>
       </box>
 
-      {/* Wave info */}
       <Show when={waves()}>
         <box flexDirection="row" gap={2} marginBottom={1}>
           <text fg={theme.textMuted}>Waves:</text>
@@ -650,14 +892,7 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
       </Show>
 
       <Show when={timeline().length > 0}>
-        <box
-          marginBottom={1}
-          padding={1}
-          borderStyle="single"
-          borderColor={theme.border}
-          flexDirection="column"
-          gap={0}
-        >
+        <box marginBottom={1} padding={1} borderStyle="single" borderColor={theme.border} flexDirection="column">
           <text fg={theme.textMuted} attributes={TextAttributes.UNDERLINE}>
             Timeline
           </text>
@@ -676,7 +911,7 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
                           : theme.text
                   }
                 >
-                  {item.text.slice(0, 72)}
+                  {item.text.slice(0, width() - 20)}
                 </text>
               </box>
             )}
@@ -684,42 +919,53 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
         </box>
       </Show>
 
-      {/* Worker lanes */}
-      <For each={rows()}>
-        {(row) => (
-          <box flexDirection="row" gap={1} marginBottom={1}>
-            <For each={row}>
-              {(worker) => {
-                const index = () => props.plan.workers.indexOf(worker)
-                const subtask = () => props.plan.subtasks.find((s) => s.id === worker.subtaskID)
-                return (
-                  <box
-                    flexGrow={1}
-                    flexBasis={0}
-                    onMouseUp={() => setExpanded((e) => (e === index() ? null : index()))}
-                  >
-                    <WorkerLane
-                      worker={worker}
-                      subtask={subtask()}
-                      selected={selected() === index()}
-                      expanded={expanded() === index()}
-                      planWorkerModel={props.plan.workerModel.modelID}
-                    />
-                  </box>
-                )
-              }}
+      <box flexDirection={wide() ? "row" : "column"} gap={1}>
+        <box flexDirection="column" width={listWidth()} gap={1}>
+          <Show
+            when={items().length > 0}
+            fallback={
+              <box padding={1} borderStyle="rounded" borderColor={theme.border}>
+                <text fg={theme.textMuted}>No workers match the current view.</text>
+              </box>
+            }
+          >
+            <For each={items()}>
+              {(item, index) => (
+                <WorkerLane
+                  worker={item.worker}
+                  subtask={item.subtask}
+                  selected={selected() === index()}
+                  planWorkerModel={props.plan.workerModel.modelID}
+                  onSelect={() => {
+                    setSelected(index())
+                    setShowLogs(false)
+                  }}
+                />
+              )}
             </For>
-          </box>
-        )}
-      </For>
+          </Show>
+        </box>
 
-      <Show when={showLogs() !== null}>
-        <WorkerLogs
-          worker={props.plan.workers[showLogs()!]}
-          subtask={props.plan.subtasks.find((s) => s.id === props.plan.workers[showLogs()!].subtaskID)}
-          width={width()}
-        />
-      </Show>
+        <Show when={current()}>
+          {(item) => (
+            <box flexDirection="column" width={detailWidth()} gap={1}>
+              <WorkerDetail
+                plan={props.plan}
+                worker={item().worker}
+                subtask={item().subtask}
+                width={detailWidth()}
+                onLogs={() => setShowLogs((value) => !value)}
+                onOpen={openCurrent}
+                onRetry={() => void retryCurrent()}
+              />
+              <Show when={showLogs()}>
+                <WorkerLogs worker={item().worker} subtask={item().subtask} width={detailWidth()} />
+              </Show>
+            </box>
+          )}
+        </Show>
+      </box>
+
       <box marginTop={1} paddingTop={1} borderStyle="single" borderColor={theme.border} flexDirection="column" gap={0}>
         <box flexDirection="row" gap={2}>
           <text fg={theme.text} attributes={TextAttributes.BOLD}>
@@ -733,7 +979,7 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
           <text fg={theme.textMuted}>{formatDuration(elapsed())}</text>
         </box>
         <box flexDirection="row" gap={2} marginTop={1}>
-          <text fg={theme.textMuted}>arrows navigate | enter expand | l logs | c cancel | esc back</text>
+          <text fg={theme.textMuted}>arrows navigate | f filter | s sort | l logs | o open | r retry | c cancel | esc back</text>
         </box>
       </box>
     </box>

@@ -14,43 +14,27 @@ export function ParallelMerge(props: { plan: Plan }) {
   const { theme } = useTheme()
   const dim = useTerminalDimensions()
   const sdk = useSDK()
+  const bus = sdk.event as { on(type: string, handler: (evt: { properties: Record<string, unknown> }) => void): () => void }
   const [progressMap, setProgressMap] = createSignal<Record<string, MergeStatus>>({})
 
-  // Listen to MergeProgress events via SSE
   createEffect(() => {
     const id = props.plan.id
     if (!id) return
-
-    let es: EventSource | null = null
-
-    // Check if EventSource is available (browser environment)
-    if (typeof EventSource !== "undefined") {
-      try {
-        es = new EventSource(`${sdk.url}/parallel/${id}/events`)
-
-        es.addEventListener("message", (e: MessageEvent) => {
-          try {
-            const data = JSON.parse(e.data)
-            if (data.type === "parallel.merge.progress") {
-              const { branch, result } = data.payload
-              setProgressMap((prev) => ({
-                ...prev,
-                [branch]: result,
-              }))
-            }
-          } catch {}
-        })
-
-        es.addEventListener("error", () => {
-          // Will reconnect automatically
-        })
-      } catch {
-        // EventSource not available
-      }
-    }
+    setProgressMap({})
+    const off = bus.on("parallel.merge.progress", (evt) => {
+      if (evt.properties.planID !== id) return
+      const branch = evt.properties.branch
+      const result = evt.properties.result
+      if (typeof branch !== "string") return
+      if (result !== "clean" && result !== "smart" && result !== "ai" && result !== "failed") return
+      setProgressMap((prev) => ({
+        ...prev,
+        [branch]: result,
+      }))
+    })
 
     onCleanup(() => {
-      if (es) es.close()
+      off()
     })
   })
 
