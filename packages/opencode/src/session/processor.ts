@@ -16,7 +16,7 @@ import { Permission } from "@/permission"
 import { Question } from "@/question"
 import { PartID } from "./schema"
 import type { SessionID, MessageID } from "./schema"
-import { Cause, Effect } from "effect"
+import { Cause, Effect, Exit } from "effect"
 import * as Stream from "effect/Stream"
 
 export namespace SessionProcessor {
@@ -351,7 +351,6 @@ export namespace SessionProcessor {
     const toolcalls: Record<string, MessageV2.ToolPart> = {}
     let snapshot: string | undefined
     let blocked = false
-    let attempt = 0
     let needsCompaction = false
 
     const result = {
@@ -395,6 +394,12 @@ export namespace SessionProcessor {
           reasoningMap: {},
         }
 
+        const parse = (e: unknown) =>
+          MessageV2.fromError(e, {
+            providerID: input.model.providerID,
+            aborted: input.abort.aborted,
+          })
+
         const consumeStream = Effect.gen(function* () {
           ctx.currentText = undefined
           ctx.reasoningMap = {}
@@ -411,7 +416,7 @@ export namespace SessionProcessor {
           )
         })
 
-        const errorHandler = (e: unknown): Effect.Effect<void> =>
+        const halt = (e: unknown): Effect.Effect<void> =>
           Effect.gen(function* () {
             log.error("process", { error: e, stack: JSON.stringify((e as any)?.stack) })
             const error = MessageV2.fromError(e, {
@@ -421,48 +426,34 @@ export namespace SessionProcessor {
             if (MessageV2.ContextOverflowError.isInstance(error)) {
               needsCompaction = true
               Bus.publish(Session.Event.Error, { sessionID: input.sessionID, error })
-            } else {
-              const retry = SessionRetry.retryable(error)
-              if (retry !== undefined) {
-                attempt++
-                const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
-                yield* Effect.promise(() =>
-                  SessionStatus.set(input.sessionID, {
-                    type: "retry",
-                    attempt,
-                    message: retry,
-                    next: Date.now() + delay,
-                  }),
-                )
-                yield* Effect.promise(() => SessionRetry.sleep(delay, input.abort).catch(() => {}))
-                // Retrying here re-enters `loop` before the outer `ensuring(cleanupEffect(ctx))`
-                // runs, so any partial state from this attempt stays live unless cleanup moves
-                // inside the per-attempt boundary.
-                yield* loop
-                return
-              }
-              input.assistantMessage.error = error
-              Bus.publish(Session.Event.Error, {
-                sessionID: input.assistantMessage.sessionID,
-                error: input.assistantMessage.error,
-              })
-              yield* Effect.promise(() => SessionStatus.set(input.sessionID, { type: "idle" }))
+              return
             }
+            input.assistantMessage.error = error
+            Bus.publish(Session.Event.Error, {
+              sessionID: input.assistantMessage.sessionID,
+              error: input.assistantMessage.error,
+            })
+            yield* Effect.promise(() => SessionStatus.set(input.sessionID, { type: "idle" }))
           })
 
-        const loop: Effect.Effect<void> = consumeStream.pipe(
-          Effect.catchCause((cause) => {
-            const reason = cause.reasons[0]
-            const e = Cause.isDieReason(reason) ? reason.defect : Cause.isFailReason(reason) ? reason.error : cause
-            return errorHandler(e)
-          }),
+        const loop: Effect.Effect<void, unknown> = consumeStream.pipe(
+          Effect.catchCause((cause) => Effect.fail(Cause.squash(cause))),
+          Effect.retry(SessionRetry.policy({ sessionID: input.sessionID, parse })),
+          Effect.ensuring(cleanupEffect(ctx)),
         )
 
-        await Effect.runPromise(loop.pipe(Effect.ensuring(cleanupEffect(ctx))))
+        const exit = await Effect.runPromiseExit(loop, { signal: input.abort })
+
+        if (Exit.isFailure(exit)) {
+          const err =
+            Cause.hasInterrupts(exit.cause) && input.abort.aborted
+              ? new DOMException("Aborted", "AbortError")
+              : Cause.squash(exit.cause)
+          await Effect.runPromise(halt(err))
+        }
 
         if (needsCompaction) return "compact"
-        if (blocked) return "stop"
-        if (input.assistantMessage.error) return "stop"
+        if (blocked || input.assistantMessage.error) return "stop"
         return "continue"
       },
     }
