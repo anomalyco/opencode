@@ -83,7 +83,7 @@ ENV PATH="/root/.local/bin:$PATH"
 RUN curl -fsSL https://bun.sh/install | bash
 ENV PATH="/root/.bun/bin:$PATH"
 
-# Install devcontainer CLI (VS Code Dev Containers)
+# Install devcontainer CLI (VS Code Dev Containers) - enables devcontainer.json support
 RUN curl -fsSL https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-x64 \
     --output /tmp/vscode-cli.tar.gz && \
     tar -xzf /tmp/vscode-cli.tar.gz -C /usr/local/bin && \
