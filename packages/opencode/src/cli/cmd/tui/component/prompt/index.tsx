@@ -1189,11 +1189,6 @@ export function Prompt(props: PromptProps) {
                       )}
                     </Match>
                     <Match when={true}>
-                      <Show when={local.model.variant.list().length > 0}>
-                        <text fg={theme.text}>
-                          {keybind.print("variant_cycle")} <span style={{ fg: theme.textMuted }}>variants</span>
-                        </text>
-                      </Show>
                       <text fg={theme.text}>
                         {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>agents</span>
                       </text>
