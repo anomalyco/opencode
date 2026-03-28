@@ -481,6 +481,13 @@ export namespace SessionPrompt {
           },
           result,
         )
+        if ((result as any)?.inject?.length) {
+          await flushInjectedMessages(
+            (result as any).inject,
+            sessionID,
+            { agent: lastUser.agent, model: lastUser.model },
+          )
+        }
         assistantMessage.finish = "tool-calls"
         assistantMessage.time.completed = Date.now()
         await Session.updateMessage(assistantMessage)
@@ -768,6 +775,42 @@ export namespace SessionPrompt {
     return Provider.defaultModel()
   }
 
+  /**
+   * Persist injected messages from a `tool.execute.after` hook so the AI
+   * sees them on the next loop iteration.  Each entry becomes a synthetic
+   * user message with a single text part, mirroring the existing pattern
+   * used for subtask summary messages (see loop body).
+   */
+  async function flushInjectedMessages(
+    inject: Array<{ role: "user" | "system"; text: string }> | undefined,
+    sessionID: string,
+    lastUser: { agent: string; model: { providerID: string; modelID: string } },
+  ) {
+    if (!inject?.length) return
+    for (const msg of inject) {
+      const userMsg: MessageV2.User = {
+        id: MessageID.ascending(),
+        sessionID: SessionID.make(sessionID),
+        role: "user",
+        time: { created: Date.now() },
+        agent: lastUser.agent,
+        model: lastUser.model,
+      }
+      await Session.updateMessage(userMsg)
+      await Session.updatePart({
+        id: PartID.ascending(),
+        messageID: userMsg.id,
+        sessionID: SessionID.make(sessionID),
+        type: "text",
+        text:
+          msg.role === "system"
+            ? `<system-reminder>\n${msg.text}\n</system-reminder>`
+            : msg.text,
+        synthetic: true,
+      } satisfies MessageV2.TextPart)
+    }
+  }
+
   /** @internal Exported for testing */
   export async function resolveTools(input: {
     agent: Agent.Info
@@ -858,6 +901,13 @@ export namespace SessionPrompt {
             },
             output,
           )
+          if ((output as any).inject?.length) {
+            await flushInjectedMessages(
+              (output as any).inject,
+              ctx.sessionID,
+              { agent: input.agent.name, model: { providerID: input.model.providerID, modelID: input.model.api.id } },
+            )
+          }
           return output
         },
       })
@@ -905,6 +955,13 @@ export namespace SessionPrompt {
           },
           result,
         )
+        if ((result as any).inject?.length) {
+          await flushInjectedMessages(
+            (result as any).inject,
+            ctx.sessionID,
+            { agent: input.agent.name, model: { providerID: input.model.providerID, modelID: input.model.api.id } },
+          )
+        }
 
         const textParts: string[] = []
         const attachments: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[] = []
