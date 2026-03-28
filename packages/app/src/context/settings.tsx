@@ -32,8 +32,8 @@ export interface Settings {
   }
   appearance: {
     fontSize: number
-    font: string
-    uiFont: string
+    mono: string
+    sans: string
   }
   keybinds: Record<string, string>
   permissions: {
@@ -52,36 +52,9 @@ const sansFallback = 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFon
 
 const monoBase = monoFallback
 const sansBase = sansFallback
-const monoKey = "ibm-plex-mono"
-const monoSkip = new Set([monoDefault])
-const sansSkip = new Set([sansDefault])
 
-function migrate(value: unknown) {
-  if (!value || typeof value !== "object") return value
-  const item = value as {
-    appearance?: {
-      font?: string
-      uiFont?: string
-    }
-  }
-  if (!item.appearance) return value
-  const font = item.appearance.font === monoKey || item.appearance.font === monoDefault ? "" : item.appearance.font
-  const uiFont = item.appearance.uiFont === sansDefault ? "" : item.appearance.uiFont
-  if (font === item.appearance.font && uiFont === item.appearance.uiFont) return value
-  return {
-    ...item,
-    appearance: {
-      ...item.appearance,
-      font,
-      uiFont,
-    },
-  }
-}
-
-function input(font: string | undefined, skip?: Set<string>) {
-  const value = font?.trim()
-  if (!value || skip?.has(value)) return ""
-  return value
+function input(font: string | undefined) {
+  return font ?? ""
 }
 
 function family(font: string) {
@@ -89,26 +62,26 @@ function family(font: string) {
   return `"${font.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`
 }
 
-function stack(font: string | undefined, base: string, skip?: Set<string>) {
-  const value = input(font, skip).trim()
+function stack(font: string | undefined, base: string) {
+  const value = font?.trim() ?? ""
   if (!value) return base
   return `${family(value)}, ${base}`
 }
 
 export function monoInput(font: string | undefined) {
-  return input(font, monoSkip)
+  return input(font)
 }
 
 export function sansInput(font: string | undefined) {
-  return input(font, sansSkip)
+  return input(font)
 }
 
 export function monoFontFamily(font: string | undefined) {
-  return stack(font, monoBase, monoSkip)
+  return stack(font, monoBase)
 }
 
 export function sansFontFamily(font: string | undefined) {
-  return stack(font, sansBase, sansSkip)
+  return stack(font, sansBase)
 }
 
 const defaultSettings: Settings = {
@@ -125,8 +98,8 @@ const defaultSettings: Settings = {
   },
   appearance: {
     fontSize: 14,
-    font: "",
-    uiFont: "",
+    mono: "",
+    sans: "",
   },
   keybinds: {},
   permissions: {
@@ -154,16 +127,13 @@ function withFallback<T>(read: () => T | undefined, fallback: T) {
 export const { use: useSettings, provider: SettingsProvider } = createSimpleContext({
   name: "Settings",
   init: () => {
-    const [store, setStore, _, ready] = persisted(
-      { key: "settings.v3", migrate },
-      createStore<Settings>(defaultSettings),
-    )
+    const [store, setStore, _, ready] = persisted("settings.v3", createStore<Settings>(defaultSettings))
 
     createEffect(() => {
       if (typeof document === "undefined") return
       const root = document.documentElement
-      root.style.setProperty("--font-family-mono", monoFontFamily(store.appearance?.font))
-      root.style.setProperty("--font-family-sans", sansFontFamily(store.appearance?.uiFont))
+      root.style.setProperty("--font-family-mono", monoFontFamily(store.appearance?.mono))
+      root.style.setProperty("--font-family-sans", sansFontFamily(store.appearance?.sans))
     })
 
     return {
@@ -217,13 +187,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setFontSize(value: number) {
           setStore("appearance", "fontSize", value)
         },
-        font: withFallback(() => store.appearance?.font, defaultSettings.appearance.font),
+        font: withFallback(() => store.appearance?.mono, defaultSettings.appearance.mono),
         setFont(value: string) {
-          setStore("appearance", "font", value.trim() ? value : "")
+          setStore("appearance", "mono", value.trim() ? value : "")
         },
-        uiFont: withFallback(() => store.appearance?.uiFont, defaultSettings.appearance.uiFont),
+        uiFont: withFallback(() => store.appearance?.sans, defaultSettings.appearance.sans),
         setUIFont(value: string) {
-          setStore("appearance", "uiFont", value.trim() ? value : "")
+          setStore("appearance", "sans", value.trim() ? value : "")
         },
       },
       keybinds: {

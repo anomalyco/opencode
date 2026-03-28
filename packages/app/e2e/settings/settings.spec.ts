@@ -185,7 +185,7 @@ test("typing a code font with spaces persists and updates CSS variable", async (
     })
     .toMatchObject({
       appearance: {
-        font: next,
+        mono: next,
       },
     })
 
@@ -232,7 +232,7 @@ test("typing a UI font with spaces persists and updates CSS variable", async ({ 
     })
     .toMatchObject({
       appearance: {
-        uiFont: next,
+        sans: next,
       },
     })
 
@@ -267,7 +267,7 @@ test("clearing the code font field restores the default placeholder and stack", 
     })
     .toMatchObject({
       appearance: {
-        font: "Reset Mono",
+        mono: "Reset Mono",
       },
     })
 
@@ -285,7 +285,7 @@ test("clearing the code font field restores the default placeholder and stack", 
     })
     .toMatchObject({
       appearance: {
-        font: "",
+        mono: "",
       },
     })
 
@@ -316,7 +316,7 @@ test("clearing the UI font field restores the default placeholder and stack", as
     })
     .toMatchObject({
       appearance: {
-        uiFont: "Reset Sans",
+        sans: "Reset Sans",
       },
     })
 
@@ -334,7 +334,7 @@ test("clearing the UI font field restores the default placeholder and stack", as
     })
     .toMatchObject({
       appearance: {
-        uiFont: "",
+        sans: "",
       },
     })
 
@@ -373,8 +373,8 @@ test("color scheme, code font, and UI font rehydrate after reload", async ({ pag
     return raw ? JSON.parse(raw) : null
   }, settingsKey)
 
-  const mono = initialSettings?.appearance?.font === "Reload Mono" ? "Reload Mono 2" : "Reload Mono"
-  const sans = initialSettings?.appearance?.uiFont === "Reload Sans" ? "Reload Sans 2" : "Reload Sans"
+  const mono = initialSettings?.appearance?.mono === "Reload Mono" ? "Reload Mono 2" : "Reload Mono"
+  const sans = initialSettings?.appearance?.sans === "Reload Sans" ? "Reload Sans 2" : "Reload Sans"
 
   await code.click()
   await code.clear()
@@ -395,8 +395,8 @@ test("color scheme, code font, and UI font rehydrate after reload", async ({ pag
     })
     .toMatchObject({
       appearance: {
-        font: mono,
-        uiFont: sans,
+        mono,
+        sans,
       },
     })
 
@@ -415,8 +415,8 @@ test("color scheme, code font, and UI font rehydrate after reload", async ({ pag
   expect(updatedMono).not.toBe(initialMono)
   expect(updatedSans).toContain(sans)
   expect(updatedSans).not.toBe(initialSans)
-  expect(updatedSettings?.appearance?.font).toBe(mono)
-  expect(updatedSettings?.appearance?.uiFont).toBe(sans)
+  expect(updatedSettings?.appearance?.mono).toBe(mono)
+  expect(updatedSettings?.appearance?.sans).toBe(sans)
 
   await closeDialog(page, dialog)
   await page.reload()
@@ -432,8 +432,8 @@ test("color scheme, code font, and UI font rehydrate after reload", async ({ pag
     })
     .toMatchObject({
       appearance: {
-        font: mono,
-        uiFont: sans,
+        mono,
+        sans,
       },
     })
 
@@ -468,8 +468,8 @@ test("color scheme, code font, and UI font rehydrate after reload", async ({ pag
   expect(rehydratedMono).not.toBe(initialMono)
   expect(rehydratedSans).toContain(sans)
   expect(rehydratedSans).not.toBe(initialSans)
-  expect(rehydratedSettings?.appearance?.font).toBe(mono)
-  expect(rehydratedSettings?.appearance?.uiFont).toBe(sans)
+  expect(rehydratedSettings?.appearance?.mono).toBe(mono)
+  expect(rehydratedSettings?.appearance?.sans).toBe(sans)
 })
 
 test("toggling notification agent switch updates localStorage", async ({ page, gotoSession }) => {
