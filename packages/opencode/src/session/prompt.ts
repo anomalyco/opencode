@@ -96,6 +96,7 @@ export namespace SessionPrompt {
       const processor = yield* SessionProcessor.Service
       const compaction = yield* SessionCompaction.Service
       const plugin = yield* Plugin.Service
+      const commands = yield* Command.Service
       const fsys = yield* AppFileSystem.Service
       const scope = yield* Scope.Scope
 
@@ -527,8 +528,121 @@ export namespace SessionPrompt {
       })
 
       const command = Effect.fn("SessionPrompt.command")(function* (input: CommandInput) {
-        const resolved = yield* Effect.promise(() => resolveCommand(input))
-        const result = yield* prompt(resolved.promptInput)
+        log.info("command", input)
+        const cmd = yield* commands.get(input.command)
+        if (!cmd) {
+          const available = (yield* commands.list()).map((c) => c.name)
+          const hint = available.length ? ` Available commands: ${available.join(", ")}` : ""
+          const error = new NamedError.Unknown({ message: `Command not found: "${input.command}".${hint}` })
+          yield* bus.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
+          throw error
+        }
+        const agentName = cmd.agent ?? input.agent ?? (yield* agents.defaultAgent())
+
+        const raw = input.arguments.match(argsRegex) ?? []
+        const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
+        const templateCommand = yield* Effect.promise(() => Promise.resolve(cmd.template))
+
+        const placeholders = templateCommand.match(placeholderRegex) ?? []
+        let last = 0
+        for (const item of placeholders) {
+          const value = Number(item.slice(1))
+          if (value > last) last = value
+        }
+
+        const withArgs = templateCommand.replaceAll(placeholderRegex, (_, index) => {
+          const position = Number(index)
+          const argIndex = position - 1
+          if (argIndex >= args.length) return ""
+          if (position === last) return args.slice(argIndex).join(" ")
+          return args[argIndex]
+        })
+        const usesArgumentsPlaceholder = templateCommand.includes("$ARGUMENTS")
+        let template = withArgs.replaceAll("$ARGUMENTS", input.arguments)
+
+        if (placeholders.length === 0 && !usesArgumentsPlaceholder && input.arguments.trim()) {
+          template = template + "\n\n" + input.arguments
+        }
+
+        const shellMatches = ConfigMarkdown.shell(template)
+        if (shellMatches.length > 0) {
+          const sh = Shell.preferred()
+          const results = yield* Effect.promise(() =>
+            Promise.all(shellMatches.map(async ([, cmd]) => (await Process.text([cmd], { shell: sh, nothrow: true })).text)),
+          )
+          let index = 0
+          template = template.replace(bashRegex, () => results[index++])
+        }
+        template = template.trim()
+
+        const taskModel = yield* Effect.promise(async () => {
+          if (cmd.model) return Provider.parseModel(cmd.model)
+          if (cmd.agent) {
+            const cmdAgent = await Agent.get(cmd.agent)
+            if (cmdAgent?.model) return cmdAgent.model
+          }
+          if (input.model) return Provider.parseModel(input.model)
+          return await lastModelImpl(input.sessionID)
+        })
+
+        yield* Effect.promise(() =>
+          Provider.getModel(taskModel.providerID, taskModel.modelID).catch((e) => {
+            if (Provider.ModelNotFoundError.isInstance(e)) {
+              const hint = e.data.suggestions?.length ? ` Did you mean: ${e.data.suggestions.join(", ")}?` : ""
+              Bus.publish(Session.Event.Error, {
+                sessionID: input.sessionID,
+                error: new NamedError.Unknown({ message: `Model not found: ${e.data.providerID}/${e.data.modelID}.${hint}` }).toObject(),
+              })
+            }
+            throw e
+          }),
+        )
+
+        const agent = yield* agents.get(agentName)
+        if (!agent) {
+          const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
+          const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
+          const error = new NamedError.Unknown({ message: `Agent not found: "${agentName}".${hint}` })
+          yield* bus.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
+          throw error
+        }
+
+        const templateParts = yield* resolvePromptParts(template)
+        const isSubtask = (agent.mode === "subagent" && cmd.subtask !== false) || cmd.subtask === true
+        const parts = isSubtask
+          ? [
+              {
+                type: "subtask" as const,
+                agent: agent.name,
+                description: cmd.description ?? "",
+                command: input.command,
+                model: { providerID: taskModel.providerID, modelID: taskModel.modelID },
+                prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
+              },
+            ]
+          : [...templateParts, ...(input.parts ?? [])]
+
+        const userAgent = isSubtask ? (input.agent ?? (yield* agents.defaultAgent())) : agentName
+        const userModel = isSubtask
+          ? input.model
+            ? Provider.parseModel(input.model)
+            : yield* Effect.promise(() => lastModelImpl(input.sessionID))
+          : taskModel
+
+        yield* plugin.trigger(
+          "command.execute.before",
+          { command: input.command, sessionID: input.sessionID, arguments: input.arguments },
+          { parts },
+        )
+
+        const result = yield* prompt({
+          sessionID: input.sessionID,
+          messageID: input.messageID,
+          model: userModel,
+          agent: userAgent,
+          parts,
+          variant: input.variant,
+        })
         yield* bus.publish(Command.Event.Executed, {
           name: input.command,
           sessionID: input.sessionID,
@@ -556,6 +670,7 @@ export namespace SessionPrompt {
         Layer.provide(SessionStatus.layer),
         Layer.provide(SessionCompaction.defaultLayer),
         Layer.provide(SessionProcessor.defaultLayer),
+        Layer.provide(Command.defaultLayer),
         Layer.provide(AppFileSystem.defaultLayer),
         Layer.provide(Plugin.defaultLayer),
         Layer.provide(Session.defaultLayer),
