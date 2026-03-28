@@ -1,0 +1,184 @@
+name: Auto-merge and Release
+
+# Permanent replacement for GitHub's built-in auto-merge.
+#
+# WHY: GitHub's enablePullRequestAutoMerge (GraphQL) uses GITHUB_TOKEN to
+# merge PRs. When GITHUB_TOKEN merges a PR:
+#   - push event does NOT fire (documented GitHub limitation)
+#   - pull_request_target: closed webhook is silently dropped (GitHub bug)
+# This caused CD to never trigger after auto-merged PRs.
+#
+# HOW THIS FIXES IT:
+#   1. workflow_run fires INSIDE GitHub Actions infrastructure — reliable,
+#      never subject to external webhook delivery failures.
+#   2. After merging, we fire repository_dispatch. Unlike push events,
+#      repository_dispatch created by GITHUB_TOKEN DOES trigger other
+#      workflows (not affected by the GITHUB_TOKEN event restriction).
+#   3. CD listens to repository_dispatch: types: [cd-release] and releases.
+#
+# FORK LIMITATION: workflow_run.pull_requests is empty for PRs from forks.
+# This repo is internal-only (no fork PRs expected), so silent skip is fine.
+# If fork support is ever needed, switch to pull_request_target: closed with
+# a PAT token to avoid the GITHUB_TOKEN webhook suppression bug.
+#
+# RESULT: PR open → CI passes → this workflow fires (reliable) →
+#         merge → repository_dispatch → CD (reliable) → release.
+
+on:
+  workflow_run:
+    workflows: [CI, test]
+    types: [completed]
+  # Manual escape hatch: re-trigger merge+CD for a PR without re-running CI.
+  # Use when auto-merge fires but the dispatch step fails silently.
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR number to merge and release
+        required: true
+        type: number
+
+concurrency:
+  group: auto-merge-${{ github.event.workflow_run.head_sha || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  merge-and-trigger-cd:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    # For workflow_run: only proceed for successful runs on PRs targeting main.
+    # For workflow_dispatch: always proceed (manual override).
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'pull_request')
+    steps:
+      - name: Find PR targeting main
+        id: find_pr
+        uses: actions/github-script@v8
+        with:
+          script: |
+            // Manual override: use the input PR number directly
+            if (context.eventName === 'workflow_dispatch') {
+              const prNum = context.payload.inputs.pr_number;
+              console.log(`Manual dispatch: using PR #${prNum}`);
+              core.setOutput('pr_number', String(prNum));
+              // Fetch the head SHA for this PR
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: Number(prNum),
+              });
+              core.setOutput('head_sha', pr.head.sha);
+              return;
+            }
+
+            // workflow_run: extract PR from event payload.
+            // NOTE: pull_requests array is empty for fork PRs — silent skip
+            // is intentional (this repo is internal, forks not expected).
+            const prs = context.payload.workflow_run.pull_requests || [];
+            const pr = prs.find(p => p.base.ref === 'main');
+            if (!pr) {
+              console.log('No PR targeting main found (or fork PR) — skipping.');
+              core.setOutput('pr_number', '');
+              return;
+            }
+            console.log(`Found PR #${pr.number} targeting main`);
+            core.setOutput('pr_number', String(pr.number));
+            core.setOutput('head_sha', context.payload.workflow_run.head_sha);
+
+      - name: Check all required checks are passing
+        id: check_all
+        if: steps.find_pr.outputs.pr_number != ''
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const sha = '${{ steps.find_pr.outputs.head_sha }}';
+            const { data } = await github.rest.checks.listForRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: sha,
+              per_page: 100,
+            });
+
+            // Filter to GitHub Actions checks only (app ID 15368).
+            // checks.listForRef can return stale runs from old check suites
+            // (e.g. re-runs, cancelled runs) — filtering by app ID ensures
+            // we only evaluate the current, authoritative check results.
+            const GITHUB_ACTIONS_APP_ID = 15368;
+            const runs = data.check_runs.filter(r => r.app?.id === GITHUB_ACTIONS_APP_ID);
+            console.log(`Found ${runs.length} GitHub Actions check runs for ${sha}`);
+
+            // If any check is still in progress, bail — the other
+            // workflow_run event will handle it once all are done.
+            const pending = runs.filter(r => r.status !== 'completed');
+            if (pending.length > 0) {
+              console.log(`Checks still pending: ${pending.map(r => r.name).join(', ')}`);
+              console.log('Waiting for remaining checks — another workflow_run will fire.');
+              core.setOutput('ready', 'false');
+              return;
+            }
+
+            // All completed — check none failed
+            const failed = runs.filter(r =>
+              r.conclusion !== 'success' && r.conclusion !== 'skipped' && r.conclusion !== 'neutral'
+            );
+            if (failed.length > 0) {
+              console.log(`Failed checks: ${failed.map(r => `${r.name} (${r.conclusion})`).join(', ')}`);
+              core.setOutput('ready', 'false');
+              return;
+            }
+
+            console.log(`All ${runs.length} checks passed.`);
+            core.setOutput('ready', 'true');
+
+      - name: Check PR is still open (not already merged)
+        id: check_open
+        if: steps.find_pr.outputs.pr_number != '' && steps.check_all.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          STATE=$(gh pr view ${{ steps.find_pr.outputs.pr_number }} \
+            --repo ${{ github.repository }} \
+            --json state --jq .state)
+          echo "PR state: $STATE"
+          if [[ "$STATE" != "OPEN" ]]; then
+            echo "PR is not open (state=$STATE) — already merged or closed. Skipping."
+            echo "is_open=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_open=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Merge PR
+        id: merge
+        if: |
+          steps.find_pr.outputs.pr_number != '' &&
+          steps.check_all.outputs.ready == 'true' &&
+          steps.check_open.outputs.is_open == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr merge ${{ steps.find_pr.outputs.pr_number }} \
+            --merge \
+            --repo ${{ github.repository }}
+          echo "merged=true" >> "$GITHUB_OUTPUT"
+          echo "PR #${{ steps.find_pr.outputs.pr_number }} merged."
+
+      - name: Dispatch CD release
+        if: steps.merge.outputs.merged == 'true'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            // repository_dispatch from GITHUB_TOKEN reliably triggers
+            // other workflows — unlike push events which are suppressed.
+            await github.rest.repos.createDispatchEvent({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              event_type: 'cd-release',
+              client_payload: {
+                pr_number: ${{ steps.find_pr.outputs.pr_number || 0 }},
+                triggered_by: context.eventName === 'workflow_dispatch' ? 'manual' : 'auto-merge'
+              }
+            });
+            console.log('Dispatched cd-release event → CD will now create a release.');
