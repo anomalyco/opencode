@@ -12,7 +12,9 @@ import {
   Switch,
   useContext,
 } from "solid-js"
+import { produce } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
+import { Binary } from "@opencode-ai/util/binary"
 import path from "path"
 import { useRoute, useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
@@ -488,7 +490,18 @@ export function Session() {
           .unshare({
             sessionID: route.sessionID,
           })
-          .then(() => toast.show({ message: "Session unshared successfully", variant: "success" }))
+          .then((res) => {
+            toast.show({ message: "Session unshared successfully", variant: "success" })
+            if (res.data) {
+              sync.set(
+                produce((draft) => {
+                  const match = Binary.search(draft.session, route.sessionID, (s) => s.id)
+                  if (match.found) draft.session[match.index] = res.data!
+                  if (!match.found) draft.session.splice(match.index, 0, res.data!)
+                }),
+              )
+            }
+          })
           .catch((error) => {
             toast.show({
               message: error instanceof Error ? error.message : "Failed to unshare session",

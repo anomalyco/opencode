@@ -9,6 +9,7 @@ import { MessageV2 } from "@/session/message-v2"
 import { Database, eq } from "@/storage/db"
 import { SessionShareTable } from "./share.sql"
 import { Log } from "@/util/log"
+import { SyncEvent } from "@/sync"
 import type * as SDK from "@opencode-ai/sdk/v2"
 
 export namespace ShareNext {
@@ -230,7 +231,11 @@ export namespace ShareNext {
     if (disabled) return
     log.info("removing share", { sessionID })
     const share = get(sessionID)
-    if (!share) return
+    if (!share) {
+      // For imported sessions, emit event to clear local share_url without calling API
+      SyncEvent.run(Session.Event.Updated, { sessionID, info: { share: { url: null } } })
+      return
+    }
 
     const req = await request()
     const response = await fetch(`${req.baseUrl}${req.api.remove(share.id)}`, {
