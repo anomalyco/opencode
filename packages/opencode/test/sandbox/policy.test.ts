@@ -29,6 +29,18 @@ describe("sandbox.policy", () => {
     expect(out.deny).toContain("/tmp/blocked")
   })
 
+  test("includes /opt/homebrew in default read roots without extra config", () => {
+    const out = SandboxPolicy.build({
+      cwd: "/tmp/project",
+      project_root: "/tmp/project",
+      worktree_root: "/tmp/project",
+      home: "/Users/tester",
+    })
+
+    expect(out.read).toContain("/opt/homebrew")
+    expect(out.profile).toContain('(subpath "/opt/homebrew")')
+  })
+
   test("adds network and unix socket rules only when requested", () => {
     const out = SandboxPolicy.build({
       cwd: "/tmp/project",

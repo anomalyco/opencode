@@ -25,7 +25,18 @@ export namespace SandboxPolicy {
     deny: string[]
   }
 
-  const read = ["/bin", "/sbin", "/usr", "/System", "/Library", "/dev", "/tmp", "/private/tmp", "/private/etc"]
+  const read = [
+    "/bin",
+    "/sbin",
+    "/usr",
+    "/opt/homebrew",
+    "/System",
+    "/Library",
+    "/dev",
+    "/tmp",
+    "/private/tmp",
+    "/private/etc",
+  ]
   const temp = ["/tmp", "/private/tmp"]
   const secret = [".ssh", ".gnupg", ".aws", ".azure", path.join(".config", "gcloud"), ".netrc", ".npmrc"]
 

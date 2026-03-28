@@ -23,11 +23,8 @@ OpenCode can optionally sandbox certain command execution paths on macOS using `
 | **Bash tool** (agent-issued non-interactive commands)       | Yes             | Yes (pre-spawn)        | Yes (`bash:unsandboxed` permission) |
 | **Session command path** (user-initiated command execution) | Yes             | Yes (pre-spawn)        | Yes (`bash:unsandboxed` permission) |
 | **PTY interactive sessions**                                | Yes             | Initial spawn only     | No                                  |
-| **LSP server launches**                                     | Yes             | No                     | No                                  |
 
 PTY sessions apply the sandbox profile to the initial process spawn and check `excluded_commands` before spawning. In-band command filtering inside a running PTY session is **not** performed — once a PTY shell is running, commands typed into it are not individually inspected or blocked.
-
-LSP servers are always launched with `read-only` mode and network denied, regardless of the active preset. This is hardcoded in `lsp/launch.ts` and cannot be overridden by configuration.
 
 #### Presets
 
@@ -63,17 +60,17 @@ All options live under `experimental.sandbox` in `opencode.json`:
 - **`protected_roots`** — overrides the preset list of write-protected workspace-relative paths (defaults to `.git` and `.opencode`).
 - **`extra_read_roots`** — additional absolute paths the sandbox allows reading.
 - **`extra_write_roots`** — additional absolute paths the sandbox allows writing.
-- **`excluded_commands`** — a pre-spawn deny list of command prefixes. Matched commands are blocked before execution on all covered surfaces except LSP launches.
+- **`excluded_commands`** — a pre-spawn deny list of command prefixes. Matched commands are blocked before execution on all covered surfaces.
 - **`fail_if_unavailable`** — when `true`, hard-fails activation if sandboxing is enabled but `sandbox-exec` is missing or the platform is unsupported.
 - **`extra_deny_paths`** — extends the default set of denied paths (secrets directories like `.ssh`, `.gnupg`, `.aws`, etc.).
-- **`allow_unsandboxed_retry`** — when `true`, adds a distinct `bash:unsandboxed` permission-gated retry for the bash tool and session command path only. If a sandboxed command fails due to a sandbox denial, the user is prompted to allow an unsandboxed re-execution. PTY sessions and LSP launches do **not** support unsandboxed retry.
+- **`allow_unsandboxed_retry`** — when `true`, adds a distinct `bash:unsandboxed` permission-gated retry for the bash tool and session command path only. If a sandboxed command fails due to a sandbox denial, the user is prompted to allow an unsandboxed re-execution. PTY sessions do **not** support unsandboxed retry.
 
 #### Not covered
 
 The following are explicitly **not** sandboxed:
 
 - MCP server processes (local stdio servers and SSE connections)
-- Internal spawn utilities (`util/process.ts`, `cross-spawn-spawner.ts`) not routed through the four surfaces above
+- Internal spawn utilities (`util/process.ts`, `cross-spawn-spawner.ts`) not routed through the three surfaces above
 - Domain/proxy-mediated network controls
 - All non-macOS platforms (Linux, Windows, etc.)
 
