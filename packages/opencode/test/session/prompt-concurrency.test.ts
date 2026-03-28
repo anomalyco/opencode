@@ -160,8 +160,7 @@ describe("session.prompt concurrency", () => {
       directory: tmp.path,
       fn: async () => {
         const session = await Session.create({})
-        // Don't seed an assistant message — loop will try to call Provider.getModel
-        // and hang. We cancel before it can fail.
+        // Seed only a user message — loop must call getModel to proceed
         const userMsg: MessageV2.Info = {
           id: MessageID.ascending(),
           role: "user",
@@ -178,20 +177,57 @@ describe("session.prompt concurrency", () => {
           type: "text",
           text: "hello",
         })
+        // Also seed an assistant message so lastAssistant() fallback can find it
+        const assistantMsg: MessageV2.Info = {
+          id: MessageID.ascending(),
+          role: "assistant",
+          parentID: userMsg.id,
+          sessionID: session.id,
+          mode: "build",
+          agent: "build",
+          cost: 0,
+          path: { cwd: "/tmp", root: "/tmp" },
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          modelID: "gpt-5.2" as any,
+          providerID: "openai" as any,
+          time: { created: Date.now() },
+        }
+        await Session.updateMessage(assistantMsg)
+        await Session.updatePart({
+          id: PartID.ascending(),
+          messageID: assistantMsg.id,
+          sessionID: session.id,
+          type: "text",
+          text: "hi there",
+        })
 
-        // Start loop — it will try to get model and either fail or hang
-        const loopPromise = SessionPrompt.loop({ sessionID: session.id }).catch(() => undefined)
+        const ready = deferred()
+        const gate = deferred()
+        const getModel = spyOn(Provider, "getModel").mockImplementation(async () => {
+          ready.resolve()
+          await gate.promise
+          throw new Error("test stop")
+        })
 
-        // Give it a tick to start
-        await new Promise((r) => setTimeout(r, 10))
+        try {
+          // Start loop — it will block in getModel (assistant has no finish, so loop continues)
+          const loopPromise = SessionPrompt.loop({ sessionID: session.id })
 
-        await SessionPrompt.cancel(session.id)
+          await ready.promise
 
-        const status = await SessionStatus.get(session.id)
-        expect(status.type).toBe("idle")
+          await SessionPrompt.cancel(session.id)
 
-        // Wait for the loop to settle
-        await loopPromise
+          const status = await SessionStatus.get(session.id)
+          expect(status.type).toBe("idle")
+
+          // loop should resolve cleanly, not throw "All fibers interrupted"
+          const result = await loopPromise
+          expect(result.info.role).toBe("assistant")
+          expect(result.info.id).toBe(assistantMsg.id)
+        } finally {
+          gate.resolve()
+          getModel.mockRestore()
+        }
       },
     })
   }, 10000)
