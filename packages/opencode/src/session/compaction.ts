@@ -213,6 +213,7 @@ export namespace SessionCompaction {
           model,
           abort: input.abort,
         })
+        // Allow plugins to inject context or replace compaction prompt.
         const compacting = yield* plugin.trigger(
           "experimental.session.compacting",
           { sessionID: input.sessionID },

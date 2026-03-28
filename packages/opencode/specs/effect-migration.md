@@ -59,10 +59,9 @@ Rules:
 
 - Keep everything in one namespace, one file — no separate `service.ts` / `index.ts` split
 - `runPromise` goes inside the namespace (not exported unless tests need it)
-- Public async facades are usually plain `async function`; use `fn(...)` when the facade also needs validation
+- Facade functions are plain `async function` — no `fn()` wrappers
 - Use `Effect.fn("Namespace.method")` for all Effect functions (for tracing)
 - No `Layer.fresh` — InstanceState handles per-directory isolation
-- Inside another Effect service, depend on `Foo.Service` directly instead of calling `Foo.get()`-style async facades
 
 ## Schema → Zod interop
 
@@ -165,20 +164,6 @@ Prefer these first:
 - `Config` for effect-native configuration reads
 - `Clock` / `DateTime` for time reads inside effects
 
-## Use collaborators directly
-
-Inside an effectified service, prefer another service's `Service` + `layer` over its exported async facade.
-
-- In the layer, `yield* Foo.Service` and provide `Foo.layer` or `Foo.defaultLayer`
-- Inside Effect code, call `yield* foo.method(...)`
-- Do not call `Foo.method(...)` when that function is the `runPromise` async facade
-- Keep the async facade for non-Effect callers and legacy boundaries
-
-```ts
-const foo = yield * Foo.Service
-const item = yield * foo.get(id)
-```
-
 ## Child processes
 
 For child process work in services, yield `ChildProcessSpawner.ChildProcessSpawner` in the layer and use `ChildProcess.make(...)`.
@@ -227,8 +212,8 @@ Fully migrated (single namespace, InstanceState where needed, flattened facade):
 
 Still open and likely worth migrating:
 
-- [x] `Session`
+- [ ] `Session`
 - [ ] `SessionProcessor`
 - [ ] `SessionPrompt`
-- [x] `SessionCompaction`
+- [ ] `SessionCompaction`
 - [ ] `Provider`
