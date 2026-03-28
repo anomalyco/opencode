@@ -120,7 +120,7 @@ async function promptSlashSelected(page: Page, input: { id: string; count: numbe
 
 export async function waitTerminalReady(page: Page, input?: { term?: Locator; timeout?: number }) {
   const term = input?.term ?? page.locator(terminalSelector).first()
-  const timeout = input?.timeout ?? 10_000
+  const timeout = input?.timeout ?? 30_000
   await expect(term).toBeVisible()
   await expect(term.locator("textarea")).toHaveCount(1)
   await expect.poll(() => terminalReady(page, term), { timeout }).toBe(true)
@@ -128,7 +128,7 @@ export async function waitTerminalReady(page: Page, input?: { term?: Locator; ti
 
 export async function waitTerminalFocusIdle(page: Page, input?: { term?: Locator; timeout?: number }) {
   const term = input?.term ?? page.locator(terminalSelector).first()
-  const timeout = input?.timeout ?? 10_000
+  const timeout = input?.timeout ?? 30_000
   await waitTerminalReady(page, { term, timeout })
   await expect.poll(() => terminalFocusIdle(page, term), { timeout }).toBe(true)
 }

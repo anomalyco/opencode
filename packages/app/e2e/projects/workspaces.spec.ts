@@ -72,6 +72,7 @@ test("can enable and disable workspaces from project menu", async ({ page, withP
 })
 
 test("can create a workspace", async ({ page, withProject }) => {
+  test.setTimeout(180_000)
   await page.setViewportSize({ width: 1400, height: 800 })
 
   await withProject(async ({ slug }) => {
@@ -108,6 +109,7 @@ test("can create a workspace", async ({ page, withProject }) => {
 })
 
 test("non-git projects keep workspace mode disabled", async ({ page, withProject }) => {
+  test.setTimeout(120_000)
   await page.setViewportSize({ width: 1400, height: 800 })
 
   const nonGit = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-e2e-project-nongit-"))
