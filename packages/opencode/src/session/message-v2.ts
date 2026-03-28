@@ -850,44 +850,19 @@ function hydrate(rows: (typeof MessageTable.$inferSelect)[]) {
             ...(differentModel ? {} : { providerMetadata: part.metadata }),
           })
         }
-        if (part.type === "step-start")
-          assistantMessage.parts.push({
-            type: "step-start",
-          })
-        if (part.type === "tool") {
-          toolNames.add(part.tool)
-          if (part.state.status === "completed") {
-            const outputText = part.state.time.compacted
-              ? "[Old tool result content cleared]"
-              : truncateToolOutput(part.state.output, options?.toolOutputMaxChars)
-            const attachments = part.state.time.compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
-
-            // For providers that don't support media in tool results, extract media files
-            // (images, PDFs) to be sent as a separate user message
-            const mediaAttachments = attachments.filter((a) => isMedia(a.mime))
-            const extractedMedia = mediaAttachments.filter((a) => !supportsMediaInToolResult(a))
-            if (extractedMedia.length > 0) {
-              media.push(...extractedMedia)
-            }
-            const finalAttachments = attachments.filter((a) => !isMedia(a.mime) || supportsMediaInToolResult(a))
-
-            const output =
-              finalAttachments.length > 0
-                ? {
-                    text: outputText,
-                    attachments: finalAttachments,
-                  }
-                : outputText
-
-            assistantMessage.parts.push({
-              type: ("tool-" + part.tool) as `tool-${string}`,
-              state: "output-available",
-              toolCallId: part.callID,
-              input: part.state.input,
-              output,
-              ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
-              ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
-            })
+        const assistantMessage: UIMessage = {
+          id: msg.info.id,
+          role: "assistant",
+          parts: [],
+        }
+        for (const part of msg.parts) {
+          if (part.type === "text")
+            if (part.text !== "")
+              assistantMessage.parts.push({
+                type: "text",
+                text: part.text,
+                ...(differentModel ? {} : { providerMetadata: part.metadata }),
+              })
           if (part.type === "step-start")
             assistantMessage.parts.push({
               type: "step-start",
@@ -937,18 +912,14 @@ function hydrate(rows: (typeof MessageTable.$inferSelect)[]) {
               })
             }
           }
-          // Handle pending/running tool calls to prevent dangling tool_use blocks
-          // Anthropic/Claude APIs require every tool_use to have a corresponding tool_result
-          if (part.state.status === "pending" || part.state.status === "running")
-            assistantMessage.parts.push({
-              type: ("tool-" + part.tool) as `tool-${string}`,
-              state: "output-error",
-              toolCallId: part.callID,
-              input: part.state.input,
-              errorText: "[Tool execution was interrupted]",
-              ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
-              ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
-            })
+          if (part.type === "reasoning") {
+            if (part.text !== "")
+              assistantMessage.parts.push({
+                type: "reasoning",
+                text: part.text,
+                ...(differentModel ? {} : { providerMetadata: part.metadata }),
+              })
+          }
         }
         if (assistantMessage.parts.length > 0) {
           result.push(assistantMessage)
