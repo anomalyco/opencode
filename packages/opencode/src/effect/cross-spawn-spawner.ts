@@ -331,12 +331,12 @@ export const make = Effect.gen(function* () {
         proc: NodeChildProcess.ChildProcess,
         signal: NodeJS.Signals,
       ) => Effect.Effect<A, E, R>,
-    ) => {
+    ): Effect.Effect<A, E, R> => {
       const signal = opts?.killSignal ?? "SIGTERM"
       if (Predicate.isUndefined(opts?.forceKillAfter)) return f(command, proc, signal)
       return Effect.timeoutOrElse(f(command, proc, signal), {
         duration: opts.forceKillAfter,
-        orElse: () => f(command, proc, "SIGKILL"),
+        onTimeout: (): Effect.Effect<A, E, R> => f(command, proc, "SIGKILL"),
       })
     }
 
@@ -387,7 +387,10 @@ export const make = Effect.gen(function* () {
                 return yield* Effect.void
               }
               return yield* kill((command, proc, signal) =>
-                Effect.catch(killGroup(command, proc, signal), () => killOne(command, proc, signal)),
+                Effect.catch(
+                  killGroup(command, proc, signal),
+                  (): Effect.Effect<void, PlatformError.PlatformError, never> => killOne(command, proc, signal),
+                ),
               ).pipe(Effect.andThen(Deferred.await(signal)), Effect.ignore)
             }),
           )
@@ -419,7 +422,10 @@ export const make = Effect.gen(function* () {
                 command,
                 opts,
               )((command, proc, signal) =>
-                Effect.catch(killGroup(command, proc, signal), () => killOne(command, proc, signal)),
+                Effect.catch(
+                  killGroup(command, proc, signal),
+                  (): Effect.Effect<void, PlatformError.PlatformError, never> => killOne(command, proc, signal),
+                ),
               ).pipe(Effect.andThen(Deferred.await(signal)), Effect.asVoid),
           })
         }
