@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { ConfigInvalidError, ProviderModelNotFoundError } from "./server-errors"
-import { formatServerError, parseReadableConfigInvalidError } from "./server-errors"
+import { formatServerError, parseReadableConfigInvalidError, permissionNotice } from "./server-errors"
 
 function fill(text: string, vars?: Record<string, string | number>) {
   if (!vars) return text
@@ -19,6 +19,8 @@ function useLanguageMock() {
     "error.chain.modelNotFound": "Modelo nao encontrado: {{provider}}/{{model}}",
     "error.chain.didYouMean": "Voce quis dizer: {{suggestions}}",
     "error.chain.checkConfig": "Revise provider/model no config",
+    "error.permission.fileProtected": "Diretorio protegido pelo sistema e indisponivel para leitura",
+    "error.permission.sessionProtected": "Diretorio protegido pelo sistema e indisponivel para carregar sessoes",
   }
   return {
     t(key: string, vars?: Record<string, string | number>) {
@@ -126,6 +128,18 @@ describe("formatServerError", () => {
 
     expect(formatServerError(error, language.t)).toBe(
       ["Modelo nao encontrado: x/y", "Voce quis dizer: x/y2, x/y3", "Revise provider/model no config"].join("\n"),
+    )
+  })
+
+  test("detects file permission errors", () => {
+    expect(permissionNotice(new Error("EPERM: operation not permitted"), language.t)).toBe(
+      "Diretorio protegido pelo sistema e indisponivel para leitura",
+    )
+  })
+
+  test("detects session permission errors", () => {
+    expect(permissionNotice("permission denied", language.t, "session")).toBe(
+      "Diretorio protegido pelo sistema e indisponivel para carregar sessoes",
     )
   })
 })

@@ -251,6 +251,7 @@ const WorkspaceSessionList = (props: {
   ctx: WorkspaceSidebarContext
   showNew: Accessor<boolean>
   loading: Accessor<boolean>
+  issue: Accessor<string | undefined>
   sessions: Accessor<Session[]>
   hasMore: Accessor<boolean>
   loadMore: () => Promise<void>
@@ -281,6 +282,9 @@ const WorkspaceSessionList = (props: {
             {props.language.t("common.loading.ellipsis")}
           </span>
         </div>
+      </Show>
+      <Show when={!props.loading() && props.issue()}>
+        {(value) => <div class="px-2 py-1 text-14-regular text-text-weak">{value()}</div>}
       </Show>
       <For each={props.sessions()}>
         {(session) => {
@@ -475,6 +479,7 @@ export const SortableWorkspace = (props: {
             ctx={props.ctx}
             showNew={showNew}
             loading={loading}
+            issue={() => workspaceStore.session_error}
             sessions={sessions}
             hasMore={hasMore}
             loadMore={loadMore}
@@ -539,6 +544,7 @@ export const LocalWorkspace = (props: {
         ctx={props.ctx}
         showNew={() => false}
         loading={loading}
+        issue={() => workspace().store.session_error}
         sessions={sessions}
         hasMore={hasMore}
         loadMore={loadMore}

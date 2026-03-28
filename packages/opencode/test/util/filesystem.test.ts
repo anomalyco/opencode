@@ -529,7 +529,7 @@ describe("filesystem", () => {
     })
 
     // Windows: chmod(0o000) is a no-op, so EACCES cannot be triggered
-    test("throws EACCES on permission-denied symlink target", async () => {
+    test("returns unresolved path on permission-denied symlink target", async () => {
       if (process.platform === "win32") return
       if (process.getuid?.() === 0) return // skip when running as root
       await using tmp = await tmpdir()
@@ -537,9 +537,10 @@ describe("filesystem", () => {
       await fs.mkdir(dir)
       const link = path.join(tmp.path, "link")
       await fs.symlink(dir, link)
+      const child = path.join(link, "child")
       await fs.chmod(dir, 0o000)
       try {
-        expect(() => Filesystem.resolve(path.join(link, "child"))).toThrow()
+        expect(Filesystem.resolve(child)).toBe(Filesystem.normalizePath(path.resolve(child)))
       } finally {
         await fs.chmod(dir, 0o755)
       }

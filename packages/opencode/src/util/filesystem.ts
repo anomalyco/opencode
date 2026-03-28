@@ -8,6 +8,12 @@ import { pipeline } from "stream/promises"
 import { Glob } from "./glob"
 
 export namespace Filesystem {
+  function ignorable(e: unknown) {
+    if (!e || typeof e !== "object" || !("code" in e)) return false
+    const code = (e as { code?: string }).code
+    return code === "ENOENT" || code === "EACCES" || code === "EPERM"
+  }
+
   // Fast sync version for metadata checks
   export async function exists(p: string): Promise<boolean> {
     return existsSync(p)
@@ -121,7 +127,7 @@ export namespace Filesystem {
     try {
       return normalizePath(realpathSync(resolved))
     } catch (e) {
-      if (isEnoent(e)) return normalizePath(resolved)
+      if (isEnoent(e) || ignorable(e)) return normalizePath(resolved)
       throw e
     }
   }

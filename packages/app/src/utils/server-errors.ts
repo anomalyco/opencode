@@ -43,6 +43,32 @@ export function formatServerError(error: unknown, translate?: Translator, fallba
   return tr(translate, "error.chain.unknown", "Unknown error")
 }
 
+export function permissionNotice(error: unknown, translate?: Translator, kind: "file" | "session" = "file") {
+  const message =
+    nestedMessage(error) ?? (error instanceof Error ? error.message : typeof error === "string" ? error : "")
+  if (!message) return
+  const lower = message.toLowerCase()
+  const denied =
+    lower.includes("eperm") ||
+    lower.includes("eacces") ||
+    lower.includes("operation not permitted") ||
+    lower.includes("permission denied") ||
+    lower.includes("access denied")
+  if (!denied) return
+  if (kind === "session") {
+    return tr(
+      translate,
+      "error.permission.sessionProtected",
+      "This directory is protected by the system and its sessions cannot be loaded.",
+    )
+  }
+  return tr(
+    translate,
+    "error.permission.fileProtected",
+    "This directory is protected by the system and cannot be read.",
+  )
+}
+
 export function parseOpenclawError(error: unknown, translate?: Translator): OpenclawGuidance | undefined {
   const message =
     nestedMessage(error) ?? (error instanceof Error ? error.message : typeof error === "string" ? error : "")

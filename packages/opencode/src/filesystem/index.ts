@@ -7,6 +7,12 @@ import type { PlatformError } from "effect/PlatformError"
 import { Glob } from "../util/glob"
 
 export namespace AppFileSystem {
+  function ignorable(e: unknown) {
+    if (!e || typeof e !== "object" || !("code" in e)) return false
+    const code = (e as { code?: string }).code
+    return code === "ENOENT" || code === "EACCES" || code === "EPERM"
+  }
+
   export class FileSystemError extends Schema.TaggedErrorClass<FileSystemError>()("FileSystemError", {
     method: Schema.String,
     cause: Schema.optional(Schema.Defect),
@@ -171,7 +177,7 @@ export namespace AppFileSystem {
     try {
       return normalizePath(realpathSync(resolved))
     } catch (e: any) {
-      if (e?.code === "ENOENT") return normalizePath(resolved)
+      if (ignorable(e)) return normalizePath(resolved)
       throw e
     }
   }

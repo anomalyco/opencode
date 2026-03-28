@@ -27,6 +27,7 @@ import { FileTabContent } from "@/pages/session/file-tabs"
 import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type Sizing } from "@/pages/session/helpers"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { permissionNotice } from "@/utils/server-errors"
 
 export function SessionSidePanel(props: {
   canReview: () => boolean
@@ -103,6 +104,7 @@ export function SessionSidePanel(props: {
     if (!state?.loaded) return false
     return file.tree.children("").length === 0
   })
+  const issue = createMemo(() => permissionNotice(file.tree.state("")?.error, language.t, "file"))
   const openclaw = createMemo(() => server.current?.integration === "openclaw")
 
   const normalizeTab = (tab: string) => {
@@ -407,6 +409,7 @@ export function SessionSidePanel(props: {
                 <Tabs.Content value="all" class="bg-background-stronger px-3 py-0">
                   <Switch>
                     <Match when={openclaw()}>{empty(language.t("toast.file.listFailed.openclaw"))}</Match>
+                    <Match when={issue()}>{empty(issue()!)}</Match>
                     <Match when={nofiles()}>{empty(language.t("session.files.empty"))}</Match>
                     <Match when={true}>
                       <FileTree

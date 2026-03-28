@@ -310,6 +310,12 @@ export namespace File {
     return normalized.split("/").some((part) => part.startsWith(".") && part.length > 1)
   }
 
+  const denied = (e: unknown) => {
+    if (!e || typeof e !== "object" || !("code" in e)) return false
+    const code = (e as { code?: string }).code
+    return code === "EACCES" || code === "EPERM"
+  }
+
   const sortHiddenLast = (items: string[], prefer: boolean) => {
     if (prefer) return items
     const visible: string[] = []
@@ -626,8 +632,16 @@ export namespace File {
             throw new Error("Access denied: path escapes project directory")
           }
 
+          const entries = await fs.promises.readdir(resolved, { withFileTypes: true }).catch((err) => {
+            if (denied(err)) {
+              log.warn("list denied", { dir, resolved, err })
+              throw err
+            }
+            return [] as fs.Dirent[]
+          })
+
           const nodes: File.Node[] = []
-          for (const entry of await fs.promises.readdir(resolved, { withFileTypes: true }).catch(() => [])) {
+          for (const entry of entries) {
             if (exclude.includes(entry.name)) continue
             const absolute = path.join(resolved, entry.name)
             const file = path.relative(Instance.directory, absolute)

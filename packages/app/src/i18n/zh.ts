@@ -470,6 +470,8 @@ export const dict = {
   "toast.session.unshare.failed.description": "取消分享会话时发生错误",
   "toast.session.listFailed.title": "无法加载 {{project}} 的会话",
   "toast.session.listFailed.openclaw.title": "无法加载 OpenClaw 会话",
+  "error.permission.fileProtected": "本目录受系统保护，无法读取。",
+  "error.permission.sessionProtected": "本目录受系统保护，无法加载会话。",
   "toast.update.title": "有可用更新",
   "toast.update.description": "OpenCode 有新版本 ({{version}}) 可安装。",
   "toast.update.action.installRestart": "安装并重启",

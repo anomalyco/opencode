@@ -493,6 +493,8 @@ export const dict = {
   "toast.session.listFailed.title": "Failed to load sessions for {{project}}",
   "toast.session.listFailed.openclaw.title": "Failed to load OpenClaw sessions",
   "toast.project.reloadFailed.title": "Failed to reload {{project}}",
+  "error.permission.fileProtected": "This directory is protected by the system and cannot be read.",
+  "error.permission.sessionProtected": "This directory is protected by the system and its sessions cannot be loaded.",
 
   "toast.update.title": "Update available",
   "toast.update.description": "A new version of OpenCode ({{version}}) is now available to install.",
