@@ -34,25 +34,31 @@ export namespace LSPServer {
 
   const NearestRoot = (includePatterns: string[], excludePatterns?: string[]): RootFunction => {
     return async (file) => {
-      if (excludePatterns) {
-        const excludedFiles = Filesystem.up({
-          targets: excludePatterns,
-          start: path.dirname(file),
-          stop: Instance.directory,
-        })
-        const excluded = await excludedFiles.next()
-        await excludedFiles.return()
-        if (excluded.value) return undefined
+      let current = path.dirname(file)
+      const stop = Instance.directory
+
+      while (true) {
+        if (excludePatterns) {
+          for (const pattern of excludePatterns) {
+            if (await Filesystem.exists(path.join(current, pattern))) {
+              return undefined
+            }
+          }
+        }
+
+        for (const pattern of includePatterns) {
+          if (await Filesystem.exists(path.join(current, pattern))) {
+            return current
+          }
+        }
+
+        if (current === stop) break
+        const parent = path.dirname(current)
+        if (parent === current) break
+        current = parent
       }
-      const files = Filesystem.up({
-        targets: includePatterns,
-        start: path.dirname(file),
-        stop: Instance.directory,
-      })
-      const first = await files.next()
-      await files.return()
-      if (!first.value) return Instance.directory
-      return path.dirname(first.value)
+
+      return Instance.directory
     }
   }
 
