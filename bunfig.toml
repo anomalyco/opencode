@@ -1,6 +1,4 @@
-[install]
-exact = true
+preload = ["@opentui/solid/preload"]
 
 [test]
-root = "./do-not-run-tests-from-root"
-
+preload = ["@opentui/solid/preload"]

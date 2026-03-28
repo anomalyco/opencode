@@ -1,1 +1,0 @@
-ALTER TABLE `billing` DROP COLUMN `subscription_coupon_id`;

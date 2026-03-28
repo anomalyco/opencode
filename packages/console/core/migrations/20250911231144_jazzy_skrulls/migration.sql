@@ -1,1 +1,0 @@
-ALTER TABLE `usage` MODIFY COLUMN `provider` varchar(255) NOT NULL;
