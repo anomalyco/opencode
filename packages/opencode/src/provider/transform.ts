@@ -51,27 +51,26 @@ export namespace ProviderTransform {
     model: Provider.Model,
     options: Record<string, unknown>,
   ): ModelMessage[] {
-    // Anthropic rejects messages with empty content - filter out empty string messages
-    // and remove empty text/reasoning parts from array content
-    if (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/amazon-bedrock") {
-      msgs = msgs
-        .map((msg) => {
-          if (typeof msg.content === "string") {
-            if (msg.content === "") return undefined
-            return msg
+    msgs = msgs
+      .map((msg) => {
+        if (typeof msg.content === "string") {
+          if (!msg.content.trim()) return undefined
+          return msg
+        }
+        if (!Array.isArray(msg.content)) return msg
+        const filtered = msg.content.filter((part) => {
+          if (part.type === "text" || part.type === "reasoning") {
+            return part.text.trim() !== ""
           }
-          if (!Array.isArray(msg.content)) return msg
-          const filtered = msg.content.filter((part) => {
-            if (part.type === "text" || part.type === "reasoning") {
-              return part.text !== ""
-            }
-            return true
-          })
-          if (filtered.length === 0) return undefined
-          return { ...msg, content: filtered }
+          return true
         })
-        .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
-    }
+        if (filtered.length === 0) return undefined
+        return { ...msg, content: filtered }
+      })
+      .filter(
+        (msg): msg is ModelMessage =>
+          msg !== undefined && (typeof msg.content !== "string" || msg.content.trim() !== ""),
+      )
 
     if (model.api.id.includes("claude")) {
       const scrub = (id: string) => id.replace(/[^a-zA-Z0-9_-]/g, "_")
@@ -153,37 +152,39 @@ export namespace ProviderTransform {
 
     if (typeof model.capabilities.interleaved === "object" && model.capabilities.interleaved.field) {
       const field = model.capabilities.interleaved.field
-      return msgs.map((msg) => {
-        if (msg.role === "assistant" && Array.isArray(msg.content)) {
-          const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
-          const reasoningText = reasoningParts.map((part: any) => part.text).join("")
+      return msgs
+        .map((msg) => {
+          if (msg.role === "assistant" && Array.isArray(msg.content)) {
+            const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
+            const reasoningText = reasoningParts.map((part: any) => part.text).join("")
 
-          // Filter out reasoning parts from content
-          const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
+            const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
 
-          // Include reasoning_content | reasoning_details directly on the message for all assistant messages
-          if (reasoningText) {
+            if (filteredContent.length === 0) return undefined
+
+            if (reasoningText) {
+              return {
+                ...msg,
+                content: filteredContent,
+                providerOptions: {
+                  ...msg.providerOptions,
+                  openaiCompatible: {
+                    ...(msg.providerOptions as any)?.openaiCompatible,
+                    [field]: reasoningText,
+                  },
+                },
+              }
+            }
+
             return {
               ...msg,
               content: filteredContent,
-              providerOptions: {
-                ...msg.providerOptions,
-                openaiCompatible: {
-                  ...(msg.providerOptions as any)?.openaiCompatible,
-                  [field]: reasoningText,
-                },
-              },
             }
           }
 
-          return {
-            ...msg,
-            content: filteredContent,
-          }
-        }
-
-        return msg
-      })
+          return msg
+        })
+        .filter((msg): msg is ModelMessage => msg !== undefined)
     }
 
     return msgs

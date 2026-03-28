@@ -1194,7 +1194,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[1].content[0]).toEqual({ type: "text", text: "Answer" })
   })
 
-  test("does not filter for non-anthropic providers", () => {
+  test("filters empty content for non-anthropic providers too", () => {
     const openaiModel = {
       ...anthropicModel,
       providerID: "openai",
@@ -1215,9 +1215,153 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
 
     const result = ProviderTransform.message(msgs, openaiModel, {})
 
+    expect(result).toHaveLength(0)
+  })
+
+  test("filters empty content for openai-compatible providers (LiteLLM proxy)", () => {
+    const litellmModel = {
+      ...anthropicModel,
+      providerID: "litellm",
+      api: {
+        id: "litellm/claude-sonnet",
+        url: "https://litellm.example.com",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    }
+
+    const msgs = [
+      { role: "system", content: "" },
+      { role: "assistant", content: "" },
+      { role: "assistant", content: "hello" },
+      {
+        role: "assistant",
+        content: [{ type: "tool-call", toolCallId: "123", toolName: "test", args: {} }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, litellmModel, {})
+
     expect(result).toHaveLength(2)
-    expect(result[0].content).toBe("")
-    expect(result[1].content).toHaveLength(1)
+    expect(result[0].content).toBe("hello")
+    expect((result[1].content as any[])[0].type).toBe("tool-call")
+  })
+
+  test("filters whitespace-only string content", () => {
+    const litellmModel = {
+      ...anthropicModel,
+      providerID: "litellm",
+      api: {
+        id: "litellm/claude-sonnet",
+        url: "https://litellm.example.com",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    }
+
+    const msgs = [
+      { role: "assistant", content: " " },
+      { role: "assistant", content: "\n" },
+      { role: "assistant", content: "\t" },
+      { role: "assistant", content: "  \n\t  " },
+      { role: "assistant", content: "valid text" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, litellmModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toBe("valid text")
+  })
+
+  test("filters whitespace-only text parts in array content", () => {
+    const litellmModel = {
+      ...anthropicModel,
+      providerID: "litellm",
+      api: {
+        id: "litellm/claude-sonnet",
+        url: "https://litellm.example.com",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    }
+
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: " " },
+          { type: "text", text: "\n" },
+          { type: "text", text: "valid" },
+          { type: "reasoning", text: "  " },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, litellmModel, {})
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(1)
+    expect((result[0].content as any[])[0].type).toBe("text")
+    expect((result[0].content as any[])[0].text).toBe("valid")
+  })
+
+  test("drops message when all parts are whitespace-only", () => {
+    const litellmModel = {
+      ...anthropicModel,
+      providerID: "litellm",
+      api: {
+        id: "litellm/claude-sonnet",
+        url: "https://litellm.example.com",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    }
+
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: " " },
+          { type: "reasoning", text: "\n\t" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, litellmModel, {})
+
+    expect(result).toHaveLength(0)
+  })
+
+  test("drops reasoning-only message after interleaved filter strips reasoning", () => {
+    const interleavedModel = {
+      ...anthropicModel,
+      providerID: "custom-bedrock",
+      api: {
+        id: "zai.glm-4.7",
+        url: "https://bedrock-runtime.us-east-1.amazonaws.com",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      capabilities: {
+        ...anthropicModel.capabilities,
+        interleaved: { field: "reasoning_content" },
+      },
+    }
+
+    const msgs = [
+      { role: "user", content: "Hello" },
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Let me think..." },
+          { type: "reasoning", text: "Still thinking..." },
+        ],
+      },
+      { role: "assistant", content: [{ type: "text", text: "Answer" }] },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, interleavedModel, {})
+
+    // The reasoning-only message should be dropped after interleaved filter
+    // strips reasoning parts, not sent as content: []
+    expect(result).toHaveLength(2)
+    expect(result[0].content).toBe("Hello")
+    expect(result[1].content).toEqual([{ type: "text", text: "Answer" }])
   })
 })
 

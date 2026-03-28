@@ -702,7 +702,7 @@ export namespace MessageV2 {
           parts: [],
         }
         for (const part of msg.parts) {
-          if (part.type === "text")
+          if (part.type === "text" && part.text.trim())
             assistantMessage.parts.push({
               type: "text",
               text: part.text,
@@ -765,7 +765,7 @@ export namespace MessageV2 {
                 ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
               })
           }
-          if (part.type === "reasoning") {
+          if (part.type === "reasoning" && part.text.trim()) {
             assistantMessage.parts.push({
               type: "reasoning",
               text: part.text,

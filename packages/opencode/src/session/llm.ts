@@ -160,12 +160,14 @@ export namespace LLM {
       : isWorkflow
         ? input.messages
         : [
-            ...system.map(
-              (x): ModelMessage => ({
-                role: "system",
-                content: x,
-              }),
-            ),
+            ...system
+              .filter((x) => x !== "")
+              .map(
+                (x): ModelMessage => ({
+                  role: "system",
+                  content: x,
+                }),
+              ),
             ...input.messages,
           ]
 
