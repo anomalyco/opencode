@@ -477,7 +477,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       category: "Session",
       slash: {
         name: "new",
-        aliases: ["clear"],
       },
       onSelect: () => {
         const current = promptRef.current
@@ -492,6 +491,45 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         })
         dialog.clear()
       },
+    },
+    {
+      title: "Clear session",
+      value: "session.clear",
+      category: "Session",
+      slash: {
+        name: "clear",
+      },
+      onSelect: async () => {
+        try {
+        const choice = await DialogConfirm.show(
+          dialog,
+          "Clear Session",
+          "Are you sure you want to clear the current session? All messages with it's context will be deleted.This cannot be undone.",
+          "cancel",
+        )
+        if (choice !== true) return
+
+        
+        if (route.data.type !== "session") return
+        const sessionID=route.data.sessionID
+        const messages=await sdk.client.session.messages({sessionID})
+        if (!messages.data?.length) return
+        const results=await Promise.all(
+          messages.data.map((m) =>
+            sdk.client.session.deleteMessage({
+              sessionID,
+              messageID: m.info.id,
+            }).then(() => ({ok: true}))
+              .catch(()=>({ok: false}))
+          )
+        )
+        const success=results.filter(r=>r.ok).length
+        toast.show({variant:"info",message: `Cleared ${success} messages`,duration: 3000})
+        dialog.clear()
+      } finally{
+        dialog.clear()
+      }
+    },
     },
     {
       title: "Switch model",
