@@ -870,6 +870,7 @@ export function Prompt(props: PromptProps) {
           >
             <textarea
               placeholder={placeholderText()}
+              placeholderColor={theme.textMuted}
               textColor={keybind.leader ? theme.textMuted : theme.text}
               focusedTextColor={keybind.leader ? theme.textMuted : theme.text}
               minHeight={1}
