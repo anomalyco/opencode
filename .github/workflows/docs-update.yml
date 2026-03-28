@@ -43,7 +43,7 @@ jobs:
 
       - name: Run opencode
         if: steps.commits.outputs.has_commits == 'true'
-        uses: sst/opencode/github@latest
+        uses: sst/opencode/github@0cf0294787322664c6d668fa5ab0a9ce26796f78 # latest
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
         with:

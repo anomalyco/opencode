@@ -29,7 +29,7 @@ jobs:
           opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
           opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
-      - uses: mitchellh/vouch/action/manage-by-issue@main
+      - uses: mitchellh/vouch/action/manage-by-issue@0933dfd284080cb4b76c05a1887c2104f5876fda # main
         with:
           issue-id: ${{ github.event.issue.number }}
           comment-id: ${{ github.event.comment.id }}

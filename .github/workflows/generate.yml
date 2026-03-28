@@ -36,8 +36,8 @@ jobs:
           fi
           git add -A
           git commit -m "chore: generate" --allow-empty
-          git push origin HEAD:${{ github.ref_name }} --no-verify
-          # if ! git push origin HEAD:${{ github.event.pull_request.head.ref || github.ref_name }} --no-verify; then
+          git push origin HEAD:${REF_NAME} --no-verify
+          # if ! git push origin HEAD:${PR_HEAD_REF} --no-verify; then
           #   echo ""
           #   echo "============================================"
           #   echo "Failed to push generated code."
@@ -49,3 +49,7 @@ jobs:
           #   echo "============================================"
           #   exit 1
           # fi
+
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref || github.ref_name }}
