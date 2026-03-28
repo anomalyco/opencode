@@ -25,6 +25,8 @@ jobs:
   sync:
     name: sync upstream
     runs-on: ubuntu-latest
+    outputs:
+      synced: ${{ steps.push.outputs.synced || 'false' }}
     steps:
       - name: Checkout fork
         uses: actions/checkout@v4
@@ -171,9 +173,11 @@ jobs:
           fi
 
       - name: Push rebased dev
+        id: push
         if: steps.typecheck.outputs.result == 'pass'
         run: |
           git push origin $FORK_BRANCH --force-with-lease
+          echo "synced=true" >> "$GITHUB_OUTPUT"
           echo "✅ Pushed rebased dev to origin"
 
       - name: Close sync issue on success
@@ -288,3 +292,10 @@ jobs:
           echo "| Commit count valid | ${{ steps.verify_commits.outputs.valid || 'skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Tests | ${{ steps.tests.outputs.result || 'skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Typecheck | ${{ steps.typecheck.outputs.result || 'skipped' }} |" >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: publish fork release
+    needs: sync
+    if: needs.sync.outputs.synced == 'true'
+    uses: ./.github/workflows/publish-fork.yml
+    secrets: inherit
