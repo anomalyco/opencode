@@ -122,14 +122,14 @@ jobs:
           cat /tmp/release-notes.md
           echo "Next release: ${NEXT_TAG}"
 
-      - name: Create GitHub release
+      - name: Create GitHub release (draft)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "${{ steps.next_version.outputs.tag }}" \
             --title "CoBuilder ${{ steps.next_version.outputs.display }}" \
             --notes-file /tmp/release-notes.md \
-            --latest
+            --draft
 
   desktop-linux:
     name: Desktop (Linux)
@@ -234,3 +234,52 @@ jobs:
           gh release upload "${{ needs.release.outputs.tag }}" \
             packages/desktop-electron/dist/*.exe \
             --repo CobuilderLabs/opencode --clobber
+
+  build-cli:
+    name: CLI Binaries (all platforms)
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+            packages/*/node_modules
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build and upload CLI binaries (all platforms)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENCODE_RELEASE: "true"
+          OPENCODE_VERSION: ${{ needs.release.outputs.semver }}
+          OPENCODE_CHANNEL: prod
+          COBUILDER_RELEASE_TAG: ${{ needs.release.outputs.tag }}
+          GH_REPO: CobuilderLabs/opencode
+        run: cd packages/opencode && bun run build
+
+  publish:
+    name: Publish Release
+    needs: [release, build-cli, desktop-linux, desktop-windows]
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+      - name: Publish draft as latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit "${{ needs.release.outputs.tag }}" \
+            --draft=false \
+            --latest \
+            --repo CobuilderLabs/opencode
