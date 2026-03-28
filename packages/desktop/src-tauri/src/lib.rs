@@ -23,7 +23,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tauri::{
-    AppHandle, Emitter, Listener, Manager, RunEvent, State, ipc::Channel, path::BaseDirectory,
+    AppHandle, Listener, Manager, RunEvent, State, ipc::Channel, path::BaseDirectory,
 };
 #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
 use tauri_plugin_deep_link::DeepLinkExt;
@@ -1372,11 +1372,7 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
             let path = resolve_path_from_args(&args, &cwd);
             if let Some(window) = app.get_webview_window(MainWindow::LABEL) {
-                if let Some(ref p) = path {
-                    let _ = window.emit("opencode:open-path", p);
-                }
-                let _ = window.set_focus();
-                let _ = window.unminimize();
+                MainWindow::reveal(&window, path.as_deref());
             } else if let Some(p) = path {
                 if let Some(state) = app.try_state::<InitialPathState>() {
                     *state.0.lock().unwrap() = Some(p);
@@ -1641,10 +1637,32 @@ async fn initialize(app: AppHandle) {
 
     tracing::info!("Showing main window after startup loading");
 
+    // The window-state plugin can restore the main window onto a stale monitor
+    // during startup. The loading window consistently appears on the visible
+    // screen, so use its monitor as the anchor for the first few main-window
+    // presentations until the OS finishes applying window state.
+    let monitor = loading_window.current_monitor().ok().flatten();
+
     if let Some(window) = app.get_webview_window(MainWindow::LABEL) {
-        let _ = window.show();
-        let _ = window.set_focus();
+        if let Some(ref monitor) = monitor {
+            MainWindow::present_on(&window, monitor);
+        } else {
+            MainWindow::present(&window);
+        }
         startup_mark(&app, "native", "main_window.shown", None, None);
+
+        let retry = window.clone();
+        let monitor = monitor.clone();
+        tauri::async_runtime::spawn(async move {
+            for delay in [80_u64, 160, 320, 640, 1200] {
+                sleep(Duration::from_millis(delay)).await;
+                if let Some(ref monitor) = monitor {
+                    MainWindow::present_on(&retry, monitor);
+                } else {
+                    MainWindow::present(&retry);
+                }
+            }
+        });
     }
 
     sleep(Duration::from_millis(120)).await;
