@@ -1,0 +1,5 @@
+{
+  "name": "feature-rollout-scheduler",
+  "private": true,
+  "type": "module"
+}

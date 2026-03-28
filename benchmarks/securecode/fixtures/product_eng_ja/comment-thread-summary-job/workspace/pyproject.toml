@@ -1,0 +1,3 @@
+[project]
+name = "comment-thread-summary-job"
+version = "0.1.0"

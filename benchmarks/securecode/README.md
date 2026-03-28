@@ -1,12 +1,13 @@
 # SecureCode 負荷試験
 
-SecCodeBench の SecureCode prompt を使って、OpenAI 互換の SecureCode endpoint に対する同時実行ごとのレイテンシと throughput を計測するための資産をこのディレクトリに集約しています。
+このディレクトリには、OpenAI 互換 endpoint に対する同時実行ごとの latency と throughput を測る benchmark 資産を置いています。既定 workload は `product-eng-ja` で、外部 API key や画像入力に依存しない日本語の業務アプリ開発タスクです。旧 `SecCodeBench` ベースの workload は `legacy-securecode` として明示指定時のみ使います。
 
 ## ディレクトリ構成
 
 - `scripts/`: 実行入口。capacity / session / live load / trial workspace を置く
 - `runners/`: Python runner 本体と chart renderer
-- `workload/`: SecureCode ケース定義
+- `workload/`: benchmark ケース定義
+- `fixtures/`: `product-eng-ja` 用の workspace / test fixture
 - `monitoring/`: リモート GPU / system 監視スクリプト
 - `publish/`: 結果を Notion に流す補助スクリプト
 - `REPORT_AUTHORING_TIPS.md`: agent が最終レポートを書くときの観点
@@ -28,6 +29,7 @@ cp benchmarks/securecode/.env.example benchmarks/securecode/.env
 SECURECODE_BASE_URL=http://localhost:8080/v1
 SECURECODE_MODEL=model-under-test
 SECURECODE_API_KEY=
+SECURECODE_SUITE=product-eng-ja
 ```
 
 ## 入口コマンド
@@ -69,6 +71,13 @@ $EDITOR benchmarks/securecode/.env
 3. ベンチを流す
 
 ```bash
+./benchmarks/securecode/scripts/run_securecode_capacity.sh
+```
+
+既定 suite は `product-eng-ja` です。旧 workload を使いたい場合だけ明示的に切り替えます。
+
+```bash
+SECURECODE_SUITE=legacy-securecode \
 ./benchmarks/securecode/scripts/run_securecode_capacity.sh
 ```
 
@@ -126,6 +135,17 @@ SECURECODE_REMOTE_MONITOR_DIR=/absolute/path/to/benchmarks/securecode/monitoring
 
 `--max-tokens 128` のような軽い条件で流すと、throughput が大きく跳ね上がって heavy profile とは別ベンチになります。
 
+## `product-eng-ja` のケース
+
+- `order-webhook-router` / TypeScript / bugfix
+- `tenant-branding-config-api` / TypeScript / feature
+- `feature-rollout-scheduler` / TypeScript / feature
+- `comment-thread-summary-job` / Python / feature
+- `receipt-ocr-result-normalizer` / Python / bugfix
+- `customer-export-assembly` / Python / bugfix
+
+すべて text-only で完結し、第三者 API key、外部 SaaS、画像・音声入力は不要です。
+
 ## session 型の最短実行
 
 ```bash
@@ -157,6 +177,7 @@ SECURECODE_REMOTE_RUN_ROOT=~/.cache/securecode/securecode-monitor/runs
 ## 補足
 
 - SecCodeBench 本体は初回実行時に `~/.cache/securecode/sec-code-bench` へ clone されます。
+- `product-eng-ja` は repo 内だけで完結します。`sec-code-bench` clone が必要なのは `legacy-securecode` を使う場合だけです。
 - グラフ生成には `matplotlib` が必要です。未導入でもベンチ本体は動きますが、PNG はスキップされます。
 - 監視なしでも `summary.json` / CSV は生成されます。
 - `scripts/` 配下の shell は `benchmarks/securecode/.env` を共通で読みます。

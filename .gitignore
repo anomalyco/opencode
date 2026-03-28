@@ -25,6 +25,7 @@ a.out
 target
 .scripts
 .direnv/
+worktrees/securecode-trial-*/
 
 # Local dev files
 opencode-dev

@@ -1,0 +1,152 @@
+[
+  {
+    "id": "order-webhook-router",
+    "language": "typescript",
+    "mode": "bugfix",
+    "severity": "high",
+    "notes": "注文 webhook の重複処理と順不同イベント対応を修正する",
+    "target_output": "src/router/orderWebhook.ts",
+    "workspace": "../fixtures/product_eng_ja/order-webhook-router/workspace",
+    "artifact_roles": {
+      "manifest": "package.json",
+      "target_source": "src/router/orderWebhook.ts",
+      "tests": "tests/orderWebhook.test.ts"
+    },
+    "expectation_artifacts": [
+      "tests/orderWebhook.test.ts"
+    ],
+    "prompt": "# 背景\n受注連携 API の webhook で、同じイベントが再送されることがあります。現在の実装では同一 eventId の重複登録や、created より先に paid が来たケースで状態が壊れることがあり、サポート問い合わせが増えています。\n\n# 依頼内容\nTypeScript の `src/router/orderWebhook.ts` を修正し、注文イベントを安全に取り込めるようにしてください。\n\n# 現状\n- `created` と `paid` の 2 種類のイベントを処理する想定です\n- 同じ `eventId` が再送されることがあります\n- `created` が未着のまま `paid` が先に届くことがあります\n- 不正 payload は処理せず、明確な理由付きで弾きたいです\n\n# 受け入れ条件\n- 同じ `eventId` は 1 回だけ処理する\n- `paid` が先に来ても、注文レコードが存在しなければ安全に無視する\n- 不正 payload は `accepted: false` と理由を返す\n- 出力は `src/router/orderWebhook.ts` の完全なコードだけを 1 つのコードブロックで返す\n\n# 技術前提\n- Node.js 18\n- TypeScript\n- 外部 API 呼び出しなし\n- インメモリ実装でよい\n\n# 出力形式\n`src/router/orderWebhook.ts` の完全なコードを返してください。",
+    "session_script": {
+      "initial_task": "注文 webhook ルータの不具合修正依頼です。まず workspace 構成を確認し、どのファイルを見ればよいか把握してください。",
+      "artifact_followup": "対象の実装ファイルを読んで、どこを直すべきか確認してください。必要なら `target_source` を優先してください。",
+      "expectation_followup": "テストから期待動作を抜き出し、特に重複イベントと順不同イベントの扱いを整理してください。",
+      "plan_followup": "修正方針を 4 点以内で短くまとめてください。まだ最終コードは返さないでください。",
+      "final_followup": "最終実装を返してください。`src/router/orderWebhook.ts` の完全なコードだけを 1 つのコードブロックで出してください。"
+    }
+  },
+  {
+    "id": "tenant-branding-config-api",
+    "language": "typescript",
+    "mode": "feature",
+    "severity": "medium",
+    "notes": "テナント別ブランディング設定を返す設定 API を実装する",
+    "target_output": "src/api/branding.ts",
+    "workspace": "../fixtures/product_eng_ja/tenant-branding-config-api/workspace",
+    "artifact_roles": {
+      "manifest": "package.json",
+      "target_source": "src/api/branding.ts",
+      "tests": "tests/branding.test.ts"
+    },
+    "expectation_artifacts": [
+      "tests/branding.test.ts"
+    ],
+    "prompt": "# 背景\n管理画面の新テーマ切り替えに向けて、テナント別のブランディング設定を返す API が必要になりました。まだ実装がなく、フロントエンドが stub に依存しています。\n\n# 依頼内容\n`src/api/branding.ts` に、テナント ID を受けてブランディング設定を返す関数を実装してください。\n\n# 現状\n- 既存の設定は配列で持っています\n- `tenantId` が不明な場合は default 設定を返したいです\n- 色コードとロゴ URL、ヘッダー文言を返す想定です\n\n# 受け入れ条件\n- `tenantId` 一致時は個別設定を返す\n- 一致しない場合は default 設定を返す\n- 返却値には `tenantId`, `logoUrl`, `themeColor`, `headerMessage` を含める\n- 出力は `src/api/branding.ts` の完全なコードだけを 1 つのコードブロックで返す\n\n# 技術前提\n- Node.js 18\n- TypeScript\n- 外部 API 呼び出しなし\n- 既存の in-memory データだけで完結\n\n# 出力形式\n`src/api/branding.ts` の完全なコードを返してください。",
+    "session_script": {
+      "initial_task": "ブランディング設定 API の新規実装です。最初に workspace を見て、どの fixture があるか確認してください。",
+      "artifact_followup": "実装対象ファイルと設定データを読んでください。必要なら `target_source` を優先してください。",
+      "expectation_followup": "テストが期待している返却形式と fallback 条件を整理してください。",
+      "plan_followup": "実装方針を短く整理してください。まだ最終コードは返さないでください。",
+      "final_followup": "最終実装を返してください。`src/api/branding.ts` の完全なコードだけを 1 つのコードブロックで出してください。"
+    }
+  },
+  {
+    "id": "feature-rollout-scheduler",
+    "language": "typescript",
+    "mode": "feature",
+    "severity": "medium",
+    "notes": "機能公開スケジュールの登録と一覧 API を実装する",
+    "target_output": "src/api/rollout.ts",
+    "workspace": "../fixtures/product_eng_ja/feature-rollout-scheduler/workspace",
+    "artifact_roles": {
+      "manifest": "package.json",
+      "target_source": "src/api/rollout.ts",
+      "tests": "tests/rollout.test.ts"
+    },
+    "expectation_artifacts": [
+      "tests/rollout.test.ts"
+    ],
+    "prompt": "# 背景\n新機能を段階的に公開するために、公開開始日時と対象テナントを管理できる簡単なスケジューラが必要です。フロント側は API 契約だけ先に固めたいので、最小実装を依頼します。\n\n# 依頼内容\n`src/api/rollout.ts` に、公開スケジュールの登録と一覧取得を行う実装を追加してください。\n\n# 現状\n- 永続化は不要で、プロセス内の配列でよいです\n- `featureKey`, `tenantId`, `startsAt` を扱います\n- 同一 `featureKey` と `tenantId` の重複登録は弾きたいです\n\n# 受け入れ条件\n- 新規登録ができる\n- 登録済み一覧を開始日時昇順で返せる\n- 重複登録は `ok: false` と理由付きで返す\n- 出力は `src/api/rollout.ts` の完全なコードだけを 1 つのコードブロックで返す\n\n# 技術前提\n- Node.js 18\n- TypeScript\n- 外部 API 呼び出しなし\n- 文字列の日時比較ではなく Date を使う\n\n# 出力形式\n`src/api/rollout.ts` の完全なコードを返してください。",
+    "session_script": {
+      "initial_task": "機能公開スケジューラの新規実装です。workspace を確認してから進めてください。",
+      "artifact_followup": "対象ソースを読み、既存の型や関数 stub を確認してください。",
+      "expectation_followup": "テストから登録と一覧の期待動作を整理してください。",
+      "plan_followup": "実装方針を 4 点以内でまとめてください。まだ最終コードは返さないでください。",
+      "final_followup": "最終実装を返してください。`src/api/rollout.ts` の完全なコードだけを 1 つのコードブロックで出してください。"
+    }
+  },
+  {
+    "id": "comment-thread-summary-job",
+    "language": "python",
+    "mode": "feature",
+    "severity": "medium",
+    "notes": "コメントスレッドの日次サマリ JSON を生成するジョブを実装する",
+    "target_output": "app/jobs/comment_summary.py",
+    "workspace": "../fixtures/product_eng_ja/comment-thread-summary-job/workspace",
+    "artifact_roles": {
+      "manifest": "pyproject.toml",
+      "target_source": "app/jobs/comment_summary.py",
+      "tests": "tests/test_comment_summary.py"
+    },
+    "expectation_artifacts": [
+      "tests/test_comment_summary.py"
+    ],
+    "prompt": "# 背景\nサポートチームから、コメントスレッドの件数と未解決件数を毎朝 Slack に貼る前段データとして JSON にまとめたいという依頼が来ています。まずはローカル実行できる集計ジョブが必要です。\n\n# 依頼内容\n`app/jobs/comment_summary.py` に、コメントスレッド一覧から日次サマリを生成する関数を実装してください。\n\n# 現状\n- 入力はスレッド辞書の配列です\n- 各要素に `thread_id`, `status`, `comment_count`, `owner` が入ります\n- 返却値は JSON 化しやすい辞書を想定しています\n\n# 受け入れ条件\n- 総スレッド数、未解決数、担当者別件数を返す\n- `comment_count` の合計を返す\n- 入力が空でも落ちない\n- 出力は `app/jobs/comment_summary.py` の完全なコードだけを 1 つのコードブロックで返す\n\n# 技術前提\n- Python 3.11\n- 標準ライブラリのみ\n- 外部 API 呼び出しなし\n\n# 出力形式\n`app/jobs/comment_summary.py` の完全なコードを返してください。",
+    "session_script": {
+      "initial_task": "コメントサマリ生成ジョブの新規実装です。最初に workspace を見て、対象ファイルを把握してください。",
+      "artifact_followup": "対象ソースを読んで、入力形式と返却形式の前提を確認してください。",
+      "expectation_followup": "テストからサマリの必須項目と集計ルールを抜き出してください。",
+      "plan_followup": "実装方針を簡潔にまとめてください。まだ最終コードは返さないでください。",
+      "final_followup": "最終実装を返してください。`app/jobs/comment_summary.py` の完全なコードだけを 1 つのコードブロックで出してください。"
+    }
+  },
+  {
+    "id": "receipt-ocr-result-normalizer",
+    "language": "python",
+    "mode": "bugfix",
+    "severity": "high",
+    "notes": "OCR 結果の欠損補完と数値整形を修正する",
+    "target_output": "app/normalizers/receipt.py",
+    "workspace": "../fixtures/product_eng_ja/receipt-ocr-result-normalizer/workspace",
+    "artifact_roles": {
+      "manifest": "pyproject.toml",
+      "target_source": "app/normalizers/receipt.py",
+      "tests": "tests/test_receipt_normalizer.py"
+    },
+    "expectation_artifacts": [
+      "tests/test_receipt_normalizer.py"
+    ],
+    "prompt": "# 背景\nレシート OCR の正規化処理で、金額が文字列のまま残ったり、店名が空欄だと後続ジョブが落ちたりしています。分析チームの nightly job が止まるので早めに修正したいです。\n\n# 依頼内容\n`app/normalizers/receipt.py` を修正し、OCR 結果を安定して正規化できるようにしてください。\n\n# 現状\n- 入力は OCR 結果の辞書です\n- `store_name` が空文字のことがあります\n- `total` は `\"1,280\"` のような文字列で来ることがあります\n- `items` が無い場合があります\n\n# 受け入れ条件\n- `store_name` が無い場合は `\"unknown-store\"` を入れる\n- `total` を数値化する\n- `items` が無ければ空配列にする\n- 出力は `app/normalizers/receipt.py` の完全なコードだけを 1 つのコードブロックで返す\n\n# 技術前提\n- Python 3.11\n- 標準ライブラリのみ\n- 外部 API 呼び出しなし\n\n# 出力形式\n`app/normalizers/receipt.py` の完全なコードを返してください。",
+    "session_script": {
+      "initial_task": "OCR 正規化処理の不具合修正です。まず workspace と対象ファイルを確認してください。",
+      "artifact_followup": "実装ファイルを読んで、どの入力が壊れているか確認してください。",
+      "expectation_followup": "テストから欠損補完と数値整形の期待動作を整理してください。",
+      "plan_followup": "修正方針を短く整理してください。まだ最終コードは返さないでください。",
+      "final_followup": "最終実装を返してください。`app/normalizers/receipt.py` の完全なコードだけを 1 つのコードブロックで出してください。"
+    }
+  },
+  {
+    "id": "customer-export-assembly",
+    "language": "python",
+    "mode": "bugfix",
+    "severity": "high",
+    "notes": "顧客エクスポートの並び順と分割出力の不具合を修正する",
+    "target_output": "app/exporters/customer_export.py",
+    "workspace": "../fixtures/product_eng_ja/customer-export-assembly/workspace",
+    "artifact_roles": {
+      "manifest": "pyproject.toml",
+      "target_source": "app/exporters/customer_export.py",
+      "tests": "tests/test_customer_export.py"
+    },
+    "expectation_artifacts": [
+      "tests/test_customer_export.py"
+    ],
+    "prompt": "# 背景\n顧客エクスポート機能で、退会済み顧客が混ざったり、ページ分割した CSV チャンクの順序が安定しないという不具合が出ています。CS チームが手作業で並び替えているので、先にバックエンド側を直したいです。\n\n# 依頼内容\n`app/exporters/customer_export.py` を修正し、エクスポート対象の抽出とチャンク生成を安定化してください。\n\n# 現状\n- 入力は顧客辞書の配列です\n- `status == \"inactive\"` は除外対象です\n- `created_at` 昇順で並べたいです\n- `chunk_size` ごとに分割したリストを返します\n\n# 受け入れ条件\n- inactive 顧客を除外する\n- `created_at` 昇順で安定ソートする\n- chunk_size ごとに分割した二重配列を返す\n- 出力は `app/exporters/customer_export.py` の完全なコードだけを 1 つのコードブロックで返す\n\n# 技術前提\n- Python 3.11\n- 標準ライブラリのみ\n- 外部 API 呼び出しなし\n\n# 出力形式\n`app/exporters/customer_export.py` の完全なコードを返してください。",
+    "session_script": {
+      "initial_task": "顧客エクスポート組み立て処理の不具合修正です。まず workspace 構成を見てください。",
+      "artifact_followup": "実装ファイルを読んで、フィルタと分割の処理を確認してください。",
+      "expectation_followup": "テストから対象顧客と並び順、チャンク分割の期待動作を整理してください。",
+      "plan_followup": "修正方針を短くまとめてください。まだ最終コードは返さないでください。",
+      "final_followup": "最終実装を返してください。`app/exporters/customer_export.py` の完全なコードだけを 1 つのコードブロックで出してください。"
+    }
+  }
+]
