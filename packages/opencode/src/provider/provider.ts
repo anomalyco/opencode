@@ -443,6 +443,9 @@ export namespace Provider {
 
       const autoload = Boolean(project)
       if (!autoload) return { autoload: false }
+
+      const authOptions = provider.options?.googleAuthOptions
+
       return {
         autoload: true,
         vars(_options: Record<string, any>) {
@@ -456,10 +459,11 @@ export namespace Provider {
         options: {
           project,
           location,
+          ...(authOptions && { googleAuthOptions: authOptions }),
           fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
-            const auth = new GoogleAuth()
-            const client = await auth.getApplicationDefault()
-            const token = await client.credential.getAccessToken()
+            const auth = new GoogleAuth(authOptions ?? {})
+            const client = await auth.getClient()
+            const token = await client.getAccessToken()
 
             const headers = new Headers(init?.headers)
             headers.set("Authorization", `Bearer ${token.token}`)
@@ -473,16 +477,26 @@ export namespace Provider {
         },
       }
     },
-    "google-vertex-anthropic": async () => {
-      const project = Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
-      const location = Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "global"
+    "google-vertex-anthropic": async (provider) => {
+      const project =
+        provider.options?.project ??
+        Env.get("GOOGLE_CLOUD_PROJECT") ??
+        Env.get("GCP_PROJECT") ??
+        Env.get("GCLOUD_PROJECT")
+      const location = String(
+        provider.options?.location ?? Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "global",
+      )
       const autoload = Boolean(project)
       if (!autoload) return { autoload: false }
+
+      const authOptions = provider.options?.googleAuthOptions
+
       return {
         autoload: true,
         options: {
           project,
           location,
+          ...(authOptions && { googleAuthOptions: authOptions }),
         },
         async getModel(sdk: any, modelID) {
           const id = String(modelID).trim()

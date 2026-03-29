@@ -2282,3 +2282,105 @@ test("cloudflare-ai-gateway forwards config metadata options", async () => {
     },
   })
 })
+
+test("google-vertex-anthropic: respects config-level project and location", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "google-vertex-anthropic": {
+              options: {
+                project: "config-project",
+                location: "us-east5",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("GOOGLE_CLOUD_PROJECT", "env-project")
+      Env.set("GOOGLE_CLOUD_LOCATION", "env-location")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const p = providers[ProviderID.make("google-vertex-anthropic")]
+      expect(p).toBeDefined()
+      expect(p.options.project).toBe("config-project")
+      expect(p.options.location).toBe("us-east5")
+    },
+  })
+})
+
+test("google-vertex: passes googleAuthOptions to provider options", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "google-vertex": {
+              options: {
+                project: "test-project",
+                location: "us-central1",
+                googleAuthOptions: { keyFilename: "/path/to/key.json" },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("GOOGLE_CLOUD_PROJECT", "test-project")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const p = providers[ProviderID.make("google-vertex")]
+      expect(p).toBeDefined()
+      expect(p.options.googleAuthOptions).toEqual({ keyFilename: "/path/to/key.json" })
+    },
+  })
+})
+
+test("google-vertex-anthropic: passes googleAuthOptions to provider options", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "google-vertex-anthropic": {
+              options: {
+                project: "test-project",
+                googleAuthOptions: { keyFilename: "/path/to/anthropic-key.json" },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("GOOGLE_CLOUD_PROJECT", "test-project")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const p = providers[ProviderID.make("google-vertex-anthropic")]
+      expect(p).toBeDefined()
+      expect(p.options.googleAuthOptions).toEqual({ keyFilename: "/path/to/anthropic-key.json" })
+    },
+  })
+})
