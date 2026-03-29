@@ -458,21 +458,19 @@ export default function Page() {
     return sync.session.history.loading(id)
   })
 
-  const userMessages = createMemo(
-    () => messages().filter((m) => m.role === "user") as UserMessage[],
-    emptyUserMessages,
-    { equals: same },
-  )
   const visibleUserMessages = createMemo(
     () => {
       const revert = revertMessageID()
-      if (!revert) return userMessages()
-      return userMessages().filter((m) => m.id < revert)
+      const result: UserMessage[] = []
+      for (const m of messages()) {
+        if (m.role !== "user") continue
+        if (revert && m.id >= revert) continue
+        result.push(m as UserMessage)
+      }
+      return result
     },
     emptyUserMessages,
-    {
-      equals: same,
-    },
+    { equals: same },
   )
   const lastUserMessage = createMemo(() => visibleUserMessages().at(-1))
 
@@ -1558,7 +1556,7 @@ export default function Page() {
       const sessionID = params.id
       if (!sessionID) return
 
-      const next = userMessages().find((item) => item.id > id)
+      const next = messages().find((item): item is UserMessage => item.role === "user" && item.id > id)
       const prev = prompt.current().slice()
       const last = info()?.revert
 
@@ -1610,8 +1608,8 @@ export default function Page() {
   const rolled = createMemo(() => {
     const id = revertMessageID()
     if (!id) return []
-    return userMessages()
-      .filter((item) => item.id >= id)
+    return messages()
+      .filter((item): item is UserMessage => item.role === "user" && item.id >= id)
       .map((item) => ({ id: item.id, text: line(item.id) }))
   })
 

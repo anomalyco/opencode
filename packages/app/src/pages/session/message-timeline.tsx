@@ -1,4 +1,15 @@
-import { For, createEffect, createMemo, on, onCleanup, Show, Index, type JSX, createSignal } from "solid-js"
+import {
+  For,
+  createComputed,
+  createEffect,
+  createMemo,
+  on,
+  onCleanup,
+  Show,
+  Index,
+  type JSX,
+  createSignal,
+} from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { useNavigate } from "@solidjs/router"
 import { useMutation } from "@tanstack/solid-query"
@@ -125,11 +136,18 @@ function createTimelineStaging(input: TimelineStageInput) {
     count: 0,
   })
 
+  createComputed((prev: string) => {
+    const key = input.sessionKey()
+    if (prev && key !== prev) setState("completedSession", "")
+    return key
+  }, input.sessionKey())
+
   const stagedCount = createMemo(() => {
     const total = input.messages().length
     if (input.turnStart() <= 0) return total
     if (state.completedSession === input.sessionKey()) return total
     const init = Math.min(total, input.config.init)
+    if (state.activeSession !== input.sessionKey()) return init
     if (state.count <= init) return init
     if (state.count >= total) return total
     return state.count
@@ -172,10 +190,10 @@ function createTimelineStaging(input: TimelineStageInput) {
             frame = undefined
             return
           }
-          const currentTotal = input.messages().length
-          count = Math.min(currentTotal, count + input.config.batch)
+          const current = input.messages().length
+          count = Math.min(current, count + input.config.batch)
           setState("count", count)
-          if (count >= currentTotal) {
+          if (count >= current) {
             setState({ completedSession: sessionKey, activeSession: "" })
             frame = undefined
             return
@@ -231,18 +249,21 @@ export function MessageTimeline(props: {
   const { params, sessionKey } = useSessionKey()
   const platform = usePlatform()
 
-  const rendered = createMemo(() => props.renderedUserMessages.map((message) => message.id))
   const sessionID = createMemo(() => params.id)
   const sessionMessages = createMemo(() => {
     const id = sessionID()
     if (!id) return emptyMessages
     return sync.data.message[id] ?? emptyMessages
   })
-  const pending = createMemo(() =>
-    sessionMessages().findLast(
-      (item): item is AssistantMessage => item.role === "assistant" && typeof item.time.completed !== "number",
-    ),
-  )
+  const pending = createMemo(() => {
+    const msgs = sessionMessages()
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const item = msgs[i]
+      if (item.role === "user") return undefined
+      if (item.role === "assistant" && typeof item.time.completed !== "number") return item as AssistantMessage
+    }
+    return undefined
+  })
   const sessionStatus = createMemo(() => {
     const id = sessionID()
     if (!id) return idle
@@ -295,13 +316,14 @@ export function MessageTimeline(props: {
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
   const parentID = createMemo(() => info()?.parentID)
   const showHeader = createMemo(() => !!(titleValue() || parentID()))
-  const stageCfg = { init: 1, batch: 3 }
+  const stageCfg = { init: 0, batch: 3 }
   const staging = createTimelineStaging({
     sessionKey,
     turnStart: () => props.turnStart,
     messages: () => props.renderedUserMessages,
     config: stageCfg,
   })
+  const rendered = createMemo(() => staging.messages().map((message) => message.id))
 
   const [title, setTitle] = createStore({
     draft: "",
