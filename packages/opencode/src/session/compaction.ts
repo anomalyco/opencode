@@ -45,7 +45,6 @@ export namespace SessionCompaction {
       parentID: MessageID
       messages: MessageV2.WithParts[]
       sessionID: SessionID
-      abort: AbortSignal
       auto: boolean
       overflow?: boolean
     }) => Effect.Effect<"continue" | "stop">
@@ -135,7 +134,6 @@ export namespace SessionCompaction {
         parentID: MessageID
         messages: MessageV2.WithParts[]
         sessionID: SessionID
-        abort: AbortSignal
         auto: boolean
         overflow?: boolean
       }) {
@@ -236,13 +234,6 @@ When constructing the summary, try to stick to this template:
           sessionID: input.sessionID,
           model,
         })
-        const cancel = Effect.fn("SessionCompaction.cancel")(function* () {
-          if (!input.abort.aborted || msg.time.completed) return
-          msg.error = msg.error ?? new MessageV2.AbortedError({ message: "Aborted" }).toObject()
-          msg.finish = msg.finish ?? "error"
-          msg.time.completed = Date.now()
-          yield* session.updateMessage(msg)
-        })
         const result = yield* processor
           .process({
             user: userMessage,
@@ -259,7 +250,7 @@ When constructing the summary, try to stick to this template:
             ],
             model,
           })
-          .pipe(Effect.ensuring(cancel()))
+          .pipe(Effect.onInterrupt(() => processor.abort()))
 
         if (result === "compact") {
           processor.message.error = new MessageV2.ContextOverflowError({
@@ -383,7 +374,7 @@ When constructing the summary, try to stick to this template:
     ),
   )
 
-  const { runPromise, runPromiseExit } = makeRuntime(Service, defaultLayer)
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
     return runPromise((svc) => svc.isOverflow(input))
@@ -393,21 +384,16 @@ When constructing the summary, try to stick to this template:
     return runPromise((svc) => svc.prune(input))
   }
 
-  export async function process(input: {
-    parentID: MessageID
-    messages: MessageV2.WithParts[]
-    sessionID: SessionID
-    abort: AbortSignal
-    auto: boolean
-    overflow?: boolean
-  }) {
-    const exit = await runPromiseExit((svc) => svc.process(input), { signal: input.abort })
-    if (Exit.isFailure(exit)) {
-      if (Cause.hasInterrupts(exit.cause) && input.abort.aborted) return "stop"
-      throw Cause.squash(exit.cause)
-    }
-    return exit.value
-  }
+  export const process = fn(
+    z.object({
+      parentID: MessageID.zod,
+      messages: z.custom<MessageV2.WithParts[]>(),
+      sessionID: SessionID.zod,
+      auto: z.boolean(),
+      overflow: z.boolean().optional(),
+    }),
+    (input) => runPromise((svc) => svc.process(input)),
+  )
 
   export const create = fn(
     z.object({

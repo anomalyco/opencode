@@ -657,16 +657,13 @@ export namespace SessionPrompt {
           }
 
           if (task?.type === "compaction") {
-            const result = yield* Effect.promise((signal) =>
-              SessionCompaction.process({
-                messages: msgs,
-                parentID: lastUser!.id,
-                abort: signal,
-                sessionID,
-                auto: task.auto,
-                overflow: task.overflow,
-              }),
-            )
+            const result = yield* compaction.process({
+              messages: msgs,
+              parentID: lastUser!.id,
+              sessionID,
+              auto: task.auto,
+              overflow: task.overflow,
+            })
             if (result === "stop") break
             continue
           }
