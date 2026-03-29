@@ -1085,6 +1085,7 @@ export namespace Config {
             .describe("Browser viewport size."),
           userAgent: z.string().optional().describe("Custom User-Agent string for the browser."),
           idleTimeout: z.number().int().positive().optional().describe("Idle timeout in ms before browser daemon auto-stops."),
+          cdpPort: z.number().int().positive().optional().describe("CDP port to connect to an already-running Chrome. When set, agent-browser uses --cdp instead of launching its own Chrome."),
         })
         .optional()
         .describe("Browser automation configuration for Athena Browser Agent"),

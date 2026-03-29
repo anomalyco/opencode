@@ -14,27 +14,34 @@ export interface BrowserDaemonOptions {
   viewport?: { width: number; height: number }
   userAgent?: string
   idleTimeoutMs?: number
+  /**
+   * CDP port to connect to an already-running Chrome instance.
+   * When set, agent-browser uses --cdp instead of launching its own Chrome.
+   * Optional — by default agent-browser launches its own Chrome for Testing.
+   */
+  cdpPort?: number
 }
 
 interface DaemonInstance {
   session: string
   options: BrowserDaemonOptions
   profilePath: string
+  cdpPort?: number
   startedAt: number
 }
 
 /**
  * Manages the agent-browser daemon lifecycle.
  *
- * agent-browser uses an automatic daemon model: the daemon starts on
- * the first command and persists between commands. We manage this by
- * running an initial `open about:blank` to ensure the daemon is up,
- * and tracking session state.
+ * Primary mode: agent-browser launches its own Chrome for Testing in
+ * headed mode. The Tauri app (Athena Agent UI) is separate — it controls
+ * the automation while the user watches Chrome do its thing.
  *
- * IMPORTANT: We always use a persistent profile stored in the athena
- * data directory (~/.local/share/athena/browser-profile/). This means
- * when the user logs into a site, cookies and auth state persist across
- * sessions. The profile is shared across all sessions.
+ * Optional CDP mode: connect to an already-running Chrome via
+ * --cdp <port> if the user wants to attach to their own browser.
+ *
+ * In both modes, a persistent profile is used so logins/cookies survive
+ * across sessions.
  */
 export namespace BrowserDaemon {
   const instances = new Map<string, DaemonInstance>()
@@ -42,6 +49,13 @@ export namespace BrowserDaemon {
   /** Persistent browser profile directory */
   function getProfilePath(): string {
     return path.join(Global.Path.data, "browser-profile")
+  }
+
+  /** Resolve CDP port from options → flag → env → undefined */
+  function resolveCdpPort(options: BrowserDaemonOptions): number | undefined {
+    if (options.cdpPort) return options.cdpPort
+    if (Flag.ATHENA_BROWSER_CDP_PORT) return Flag.ATHENA_BROWSER_CDP_PORT
+    return undefined
   }
 
   export async function start(sessionId: string, options: BrowserDaemonOptions = {}): Promise<void> {
@@ -54,16 +68,21 @@ export namespace BrowserDaemon {
     const profilePath = options.profile || getProfilePath()
     await fs.mkdir(profilePath, { recursive: true })
 
+    const cdpPort = resolveCdpPort(options)
+
     const optionsWithProfile: BrowserDaemonOptions = {
       ...options,
       profile: profilePath,
+      cdpPort,
     }
 
     const binary = await BrowserBinary.resolve()
     const args = buildGlobalArgs(sessionId, optionsWithProfile)
 
+    const mode = cdpPort ? `CDP:${cdpPort} (Electron)` : "standalone"
     log.info("starting browser daemon", {
       sessionId,
+      mode,
       headed: options.headed ?? true,
       profile: profilePath,
     })
@@ -78,6 +97,8 @@ export namespace BrowserDaemon {
     }
 
     // Start the daemon by opening a blank page
+    // In CDP mode this connects to the existing Electron Chromium
+    // In standalone mode this launches a new Chrome instance
     const cmdArgs = binary === "npx"
       ? ["npx", "agent-browser", ...args, "open", "about:blank"]
       : [binary, ...args, "open", "about:blank"]
@@ -93,16 +114,17 @@ export namespace BrowserDaemon {
     const exitCode = await proc.exited
 
     if (exitCode !== 0) {
-      log.error("failed to start browser daemon", { exitCode, stderr })
-      throw new Error(`Failed to start browser daemon: ${stderr || "unknown error"}`)
+      log.error("failed to start browser daemon", { exitCode, stderr, mode })
+      throw new Error(`Failed to start browser daemon (${mode}): ${stderr || "unknown error"}`)
     }
 
-    log.info("browser daemon started", { sessionId, stdout: stdout.slice(0, 200) })
+    log.info("browser daemon started", { sessionId, mode, stdout: stdout.slice(0, 200) })
 
     instances.set(sessionId, {
       session: sessionId,
       options: optionsWithProfile,
       profilePath,
+      cdpPort,
       startedAt: Date.now(),
     })
   }
@@ -117,11 +139,15 @@ export namespace BrowserDaemon {
       const binary = await BrowserBinary.resolve()
       const args = buildGlobalArgs(sessionId, instance.options)
 
-      const cmdArgs = binary === "npx"
-        ? ["npx", "agent-browser", ...args, "close"]
-        : [binary, ...args, "close"]
+      // In CDP/Electron mode we close the agent-browser session but
+      // do NOT close the actual browser — Electron manages that.
+      // We just navigate to about:blank to "release" the tab.
+      const closeCmd = instance.cdpPort ? "open" : "close"
+      const closeArgs = instance.cdpPort
+        ? [binary === "npx" ? "npx" : binary, ...(binary === "npx" ? ["agent-browser"] : []), ...args, "open", "about:blank"]
+        : [binary === "npx" ? "npx" : binary, ...(binary === "npx" ? ["agent-browser"] : []), ...args, "close"]
 
-      const proc = Bun.spawn(cmdArgs, {
+      const proc = Bun.spawn(closeArgs, {
         stdout: "pipe",
         stderr: "pipe",
       })
@@ -143,6 +169,10 @@ export namespace BrowserDaemon {
     return instances.get(sessionId)
   }
 
+  export function isElectronMode(sessionId: string): boolean {
+    return instances.get(sessionId)?.cdpPort !== undefined
+  }
+
   export async function stopAll(): Promise<void> {
     const sessions = Array.from(instances.keys())
     await Promise.all(sessions.map((id) => stop(id)))
@@ -154,10 +184,16 @@ export namespace BrowserDaemon {
     // Session name for isolation between concurrent sessions
     args.push("--session", `athena-${sessionId.slice(0, 8)}`)
 
-    // Headed mode (default: true for user visibility, configurable via flag)
-    const headed = options.headed ?? Flag.ATHENA_BROWSER_HEADED
-    if (headed) {
-      args.push("--headed")
+    // CDP mode: connect to existing Chromium (Electron) instead of launching Chrome
+    if (options.cdpPort) {
+      args.push("--cdp", String(options.cdpPort))
+    } else {
+      // Standalone mode: launch own Chrome
+      // Headed mode (default: true for user visibility)
+      const headed = options.headed ?? Flag.ATHENA_BROWSER_HEADED
+      if (headed) {
+        args.push("--headed")
+      }
     }
 
     // JSON output for machine-readable responses

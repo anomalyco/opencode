@@ -1569,6 +1569,85 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         <Match when={props.part.tool === "skill"}>
           <Skill {...toolprops} />
         </Match>
+        {/* Browser automation tools */}
+        <Match when={props.part.tool === "browser_open"}>
+          <BrowserInline icon="🌐" pending="Opening browser..." label={(toolprops.input as any).url} {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "browser_navigate"}>
+          <BrowserInline icon="🔗" pending="Navigating..." label={(toolprops.input as any).url || (toolprops.input as any).action} {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "browser_click"}>
+          <BrowserInline icon="👆" pending="Clicking..." label={(toolprops.input as any).ref} {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "browser_type"}>
+          <BrowserInline icon="⌨" pending="Typing..." label={(toolprops.input as any).ref} {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "browser_snapshot"}>
+          <BrowserInline icon="👁" pending="Getting snapshot..." label="page snapshot" {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "browser_screenshot"}>
+          <BrowserInline icon="📸" pending="Taking screenshot..." label="screenshot" {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "browser_scroll"}>
+          <BrowserInline icon="↕" pending="Scrolling..." label={(toolprops.input as any).direction} {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "browser_extract"}>
+          <BrowserInline icon="📋" pending="Extracting..." label={(toolprops.input as any).type} {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "browser_find"}>
+          <BrowserInline icon="🔍" pending="Finding element..." label={`${(toolprops.input as any).by}="${(toolprops.input as any).value}"`} {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "browser_evaluate"}>
+          <BrowserInline icon="⚡" pending="Running JavaScript..." label="eval" {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "browser_wait"}>
+          <BrowserInline icon="⏳" pending="Waiting..." label="waiting" {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "browser_tab"}>
+          <BrowserInline icon="📑" pending="Managing tabs..." label={(toolprops.input as any).action} {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "browser_frame"}>
+          <BrowserInline icon="⬡" pending="Switching frame..." label={(toolprops.input as any).target} {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "browser_dialog"}>
+          <BrowserInline icon="💬" pending="Handling dialog..." label={(toolprops.input as any).action} {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "browser_hover"}>
+          <BrowserInline icon="◎" pending="Hovering..." label={(toolprops.input as any).ref} {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "browser_select"}>
+          <BrowserInline icon="☰" pending="Selecting..." label={(toolprops.input as any).value} {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "browser_press"}>
+          <BrowserInline icon="⌨" pending="Pressing key..." label={(toolprops.input as any).key} {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "browser_drag"}>
+          <BrowserInline icon="✥" pending="Dragging..." label={`${(toolprops.input as any).source} → ${(toolprops.input as any).target}`} {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "browser_upload"}>
+          <BrowserInline icon="📤" pending="Uploading..." label={(toolprops.input as any).filePath} {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "browser_cookies"}>
+          <BrowserInline icon="🍪" pending="Managing cookies..." label={(toolprops.input as any).action} {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "browser_storage"}>
+          <BrowserInline icon="💾" pending="Managing storage..." label={(toolprops.input as any).action} {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "browser_network"}>
+          <BrowserInline icon="📡" pending="Network control..." label={(toolprops.input as any).action} {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "browser_config"}>
+          <BrowserInline icon="⚙" pending="Configuring..." label={(toolprops.input as any).setting} {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "browser_console"}>
+          <BrowserInline icon="▸" pending="Reading console..." label={(toolprops.input as any).action} {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "browser_human_handoff"}>
+          <BrowserHumanHandoff {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "browser_close"}>
+          <BrowserInline icon="✕" pending="Closing browser..." label="close" {...toolprops} />
+        </Match>
         <Match when={true}>
           <GenericTool {...toolprops} />
         </Match>
@@ -1620,6 +1699,55 @@ function GenericTool(props: ToolProps<any>) {
         </box>
       </BlockTool>
     </Show>
+  )
+}
+
+function BrowserInline(props: ToolProps<any> & { icon: string; pending: string; label: string }) {
+  const title = createMemo(() => props.metadata?.title || props.label || props.tool)
+  return (
+    <InlineTool
+      icon={props.icon}
+      pending={props.pending}
+      complete={title()}
+      part={props.part}
+    >
+      {title()}
+    </InlineTool>
+  )
+}
+
+function BrowserHumanHandoff(props: ToolProps<any>) {
+  const { theme } = useTheme()
+  const reason = createMemo(() => (props.input as any)?.reason ?? "unknown")
+  const description = createMemo(() => (props.input as any)?.description ?? "Human attention needed")
+  const isRunning = createMemo(() => props.part.state.status === "running" || props.part.state.status === "pending")
+
+  return (
+    <box marginTop={1} paddingLeft={2} paddingRight={2} flexDirection="column">
+      <box
+        border={["left"]}
+        borderColor={theme.primary}
+        paddingLeft={2}
+        paddingRight={2}
+        paddingTop={1}
+        paddingBottom={1}
+        backgroundColor={theme.backgroundElement}
+      >
+        <text fg={theme.primary}>
+          <span style={{ bold: true }}>
+            {isRunning() ? "⏸ PAUSED — Human Action Required" : "✓ Human Action Completed"}
+          </span>
+        </text>
+        <text fg={theme.text}>
+          <span style={{ bold: true }}>{reason()}</span>: {description()}
+        </text>
+        <Show when={isRunning()}>
+          <text fg={theme.accent}>
+            Complete the action in the browser window, then approve to continue.
+          </text>
+        </Show>
+      </box>
+    </box>
   )
 }
 

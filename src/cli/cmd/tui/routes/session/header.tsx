@@ -41,6 +41,38 @@ const WorkspaceInfo = (props: { workspace: Accessor<string | undefined> }) => {
   )
 }
 
+function BrowserStatusBar(props: { messages: Accessor<any[]>; session: Accessor<Session> }) {
+  const { theme } = useTheme()
+
+  // Detect the current agent mode from the last assistant message
+  const agentMode = createMemo(() => {
+    const msgs = props.messages()
+    const lastAssistant = msgs.findLast((m: any) => m.role === "assistant")
+    return lastAssistant?.agent ?? lastAssistant?.mode ?? "auto"
+  })
+
+  const isBrowserAgent = createMemo(() => {
+    const mode = agentMode()
+    return mode === "auto" || mode === "interactive"
+  })
+
+  return (
+    <Show when={isBrowserAgent()}>
+      <box flexDirection="row" gap={2} paddingTop={0}>
+        <text fg={theme.primary} wrapMode="none">
+          <span style={{ bold: true }}>◈</span>{" "}
+          <span style={{ fg: agentMode() === "auto" ? theme.primary : theme.accent, bold: true }}>
+            {agentMode() === "auto" ? "AUTO" : "INTERACTIVE"}
+          </span>
+        </text>
+        <text fg={theme.textMuted} wrapMode="none">
+          Athena Browser Agent
+        </text>
+      </box>
+    </Show>
+  )
+}
+
 export function Header() {
   const route = useRouteData("session")
   const sync = useSync()
@@ -153,16 +185,19 @@ export function Header() {
             </box>
           </Match>
           <Match when={true}>
-            <box flexDirection={narrow() ? "column" : "row"} justifyContent="space-between" gap={1}>
-              {Flag.ATHENA_EXPERIMENTAL_WORKSPACES ? (
-                <box flexDirection="column">
+            <box flexDirection="column" gap={0}>
+              <box flexDirection={narrow() ? "column" : "row"} justifyContent="space-between" gap={1}>
+                {Flag.ATHENA_EXPERIMENTAL_WORKSPACES ? (
+                  <box flexDirection="column">
+                    <Title session={session} />
+                    <WorkspaceInfo workspace={workspace} />
+                  </box>
+                ) : (
                   <Title session={session} />
-                  <WorkspaceInfo workspace={workspace} />
-                </box>
-              ) : (
-                <Title session={session} />
-              )}
-              <ContextInfo context={context} cost={cost} />
+                )}
+                <ContextInfo context={context} cost={cost} />
+              </box>
+              <BrowserStatusBar messages={messages} session={session} />
             </box>
           </Match>
         </Switch>

@@ -83,6 +83,8 @@ export namespace Flag {
   export const ATHENA_BROWSER_HEADED = !falsy("ATHENA_BROWSER_HEADED") // default: true (headed)
   export const ATHENA_BROWSER_TIMEOUT = number("ATHENA_BROWSER_TIMEOUT") ?? 30000
   export const ATHENA_BROWSER_EXECUTABLE = process.env["ATHENA_BROWSER_EXECUTABLE"]
+  /** CDP port to connect to an already-running Chrome. When set, agent-browser uses --cdp instead of launching its own. */
+  export const ATHENA_BROWSER_CDP_PORT = number("ATHENA_BROWSER_CDP_PORT")
 
   function number(key: string) {
     const value = process.env[key]
