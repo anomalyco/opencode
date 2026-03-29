@@ -79,6 +79,11 @@ export namespace Flag {
   export const ATHENA_SKIP_MIGRATIONS = truthy("ATHENA_SKIP_MIGRATIONS")
   export const ATHENA_STRICT_CONFIG_DEPS = truthy("ATHENA_STRICT_CONFIG_DEPS")
 
+  // Browser automation flags
+  export const ATHENA_BROWSER_HEADED = !falsy("ATHENA_BROWSER_HEADED") // default: true (headed)
+  export const ATHENA_BROWSER_TIMEOUT = number("ATHENA_BROWSER_TIMEOUT") ?? 30000
+  export const ATHENA_BROWSER_EXECUTABLE = process.env["ATHENA_BROWSER_EXECUTABLE"]
+
   function number(key: string) {
     const value = process.env[key]
     if (!value) return undefined

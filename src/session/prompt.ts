@@ -21,6 +21,8 @@ import { InstructionPrompt } from "./instruction"
 import { Plugin } from "../plugin"
 import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
+import { BrowserDaemon } from "../browser/daemon"
+import { BrowserState } from "../browser/state"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { defer } from "../util/defer"
 import { ToolRegistry } from "../tool/registry"
@@ -267,6 +269,11 @@ export namespace SessionPrompt {
     }
     match.abort.abort()
     delete s[sessionID]
+    // Stop browser daemon if running for this session
+    if (BrowserDaemon.isRunning(sessionID)) {
+      await BrowserDaemon.stop(sessionID).catch(() => {})
+      BrowserState.remove(sessionID)
+    }
     await SessionStatus.set(sessionID, { type: "idle" })
     return
   }
@@ -580,6 +587,17 @@ export namespace SessionPrompt {
         })
         throw error
       }
+      // Auto-start browser daemon for browser agents (auto/interactive)
+      if ((agent.name === "auto" || agent.name === "interactive") && !BrowserDaemon.isRunning(sessionID)) {
+        try {
+          await BrowserDaemon.start(sessionID, { headed: true })
+          BrowserState.create(sessionID, true)
+          log.info("browser daemon auto-started", { sessionID, agent: agent.name })
+        } catch (e) {
+          log.warn("browser daemon auto-start failed", { sessionID, error: String(e) })
+        }
+      }
+
       const maxSteps = agent.steps ?? Infinity
       const isLastStep = step >= maxSteps
       msgs = await insertReminders({
@@ -675,7 +693,7 @@ export namespace SessionPrompt {
       // Build system prompt, adding structured output instruction if needed
       const skills = await SystemPrompt.skills(agent)
       const system = [
-        ...(await SystemPrompt.environment(model)),
+        ...(await SystemPrompt.environment(model, sessionID)),
         ...(skills ? [skills] : []),
         ...(await InstructionPrompt.system()),
       ]
@@ -1389,6 +1407,53 @@ export namespace SessionPrompt {
   async function insertReminders(input: { messages: MessageV2.WithParts[]; agent: Agent.Info; session: Session.Info }) {
     const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
     if (!userMessage) return input.messages
+
+    // Browser agent mode switching: auto <-> interactive
+    const assistantMsg = input.messages.findLast((msg) => msg.info.role === "assistant")
+    const prevAgent = assistantMsg?.info.agent
+
+    // Switching from interactive to auto mode
+    if (input.agent.name === "auto" && prevAgent === "interactive") {
+      userMessage.parts.push({
+        id: PartID.ascending(),
+        messageID: userMessage.info.id,
+        sessionID: userMessage.info.sessionID,
+        type: "text",
+        text: `<system-reminder>
+You have switched to autonomous mode. Execute the user's task fully and autonomously. Create a todo list, execute browser actions, and complete the task without asking for guidance. The browser session is still active - continue where you left off.
+</system-reminder>`,
+        synthetic: true,
+      })
+    }
+
+    // Switching from auto to interactive mode
+    if (input.agent.name === "interactive" && prevAgent === "auto") {
+      userMessage.parts.push({
+        id: PartID.ascending(),
+        messageID: userMessage.info.id,
+        sessionID: userMessage.info.sessionID,
+        type: "text",
+        text: `<system-reminder>
+You have switched to interactive mode. Ask the user what they'd like to do next. Show the current browser state and offer suggestions. The browser session is still active.
+</system-reminder>`,
+        synthetic: true,
+      })
+    }
+
+    // Inject browser state info for browser agents
+    if (input.agent.name === "auto" || input.agent.name === "interactive") {
+      const browserSummary = BrowserState.getSummary(input.session.id)
+      if (browserSummary !== "Browser: not started") {
+        userMessage.parts.push({
+          id: PartID.ascending(),
+          messageID: userMessage.info.id,
+          sessionID: userMessage.info.sessionID,
+          type: "text",
+          text: `<system-reminder>${browserSummary}</system-reminder>`,
+          synthetic: true,
+        })
+      }
+    }
 
     // Original logic when experimental plan mode is disabled
     if (!Flag.ATHENA_EXPERIMENTAL_PLAN_MODE) {

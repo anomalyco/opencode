@@ -13,6 +13,8 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
+import PROMPT_AUTO from "./prompt/auto.txt"
+import PROMPT_INTERACTIVE from "./prompt/interactive.txt"
 import { Permission } from "@/permission"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
@@ -103,40 +105,82 @@ export namespace Agent {
 
           const user = Permission.fromConfig(cfg.permission ?? {})
 
+          const browserToolPermissions = Permission.fromConfig({
+            browser_open: "allow",
+            browser_navigate: "allow",
+            browser_click: "allow",
+            browser_type: "allow",
+            browser_screenshot: "allow",
+            browser_snapshot: "allow",
+            browser_scroll: "allow",
+            browser_extract: "allow",
+            browser_evaluate: "ask",
+            browser_close: "allow",
+            browser_wait: "allow",
+            browser_tab: "allow",
+          })
+
+          const browserFileRestrictions = Permission.fromConfig({
+            // Restrict file access to app data directory only
+            external_directory: {
+              "*": "deny",
+              [path.join(Global.Path.data, "**")]: "allow",
+              ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
+            },
+            edit: {
+              "*": "deny",
+              [path.join(Global.Path.data, "**")]: "allow",
+            },
+            read: {
+              "*": "allow",
+              "*.env": "deny",
+              "*.env.*": "deny",
+            },
+            write: {
+              "*": "deny",
+              [path.join(Global.Path.data, "**")]: "allow",
+            },
+          })
+
           const agents: Record<string, Info> = {
-            build: {
-              name: "build",
-              description: "The default agent. Executes tools based on configured permissions.",
+            auto: {
+              name: "auto",
+              description: "Autonomous browser automation. Given a task, creates a plan, executes browser actions, and completes the task end-to-end.",
               options: {},
+              prompt: PROMPT_AUTO,
               permission: Permission.merge(
                 defaults,
+                browserToolPermissions,
+                browserFileRestrictions,
                 Permission.fromConfig({
                   question: "allow",
                   plan_enter: "allow",
+                  // Deny code editing tools not needed for browser automation
+                  apply_patch: "deny",
+                  lsp: "deny",
+                  codesearch: "deny",
                 }),
                 user,
               ),
               mode: "primary",
               native: true,
             },
-            plan: {
-              name: "plan",
-              description: "Plan mode. Disallows all edit tools.",
+            interactive: {
+              name: "interactive",
+              description: "Interactive browser assistant. Conversational mode - asks what you want to do, shows browser state, guides step by step.",
               options: {},
+              prompt: PROMPT_INTERACTIVE,
               permission: Permission.merge(
                 defaults,
+                browserToolPermissions,
+                browserFileRestrictions,
                 Permission.fromConfig({
                   question: "allow",
                   plan_exit: "allow",
-                  external_directory: {
-                    [path.join(Global.Path.data, "plans", "*")]: "allow",
-                  },
-                  edit: {
-                    "*": "deny",
-                    [path.join(".athena", "plans", "*.md")]: "allow",
-                    [path.relative(Instance.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]:
-                      "allow",
-                  },
+                  // Deny code editing tools not needed for browser automation
+                  apply_patch: "deny",
+                  lsp: "deny",
+                  codesearch: "deny",
                 }),
                 user,
               ),
@@ -287,7 +331,7 @@ export namespace Agent {
               agents,
               values(),
               sortBy(
-                [(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "build"), "desc"],
+                [(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "auto"), "desc"],
                 [(x) => x.name, "asc"],
               ),
             )
