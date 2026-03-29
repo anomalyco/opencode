@@ -60,11 +60,11 @@ export namespace PluginMeta {
     return
   }
 
-  function modifiedAt(file: string) {
-    const stat = Filesystem.stat(file)
+  async function modifiedAt(file: string) {
+    const stat = await Filesystem.statAsync(file)
     if (!stat) return
-    const value = stat.mtimeMs
-    return Math.floor(typeof value === "bigint" ? Number(value) : value)
+    const mtime = stat.mtimeMs
+    return Math.floor(typeof mtime === "bigint" ? Number(mtime) : mtime)
   }
 
   function resolvedTarget(target: string) {
@@ -74,7 +74,7 @@ export namespace PluginMeta {
 
   async function npmVersion(target: string) {
     const resolved = resolvedTarget(target)
-    const stat = Filesystem.stat(resolved)
+    const stat = await Filesystem.statAsync(resolved)
     const dir = stat?.isDirectory() ? resolved : path.dirname(resolved)
     return Filesystem.readJson<{ version?: string }>(path.join(dir, "package.json"))
       .then((item) => item.version)
@@ -92,7 +92,7 @@ export namespace PluginMeta {
         source,
         spec,
         target,
-        modified: file ? modifiedAt(file) : undefined,
+        modified: file ? await modifiedAt(file) : undefined,
       }
     }
 

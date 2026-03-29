@@ -145,17 +145,6 @@ function resolveRoot(root: string) {
   return path.resolve(process.cwd(), root)
 }
 
-function readStamp(file: string) {
-  const stat = Filesystem.stat(file)
-  if (!stat) return
-  const mtime = stat.mtimeMs
-  const size = stat.size
-  return {
-    mtime: Math.floor(typeof mtime === "bigint" ? Number(mtime) : mtime),
-    size: typeof size === "bigint" ? Number(size) : size,
-  }
-}
-
 function createThemeInstaller(
   meta: TuiConfig.PluginMeta,
   root: string,
@@ -173,7 +162,9 @@ function createThemeInstaller(
         : path.join(source_dir, ".opencode", "themes")
     const dest_dir = meta.scope === "local" ? local_dir : path.join(Global.Path.config, "themes")
     const dest = path.join(dest_dir, `${name}.json`)
-    const stamp = readStamp(src)
+    const stat = await Filesystem.statAsync(src)
+    const mtime = stat ? Math.floor(typeof stat.mtimeMs === "bigint" ? Number(stat.mtimeMs) : stat.mtimeMs) : undefined
+    const size = stat ? (typeof stat.size === "bigint" ? Number(stat.size) : stat.size) : undefined
     const exists = hasTheme(name)
     const prev = plugin.themes[name]
 
@@ -181,14 +172,13 @@ function createThemeInstaller(
       if (plugin.meta.state !== "updated") return
       if (!prev) {
         if (await Filesystem.exists(dest)) {
-          const row: PluginMeta.Theme = {
+          plugin.themes[name] = {
             src,
             dest,
-            mtime: stamp?.mtime,
-            size: stamp?.size,
+            mtime,
+            size,
           }
-          plugin.themes[name] = row
-          await PluginMeta.setTheme(plugin.id, name, row).catch((error) => {
+          await PluginMeta.setTheme(plugin.id, name, plugin.themes[name]!).catch((error) => {
             log.warn("failed to track tui plugin theme", {
               path: spec,
               id: plugin.id,
@@ -201,7 +191,7 @@ function createThemeInstaller(
         return
       }
       if (prev.dest !== dest) return
-      if (prev.mtime === stamp?.mtime && prev.size === stamp?.size) return
+      if (prev.mtime === mtime && prev.size === size) return
     }
 
     const text = await Filesystem.readText(src).catch((error) => {
@@ -231,14 +221,13 @@ function createThemeInstaller(
     }
 
     upsertTheme(name, data)
-    const row: PluginMeta.Theme = {
+    plugin.themes[name] = {
       src,
       dest,
-      mtime: stamp?.mtime,
-      size: stamp?.size,
+      mtime,
+      size,
     }
-    plugin.themes[name] = row
-    await PluginMeta.setTheme(plugin.id, name, row).catch((error) => {
+    await PluginMeta.setTheme(plugin.id, name, plugin.themes[name]!).catch((error) => {
       log.warn("failed to track tui plugin theme", {
         path: spec,
         id: plugin.id,
