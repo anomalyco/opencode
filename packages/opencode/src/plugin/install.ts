@@ -16,6 +16,12 @@ import { parsePluginSpecifier, readPluginPackage, resolvePluginTarget } from "./
 
 type Mode = "noop" | "add" | "replace"
 type Kind = "server" | "tui"
+type Key = string | number
+
+type Op = {
+  path: Key[]
+  value: unknown
+}
 
 export type Target = {
   kind: Kind
@@ -94,6 +100,13 @@ function pluginSpec(item: unknown) {
   return item[0]
 }
 
+function pluginList(data: unknown) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return
+  const item = data as { plugin?: unknown }
+  if (!Array.isArray(item.plugin)) return
+  return item.plugin
+}
+
 function parseTarget(item: unknown): Target | undefined {
   if (item === "server" || item === "tui") return { kind: item }
   if (!Array.isArray(item)) return
@@ -118,7 +131,13 @@ function parseTargets(raw: unknown) {
   return [...map.values()]
 }
 
-function patchPluginList(list: unknown[], spec: string, next: unknown, force = false): { mode: Mode; list: unknown[] } {
+function patchPluginOps(
+  list: unknown[],
+  spec: string,
+  next: unknown,
+  force = false,
+  array = true,
+): { mode: Mode; ops: Op[] } {
   const pkg = parsePluginSpecifier(spec).pkg
   const rows = list.map((item, i) => ({
     item,
@@ -135,14 +154,19 @@ function patchPluginList(list: unknown[], spec: string, next: unknown, force = f
   if (!dup.length) {
     return {
       mode: "add",
-      list: [...list, next],
+      ops: [
+        {
+          path: array ? ["plugin", list.length] : ["plugin"],
+          value: array ? next : [next],
+        },
+      ],
     }
   }
 
   if (!force) {
     return {
       mode: "noop",
-      list,
+      ops: [],
     }
   }
 
@@ -150,30 +174,57 @@ function patchPluginList(list: unknown[], spec: string, next: unknown, force = f
   if (!keep) {
     return {
       mode: "noop",
-      list,
+      ops: [],
     }
   }
 
   if (dup.length === 1 && keep.spec === spec) {
     return {
       mode: "noop",
-      list,
+      ops: [],
     }
   }
 
-  const idx = new Set(dup.map((item) => item.i))
+  const set = (() => {
+    if (typeof keep.item === "string") {
+      return {
+        path: ["plugin", keep.i],
+        value: next,
+      }
+    }
+    if (Array.isArray(keep.item) && typeof keep.item[0] === "string") {
+      return {
+        path: ["plugin", keep.i, 0],
+        value: spec,
+      }
+    }
+  })()
+
+  const del = dup
+    .map((item) => item.i)
+    .filter((i) => i !== keep.i)
+    .sort((a, b) => b - a)
+    .map((i) => ({
+      path: ["plugin", i],
+      value: undefined,
+    }))
+
   return {
     mode: "replace",
-    list: rows.flatMap((row) => {
-      if (!idx.has(row.i)) return [row.item]
-      if (row.i !== keep.i) return []
-      if (typeof row.item === "string") return [next]
-      if (Array.isArray(row.item) && typeof row.item[0] === "string") {
-        return [[spec, ...row.item.slice(1)]]
-      }
-      return [row.item]
-    }),
+    ops: set ? [set, ...del] : del,
   }
+}
+
+function patchText(text: string, ops: Op[]) {
+  return ops.reduce((acc, op) => {
+    const edits = modify(acc, op.path, op.value, {
+      formattingOptions: {
+        tabSize: 2,
+        insertSpaces: true,
+      },
+    })
+    return applyEdits(acc, edits)
+  }, text)
 }
 
 export async function installPlugin(spec: string, dep: InstallDeps = defaultInstallDeps): Promise<InstallResult> {
@@ -289,10 +340,9 @@ async function patchOne(dir: string, target: Target, spec: string, force: boolea
     }
   }
 
-  const list: unknown[] =
-    data && typeof data === "object" && !Array.isArray(data) && Array.isArray(data.plugin) ? data.plugin : []
+  const list = pluginList(data)
   const item = target.opts ? [spec, target.opts] : spec
-  const out = patchPluginList(list, spec, item, force)
+  const out = patchPluginOps(list ?? [], spec, item, force, Boolean(list))
   if (out.mode === "noop") {
     return {
       ok: true,
@@ -304,13 +354,7 @@ async function patchOne(dir: string, target: Target, spec: string, force: boolea
     }
   }
 
-  const edits = modify(text, ["plugin"], out.list, {
-    formattingOptions: {
-      tabSize: 2,
-      insertSpaces: true,
-    },
-  })
-  const write = await dep.write(cfg, applyEdits(text, edits)).catch((error: unknown) => error)
+  const write = await dep.write(cfg, patchText(text, out.ops)).catch((error: unknown) => error)
   if (write instanceof Error) {
     return {
       ok: false,
