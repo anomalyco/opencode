@@ -174,7 +174,7 @@ export function rewrite(subtasks: Subtask[], lintReport: LintReport): RewrittenP
   }
 
   // Create wiring subtask with shared files
-  const wiringId = SubtaskIDSchema.make(`wiring-${Date.now()}`)
+  const wiringId = SubtaskIDSchema.ascending()
   const sharedFilesSorted = [...sharedFiles].sort()
 
   // Filter shared files from original subtasks

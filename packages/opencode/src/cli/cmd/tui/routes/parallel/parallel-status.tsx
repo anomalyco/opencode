@@ -8,7 +8,8 @@ import { useToast } from "@tui/ui/toast"
 import { useRoute } from "@tui/context/route"
 import type { Plan, WorkerState, Subtask } from "@/parallel/schema"
 import { summarizeWaves } from "@/parallel/scheduler"
-import { TextAttributes } from "@opentui/core"
+import { selectExecutionMode } from "@/parallel/strategy"
+import { ScrollBoxRenderable, TextAttributes } from "@opentui/core"
 import { pipe, sumBy } from "remeda"
 
 function formatDuration(ms: number) {
@@ -556,6 +557,7 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
   const [elapsed, setElapsed] = createSignal(0)
   const [view, setView] = createSignal<"active" | "all" | "failed" | "done">("active")
   const [sort, setSort] = createSignal<"status" | "title" | "cost">("status")
+  let scroll: ScrollBoxRenderable | undefined
 
   const workerSessions = createMemo(() =>
     props.plan.workers.flatMap((worker) => (worker.sessionID ? [worker.sessionID] : [])),
@@ -580,6 +582,7 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
   const failed = () => props.plan.workers.filter((worker) => worker.status === "failed" || worker.status === "conflict").length
   const total = () => props.plan.workers.length
   const width = () => Math.min(120, dim().width - 2)
+  const height = () => Math.max(12, dim().height - 4)
   const wide = () => width() >= 110
   const listWidth = () => (wide() ? Math.min(44, Math.floor(width() * 0.4)) : width())
   const detailWidth = () => (wide() ? width() - listWidth() - 1 : width())
@@ -766,6 +769,30 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
       setSelected((value) => Math.min(items().length - 1, value + 1))
       return
     }
+    if (evt.name === "pageup") {
+      evt.preventDefault()
+      evt.stopPropagation()
+      scroll?.scrollBy(-Math.max(1, Math.floor(height() / 2)))
+      return
+    }
+    if (evt.name === "pagedown") {
+      evt.preventDefault()
+      evt.stopPropagation()
+      scroll?.scrollBy(Math.max(1, Math.floor(height() / 2)))
+      return
+    }
+    if (evt.name === "home") {
+      evt.preventDefault()
+      evt.stopPropagation()
+      scroll?.scrollTo(0)
+      return
+    }
+    if (evt.name === "end") {
+      evt.preventDefault()
+      evt.stopPropagation()
+      scroll?.scrollTo(scroll.scrollHeight)
+      return
+    }
     if (evt.name === "escape") {
       evt.preventDefault()
       evt.stopPropagation()
@@ -814,174 +841,197 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
   })
 
   return (
-    <box flexDirection="column" width={width()} backgroundColor={theme.backgroundPanel} padding={1}>
-      <box flexDirection="row" gap={2} marginBottom={1}>
-        <text attributes={TextAttributes.BOLD} fg={theme.primary}>
-          Agent Manager
-        </text>
-        <text fg={theme.text}>
-          {done()}/{total()} complete
-        </text>
-        <Show when={running() > 0}>
-          <text fg={theme.warning}>{running()} running</text>
-        </Show>
-        <Show when={failed() > 0}>
-          <text fg={theme.error}>{failed()} failed</text>
-        </Show>
-        <text fg={theme.textMuted}>{formatDuration(elapsed())}</text>
-      </box>
+    <box width={width()} height={height()} backgroundColor={theme.backgroundPanel} padding={1}>
+      <scrollbox
+        ref={(item) => (scroll = item)}
+        height="100%"
+        width="100%"
+        verticalScrollbarOptions={{
+          paddingLeft: 1,
+          trackOptions: {
+            backgroundColor: theme.backgroundElement,
+            foregroundColor: theme.border,
+          },
+        }}
+      >
+        <box flexDirection="column" width={width() - 2}>
+          <box flexDirection="row" gap={2} marginBottom={1}>
+            <text attributes={TextAttributes.BOLD} fg={theme.primary}>
+              Agent Manager
+            </text>
+            <text fg={theme.text}>
+              {done()}/{total()} complete
+            </text>
+            <Show when={running() > 0}>
+              <text fg={theme.warning}>{running()} running</text>
+            </Show>
+            <Show when={failed() > 0}>
+              <text fg={theme.error}>{failed()} failed</text>
+            </Show>
+            <text fg={theme.textMuted}>{formatDuration(elapsed())}</text>
+          </box>
 
-      <box flexDirection="row" gap={2} marginBottom={1}>
-        <text fg={theme.textMuted}>view</text>
-        <text fg={theme.accent}>{view()}</text>
-        <text fg={theme.textMuted}>sort</text>
-        <text fg={theme.accent}>{sort()}</text>
-        <text fg={theme.textMuted}>
-          showing {items().length} of {total()}
-        </text>
-      </box>
+          <box flexDirection="row" gap={2} marginBottom={1}>
+            <text fg={theme.textMuted}>view</text>
+            <text fg={theme.accent}>{view()}</text>
+            <text fg={theme.textMuted}>sort</text>
+            <text fg={theme.accent}>{sort()}</text>
+            <text fg={theme.textMuted}>mode</text>
+            <text fg={selectExecutionMode(props.plan) === "task-agent" ? theme.accent : theme.success}>
+              {selectExecutionMode(props.plan)}
+            </text>
+            <text fg={theme.textMuted}>
+              showing {items().length} of {total()}
+            </text>
+          </box>
 
-      <Show when={currentWave()}>
-        <box flexDirection="row" gap={2} marginBottom={1}>
-          <text fg={theme.textMuted}>Current:</text>
-          <text fg={theme.accent}>
-            {waveLabel(currentWave()!.index, currentWave()!.type)} {currentWave()!.state}
-          </text>
-          <Show when={waves()!.ready > 0}>
-            <text fg={theme.success}>{waves()!.ready} ready</text>
-          </Show>
-          <Show when={waves()!.waiting > 0}>
-            <text fg={theme.textMuted}>{waves()!.waiting} waiting</text>
-          </Show>
-          <Show when={waves()!.blocked > 0}>
-            <text fg={theme.error}>{waves()!.blocked} blocked</text>
-          </Show>
-          <Show when={wiring()}>
-            <text fg={theme.warning}>wiring task queued</text>
-          </Show>
-        </box>
-      </Show>
-
-      <box marginBottom={1}>
-        <text fg={theme.success}>{"█".repeat(Math.floor((done() / Math.max(total(), 1)) * 30))}</text>
-        <text fg={theme.warning}>{"█".repeat(Math.floor((running() / Math.max(total(), 1)) * 30))}</text>
-        <text fg={theme.textMuted}>
-          {"░".repeat(Math.max(0, 30 - Math.floor(((done() + running()) / Math.max(total(), 1)) * 30)))}
-        </text>
-      </box>
-
-      <Show when={waves()}>
-        <box flexDirection="row" gap={2} marginBottom={1}>
-          <text fg={theme.textMuted}>Waves:</text>
-          <For each={waves()?.waves}>
-            {(wave) => (
-              <box flexDirection="row" gap={1}>
-                <text fg={wave.type === "parallel" ? theme.success : theme.warning}>
-                  {waveLabel(wave.index, wave.type)}({wave.subtasks.length})
-                </text>
-                <text fg={wave.state === "complete" ? theme.success : wave.state === "active" ? theme.accent : theme.textMuted}>
-                  {wave.state}
-                </text>
-                <Show when={wave.reason}>
-                  <text fg={theme.textMuted}>{wave.reason}</text>
-                </Show>
-              </box>
-            )}
-          </For>
-        </box>
-      </Show>
-
-      <Show when={timeline().length > 0}>
-        <box marginBottom={1} padding={1} borderStyle="single" borderColor={theme.border} flexDirection="column">
-          <text fg={theme.textMuted} attributes={TextAttributes.UNDERLINE}>
-            Timeline
-          </text>
-          <For each={timeline()}>
-            {(item) => (
-              <box flexDirection="row" gap={1}>
-                <text fg={theme.textMuted}>{formatTime(item.time)}</text>
-                <text
-                  fg={
-                    item.tone === "success"
-                      ? theme.success
-                      : item.tone === "warning"
-                        ? theme.warning
-                        : item.tone === "accent"
-                          ? theme.accent
-                          : theme.text
-                  }
-                >
-                  {item.text.slice(0, width() - 20)}
-                </text>
-              </box>
-            )}
-          </For>
-        </box>
-      </Show>
-
-      <box flexDirection={wide() ? "row" : "column"} gap={1}>
-        <box flexDirection="column" width={listWidth()} gap={1}>
-          <Show
-            when={items().length > 0}
-            fallback={
-              <box padding={1} borderStyle="rounded" borderColor={theme.border}>
-                <text fg={theme.textMuted}>No workers match the current view.</text>
-              </box>
-            }
-          >
-            <For each={items()}>
-              {(item, index) => (
-                <WorkerLane
-                  worker={item.worker}
-                  subtask={item.subtask}
-                  selected={selected() === index()}
-                  planWorkerModel={props.plan.workerModel.modelID}
-                  onSelect={() => {
-                    setSelected(index())
-                    setShowLogs(false)
-                  }}
-                />
-              )}
-            </For>
-          </Show>
-        </box>
-
-        <Show when={current()}>
-          {(item) => (
-            <box flexDirection="column" width={detailWidth()} gap={1}>
-              <WorkerDetail
-                plan={props.plan}
-                worker={item().worker}
-                subtask={item().subtask}
-                width={detailWidth()}
-                onLogs={() => setShowLogs((value) => !value)}
-                onOpen={openCurrent}
-                onRetry={() => void retryCurrent()}
-              />
-              <Show when={showLogs()}>
-                <WorkerLogs worker={item().worker} subtask={item().subtask} width={detailWidth()} />
+          <Show when={currentWave()}>
+            <box flexDirection="row" gap={2} marginBottom={1}>
+              <text fg={theme.textMuted}>Current:</text>
+              <text fg={theme.accent}>
+                {waveLabel(currentWave()!.index, currentWave()!.type)} {currentWave()!.state}
+              </text>
+              <Show when={waves()!.ready > 0}>
+                <text fg={theme.success}>{waves()!.ready} ready</text>
+              </Show>
+              <Show when={waves()!.waiting > 0}>
+                <text fg={theme.textMuted}>{waves()!.waiting} waiting</text>
+              </Show>
+              <Show when={waves()!.blocked > 0}>
+                <text fg={theme.error}>{waves()!.blocked} blocked</text>
+              </Show>
+              <Show when={wiring()}>
+                <text fg={theme.warning}>wiring task queued</text>
               </Show>
             </box>
-          )}
-        </Show>
-      </box>
+          </Show>
 
-      <box marginTop={1} paddingTop={1} borderStyle="single" borderColor={theme.border} flexDirection="column" gap={0}>
-        <box flexDirection="row" gap={2}>
-          <text fg={theme.text} attributes={TextAttributes.BOLD}>
-            Total:
-          </text>
-          <text fg={theme.accent}>{formatCost(totals().cost)}</text>
-          <text fg={theme.textMuted}>
-            {formatTokens(totals().input)} in / {formatTokens(totals().output)} out
-          </text>
-          <text fg={theme.textMuted}>{totals().tools} tool calls</text>
-          <text fg={theme.textMuted}>{formatDuration(elapsed())}</text>
+          <box marginBottom={1}>
+            <text fg={theme.success}>{"█".repeat(Math.floor((done() / Math.max(total(), 1)) * 30))}</text>
+            <text fg={theme.warning}>{"█".repeat(Math.floor((running() / Math.max(total(), 1)) * 30))}</text>
+            <text fg={theme.textMuted}>
+              {"░".repeat(Math.max(0, 30 - Math.floor(((done() + running()) / Math.max(total(), 1)) * 30)))}
+            </text>
+          </box>
+
+          <Show when={waves()}>
+            <box flexDirection="row" gap={2} marginBottom={1}>
+              <text fg={theme.textMuted}>Waves:</text>
+              <For each={waves()?.waves}>
+                {(wave) => (
+                  <box flexDirection="row" gap={1}>
+                    <text fg={wave.type === "parallel" ? theme.success : theme.warning}>
+                      {waveLabel(wave.index, wave.type)}({wave.subtasks.length})
+                    </text>
+                    <text
+                      fg={wave.state === "complete" ? theme.success : wave.state === "active" ? theme.accent : theme.textMuted}
+                    >
+                      {wave.state}
+                    </text>
+                    <Show when={wave.reason}>
+                      <text fg={theme.textMuted}>{wave.reason}</text>
+                    </Show>
+                  </box>
+                )}
+              </For>
+            </box>
+          </Show>
+
+          <Show when={timeline().length > 0}>
+            <box marginBottom={1} padding={1} borderStyle="single" borderColor={theme.border} flexDirection="column">
+              <text fg={theme.textMuted} attributes={TextAttributes.UNDERLINE}>
+                Timeline
+              </text>
+              <For each={timeline()}>
+                {(item) => (
+                  <box flexDirection="row" gap={1}>
+                    <text fg={theme.textMuted}>{formatTime(item.time)}</text>
+                    <text
+                      fg={
+                        item.tone === "success"
+                          ? theme.success
+                          : item.tone === "warning"
+                            ? theme.warning
+                            : item.tone === "accent"
+                              ? theme.accent
+                              : theme.text
+                      }
+                    >
+                      {item.text.slice(0, width() - 20)}
+                    </text>
+                  </box>
+                )}
+              </For>
+            </box>
+          </Show>
+
+          <box flexDirection={wide() ? "row" : "column"} gap={1}>
+            <box flexDirection="column" width={listWidth()} gap={1}>
+              <Show
+                when={items().length > 0}
+                fallback={
+                  <box padding={1} borderStyle="rounded" borderColor={theme.border}>
+                    <text fg={theme.textMuted}>No workers match the current view.</text>
+                  </box>
+                }
+              >
+                <For each={items()}>
+                  {(item, index) => (
+                    <WorkerLane
+                      worker={item.worker}
+                      subtask={item.subtask}
+                      selected={selected() === index()}
+                      planWorkerModel={props.plan.workerModel.modelID}
+                      onSelect={() => {
+                        setSelected(index())
+                        setShowLogs(false)
+                      }}
+                    />
+                  )}
+                </For>
+              </Show>
+            </box>
+
+            <Show when={current()}>
+              {(item) => (
+                <box flexDirection="column" width={detailWidth()} gap={1}>
+                  <WorkerDetail
+                    plan={props.plan}
+                    worker={item().worker}
+                    subtask={item().subtask}
+                    width={detailWidth()}
+                    onLogs={() => setShowLogs((value) => !value)}
+                    onOpen={openCurrent}
+                    onRetry={() => void retryCurrent()}
+                  />
+                  <Show when={showLogs()}>
+                    <WorkerLogs worker={item().worker} subtask={item().subtask} width={detailWidth()} />
+                  </Show>
+                </box>
+              )}
+            </Show>
+          </box>
+
+          <box marginTop={1} paddingTop={1} borderStyle="single" borderColor={theme.border} flexDirection="column" gap={0}>
+            <box flexDirection="row" gap={2}>
+              <text fg={theme.text} attributes={TextAttributes.BOLD}>
+                Total:
+              </text>
+              <text fg={theme.accent}>{formatCost(totals().cost)}</text>
+              <text fg={theme.textMuted}>
+                {formatTokens(totals().input)} in / {formatTokens(totals().output)} out
+              </text>
+              <text fg={theme.textMuted}>{totals().tools} tool calls</text>
+              <text fg={theme.textMuted}>{formatDuration(elapsed())}</text>
+            </box>
+            <box flexDirection="row" gap={2} marginTop={1}>
+              <text fg={theme.textMuted}>
+                arrows navigate | pgup/pgdn scroll | home/end jump | f filter | s sort | l logs | o open | r retry | c cancel | esc back
+              </text>
+            </box>
+          </box>
         </box>
-        <box flexDirection="row" gap={2} marginTop={1}>
-          <text fg={theme.textMuted}>arrows navigate | f filter | s sort | l logs | o open | r retry | c cancel | esc back</text>
-        </box>
-      </box>
+      </scrollbox>
     </box>
   )
 }

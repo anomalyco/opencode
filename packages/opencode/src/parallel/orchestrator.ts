@@ -7,6 +7,7 @@ import * as Scheduler from "./scheduler"
 import { lint } from "./lint"
 import { rewrite, validate } from "./rewrite"
 import { analyze as analyzeArtifacts, validate as validateArtifacts, rewrite as rewriteArtifacts } from "./artifact"
+import { analyzeStrategy, selectExecutionMode } from "./strategy"
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
 import { Instance } from "@/project/instance"
@@ -37,6 +38,13 @@ export namespace Orchestrator {
   type Outcome = {
     status: "done" | "partial_success" | "failed"
     merged: number
+    failed: number
+    unresolved: number
+  }
+
+  type Direct = {
+    status: "done" | "partial_success" | "failed"
+    done: number
     failed: number
     unresolved: number
   }
@@ -203,6 +211,22 @@ export namespace Orchestrator {
     return { status: "failed", merged, failed, unresolved: open }
   }
 
+  export function resolveDirectOutcome(workers: Plan["workers"]): Direct {
+    const done = workers.filter((worker) => worker.status === "done" || worker.status === "merged").length
+    const failed = workers.filter((worker) => worker.status === "failed" || worker.status === "conflict").length
+    const open = unresolved(workers).length
+
+    if (done === workers.length && failed === 0 && open === 0) {
+      return { status: "done", done, failed, unresolved: open }
+    }
+
+    if (done > 0 && open === 0) {
+      return { status: "partial_success", done, failed, unresolved: open }
+    }
+
+    return { status: "failed", done, failed, unresolved: open }
+  }
+
   function pick(err: unknown, key: "code" | "stage" | "message"): string | undefined {
     if (!err || typeof err !== "object") return
     if (!("data" in err)) return
@@ -266,26 +290,18 @@ export namespace Orchestrator {
   }
 
   async function preflight(plan: Plan): Promise<void> {
-    const root =
-      Project.get(plan.projectID)?.worktree ?? plan.workers.find((w) => w.worktreeDir)?.worktreeDir ?? process.cwd()
-
-    const gitCheck = await git(["rev-parse", "--is-inside-work-tree"], { cwd: root })
-    if (gitCheck.exitCode !== 0) {
+    const project = Project.get(plan.projectID)
+    const strategy = analyzeStrategy(plan, project)
+    const mode = selectExecutionMode(plan, project)
+    if (
+      mode === "worktree" &&
+      strategy.recommended === "task-agent" &&
+      (!project || project.vcs !== "git" || project.worktree === "/")
+    ) {
       throw issue({
-        code: "git_not_ready",
+        code: "strategy_requires_task_agent",
         stage: "preflight",
-        message: `Git worktree check failed at ${root}`,
-      })
-    }
-
-    const writable = await access(root, constants.W_OK)
-      .then(() => true)
-      .catch(() => false)
-    if (!writable) {
-      throw issue({
-        code: "worktree_readonly",
-        stage: "preflight",
-        message: `Worktree is not writable: ${root}`,
+        message: `Task Analyst recommends task agents instead of git worktrees: ${strategy.reasons[0]}`,
       })
     }
 
@@ -300,6 +316,31 @@ export namespace Orchestrator {
           code: "dependency_missing",
           stage: "preflight",
           message: `Subtask "${subtask.title}" references missing dependency ${dep}`,
+        })
+      }
+    }
+
+    if (mode === "worktree") {
+      const root =
+        project?.worktree ?? plan.workers.find((w) => w.worktreeDir)?.worktreeDir ?? process.cwd()
+
+      const gitCheck = await git(["rev-parse", "--is-inside-work-tree"], { cwd: root })
+      if (gitCheck.exitCode !== 0) {
+        throw issue({
+          code: "git_not_ready",
+          stage: "preflight",
+          message: `Git worktree check failed at ${root}`,
+        })
+      }
+
+      const writable = await access(root, constants.W_OK)
+        .then(() => true)
+        .catch(() => false)
+      if (!writable) {
+        throw issue({
+          code: "worktree_readonly",
+          stage: "preflight",
+          message: `Worktree is not writable: ${root}`,
         })
       }
     }
@@ -574,6 +615,7 @@ export namespace Orchestrator {
       workerModel: PlanSchema.shape.workerModel.optional(),
       publishMode: z.enum(["new-branch", "unstaged", "direct"]).optional(),
       approvalMode: PlanSchema.shape.approvalMode.optional(),
+      executionMode: PlanSchema.shape.executionMode.optional(),
     }),
     async (input): Promise<Plan> => {
       await checkPlanLimit(input.projectID)
@@ -594,6 +636,7 @@ export namespace Orchestrator {
         ...models,
         publishMode,
         approvalMode,
+        executionMode: input.executionMode,
       })
 
       const kind = Decomposition.profile(input.task)
@@ -617,6 +660,20 @@ export namespace Orchestrator {
         estimatedOutputTokens: estimate.estimatedOutputTokens,
       })
 
+      const executionMode =
+        input.executionMode ??
+        selectExecutionMode(
+          {
+            task: input.task,
+            subtasks,
+            workers: subtasks.map((st) => ({
+              subtaskID: st.id,
+              status: "pending" as const,
+            })),
+          },
+          Instance.project,
+        )
+
       const updated = await PlanStore.update({
         id: plan.id,
         subtasks,
@@ -626,6 +683,7 @@ export namespace Orchestrator {
           subtaskID: st.id,
           status: "pending" as const,
         })),
+        executionMode,
         status: "proposed",
       })
 
@@ -648,6 +706,8 @@ export namespace Orchestrator {
 
   export async function execute(planID: PlanID, abort: AbortSignal): Promise<void> {
     log.info("executing plan", { planID })
+    const first = await PlanStore.get(planID)
+    const mode = selectExecutionMode(first, Project.get(first.projectID))
 
     await stage("spawning", async () => {
       await PlanStore.transition({ id: planID, status: "spawning" })
@@ -700,6 +760,34 @@ export namespace Orchestrator {
       log.info("phase complete awaiting manual approval", {
         planID,
         pending: pending.length,
+      })
+      return
+    }
+
+    if (mode === "task-agent") {
+      const result = resolveDirectOutcome(afterWait.workers)
+      if (result.unresolved > 0) {
+        await PlanStore.update({
+          id: planID,
+          status: "failed",
+          error: {
+            code: "workers_incomplete",
+            stage: "running",
+            message: `Workers still unresolved after task-agent execution: ${result.unresolved}`,
+            at: Date.now(),
+          },
+        })
+        Metrics.recordPlanOutcome("failed")
+        return
+      }
+
+      await PlanStore.transition({ id: planID, status: result.status })
+      Metrics.recordPlanOutcome(result.status)
+      log.info("task-agent plan execution complete", {
+        planID,
+        status: result.status,
+        done: result.done,
+        failed: result.failed,
       })
       return
     }
@@ -897,6 +985,7 @@ export namespace Orchestrator {
         subtaskID: st.id,
         status: "pending" as const,
       })),
+      executionMode: plan.executionMode ?? selectExecutionMode(plan, Project.get(plan.projectID)),
       status: "proposed",
     })
   }
@@ -944,6 +1033,13 @@ export namespace Orchestrator {
           const updated = await PlanStore.get(planID)
           const allDone = updated.workers.every((w) => w.status === "done" || w.status === "merged")
           const hasFailures = updated.workers.some((w) => w.status === "failed")
+          const mode = selectExecutionMode(updated, Project.get(updated.projectID))
+
+          if (mode === "task-agent" && updated.status === "running") {
+            const outcome = resolveDirectOutcome(updated.workers)
+            await PlanStore.transition({ id: planID, status: outcome.status })
+            return
+          }
 
           if (allDone && !hasFailures && updated.status === "running") {
             await PlanStore.transition({ id: planID, status: "merging" })
@@ -996,6 +1092,9 @@ export namespace Orchestrator {
 
   export async function publish(planID: PlanID, opts: { mode: "new-branch" | "unstaged" | "direct" }): Promise<void> {
     const plan = await PlanStore.get(planID)
+    if (selectExecutionMode(plan, Project.get(plan.projectID)) === "task-agent") {
+      throw new Error("Task-agent plans edit the current workspace directly and do not support publish modes.")
+    }
     const cfg = await Config.get()
     const mode = opts.mode ?? plan.publishMode ?? cfg.parallel?.publish_mode ?? "new-branch"
 

@@ -2,6 +2,7 @@ import z from "zod"
 import { Tool } from "./tool"
 import { PlanStore } from "@/parallel/plan"
 import { summarizeWaves } from "@/parallel/scheduler"
+import { selectExecutionMode } from "@/parallel/strategy"
 import { Instance } from "@/project/instance"
 import { Session } from "@/session"
 import { SessionID } from "@/session/schema"
@@ -129,6 +130,7 @@ export const ParallelStatusTool = Tool.define("parallel_status", {
       `Plan: ${plan.id}`,
       `Status: ${plan.status}`,
       `Approval mode: ${plan.approvalMode ?? "plan"}`,
+      `Execution mode: ${selectExecutionMode(plan, Instance.project)}`,
       `Task: ${plan.task}`,
       `Progress: ${done} done, ${running} running, ${failed} failed (${plan.workers.length} total)`,
       `Cost: ${formatCost(totalCost)} (${formatTokens(totalInputTokens)} in / ${formatTokens(totalOutputTokens)} out)`,

@@ -7,6 +7,7 @@ import { SubtaskID } from "@/parallel/schema"
 import { Instance } from "@/project/instance"
 import type { Subtask } from "@/parallel/schema"
 import { Config } from "@/config/config"
+import { analyzeStrategy, selectExecutionMode } from "@/parallel/strategy"
 
 const SubtaskModelSchema = z.object({
   providerID: z.string().describe("Provider ID (e.g., 'anthropic')"),
@@ -78,7 +79,7 @@ export const ParallelPlanTool = Tool.define("parallel_plan", async (initCtx) => 
 
   return {
     description:
-      "Create or update a parallel execution plan. Call this to propose a full execution DAG across isolated git worktrees. Subtasks may depend on earlier subtasks, and the runtime will unlock later waves automatically. If a plan already exists for this project, it will be updated.",
+      "Create or update a parallel execution plan. Call this to propose a dependency-aware DAG that can run in isolated git worktrees or direct task-agent sessions. If a plan already exists for this project, it will be updated.",
     parameters: ParamsSchema,
     async execute(params: Params, ctx) {
       const models = await Orchestrator.resolveModels({ currentModel: current })
@@ -131,6 +132,24 @@ export const ParallelPlanTool = Tool.define("parallel_plan", async (initCtx) => 
         subtaskID: st.id,
         status: "pending" as const,
       }))
+      const strategy = analyzeStrategy(
+        {
+          task: params.task,
+          subtasks,
+          workers,
+        },
+        Instance.project,
+      )
+      const executionMode =
+        existing?.executionMode ??
+        selectExecutionMode(
+          {
+            task: params.task,
+            subtasks,
+            workers,
+          },
+          Instance.project,
+        )
 
       let plan
       if (existing) {
@@ -140,6 +159,7 @@ export const ParallelPlanTool = Tool.define("parallel_plan", async (initCtx) => 
           workers,
           sharedContracts: sharedContracts ?? existing.sharedContracts ?? null,
           conventions: params.conventions ?? existing.conventions ?? null,
+          executionMode,
           ...(existing.status === "draft" ? { status: "proposed" } : {}),
         })
       } else {
@@ -149,6 +169,7 @@ export const ParallelPlanTool = Tool.define("parallel_plan", async (initCtx) => 
           task: params.task,
           ...models,
           approvalMode,
+          executionMode,
         })
         plan = await PlanStore.update({
           id: created.id,
@@ -156,6 +177,7 @@ export const ParallelPlanTool = Tool.define("parallel_plan", async (initCtx) => 
           workers,
           sharedContracts: sharedContracts ?? null,
           conventions: params.conventions ?? null,
+          executionMode,
           status: "proposed",
         })
       }
@@ -171,6 +193,9 @@ export const ParallelPlanTool = Tool.define("parallel_plan", async (initCtx) => 
         .join("\n")
 
       const extras = [
+        `Strategy: ${strategy.recommended} (${strategy.confidence} confidence)`,
+        `Execution mode: ${executionMode}`,
+        strategy.reasons[0] ? `Reason: ${strategy.reasons[0]}` : "",
         sharedContracts?.length ? `Shared contracts: ${sharedContracts.length}` : "",
         params.conventions ? "Project conventions: yes" : "",
       ]

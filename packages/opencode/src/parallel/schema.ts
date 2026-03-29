@@ -94,6 +94,9 @@ export type PublishMode = z.infer<typeof PublishMode>
 export const ApprovalMode = z.enum(["plan", "phase", "manual"])
 export type ApprovalMode = z.infer<typeof ApprovalMode>
 
+export const ExecutionMode = z.enum(["task-agent", "worktree"])
+export type ExecutionMode = z.infer<typeof ExecutionMode>
+
 export const PlanError = z.object({
   code: z.string(),
   message: z.string(),
@@ -152,6 +155,7 @@ export const Plan = z.object({
   integrationBranch: z.string().optional(),
   publishMode: PublishMode.optional(),
   approvalMode: ApprovalMode.optional(),
+  executionMode: ExecutionMode.optional(),
   version: z.number().default(0),
   time: z.object({
     created: z.number(),

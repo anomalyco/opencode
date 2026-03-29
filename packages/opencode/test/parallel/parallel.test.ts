@@ -52,21 +52,25 @@ describe("Parallel Infrastructure", () => {
             workerModel: { providerID: "test" as any, modelID: "test-model" as any },
             publishMode: "direct",
             approvalMode: "phase",
+            executionMode: "task-agent",
           })
 
           expect(plan.publishMode).toBe("direct")
           expect(plan.approvalMode).toBe("phase")
+          expect(plan.executionMode).toBe("task-agent")
 
           const updated = await PlanStore.update({
             id: plan.id,
             integrationBranch: `parallel/${plan.id}`,
             publishMode: "unstaged",
             approvalMode: "manual",
+            executionMode: "worktree",
           })
 
           expect(updated.integrationBranch).toBe(`parallel/${plan.id}`)
           expect(updated.publishMode).toBe("unstaged")
           expect(updated.approvalMode).toBe("manual")
+          expect(updated.executionMode).toBe("worktree")
 
           return updated
         },
@@ -111,6 +115,37 @@ describe("Parallel Infrastructure", () => {
           expect(updated.workers[0].status).toBe("pending")
 
           return updated
+        },
+      })
+    })
+
+    test("ignores no-op status updates", async () => {
+      await using tmp = await tmpdir({ git: true })
+
+      await Instance.provide({
+        directory: tmp.path,
+        init: InstanceBootstrap,
+        fn: async () => {
+          const plan = await PlanStore.create({
+            projectID: Instance.project.id,
+            sessionID: undefined,
+            task: "Test task",
+            orchestratorModel: { providerID: "test" as any, modelID: "test-model" as any },
+            workerModel: { providerID: "test" as any, modelID: "test-model" as any },
+          })
+
+          const proposed = await PlanStore.update({
+            id: plan.id,
+            status: "proposed",
+          })
+
+          const same = await PlanStore.update({
+            id: proposed.id,
+            status: "proposed",
+          })
+
+          expect(same.status).toBe("proposed")
+          return same
         },
       })
     })

@@ -4,7 +4,7 @@ import { streamSSE } from "hono/streaming"
 import z from "zod"
 import { Orchestrator } from "../../parallel/orchestrator"
 import { PlanStore } from "../../parallel/plan"
-import { Plan, Subtask, SubtaskID } from "../../parallel/schema"
+import { Plan, Subtask, SubtaskID, ExecutionMode } from "../../parallel/schema"
 import { Instance } from "../../project/instance"
 import { Bus } from "@/bus"
 import { ParallelEvent } from "../../parallel/events"
@@ -81,6 +81,7 @@ export const parallel = new Hono()
           modelID: z.string(),
           providerID: z.string(),
         }),
+        executionMode: ExecutionMode.optional(),
       }),
     ),
     async (c) => {
@@ -91,6 +92,7 @@ export const parallel = new Hono()
         task: body.task,
         orchestratorModel: body.orchestratorModel as any,
         workerModel: body.workerModel as any,
+        executionMode: body.executionMode,
       })
       return c.json(plan)
     },

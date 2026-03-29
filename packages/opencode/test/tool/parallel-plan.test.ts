@@ -121,8 +121,10 @@ describe("tool.parallel_plan", () => {
             timestamps: "UTC in storage",
             other: ["Prefer a single approval for the whole DAG"],
           })
+          expect(plan.executionMode).toBe("worktree")
           expect(result.output).toContain("depends on: 1")
           expect(result.output).toContain("depends on: 1, 2")
+          expect(result.output).toContain("Execution mode: worktree")
           expect(result.output).toContain("Shared contracts: 1")
           expect(result.output).toContain("Project conventions: yes")
         },

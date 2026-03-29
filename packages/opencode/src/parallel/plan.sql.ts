@@ -2,7 +2,19 @@ import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core"
 import { ProjectTable } from "../project/project.sql"
 import { SessionTable } from "../session/session.sql"
 import { Timestamps } from "../storage/schema.sql"
-import type { PlanID, PlanStatus, ModelRef, PlanError, Subtask, WorkerState, PublishMode, SharedContract, ProjectConventions, ApprovalMode } from "./schema"
+import type {
+  PlanID,
+  PlanStatus,
+  ModelRef,
+  PlanError,
+  Subtask,
+  WorkerState,
+  PublishMode,
+  SharedContract,
+  ProjectConventions,
+  ApprovalMode,
+  ExecutionMode,
+} from "./schema"
 import type { SessionID } from "../session/schema"
 import type { ProjectID } from "../project/schema"
 
@@ -29,6 +41,7 @@ export const PlanTable = sqliteTable(
     integration_branch: text(),
     publish_mode: text().$type<PublishMode>(),
     approval_mode: text().$type<ApprovalMode>(),
+    execution_mode: text().$type<ExecutionMode>(),
     version: integer().notNull().default(0),
     ...Timestamps,
     time_approved: integer(),

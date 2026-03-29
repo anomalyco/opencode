@@ -6,11 +6,11 @@ import type { Subtask } from "../../src/parallel/schema"
 
 function createSubtask(id: string, fileScope: string[], dependencies: string[] = []): Subtask {
   return {
-    id: SubtaskID.make(id),
+    id: SubtaskID.ascending(`sub_${id}`),
     title: `Subtask ${id}`,
     description: `Description for ${id}`,
     fileScope,
-    dependencies: dependencies.map((d) => SubtaskID.make(d)),
+    dependencies: dependencies.map((d) => SubtaskID.ascending(`sub_${d}`)),
   }
 }
 
@@ -60,6 +60,8 @@ describe("Rewriter", () => {
       const wiring = result.rewrittenSubtasks[2]
       expect(wiring.fileScope).toContain("src/cli/registry.ts")
       expect(wiring.title).toContain("wiring")
+      expect(SubtaskID.zod.safeParse(String(wiring.id)).success).toBe(true)
+      expect(result.wiringSubtaskId).toBe(wiring.id)
     })
 
     test("filters shared files from original subtasks", () => {
@@ -89,8 +91,8 @@ describe("Rewriter", () => {
       const result = rewrite(subtasks, report)
 
       const wiring = result.rewrittenSubtasks[2]
-      expect(wiring.dependencies.map(String)).toContain("a")
-      expect(wiring.dependencies.map(String)).not.toContain("b")
+      expect(wiring.dependencies.map(String)).toContain(String(subtasks[0].id))
+      expect(wiring.dependencies.map(String)).not.toContain(String(subtasks[1].id))
     })
 
     test("output is deterministic", () => {

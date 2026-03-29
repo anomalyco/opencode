@@ -2,6 +2,7 @@ import z from "zod"
 import { Tool } from "./tool"
 import { PlanStore } from "@/parallel/plan"
 import { Orchestrator } from "@/parallel/orchestrator"
+import { selectExecutionMode } from "@/parallel/strategy"
 import { Instance } from "@/project/instance"
 
 const params = z.object({
@@ -19,6 +20,7 @@ type Meta = {
   planID?: string
   live?: boolean
   status?: string
+  mode?: string
   total?: number
   done?: number
   running?: number
@@ -27,7 +29,7 @@ type Meta = {
 
 export const ParallelExecuteTool = Tool.define<typeof params, Meta>("parallel_execute", {
   description:
-    "Approve and launch a parallel execution plan. Workers will spawn in isolated git worktrees and execute subtasks in parallel. Call this when the user confirms the plan is ready.",
+    "Approve and launch a parallel execution plan. Depending on the saved execution mode, workers will run in isolated git worktrees or direct task-agent sessions.",
   parameters: params,
   async execute(params, ctx) {
     let planID = params.plan_id
@@ -50,6 +52,7 @@ export const ParallelExecuteTool = Tool.define<typeof params, Meta>("parallel_ex
     }
 
     const plan = await PlanStore.get(planID as any)
+    const mode = selectExecutionMode(plan, Instance.project)
 
     // Verify plan belongs to current project
     if (plan.projectID !== projectID) {
@@ -73,6 +76,7 @@ export const ParallelExecuteTool = Tool.define<typeof params, Meta>("parallel_ex
       metadata: {
         planID,
         live,
+        mode,
         status: "approved",
         total: plan.workers.length,
         done: 0,
@@ -91,7 +95,9 @@ export const ParallelExecuteTool = Tool.define<typeof params, Meta>("parallel_ex
       title: `Launched ${plan.subtasks.length} parallel workers`,
       output: [
         `Plan ${planID} approved and execution ${plan.status === "paused" ? "resumed" : "started"}.`,
-        `${plan.subtasks.length} workers are spawning in isolated git worktrees.`,
+        mode === "worktree"
+          ? `${plan.subtasks.length} workers are spawning in isolated git worktrees.`
+          : `${plan.subtasks.length} workers are launching as direct task-agent sessions in the current workspace.`,
         ``,
         live
           ? `Live worker status is now reported by default in this orchestrator thread.`
@@ -101,6 +107,7 @@ export const ParallelExecuteTool = Tool.define<typeof params, Meta>("parallel_ex
       metadata: {
         planID,
         live,
+        mode,
         status: launched.status,
         total: launched.workers.length,
         done,

@@ -23,6 +23,7 @@ import {
   Plan as PlanSchema,
   PublishMode as PublishModeSchema,
   ApprovalMode as ApprovalModeSchema,
+  ExecutionMode as ExecutionModeSchema,
 } from "./schema"
 import { SessionID } from "@/session/schema"
 import { ProjectID } from "@/project/schema"
@@ -75,6 +76,7 @@ function fromRow(row: PlanRow): Plan {
     integrationBranch: row.integration_branch ?? undefined,
     publishMode: row.publish_mode ?? undefined,
     approvalMode: row.approval_mode ?? undefined,
+    executionMode: row.execution_mode ?? undefined,
     version: row.version,
     time: {
       created: row.time_created,
@@ -101,6 +103,7 @@ function toRow(plan: Plan) {
     integration_branch: plan.integrationBranch ?? null,
     publish_mode: plan.publishMode ?? null,
     approval_mode: plan.approvalMode ?? null,
+    execution_mode: plan.executionMode ?? null,
     version: plan.version,
     time_created: plan.time.created,
     time_approved: plan.time.approved ?? null,
@@ -118,6 +121,7 @@ export namespace PlanStore {
       workerModel: true,
       publishMode: true,
       approvalMode: true,
+      executionMode: true,
     }),
     async (input): Promise<Plan> => {
       const plan: Plan = {
@@ -133,6 +137,7 @@ export namespace PlanStore {
         workers: [],
         publishMode: input.publishMode ?? "new-branch",
         approvalMode: input.approvalMode ?? "plan",
+        executionMode: input.executionMode,
         version: 0,
         time: {
           created: Date.now(),
@@ -182,12 +187,13 @@ export namespace PlanStore {
       integrationBranch: z.string().optional(),
       publishMode: PublishModeSchema.optional(),
       approvalMode: ApprovalModeSchema.optional(),
+      executionMode: ExecutionModeSchema.optional(),
     }),
     async (input): Promise<Plan> => {
       const existing = await get(input.id)
       const updates: Partial<PlanRow> = {}
 
-      if (input.status !== undefined) {
+      if (input.status !== undefined && existing.status !== input.status) {
         validateTransition(existing.status, input.status)
         updates.status = input.status
         if (input.status !== "failed" && input.error === undefined) {
@@ -217,6 +223,9 @@ export namespace PlanStore {
       }
       if (input.approvalMode !== undefined) {
         updates.approval_mode = input.approvalMode as any
+      }
+      if (input.executionMode !== undefined) {
+        updates.execution_mode = input.executionMode as any
       }
       if (input.sharedContracts !== undefined) {
         updates.shared_contracts = input.sharedContracts ?? null

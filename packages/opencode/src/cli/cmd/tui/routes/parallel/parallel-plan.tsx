@@ -10,6 +10,9 @@ import { lint } from "@/parallel/lint"
 import { analyze as analyzeArtifacts } from "@/parallel/artifact"
 import { TextAttributes } from "@opentui/core"
 import { pipe, flatMap, entries, sortBy, map, filter } from "remeda"
+import { analyzeStrategy, selectExecutionMode } from "@/parallel/strategy"
+import { Instance } from "@/project/instance"
+import type { ExecutionMode } from "@/parallel/schema"
 
 function SubtaskModelPicker(props: { subtask: Subtask; workerDefault: ModelRef; onSelect: (model: ModelRef) => void }) {
   const sync = useSync()
@@ -50,6 +53,8 @@ export function ParallelPlan(props: { plan: Plan; onApproved: () => void; onCanc
   const dialog = useDialog()
   const [selected, setSelected] = createSignal(0)
   const [edits, setEdits] = createSignal<Record<string, ModelRef | null>>({})
+  const strategy = createMemo(() => analyzeStrategy(props.plan, Instance.project))
+  const [mode, setMode] = createSignal<ExecutionMode>(props.plan.executionMode ?? selectExecutionMode(props.plan, Instance.project))
 
   const width = () => Math.min(80, dim().width - 2)
 
@@ -84,9 +89,13 @@ export function ParallelPlan(props: { plan: Plan; onApproved: () => void; onCanc
           : undefined
 
       const { Orchestrator } = await import("@/parallel/orchestrator")
-      if (editedSubtasks) {
+      if (editedSubtasks || props.plan.executionMode !== mode()) {
         const { PlanStore } = await import("@/parallel/plan")
-        await PlanStore.update({ id: props.plan.id, subtasks: editedSubtasks })
+        await PlanStore.update({
+          id: props.plan.id,
+          subtasks: editedSubtasks,
+          executionMode: mode(),
+        })
       }
       await Orchestrator.approve(props.plan.id)
       props.onApproved()
@@ -204,6 +213,40 @@ export function ParallelPlan(props: { plan: Plan; onApproved: () => void; onCanc
     ))
   }
 
+  const openMode = () => {
+    const recommended = strategy().recommended
+    dialog.replace(() => (
+      <DialogSelect
+        title="Execution Mode"
+        options={[
+          {
+            value: "task-agent",
+            title: "Task agents",
+            description:
+              recommended === "single-agent"
+                ? "Closest safe fallback when the Task Analyst prefers one live editing context"
+                : "Direct child sessions editing the current workspace",
+            category: "Execution",
+            onSelect: () => {
+              setMode("task-agent")
+              dialog.clear()
+            },
+          },
+          {
+            value: "worktree",
+            title: "Git worktrees",
+            description: "Isolated branches and worktrees with merge/publish stages",
+            category: "Execution",
+            onSelect: () => {
+              setMode("worktree")
+              dialog.clear()
+            },
+          },
+        ]}
+      />
+    ))
+  }
+
   useKeyboard((evt) => {
     if (dialog.stack.length > 0) return
     if (evt.defaultPrevented) return
@@ -231,6 +274,10 @@ export function ParallelPlan(props: { plan: Plan; onApproved: () => void; onCanc
       evt.preventDefault()
       evt.stopPropagation()
       openBulk()
+    } else if (evt.name === "e" || (evt.sequence === "e" && !evt.ctrl)) {
+      evt.preventDefault()
+      evt.stopPropagation()
+      openMode()
     } else if (evt.name === "up" || (evt.sequence === "k" && !evt.ctrl)) {
       evt.preventDefault()
       evt.stopPropagation()
@@ -268,6 +315,54 @@ export function ParallelPlan(props: { plan: Plan; onApproved: () => void; onCanc
           </text>
         </box>
       </Show>
+
+      <box
+        marginBottom={1}
+        flexDirection="column"
+        borderStyle="single"
+        borderColor={
+          strategy().recommended === "worktree"
+            ? strategy().confidence === "high"
+              ? theme.success
+              : theme.warning
+            : theme.warning
+        }
+        padding={1}
+      >
+        <box flexDirection="row" gap={1}>
+          <text fg={theme.textMuted} attributes={TextAttributes.UNDERLINE}>
+            Task Analyst
+          </text>
+          <text fg={theme.text}>
+            {strategy().recommended}
+          </text>
+          <text fg={strategy().confidence === "high" ? theme.success : strategy().confidence === "medium" ? theme.warning : theme.error}>
+            {strategy().confidence}
+          </text>
+        </box>
+        <For each={strategy().reasons}>
+          {(item) => (
+            <text fg={theme.textMuted} wrapMode="word">
+              reason: {item}
+            </text>
+          )}
+        </For>
+        <Show when={strategy().risks.length > 0}>
+          <For each={strategy().risks}>
+            {(item) => (
+              <text fg={theme.warning} wrapMode="word">
+                risk: {item}
+              </text>
+            )}
+          </For>
+        </Show>
+        <text fg={theme.textMuted}>
+          alternatives: {strategy().alternatives.join(", ")}
+        </text>
+        <text fg={mode() === "worktree" ? theme.success : theme.accent}>
+          execution mode: {mode()}
+        </text>
+      </box>
 
       {/* Lint warnings */}
       {(() => {
@@ -390,6 +485,9 @@ export function ParallelPlan(props: { plan: Plan; onApproved: () => void; onCanc
         <box onMouseUp={openBulk} paddingX={2} paddingY={1}>
           <text fg={theme.text}>[b]ulk</text>
         </box>
+        <box onMouseUp={openMode} paddingX={2} paddingY={1}>
+          <text fg={theme.text}>[e]xecution</text>
+        </box>
         <box onMouseUp={handleRegenerate} paddingX={2} paddingY={1}>
           <text fg={theme.text}>[r]egenerate</text>
         </box>
@@ -400,7 +498,7 @@ export function ParallelPlan(props: { plan: Plan; onApproved: () => void; onCanc
 
       <box marginTop={1}>
         <text fg={theme.textMuted}>
-          arrows to navigate | m model | u unset | b bulk | a approve | r regenerate | c cancel
+          arrows to navigate | m model | u unset | b bulk | e execution | a approve | r regenerate | c cancel
         </text>
       </box>
     </box>
