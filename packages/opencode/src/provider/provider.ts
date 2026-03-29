@@ -28,6 +28,7 @@ import { withStatics } from "@/util/schema"
 
 import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
+import { sanitizeSurrogates } from "./sanitize-surrogates"
 
 const log = Log.create({ service: "provider" })
 
@@ -1196,7 +1197,7 @@ const layer: Layer.Layer<
               headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
               family: model.family ?? existingModel?.family ?? "",
               release_date: model.release_date ?? existingModel?.release_date ?? "",
-              variants: {},
+              variants: {}
             }
             const merged = mergeDeep(ProviderTransform.variants(parsedModel), model.variants ?? {})
             parsedModel.variants = mapValues(
@@ -1455,6 +1456,11 @@ const layer: Layer.Layer<
 
           const combined = signals.length === 0 ? null : signals.length === 1 ? signals[0] : AbortSignal.any(signals)
           if (combined) opts.signal = combined
+
+          if (typeof opts.body === "string" && opts.method === "POST") {
+            opts.body = sanitizeSurrogates(opts.body)
+          }
+
 
           // Strip openai itemId metadata following what codex does
           if (model.api.npm === "@ai-sdk/openai" && opts.body && opts.method === "POST") {
