@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import { createTextFragment, getCursorPosition, getNodeLength, getTextLength, setCursorPosition } from "./editor-dom"
 
+function clear(el: HTMLDivElement) {
+  el.innerHTML = ""
+  el.appendChild(document.createTextNode(""))
+}
+
 describe("prompt-input editor dom", () => {
   test("createTextFragment preserves newlines with consecutive br nodes", () => {
     const fragment = createTextFragment("foo\n\nbar")
@@ -95,5 +100,16 @@ describe("prompt-input editor dom", () => {
     expect(getCursorPosition(container)).toBe(3)
 
     container.remove()
+  })
+
+  test("clear appends a text node to reset formatting context", () => {
+    const container = document.createElement("div")
+    container.innerHTML = `<a href=\"https://example.com\">https://example.com</a>`
+
+    clear(container)
+
+    expect(container.childNodes).toHaveLength(1)
+    expect(container.firstChild?.nodeType).toBe(Node.TEXT_NODE)
+    expect(container.textContent).toBe("")
   })
 })
