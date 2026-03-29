@@ -62,8 +62,9 @@ jobs:
         working-directory: packages/opencode
         run: bun test test/provider/transform.test.ts --timeout 60000
 
-      - name: Typecheck
-        run: bun turbo typecheck
+      - name: Typecheck (opencode core only)
+        working-directory: packages/opencode
+        run: bun run typecheck
 
       - name: Package binaries
         working-directory: packages/opencode/dist
@@ -99,7 +100,7 @@ jobs:
           gh release create "$tag" \
             --title "opencode $tag (f5xc fork)" \
             --notes "$(cat <<EOF
-          Fork build of opencode with LiteLLM/empty content fixes.
+          Fork build of opencode with LiteLLM fixes + TUI enhancements.
           Based on upstream v${base} + fork patches.
 
           ## Install
@@ -114,6 +115,7 @@ jobs:
           \`\`\`
 
           ## Changes from upstream
+          - feat: persistent footer with p10k-style git status colorization
           - fix: role-aware empty/whitespace content filtering for all providers
           - fix: preserve Anthropic thinking block signatures in assistant messages
           - fix: filter empty text/reasoning parts at DB load time

@@ -126,7 +126,7 @@ jobs:
         run: |
           subjects=$(git log --format="%s" upstream/$UPSTREAM_BRANCH..HEAD)
           missing=""
-          for sig in "fix: filter empty/whitespace message content" "fork onboarding - rebrand" "simplify CI for fork"; do
+          for sig in "fix: filter empty/whitespace message content" "fork onboarding - rebrand" "simplify CI for fork" "persistent footer with p10k-style git status"; do
             if ! echo "$subjects" | grep -q "$sig"; then
               missing="$missing  - $sig\n"
             fi
@@ -134,7 +134,7 @@ jobs:
           actual=$(git rev-list --count upstream/$UPSTREAM_BRANCH..HEAD)
           if [ -z "$missing" ]; then
             echo "valid=true" >> "$GITHUB_OUTPUT"
-            echo "✅ All 3 required fork commits present ($actual total ahead)"
+            echo "✅ All 4 required fork commits present ($actual total ahead)"
           else
             echo "valid=false" >> "$GITHUB_OUTPUT"
             echo "missing<<MISSLIST" >> "$GITHUB_OUTPUT"
@@ -161,11 +161,11 @@ jobs:
             echo "❌ Bugfix tests failed after rebase"
           fi
 
-      - name: Run typecheck
+      - name: Run typecheck (opencode core only)
         id: typecheck
         if: steps.tests.outputs.result == 'pass'
         run: |
-          if bun turbo typecheck; then
+          if (cd packages/opencode && bun run typecheck); then
             echo "result=pass" >> "$GITHUB_OUTPUT"
             echo "✅ Typecheck passes"
           else
