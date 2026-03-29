@@ -2,7 +2,7 @@ import { afterEach, describe, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
-import { Effect, Layer, Result, Schema } from "effect"
+import { Cause, Effect, Exit, Layer, Result, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ToolRegistry } from "@/tool/registry"
 import { Tool } from "@/tool/tool"
@@ -272,6 +272,62 @@ describe("tool.registry", () => {
         },
         required: ["query"],
       })
+    }),
+  )
+
+  // Regression for the validate-enum fix: a custom tool whose Zod schema
+  // constrains an arg to an enum must reject out-of-enum values at the registry
+  // boundary instead of forwarding them to the tool's execute. Before the fix
+  // the raw args were passed straight through, so a hallucinated enum value
+  // reached the plugin code untouched.
+  it.instance("rejects invalid enum arguments before reaching the custom tool", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const customTools = path.join(test.directory, ".opencode", "tools")
+      const pluginTool = pathToFileURL(path.resolve(import.meta.dir, "../../../plugin/src/tool.ts")).href
+      yield* Effect.promise(() => fs.mkdir(customTools, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(customTools, "mode.ts"),
+          [
+            `import { tool } from ${JSON.stringify(pluginTool)}`,
+            "export default tool({",
+            "  description: 'pick a mode',",
+            "  args: { mode: tool.schema.enum(['fast', 'slow']) },",
+            "  execute: async ({ mode }) => `mode is ${mode}`,",
+            "})",
+            "",
+          ].join("\n"),
+        ),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const loaded = (yield* registry.all()).find((tool) => tool.id === "mode")
+      if (!loaded) throw new Error("custom mode tool was not loaded")
+
+      const agents = yield* Agent.Service
+      const ctx = {
+        sessionID: SessionID.make("ses_test"),
+        messageID: MessageID.make("msg_test"),
+        agent: (yield* agents.defaultInfo()).name,
+        abort: new AbortController().signal,
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      } satisfies Tool.Context
+
+      // a valid enum value flows through to the tool
+      const ok = yield* loaded.execute({ mode: "fast" }, ctx)
+      expect(ok.output).toBe("mode is fast")
+
+      // an out-of-enum value is rejected at the boundary, naming the offending tool
+      const exit = yield* Effect.exit(loaded.execute({ mode: "medium" }, ctx))
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const pretty = Cause.pretty(exit.cause)
+        expect(pretty).toContain("invalid arguments")
+        expect(pretty).toContain("mode")
+      }
     }),
   )
 
