@@ -2227,17 +2227,42 @@ noLLMServer.instance(
   },
 )
 
-// Agent / command resolution errors
+describe("session.prompt skill metadata", () => {
+  test("marks skill template text explicitly", () => {
+    const parts = SessionPrompt.skillify([
+      {
+        type: "text",
+        text: "Use this skill.",
+      },
+      {
+        type: "agent",
+        name: "build",
+      },
+    ])
 
-noLLMServer.instance(
-  "unknown agent throws typed error",
-  () =>
-    Effect.gen(function* () {
-      const prompt = yield* SessionPrompt.Service
-      const sessions = yield* Session.Service
-      const session = yield* sessions.create({})
-      const exit = yield* prompt
-        .prompt({
+    expect(parts[0]).toMatchObject({
+      type: "text",
+      text: "Use this skill.",
+      synthetic: true,
+      metadata: {
+        kind: "skill-template",
+      },
+    })
+    expect(parts[1]).toMatchObject({
+      type: "agent",
+      name: "build",
+    })
+  })
+})
+
+describe("session.agent-resolution", () => {
+  test("unknown agent throws typed error", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const err = await SessionPrompt.prompt({
           sessionID: session.id,
           agent: "nonexistent-agent-xyz",
           noReply: true,
