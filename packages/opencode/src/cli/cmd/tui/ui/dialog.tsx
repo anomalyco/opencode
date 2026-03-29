@@ -29,7 +29,7 @@ export function Dialog(
       onMouseDown={(e) => {
         renderer.clearSelection()
         dismiss = e.button !== MouseButton.LEFT
-      }}
+      }
       onMouseUp={() => {
         if (dismiss) {
           dismiss = false
