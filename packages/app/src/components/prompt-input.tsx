@@ -27,7 +27,6 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ModelSelectorPopover } from "@/components/dialog-select-model"
-import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
 import { useProviders } from "@/hooks/use-providers"
 import { useCommand } from "@/context/command"
 import { Persist, persisted } from "@/utils/persist"
@@ -572,6 +571,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const open = recent()
       const seen = new Set(open)
       const pinned: AtOption[] = open.map((path) => ({ type: "file", path, display: path, recent: true }))
+      if (!query.trim()) return [...agents, ...pinned]
       const paths = await files.searchFilesAndDirectories(query)
       const fileOptions: AtOption[] = paths
         .filter((path) => !seen.has(path))
@@ -1493,7 +1493,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           size="normal"
                           class="min-w-0 max-w-[320px] text-13-regular text-text-base group"
                           style={control()}
-                          onClick={() => dialog.show(() => <DialogSelectModelUnpaid model={local.model} />)}
+                          onClick={() => {
+                            void import("@/components/dialog-select-model-unpaid").then((x) => {
+                              dialog.show(() => <x.DialogSelectModelUnpaid model={local.model} />)
+                            })
+                          }}
                         >
                           <Show when={local.model.current()?.provider?.id}>
                             <ProviderIcon
