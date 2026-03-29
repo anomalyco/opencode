@@ -1,6 +1,9 @@
 import { BrowserBinary } from "./binary"
 import { Log } from "@/util/log"
 import { Flag } from "@/flag/flag"
+import { Global } from "@/global"
+import path from "path"
+import fs from "fs/promises"
 
 const log = Log.create({ service: "browser.daemon" })
 
@@ -16,6 +19,7 @@ export interface BrowserDaemonOptions {
 interface DaemonInstance {
   session: string
   options: BrowserDaemonOptions
+  profilePath: string
   startedAt: number
 }
 
@@ -26,9 +30,19 @@ interface DaemonInstance {
  * the first command and persists between commands. We manage this by
  * running an initial `open about:blank` to ensure the daemon is up,
  * and tracking session state.
+ *
+ * IMPORTANT: We always use a persistent profile stored in the athena
+ * data directory (~/.local/share/athena/browser-profile/). This means
+ * when the user logs into a site, cookies and auth state persist across
+ * sessions. The profile is shared across all sessions.
  */
 export namespace BrowserDaemon {
   const instances = new Map<string, DaemonInstance>()
+
+  /** Persistent browser profile directory */
+  function getProfilePath(): string {
+    return path.join(Global.Path.data, "browser-profile")
+  }
 
   export async function start(sessionId: string, options: BrowserDaemonOptions = {}): Promise<void> {
     if (instances.has(sessionId)) {
@@ -36,10 +50,23 @@ export namespace BrowserDaemon {
       return
     }
 
-    const binary = await BrowserBinary.resolve()
-    const args = buildGlobalArgs(sessionId, options)
+    // Ensure persistent profile directory exists
+    const profilePath = options.profile || getProfilePath()
+    await fs.mkdir(profilePath, { recursive: true })
 
-    log.info("starting browser daemon", { sessionId, headed: options.headed ?? true })
+    const optionsWithProfile: BrowserDaemonOptions = {
+      ...options,
+      profile: profilePath,
+    }
+
+    const binary = await BrowserBinary.resolve()
+    const args = buildGlobalArgs(sessionId, optionsWithProfile)
+
+    log.info("starting browser daemon", {
+      sessionId,
+      headed: options.headed ?? true,
+      profile: profilePath,
+    })
 
     // Set environment for the daemon
     const env: Record<string, string> = {
@@ -74,7 +101,8 @@ export namespace BrowserDaemon {
 
     instances.set(sessionId, {
       session: sessionId,
-      options,
+      options: optionsWithProfile,
+      profilePath,
       startedAt: Date.now(),
     })
   }
@@ -103,6 +131,8 @@ export namespace BrowserDaemon {
     }
 
     instances.delete(sessionId)
+    // NOTE: We do NOT delete the profile directory — it persists
+    // so logins/cookies carry over to the next session
   }
 
   export function isRunning(sessionId: string): boolean {
@@ -121,7 +151,7 @@ export namespace BrowserDaemon {
   export function buildGlobalArgs(sessionId: string, options: BrowserDaemonOptions): string[] {
     const args: string[] = []
 
-    // Session name for isolation
+    // Session name for isolation between concurrent sessions
     args.push("--session", `athena-${sessionId.slice(0, 8)}`)
 
     // Headed mode (default: true for user visibility, configurable via flag)
@@ -133,7 +163,7 @@ export namespace BrowserDaemon {
     // JSON output for machine-readable responses
     args.push("--json")
 
-    // Profile for persistent state
+    // Persistent profile — keeps cookies, logins, localStorage across sessions
     if (options.profile) {
       args.push("--profile", options.profile)
     }
