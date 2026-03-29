@@ -21,13 +21,12 @@ import { Plugin } from "../plugin"
 import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
-import { defer } from "../util/defer"
+import { fn } from "../util/fn"
 import { ToolRegistry } from "../tool/registry"
 import { MCP } from "../mcp"
 import { LSP } from "../lsp"
 import { ReadTool } from "../tool/read"
 import { FileTime } from "../file/time"
-import { NotFoundError } from "@/storage/db"
 import { Flag } from "../flag/flag"
 import { ulid } from "ulid"
 import { spawn } from "child_process"
@@ -78,13 +77,13 @@ export namespace SessionPrompt {
   }
 
   export interface Interface {
-    readonly assertNotBusy: (sessionID: SessionID) => Effect.Effect<void>
-    readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
-    readonly prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts>
-    readonly loop: (input: z.infer<typeof LoopInput>) => Effect.Effect<MessageV2.WithParts>
-    readonly shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts>
-    readonly command: (input: CommandInput) => Effect.Effect<MessageV2.WithParts>
-    readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
+    readonly assertNotBusy: (sessionID: SessionID) => Effect.Effect<void, unknown>
+    readonly cancel: (sessionID: SessionID) => Effect.Effect<void, unknown>
+    readonly prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts, unknown>
+    readonly loop: (input: z.infer<typeof LoopInput>) => Effect.Effect<MessageV2.WithParts, unknown>
+    readonly shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts, unknown>
+    readonly command: (input: CommandInput) => Effect.Effect<MessageV2.WithParts, unknown>
+    readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"], unknown>
   }
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/SessionPrompt") {}
@@ -543,6 +542,182 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         return tools
       })
 
+      const handleSubtask: (input: {
+        task: MessageV2.SubtaskPart
+        model: Provider.Model
+        lastUser: MessageV2.User
+        sessionID: SessionID
+        session: Session.Info
+        msgs: MessageV2.WithParts[]
+      }) => Effect.Effect<void, unknown> = Effect.fn("SessionPrompt.handleSubtask")(function* (input: {
+        task: MessageV2.SubtaskPart
+        model: Provider.Model
+        lastUser: MessageV2.User
+        sessionID: SessionID
+        session: Session.Info
+        msgs: MessageV2.WithParts[]
+      }) {
+        const { task, model, lastUser, sessionID, session, msgs } = input
+        const taskTool: Awaited<ReturnType<typeof TaskTool.init>> = yield* Effect.promise(() => TaskTool.init())
+        const taskModel = task.model ? yield* getModel(task.model.providerID, task.model.modelID, sessionID) : model
+        const assistantMessage: MessageV2.Assistant = yield* sessions.updateMessage({
+          id: MessageID.ascending(),
+          role: "assistant",
+          parentID: lastUser.id,
+          sessionID,
+          mode: task.agent,
+          agent: task.agent,
+          variant: lastUser.variant,
+          path: { cwd: Instance.directory, root: Instance.worktree },
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          modelID: taskModel.id,
+          providerID: taskModel.providerID,
+          time: { created: Date.now() },
+        })
+        let part: MessageV2.ToolPart = yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: assistantMessage.id,
+          sessionID: assistantMessage.sessionID,
+          type: "tool",
+          callID: ulid(),
+          tool: TaskTool.id,
+          state: {
+            status: "running",
+            input: {
+              prompt: task.prompt,
+              description: task.description,
+              subagent_type: task.agent,
+              command: task.command,
+            },
+            time: { start: Date.now() },
+          },
+        })
+        const taskArgs = {
+          prompt: task.prompt,
+          description: task.description,
+          subagent_type: task.agent,
+          command: task.command,
+        }
+        yield* plugin.trigger("tool.execute.before", { tool: "task", sessionID, callID: part.id }, { args: taskArgs })
+
+        const taskAgent = yield* agents.get(task.agent)
+        if (!taskAgent) {
+          const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
+          const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
+          const error = new NamedError.Unknown({ message: `Agent not found: "${task.agent}".${hint}` })
+          yield* bus.publish(Session.Event.Error, { sessionID, error: error.toObject() })
+          throw error
+        }
+
+        let executionError: Error | undefined
+        const result = yield* Effect.promise((signal) =>
+          taskTool
+            .execute(taskArgs, {
+              agent: task.agent,
+              messageID: assistantMessage.id,
+              sessionID,
+              abort: signal,
+              callID: part.callID,
+              extra: { bypassAgentCheck: true },
+              messages: msgs,
+              metadata(val: { title?: string; metadata?: Record<string, any> }) {
+                return Effect.runPromise(
+                  Effect.gen(function* () {
+                    part = yield* sessions.updatePart({
+                      ...part,
+                      type: "tool",
+                      state: { ...part.state, ...val },
+                    } satisfies MessageV2.ToolPart)
+                  }),
+                )
+              },
+              ask(req: any) {
+                return Effect.runPromise(
+                  permission.ask({
+                    ...req,
+                    sessionID,
+                    ruleset: Permission.merge(taskAgent.permission, session.permission ?? []),
+                  }),
+                )
+              },
+            })
+            .catch((error) => {
+              executionError = error instanceof Error ? error : new Error(String(error))
+              log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
+              return undefined
+            }),
+        )
+
+        const attachments = result?.attachments?.map((attachment) => ({
+          ...attachment,
+          id: PartID.ascending(),
+          sessionID,
+          messageID: assistantMessage.id,
+        }))
+
+        yield* plugin.trigger(
+          "tool.execute.after",
+          { tool: "task", sessionID, callID: part.id, args: taskArgs },
+          result,
+        )
+
+        assistantMessage.finish = "tool-calls"
+        assistantMessage.time.completed = Date.now()
+        yield* sessions.updateMessage(assistantMessage)
+
+        if (result && part.state.status === "running") {
+          yield* sessions.updatePart({
+            ...part,
+            state: {
+              status: "completed",
+              input: part.state.input,
+              title: result.title,
+              metadata: result.metadata,
+              output: result.output,
+              attachments,
+              time: { ...part.state.time, end: Date.now() },
+            },
+          } satisfies MessageV2.ToolPart)
+        }
+
+        if (!result) {
+          yield* sessions.updatePart({
+            ...part,
+            state: {
+              status: "error",
+              error: executionError ? `Tool execution failed: ${executionError.message}` : "Tool execution failed",
+              time: {
+                start: part.state.status === "running" ? part.state.time.start : Date.now(),
+                end: Date.now(),
+              },
+              metadata: part.state.status === "pending" ? undefined : part.state.metadata,
+              input: part.state.input,
+            },
+          } satisfies MessageV2.ToolPart)
+        }
+
+        if (!task.command) return
+
+        const summaryUserMsg: MessageV2.User = {
+          id: MessageID.ascending(),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: lastUser.agent,
+          model: lastUser.model,
+        }
+        yield* sessions.updateMessage(summaryUserMsg)
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: summaryUserMsg.id,
+          sessionID,
+          type: "text",
+          text: "Summarize the task tool output above and continue with your task.",
+          synthetic: true,
+        } satisfies MessageV2.TextPart)
+      })
+
       const getModel = (providerID: ProviderID, modelID: ModelID, sessionID: SessionID) =>
         Effect.promise(() =>
           Provider.getModel(providerID, modelID).catch((e) => {
@@ -887,7 +1062,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         return { info, parts }
       })
 
-      const prompt = Effect.fn("SessionPrompt.prompt")(function* (input: PromptInput) {
+      const prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts, unknown> = Effect.fn(
+        "SessionPrompt.prompt",
+      )(function* (input: PromptInput) {
         const session = yield* sessions.get(input.sessionID)
         yield* Effect.promise(() => SessionRevert.cleanup(session))
         const message = yield* createUserMessage(input)
@@ -915,7 +1092,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           throw new Error("Impossible")
         })
 
-      const runLoop = Effect.fn("SessionPrompt.run")(function* (sessionID: SessionID) {
+      const runLoop: (sessionID: SessionID) => Effect.Effect<MessageV2.WithParts, unknown> = Effect.fn(
+        "SessionPrompt.run",
+      )(function* (sessionID: SessionID) {
         let structured: unknown | undefined
         let step = 0
         const session = yield* sessions.get(sessionID)
@@ -963,9 +1142,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           const task = tasks.pop()
 
           if (task?.type === "subtask") {
-            yield* Effect.promise((signal) =>
-              handleSubtask({ task, model, lastUser: lastUser!, sessionID, session, msgs, signal }),
-            )
+            yield* handleSubtask({ task, model, lastUser: lastUser!, sessionID, session, msgs })
             continue
           }
 
@@ -1147,55 +1324,60 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           return yield* Effect.failCause(exit.cause as Cause.Cause<never>)
         })
 
-      const startLoop = Effect.fnUntraced(function* (s: State, sessionID: SessionID) {
-        const fiber = yield* runLoop(sessionID).pipe(
-          Effect.onExit((exit) =>
-            Effect.gen(function* () {
-              const entry = s.loops.get(sessionID)
-              if (entry) {
-                // On interrupt, resolve queued callers with the last assistant message
-                const resolved =
-                  Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)
-                    ? Exit.succeed(yield* lastAssistant(sessionID))
-                    : exit
-                for (const d of entry.queue) yield* Deferred.done(d, resolved)
-              }
-              s.loops.delete(sessionID)
-              yield* status.set(sessionID, { type: "idle" })
-            }),
-          ),
-          Effect.forkChild,
-        )
-        const entry = s.loops.get(sessionID)
-        if (entry) {
-          entry.fiber = fiber
-        } else {
-          s.loops.set(sessionID, { fiber, queue: [] })
-        }
-        return yield* awaitFiber(fiber, lastAssistant(sessionID))
-      })
+      const startLoop: (s: State, sessionID: SessionID) => Effect.Effect<MessageV2.WithParts, unknown> =
+        Effect.fnUntraced(function* (s: State, sessionID: SessionID) {
+          const fiber = yield* runLoop(sessionID).pipe(
+            Effect.onExit((exit) =>
+              Effect.gen(function* () {
+                const entry = s.loops.get(sessionID)
+                if (entry) {
+                  // On interrupt, resolve queued callers with the last assistant message
+                  const resolved =
+                    Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)
+                      ? Exit.succeed(yield* lastAssistant(sessionID))
+                      : exit
+                  for (const d of entry.queue) yield* Deferred.done(d, resolved)
+                }
+                s.loops.delete(sessionID)
+                yield* status.set(sessionID, { type: "idle" })
+              }),
+            ),
+            Effect.forkChild,
+          )
+          const entry = s.loops.get(sessionID)
+          if (entry) {
+            entry.fiber = fiber
+          } else {
+            s.loops.set(sessionID, { fiber, queue: [] })
+          }
+          return yield* awaitFiber(fiber, lastAssistant(sessionID))
+        })
 
-      const loop = Effect.fn("SessionPrompt.loop")(function* (input: z.infer<typeof LoopInput>) {
+      const loop: (input: z.infer<typeof LoopInput>) => Effect.Effect<MessageV2.WithParts, unknown> = Effect.fn(
+        "SessionPrompt.loop",
+      )(function* (input: z.infer<typeof LoopInput>) {
         const s = yield* InstanceState.get(cache)
         const existing = s.loops.get(input.sessionID)
 
         if (existing) {
           const d = yield* Deferred.make<MessageV2.WithParts, unknown>()
           existing.queue.push(d)
-          return yield* Deferred.await(d).pipe(Effect.orDie)
+          return yield* Deferred.await(d)
         }
 
         // If a shell is running, queue — shell cleanup will start the loop
         if (s.shells.has(input.sessionID)) {
           const d = yield* Deferred.make<MessageV2.WithParts, unknown>()
           s.loops.set(input.sessionID, { queue: [d] })
-          return yield* Deferred.await(d).pipe(Effect.orDie)
+          return yield* Deferred.await(d)
         }
 
         return yield* startLoop(s, input.sessionID)
       })
 
-      const shell = Effect.fn("SessionPrompt.shell")(function* (input: ShellInput) {
+      const shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts, unknown> = Effect.fn(
+        "SessionPrompt.shell",
+      )(function* (input: ShellInput) {
         const s = yield* InstanceState.get(cache)
         if (s.loops.has(input.sessionID) || s.shells.has(input.sessionID)) {
           throw new Session.BusyError(input.sessionID)
@@ -1373,9 +1555,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   )
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
-  export async function assertNotBusy(sessionID: SessionID) {
-    return runPromise((svc) => svc.assertNotBusy(sessionID))
-  }
+  export const assertNotBusy = fn(SessionID.zod, (sessionID) => runPromise((svc) => svc.assertNotBusy(sessionID)))
 
   export const PromptInput = z.object({
     sessionID: SessionID.zod,
@@ -1444,25 +1624,17 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   })
   export type PromptInput = z.infer<typeof PromptInput>
 
-  export async function prompt(input: PromptInput) {
-    return runPromise((svc) => svc.prompt(input))
-  }
+  export const prompt = fn(PromptInput, (input) => runPromise((svc) => svc.prompt(input)))
 
-  export async function resolvePromptParts(template: string) {
-    return runPromise((svc) => svc.resolvePromptParts(template))
-  }
+  export const resolvePromptParts = fn(z.string(), (template) => runPromise((svc) => svc.resolvePromptParts(template)))
 
-  export async function cancel(sessionID: SessionID) {
-    return runPromise((svc) => svc.cancel(sessionID))
-  }
+  export const cancel = fn(SessionID.zod, (sessionID) => runPromise((svc) => svc.cancel(sessionID)))
 
   export const LoopInput = z.object({
     sessionID: SessionID.zod,
   })
 
-  export async function loop(input: z.infer<typeof LoopInput>) {
-    return runPromise((svc) => svc.loop(input))
-  }
+  export const loop = fn(LoopInput, (input) => runPromise((svc) => svc.loop(input)))
 
   export const ShellInput = z.object({
     sessionID: SessionID.zod,
@@ -1477,9 +1649,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   })
   export type ShellInput = z.infer<typeof ShellInput>
 
-  export async function shell(input: ShellInput) {
-    return runPromise((svc) => svc.shell(input))
-  }
+  export const shell = fn(ShellInput, (input) => runPromise((svc) => svc.shell(input)))
 
   export const CommandInput = z.object({
     messageID: MessageID.zod.optional(),
@@ -1504,159 +1674,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   })
   export type CommandInput = z.infer<typeof CommandInput>
 
-  export async function command(input: CommandInput) {
-    return runPromise((svc) => svc.command(input))
-  }
+  export const command = fn(CommandInput, (input) => runPromise((svc) => svc.command(input)))
 
   async function lastModelImpl(sessionID: SessionID) {
     for await (const item of MessageV2.stream(sessionID)) {
       if (item.info.role === "user" && item.info.model) return item.info.model
     }
     return Provider.defaultModel()
-  }
-
-  async function handleSubtask(input: {
-    task: MessageV2.SubtaskPart
-    model: Provider.Model
-    lastUser: MessageV2.User
-    sessionID: SessionID
-    session: Session.Info
-    msgs: MessageV2.WithParts[]
-    signal: AbortSignal
-  }) {
-    const { task, model, lastUser, sessionID, session, msgs, signal } = input
-    const taskTool = await TaskTool.init()
-    const taskModel = task.model ? await Provider.getModel(task.model.providerID, task.model.modelID) : model
-    const assistantMessage = (await Session.updateMessage({
-      id: MessageID.ascending(),
-      role: "assistant",
-      parentID: lastUser.id,
-      sessionID,
-      mode: task.agent,
-      agent: task.agent,
-      variant: lastUser.variant,
-      path: { cwd: Instance.directory, root: Instance.worktree },
-      cost: 0,
-      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-      modelID: taskModel.id,
-      providerID: taskModel.providerID,
-      time: { created: Date.now() },
-    })) as MessageV2.Assistant
-    let part = (await Session.updatePart({
-      id: PartID.ascending(),
-      messageID: assistantMessage.id,
-      sessionID: assistantMessage.sessionID,
-      type: "tool",
-      callID: ulid(),
-      tool: TaskTool.id,
-      state: {
-        status: "running",
-        input: { prompt: task.prompt, description: task.description, subagent_type: task.agent, command: task.command },
-        time: { start: Date.now() },
-      },
-    })) as MessageV2.ToolPart
-    const taskArgs = {
-      prompt: task.prompt,
-      description: task.description,
-      subagent_type: task.agent,
-      command: task.command,
-    }
-    await Plugin.trigger("tool.execute.before", { tool: "task", sessionID, callID: part.id }, { args: taskArgs })
-    let executionError: Error | undefined
-    const taskAgent = await Agent.get(task.agent)
-    if (!taskAgent) {
-      const available = await Agent.list().then((agents) => agents.filter((a) => !a.hidden).map((a) => a.name))
-      const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
-      const error = new NamedError.Unknown({ message: `Agent not found: "${task.agent}".${hint}` })
-      Bus.publish(Session.Event.Error, { sessionID, error: error.toObject() })
-      throw error
-    }
-    const taskCtx: Tool.Context = {
-      agent: task.agent,
-      messageID: assistantMessage.id,
-      sessionID,
-      abort: signal,
-      callID: part.callID,
-      extra: { bypassAgentCheck: true },
-      messages: msgs,
-      async metadata(val) {
-        part = (await Session.updatePart({
-          ...part,
-          type: "tool",
-          state: { ...part.state, ...val },
-        } satisfies MessageV2.ToolPart)) as MessageV2.ToolPart
-      },
-      async ask(req) {
-        await Permission.ask({
-          ...req,
-          sessionID,
-          ruleset: Permission.merge(taskAgent.permission, session.permission ?? []),
-        })
-      },
-    }
-    const result = await taskTool.execute(taskArgs, taskCtx).catch((error) => {
-      executionError = error
-      log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
-      return undefined
-    })
-    const attachments = result?.attachments?.map((attachment) => ({
-      ...attachment,
-      id: PartID.ascending(),
-      sessionID,
-      messageID: assistantMessage.id,
-    }))
-    await Plugin.trigger("tool.execute.after", { tool: "task", sessionID, callID: part.id, args: taskArgs }, result)
-    assistantMessage.finish = "tool-calls"
-    assistantMessage.time.completed = Date.now()
-    await Session.updateMessage(assistantMessage)
-    if (result && part.state.status === "running") {
-      await Session.updatePart({
-        ...part,
-        state: {
-          status: "completed",
-          input: part.state.input,
-          title: result.title,
-          metadata: result.metadata,
-          output: result.output,
-          attachments,
-          time: { ...part.state.time, end: Date.now() },
-        },
-      } satisfies MessageV2.ToolPart)
-    }
-    if (!result) {
-      await Session.updatePart({
-        ...part,
-        state: {
-          status: "error",
-          error: executionError ? `Tool execution failed: ${executionError.message}` : "Tool execution failed",
-          time: {
-            start: part.state.status === "running" ? part.state.time.start : Date.now(),
-            end: Date.now(),
-          },
-          metadata: part.state.status === "pending" ? undefined : part.state.metadata,
-          input: part.state.input,
-        },
-      } satisfies MessageV2.ToolPart)
-    }
-    if (task.command) {
-      const summaryUserMsg: MessageV2.User = {
-        id: MessageID.ascending(),
-        sessionID,
-        role: "user",
-        time: { created: Date.now() },
-        agent: lastUser.agent,
-        model: lastUser.model,
-      }
-      await Session.updateMessage(summaryUserMsg)
-      await Session.updatePart({
-        id: PartID.ascending(),
-        messageID: summaryUserMsg.id,
-        sessionID,
-        type: "text",
-        text: "Summarize the task tool output above and continue with your task.",
-        synthetic: true,
-      } satisfies MessageV2.TextPart)
-    }
   }
 
   /** @internal Exported for testing */
