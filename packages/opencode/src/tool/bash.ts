@@ -2,6 +2,7 @@ import z from "zod"
 import os from "os"
 import { Tool } from "./tool"
 import path from "path"
+import fs from "fs"
 import DESCRIPTION from "./bash.txt"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
@@ -16,6 +17,7 @@ import { Shell } from "@/shell/shell"
 
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncate"
+import { Identifier } from "@/id/id"
 import { Plugin } from "@/plugin"
 import { Cause, Effect, Exit, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
@@ -326,7 +328,10 @@ async function run(
   },
   ctx: Tool.Context,
 ) {
-  let output = ""
+  let head = ""
+  let spoolFd: number | undefined
+  let spoolPath: string | undefined
+  let total = 0
   let expired = false
   let aborted = false
 
@@ -344,10 +349,27 @@ async function run(
       yield* Effect.forkScoped(
         Stream.runForEach(Stream.decodeText(handle.all), (chunk) =>
           Effect.sync(() => {
-            output += chunk
+            total += chunk.length
+            // Keep only enough in memory for the metadata preview and final
+            // truncated output (Truncate.MAX_BYTES = 50 KB).  Everything else
+            // goes straight to a spool file on disk so the full output is
+            // recoverable via grep/read without blowing up the heap.
+            if (head.length < Truncate.MAX_BYTES) {
+              head += chunk
+            }
+            if (total > Truncate.MAX_BYTES) {
+              if (spoolFd === undefined) {
+                spoolPath = path.join(Truncate.DIR, Identifier.ascending("tool"))
+                fs.mkdirSync(Truncate.DIR, { recursive: true })
+                spoolFd = fs.openSync(spoolPath, "w")
+                // Flush everything accumulated so far
+                fs.writeSync(spoolFd, head)
+              }
+              fs.writeSync(spoolFd, chunk)
+            }
             ctx.metadata({
               metadata: {
-                output: preview(output),
+                output: preview(head),
                 description: input.description,
               },
             })
@@ -383,6 +405,8 @@ async function run(
     }).pipe(Effect.scoped, Effect.orDie),
   )
 
+  if (spoolFd !== undefined) fs.closeSync(spoolFd)
+
   let code: number | null = null
   if (Exit.isSuccess(exit)) {
     code = exit.value
@@ -390,21 +414,35 @@ async function run(
     throw Cause.squash(exit.cause)
   }
 
-  const meta: string[] = []
-  if (expired) meta.push(`bash tool terminated command after exceeding timeout ${input.timeout} ms`)
-  if (aborted) meta.push("User aborted the command")
-  if (meta.length > 0) {
-    output += "\n\n<bash_metadata>\n" + meta.join("\n") + "\n</bash_metadata>"
+  const suffix: string[] = []
+  if (expired) suffix.push(`bash tool terminated command after exceeding timeout ${input.timeout} ms`)
+  if (aborted) suffix.push("User aborted the command")
+  if (suffix.length > 0) {
+    head += "\n\n<bash_metadata>\n" + suffix.join("\n") + "\n</bash_metadata>"
+  }
+
+  const meta = {
+    output: preview(head),
+    exit: code,
+    description: input.description,
+  }
+
+  // If output was spooled to disk, run truncation ourselves and signal
+  // the Tool.define wrapper to skip its own Truncate.output() pass.
+  if (spoolPath) {
+    const snip = head.slice(0, Truncate.MAX_BYTES)
+    const hint = `The tool call succeeded but the output was truncated. Full output saved to: ${spoolPath}\nUse Grep to search the full content or Read with offset/limit to view specific sections.`
+    return {
+      title: input.description,
+      metadata: { ...meta, truncated: true as const, outputPath: spoolPath },
+      output: `${snip}\n\n...${total - snip.length} bytes truncated...\n\n${hint}`,
+    }
   }
 
   return {
     title: input.description,
-    metadata: {
-      output: preview(output),
-      exit: code,
-      description: input.description,
-    },
-    output,
+    metadata: meta,
+    output: head,
   }
 }
 
