@@ -429,6 +429,8 @@
           color: var(--color-text);
           font-size: 13px;
           line-height: 1.5;
+          overflow-wrap: anywhere;
+          word-break: break-word;
           padding-left: 12px;
           position: relative;
 
@@ -523,6 +525,8 @@
           color: var(--color-text);
           font-size: 13px;
           line-height: 1.5;
+          overflow-wrap: anywhere;
+          word-break: break-word;
           padding-left: 12px;
           position: relative;
 
