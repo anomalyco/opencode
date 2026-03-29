@@ -594,7 +594,7 @@ export namespace SessionPrompt {
         session,
       })
 
-      const processor = SessionProcessor.create({
+      const processor = await SessionProcessor.create({
         assistantMessage: (await Session.updateMessage({
           id: MessageID.ascending(),
           parentID: lastUser.id,

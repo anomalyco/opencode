@@ -135,6 +135,19 @@ export type TuiDialogSelectProps<Value = unknown> = {
   current?: Value
 }
 
+export type TuiPromptProps = {
+  workspaceID?: string
+  visible?: boolean
+  disabled?: boolean
+  onSubmit?: () => void
+  hint?: JSX.Element
+  showPlaceholder?: boolean
+  placeholders?: {
+    normal?: string[]
+    shell?: string[]
+  }
+}
+
 export type TuiToast = {
   variant?: "info" | "success" | "warning" | "error"
   title?: string
@@ -279,6 +292,9 @@ export type TuiSidebarFileItem = {
 export type TuiSlotMap = {
   app: {}
   home_logo: {}
+  home_prompt: {
+    workspace_id?: string
+  }
   home_bottom: {}
   sidebar_title: {
     session_id: string
@@ -386,6 +402,7 @@ export type TuiPluginApi = {
     DialogConfirm: (props: TuiDialogConfirmProps) => JSX.Element
     DialogPrompt: (props: TuiDialogPromptProps) => JSX.Element
     DialogSelect: <Value = unknown>(props: TuiDialogSelectProps<Value>) => JSX.Element
+    Prompt: (props: TuiPromptProps) => JSX.Element
     toast: (input: TuiToast) => void
     dialog: TuiDialogStack
   }
