@@ -386,7 +386,7 @@ const boot = Effect.fn("test.boot")(function* (input?: { title?: string }) {
   const test = yield* TestLLM
   const prompt = yield* SessionPrompt.Service
   const sessions = yield* Session.Service
-  const chat = yield* sessions.create(input ?? {})
+  const chat = yield* sessions.create(input ?? { title: "Pinned" })
   return { test, prompt, sessions, chat }
 })
 
@@ -438,6 +438,10 @@ it.effect("loop continues when finish is tool-calls", () =>
         const result = yield* prompt.loop({ sessionID: chat.id })
         expect(yield* test.calls).toBe(2)
         expect(result.info.role).toBe("assistant")
+        if (result.info.role === "assistant") {
+          expect(result.parts.some((part) => part.type === "text" && part.text === "second")).toBe(true)
+          expect(result.info.finish).toBe("stop")
+        }
       }),
     { git: true, config: cfg },
   ),
@@ -540,7 +544,7 @@ it.effect("loop sets status to busy then idle", () =>
 // Cancel semantics
 
 it.effect(
-  "cancel interrupts loop and returns last assistant",
+  "cancel interrupts loop and resolves with an assistant message",
   () =>
     provideTmpdirInstance(
       (dir) =>
@@ -629,9 +633,11 @@ it.effect(
           yield* prompt.cancel(chat.id)
 
           const [exitA, exitB] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
-          // Both should resolve (success or interrupt, not error)
-          expect(Exit.isFailure(exitA) && !Cause.hasInterruptsOnly(exitA.cause)).toBe(false)
-          expect(Exit.isFailure(exitB) && !Cause.hasInterruptsOnly(exitB.cause)).toBe(false)
+          expect(Exit.isSuccess(exitA)).toBe(true)
+          expect(Exit.isSuccess(exitB)).toBe(true)
+          if (Exit.isSuccess(exitA) && Exit.isSuccess(exitB)) {
+            expect(exitA.value.info.id).toBe(exitB.value.info.id)
+          }
         }),
       { git: true, config: cfg },
     ),
@@ -678,6 +684,9 @@ it.effect("concurrent loop callers all receive same error result", () =>
         if (a.info.role === "assistant") {
           expect(a.info.error).toBeDefined()
         }
+        if (b.info.role === "assistant") {
+          expect(b.info.error).toBeDefined()
+        }
       }),
     { git: true, config: cfg },
   ),
@@ -708,6 +717,9 @@ it.effect(
 
           const exit = yield* prompt.assertNotBusy(chat.id).pipe(Effect.exit)
           expect(Exit.isFailure(exit)).toBe(true)
+          if (Exit.isFailure(exit)) {
+            expect(Cause.squash(exit.cause)).toBeInstanceOf(Session.BusyError)
+          }
 
           yield* prompt.cancel(chat.id)
           yield* Fiber.await(fiber)
@@ -755,6 +767,9 @@ it.effect(
 
           const exit = yield* prompt.shell({ sessionID: chat.id, agent: "build", command: "echo hi" }).pipe(Effect.exit)
           expect(Exit.isFailure(exit)).toBe(true)
+          if (Exit.isFailure(exit)) {
+            expect(Cause.squash(exit.cause)).toBeInstanceOf(Session.BusyError)
+          }
 
           yield* prompt.cancel(chat.id)
           yield* Fiber.await(fiber)
@@ -805,8 +820,8 @@ it.effect(
             while (Date.now() - start < 2000) {
               const msgs = await MessageV2.filterCompacted(MessageV2.stream(chat.id))
               const taskMsg = msgs.find((item) => item.info.role === "assistant")
-              const tool = taskMsg ? runningTool(taskMsg.parts) : undefined
-              if (tool?.state.metadata?.output.includes("first")) return
+              const tool = taskMsg ? toolPart(taskMsg.parts) : undefined
+              if (tool?.state.status === "running" && tool.state.metadata?.output.includes("first")) return
               await new Promise((done) => setTimeout(done, 20))
             }
             throw new Error("timed out waiting for running shell metadata")
@@ -909,13 +924,47 @@ it.effect(
           expect(Exit.isSuccess(exit)).toBe(true)
           if (Exit.isSuccess(exit)) {
             expect(exit.value.info.role).toBe("assistant")
-            expect(exit.value.parts.some((part) => part.type === "tool")).toBe(true)
+            const tool = completedTool(exit.value.parts)
+            if (tool) {
+              expect(tool.state.output).toContain("User aborted the command")
+            }
           }
 
           const status = yield* SessionStatus.Service
           expect((yield* status.get(chat.id)).type).toBe("idle")
           const busy = yield* prompt.assertNotBusy(chat.id).pipe(Effect.exit)
           expect(Exit.isSuccess(busy)).toBe(true)
+        }),
+      { git: true, config: cfg },
+    ),
+  30_000,
+)
+
+it.effect(
+  "cancel interrupts loop queued behind shell",
+  () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const { prompt, chat } = yield* boot()
+
+          const sh = yield* prompt
+            .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
+            .pipe(Effect.forkChild)
+          yield* waitMs(50)
+
+          const run = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+          yield* waitMs(50)
+
+          yield* prompt.cancel(chat.id)
+
+          const exit = yield* Fiber.await(run)
+          expect(Exit.isFailure(exit)).toBe(true)
+          if (Exit.isFailure(exit)) {
+            expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true)
+          }
+
+          yield* Fiber.await(sh)
         }),
       { git: true, config: cfg },
     ),
@@ -937,6 +986,9 @@ it.effect(
 
           const exit = yield* prompt.shell({ sessionID: chat.id, agent: "build", command: "echo hi" }).pipe(Effect.exit)
           expect(Exit.isFailure(exit)).toBe(true)
+          if (Exit.isFailure(exit)) {
+            expect(Cause.squash(exit.cause)).toBeInstanceOf(Session.BusyError)
+          }
 
           yield* prompt.cancel(chat.id)
           yield* Fiber.await(a)
