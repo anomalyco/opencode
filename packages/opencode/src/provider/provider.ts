@@ -136,7 +136,7 @@ export namespace Provider {
     "@ai-sdk/vercel": createVercel,
     "gitlab-ai-provider": createGitLab,
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
-    "lmstudio": createOpenAICompatible,
+    lmstudio: createOpenAICompatible,
   }
 
   type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
@@ -164,16 +164,16 @@ export namespace Provider {
           try {
             const res = await fetch(`${baseURL}/models`)
             if (!res.ok) return {}
-            const data = await res.json() as any
+            const data = (await res.json()) as any
             const models: Record<string, any> = {}
-            for (const m of (data.data || [])) {
+            for (const m of data.data || []) {
               if (m.id.includes("embedding")) continue // skip embeddings
-              
+
               const prettyName = m.id.split("/").pop() || m.id
-              
+
               models[`lmstudio/${m.id}`] = {
                 id: m.id,
-                name: \`LM Studio: \${prettyName}\`,
+                name: `LM Studio: ${prettyName}`,
                 providerID: "lmstudio",
                 family: "lmstudio-local",
                 api: {
@@ -222,7 +222,7 @@ export namespace Provider {
           } catch (e) {
             return {} // Return empty if LM Studio is not currently running
           }
-        }
+        },
       }
     },
     async anthropic() {
