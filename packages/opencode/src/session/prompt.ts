@@ -73,6 +73,11 @@ export namespace SessionPrompt {
     queue: Deferred.Deferred<MessageV2.WithParts, unknown>[]
   }
 
+  interface ShellEntry {
+    fiber: Fiber.Fiber<MessageV2.WithParts, unknown>
+    abort: AbortController
+  }
+
   export interface Interface {
     readonly assertNotBusy: (sessionID: SessionID) => Effect.Effect<void>
     readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
@@ -105,9 +110,15 @@ export namespace SessionPrompt {
       const cache = yield* InstanceState.make(
         Effect.fn("SessionPrompt.state")(function* () {
           const loops = new Map<string, LoopEntry>()
-          const shells = new Map<string, Fiber.Fiber<MessageV2.WithParts, unknown>>()
+          const shells = new Map<string, ShellEntry>()
           yield* Effect.addFinalizer(() =>
-            Fiber.interruptAll([...loops.values().flatMap((e) => (e.fiber ? [e.fiber] : [])), ...shells.values()]),
+            Effect.gen(function* () {
+              for (const item of shells.values()) item.abort.abort()
+              yield* Fiber.interruptAll([
+                ...loops.values().flatMap((e) => (e.fiber ? [e.fiber] : [])),
+                ...shells.values().map((x) => x.fiber),
+              ])
+            }),
           )
           return { loops, shells }
         }),
@@ -133,8 +144,7 @@ export namespace SessionPrompt {
           s.loops.delete(sessionID)
         }
         if (shellEntry) {
-          yield* Fiber.interrupt(shellEntry)
-          s.shells.delete(sessionID)
+          shellEntry.abort.abort()
         }
         yield* status.set(sessionID, { type: "idle" })
       })
@@ -826,7 +836,7 @@ export namespace SessionPrompt {
         return yield* lastAssistant(sessionID)
       })
 
-      type State = { loops: Map<string, LoopEntry>; shells: Map<string, Fiber.Fiber<MessageV2.WithParts, unknown>> }
+      type State = { loops: Map<string, LoopEntry>; shells: Map<string, ShellEntry> }
 
       const awaitFiber = <A>(fiber: Fiber.Fiber<A, unknown>, fallback: Effect.Effect<A>) =>
         Effect.gen(function* () {
@@ -890,15 +900,18 @@ export namespace SessionPrompt {
           throw new Session.BusyError(input.sessionID)
         }
 
-        const fiber = yield* Effect.promise((signal) => shellImpl(input, signal)).pipe(
+        yield* status.set(input.sessionID, { type: "busy" })
+        const ctrl = new AbortController()
+        const fiber = yield* Effect.promise(() => shellImpl(input, ctrl.signal)).pipe(
           Effect.ensuring(
             Effect.gen(function* () {
-              s.shells.delete(input.sessionID)
+              const entry = s.shells.get(input.sessionID)
+              if (entry?.fiber === fiber) s.shells.delete(input.sessionID)
               // If callers queued a loop while the shell was running, start it
               const pending = s.loops.get(input.sessionID)
               if (pending && pending.queue.length > 0) {
                 yield* startLoop(s, input.sessionID).pipe(Effect.ignore, Effect.forkIn(scope))
-              } else {
+              } else if (!s.loops.has(input.sessionID) && !s.shells.has(input.sessionID)) {
                 yield* status.set(input.sessionID, { type: "idle" })
               }
             }),
@@ -906,7 +919,7 @@ export namespace SessionPrompt {
           Effect.forkChild,
         )
 
-        s.shells.set(input.sessionID, fiber)
+        s.shells.set(input.sessionID, { fiber, abort: ctrl })
         return yield* awaitFiber(fiber, lastAssistant(input.sessionID))
       })
 
