@@ -1,11 +1,16 @@
 use crate::{
+    NotificationClick,
     constants::{UPDATER_ENABLED, window_state_flags},
     server::get_wsl_config,
 };
 use std::{ops::Deref, time::Duration};
 use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_window_state::AppHandleExt;
+use tauri_specta::Event;
 use tokio::sync::mpsc;
+
+#[cfg(windows)]
+use tauri_winrt_notification::Toast;
 
 #[cfg(target_os = "linux")]
 use std::sync::OnceLock;
@@ -25,6 +30,50 @@ fn use_decorations() -> bool {
 
 pub struct MainWindow(WebviewWindow);
 
+fn reveal(window: &WebviewWindow) {
+    let _ = window.show();
+    let _ = window.unminimize();
+    let _ = window.set_focus();
+}
+
+#[cfg(windows)]
+pub fn notify(
+    app: &AppHandle,
+    title: String,
+    body: Option<String>,
+    href: Option<String>,
+) -> Result<(), String> {
+    let exe = tauri::utils::platform::current_exe()
+        .map_err(|err| format!("Failed to resolve current executable: {err}"))?;
+    let dir = exe
+        .parent()
+        .ok_or_else(|| "Failed to resolve executable directory".to_string())?;
+    let id = if dir.ends_with("target\\debug") || dir.ends_with("target\\release") {
+        Toast::POWERSHELL_APP_ID
+    } else {
+        app.config().identifier.as_str()
+    };
+
+    let app = app.clone();
+    let toast = Toast::new(id)
+        .title(&title)
+        .text1(body.as_deref().unwrap_or(""))
+        .on_activated(move |_| {
+            let app = app.clone();
+            let href = href.clone();
+            let next = app.clone();
+            let _ = app.run_on_main_thread(move || {
+                let _ = MainWindow::reveal(&next);
+                let _ = NotificationClick { href }.emit(&next);
+            });
+            Ok(())
+        });
+
+    toast
+        .show()
+        .map_err(|err| format!("Failed to show Windows notification: {err}"))
+}
+
 impl Deref for MainWindow {
     type Target = WebviewWindow;
 
@@ -36,10 +85,18 @@ impl Deref for MainWindow {
 impl MainWindow {
     pub const LABEL: &str = "main";
 
+    pub fn reveal(app: &AppHandle) -> Result<Self, tauri::Error> {
+        let Some(window) = app.get_webview_window(Self::LABEL) else {
+            return Self::create(app);
+        };
+
+        reveal(&window);
+        Ok(Self(window))
+    }
+
     pub fn create(app: &AppHandle) -> Result<Self, tauri::Error> {
         if let Some(window) = app.get_webview_window(Self::LABEL) {
-            let _ = window.set_focus();
-            let _ = window.unminimize();
+            reveal(&window);
             return Ok(Self(window));
         }
 
@@ -69,7 +126,7 @@ impl MainWindow {
         let window = window_builder.build()?;
 
         // Ensure window is focused after creation (e.g., after update/relaunch)
-        let _ = window.set_focus();
+        reveal(&window);
 
         setup_window_state_listener(app, &window);
 

@@ -192,6 +192,37 @@ fn open_path(_app: AppHandle, path: String, app_name: Option<String>) -> Result<
         .map_err(|e| format!("Failed to open path: {e}"))
 }
 
+#[tauri::command]
+#[specta::specta]
+fn show_main_window(app: AppHandle) -> Result<(), String> {
+    MainWindow::reveal(&app)
+        .map(|_| ())
+        .map_err(|e| format!("Failed to show main window: {e}"))
+}
+
+#[tauri::command]
+#[specta::specta]
+fn notify(
+    app: AppHandle,
+    title: String,
+    description: Option<String>,
+    href: Option<String>,
+) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        return crate::windows::notify(&app, title, description, href);
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = app;
+        let _ = title;
+        let _ = description;
+        let _ = href;
+        Err("Native desktop notification click handling is only implemented on Windows".to_string())
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn check_macos_app(app_name: &str) -> bool {
     // Check common installation locations
@@ -313,10 +344,7 @@ pub fn run() {
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // Focus existing window when another instance is launched
-            if let Some(window) = app.get_webview_window(MainWindow::LABEL) {
-                let _ = window.set_focus();
-                let _ = window.unminimize();
-            }
+            let _ = MainWindow::reveal(app);
         }))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_os::init())
@@ -387,11 +415,14 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             check_app_exists,
             wsl_path,
             resolve_app_path,
-            open_path
+            open_path,
+            notify,
+            show_main_window
         ])
         .events(tauri_specta::collect_events![
             LoadingWindowComplete,
-            SqliteMigrationProgress
+            SqliteMigrationProgress,
+            NotificationClick
         ])
         .error_handling(tauri_specta::ErrorHandlingMode::Throw)
 }
@@ -414,6 +445,11 @@ fn test_export_types() {
 
 #[derive(tauri_specta::Event, serde::Deserialize, specta::Type)]
 struct LoadingWindowComplete;
+
+#[derive(tauri_specta::Event, serde::Serialize, serde::Deserialize, Clone, Debug, specta::Type)]
+struct NotificationClick {
+    href: Option<String>,
+}
 
 async fn initialize(app: AppHandle) {
     tracing::info!("Initializing app");
@@ -546,7 +582,6 @@ fn spawn_cli_sync_task(app: AppHandle) {
         }
     });
 }
-
 
 fn get_sidecar_port() -> u32 {
     option_env!("OPENCODE_PORT")

@@ -34,7 +34,7 @@ import { UPDATER_ENABLED } from "./updater"
 import { webviewZoom } from "./webview-zoom"
 import "./styles.css"
 import { Channel } from "@tauri-apps/api/core"
-import { commands, type InitStep } from "./bindings"
+import { commands, events, type InitStep } from "./bindings"
 import { createMenu } from "./menu"
 
 const root = document.getElementById("root")
@@ -314,8 +314,16 @@ const createPlatform = (): Platform => {
       if (permission !== "granted") return
 
       const win = getCurrentWindow()
-      const focused = await win.isFocused().catch(() => document.hasFocus())
-      if (focused) return
+      const [focused, minimized] = await Promise.all([
+        win.isFocused().catch(() => document.hasFocus()),
+        win.isMinimized().catch(() => false),
+      ])
+      if (focused && !minimized) return
+
+      if (os === "windows") {
+        await commands.notify(title, description ?? null, href ?? null).catch(() => undefined)
+        return
+      }
 
       await Promise.resolve()
         .then(() => {
@@ -323,13 +331,18 @@ const createPlatform = (): Platform => {
             body: description ?? "",
             icon: "https://opencode.ai/favicon-96x96-v3.png",
           })
+          if (!notification) return
           notification.onclick = () => {
             const win = getCurrentWindow()
-            void win.show().catch(() => undefined)
-            void win.unminimize().catch(() => undefined)
-            void win.setFocus().catch(() => undefined)
-            handleNotificationClick(href)
-            notification.close()
+            const task = commands.showMainWindow().catch(async () => {
+              await win.show().catch(() => undefined)
+              await win.unminimize().catch(() => undefined)
+              await win.setFocus().catch(() => undefined)
+            })
+            void task.finally(() => {
+              handleNotificationClick(href)
+              notification.close()
+            })
           }
         })
         .catch(() => undefined)
@@ -473,8 +486,12 @@ render(() => {
 
   onMount(() => {
     document.addEventListener("click", handleClick)
+    const off = events.notificationClick.listen((event) => {
+      handleNotificationClick(event.payload.href ?? undefined)
+    })
     onCleanup(() => {
       document.removeEventListener("click", handleClick)
+      void off.then((unlisten) => unlisten())
     })
   })
 

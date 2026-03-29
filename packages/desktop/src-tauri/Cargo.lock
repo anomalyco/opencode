@@ -3129,6 +3129,7 @@ dependencies = [
  "tauri-plugin-updater",
  "tauri-plugin-window-state",
  "tauri-specta",
+ "tauri-winrt-notification",
  "tokio",
  "tokio-stream",
  "tracing",

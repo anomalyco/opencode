@@ -57,6 +57,7 @@ process-wrap = { version = "9.0.3", features = ["tokio1"] }
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_System_Threading", "Win32_System_Registry"] }
 windows-core = "0.62"
+tauri-winrt-notification = "0.7.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18.2"

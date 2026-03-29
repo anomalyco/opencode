@@ -24,6 +24,7 @@
     "core:window:allow-set-theme",
     "core:webview:allow-set-webview-zoom",
     "core:window:allow-is-focused",
+    "core:window:allow-is-minimized",
     "core:window:allow-show",
     "core:window:allow-unminimize",
     "core:window:allow-set-focus",
