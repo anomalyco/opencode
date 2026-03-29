@@ -173,24 +173,21 @@ const SINGLE_CANDIDATE_SIMILARITY_THRESHOLD = 0.0
 const MULTIPLE_CANDIDATES_SIMILARITY_THRESHOLD = 0.3
 
 /**
- * Levenshtein distance algorithm implementation
+ * Levenshtein distance — 2-row O(min(n,m)) memory instead of full O(n×m) matrix.
  */
 function levenshtein(a: string, b: string): number {
-  // Handle empty strings
-  if (a === "" || b === "") {
-    return Math.max(a.length, b.length)
-  }
-  const matrix = Array.from({ length: a.length + 1 }, (_, i) =>
-    Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)),
-  )
-
+  if (a === "" || b === "") return Math.max(a.length, b.length)
+  if (a.length < b.length) [a, b] = [b, a]
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j)
+  let curr = new Array(b.length + 1)
   for (let i = 1; i <= a.length; i++) {
+    curr[0] = i
     for (let j = 1; j <= b.length; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1
-      matrix[i][j] = Math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost)
+      curr[j] = a[i - 1] === b[j - 1] ? prev[j - 1] : 1 + Math.min(prev[j], curr[j - 1], prev[j - 1])
     }
+    ;[prev, curr] = [curr, prev]
   }
-  return matrix[a.length][b.length]
+  return prev[b.length]
 }
 
 export const SimpleReplacer: Replacer = function* (_content, find) {
