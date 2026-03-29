@@ -6,6 +6,24 @@ export namespace BusEvent {
 
   const registry = new Map<string, Definition>()
 
+  export const StreamLagged = define(
+    "server.stream.lagged",
+    z.object({
+      limit: z.number(),
+      queued: z.number(),
+      dropped: z.number(),
+    }),
+  )
+
+  export const StreamExpired = define(
+    "server.stream.expired",
+    z.object({
+      next: z.number(),
+      oldest: z.number(),
+      latest: z.number(),
+    }),
+  )
+
   export function define<Type extends string, Properties extends ZodType>(type: Type, properties: Properties) {
     const result = {
       type,
