@@ -28,18 +28,38 @@ import { LspTool } from "./lsp"
 import { Truncate } from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
 import {
+  // Core navigation
   BrowserOpenTool,
   BrowserNavigateTool,
+  BrowserCloseTool,
+  // Interaction
   BrowserClickTool,
   BrowserTypeTool,
-  BrowserScreenshotTool,
-  BrowserSnapshotTool,
+  BrowserSelectTool,
+  BrowserPressTool,
+  BrowserHoverTool,
+  BrowserDragTool,
   BrowserScrollTool,
+  BrowserUploadTool,
+  // Observation
+  BrowserSnapshotTool,
+  BrowserScreenshotTool,
   BrowserExtractTool,
-  BrowserEvaluateTool,
-  BrowserCloseTool,
-  BrowserWaitTool,
+  BrowserFindTool,
+  BrowserConsoleTool,
+  // Page context
+  BrowserFrameTool,
+  BrowserDialogTool,
   BrowserTabTool,
+  BrowserWaitTool,
+  // Data & state
+  BrowserCookiesTool,
+  BrowserStorageTool,
+  BrowserNetworkTool,
+  BrowserConfigTool,
+  // Execution
+  BrowserEvaluateTool,
+  // Human handoff
   BrowserHumanHandoffTool,
 } from "./browser"
 import { Glob } from "../util/glob"
@@ -149,19 +169,38 @@ export namespace ToolRegistry {
           ...(Flag.ATHENA_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
           ...(cfg.experimental?.batch_tool === true ? [BatchTool] : []),
           ...(Flag.ATHENA_EXPERIMENTAL_PLAN_MODE && Flag.ATHENA_CLIENT === "cli" ? [PlanExitTool] : []),
-          // Browser automation tools
+          // Browser automation tools — core
           BrowserOpenTool,
           BrowserNavigateTool,
+          BrowserCloseTool,
+          // Browser — interaction
           BrowserClickTool,
           BrowserTypeTool,
-          BrowserScreenshotTool,
-          BrowserSnapshotTool,
+          BrowserSelectTool,
+          BrowserPressTool,
+          BrowserHoverTool,
+          BrowserDragTool,
           BrowserScrollTool,
+          BrowserUploadTool,
+          // Browser — observation
+          BrowserSnapshotTool,
+          BrowserScreenshotTool,
           BrowserExtractTool,
-          BrowserEvaluateTool,
-          BrowserCloseTool,
-          BrowserWaitTool,
+          BrowserFindTool,
+          BrowserConsoleTool,
+          // Browser — page context
+          BrowserFrameTool,
+          BrowserDialogTool,
           BrowserTabTool,
+          BrowserWaitTool,
+          // Browser — data & state
+          BrowserCookiesTool,
+          BrowserStorageTool,
+          BrowserNetworkTool,
+          BrowserConfigTool,
+          // Browser — execution
+          BrowserEvaluateTool,
+          // Browser — human handoff
           BrowserHumanHandoffTool,
           ...custom,
         ]

@@ -106,18 +106,39 @@ export namespace Agent {
           const user = Permission.fromConfig(cfg.permission ?? {})
 
           const browserToolPermissions = Permission.fromConfig({
+            // Core navigation
             browser_open: "allow",
             browser_navigate: "allow",
+            browser_close: "deny", // Browser only closes when session ends
+            // Interaction
             browser_click: "allow",
             browser_type: "allow",
-            browser_screenshot: "allow",
-            browser_snapshot: "allow",
+            browser_select: "allow",
+            browser_press: "allow",
+            browser_hover: "allow",
+            browser_drag: "allow",
             browser_scroll: "allow",
+            browser_upload: "ask",
+            // Observation
+            browser_snapshot: "allow",
+            browser_screenshot: "allow",
             browser_extract: "allow",
-            browser_evaluate: "ask",
-            browser_close: "deny", // Browser only closes when session ends
-            browser_wait: "allow",
+            browser_find: "allow",
+            browser_console: "allow",
+            // Page context
+            browser_frame: "allow",
+            browser_dialog: "allow",
             browser_tab: "allow",
+            browser_wait: "allow",
+            // Data & state
+            browser_cookies: "allow",
+            browser_storage: "allow",
+            browser_network: "ask",
+            browser_config: "allow",
+            // Execution
+            browser_evaluate: "ask",
+            // Human handoff
+            browser_human_handoff: "allow",
           })
 
           const browserFileRestrictions = Permission.fromConfig({
