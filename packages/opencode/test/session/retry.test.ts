@@ -2,9 +2,14 @@ import { describe, expect, test } from "bun:test"
 import type { NamedError } from "@opencode-ai/util/error"
 import { APICallError } from "ai"
 import { setTimeout as sleep } from "node:timers/promises"
+import { Effect, Schedule } from "effect"
 import { SessionRetry } from "../../src/session/retry"
 import { MessageV2 } from "../../src/session/message-v2"
 import { ProviderID } from "../../src/provider/schema"
+import { SessionID } from "../../src/session/schema"
+import { SessionStatus } from "../../src/session/status"
+import { Instance } from "../../src/project/instance"
+import { tmpdir } from "../fixture/fixture"
 
 const providerID = ProviderID.make("test")
 
@@ -69,24 +74,47 @@ describe("session.retry.delay", () => {
     expect(SessionRetry.delay(1, longError)).toBe(700000)
   })
 
-  test("sleep caps delay to max 32-bit signed integer to avoid TimeoutOverflowWarning", async () => {
-    const controller = new AbortController()
+  test("caps oversized header delays to the runtime timer limit", () => {
+    const error = apiError({ "retry-after-ms": "999999999999" })
+    expect(SessionRetry.delay(1, error)).toBe(SessionRetry.RETRY_MAX_DELAY)
+  })
 
-    const warnings: string[] = []
-    const originalWarn = process.emitWarning
-    process.emitWarning = (warning: string | Error) => {
-      warnings.push(typeof warning === "string" ? warning : warning.message)
-    }
+  test("policy updates retry status and increments attempts", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const sessionID = SessionID.make("session-retry-test")
+        const error = apiError({ "retry-after-ms": "0" })
 
-    const promise = SessionRetry.sleep(2_560_914_000, controller.signal)
-    controller.abort()
+        await Effect.runPromise(
+          Effect.gen(function* () {
+            const step = yield* Schedule.toStepWithMetadata(
+              SessionRetry.policy({
+                parse: (err) => err as MessageV2.APIError,
+                set: (info) =>
+                  Effect.promise(() =>
+                    SessionStatus.set(sessionID, {
+                      type: "retry",
+                      attempt: info.attempt,
+                      message: info.message,
+                      next: info.next,
+                    }),
+                  ),
+              }),
+            )
+            yield* step(error)
+            yield* step(error)
+          }),
+        )
 
-    try {
-      await promise
-    } catch {}
-
-    process.emitWarning = originalWarn
-    expect(warnings.some((w) => w.includes("TimeoutOverflowWarning"))).toBe(false)
+        expect(await SessionStatus.get(sessionID)).toMatchObject({
+          type: "retry",
+          attempt: 2,
+          message: "boom",
+        })
+      },
+    })
   })
 })
 
@@ -101,9 +129,9 @@ describe("session.retry.retryable", () => {
     expect(SessionRetry.retryable(error)).toBe("Provider is overloaded")
   })
 
-  test("handles json messages without code", () => {
+  test("does not retry unknown json messages", () => {
     const error = wrap(JSON.stringify({ error: { message: "no_kv_space" } }))
-    expect(SessionRetry.retryable(error)).toBe(`{"error":{"message":"no_kv_space"}}`)
+    expect(SessionRetry.retryable(error)).toBeUndefined()
   })
 
   test("does not throw on numeric error codes", () => {
