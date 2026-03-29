@@ -225,6 +225,29 @@ export const ProvidersListCommand = cmd({
 
     prompts.outro(`${results.length} credentials`)
 
+    const config = await Config.get()
+    const configEntries: Array<{ provider: string; providerID: string }> = []
+
+    for (const [providerID, provider] of Object.entries(config.provider ?? {})) {
+      if (results.some(([id]) => id === providerID)) continue
+      if (!provider.options?.apiKey) continue
+      configEntries.push({
+        provider: database[providerID]?.name || provider.name || providerID,
+        providerID,
+      })
+    }
+
+    if (configEntries.length > 0) {
+      UI.empty()
+      prompts.intro("Config")
+
+      for (const { provider, providerID } of configEntries) {
+        prompts.log.info(`${provider} ${UI.Style.TEXT_DIM}config (${providerID})`)
+      }
+
+      prompts.outro(`${configEntries.length} config credential` + (configEntries.length === 1 ? "" : "s"))
+    }
+
     const activeEnvVars: Array<{ provider: string; envVar: string }> = []
 
     for (const [providerID, provider] of Object.entries(database)) {
