@@ -259,14 +259,17 @@ export namespace Snapshot {
                   log.warn("failed to get diff", { hash, exitCode: result.code })
                   return { hash, files: [] }
                 }
+                const files = result.text
+                  .trim()
+                  .split("\n")
+                  .map((x) => x.trim())
+                  .filter(Boolean)
+                if (files.length > 1000) {
+                  log.warn("patch file count exceeds cap", { hash, count: files.length, cap: 1000 })
+                }
                 return {
                   hash,
-                  files: result.text
-                    .trim()
-                    .split("\n")
-                    .map((x) => x.trim())
-                    .filter(Boolean)
-                    .map((x) => path.join(state.worktree, x).replaceAll("\\", "/")),
+                  files: files.slice(0, 1000).map((x) => x.replaceAll("\\", "/")),
                 }
               }),
             )
@@ -304,22 +307,24 @@ export namespace Snapshot {
                 const seen = new Set<string>()
                 for (const item of patches) {
                   for (const file of item.files) {
-                    if (seen.has(file)) continue
-                    seen.add(file)
-                    log.info("reverting", { file, hash: item.hash })
-                    const result = yield* git([...core, ...args(["checkout", item.hash, "--", file])], {
+                    // normalize to relative for dedup (backward compat with old absolute paths)
+                    const rel = path.isAbsolute(file) ? path.relative(state.worktree, file) : file
+                    if (seen.has(rel)) continue
+                    seen.add(rel)
+                    const abs = path.isAbsolute(file) ? file : path.join(state.worktree, file)
+                    log.info("reverting", { file: rel, hash: item.hash })
+                    const result = yield* git([...core, ...args(["checkout", item.hash, "--", rel])], {
                       cwd: state.worktree,
                     })
                     if (result.code !== 0) {
-                      const rel = path.relative(state.worktree, file)
                       const tree = yield* git([...core, ...args(["ls-tree", item.hash, "--", rel])], {
                         cwd: state.worktree,
                       })
                       if (tree.code === 0 && tree.text.trim()) {
-                        log.info("file existed in snapshot but checkout failed, keeping", { file })
+                        log.info("file existed in snapshot but checkout failed, keeping", { file: rel })
                       } else {
-                        log.info("file did not exist in snapshot, deleting", { file })
-                        yield* remove(file)
+                        log.info("file did not exist in snapshot, deleting", { file: rel })
+                        yield* remove(abs)
                       }
                     }
                   }

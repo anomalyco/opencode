@@ -9,6 +9,19 @@ import { MessageV2 } from "./message-v2"
 import { SessionID, MessageID } from "./schema"
 
 export namespace SessionSummary {
+  const DIFF_BUDGET = 1_000_000 // ~1 MB byte budget for diff payloads
+
+  function capDiffs(diffs: Snapshot.FileDiff[]) {
+    let bytes = 0
+    const result: Snapshot.FileDiff[] = []
+    for (const diff of diffs) {
+      bytes += (diff.before?.length ?? 0) + (diff.after?.length ?? 0)
+      if (bytes > DIFF_BUDGET && result.length > 0) break
+      result.push(diff)
+    }
+    return result
+  }
+
   function unquoteGitPath(input: string) {
     if (!input.startsWith('"')) return input
     if (!input.endsWith('"')) return input
@@ -65,6 +78,19 @@ export namespace SessionSummary {
     return Buffer.from(bytes).toString()
   }
 
+  const DIFF_BUDGET = 1_000_000 // ~1 MB byte budget for diff payloads
+
+  function capDiffs(diffs: Snapshot.FileDiff[]) {
+    let bytes = 0
+    const result: Snapshot.FileDiff[] = []
+    for (const diff of diffs) {
+      bytes += (diff.before?.length ?? 0) + (diff.after?.length ?? 0)
+      if (bytes > DIFF_BUDGET && result.length > 0) break
+      result.push(diff)
+    }
+    return result
+  }
+
   export interface Interface {
     readonly summarize: (input: { sessionID: SessionID; messageID: MessageID }) => Effect.Effect<void>
     readonly diff: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Snapshot.FileDiff[]>
@@ -110,7 +136,8 @@ export namespace SessionSummary {
         const all = yield* sessions.messages({ sessionID: input.sessionID })
         if (!all.length) return
 
-        const diffs = yield* computeDiff({ messages: all })
+        const raw = yield* computeDiff({ messages: all })
+        const diffs = capDiffs(raw)
         yield* sessions.setSummary({
           sessionID: input.sessionID,
           summary: {
@@ -128,7 +155,7 @@ export namespace SessionSummary {
         const target = messages.find((m) => m.info.id === input.messageID)
         if (!target || target.info.role !== "user") return
         const msgDiffs = yield* computeDiff({ messages })
-        target.info.summary = { ...target.info.summary, diffs: msgDiffs }
+        target.info.summary = { ...target.info.summary, diffs: capDiffs(msgDiffs) }
         yield* sessions.updateMessage(target.info)
       })
 
