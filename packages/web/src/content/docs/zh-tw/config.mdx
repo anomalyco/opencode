@@ -14,10 +14,11 @@ OpenCode 支援 **JSON** 和 **JSONC**（帶註解的 JSON）格式。
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  // Theme configuration
-  "theme": "opencode",
   "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
+  "server": {
+    "port": 4096,
+  },
 }
 ```
 
@@ -33,7 +34,7 @@ OpenCode 支援 **JSON** 和 **JSONC**（帶註解的 JSON）格式。
 
 設定檔是合併在一起的，而不是被替換。來自以下設定位置的設定會被合併。後面的設定僅在鍵衝突時覆寫前面的設定。所有設定中的非衝突設定都會被保留。
 
-例如，如果您的全域設定設定了 `theme: "opencode"` 和 `autoupdate: true`，而您的專案設定設定了 `model: "anthropic/claude-sonnet-4-5"`，則最終設定將包含所有三個設定。
+例如，如果您的全域設定設定了 `autoupdate: true`，而您的專案設定設定了 `model: "anthropic/claude-sonnet-4-5"`，則最終設定將包含這兩個設定。
 
 ---
 
@@ -171,6 +172,10 @@ opencode run "Hello world"
 - `scroll_speed` - 自訂捲動速度倍率（預設值：`3`，最小值：`1`）。如果 `scroll_acceleration.enabled` 為 `true`，則忽略此選項。
 - `diff_style` - 控制差異呈現方式。`"auto"` 根據終端機寬度自適應，`"stacked"` 始終顯示單列。
 
+使用 `OPENCODE_TUI_CONFIG` 指向自訂 TUI 設定檔。
+
+`opencode.json` 中的舊版 `theme`、`keybinds` 和 `tui` 鍵已被棄用，並將在可能的情況下自動遷移。
+
 [在此了解更多關於 TUI 的資訊](/docs/tui)。
 
 ---
@@ -297,12 +302,12 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）優先於基於設定
 
 ### 主題
 
-您可以透過 OpenCode 設定中的 `theme` 選項設定要使用的主題。
+在 `tui.json` 中設定您的 UI 主題。
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "theme": ""
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "tokyonight"
 }
 ```
 
@@ -402,11 +407,11 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）優先於基於設定
 
 ### 快捷鍵
 
-您可以透過 `keybinds` 選項自訂快捷鍵。
+在 `tui.json` 中自訂快捷鍵。
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/tui.json",
   "keybinds": {}
 }
 ```

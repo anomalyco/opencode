@@ -117,6 +117,78 @@ try {
 
 ---
 
+## Yapılandırılmış Çıktı
+
+Bir JSON şeması ile `format` belirterek modelden yapılandırılmış JSON çıktısı isteyebilirsiniz. Model, şemanızla eşleşen doğrulanmış JSON'u döndürmek için bir `StructuredOutput` aracı kullanacaktır.
+
+### Temel Kullanım
+
+```typescript
+const result = await client.session.prompt({
+  path: { id: sessionId },
+  body: {
+    parts: [{ type: "text", text: "Anthropic'i araştırın ve şirket bilgileri sağlayın" }],
+    format: {
+      type: "json_schema",
+      schema: {
+        type: "object",
+        properties: {
+          company: { type: "string", description: "Şirket adı" },
+          founded: { type: "number", description: "Kuruluş yılı" },
+          products: {
+            type: "array",
+            items: { type: "string" },
+            description: "Ana ürünler",
+          },
+        },
+        required: ["company", "founded"],
+      },
+    },
+  },
+})
+
+// Yapılandırılmış çıktıya erişin
+console.log(result.data.info.structured_output)
+// { company: "Anthropic", founded: 2021, products: ["Claude", "Claude API"] }
+```
+
+### Çıktı Format Türleri
+
+| Tür           | Açıklama                                                      |
+| ------------- | ------------------------------------------------------------- |
+| `text`        | Varsayılan. Standart metin yanıtı (yapılandırılmış çıktı yok) |
+| `json_schema` | Sağlanan şema ile eşleşen doğrulanmış JSON döndürür           |
+
+### JSON Şema Formatı
+
+`type: 'json_schema'` kullanırken şunları sağlayın:
+
+| Alan         | Tür             | Açıklama                                                      |
+| ------------ | --------------- | ------------------------------------------------------------- |
+| `type`       | `'json_schema'` | Gerekli. JSON şema modunu belirtir                            |
+| `schema`     | `object`        | Gerekli. Çıktı yapısını tanımlayan JSON Şema nesnesi          |
+| `retryCount` | `number`        | İsteğe bağlı. Doğrulama yeniden deneme sayısı (varsayılan: 2) |
+
+### Hata Yönetimi
+
+Model, tüm yeniden denemelerden sonra geçerli bir yapılandırılmış çıktı üretemezse, yanıt bir `StructuredOutputError` içerecektir:
+
+```typescript
+if (result.data.info.error?.name === "StructuredOutputError") {
+  console.error("Yapılandırılmış çıktı üretilemedi:", result.data.info.error.message)
+  console.error("Denemeler:", result.data.info.error.retries)
+}
+```
+
+### En İyi Uygulamalar
+
+1. **Açık açıklamalar sağlayın**: Modelin hangi verileri çıkaracağını anlamasına yardımcı olmak için şema özelliklerinde
+2. **`required` kullanın**: Hangi alanların mevcut olması gerektiğini belirtmek için
+3. **Şemaları odaklı tutun**: Karmaşık iç içe geçmiş şemaların model tarafından doğru doldurulması daha zor olabilir
+4. **Uygun `retryCount` ayarlayın**: Karmaşık şemalar için artırın, basit olanlar için azaltın
+
+---
+
 ## API'ler
 
 SDK, tüm sunucu API'lerini type-safe bir istemci aracılığıyla sunar.
@@ -226,27 +298,27 @@ const { providers, default: defaults } = await client.config.providers()
 
 ### Oturumlar
 
-| Yöntem                                                     | Açıklama                                    | Notlar                                                                                                                                                    |
-| ---------------------------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `session.list()`                                           | Oturumları listele                          | <a href={typesUrl}><code>Session[]</code></a> döndürür                                                                                                    |
-| `session.get({ path })`                                    | Oturum al                                   | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                      |
-| `session.children({ path })`                               | Alt oturumları listele                      | <a href={typesUrl}><code>Session[]</code></a> döndürür                                                                                                    |
-| `session.create({ body })`                                 | Oturum oluştur                              | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                      |
-| `session.delete({ path })`                                 | Oturum sil                                  | `boolean` döndürür                                                                                                                                        |
-| `session.update({ path, body })`                           | Oturum özelliklerini güncelle               | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                      |
-| `session.init({ path, body })`                             | Uygulamayı analiz et ve `AGENTS.md` oluştur | `boolean` döndürür                                                                                                                                        |
-| `session.abort({ path })`                                  | Çalışan bir oturumu iptal et                | `boolean` döndürür                                                                                                                                        |
-| `session.share({ path })`                                  | Oturum paylaş                               | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                      |
-| `session.unshare({ path })`                                | Oturum paylaşımını kaldır                   | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                      |
-| `session.summarize({ path, body })`                        | Oturumu özetle                              | `boolean` döndürür                                                                                                                                        |
-| `session.messages({ path })`                               | Oturumdaki mesajları listele                | `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]` döndürür                                  |
-| `session.message({ path })`                                | Mesaj ayrıntılarını al                      | `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}` döndürür                                    |
-| `session.prompt({ path, body })`                           | İstem mesajı gönder                         | `body.noReply: true` UserMessage (yalnızca bağlam) döndürür. Varsayılan olarak AI yanıtıyla <a href={typesUrl}><code>AssistantMessage</code></a> döndürür |
-| `session.command({ path, body })`                          | Oturuma komut gönder                        | `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}` döndürür                           |
-| `session.shell({ path, body })`                            | Bir kabuk komutu çalıştır                   | <a href={typesUrl}><code>AssistantMessage</code></a> döndürür                                                                                             |
-| `session.revert({ path, body })`                           | Bir mesajı geri al                          | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                      |
-| `session.unrevert({ path })`                               | Geri alınan mesajları geri yükle            | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                      |
-| `postSessionByIdPermissionsByPermissionId({ path, body })` | Bir izin isteğine yanıt ver                 | `boolean` döndürür                                                                                                                                        |
+| Yöntem                                                     | Açıklama                                    | Notlar                                                                                                                                                                                                                                        |
+| ---------------------------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session.list()`                                           | Oturumları listele                          | <a href={typesUrl}><code>Session[]</code></a> döndürür                                                                                                                                                                                        |
+| `session.get({ path })`                                    | Oturum al                                   | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                                                                                                          |
+| `session.children({ path })`                               | Alt oturumları listele                      | <a href={typesUrl}><code>Session[]</code></a> döndürür                                                                                                                                                                                        |
+| `session.create({ body })`                                 | Oturum oluştur                              | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                                                                                                          |
+| `session.delete({ path })`                                 | Oturum sil                                  | `boolean` döndürür                                                                                                                                                                                                                            |
+| `session.update({ path, body })`                           | Oturum özelliklerini güncelle               | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                                                                                                          |
+| `session.init({ path, body })`                             | Uygulamayı analiz et ve `AGENTS.md` oluştur | `boolean` döndürür                                                                                                                                                                                                                            |
+| `session.abort({ path })`                                  | Çalışan bir oturumu iptal et                | `boolean` döndürür                                                                                                                                                                                                                            |
+| `session.share({ path })`                                  | Oturum paylaş                               | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                                                                                                          |
+| `session.unshare({ path })`                                | Oturum paylaşımını kaldır                   | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                                                                                                          |
+| `session.summarize({ path, body })`                        | Oturumu özetle                              | `boolean` döndürür                                                                                                                                                                                                                            |
+| `session.messages({ path })`                               | Oturumdaki mesajları listele                | `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]` döndürür                                                                                                                      |
+| `session.message({ path })`                                | Mesaj ayrıntılarını al                      | `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}` döndürür                                                                                                                        |
+| `session.prompt({ path, body })`                           | İstem mesajı gönder                         | `body.noReply: true` UserMessage (yalnızca bağlam) döndürür. Varsayılan olarak AI yanıtıyla <a href={typesUrl}><code>AssistantMessage</code></a> döndürür. [yapılandırılmış çıktı](#yapılandırılmış-çıktı) için `body.outputFormat` destekler |
+| `session.command({ path, body })`                          | Oturuma komut gönder                        | `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}` döndürür                                                                                                               |
+| `session.shell({ path, body })`                            | Bir kabuk komutu çalıştır                   | <a href={typesUrl}><code>AssistantMessage</code></a> döndürür                                                                                                                                                                                 |
+| `session.revert({ path, body })`                           | Bir mesajı geri al                          | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                                                                                                          |
+| `session.unrevert({ path })`                               | Geri alınan mesajları geri yükle            | <a href={typesUrl}><code>Session</code></a> döndürür                                                                                                                                                                                          |
+| `postSessionByIdPermissionsByPermissionId({ path, body })` | Bir izin isteğine yanıt ver                 | `boolean` döndürür                                                                                                                                                                                                                            |
 
 ---
 

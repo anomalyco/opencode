@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 
-import { $ } from "bun"
 import { Script } from "@opencode-ai/script"
+import { $ } from "bun"
+import { fileURLToPath } from "url"
 
 const highlightsTemplate = `
 <!--
@@ -46,7 +47,7 @@ for (const file of pkgjsons) {
   await Bun.file(file).write(pkg)
 }
 
-const extensionToml = new URL("../packages/extensions/zed/extension.toml", import.meta.url).pathname
+const extensionToml = fileURLToPath(new URL("../packages/extensions/zed/extension.toml", import.meta.url))
 let toml = await Bun.file(extensionToml).text()
 toml = toml.replace(/^version = "[^"]+"/m, `version = "${Script.version}"`)
 toml = toml.replaceAll(/releases\/download\/v[^/]+\//g, `releases/download/v${Script.version}/`)
@@ -66,6 +67,9 @@ if (Script.release) {
     await new Promise((resolve) => setTimeout(resolve, 5_000))
   }
 
+  await import(`../packages/desktop/scripts/finalize-latest-json.ts`)
+  await import(`../packages/desktop-electron/scripts/finalize-latest-yml.ts`)
+
   await $`gh release edit v${Script.version} --draft=false --repo ${process.env.GH_REPO}`
 }
 
@@ -78,5 +82,5 @@ await import(`../packages/sdk/js/script/publish.ts`)
 console.log("\n=== plugin ===\n")
 await import(`../packages/plugin/script/publish.ts`)
 
-const dir = new URL("..", import.meta.url).pathname
+const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)

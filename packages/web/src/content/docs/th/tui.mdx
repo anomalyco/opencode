@@ -235,7 +235,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 แสดงรายการธีมที่มีอยู่
 
 ```bash frame="none"
-/theme
+/themes
 ```
 
 **ผูกปุ่ม:** `ctrl+x t`
@@ -355,24 +355,34 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## กำหนดค่า
 
-คุณสามารถปรับแต่งพฤติกรรม TUI ผ่านไฟล์กำหนดค่า OpenCode ของคุณได้
+คุณสามารถปรับแต่งพฤติกรรม TUI ได้ผ่าน `tui.json` (หรือ `tui.jsonc`)
 
-```json title="opencode.json"
+```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "tui": {
-    "scroll_speed": 3,
-    "scroll_acceleration": {
-      "enabled": true
-    }
-  }
+  "$schema": "https://opencode.ai/tui.json",
+  "theme": "opencode",
+  "keybinds": {
+    "leader": "ctrl+x"
+  },
+  "scroll_speed": 3,
+  "scroll_acceleration": {
+    "enabled": true
+  },
+  "diff_style": "auto"
 }
 ```
 
+สิ่งนี้แยกจาก `opencode.json` ซึ่งกำหนดค่าพฤติกรรมเซิร์ฟเวอร์/รันไทม์
+
 ### ตัวเลือก
 
-- `scroll_acceleration` - ​​เปิดใช้งานการเร่งความเร็วการเลื่อนแบบ macOS เพื่อการเลื่อนที่ราบรื่นและเป็นธรรมชาติ เมื่อเปิดใช้งาน ความเร็วในการเลื่อนจะเพิ่มขึ้นตามท่าทางการเลื่อนอย่างรวดเร็ว และคงความแม่นยำไว้สำหรับการเคลื่อนไหวที่ช้าลง **การตั้งค่านี้มีความสำคัญมากกว่า `scroll_speed` และแทนที่เมื่อเปิดใช้งาน**
-- `scroll_speed` - ​​ควบคุมความเร็วของการเลื่อน TUI เมื่อใช้คำสั่งการเลื่อน (ขั้นต่ำ: `1`) ค่าเริ่มต้นเป็น `3` **หมายเหตุ: สิ่งนี้จะถูกละเว้นหากตั้งค่า `scroll_acceleration.enabled` เป็น `true`.**
+- `theme` - ตั้งค่าธีม UI ของคุณ [เรียนรู้เพิ่มเติม](/docs/themes)
+- `keybinds` - ปรับแต่งแป้นพิมพ์ลัด [เรียนรู้เพิ่มเติม](/docs/keybinds)
+- `scroll_acceleration.enabled` - ​​เปิดใช้งานการเร่งความเร็วการเลื่อนแบบ macOS เพื่อการเลื่อนที่ราบรื่นและเป็นธรรมชาติ เมื่อเปิดใช้งาน ความเร็วในการเลื่อนจะเพิ่มขึ้นตามท่าทางการเลื่อนอย่างรวดเร็ว และคงความแม่นยำไว้สำหรับการเคลื่อนไหวที่ช้าลง **การตั้งค่านี้มีความสำคัญมากกว่า `scroll_speed` และแทนที่เมื่อเปิดใช้งาน**
+- `scroll_speed` - ​​ควบคุมความเร็วของการเลื่อน TUI เมื่อใช้คำสั่งการเลื่อน (ขั้นต่ำ: `0.001` รองรับค่าทศนิยม) ค่าเริ่มต้นเป็น `3` **หมายเหตุ: สิ่งนี้จะถูกละเว้นหากตั้งค่า `scroll_acceleration.enabled` เป็น `true`.**
+- `diff_style` - ควบคุมการเรนเดอร์ diff `"auto"` ปรับให้เข้ากับความกว้างของ terminal `"stacked"` จะแสดงคอลัมน์เดียวเสมอ
+
+ใช้ `OPENCODE_TUI_CONFIG` เพื่อโหลดเส้นทางการกำหนดค่า TUI แบบกำหนดเอง
 
 ---
 
