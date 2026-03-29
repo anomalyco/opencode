@@ -43,7 +43,6 @@ import { Tool } from "@/tool/tool"
 import { Permission } from "@/permission"
 import { SessionStatus } from "./status"
 import { LLM } from "./llm"
-import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 import { AppFileSystem } from "@/filesystem"
 import { Truncate } from "@/tool/truncate"
@@ -105,10 +104,7 @@ export namespace SessionPrompt {
           const loops = new Map<string, LoopEntry>()
           const shells = new Map<string, Fiber.Fiber<MessageV2.WithParts, unknown>>()
           yield* Effect.addFinalizer(() =>
-            Fiber.interruptAll([
-              ...loops.values().flatMap((e) => e.fiber ? [e.fiber] : []),
-              ...shells.values(),
-            ]),
+            Fiber.interruptAll([...loops.values().flatMap((e) => (e.fiber ? [e.fiber] : [])), ...shells.values()]),
           )
           return { loops, shells }
         }),
@@ -172,6 +168,68 @@ export namespace SessionPrompt {
           { concurrency: "unbounded" },
         )
         return parts
+      })
+
+      const title = Effect.fn("SessionPrompt.ensureTitle")(function* (input: {
+        session: Session.Info
+        history: MessageV2.WithParts[]
+        providerID: ProviderID
+        modelID: ModelID
+      }) {
+        if (input.session.parentID) return
+        if (!Session.isDefaultTitle(input.session.title)) return
+
+        const firstRealUserIdx = input.history.findIndex(
+          (m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic),
+        )
+        if (firstRealUserIdx === -1) return
+
+        const isFirst =
+          input.history.filter((m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic))
+            .length === 1
+        if (!isFirst) return
+
+        const context = input.history.slice(0, firstRealUserIdx + 1)
+        const firstUser = context[firstRealUserIdx]
+        if (!firstUser || firstUser.info.role !== "user") return
+
+        const subtasks = firstUser.parts.filter((p) => p.type === "subtask") as MessageV2.SubtaskPart[]
+        const onlySubtasks = subtasks.length > 0 && firstUser.parts.every((p) => p.type === "subtask")
+
+        const ag = yield* agents.get("title")
+        if (!ag) return
+        const mdl = yield* Effect.promise(async () => {
+          if (ag.model) return Provider.getModel(ag.model.providerID, ag.model.modelID)
+          return (await Provider.getSmallModel(input.providerID)) ?? Provider.getModel(input.providerID, input.modelID)
+        })
+        const result = yield* Effect.promise(async () => {
+          const msgs = onlySubtasks
+            ? [{ role: "user" as const, content: subtasks.map((p) => p.prompt).join("\n") }]
+            : await MessageV2.toModelMessages(context, mdl)
+          return LLM.stream({
+            agent: ag,
+            user: firstUser.info as MessageV2.User,
+            system: [],
+            small: true,
+            tools: {},
+            model: mdl,
+            abort: new AbortController().signal,
+            sessionID: input.session.id,
+            retries: 2,
+            messages: [{ role: "user", content: "Generate a title for this conversation:\n" }, ...msgs],
+          })
+        })
+        const text = yield* Effect.promise(() => result.text)
+        const cleaned = text
+          .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+          .split("\n")
+          .map((line) => line.trim())
+          .find((line) => line.length > 0)
+        if (!cleaned) return
+        const t = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
+        yield* sessions.setTitle({ sessionID: input.session.id, title: t }).pipe(
+          Effect.catchCause(() => Effect.void),
+        )
       })
 
       const prompt = Effect.fn("SessionPrompt.prompt")(function* (input: PromptInput) {
@@ -240,14 +298,12 @@ export namespace SessionPrompt {
 
           step++
           if (step === 1)
-            yield* Effect.promise(() =>
-              ensureTitle({
-                session,
-                modelID: lastUser.model.modelID,
-                providerID: lastUser.model.providerID,
-                history: msgs,
-              }),
-            ).pipe(Effect.ignore, Effect.forkIn(scope))
+            yield* title({
+              session,
+              modelID: lastUser.model.modelID,
+              providerID: lastUser.model.providerID,
+              history: msgs,
+            }).pipe(Effect.ignore, Effect.forkIn(scope))
 
           const model = yield* Effect.promise(() =>
             Provider.getModel(lastUser!.model.providerID, lastUser!.model.modelID).catch((e) => {
@@ -337,7 +393,15 @@ export namespace SessionPrompt {
               const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
 
               const tools = yield* Effect.promise(() =>
-                resolveTools({ agent, session, model, tools: lastUser!.tools, processor: handle, bypassAgentCheck, messages: msgs }),
+                resolveTools({
+                  agent,
+                  session,
+                  model,
+                  tools: lastUser!.tools,
+                  processor: handle,
+                  bypassAgentCheck,
+                  messages: msgs,
+                }),
               )
 
               if (lastUser!.format?.type === "json_schema") {
@@ -389,10 +453,7 @@ export namespace SessionPrompt {
                 abort: ctrl.signal,
                 sessionID,
                 system,
-                messages: [
-                  ...modelMsgs,
-                  ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : []),
-                ],
+                messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
                 tools,
                 model,
                 toolChoice: format.type === "json_schema" ? "required" : undefined,
@@ -461,9 +522,10 @@ export namespace SessionPrompt {
               const entry = s.loops.get(sessionID)
               if (entry) {
                 // On interrupt, resolve queued callers with the last assistant message
-                const resolved = Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)
-                  ? Exit.succeed(yield* lastAssistant(sessionID))
-                  : exit
+                const resolved =
+                  Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)
+                    ? Exit.succeed(yield* lastAssistant(sessionID))
+                    : exit
                 for (const d of entry.queue) yield* Deferred.done(d, resolved)
               }
               s.loops.delete(sessionID)
@@ -568,7 +630,9 @@ export namespace SessionPrompt {
         if (shellMatches.length > 0) {
           const sh = Shell.preferred()
           const results = yield* Effect.promise(() =>
-            Promise.all(shellMatches.map(async ([, cmd]) => (await Process.text([cmd], { shell: sh, nothrow: true })).text)),
+            Promise.all(
+              shellMatches.map(async ([, cmd]) => (await Process.text([cmd], { shell: sh, nothrow: true })).text),
+            ),
           )
           let index = 0
           template = template.replace(bashRegex, () => results[index++])
@@ -591,7 +655,9 @@ export namespace SessionPrompt {
               const hint = e.data.suggestions?.length ? ` Did you mean: ${e.data.suggestions.join(", ")}?` : ""
               Bus.publish(Session.Event.Error, {
                 sessionID: input.sessionID,
-                error: new NamedError.Unknown({ message: `Model not found: ${e.data.providerID}/${e.data.modelID}.${hint}` }).toObject(),
+                error: new NamedError.Unknown({
+                  message: `Model not found: ${e.data.providerID}/${e.data.modelID}.${hint}`,
+                }).toObject(),
               })
             }
             throw e
@@ -913,11 +979,7 @@ export namespace SessionPrompt {
       sessionID,
       messageID: assistantMessage.id,
     }))
-    await Plugin.trigger(
-      "tool.execute.after",
-      { tool: "task", sessionID, callID: part.id, args: taskArgs },
-      result,
-    )
+    await Plugin.trigger("tool.execute.after", { tool: "task", sessionID, callID: part.id, args: taskArgs }, result)
     assistantMessage.finish = "tool-calls"
     assistantMessage.time.completed = Date.now()
     await Session.updateMessage(assistantMessage)
@@ -1821,9 +1883,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     }
     await Session.updatePart(part)
     const sh = Shell.preferred()
-    const shellName = (
-      process.platform === "win32" ? path.win32.basename(sh, ".exe") : path.basename(sh)
-    ).toLowerCase()
+    const shellName = (process.platform === "win32" ? path.win32.basename(sh, ".exe") : path.basename(sh)).toLowerCase()
 
     const invocations: Record<string, { args: string[] }> = {
       nu: {
@@ -1973,80 +2033,4 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   const placeholderRegex = /\$(\d+)/g
   const quoteTrimRegex = /^["']|["']$/g
 
-  async function ensureTitle(input: {
-    session: Session.Info
-    history: MessageV2.WithParts[]
-    providerID: ProviderID
-    modelID: ModelID
-  }) {
-    if (input.session.parentID) return
-    if (!Session.isDefaultTitle(input.session.title)) return
-
-    // Find first non-synthetic user message
-    const firstRealUserIdx = input.history.findIndex(
-      (m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic),
-    )
-    if (firstRealUserIdx === -1) return
-
-    const isFirst =
-      input.history.filter((m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic))
-        .length === 1
-    if (!isFirst) return
-
-    // Gather all messages up to and including the first real user message for context
-    // This includes any shell/subtask executions that preceded the user's first prompt
-    const contextMessages = input.history.slice(0, firstRealUserIdx + 1)
-    const firstRealUser = contextMessages[firstRealUserIdx]
-
-    // For subtask-only messages (from command invocations), extract the prompt directly
-    // since toModelMessage converts subtask parts to generic "The following tool was executed by the user"
-    const subtaskParts = firstRealUser.parts.filter((p) => p.type === "subtask") as MessageV2.SubtaskPart[]
-    const hasOnlySubtaskParts = subtaskParts.length > 0 && firstRealUser.parts.every((p) => p.type === "subtask")
-
-    const agent = await Agent.get("title")
-    if (!agent) return
-    const model = await iife(async () => {
-      if (agent.model) return await Provider.getModel(agent.model.providerID, agent.model.modelID)
-      return (
-        (await Provider.getSmallModel(input.providerID)) ?? (await Provider.getModel(input.providerID, input.modelID))
-      )
-    })
-    try {
-      const result = await LLM.stream({
-        agent,
-        user: firstRealUser.info as MessageV2.User,
-        system: [],
-        small: true,
-        tools: {},
-        model,
-        abort: new AbortController().signal,
-        sessionID: input.session.id,
-        retries: 2,
-        messages: [
-          {
-            role: "user",
-            content: "Generate a title for this conversation:\n",
-          },
-          ...(hasOnlySubtaskParts
-            ? [{ role: "user" as const, content: subtaskParts.map((p) => p.prompt).join("\n") }]
-            : await MessageV2.toModelMessages(contextMessages, model)),
-        ],
-      })
-      const text = await result.text
-      const cleaned = text
-        .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
-        .split("\n")
-        .map((line) => line.trim())
-        .find((line) => line.length > 0)
-      if (!cleaned) return
-
-      const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
-      return Session.setTitle({ sessionID: input.session.id, title }).catch((err) => {
-        if (NotFoundError.isInstance(err)) return
-        throw err
-      })
-    } catch (error) {
-      log.error("failed to generate title", { error })
-    }
-  }
 }
