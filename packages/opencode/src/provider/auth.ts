@@ -1,8 +1,8 @@
-import type { AuthOuathResult, Hooks } from "@opencode-ai/plugin"
+import type { AuthOAuthResult, Hooks } from "@opencode-ai/plugin"
 import { NamedError } from "@opencode-ai/util/error"
 import { Auth } from "@/auth"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRunPromise } from "@/effect/run-service"
+import { makeRuntime } from "@/effect/run-service"
 import { Plugin } from "../plugin"
 import { ProviderID } from "./schema"
 import { Array as Arr, Effect, Layer, Record, Result, ServiceMap } from "effect"
@@ -106,7 +106,7 @@ export namespace ProviderAuth {
 
   interface State {
     hooks: Record<ProviderID, Hook>
-    pending: Map<ProviderID, AuthOuathResult>
+    pending: Map<ProviderID, AuthOAuthResult>
   }
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/ProviderAuth") {}
@@ -127,7 +127,7 @@ export namespace ProviderAuth {
                     : Result.failVoid,
                 ),
               ),
-              pending: new Map<ProviderID, AuthOuathResult>(),
+              pending: new Map<ProviderID, AuthOAuthResult>(),
             }
           }),
         ),
@@ -215,12 +215,13 @@ export namespace ProviderAuth {
         }
 
         if ("refresh" in result) {
+          const { type: _, provider: __, refresh, access, expires, ...extra } = result
           yield* auth.set(input.providerID, {
             type: "oauth",
-            access: result.access,
-            refresh: result.refresh,
-            expires: result.expires,
-            ...(result.accountId ? { accountId: result.accountId } : {}),
+            access,
+            refresh,
+            expires,
+            ...extra,
           })
         }
       })
@@ -231,7 +232,7 @@ export namespace ProviderAuth {
 
   export const defaultLayer = layer.pipe(Layer.provide(Auth.layer))
 
-  const runPromise = makeRunPromise(Service, defaultLayer)
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export async function methods() {
     return runPromise((svc) => svc.methods())

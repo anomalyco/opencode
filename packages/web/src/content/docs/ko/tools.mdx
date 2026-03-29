@@ -248,27 +248,6 @@ LSP 서버가 프로젝트에 사용할 수 있는 구성하려면 [LSP Servers]
 
 ---
 
-#### todoread
-
-기존의 todo 목록 읽기.
-
-```json title="opencode.json" {4}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "todoread": "allow"
-  }
-}
-```
-
-현재 todo 목록 상태를 읽습니다. 작업이 종료되거나 완료되는 것을 추적하기 위해 LLM에 의해 사용됩니다.
-
-:::note
-이 도구는 기본으로 시약을 비활성화하지만 수동으로 활성화 할 수 있습니다. [더 알아보기](/docs/agents/#permissions)
-:::
-
----
-
 #### webfetch
 
 Fetch 웹 콘텐츠.
