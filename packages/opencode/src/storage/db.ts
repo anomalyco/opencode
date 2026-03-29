@@ -94,6 +94,15 @@ export namespace Database {
     db.run("PRAGMA foreign_keys = ON")
     db.run("PRAGMA wal_checkpoint(PASSIVE)")
 
+    // Migrate to incremental auto-vacuum if needed (one-time)
+    const vacuum = db.$client.prepare("PRAGMA auto_vacuum").get() as { auto_vacuum: number } | undefined
+    if (vacuum && vacuum.auto_vacuum === 0) {
+      log.info("migrating database to incremental auto-vacuum mode (one-time operation)...")
+      db.$client.run("PRAGMA auto_vacuum = 2")
+      db.$client.run("VACUUM")
+      log.info("auto-vacuum migration complete")
+    }
+
     // Apply schema migrations
     const entries =
       typeof OPENCODE_MIGRATIONS !== "undefined"
@@ -114,6 +123,16 @@ export namespace Database {
 
     return db
   })
+
+  /** Run periodic WAL checkpoint (TRUNCATE mode) */
+  export function checkpoint() {
+    Client().$client.run("PRAGMA wal_checkpoint(TRUNCATE)")
+  }
+
+  /** Run incremental vacuum to reclaim free pages */
+  export function vacuum() {
+    Client().$client.run("PRAGMA incremental_vacuum(500)")
+  }
 
   export function close() {
     Client().$client.close()
