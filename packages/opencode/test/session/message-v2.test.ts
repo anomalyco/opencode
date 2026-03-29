@@ -789,7 +789,7 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
-  test("does not produce interleaved tool-call and text/reasoning in a single assistant block when step boundaries are missing", () => {
+  test("does not produce interleaved tool-call and text/reasoning in a single assistant block when step boundaries are missing", async () => {
     // When the finish-step handler in processor.ts throws during a retryable error,
     // step-finish for step 1 and step-start for step 2 are never saved. Both steps'
     // content merges into one DB message without boundaries. On replay,
@@ -866,7 +866,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    const result = MessageV2.toModelMessages(input, model)
+    const result = await MessageV2.toModelMessages(input, model)
 
     // Structural invariant: in every assistant ModelMessage, no text or reasoning
     // part should appear AFTER a tool-call part. If it does, the Anthropic API
