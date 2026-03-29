@@ -40,6 +40,7 @@ import {
   BrowserCloseTool,
   BrowserWaitTool,
   BrowserTabTool,
+  BrowserHumanHandoffTool,
 } from "./browser"
 import { Glob } from "../util/glob"
 import { pathToFileURL } from "url"
@@ -161,6 +162,7 @@ export namespace ToolRegistry {
           BrowserCloseTool,
           BrowserWaitTool,
           BrowserTabTool,
+          BrowserHumanHandoffTool,
           ...custom,
         ]
       })

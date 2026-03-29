@@ -115,7 +115,7 @@ export namespace Agent {
             browser_scroll: "allow",
             browser_extract: "allow",
             browser_evaluate: "ask",
-            browser_close: "allow",
+            browser_close: "deny", // Browser only closes when session ends
             browser_wait: "allow",
             browser_tab: "allow",
           })
@@ -145,7 +145,7 @@ export namespace Agent {
           const agents: Record<string, Info> = {
             auto: {
               name: "auto",
-              description: "Autonomous browser automation. Given a task, creates a plan, executes browser actions, and completes the task end-to-end.",
+              description: "Autonomous browser automation. Given a task, creates a plan, executes browser actions, and completes the task end-to-end. Only interrupts for auth/payment/captcha.",
               options: {},
               prompt: PROMPT_AUTO,
               permission: Permission.merge(
@@ -153,8 +153,13 @@ export namespace Agent {
                 browserToolPermissions,
                 browserFileRestrictions,
                 Permission.fromConfig({
-                  question: "allow",
-                  plan_enter: "allow",
+                  // Auto mode does NOT ask questions - fully autonomous
+                  question: "deny",
+                  plan_enter: "deny",
+                  plan_exit: "deny",
+                  // Human handoff is the ONLY way auto mode talks to user
+                  // Used for auth/login/payment/captcha that need human
+                  browser_human_handoff: "allow",
                   // Deny code editing tools not needed for browser automation
                   apply_patch: "deny",
                   lsp: "deny",

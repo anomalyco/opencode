@@ -4,12 +4,7 @@ import { BrowserDaemon } from "../../browser/daemon"
 import { BrowserState } from "../../browser/state"
 
 export const BrowserCloseTool = Tool.define("browser_close", {
-  description: `Close the browser and stop the browser daemon for the current session.
-
-Use this tool when:
-- The browser task is complete
-- You need to restart the browser with different settings
-- The user asks to close the browser`,
+  description: `Close the browser and stop the browser daemon. This is an internal tool used only when the session ends. Do NOT call this during normal task execution — the browser should stay open for the entire session. The browser is automatically closed when the session ends.`,
   parameters: z.object({}),
   async execute(_params, ctx) {
     ctx.metadata({ title: "Closing browser" })
