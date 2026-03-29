@@ -97,6 +97,9 @@ export namespace SessionPrompt {
       const plugin = yield* Plugin.Service
       const commands = yield* Command.Service
       const fsys = yield* AppFileSystem.Service
+      const mcp = yield* MCP.Service
+      const lsp = yield* LSP.Service
+      const filetime = yield* FileTime.Service
       const scope = yield* Scope.Scope
 
       const cache = yield* InstanceState.make(
@@ -240,10 +243,248 @@ export namespace SessionPrompt {
           }),
         )
 
+      const createUserMessage = Effect.fn("SessionPrompt.createUserMessage")(function* (input: PromptInput) {
+        const agentName = input.agent || (yield* agents.defaultAgent())
+        const ag = yield* agents.get(agentName)
+        if (!ag) {
+          const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
+          const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
+          const error = new NamedError.Unknown({ message: `Agent not found: "${agentName}".${hint}` })
+          yield* bus.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
+          throw error
+        }
+
+        const model = input.model ?? ag.model ?? (yield* Effect.promise(() => lastModelImpl(input.sessionID)))
+        const full =
+          !input.variant && ag.variant
+            ? yield* Effect.promise(() => Provider.getModel(model.providerID, model.modelID).catch(() => undefined))
+            : undefined
+        const variant = input.variant ?? (ag.variant && full?.variants?.[ag.variant] ? ag.variant : undefined)
+
+        const info: MessageV2.Info = {
+          id: input.messageID ?? MessageID.ascending(),
+          role: "user",
+          sessionID: input.sessionID,
+          time: { created: Date.now() },
+          tools: input.tools,
+          agent: ag.name,
+          model,
+          system: input.system,
+          format: input.format,
+          variant,
+        }
+
+        type Draft<T> = T extends MessageV2.Part ? Omit<T, "id"> & { id?: string } : never
+        const assign = (part: Draft<MessageV2.Part>): MessageV2.Part => ({
+          ...part,
+          id: part.id ? PartID.make(part.id) : PartID.ascending(),
+        })
+
+        const parts = yield* Effect.promise(() =>
+          Promise.all(
+            input.parts.map(async (part): Promise<Draft<MessageV2.Part>[]> => {
+              if (part.type === "file") {
+                if (part.source?.type === "resource") {
+                  const { clientName, uri } = part.source
+                  log.info("mcp resource", { clientName, uri, mime: part.mime })
+                  const pieces: Draft<MessageV2.Part>[] = [
+                    { messageID: info.id, sessionID: input.sessionID, type: "text", synthetic: true, text: `Reading MCP resource: ${part.filename} (${uri})` },
+                  ]
+                  try {
+                    const content = await MCP.readResource(clientName, uri)
+                    if (!content) throw new Error(`Resource not found: ${clientName}/${uri}`)
+                    const items = Array.isArray(content.contents) ? content.contents : [content.contents]
+                    for (const c of items) {
+                      if ("text" in c && c.text) {
+                        pieces.push({ messageID: info.id, sessionID: input.sessionID, type: "text", synthetic: true, text: c.text })
+                      } else if ("blob" in c && c.blob) {
+                        const mime = "mimeType" in c ? c.mimeType : part.mime
+                        pieces.push({ messageID: info.id, sessionID: input.sessionID, type: "text", synthetic: true, text: `[Binary content: ${mime}]` })
+                      }
+                    }
+                    pieces.push({ ...part, messageID: info.id, sessionID: input.sessionID })
+                  } catch (error: unknown) {
+                    log.error("failed to read MCP resource", { error, clientName, uri })
+                    const message = error instanceof Error ? error.message : String(error)
+                    pieces.push({ messageID: info.id, sessionID: input.sessionID, type: "text", synthetic: true, text: `Failed to read MCP resource ${part.filename}: ${message}` })
+                  }
+                  return pieces
+                }
+                const url = new URL(part.url)
+                switch (url.protocol) {
+                  case "data:":
+                    if (part.mime === "text/plain") {
+                      return [
+                        { messageID: info.id, sessionID: input.sessionID, type: "text", synthetic: true, text: `Called the Read tool with the following input: ${JSON.stringify({ filePath: part.filename })}` },
+                        { messageID: info.id, sessionID: input.sessionID, type: "text", synthetic: true, text: decodeDataUrl(part.url) },
+                        { ...part, messageID: info.id, sessionID: input.sessionID },
+                      ]
+                    }
+                    break
+                  case "file:": {
+                    log.info("file", { mime: part.mime })
+                    const filepath = fileURLToPath(part.url)
+                    const s = Filesystem.stat(filepath)
+                    if (s?.isDirectory()) part.mime = "application/x-directory"
+
+                    if (part.mime === "text/plain") {
+                      let offset: number | undefined
+                      let limit: number | undefined
+                      const range = { start: url.searchParams.get("start"), end: url.searchParams.get("end") }
+                      if (range.start != null) {
+                        const filePathURI = part.url.split("?")[0]
+                        let start = parseInt(range.start)
+                        let end = range.end ? parseInt(range.end) : undefined
+                        if (start === end) {
+                          const symbols = await LSP.documentSymbol(filePathURI).catch(() => [])
+                          for (const symbol of symbols) {
+                            let r: LSP.Range | undefined
+                            if ("range" in symbol) r = symbol.range
+                            else if ("location" in symbol) r = symbol.location.range
+                            if (r?.start?.line && r?.start?.line === start) {
+                              start = r.start.line
+                              end = r?.end?.line ?? start
+                              break
+                            }
+                          }
+                        }
+                        offset = Math.max(start, 1)
+                        if (end) limit = end - (offset - 1)
+                      }
+                      const args = { filePath: filepath, offset, limit }
+                      const pieces: Draft<MessageV2.Part>[] = [
+                        { messageID: info.id, sessionID: input.sessionID, type: "text", synthetic: true, text: `Called the Read tool with the following input: ${JSON.stringify(args)}` },
+                      ]
+                      await ReadTool.init()
+                        .then(async (t) => {
+                          const mdl = await Provider.getModel(info.model.providerID, info.model.modelID)
+                          const ctx: Tool.Context = {
+                            sessionID: input.sessionID,
+                            abort: new AbortController().signal,
+                            agent: input.agent!,
+                            messageID: info.id,
+                            extra: { bypassCwdCheck: true, model: mdl },
+                            messages: [],
+                            metadata: async () => {},
+                            ask: async () => {},
+                          }
+                          const result = await t.execute(args, ctx)
+                          pieces.push({ messageID: info.id, sessionID: input.sessionID, type: "text", synthetic: true, text: result.output })
+                          if (result.attachments?.length) {
+                            pieces.push(...result.attachments.map((a) => ({ ...a, synthetic: true, filename: a.filename ?? part.filename, messageID: info.id, sessionID: input.sessionID })))
+                          } else {
+                            pieces.push({ ...part, messageID: info.id, sessionID: input.sessionID })
+                          }
+                        })
+                        .catch((error) => {
+                          log.error("failed to read file", { error })
+                          const message = error instanceof Error ? error.message : error.toString()
+                          Bus.publish(Session.Event.Error, { sessionID: input.sessionID, error: new NamedError.Unknown({ message }).toObject() })
+                          pieces.push({ messageID: info.id, sessionID: input.sessionID, type: "text", synthetic: true, text: `Read tool failed to read ${filepath} with the following error: ${message}` })
+                        })
+                      return pieces
+                    }
+
+                    if (part.mime === "application/x-directory") {
+                      const args = { filePath: filepath }
+                      const ctx: Tool.Context = {
+                        sessionID: input.sessionID,
+                        abort: new AbortController().signal,
+                        agent: input.agent!,
+                        messageID: info.id,
+                        extra: { bypassCwdCheck: true },
+                        messages: [],
+                        metadata: async () => {},
+                        ask: async () => {},
+                      }
+                      const result = await ReadTool.init().then((t) => t.execute(args, ctx))
+                      return [
+                        { messageID: info.id, sessionID: input.sessionID, type: "text", synthetic: true, text: `Called the Read tool with the following input: ${JSON.stringify(args)}` },
+                        { messageID: info.id, sessionID: input.sessionID, type: "text", synthetic: true, text: result.output },
+                        { ...part, messageID: info.id, sessionID: input.sessionID },
+                      ]
+                    }
+
+                    await FileTime.read(input.sessionID, filepath)
+                    return [
+                      { messageID: info.id, sessionID: input.sessionID, type: "text", synthetic: true, text: `Called the Read tool with the following input: {"filePath":"${filepath}"}` },
+                      {
+                        id: part.id,
+                        messageID: info.id,
+                        sessionID: input.sessionID,
+                        type: "file",
+                        url: `data:${part.mime};base64,` + (await Filesystem.readBytes(filepath)).toString("base64"),
+                        mime: part.mime,
+                        filename: part.filename!,
+                        source: part.source,
+                      },
+                    ]
+                  }
+                }
+              }
+
+              if (part.type === "agent") {
+                const perm = Permission.evaluate("task", part.name, ag.permission)
+                const hint = perm.action === "deny" ? " . Invoked by user; guaranteed to exist." : ""
+                return [
+                  { ...part, messageID: info.id, sessionID: input.sessionID },
+                  {
+                    messageID: info.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    synthetic: true,
+                    text: " Use the above message and context to generate a prompt and call the task tool with subagent: " + part.name + hint,
+                  },
+                ]
+              }
+
+              return [{ ...part, messageID: info.id, sessionID: input.sessionID }]
+            }),
+          ).then((x) => x.flat().map(assign)),
+        )
+
+        yield* plugin.trigger("chat.message", {
+          sessionID: input.sessionID,
+          agent: input.agent,
+          model: input.model,
+          messageID: input.messageID,
+          variant: input.variant,
+        }, { message: info, parts })
+
+        const parsed = MessageV2.Info.safeParse(info)
+        if (!parsed.success) {
+          log.error("invalid user message before save", {
+            sessionID: input.sessionID,
+            messageID: info.id,
+            agent: info.agent,
+            model: info.model,
+            issues: parsed.error.issues,
+          })
+        }
+        parts.forEach((part, index) => {
+          const p = MessageV2.Part.safeParse(part)
+          if (p.success) return
+          log.error("invalid user part before save", {
+            sessionID: input.sessionID,
+            messageID: info.id,
+            partID: part.id,
+            partType: part.type,
+            index,
+            issues: p.error.issues,
+            part,
+          })
+        })
+
+        yield* sessions.updateMessage(info)
+        for (const part of parts) yield* sessions.updatePart(part)
+
+        return { info, parts }
+      })
+
       const prompt = Effect.fn("SessionPrompt.prompt")(function* (input: PromptInput) {
         const session = yield* sessions.get(input.sessionID)
         yield* Effect.promise(() => SessionRevert.cleanup(session))
-        const message = yield* Effect.promise(() => createUserMessage(input))
+        const message = yield* createUserMessage(input)
         yield* sessions.touch(input.sessionID)
 
         const permissions: Permission.Ruleset = []
@@ -718,6 +959,9 @@ export namespace SessionPrompt {
         Layer.provide(SessionCompaction.defaultLayer),
         Layer.provide(SessionProcessor.defaultLayer),
         Layer.provide(Command.defaultLayer),
+        Layer.provide(MCP.defaultLayer),
+        Layer.provide(LSP.defaultLayer),
+        Layer.provide(FileTime.layer),
         Layer.provide(AppFileSystem.defaultLayer),
         Layer.provide(Plugin.defaultLayer),
         Layer.provide(Session.defaultLayer),
@@ -1235,410 +1479,6 @@ export namespace SessionPrompt {
       },
     })
   }
-
-  async function createUserMessage(input: PromptInput) {
-    const agentName = input.agent || (await Agent.defaultAgent())
-    const agent = await Agent.get(agentName)
-    if (!agent) {
-      const available = await Agent.list().then((agents) => agents.filter((a) => !a.hidden).map((a) => a.name))
-      const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
-      const error = new NamedError.Unknown({ message: `Agent not found: "${agentName}".${hint}` })
-      Bus.publish(Session.Event.Error, {
-        sessionID: input.sessionID,
-        error: error.toObject(),
-      })
-      throw error
-    }
-
-    const model = input.model ?? agent.model ?? (await lastModelImpl(input.sessionID))
-    const full =
-      !input.variant && agent.variant
-        ? await Provider.getModel(model.providerID, model.modelID).catch(() => undefined)
-        : undefined
-    const variant = input.variant ?? (agent.variant && full?.variants?.[agent.variant] ? agent.variant : undefined)
-
-    const info: MessageV2.Info = {
-      id: input.messageID ?? MessageID.ascending(),
-      role: "user",
-      sessionID: input.sessionID,
-      time: {
-        created: Date.now(),
-      },
-      tools: input.tools,
-      agent: agent.name,
-      model,
-      system: input.system,
-      format: input.format,
-      variant,
-    }
-    using _ = defer(() => InstructionPrompt.clear(info.id))
-
-    type Draft<T> = T extends MessageV2.Part ? Omit<T, "id"> & { id?: string } : never
-    const assign = (part: Draft<MessageV2.Part>): MessageV2.Part => ({
-      ...part,
-      id: part.id ? PartID.make(part.id) : PartID.ascending(),
-    })
-
-    const parts = await Promise.all(
-      input.parts.map(async (part): Promise<Draft<MessageV2.Part>[]> => {
-        if (part.type === "file") {
-          // before checking the protocol we check if this is an mcp resource because it needs special handling
-          if (part.source?.type === "resource") {
-            const { clientName, uri } = part.source
-            log.info("mcp resource", { clientName, uri, mime: part.mime })
-
-            const pieces: Draft<MessageV2.Part>[] = [
-              {
-                messageID: info.id,
-                sessionID: input.sessionID,
-                type: "text",
-                synthetic: true,
-                text: `Reading MCP resource: ${part.filename} (${uri})`,
-              },
-            ]
-
-            try {
-              const resourceContent = await MCP.readResource(clientName, uri)
-              if (!resourceContent) {
-                throw new Error(`Resource not found: ${clientName}/${uri}`)
-              }
-
-              // Handle different content types
-              const contents = Array.isArray(resourceContent.contents)
-                ? resourceContent.contents
-                : [resourceContent.contents]
-
-              for (const content of contents) {
-                if ("text" in content && content.text) {
-                  pieces.push({
-                    messageID: info.id,
-                    sessionID: input.sessionID,
-                    type: "text",
-                    synthetic: true,
-                    text: content.text,
-                  })
-                } else if ("blob" in content && content.blob) {
-                  // Handle binary content if needed
-                  const mimeType = "mimeType" in content ? content.mimeType : part.mime
-                  pieces.push({
-                    messageID: info.id,
-                    sessionID: input.sessionID,
-                    type: "text",
-                    synthetic: true,
-                    text: `[Binary content: ${mimeType}]`,
-                  })
-                }
-              }
-
-              pieces.push({
-                ...part,
-                messageID: info.id,
-                sessionID: input.sessionID,
-              })
-            } catch (error: unknown) {
-              log.error("failed to read MCP resource", { error, clientName, uri })
-              const message = error instanceof Error ? error.message : String(error)
-              pieces.push({
-                messageID: info.id,
-                sessionID: input.sessionID,
-                type: "text",
-                synthetic: true,
-                text: `Failed to read MCP resource ${part.filename}: ${message}`,
-              })
-            }
-
-            return pieces
-          }
-          const url = new URL(part.url)
-          switch (url.protocol) {
-            case "data:":
-              if (part.mime === "text/plain") {
-                return [
-                  {
-                    messageID: info.id,
-                    sessionID: input.sessionID,
-                    type: "text",
-                    synthetic: true,
-                    text: `Called the Read tool with the following input: ${JSON.stringify({ filePath: part.filename })}`,
-                  },
-                  {
-                    messageID: info.id,
-                    sessionID: input.sessionID,
-                    type: "text",
-                    synthetic: true,
-                    text: decodeDataUrl(part.url),
-                  },
-                  {
-                    ...part,
-                    messageID: info.id,
-                    sessionID: input.sessionID,
-                  },
-                ]
-              }
-              break
-            case "file:":
-              log.info("file", { mime: part.mime })
-              // have to normalize, symbol search returns absolute paths
-              // Decode the pathname since URL constructor doesn't automatically decode it
-              const filepath = fileURLToPath(part.url)
-              const s = Filesystem.stat(filepath)
-
-              if (s?.isDirectory()) {
-                part.mime = "application/x-directory"
-              }
-
-              if (part.mime === "text/plain") {
-                let offset: number | undefined = undefined
-                let limit: number | undefined = undefined
-                const range = {
-                  start: url.searchParams.get("start"),
-                  end: url.searchParams.get("end"),
-                }
-                if (range.start != null) {
-                  const filePathURI = part.url.split("?")[0]
-                  let start = parseInt(range.start)
-                  let end = range.end ? parseInt(range.end) : undefined
-                  // some LSP servers (eg, gopls) don't give full range in
-                  // workspace/symbol searches, so we'll try to find the
-                  // symbol in the document to get the full range
-                  if (start === end) {
-                    const symbols = await LSP.documentSymbol(filePathURI).catch(() => [])
-                    for (const symbol of symbols) {
-                      let range: LSP.Range | undefined
-                      if ("range" in symbol) {
-                        range = symbol.range
-                      } else if ("location" in symbol) {
-                        range = symbol.location.range
-                      }
-                      if (range?.start?.line && range?.start?.line === start) {
-                        start = range.start.line
-                        end = range?.end?.line ?? start
-                        break
-                      }
-                    }
-                  }
-                  offset = Math.max(start, 1)
-                  if (end) {
-                    limit = end - (offset - 1)
-                  }
-                }
-                const args = { filePath: filepath, offset, limit }
-
-                const pieces: Draft<MessageV2.Part>[] = [
-                  {
-                    messageID: info.id,
-                    sessionID: input.sessionID,
-                    type: "text",
-                    synthetic: true,
-                    text: `Called the Read tool with the following input: ${JSON.stringify(args)}`,
-                  },
-                ]
-
-                await ReadTool.init()
-                  .then(async (t) => {
-                    const model = await Provider.getModel(info.model.providerID, info.model.modelID)
-                    const readCtx: Tool.Context = {
-                      sessionID: input.sessionID,
-                      abort: new AbortController().signal,
-                      agent: input.agent!,
-                      messageID: info.id,
-                      extra: { bypassCwdCheck: true, model },
-                      messages: [],
-                      metadata: async () => {},
-                      ask: async () => {},
-                    }
-                    const result = await t.execute(args, readCtx)
-                    pieces.push({
-                      messageID: info.id,
-                      sessionID: input.sessionID,
-                      type: "text",
-                      synthetic: true,
-                      text: result.output,
-                    })
-                    if (result.attachments?.length) {
-                      pieces.push(
-                        ...result.attachments.map((attachment) => ({
-                          ...attachment,
-                          synthetic: true,
-                          filename: attachment.filename ?? part.filename,
-                          messageID: info.id,
-                          sessionID: input.sessionID,
-                        })),
-                      )
-                    } else {
-                      pieces.push({
-                        ...part,
-                        messageID: info.id,
-                        sessionID: input.sessionID,
-                      })
-                    }
-                  })
-                  .catch((error) => {
-                    log.error("failed to read file", { error })
-                    const message = error instanceof Error ? error.message : error.toString()
-                    Bus.publish(Session.Event.Error, {
-                      sessionID: input.sessionID,
-                      error: new NamedError.Unknown({
-                        message,
-                      }).toObject(),
-                    })
-                    pieces.push({
-                      messageID: info.id,
-                      sessionID: input.sessionID,
-                      type: "text",
-                      synthetic: true,
-                      text: `Read tool failed to read ${filepath} with the following error: ${message}`,
-                    })
-                  })
-
-                return pieces
-              }
-
-              if (part.mime === "application/x-directory") {
-                const args = { filePath: filepath }
-                const listCtx: Tool.Context = {
-                  sessionID: input.sessionID,
-                  abort: new AbortController().signal,
-                  agent: input.agent!,
-                  messageID: info.id,
-                  extra: { bypassCwdCheck: true },
-                  messages: [],
-                  metadata: async () => {},
-                  ask: async () => {},
-                }
-                const result = await ReadTool.init().then((t) => t.execute(args, listCtx))
-                return [
-                  {
-                    messageID: info.id,
-                    sessionID: input.sessionID,
-                    type: "text",
-                    synthetic: true,
-                    text: `Called the Read tool with the following input: ${JSON.stringify(args)}`,
-                  },
-                  {
-                    messageID: info.id,
-                    sessionID: input.sessionID,
-                    type: "text",
-                    synthetic: true,
-                    text: result.output,
-                  },
-                  {
-                    ...part,
-                    messageID: info.id,
-                    sessionID: input.sessionID,
-                  },
-                ]
-              }
-
-              await FileTime.read(input.sessionID, filepath)
-              return [
-                {
-                  messageID: info.id,
-                  sessionID: input.sessionID,
-                  type: "text",
-                  text: `Called the Read tool with the following input: {"filePath":"${filepath}"}`,
-                  synthetic: true,
-                },
-                {
-                  id: part.id,
-                  messageID: info.id,
-                  sessionID: input.sessionID,
-                  type: "file",
-                  url: `data:${part.mime};base64,` + (await Filesystem.readBytes(filepath)).toString("base64"),
-                  mime: part.mime,
-                  filename: part.filename!,
-                  source: part.source,
-                },
-              ]
-          }
-        }
-
-        if (part.type === "agent") {
-          // Check if this agent would be denied by task permission
-          const perm = Permission.evaluate("task", part.name, agent.permission)
-          const hint = perm.action === "deny" ? " . Invoked by user; guaranteed to exist." : ""
-          return [
-            {
-              ...part,
-              messageID: info.id,
-              sessionID: input.sessionID,
-            },
-            {
-              messageID: info.id,
-              sessionID: input.sessionID,
-              type: "text",
-              synthetic: true,
-              // An extra space is added here. Otherwise the 'Use' gets appended
-              // to user's last word; making a combined word
-              text:
-                " Use the above message and context to generate a prompt and call the task tool with subagent: " +
-                part.name +
-                hint,
-            },
-          ]
-        }
-
-        return [
-          {
-            ...part,
-            messageID: info.id,
-            sessionID: input.sessionID,
-          },
-        ]
-      }),
-    ).then((x) => x.flat().map(assign))
-
-    await Plugin.trigger(
-      "chat.message",
-      {
-        sessionID: input.sessionID,
-        agent: input.agent,
-        model: input.model,
-        messageID: input.messageID,
-        variant: input.variant,
-      },
-      {
-        message: info,
-        parts,
-      },
-    )
-
-    const parsedInfo = MessageV2.Info.safeParse(info)
-    if (!parsedInfo.success) {
-      log.error("invalid user message before save", {
-        sessionID: input.sessionID,
-        messageID: info.id,
-        agent: info.agent,
-        model: info.model,
-        issues: parsedInfo.error.issues,
-      })
-    }
-
-    parts.forEach((part, index) => {
-      const parsedPart = MessageV2.Part.safeParse(part)
-      if (parsedPart.success) return
-      log.error("invalid user part before save", {
-        sessionID: input.sessionID,
-        messageID: info.id,
-        partID: part.id,
-        partType: part.type,
-        index,
-        issues: parsedPart.error.issues,
-        part,
-      })
-    })
-
-    await Session.updateMessage(info)
-    for (const part of parts) {
-      await Session.updatePart(part)
-    }
-
-    return {
-      info,
-      parts,
-    }
-  }
-
   async function insertReminders(input: { messages: MessageV2.WithParts[]; agent: Agent.Info; session: Session.Info }) {
     const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
     if (!userMessage) return input.messages
