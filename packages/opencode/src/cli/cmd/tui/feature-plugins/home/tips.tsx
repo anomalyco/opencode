@@ -1,4 +1,4 @@
-import type { TuiPlugin } from "@opencode-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
 import { createMemo, Show } from "solid-js"
 import { Tips } from "./tips-view"
 
@@ -42,7 +42,9 @@ const tui: TuiPlugin = async (api) => {
   })
 }
 
-export default {
+const plugin: TuiPluginModule & { id: string } = {
   id,
   tui,
 }
+
+export default plugin

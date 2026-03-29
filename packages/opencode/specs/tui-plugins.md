@@ -8,6 +8,8 @@ Technical reference for the current TUI plugin system.
 - Author package entrypoint is `@opencode-ai/plugin/tui`.
 - Internal plugins load inside the CLI app the same way external TUI plugins do.
 - Package plugins can be installed from CLI or TUI.
+- v1 plugin modules are target-exclusive: a module can export `server` or `tui`, never both.
+- Server runtime keeps v0 legacy fallback (function exports / enumerated exports) after v1 parsing.
 
 ## TUI config
 
@@ -27,6 +29,7 @@ Example:
 - `plugin` entries can be either a string spec or `[spec, options]`.
 - Plugin specs can be npm specs, `file://` URLs, relative paths, or absolute paths.
 - Relative path specs are resolved relative to the config file that declared them.
+- A file module listed in `tui.json` must be a TUI module (`default export { id?, tui }`) and must not export `server`.
 - Duplicate npm plugins are deduped by package name; higher-precedence config wins.
 - Duplicate file plugins are deduped by exact resolved file spec. This happens while merging config, before plugin modules are loaded.
 - `plugin_enabled` is keyed by plugin id, not by plugin spec.
@@ -46,7 +49,7 @@ Minimal module shape:
 
 ```tsx
 /** @jsxImportSource @opentui/solid */
-import type { TuiPlugin } from "@opencode-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
 
 const tui: TuiPlugin = async (api, options, meta) => {
   api.command.register(() => [
@@ -69,16 +72,20 @@ const tui: TuiPlugin = async (api, options, meta) => {
   ])
 }
 
-export default {
+const plugin: TuiPluginModule & { id: string } = {
   id: "acme.demo",
   tui,
 }
+
+export default plugin
 ```
 
 - Loader only reads the module default export object. Named exports are ignored.
-- TUI shape is `default export { id?, tui }`.
+- TUI shape is `default export { id?, tui }`; including `server` is rejected.
+- A single module cannot export both `server` and `tui`.
 - `tui` signature is `(api, options, meta) => Promise<void>`.
 - If package `exports` contains `./tui`, the loader resolves that entrypoint. Otherwise it uses the resolved package target.
+- If a package supports both server and TUI, use separate files and package `exports` (`./server` and `./tui`) so each target resolves to a target-only module.
 - File/path plugins must export a non-empty `id`.
 - npm plugins may omit `id`; package `name` is used.
 - Runtime identity is the resolved plugin id. Later plugins with the same id are rejected, including collisions with internal plugin ids.
@@ -133,10 +140,13 @@ npm plugins can declare a version compatibility range in `package.json` using th
 - Root-worktree fallback (`worktree === "/"` uses `<directory>/.opencode`) is covered by regression tests.
 - `patchPluginConfig` applies all declared manifest targets (`server` and/or `tui`) in one call.
 - `patchPluginConfig` returns structured result unions (`ok`, `code`, fields by error kind) instead of custom thrown errors.
+- `patchPluginConfig` serializes per-target config writes with `Flock.acquire(...)`.
+- `patchPluginConfig` uses targeted `jsonc-parser` edits, so existing JSONC comments are preserved when plugin entries are added or replaced.
 - Without `--force`, an already-configured npm package name is a no-op.
 - With `--force`, replacement matches by package name. If the existing row is `[spec, options]`, those tuple options are kept.
 - Tuple targets in `oc-plugin` provide default options written into config.
 - A package can target `server`, `tui`, or both.
+- If a package targets both, each target must still resolve to a separate target-only module. Do not export `{ server, tui }` from one module.
 - There is no uninstall, list, or update CLI command for external plugins.
 - Local file plugins are configured directly in `tui.json`.
 
@@ -156,7 +166,7 @@ Top-level API groups exposed to `tui(api, options, meta)`:
 - `api.app.version`
 - `api.command.register(cb)` / `api.command.trigger(value)`
 - `api.route.register(routes)` / `api.route.navigate(name, params?)` / `api.route.current`
-- `api.ui.Dialog`, `DialogAlert`, `DialogConfirm`, `DialogPrompt`, `DialogSelect`, `ui.toast`, `ui.dialog`
+- `api.ui.Dialog`, `DialogAlert`, `DialogConfirm`, `DialogPrompt`, `DialogSelect`, `Prompt`, `ui.toast`, `ui.dialog`
 - `api.keybind.match`, `print`, `create`
 - `api.tuiConfig`
 - `api.kv.get`, `set`, `ready`
@@ -202,6 +212,7 @@ Command behavior:
 
 - `ui.Dialog` is the base dialog wrapper.
 - `ui.DialogAlert`, `ui.DialogConfirm`, `ui.DialogPrompt`, `ui.DialogSelect` are built-in dialog components.
+- `ui.Prompt` renders the same prompt component used by the host app.
 - `ui.toast(...)` shows a toast.
 - `ui.dialog` exposes the host dialog stack:
   - `replace(render, onClose?)`
@@ -269,6 +280,7 @@ Current host slot names:
 
 - `app`
 - `home_logo`
+- `home_prompt` with props `{ workspace_id? }`
 - `home_bottom`
 - `sidebar_title` with props `{ session_id, title, share_url? }`
 - `sidebar_content` with props `{ session_id }`
@@ -281,7 +293,7 @@ Slot notes:
 - `api.slots.register(plugin)` does not return an unregister function.
 - Returned ids are `pluginId`, `pluginId:1`, `pluginId:2`, and so on.
 - Plugin-provided `id` is not allowed.
-- The current host renders `home_logo` with `replace`, `sidebar_title` and `sidebar_footer` with `single_winner`, and `app`, `home_bottom`, and `sidebar_content` with the slot library default mode.
+- The current host renders `home_logo` and `home_prompt` with `replace`, `sidebar_title` and `sidebar_footer` with `single_winner`, and `app`, `home_bottom`, and `sidebar_content` with the slot library default mode.
 - Plugins cannot define new slot names in this branch.
 
 ### Plugin control and lifecycle
