@@ -14,6 +14,10 @@ import { Plugin } from "@/plugin"
 import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { Permission } from "@/permission"
+import { PermissionID } from "@/permission/schema"
+import { Bus } from "@/bus"
+import { Wildcard } from "@/util/wildcard"
+import { SessionID } from "@/session/schema"
 import { Auth } from "@/auth"
 import { Installation } from "@/installation"
 
@@ -235,6 +239,40 @@ export namespace LLM {
           return { result: "", error: e.message ?? String(e) }
         }
       }
+
+      const ruleset = Permission.merge(input.agent.permission ?? [], input.permission ?? [])
+      workflowModel.sessionPreapprovedTools = preapprovedWorkflowTools(Object.keys(tools), ruleset)
+
+      workflowModel.approvalHandler = Instance.bind(async (approvalTools) => {
+        const id = PermissionID.ascending()
+        let reply: Permission.Reply | undefined
+        let unsub: (() => void) | undefined
+        try {
+          unsub = Bus.subscribe(Permission.Event.Replied, (evt) => {
+            if (evt.properties.requestID === id) reply = evt.properties.reply
+          })
+          await Permission.ask({
+            id,
+            sessionID: SessionID.zod.parse(input.sessionID),
+            permission: "workflow_tool_approval",
+            patterns: approvalTools.map((t) => t.name),
+            metadata: { tools: approvalTools },
+            always: approvalTools.map((t) => t.name),
+            ruleset: [],
+          })
+          if (reply === "always") {
+            workflowModel.sessionPreapprovedTools = [
+              ...workflowModel.sessionPreapprovedTools,
+              ...approvalTools.map((t) => t.name),
+            ]
+          }
+          return { approved: true }
+        } catch {
+          return { approved: false }
+        } finally {
+          unsub?.()
+        }
+      })
     }
 
     return streamText({
@@ -325,6 +363,13 @@ export namespace LLM {
       }
     }
     return input.tools
+  }
+
+  export function preapprovedWorkflowTools(tools: string[], ruleset: Permission.Ruleset): string[] {
+    return tools.filter((name) => {
+      const match = ruleset.findLast((rule) => Wildcard.match(name, rule.permission))
+      return !match || match.action !== "ask"
+    })
   }
 
   // Check if messages contain any tool-call content
