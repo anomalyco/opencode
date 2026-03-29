@@ -18,8 +18,9 @@ import { ModelTable } from "../src/schema/model.sql.js"
 
 // get input from command line
 const identifier = process.argv[2]
+const verbose = process.argv[process.argv.length - 1] === "-v"
 if (!identifier) {
-  console.error("Usage: bun lookup-user.ts <email|workspaceID|apiKey>")
+  console.error("Usage: bun lookup-user.ts <email|workspaceID|apiKey> [-v]")
   process.exit(1)
 }
 
@@ -223,93 +224,68 @@ async function printWorkspace(workspaceID: string) {
       ),
   )
 
-  await printTable("28-Day Usage", (tx) =>
-    tx
-      .select({
-        date: sql<string>`DATE(${UsageTable.timeCreated})`.as("date"),
-        requests: sql<number>`COUNT(*)`.as("requests"),
-        inputTokens: sql<number>`SUM(${UsageTable.inputTokens})`.as("input_tokens"),
-        outputTokens: sql<number>`SUM(${UsageTable.outputTokens})`.as("output_tokens"),
-        reasoningTokens: sql<number>`SUM(${UsageTable.reasoningTokens})`.as("reasoning_tokens"),
-        cacheReadTokens: sql<number>`SUM(${UsageTable.cacheReadTokens})`.as("cache_read_tokens"),
-        cacheWrite5mTokens: sql<number>`SUM(${UsageTable.cacheWrite5mTokens})`.as("cache_write_5m_tokens"),
-        cacheWrite1hTokens: sql<number>`SUM(${UsageTable.cacheWrite1hTokens})`.as("cache_write_1h_tokens"),
-        cost: sql<number>`SUM(${UsageTable.cost})`.as("cost"),
-      })
-      .from(UsageTable)
-      .where(
-        and(
-          eq(UsageTable.workspaceID, workspace.id),
-          sql`${UsageTable.timeCreated} >= DATE_SUB(NOW(), INTERVAL 28 DAY)`,
+  if (verbose) {
+    await printTable("28-Day Usage", (tx) =>
+      tx
+        .select({
+          date: sql<string>`DATE(${UsageTable.timeCreated})`.as("date"),
+          requests: sql<number>`COUNT(*)`.as("requests"),
+          inputTokens: sql<number>`SUM(${UsageTable.inputTokens})`.as("input_tokens"),
+          outputTokens: sql<number>`SUM(${UsageTable.outputTokens})`.as("output_tokens"),
+          reasoningTokens: sql<number>`SUM(${UsageTable.reasoningTokens})`.as("reasoning_tokens"),
+          cacheReadTokens: sql<number>`SUM(${UsageTable.cacheReadTokens})`.as("cache_read_tokens"),
+          cacheWrite5mTokens: sql<number>`SUM(${UsageTable.cacheWrite5mTokens})`.as("cache_write_5m_tokens"),
+          cacheWrite1hTokens: sql<number>`SUM(${UsageTable.cacheWrite1hTokens})`.as("cache_write_1h_tokens"),
+          cost: sql<number>`SUM(${UsageTable.cost})`.as("cost"),
+        })
+        .from(UsageTable)
+        .where(
+          and(
+            eq(UsageTable.workspaceID, workspace.id),
+            sql`${UsageTable.timeCreated} >= DATE_SUB(NOW(), INTERVAL 28 DAY)`,
+          ),
+        )
+        .groupBy(sql`DATE(${UsageTable.timeCreated})`)
+        .orderBy(sql`DATE(${UsageTable.timeCreated}) DESC`)
+        .then((rows) => {
+          const totalCost = rows.reduce((sum, r) => sum + Number(r.cost), 0)
+          const mapped = rows.map((row) => ({
+            ...row,
+            cost: `$${(Number(row.cost) / 100000000).toFixed(2)}`,
+          }))
+          if (mapped.length > 0) {
+            mapped.push({
+              date: "TOTAL",
+              requests: null as any,
+              inputTokens: null as any,
+              outputTokens: null as any,
+              reasoningTokens: null as any,
+              cacheReadTokens: null as any,
+              cacheWrite5mTokens: null as any,
+              cacheWrite1hTokens: null as any,
+              cost: `$${(totalCost / 100000000).toFixed(2)}`,
+            })
+          }
+          return mapped
+        }),
+    )
+    await printTable("Disabled Models", (tx) =>
+      tx
+        .select({
+          model: ModelTable.model,
+          timeCreated: ModelTable.timeCreated,
+        })
+        .from(ModelTable)
+        .where(eq(ModelTable.workspaceID, workspace.id))
+        .orderBy(sql`${ModelTable.timeCreated} DESC`)
+        .then((rows) =>
+          rows.map((row) => ({
+            model: row.model,
+            timeCreated: formatDate(row.timeCreated),
+          })),
         ),
-      )
-      .groupBy(sql`DATE(${UsageTable.timeCreated})`)
-      .orderBy(sql`DATE(${UsageTable.timeCreated}) DESC`)
-      .then((rows) => {
-        const totalCost = rows.reduce((sum, r) => sum + Number(r.cost), 0)
-        const mapped = rows.map((row) => ({
-          ...row,
-          cost: `$${(Number(row.cost) / 100000000).toFixed(2)}`,
-        }))
-        if (mapped.length > 0) {
-          mapped.push({
-            date: "TOTAL",
-            requests: null as any,
-            inputTokens: null as any,
-            outputTokens: null as any,
-            reasoningTokens: null as any,
-            cacheReadTokens: null as any,
-            cacheWrite5mTokens: null as any,
-            cacheWrite1hTokens: null as any,
-            cost: `$${(totalCost / 100000000).toFixed(2)}`,
-          })
-        }
-        return mapped
-      }),
-  )
-  /*
-  await printTable("Usage", (tx) =>
-    tx
-      .select({
-        model: UsageTable.model,
-        provider: UsageTable.provider,
-        inputTokens: UsageTable.inputTokens,
-        outputTokens: UsageTable.outputTokens,
-        reasoningTokens: UsageTable.reasoningTokens,
-        cacheReadTokens: UsageTable.cacheReadTokens,
-        cacheWrite5mTokens: UsageTable.cacheWrite5mTokens,
-        cacheWrite1hTokens: UsageTable.cacheWrite1hTokens,
-        cost: UsageTable.cost,
-        timeCreated: UsageTable.timeCreated,
-      })
-      .from(UsageTable)
-      .where(eq(UsageTable.workspaceID, workspace.id))
-      .orderBy(sql`${UsageTable.timeCreated} DESC`)
-      .limit(10)
-      .then((rows) =>
-        rows.map((row) => ({
-          ...row,
-          cost: `$${(row.cost / 100000000).toFixed(2)}`,
-        })),
-      ),
-  )
-  await printTable("Disabled Models", (tx) =>
-    tx
-      .select({
-        model: ModelTable.model,
-        timeCreated: ModelTable.timeCreated,
-      })
-      .from(ModelTable)
-      .where(eq(ModelTable.workspaceID, workspace.id))
-      .orderBy(sql`${ModelTable.timeCreated} DESC`)
-      .then((rows) =>
-        rows.map((row) => ({
-          model: row.model,
-          timeCreated: formatDate(row.timeCreated),
-        })),
-      ),
-  )
-        */
+    )
+  }
 }
 
 function formatMicroCents(value: number | null | undefined) {
