@@ -4,7 +4,41 @@ export function virtualize(input: { desktop: boolean; count: number; working: bo
   return input.desktop && input.count > 6 && !input.working
 }
 
-export function captureScroll(input: { scrollTop: number; scrollHeight: number; clientHeight: number; threshold?: number }) {
+export function pickPin(input: {
+  viewTop: number
+  viewBottom: number
+  line?: number
+  items: Array<{
+    id: string
+    top: number
+    bottom: number
+  }>
+}) {
+  const line = input.line ?? input.viewTop + 100
+  const shown = input.items.filter((item) => item.bottom > input.viewTop && item.top < input.viewBottom)
+  const hit =
+    shown.find((item) => item.top <= line && item.bottom >= line) ??
+    [...shown].sort((a, b) => {
+      const da = Math.abs(a.top - line)
+      const db = Math.abs(b.top - line)
+      if (da !== db) return da - db
+      return a.top - b.top
+    })[0] ??
+    input.items.filter((item) => item.top <= line).at(-1) ??
+    input.items[0]
+  if (!hit) return
+  return {
+    id: hit.id,
+    top: hit.top - input.viewTop,
+  }
+}
+
+export function captureScroll(input: {
+  scrollTop: number
+  scrollHeight: number
+  clientHeight: number
+  threshold?: number
+}) {
   const max = Math.max(0, input.scrollHeight - input.clientHeight)
   const top = Math.max(0, Math.min(input.scrollTop, max))
   const gap = Math.max(0, max - top)
@@ -25,6 +59,18 @@ export function restoreScroll(input: {
   const max = Math.max(0, input.scrollHeight - input.clientHeight)
   if (input.bottom) return Math.max(0, max - Math.max(0, input.gap))
   return Math.max(0, Math.min(input.top, max))
+}
+
+export function restorePinnedTop(input: {
+  scrollTop: number
+  scrollHeight: number
+  clientHeight: number
+  pinTop: number
+  nextTop: number
+}) {
+  const max = Math.max(0, input.scrollHeight - input.clientHeight)
+  const next = input.scrollTop + input.nextTop - input.pinTop
+  return Math.max(0, Math.min(next, max))
 }
 
 export function itemStyle(centered: boolean): JSX.CSSProperties {

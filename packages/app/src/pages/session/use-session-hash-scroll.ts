@@ -8,6 +8,7 @@ export const useSessionHashScroll = (input: {
   sessionKey: () => string
   sessionID: () => string | undefined
   messagesReady: () => boolean
+  userScrolled: () => boolean
   visibleUserMessages: () => UserMessage[]
   renderedUserMessages?: () => UserMessage[]
   turnStart: () => number
@@ -27,10 +28,19 @@ export const useSessionHashScroll = (input: {
   const renderedUserMessages = createMemo(() => input.renderedUserMessages?.() ?? visibleUserMessages())
   const messageById = createMemo(() => new Map(visibleUserMessages().map((m) => [m.id, m])))
   let pendingKey = ""
+  let freshKey = ""
+  let fresh = true
   let clearing = false
 
   const location = useLocation()
   const navigate = useNavigate()
+
+  createEffect(() => {
+    const key = input.sessionKey()
+    if (!key || key === freshKey) return
+    freshKey = key
+    fresh = true
+  })
 
   const frames = new Set<number>()
   const queue = (fn: () => void) => {
@@ -120,6 +130,8 @@ export const useSessionHashScroll = (input: {
   const applyHash = (behavior: ScrollBehavior) => {
     const hash = location.hash.slice(1)
     if (!hash) {
+      if (input.userScrolled() && !fresh) return
+      fresh = false
       input.autoScroll.forceScrollToBottom()
       const el = input.scroller()
       if (el) input.scheduleScrollState(el)
@@ -171,12 +183,14 @@ export const useSessionHashScroll = (input: {
         pendingKey = key
         const next = input.consumePendingMessage(key)
         if (next) {
+          if (input.userScrolled() && !fresh) return
           input.setPendingMessage(next)
           targetId = next
         }
       }
     }
 
+    const source = targetId ? "pending" : "hash"
     if (!targetId && !clearing) targetId = messageIdFromHash(location.hash)
     if (!targetId) return
 
@@ -184,6 +198,7 @@ export const useSessionHashScroll = (input: {
     const msg = messageById().get(targetId)
     if (!msg) return
 
+    fresh = false
     if (pending) input.setPendingMessage(undefined)
     if (input.currentMessageId() === targetId && !pending) return
 

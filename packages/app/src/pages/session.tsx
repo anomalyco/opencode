@@ -1791,6 +1791,10 @@ export default function Page() {
     bottomThreshold: scrollBottomThreshold,
   })
 
+  const handleTimelineAutoScroll = () => {
+    autoScroll.handleScroll()
+  }
+
   let scrollStateFrame: number | undefined
   let scrollStateTarget: HTMLDivElement | undefined
   let fillFrame: number | undefined
@@ -2229,6 +2233,7 @@ export default function Page() {
     sessionKey,
     sessionID: () => params.id,
     messagesReady,
+    userScrolled: autoScroll.userScrolled,
     visibleUserMessages,
     renderedUserMessages: historyWindow.renderedUserMessages,
     turnStart: historyWindow.turnStart,
@@ -2401,7 +2406,7 @@ export default function Page() {
                     onResumeScroll={resumeScroll}
                     setScrollRef={setScrollRef}
                     onScheduleScrollState={scheduleScrollState}
-                    onAutoScrollHandleScroll={autoScroll.handleScroll}
+                    onAutoScrollHandleScroll={handleTimelineAutoScroll}
                     onMarkScrollGesture={markScrollGesture}
                     hasScrollGesture={hasScrollGesture}
                     onUserScroll={markUserScroll}
@@ -2412,6 +2417,7 @@ export default function Page() {
                     }
                     centered={centered()}
                     scrollRef={() => scroller}
+                    userScrolled={autoScroll.userScrolled}
                     onVirtualizedChange={(value) => {
                       virtualized = value
                     }}
