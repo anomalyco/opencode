@@ -201,7 +201,8 @@ export namespace SessionPrompt {
         const text = yield* Effect.promise(async (signal) => {
           const mdl = ag.model
             ? await Provider.getModel(ag.model.providerID, ag.model.modelID)
-            : (await Provider.getSmallModel(input.providerID)) ?? (await Provider.getModel(input.providerID, input.modelID))
+            : ((await Provider.getSmallModel(input.providerID)) ??
+              (await Provider.getModel(input.providerID, input.modelID)))
           const msgs = onlySubtasks
             ? [{ role: "user" as const, content: subtasks.map((p) => p.prompt).join("\n") }]
             : await MessageV2.toModelMessages(context, mdl)
@@ -236,7 +237,9 @@ export namespace SessionPrompt {
               const hint = e.data.suggestions?.length ? ` Did you mean: ${e.data.suggestions.join(", ")}?` : ""
               Bus.publish(Session.Event.Error, {
                 sessionID,
-                error: new NamedError.Unknown({ message: `Model not found: ${e.data.providerID}/${e.data.modelID}.${hint}` }).toObject(),
+                error: new NamedError.Unknown({
+                  message: `Model not found: ${e.data.providerID}/${e.data.modelID}.${hint}`,
+                }).toObject(),
               })
             }
             throw e
@@ -288,7 +291,13 @@ export namespace SessionPrompt {
                   const { clientName, uri } = part.source
                   log.info("mcp resource", { clientName, uri, mime: part.mime })
                   const pieces: Draft<MessageV2.Part>[] = [
-                    { messageID: info.id, sessionID: input.sessionID, type: "text", synthetic: true, text: `Reading MCP resource: ${part.filename} (${uri})` },
+                    {
+                      messageID: info.id,
+                      sessionID: input.sessionID,
+                      type: "text",
+                      synthetic: true,
+                      text: `Reading MCP resource: ${part.filename} (${uri})`,
+                    },
                   ]
                   try {
                     const content = await MCP.readResource(clientName, uri)
@@ -296,17 +305,35 @@ export namespace SessionPrompt {
                     const items = Array.isArray(content.contents) ? content.contents : [content.contents]
                     for (const c of items) {
                       if ("text" in c && c.text) {
-                        pieces.push({ messageID: info.id, sessionID: input.sessionID, type: "text", synthetic: true, text: c.text })
+                        pieces.push({
+                          messageID: info.id,
+                          sessionID: input.sessionID,
+                          type: "text",
+                          synthetic: true,
+                          text: c.text,
+                        })
                       } else if ("blob" in c && c.blob) {
                         const mime = "mimeType" in c ? c.mimeType : part.mime
-                        pieces.push({ messageID: info.id, sessionID: input.sessionID, type: "text", synthetic: true, text: `[Binary content: ${mime}]` })
+                        pieces.push({
+                          messageID: info.id,
+                          sessionID: input.sessionID,
+                          type: "text",
+                          synthetic: true,
+                          text: `[Binary content: ${mime}]`,
+                        })
                       }
                     }
                     pieces.push({ ...part, messageID: info.id, sessionID: input.sessionID })
                   } catch (error: unknown) {
                     log.error("failed to read MCP resource", { error, clientName, uri })
                     const message = error instanceof Error ? error.message : String(error)
-                    pieces.push({ messageID: info.id, sessionID: input.sessionID, type: "text", synthetic: true, text: `Failed to read MCP resource ${part.filename}: ${message}` })
+                    pieces.push({
+                      messageID: info.id,
+                      sessionID: input.sessionID,
+                      type: "text",
+                      synthetic: true,
+                      text: `Failed to read MCP resource ${part.filename}: ${message}`,
+                    })
                   }
                   return pieces
                 }
@@ -315,8 +342,20 @@ export namespace SessionPrompt {
                   case "data:":
                     if (part.mime === "text/plain") {
                       return [
-                        { messageID: info.id, sessionID: input.sessionID, type: "text", synthetic: true, text: `Called the Read tool with the following input: ${JSON.stringify({ filePath: part.filename })}` },
-                        { messageID: info.id, sessionID: input.sessionID, type: "text", synthetic: true, text: decodeDataUrl(part.url) },
+                        {
+                          messageID: info.id,
+                          sessionID: input.sessionID,
+                          type: "text",
+                          synthetic: true,
+                          text: `Called the Read tool with the following input: ${JSON.stringify({ filePath: part.filename })}`,
+                        },
+                        {
+                          messageID: info.id,
+                          sessionID: input.sessionID,
+                          type: "text",
+                          synthetic: true,
+                          text: decodeDataUrl(part.url),
+                        },
                         { ...part, messageID: info.id, sessionID: input.sessionID },
                       ]
                     }
@@ -353,7 +392,13 @@ export namespace SessionPrompt {
                       }
                       const args = { filePath: filepath, offset, limit }
                       const pieces: Draft<MessageV2.Part>[] = [
-                        { messageID: info.id, sessionID: input.sessionID, type: "text", synthetic: true, text: `Called the Read tool with the following input: ${JSON.stringify(args)}` },
+                        {
+                          messageID: info.id,
+                          sessionID: input.sessionID,
+                          type: "text",
+                          synthetic: true,
+                          text: `Called the Read tool with the following input: ${JSON.stringify(args)}`,
+                        },
                       ]
                       await ReadTool.init()
                         .then(async (t) => {
@@ -369,9 +414,23 @@ export namespace SessionPrompt {
                             ask: async () => {},
                           }
                           const result = await t.execute(args, ctx)
-                          pieces.push({ messageID: info.id, sessionID: input.sessionID, type: "text", synthetic: true, text: result.output })
+                          pieces.push({
+                            messageID: info.id,
+                            sessionID: input.sessionID,
+                            type: "text",
+                            synthetic: true,
+                            text: result.output,
+                          })
                           if (result.attachments?.length) {
-                            pieces.push(...result.attachments.map((a) => ({ ...a, synthetic: true, filename: a.filename ?? part.filename, messageID: info.id, sessionID: input.sessionID })))
+                            pieces.push(
+                              ...result.attachments.map((a) => ({
+                                ...a,
+                                synthetic: true,
+                                filename: a.filename ?? part.filename,
+                                messageID: info.id,
+                                sessionID: input.sessionID,
+                              })),
+                            )
                           } else {
                             pieces.push({ ...part, messageID: info.id, sessionID: input.sessionID })
                           }
@@ -379,8 +438,17 @@ export namespace SessionPrompt {
                         .catch((error) => {
                           log.error("failed to read file", { error })
                           const message = error instanceof Error ? error.message : error.toString()
-                          Bus.publish(Session.Event.Error, { sessionID: input.sessionID, error: new NamedError.Unknown({ message }).toObject() })
-                          pieces.push({ messageID: info.id, sessionID: input.sessionID, type: "text", synthetic: true, text: `Read tool failed to read ${filepath} with the following error: ${message}` })
+                          Bus.publish(Session.Event.Error, {
+                            sessionID: input.sessionID,
+                            error: new NamedError.Unknown({ message }).toObject(),
+                          })
+                          pieces.push({
+                            messageID: info.id,
+                            sessionID: input.sessionID,
+                            type: "text",
+                            synthetic: true,
+                            text: `Read tool failed to read ${filepath} with the following error: ${message}`,
+                          })
                         })
                       return pieces
                     }
@@ -399,15 +467,33 @@ export namespace SessionPrompt {
                       }
                       const result = await ReadTool.init().then((t) => t.execute(args, ctx))
                       return [
-                        { messageID: info.id, sessionID: input.sessionID, type: "text", synthetic: true, text: `Called the Read tool with the following input: ${JSON.stringify(args)}` },
-                        { messageID: info.id, sessionID: input.sessionID, type: "text", synthetic: true, text: result.output },
+                        {
+                          messageID: info.id,
+                          sessionID: input.sessionID,
+                          type: "text",
+                          synthetic: true,
+                          text: `Called the Read tool with the following input: ${JSON.stringify(args)}`,
+                        },
+                        {
+                          messageID: info.id,
+                          sessionID: input.sessionID,
+                          type: "text",
+                          synthetic: true,
+                          text: result.output,
+                        },
                         { ...part, messageID: info.id, sessionID: input.sessionID },
                       ]
                     }
 
                     await FileTime.read(input.sessionID, filepath)
                     return [
-                      { messageID: info.id, sessionID: input.sessionID, type: "text", synthetic: true, text: `Called the Read tool with the following input: {"filePath":"${filepath}"}` },
+                      {
+                        messageID: info.id,
+                        sessionID: input.sessionID,
+                        type: "text",
+                        synthetic: true,
+                        text: `Called the Read tool with the following input: {"filePath":"${filepath}"}`,
+                      },
                       {
                         id: part.id,
                         messageID: info.id,
@@ -433,7 +519,10 @@ export namespace SessionPrompt {
                     sessionID: input.sessionID,
                     type: "text",
                     synthetic: true,
-                    text: " Use the above message and context to generate a prompt and call the task tool with subagent: " + part.name + hint,
+                    text:
+                      " Use the above message and context to generate a prompt and call the task tool with subagent: " +
+                      part.name +
+                      hint,
                   },
                 ]
               }
@@ -443,13 +532,17 @@ export namespace SessionPrompt {
           ).then((x) => x.flat().map(assign)),
         )
 
-        yield* plugin.trigger("chat.message", {
-          sessionID: input.sessionID,
-          agent: input.agent,
-          model: input.model,
-          messageID: input.messageID,
-          variant: input.variant,
-        }, { message: info, parts })
+        yield* plugin.trigger(
+          "chat.message",
+          {
+            sessionID: input.sessionID,
+            agent: input.agent,
+            model: input.model,
+            messageID: input.messageID,
+            variant: input.variant,
+          },
+          { message: info, parts },
+        )
 
         const parsed = MessageV2.Info.safeParse(info)
         if (!parsed.success) {
@@ -614,12 +707,10 @@ export namespace SessionPrompt {
             time: { created: Date.now() },
             sessionID,
           })
-          const ctrl = new AbortController()
           const handle = yield* processor.create({
             assistantMessage: msg as MessageV2.Assistant,
             sessionID,
             model,
-            abort: ctrl.signal,
           })
 
           const outcome: "break" | "continue" = yield* Effect.onExit(
@@ -685,7 +776,6 @@ export namespace SessionPrompt {
                 user: lastUser!,
                 agent,
                 permission: session.permission,
-                abort: ctrl.signal,
                 sessionID,
                 system,
                 messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
@@ -727,7 +817,6 @@ export namespace SessionPrompt {
             }),
             (exit) =>
               Effect.gen(function* () {
-                ctrl.abort()
                 if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) yield* handle.abort()
                 InstructionPrompt.clear(handle.message.id)
               }),

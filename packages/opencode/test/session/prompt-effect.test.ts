@@ -8,6 +8,9 @@ import { Agent as AgentSvc } from "../../src/agent/agent"
 import { Bus } from "../../src/bus"
 import { Command } from "../../src/command"
 import { Config } from "../../src/config/config"
+import { FileTime } from "../../src/file/time"
+import { LSP } from "../../src/lsp"
+import { MCP } from "../../src/mcp"
 import { Permission } from "../../src/permission"
 import { Plugin } from "../../src/plugin"
 import type { Provider } from "../../src/provider/provider"
@@ -98,21 +101,39 @@ function finish(): LLM.Event {
   return { type: "finish", finishReason: "stop", rawFinishReason: "stop", totalUsage: usage() }
 }
 
-function wait(abort: AbortSignal) {
-  return Effect.promise(
-    () =>
-      new Promise<void>((done) => {
-        abort.addEventListener("abort", () => done(), { once: true })
-      }),
-  )
+function finishToolCallsStep(): LLM.Event {
+  return {
+    type: "finish-step",
+    finishReason: "tool-calls",
+    rawFinishReason: "tool_calls",
+    response: { id: "res", modelId: "test-model", timestamp: new Date() },
+    providerMetadata: undefined,
+    usage: usage(),
+  }
 }
 
-function hang(input: LLM.StreamInput, ...items: LLM.Event[]) {
-  return stream(...items).pipe(
-    Stream.concat(
-      Stream.unwrap(wait(input.abort).pipe(Effect.as(Stream.fail(new DOMException("Aborted", "AbortError"))))),
-    ),
-  )
+function finishToolCalls(): LLM.Event {
+  return { type: "finish", finishReason: "tool-calls", rawFinishReason: "tool_calls", totalUsage: usage() }
+}
+
+function replyStop(text: string, id = "t") {
+  return [start(), textStart(id), textDelta(id, text), textEnd(id), finishStep(), finish()] as const
+}
+
+function replyToolCalls(text: string, id = "t") {
+  return [start(), textStart(id), textDelta(id, text), textEnd(id), finishToolCallsStep(), finishToolCalls()] as const
+}
+
+function toolInputStart(id: string, toolName: string): LLM.Event {
+  return { type: "tool-input-start", id, toolName }
+}
+
+function toolCall(toolCallId: string, toolName: string, input: unknown): LLM.Event {
+  return { type: "tool-call", toolCallId, toolName, input }
+}
+
+function hang(_input: LLM.StreamInput, ...items: LLM.Event[]) {
+  return stream(...items).pipe(Stream.concat(Stream.fromEffect(Effect.never)))
 }
 
 function defer<T>() {
@@ -121,6 +142,36 @@ function defer<T>() {
     resolve = done
   })
   return { promise, resolve }
+}
+
+function waitMs(ms: number) {
+  return Effect.promise(() => new Promise<void>((done) => setTimeout(done, ms)))
+}
+
+function toolPart(parts: MessageV2.Part[]) {
+  return parts.find((part): part is MessageV2.ToolPart => part.type === "tool")
+}
+
+type CompletedToolPart = MessageV2.ToolPart & { state: MessageV2.ToolStateCompleted }
+type ErrorToolPart = MessageV2.ToolPart & { state: MessageV2.ToolStateError }
+type RunningToolPart = MessageV2.ToolPart & { state: MessageV2.ToolStateRunning }
+
+function completedTool(parts: MessageV2.Part[]) {
+  const part = toolPart(parts)
+  expect(part?.state.status).toBe("completed")
+  return part?.state.status === "completed" ? (part as CompletedToolPart) : undefined
+}
+
+function errorTool(parts: MessageV2.Part[]) {
+  const part = toolPart(parts)
+  expect(part?.state.status).toBe("error")
+  return part?.state.status === "error" ? (part as ErrorToolPart) : undefined
+}
+
+function runningTool(parts: MessageV2.Part[]) {
+  const part = toolPart(parts)
+  expect(part?.state.status).toBe("running")
+  return part?.state.status === "running" ? (part as RunningToolPart) : undefined
 }
 
 const llm = Layer.unwrap(
@@ -160,6 +211,59 @@ const llm = Layer.unwrap(
   }),
 )
 
+const mcp = Layer.succeed(
+  MCP.Service,
+  MCP.Service.of({
+    status: () => Effect.succeed({}),
+    clients: () => Effect.succeed({}),
+    tools: () => Effect.succeed({}),
+    prompts: () => Effect.succeed({}),
+    resources: () => Effect.succeed({}),
+    add: () => Effect.succeed({ status: { status: "disabled" as const } }),
+    connect: () => Effect.void,
+    disconnect: () => Effect.void,
+    getPrompt: () => Effect.succeed(undefined),
+    readResource: () => Effect.succeed(undefined),
+    startAuth: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
+    authenticate: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
+    finishAuth: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
+    removeAuth: () => Effect.void,
+    supportsOAuth: () => Effect.succeed(false),
+    hasStoredTokens: () => Effect.succeed(false),
+    getAuthStatus: () => Effect.succeed("not_authenticated" as const),
+  }),
+)
+
+const lsp = Layer.succeed(
+  LSP.Service,
+  LSP.Service.of({
+    init: () => Effect.void,
+    status: () => Effect.succeed([]),
+    hasClients: () => Effect.succeed(false),
+    touchFile: () => Effect.void,
+    diagnostics: () => Effect.succeed({}),
+    hover: () => Effect.succeed(undefined),
+    definition: () => Effect.succeed([]),
+    references: () => Effect.succeed([]),
+    implementation: () => Effect.succeed([]),
+    documentSymbol: () => Effect.succeed([]),
+    workspaceSymbol: () => Effect.succeed([]),
+    prepareCallHierarchy: () => Effect.succeed([]),
+    incomingCalls: () => Effect.succeed([]),
+    outgoingCalls: () => Effect.succeed([]),
+  }),
+)
+
+const filetime = Layer.succeed(
+  FileTime.Service,
+  FileTime.Service.of({
+    read: () => Effect.void,
+    get: () => Effect.succeed(undefined),
+    assert: () => Effect.void,
+    withLock: (_filepath, fn) => Effect.promise(fn),
+  }),
+)
+
 const status = SessionStatus.layer.pipe(Layer.provideMerge(Bus.layer))
 const infra = Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
 const deps = Layer.mergeAll(
@@ -170,6 +274,9 @@ const deps = Layer.mergeAll(
   Permission.layer,
   Plugin.defaultLayer,
   Config.defaultLayer,
+  filetime,
+  lsp,
+  mcp,
   AppFileSystem.defaultLayer,
   status,
   llm,
@@ -260,17 +367,36 @@ const seed = Effect.fn("test.seed")(function* (sessionID: SessionID, opts?: { fi
   return { user: msg, assistant }
 })
 
-// Priority 1: Loop lifecycle
+const addSubtask = (sessionID: SessionID, messageID: MessageID, model = ref) =>
+  Effect.gen(function* () {
+    const session = yield* Session.Service
+    yield* session.updatePart({
+      id: PartID.ascending(),
+      messageID,
+      sessionID,
+      type: "subtask",
+      prompt: "look into the cache key path",
+      description: "inspect bug",
+      agent: "general",
+      model,
+    })
+  })
+
+const boot = Effect.fn("test.boot")(function* (input?: { title?: string }) {
+  const test = yield* TestLLM
+  const prompt = yield* SessionPrompt.Service
+  const sessions = yield* Session.Service
+  const chat = yield* sessions.create(input ?? {})
+  return { test, prompt, sessions, chat }
+})
+
+// Loop semantics
 
 it.effect("loop exits immediately when last assistant has stop finish", () =>
   provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
-        const test = yield* TestLLM
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
-
-        const chat = yield* sessions.create({})
+        const { test, prompt, chat } = yield* boot()
         yield* seed(chat.id, { finish: "stop" })
 
         const result = yield* prompt.loop({ sessionID: chat.id })
@@ -286,13 +412,8 @@ it.effect("loop calls LLM and returns assistant message", () =>
   provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
-        const test = yield* TestLLM
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
-
-        yield* test.reply(start(), textStart(), textDelta("t", "world"), textEnd(), finishStep(), finish())
-
-        const chat = yield* sessions.create({})
+        const { test, prompt, chat } = yield* boot()
+        yield* test.reply(...replyStop("world"))
         yield* user(chat.id, "hello")
 
         const result = yield* prompt.loop({ sessionID: chat.id })
@@ -309,16 +430,32 @@ it.effect("loop continues when finish is tool-calls", () =>
   provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
-        const test = yield* TestLLM
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
+        const { test, prompt, chat } = yield* boot()
+        yield* test.reply(...replyToolCalls("first"))
+        yield* test.reply(...replyStop("second"))
+        yield* user(chat.id, "hello")
 
-        // First reply finishes with tool-calls, second with stop
+        const result = yield* prompt.loop({ sessionID: chat.id })
+        expect(yield* test.calls).toBe(2)
+        expect(result.info.role).toBe("assistant")
+      }),
+    { git: true, config: cfg },
+  ),
+)
+
+it.effect("failed subtask preserves metadata on error tool state", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { test, prompt, chat } = yield* boot({ title: "Pinned" })
         yield* test.reply(
           start(),
-          textStart(),
-          textDelta("t", "first"),
-          textEnd(),
+          toolInputStart("task-1", "task"),
+          toolCall("task-1", "task", {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+          }),
           {
             type: "finish-step",
             finishReason: "tool-calls",
@@ -329,16 +466,41 @@ it.effect("loop continues when finish is tool-calls", () =>
           },
           { type: "finish", finishReason: "tool-calls", rawFinishReason: "tool_calls", totalUsage: usage() },
         )
-        yield* test.reply(start(), textStart(), textDelta("t", "second"), textEnd(), finishStep(), finish())
-
-        const chat = yield* sessions.create({})
-        yield* user(chat.id, "hello")
+        yield* test.reply(...replyStop("done"))
+        const msg = yield* user(chat.id, "hello")
+        yield* addSubtask(chat.id, msg.id)
 
         const result = yield* prompt.loop({ sessionID: chat.id })
-        expect(yield* test.calls).toBe(2)
         expect(result.info.role).toBe("assistant")
+        expect(yield* test.calls).toBe(2)
+
+        const msgs = yield* Effect.promise(() => MessageV2.filterCompacted(MessageV2.stream(chat.id)))
+        const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
+        expect(taskMsg?.info.role).toBe("assistant")
+        if (!taskMsg || taskMsg.info.role !== "assistant") return
+
+        const tool = errorTool(taskMsg.parts)
+        if (!tool) return
+
+        expect(tool.state.error).toContain("Tool execution failed")
+        expect(tool.state.metadata).toBeDefined()
+        expect(tool.state.metadata?.sessionId).toBeDefined()
+        expect(tool.state.metadata?.model).toEqual({
+          providerID: ProviderID.make("test"),
+          modelID: ModelID.make("missing-model"),
+        })
       }),
-    { git: true, config: cfg },
+    {
+      git: true,
+      config: {
+        ...cfg,
+        agent: {
+          general: {
+            model: "test/missing-model",
+          },
+        },
+      },
+    },
   ),
 )
 
@@ -375,7 +537,7 @@ it.effect("loop sets status to busy then idle", () =>
   ),
 )
 
-// Priority 2: Cancel safety
+// Cancel semantics
 
 it.effect(
   "cancel interrupts loop and returns last assistant",
@@ -383,11 +545,7 @@ it.effect(
     provideTmpdirInstance(
       (dir) =>
         Effect.gen(function* () {
-          const test = yield* TestLLM
-          const prompt = yield* SessionPrompt.Service
-          const sessions = yield* Session.Service
-
-          const chat = yield* sessions.create({})
+          const { test, prompt, chat } = yield* boot()
           yield* seed(chat.id)
 
           // Make LLM hang so the loop blocks
@@ -398,7 +556,7 @@ it.effect(
 
           const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
           // Give the loop time to start
-          yield* Effect.promise(() => new Promise<void>((r) => setTimeout(r, 200)))
+          yield* waitMs(200)
           yield* prompt.cancel(chat.id)
 
           const exit = yield* Fiber.await(fiber)
@@ -419,17 +577,13 @@ it.effect(
       (dir) =>
         Effect.gen(function* () {
           const ready = defer<void>()
-          const test = yield* TestLLM
-          const prompt = yield* SessionPrompt.Service
-          const sessions = yield* Session.Service
+          const { test, prompt, chat } = yield* boot()
 
           yield* test.push((input) =>
             hang(input, start()).pipe(
               Stream.tap((event) => (event.type === "start" ? Effect.sync(() => ready.resolve()) : Effect.void)),
             ),
           )
-
-          const chat = yield* sessions.create({})
           yield* user(chat.id, "hello")
 
           const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
@@ -457,24 +611,20 @@ it.effect(
       (dir) =>
         Effect.gen(function* () {
           const ready = defer<void>()
-          const test = yield* TestLLM
-          const prompt = yield* SessionPrompt.Service
-          const sessions = yield* Session.Service
+          const { test, prompt, chat } = yield* boot()
 
           yield* test.push((input) =>
             hang(input, start()).pipe(
               Stream.tap((event) => (event.type === "start" ? Effect.sync(() => ready.resolve()) : Effect.void)),
             ),
           )
-
-          const chat = yield* sessions.create({})
           yield* user(chat.id, "hello")
 
           const a = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
           yield* Effect.promise(() => ready.promise)
           // Queue a second caller
           const b = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-          yield* Effect.promise(() => new Promise<void>((r) => setTimeout(r, 50)))
+          yield* waitMs(50)
 
           yield* prompt.cancel(chat.id)
 
@@ -488,17 +638,13 @@ it.effect(
   30_000,
 )
 
-// Priority 3: Deferred queue
+// Queue semantics
 
 it.effect("concurrent loop callers get same result", () =>
   provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
-        const test = yield* TestLLM
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
-
-        const chat = yield* sessions.create({})
+        const { prompt, chat } = yield* boot()
         yield* seed(chat.id, { finish: "stop" })
 
         const [a, b] = yield* Effect.all([prompt.loop({ sessionID: chat.id }), prompt.loop({ sessionID: chat.id })], {
@@ -516,14 +662,10 @@ it.effect("concurrent loop callers all receive same error result", () =>
   provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
-        const test = yield* TestLLM
-        const prompt = yield* SessionPrompt.Service
-        const sessions = yield* Session.Service
+        const { test, prompt, chat } = yield* boot()
 
         // Push a stream that fails — the loop records the error on the assistant message
         yield* test.push(Stream.fail(new Error("boom")))
-
-        const chat = yield* sessions.create({})
         yield* user(chat.id, "hello")
 
         const [a, b] = yield* Effect.all([prompt.loop({ sessionID: chat.id }), prompt.loop({ sessionID: chat.id })], {
@@ -590,7 +732,7 @@ it.effect("assertNotBusy succeeds when idle", () =>
   ),
 )
 
-// Priority 4: Shell basics
+// Shell semantics
 
 it.effect(
   "shell rejects with BusyError when loop running",
@@ -599,17 +741,13 @@ it.effect(
       (dir) =>
         Effect.gen(function* () {
           const ready = defer<void>()
-          const test = yield* TestLLM
-          const prompt = yield* SessionPrompt.Service
-          const sessions = yield* Session.Service
+          const { test, prompt, chat } = yield* boot()
 
           yield* test.push((input) =>
             hang(input, start()).pipe(
               Stream.tap((event) => (event.type === "start" ? Effect.sync(() => ready.resolve()) : Effect.void)),
             ),
           )
-
-          const chat = yield* sessions.create({})
           yield* user(chat.id, "hi")
 
           const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
@@ -626,27 +764,78 @@ it.effect(
   30_000,
 )
 
+it.effect("shell captures stdout and stderr in completed tool output", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { prompt, chat } = yield* boot()
+        const result = yield* prompt.shell({
+          sessionID: chat.id,
+          agent: "build",
+          command: "printf out && printf err >&2",
+        })
+
+        expect(result.info.role).toBe("assistant")
+        const tool = completedTool(result.parts)
+        if (!tool) return
+
+        expect(tool.state.output).toContain("out")
+        expect(tool.state.output).toContain("err")
+        expect(tool.state.metadata.output).toContain("out")
+        expect(tool.state.metadata.output).toContain("err")
+      }),
+    { git: true, config: cfg },
+  ),
+)
+
+it.effect(
+  "shell updates running metadata before process exit",
+  () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const { prompt, chat } = yield* boot()
+
+          const fiber = yield* prompt
+            .shell({ sessionID: chat.id, agent: "build", command: "printf first && sleep 0.2 && printf second" })
+            .pipe(Effect.forkChild)
+
+          yield* Effect.promise(async () => {
+            const start = Date.now()
+            while (Date.now() - start < 2000) {
+              const msgs = await MessageV2.filterCompacted(MessageV2.stream(chat.id))
+              const taskMsg = msgs.find((item) => item.info.role === "assistant")
+              const tool = taskMsg ? runningTool(taskMsg.parts) : undefined
+              if (tool?.state.metadata?.output.includes("first")) return
+              await new Promise((done) => setTimeout(done, 20))
+            }
+            throw new Error("timed out waiting for running shell metadata")
+          })
+
+          const exit = yield* Fiber.await(fiber)
+          expect(Exit.isSuccess(exit)).toBe(true)
+        }),
+      { git: true, config: cfg },
+    ),
+  30_000,
+)
+
 it.effect(
   "loop waits while shell runs and starts after shell exits",
   () =>
     provideTmpdirInstance(
       (dir) =>
         Effect.gen(function* () {
-          const test = yield* TestLLM
-          const prompt = yield* SessionPrompt.Service
-          const sessions = yield* Session.Service
-
-          yield* test.reply(start(), textStart(), textDelta("t", "after-shell"), textEnd(), finishStep(), finish())
-
-          const chat = yield* sessions.create({})
+          const { test, prompt, chat } = yield* boot()
+          yield* test.reply(...replyStop("after-shell"))
 
           const sh = yield* prompt
             .shell({ sessionID: chat.id, agent: "build", command: "sleep 0.2" })
             .pipe(Effect.forkChild)
-          yield* Effect.promise(() => new Promise<void>((done) => setTimeout(done, 50)))
+          yield* waitMs(50)
 
           const run = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-          yield* Effect.promise(() => new Promise<void>((done) => setTimeout(done, 50)))
+          yield* waitMs(50)
 
           expect(yield* test.calls).toBe(0)
 
@@ -671,22 +860,17 @@ it.effect(
     provideTmpdirInstance(
       (dir) =>
         Effect.gen(function* () {
-          const test = yield* TestLLM
-          const prompt = yield* SessionPrompt.Service
-          const sessions = yield* Session.Service
-
-          yield* test.reply(start(), textStart(), textDelta("t", "done"), textEnd(), finishStep(), finish())
-
-          const chat = yield* sessions.create({})
+          const { test, prompt, chat } = yield* boot()
+          yield* test.reply(...replyStop("done"))
 
           const sh = yield* prompt
             .shell({ sessionID: chat.id, agent: "build", command: "sleep 0.2" })
             .pipe(Effect.forkChild)
-          yield* Effect.promise(() => new Promise<void>((done) => setTimeout(done, 50)))
+          yield* waitMs(50)
 
           const a = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
           const b = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-          yield* Effect.promise(() => new Promise<void>((done) => setTimeout(done, 50)))
+          yield* waitMs(50)
 
           expect(yield* test.calls).toBe(0)
 
@@ -712,15 +896,12 @@ it.effect(
     provideTmpdirInstance(
       (dir) =>
         Effect.gen(function* () {
-          const prompt = yield* SessionPrompt.Service
-          const sessions = yield* Session.Service
-
-          const chat = yield* sessions.create({})
+          const { prompt, chat } = yield* boot()
 
           const sh = yield* prompt
             .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
             .pipe(Effect.forkChild)
-          yield* Effect.promise(() => new Promise<void>((done) => setTimeout(done, 50)))
+          yield* waitMs(50)
 
           yield* prompt.cancel(chat.id)
 
@@ -747,15 +928,12 @@ it.effect(
     provideTmpdirInstance(
       (dir) =>
         Effect.gen(function* () {
-          const prompt = yield* SessionPrompt.Service
-          const sessions = yield* Session.Service
-
-          const chat = yield* sessions.create({})
+          const { prompt, chat } = yield* boot()
 
           const a = yield* prompt
             .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
             .pipe(Effect.forkChild)
-          yield* Effect.promise(() => new Promise<void>((done) => setTimeout(done, 50)))
+          yield* waitMs(50)
 
           const exit = yield* prompt.shell({ sessionID: chat.id, agent: "build", command: "echo hi" }).pipe(Effect.exit)
           expect(Exit.isFailure(exit)).toBe(true)

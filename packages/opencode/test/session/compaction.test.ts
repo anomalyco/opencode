@@ -129,7 +129,7 @@ async function tool(sessionID: SessionID, messageID: MessageID, tool: string, ou
 }
 
 function fake(
-  input: Parameters<(typeof SessionProcessorModule.SessionProcessor)["create"]>[0],
+  input: Parameters<SessionProcessorModule.SessionProcessor.Interface["create"]>[0],
   result: "continue" | "compact",
 ) {
   const msg = input.assistantMessage

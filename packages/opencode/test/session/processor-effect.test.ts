@@ -1,7 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { expect } from "bun:test"
 import { APICallError } from "ai"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer, ServiceMap } from "effect"
 import * as Stream from "effect/Stream"
 import path from "path"
 import type { Agent } from "../../src/agent/agent"
@@ -120,21 +120,8 @@ function fail<E>(err: E, ...items: LLM.Event[]) {
   return stream(...items).pipe(Stream.concat(Stream.fail(err)))
 }
 
-function wait(abort: AbortSignal) {
-  return Effect.promise(
-    () =>
-      new Promise<void>((done) => {
-        abort.addEventListener("abort", () => done(), { once: true })
-      }),
-  )
-}
-
-function hang(input: LLM.StreamInput, ...items: LLM.Event[]) {
-  return stream(...items).pipe(
-    Stream.concat(
-      Stream.unwrap(wait(input.abort).pipe(Effect.as(Stream.fail(new DOMException("Aborted", "AbortError"))))),
-    ),
-  )
+function hang(_input: LLM.StreamInput, ...items: LLM.Event[]) {
+  return stream(...items).pipe(Stream.concat(Stream.fromEffect(Effect.never)))
 }
 
 function model(context: number): Provider.Model {
@@ -291,13 +278,11 @@ it.effect("session.processor effect tests capture llm input cleanly", () => {
         const chat = yield* session.create({})
         const parent = yield* user(chat.id, "hi")
         const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
-        const abort = new AbortController()
         const mdl = model(100)
         const handle = yield* processors.create({
           assistantMessage: msg,
           sessionID: chat.id,
           model: mdl,
-          abort: abort.signal,
         })
 
         const input = {
@@ -313,7 +298,6 @@ it.effect("session.processor effect tests capture llm input cleanly", () => {
           model: mdl,
           agent: agent(),
           system: [],
-          abort: abort.signal,
           messages: [{ role: "user", content: "hi" }],
           tools: {},
         } satisfies LLM.StreamInput
@@ -359,13 +343,11 @@ it.effect("session.processor effect tests stop after token overflow requests com
         const chat = yield* session.create({})
         const parent = yield* user(chat.id, "compact")
         const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
-        const abort = new AbortController()
         const mdl = model(20)
         const handle = yield* processors.create({
           assistantMessage: msg,
           sessionID: chat.id,
           model: mdl,
-          abort: abort.signal,
         })
 
         const value = yield* handle.process({
@@ -381,7 +363,6 @@ it.effect("session.processor effect tests stop after token overflow requests com
           model: mdl,
           agent: agent(),
           system: [],
-          abort: abort.signal,
           messages: [{ role: "user", content: "compact" }],
           tools: {},
         })
@@ -433,13 +414,11 @@ it.effect("session.processor effect tests reset reasoning state across retries",
         const chat = yield* session.create({})
         const parent = yield* user(chat.id, "reason")
         const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
-        const abort = new AbortController()
         const mdl = model(100)
         const handle = yield* processors.create({
           assistantMessage: msg,
           sessionID: chat.id,
           model: mdl,
-          abort: abort.signal,
         })
 
         const value = yield* handle.process({
@@ -455,7 +434,6 @@ it.effect("session.processor effect tests reset reasoning state across retries",
           model: mdl,
           agent: agent(),
           system: [],
-          abort: abort.signal,
           messages: [{ role: "user", content: "reason" }],
           tools: {},
         })
@@ -485,13 +463,11 @@ it.effect("session.processor effect tests do not retry unknown json errors", () 
         const chat = yield* session.create({})
         const parent = yield* user(chat.id, "json")
         const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
-        const abort = new AbortController()
         const mdl = model(100)
         const handle = yield* processors.create({
           assistantMessage: msg,
           sessionID: chat.id,
           model: mdl,
-          abort: abort.signal,
         })
 
         const value = yield* handle.process({
@@ -507,7 +483,6 @@ it.effect("session.processor effect tests do not retry unknown json errors", () 
           model: mdl,
           agent: agent(),
           system: [],
-          abort: abort.signal,
           messages: [{ role: "user", content: "json" }],
           tools: {},
         })
@@ -535,13 +510,11 @@ it.effect("session.processor effect tests retry recognized structured json error
         const chat = yield* session.create({})
         const parent = yield* user(chat.id, "retry json")
         const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
-        const abort = new AbortController()
         const mdl = model(100)
         const handle = yield* processors.create({
           assistantMessage: msg,
           sessionID: chat.id,
           model: mdl,
-          abort: abort.signal,
         })
 
         const value = yield* handle.process({
@@ -557,7 +530,6 @@ it.effect("session.processor effect tests retry recognized structured json error
           model: mdl,
           agent: agent(),
           system: [],
-          abort: abort.signal,
           messages: [{ role: "user", content: "retry json" }],
           tools: {},
         })
@@ -601,7 +573,6 @@ it.effect("session.processor effect tests publish retry status updates", () => {
         const chat = yield* session.create({})
         const parent = yield* user(chat.id, "retry")
         const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
-        const abort = new AbortController()
         const mdl = model(100)
         const states: number[] = []
         const off = yield* bus.subscribeCallback(SessionStatus.Event.Status, (evt) => {
@@ -612,7 +583,6 @@ it.effect("session.processor effect tests publish retry status updates", () => {
           assistantMessage: msg,
           sessionID: chat.id,
           model: mdl,
-          abort: abort.signal,
         })
 
         const value = yield* handle.process({
@@ -628,7 +598,6 @@ it.effect("session.processor effect tests publish retry status updates", () => {
           model: mdl,
           agent: agent(),
           system: [],
-          abort: abort.signal,
           messages: [{ role: "user", content: "retry" }],
           tools: {},
         })
@@ -656,13 +625,11 @@ it.effect("session.processor effect tests compact on structured context overflow
         const chat = yield* session.create({})
         const parent = yield* user(chat.id, "compact json")
         const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
-        const abort = new AbortController()
         const mdl = model(100)
         const handle = yield* processors.create({
           assistantMessage: msg,
           sessionID: chat.id,
           model: mdl,
-          abort: abort.signal,
         })
 
         const value = yield* handle.process({
@@ -678,7 +645,6 @@ it.effect("session.processor effect tests compact on structured context overflow
           model: mdl,
           agent: agent(),
           system: [],
-          abort: abort.signal,
           messages: [{ role: "user", content: "compact json" }],
           tools: {},
         })
@@ -710,17 +676,15 @@ it.effect("session.processor effect tests mark pending tools as aborted on clean
         const chat = yield* session.create({})
         const parent = yield* user(chat.id, "tool abort")
         const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
-        const abort = new AbortController()
         const mdl = model(100)
         const handle = yield* processors.create({
           assistantMessage: msg,
           sessionID: chat.id,
           model: mdl,
-          abort: abort.signal,
         })
 
-        const run = Effect.runPromise(
-          handle.process({
+        const run = yield* handle
+          .process({
             user: {
               id: parent.id,
               sessionID: chat.id,
@@ -733,20 +697,25 @@ it.effect("session.processor effect tests mark pending tools as aborted on clean
             model: mdl,
             agent: agent(),
             system: [],
-            abort: abort.signal,
             messages: [{ role: "user", content: "tool abort" }],
             tools: {},
-          }),
-        )
+          })
+          .pipe(Effect.forkChild)
 
         yield* Effect.promise(() => ready.promise)
-        abort.abort()
+        yield* Fiber.interrupt(run)
 
-        const value = yield* Effect.promise(() => run)
+        const exit = yield* Fiber.await(run)
+        if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) {
+          yield* handle.abort()
+        }
         const parts = yield* Effect.promise(() => MessageV2.parts(msg.id))
         const tool = parts.find((part): part is MessageV2.ToolPart => part.type === "tool")
 
-        expect(value).toBe("stop")
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit)) {
+          expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true)
+        }
         expect(yield* test.calls).toBe(1)
         expect(tool?.state.status).toBe("error")
         if (tool?.state.status === "error") {
@@ -779,7 +748,6 @@ it.effect("session.processor effect tests record aborted errors and idle state",
         const chat = yield* session.create({})
         const parent = yield* user(chat.id, "abort")
         const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
-        const abort = new AbortController()
         const mdl = model(100)
         const errs: string[] = []
         const off = yield* bus.subscribeCallback(Session.Event.Error, (evt) => {
@@ -792,11 +760,10 @@ it.effect("session.processor effect tests record aborted errors and idle state",
           assistantMessage: msg,
           sessionID: chat.id,
           model: mdl,
-          abort: abort.signal,
         })
 
-        const run = Effect.runPromise(
-          handle.process({
+        const run = yield* handle
+          .process({
             user: {
               id: parent.id,
               sessionID: chat.id,
@@ -809,22 +776,27 @@ it.effect("session.processor effect tests record aborted errors and idle state",
             model: mdl,
             agent: agent(),
             system: [],
-            abort: abort.signal,
             messages: [{ role: "user", content: "abort" }],
             tools: {},
-          }),
-        )
+          })
+          .pipe(Effect.forkChild)
 
         yield* Effect.promise(() => ready.promise)
-        abort.abort()
+        yield* Fiber.interrupt(run)
 
-        const value = yield* Effect.promise(() => run)
+        const exit = yield* Fiber.await(run)
+        if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) {
+          yield* handle.abort()
+        }
         yield* Effect.promise(() => seen.promise)
         const stored = yield* Effect.promise(() => MessageV2.get({ sessionID: chat.id, messageID: msg.id }))
         const state = yield* status.get(chat.id)
         off()
 
-        expect(value).toBe("stop")
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit)) {
+          expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true)
+        }
         expect(handle.message.error?.name).toBe("MessageAbortedError")
         expect(stored.info.role).toBe("assistant")
         if (stored.info.role === "assistant") {

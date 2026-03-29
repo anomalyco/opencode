@@ -2,7 +2,6 @@ import { Cause, Effect, Exit, Layer, ServiceMap } from "effect"
 import * as Stream from "effect/Stream"
 import { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
-import { makeRuntime } from "@/effect/run-service"
 import { Config } from "@/config/config"
 import { Permission } from "@/permission"
 import { Plugin } from "@/plugin"
@@ -35,17 +34,10 @@ export namespace SessionProcessor {
     readonly process: (streamInput: LLM.StreamInput) => Effect.Effect<Result>
   }
 
-  export interface Info {
-    readonly message: MessageV2.Assistant
-    readonly partFromToolCall: (toolCallID: string) => MessageV2.ToolPart | undefined
-    readonly process: (streamInput: LLM.StreamInput) => Promise<Result>
-  }
-
   type Input = {
     assistantMessage: MessageV2.Assistant
     sessionID: SessionID
     model: Provider.Model
-    abort: AbortSignal
   }
 
   export interface Interface {
@@ -96,7 +88,6 @@ export namespace SessionProcessor {
           assistantMessage: input.assistantMessage,
           sessionID: input.sessionID,
           model: input.model,
-          abort: input.abort,
           toolcalls: {},
           shouldBreak: false,
           snapshot: undefined,
@@ -105,11 +96,12 @@ export namespace SessionProcessor {
           currentText: undefined,
           reasoningMap: {},
         }
+        let aborted = false
 
         const parse = (e: unknown) =>
           MessageV2.fromError(e, {
             providerID: input.model.providerID,
-            aborted: input.abort.aborted,
+            aborted,
           })
 
         const handleEvent = Effect.fn("SessionProcessor.handleEvent")(function* (value: StreamEvent) {
@@ -440,16 +432,12 @@ export namespace SessionProcessor {
             const stream = llm.stream(streamInput)
 
             yield* stream.pipe(
-              Stream.tap((event) =>
-                Effect.gen(function* () {
-                  input.abort.throwIfAborted()
-                  yield* handleEvent(event)
-                }),
-              ),
+              Stream.tap((event) => handleEvent(event)),
               Stream.takeUntil(() => ctx.needsCompaction),
               Stream.runDrain,
             )
           }).pipe(
+            Effect.onInterrupt(() => Effect.sync(() => void (aborted = true))),
             Effect.catchCauseIf(
               (cause) => !Cause.hasInterruptsOnly(cause),
               (cause) => Effect.fail(Cause.squash(cause)),
@@ -468,17 +456,20 @@ export namespace SessionProcessor {
             ),
             Effect.catchCause((cause) =>
               Cause.hasInterruptsOnly(cause)
-                ? halt(new DOMException("Aborted", "AbortError"))
+                ? Effect.gen(function* () {
+                    aborted = true
+                    yield* halt(new DOMException("Aborted", "AbortError"))
+                  })
                 : halt(Cause.squash(cause)),
             ),
             Effect.ensuring(cleanup()),
           )
 
-          if (input.abort.aborted && !ctx.assistantMessage.error) {
+          if (aborted && !ctx.assistantMessage.error) {
             yield* abort()
           }
           if (ctx.needsCompaction) return "compact"
-          if (ctx.blocked || ctx.assistantMessage.error || input.abort.aborted) return "stop"
+          if (ctx.blocked || ctx.assistantMessage.error || aborted) return "stop"
           return "continue"
         })
 
@@ -526,29 +517,4 @@ export namespace SessionProcessor {
       ),
     ),
   )
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function create(input: Input): Promise<Info> {
-    const hit = await runPromise((svc) => svc.create(input))
-    return {
-      get message() {
-        return hit.message
-      },
-      partFromToolCall(toolCallID: string) {
-        return hit.partFromToolCall(toolCallID)
-      },
-      async process(streamInput: LLM.StreamInput) {
-        const exit = await Effect.runPromiseExit(hit.process(streamInput), { signal: input.abort })
-        if (Exit.isFailure(exit)) {
-          if (Cause.hasInterrupts(exit.cause) && input.abort.aborted) {
-            await Effect.runPromise(hit.abort())
-            return "stop"
-          }
-          throw Cause.squash(exit.cause)
-        }
-        return exit.value
-      },
-    }
-  }
 }

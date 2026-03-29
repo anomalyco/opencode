@@ -235,7 +235,6 @@ When constructing the summary, try to stick to this template:
           assistantMessage: msg,
           sessionID: input.sessionID,
           model,
-          abort: input.abort,
         })
         const cancel = Effect.fn("SessionCompaction.cancel")(function* () {
           if (!input.abort.aborted || msg.time.completed) return
@@ -248,7 +247,6 @@ When constructing the summary, try to stick to this template:
           .process({
             user: userMessage,
             agent,
-            abort: input.abort,
             sessionID: input.sessionID,
             tools: {},
             system: [],
