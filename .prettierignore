@@ -1,2 +1,4 @@
 sst-env.d.ts
 packages/desktop/src/bindings.ts
+packages/sdk/js/src/gen/
+packages/sdk/js/src/v2/gen/

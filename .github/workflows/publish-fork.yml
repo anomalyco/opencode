@@ -62,9 +62,8 @@ jobs:
         working-directory: packages/opencode
         run: bun test test/provider/transform.test.ts --timeout 60000
 
-      - name: Typecheck (opencode core only)
-        working-directory: packages/opencode
-        run: bun run typecheck
+      - name: Typecheck
+        run: bun turbo typecheck
 
       - name: Package binaries
         working-directory: packages/opencode/dist

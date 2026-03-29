@@ -161,11 +161,11 @@ jobs:
             echo "❌ Bugfix tests failed after rebase"
           fi
 
-      - name: Run typecheck (opencode core only)
+      - name: Run typecheck
         id: typecheck
         if: steps.tests.outputs.result == 'pass'
         run: |
-          if (cd packages/opencode && bun run typecheck); then
+          if bun turbo typecheck; then
             echo "result=pass" >> "$GITHUB_OUTPUT"
             echo "✅ Typecheck passes"
           else
