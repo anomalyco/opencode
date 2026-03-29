@@ -261,7 +261,7 @@ export function Prompt(props: PromptProps) {
           if (store.interrupt >= 2) {
             sdk.client.session.abort({
               sessionID: props.sessionID,
-            })
+            }).catch(() => {})
             setStore("interrupt", 0)
           }
           dialog.clear()
@@ -665,7 +665,7 @@ export function Prompt(props: PromptProps) {
             id: PartID.ascending(),
             ...x,
           })),
-      })
+      }).catch(() => {})
     } else {
       sdk.client.session
         .prompt({
