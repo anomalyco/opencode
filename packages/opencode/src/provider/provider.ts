@@ -204,7 +204,56 @@ export namespace Provider {
         options: {},
       }
     },
-    "github-copilot": async () => {
+    "github-copilot": async (input) => {
+      input.models["auto"] = {
+        id: ModelID.make("auto"),
+        providerID: ProviderID.make("github-copilot"),
+        name: "Auto (Server Selected)",
+        family: "copilot-auto",
+        api: {
+          id: "auto",
+          url: "https://api.github.com/copilot",
+          npm: "@ai-sdk/github-copilot",
+        },
+        status: "active",
+        headers: {},
+        options: {},
+        cost: {
+          input: 0,
+          output: 0,
+          cache: {
+            read: 0,
+            write: 0,
+          },
+        },
+        limit: {
+          context: 128000,
+          output: 4096,
+        },
+        capabilities: {
+          temperature: true,
+          reasoning: true,
+          attachment: true,
+          toolcall: true,
+          input: {
+            text: true,
+            audio: false,
+            image: true,
+            video: false,
+            pdf: false,
+          },
+          output: {
+            text: true,
+            audio: false,
+            image: false,
+            video: false,
+            pdf: false,
+          },
+          interleaved: true,
+        },
+        release_date: "2025-01-01",
+        variants: {},
+      }
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
