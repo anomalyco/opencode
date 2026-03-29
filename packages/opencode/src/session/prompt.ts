@@ -179,47 +179,43 @@ export namespace SessionPrompt {
         if (input.session.parentID) return
         if (!Session.isDefaultTitle(input.session.title)) return
 
-        const firstRealUserIdx = input.history.findIndex(
-          (m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic),
-        )
-        if (firstRealUserIdx === -1) return
+        const real = (m: MessageV2.WithParts) =>
+          m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic)
+        const idx = input.history.findIndex(real)
+        if (idx === -1) return
+        if (input.history.filter(real).length !== 1) return
 
-        const isFirst =
-          input.history.filter((m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic))
-            .length === 1
-        if (!isFirst) return
-
-        const context = input.history.slice(0, firstRealUserIdx + 1)
-        const firstUser = context[firstRealUserIdx]
+        const context = input.history.slice(0, idx + 1)
+        const firstUser = context[idx]
         if (!firstUser || firstUser.info.role !== "user") return
+        const firstInfo = firstUser.info
 
-        const subtasks = firstUser.parts.filter((p) => p.type === "subtask") as MessageV2.SubtaskPart[]
+        const subtasks = firstUser.parts.filter((p): p is MessageV2.SubtaskPart => p.type === "subtask")
         const onlySubtasks = subtasks.length > 0 && firstUser.parts.every((p) => p.type === "subtask")
 
         const ag = yield* agents.get("title")
         if (!ag) return
-        const mdl = yield* Effect.promise(async () => {
-          if (ag.model) return Provider.getModel(ag.model.providerID, ag.model.modelID)
-          return (await Provider.getSmallModel(input.providerID)) ?? Provider.getModel(input.providerID, input.modelID)
-        })
-        const result = yield* Effect.promise(async () => {
+        const text = yield* Effect.promise(async (signal) => {
+          const mdl = ag.model
+            ? await Provider.getModel(ag.model.providerID, ag.model.modelID)
+            : (await Provider.getSmallModel(input.providerID)) ?? (await Provider.getModel(input.providerID, input.modelID))
           const msgs = onlySubtasks
             ? [{ role: "user" as const, content: subtasks.map((p) => p.prompt).join("\n") }]
             : await MessageV2.toModelMessages(context, mdl)
-          return LLM.stream({
+          const result = await LLM.stream({
             agent: ag,
-            user: firstUser.info as MessageV2.User,
+            user: firstInfo,
             system: [],
             small: true,
             tools: {},
             model: mdl,
-            abort: new AbortController().signal,
+            abort: signal,
             sessionID: input.session.id,
             retries: 2,
             messages: [{ role: "user", content: "Generate a title for this conversation:\n" }, ...msgs],
           })
+          return result.text
         })
-        const text = yield* Effect.promise(() => result.text)
         const cleaned = text
           .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
           .split("\n")
@@ -227,9 +223,7 @@ export namespace SessionPrompt {
           .find((line) => line.length > 0)
         if (!cleaned) return
         const t = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
-        yield* sessions.setTitle({ sessionID: input.session.id, title: t }).pipe(
-          Effect.catchCause(() => Effect.void),
-        )
+        yield* sessions.setTitle({ sessionID: input.session.id, title: t }).pipe(Effect.catchCause(() => Effect.void))
       })
 
       const prompt = Effect.fn("SessionPrompt.prompt")(function* (input: PromptInput) {
@@ -277,10 +271,9 @@ export namespace SessionPrompt {
           let tasks: (MessageV2.CompactionPart | MessageV2.SubtaskPart)[] = []
           for (let i = msgs.length - 1; i >= 0; i--) {
             const msg = msgs[i]
-            if (!lastUser && msg.info.role === "user") lastUser = msg.info as MessageV2.User
-            if (!lastAssistant && msg.info.role === "assistant") lastAssistant = msg.info as MessageV2.Assistant
-            if (!lastFinished && msg.info.role === "assistant" && msg.info.finish)
-              lastFinished = msg.info as MessageV2.Assistant
+            if (!lastUser && msg.info.role === "user") lastUser = msg.info
+            if (!lastAssistant && msg.info.role === "assistant") lastAssistant = msg.info
+            if (!lastFinished && msg.info.role === "assistant" && msg.info.finish) lastFinished = msg.info
             if (lastUser && lastFinished) break
             const task = msg.parts.filter((part) => part.type === "compaction" || part.type === "subtask")
             if (task && !lastFinished) tasks.push(...task)
@@ -381,7 +374,7 @@ export namespace SessionPrompt {
           })
           const ctrl = new AbortController()
           const handle = yield* processor.create({
-            assistantMessage: msg as MessageV2.Assistant,
+            assistantMessage: msg,
             sessionID,
             model,
             abort: ctrl.signal,
@@ -901,7 +894,7 @@ export namespace SessionPrompt {
     const { task, model, lastUser, sessionID, session, msgs, signal } = input
     const taskTool = await TaskTool.init()
     const taskModel = task.model ? await Provider.getModel(task.model.providerID, task.model.modelID) : model
-    const assistantMessage = (await Session.updateMessage({
+    const assistantMessage: MessageV2.Assistant = await Session.updateMessage({
       id: MessageID.ascending(),
       role: "assistant",
       parentID: lastUser.id,
@@ -915,8 +908,8 @@ export namespace SessionPrompt {
       modelID: taskModel.id,
       providerID: taskModel.providerID,
       time: { created: Date.now() },
-    })) as MessageV2.Assistant
-    let part = (await Session.updatePart({
+    })
+    let part: MessageV2.ToolPart = await Session.updatePart({
       id: PartID.ascending(),
       messageID: assistantMessage.id,
       sessionID: assistantMessage.sessionID,
@@ -928,7 +921,7 @@ export namespace SessionPrompt {
         input: { prompt: task.prompt, description: task.description, subagent_type: task.agent, command: task.command },
         time: { start: Date.now() },
       },
-    })) as MessageV2.ToolPart
+    })
     const taskArgs = {
       prompt: task.prompt,
       description: task.description,
@@ -954,11 +947,11 @@ export namespace SessionPrompt {
       extra: { bypassAgentCheck: true },
       messages: msgs,
       async metadata(val) {
-        part = (await Session.updatePart({
+        part = await Session.updatePart({
           ...part,
           type: "tool",
           state: { ...part.state, ...val },
-        } satisfies MessageV2.ToolPart)) as MessageV2.ToolPart
+        } satisfies MessageV2.ToolPart)
       },
       async ask(req) {
         await Permission.ask({
@@ -1007,7 +1000,7 @@ export namespace SessionPrompt {
             start: part.state.status === "running" ? part.state.time.start : Date.now(),
             end: Date.now(),
           },
-          metadata: "metadata" in part.state ? part.state.metadata : undefined,
+          metadata: part.state.status === "pending" ? undefined : part.state.metadata,
           input: part.state.input,
         },
       } satisfies MessageV2.ToolPart)
@@ -1334,7 +1327,7 @@ export namespace SessionPrompt {
                     sessionID: input.sessionID,
                     type: "text",
                     synthetic: true,
-                    text: content.text as string,
+                    text: content.text,
                   })
                 } else if ("blob" in content && content.blob) {
                   // Handle binary content if needed
@@ -2032,5 +2025,4 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   const argsRegex = /(?:\[Image\s+\d+\]|"[^"]*"|'[^']*'|[^\s"']+)/gi
   const placeholderRegex = /\$(\d+)/g
   const quoteTrimRegex = /^["']|["']$/g
-
 }
