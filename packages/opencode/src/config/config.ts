@@ -1043,6 +1043,16 @@ export namespace Config {
           url: z.string().optional().describe("Enterprise URL"),
         })
         .optional(),
+      retention: z
+        .object({
+          days: z
+            .number()
+            .int()
+            .min(0)
+            .optional()
+            .describe("Auto-delete archived sessions older than this many days (default: 90, 0 = disabled)"),
+        })
+        .optional(),
       compaction: z
         .object({
           auto: z.boolean().optional().describe("Enable automatic compaction when context is full (default: true)"),
