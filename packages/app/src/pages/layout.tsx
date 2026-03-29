@@ -1150,6 +1150,13 @@ export default function Layout(props: ParentProps) {
         keybind: "mod+shift+t",
         onSelect: () => cycleTheme(1),
       },
+      {
+        id: "window.new",
+        title: language.t("command.window.new"),
+        category: language.t("command.category.window"),
+        keybind: "mod+shift+n",
+        onSelect: () => platform.spawnWindow?.(),
+      },
     ]
 
     for (const [id] of availableThemeEntries()) {

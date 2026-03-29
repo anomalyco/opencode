@@ -241,6 +241,12 @@ registerIpcHandlers({
   checkUpdate: async () => checkUpdate(),
   installUpdate: async () => installUpdate(),
   setBackgroundColor: (color) => setBackgroundColor(color),
+  spawnWindow: () => {
+    createMainWindow({
+      updaterEnabled: UPDATER_ENABLED,
+      deepLinks: [],
+    })
+  },
 })
 
 function killSidecar() {

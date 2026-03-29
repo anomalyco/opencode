@@ -36,8 +36,8 @@ impl Deref for MainWindow {
 impl MainWindow {
     pub const LABEL: &str = "main";
 
-    pub fn create(app: &AppHandle) -> Result<Self, tauri::Error> {
-        if let Some(window) = app.get_webview_window(Self::LABEL) {
+    pub fn create(app: &AppHandle, label: &str) -> Result<Self, tauri::Error> {
+        if let Some(window) = app.get_webview_window(label) {
             let _ = window.set_focus();
             let _ = window.unminimize();
             return Ok(Self(window));
@@ -49,7 +49,7 @@ impl MainWindow {
             .unwrap_or(false);
         let decorations = use_decorations();
         let window_builder = base_window_config(
-            WebviewWindowBuilder::new(app, Self::LABEL, WebviewUrl::App("/".into())),
+            WebviewWindowBuilder::new(app, label, WebviewUrl::App("/".into())),
             app,
             decorations,
         )

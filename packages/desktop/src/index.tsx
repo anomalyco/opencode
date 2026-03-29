@@ -406,6 +406,9 @@ const createPlatform = (): Platform => {
         }, "image/png")
       })
     },
+    spawnWindow: async () => {
+      await commands.spawnWindow()
+    },
   }
 }
 

@@ -238,6 +238,10 @@ const createPlatform = (): Platform => {
         type: "image/png",
       })
     },
+
+    spawnWindow: async () => {
+      await window.api.spawnWindow()
+    },
   }
 }
 

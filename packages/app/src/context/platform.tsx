@@ -87,6 +87,9 @@ export type Platform = {
 
   /** Read image from clipboard (desktop only) */
   readClipboardImage?(): Promise<File | null>
+
+  /** Spawn a new window (desktop only) */
+  spawnWindow?(): Promise<void>
 }
 
 export type DisplayBackend = "auto" | "wayland"

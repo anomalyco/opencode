@@ -165,6 +165,13 @@ fn resolve_app_path(app_name: &str) -> Option<String> {
 
 #[tauri::command]
 #[specta::specta]
+fn spawn_window(app: AppHandle) -> Result<(), String> {
+    let label = uuid::Uuid::new_v4().to_string();
+    MainWindow::create(&app, &label).map(|_| ()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
 fn open_path(_app: AppHandle, path: String, app_name: Option<String>) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
@@ -387,7 +394,8 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             check_app_exists,
             wsl_path,
             resolve_app_path,
-            open_path
+            open_path,
+            spawn_window
         ])
         .events(tauri_specta::collect_events![
             LoadingWindowComplete,
@@ -515,7 +523,7 @@ async fn initialize(app: AppHandle) {
     };
 
     // Create main window immediately - the web app handles its own loading/health gate
-    MainWindow::create(&app).expect("Failed to create main window");
+    MainWindow::create(&app, MainWindow::LABEL).expect("Failed to create main window");
 
     let _ = loading_task.await;
 
