@@ -549,7 +549,7 @@ export namespace Session {
         Effect.sync(() => SyncEvent.run(Event.Updated, { sessionID, info }))
 
       const touch = Effect.fn("Session.touch")(function* (sessionID: SessionID) {
-        yield* patch(sessionID, { time: { updated: Date.now() } })
+        yield* patch(sessionID, { time: { updated: Date.now(), archived: null } })
       })
 
       const setTitle = Effect.fn("Session.setTitle")(function* (input: { sessionID: SessionID; title: string }) {
