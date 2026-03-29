@@ -11,10 +11,6 @@ import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
-import { DialogSelectFile } from "@/components/dialog-select-file"
-import { DialogSelectModel } from "@/components/dialog-select-model"
-import { DialogSelectMcp } from "@/components/dialog-select-mcp"
-import { DialogFork } from "@/components/dialog-fork"
 import { showToast } from "@opencode-ai/ui/toast"
 import { findLast } from "@opencode-ai/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
@@ -258,7 +254,11 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         description: language.t("palette.search.placeholder"),
         keybind: "mod+k,mod+p",
         slash: "open",
-        onSelect: () => dialog.show(() => <DialogSelectFile onOpenFile={showAllFiles} />),
+        onSelect: () => {
+          void import("@/components/dialog-select-file").then((x) => {
+            dialog.show(() => <x.DialogSelectFile onOpenFile={showAllFiles} />)
+          })
+        },
       }),
       fileCommand({
         id: "tab.close",
@@ -349,7 +349,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         id: "message.previous",
         title: language.t("command.message.previous"),
         description: language.t("command.message.previous.description"),
-        keybind: "mod+arrowup",
+        keybind: "mod+alt+[",
         disabled: !params.id,
         onSelect: () => navigateMessageByOffset(-1),
       }),
@@ -357,7 +357,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         id: "message.next",
         title: language.t("command.message.next"),
         description: language.t("command.message.next.description"),
-        keybind: "mod+arrowdown",
+        keybind: "mod+alt+]",
         disabled: !params.id,
         onSelect: () => navigateMessageByOffset(1),
       }),
@@ -367,7 +367,11 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         description: language.t("command.model.choose.description"),
         keybind: "mod+'",
         slash: "model",
-        onSelect: () => dialog.show(() => <DialogSelectModel model={local.model} />),
+        onSelect: () => {
+          void import("@/components/dialog-select-model").then((x) => {
+            dialog.show(() => <x.DialogSelectModel model={local.model} />)
+          })
+        },
       }),
       mcpCommand({
         id: "mcp.toggle",
@@ -375,7 +379,11 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         description: language.t("command.mcp.toggle.description"),
         keybind: "mod+;",
         slash: "mcp",
-        onSelect: () => dialog.show(() => <DialogSelectMcp />),
+        onSelect: () => {
+          void import("@/components/dialog-select-mcp").then((x) => {
+            dialog.show(() => <x.DialogSelectMcp />)
+          })
+        },
       }),
       agentCommand({
         id: "agent.cycle",
@@ -503,7 +511,11 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         description: language.t("command.session.fork.description"),
         slash: "fork",
         disabled: !params.id || visibleUserMessages().length === 0,
-        onSelect: () => dialog.show(() => <DialogFork />),
+        onSelect: () => {
+          void import("@/components/dialog-fork").then((x) => {
+            dialog.show(() => <x.DialogFork />)
+          })
+        },
       }),
       ...share,
     ]

@@ -105,6 +105,8 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     const aborted = (error: unknown) => abortError.safeParse(error).success
 
     let attempt: AbortController | undefined
+    let run: Promise<void> | undefined
+    let started = false
     const HEARTBEAT_TIMEOUT_MS = 15_000
     let lastEventAt = Date.now()
     let heartbeat: ReturnType<typeof setTimeout> | undefined
@@ -121,78 +123,93 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       heartbeat = undefined
     }
 
-    void (async () => {
-      while (!abort.signal.aborted) {
-        attempt = new AbortController()
-        lastEventAt = Date.now()
-        const onAbort = () => {
-          attempt?.abort()
-        }
-        abort.signal.addEventListener("abort", onAbort)
-        try {
-          const events = await eventSdk.global.event({
-            signal: attempt.signal,
-            onSseError: (error) => {
-              if (aborted(error)) return
-              if (streamErrorLogged) return
+    const start = () => {
+      if (started) return run
+      started = true
+      run = (async () => {
+        while (!abort.signal.aborted && started) {
+          attempt = new AbortController()
+          lastEventAt = Date.now()
+          const onAbort = () => {
+            attempt?.abort()
+          }
+          abort.signal.addEventListener("abort", onAbort)
+          try {
+            const events = await eventSdk.global.event({
+              signal: attempt.signal,
+              onSseError: (error) => {
+                if (aborted(error)) return
+                if (streamErrorLogged) return
+                streamErrorLogged = true
+                console.error("[global-sdk] event stream error", {
+                  url: currentServer.http.url,
+                  fetch: eventFetch ? "platform" : "webview",
+                  error,
+                })
+              },
+            })
+            let yielded = Date.now()
+            resetHeartbeat()
+            for await (const event of events.stream) {
+              resetHeartbeat()
+              streamErrorLogged = false
+              const directory = event.directory ?? "global"
+              const payload = event.payload
+              const k = key(directory, payload)
+              if (k) {
+                const i = coalesced.get(k)
+                if (i !== undefined) {
+                  queue[i] = { directory, payload }
+                  if (payload.type === "message.part.updated") {
+                    const part = payload.properties.part
+                    staleDeltas.add(deltaKey(directory, part.messageID, part.id))
+                  }
+                  continue
+                }
+                coalesced.set(k, queue.length)
+              }
+              queue.push({ directory, payload })
+              schedule()
+
+              if (Date.now() - yielded < STREAM_YIELD_MS) continue
+              yielded = Date.now()
+              await wait(0)
+            }
+          } catch (error) {
+            if (!aborted(error) && !streamErrorLogged) {
               streamErrorLogged = true
-              console.error("[global-sdk] event stream error", {
+              console.error("[global-sdk] event stream failed", {
                 url: currentServer.http.url,
                 fetch: eventFetch ? "platform" : "webview",
                 error,
               })
-            },
-          })
-          let yielded = Date.now()
-          resetHeartbeat()
-          for await (const event of events.stream) {
-            resetHeartbeat()
-            streamErrorLogged = false
-            const directory = event.directory ?? "global"
-            const payload = event.payload
-            const k = key(directory, payload)
-            if (k) {
-              const i = coalesced.get(k)
-              if (i !== undefined) {
-                queue[i] = { directory, payload }
-                if (payload.type === "message.part.updated") {
-                  const part = payload.properties.part
-                  staleDeltas.add(deltaKey(directory, part.messageID, part.id))
-                }
-                continue
-              }
-              coalesced.set(k, queue.length)
             }
-            queue.push({ directory, payload })
-            schedule()
+          } finally {
+            abort.signal.removeEventListener("abort", onAbort)
+            attempt = undefined
+            clearHeartbeat()
+          }
 
-            if (Date.now() - yielded < STREAM_YIELD_MS) continue
-            yielded = Date.now()
-            await wait(0)
-          }
-        } catch (error) {
-          if (!aborted(error) && !streamErrorLogged) {
-            streamErrorLogged = true
-            console.error("[global-sdk] event stream failed", {
-              url: currentServer.http.url,
-              fetch: eventFetch ? "platform" : "webview",
-              error,
-            })
-          }
-        } finally {
-          abort.signal.removeEventListener("abort", onAbort)
-          attempt = undefined
-          clearHeartbeat()
+          if (abort.signal.aborted || !started) return
+          await wait(RECONNECT_DELAY_MS)
         }
+      })().finally(() => {
+        run = undefined
+        flush()
+      })
+      return run
+    }
 
-        if (abort.signal.aborted) return
-        await wait(RECONNECT_DELAY_MS)
-      }
-    })().finally(flush)
+    const stop = () => {
+      started = false
+      attempt?.abort()
+      clearHeartbeat()
+    }
 
     const onVisibility = () => {
       if (typeof document === "undefined") return
       if (document.visibilityState !== "visible") return
+      if (!started) return
       if (Date.now() - lastEventAt < HEARTBEAT_TIMEOUT_MS) return
       attempt?.abort()
     }
@@ -204,6 +221,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       if (typeof document !== "undefined") {
         document.removeEventListener("visibilitychange", onVisibility)
       }
+      stop()
       abort.abort()
       flush()
     })
@@ -217,7 +235,11 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     return {
       url: currentServer.http.url,
       client: sdk,
-      event: emitter,
+      event: {
+        on: emitter.on.bind(emitter),
+        listen: emitter.listen.bind(emitter),
+        start,
+      },
       createClient(opts: Omit<Parameters<typeof createSdkForServer>[0], "server" | "fetch">) {
         const s = server.current
         if (!s) throw new Error(language.t("error.globalSDK.serverNotAvailable"))

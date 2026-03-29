@@ -33,6 +33,8 @@ export function DialogEditProject(props: { project: LocalProject }) {
     iconHover: false,
   })
 
+  const icon = createMemo(() => store.iconUrl || props.project.icon?.url || "")
+
   let iconInput: HTMLInputElement | undefined
 
   function handleFileSelect(file: File) {
@@ -130,7 +132,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
                   classList={{
                     "border-text-interactive-base bg-surface-info-base/20": store.dragOver,
                     "border-border-base hover:border-border-strong": !store.dragOver,
-                    "overflow-hidden": !!store.iconUrl,
+                    "overflow-hidden": !!icon(),
                   }}
                   onDrop={handleDrop}
                   onDragOver={handleDragOver}
@@ -144,7 +146,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
                   }}
                 >
                   <Show
-                    when={store.iconUrl}
+                    when={icon()}
                     fallback={
                       <div class="size-full flex items-center justify-center">
                         <Avatar
@@ -155,11 +157,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
                       </div>
                     }
                   >
-                    <img
-                      src={store.iconUrl}
-                      alt={language.t("dialog.project.edit.icon.alt")}
-                      class="size-full object-cover"
-                    />
+                    <img src={icon()} alt={language.t("dialog.project.edit.icon.alt")} class="size-full object-cover" />
                   </Show>
                 </div>
                 <div
@@ -198,7 +196,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
             </div>
           </div>
 
-          <Show when={!store.iconUrl}>
+          <Show when={!icon()}>
             <div class="flex flex-col gap-2">
               <label class="text-12-medium text-text-weak">{language.t("dialog.project.edit.color")}</label>
               <div class="flex gap-1.5">
