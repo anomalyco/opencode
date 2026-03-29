@@ -15,7 +15,7 @@ import type {
 } from "@opencode-ai/sdk/v2"
 import type { CliRenderer, ParsedKey, RGBA } from "@opentui/core"
 import type { JSX, SolidPlugin } from "@opentui/solid"
-import type { Config as PluginConfig, Plugin, PluginModule, PluginOptions } from "./index.js"
+import type { Config as PluginConfig, PluginOptions } from "./index.js"
 
 export type { CliRenderer, SlotMode } from "@opentui/core"
 
@@ -107,6 +107,8 @@ export type TuiDialogPromptProps = {
   description?: () => JSX.Element
   placeholder?: string
   value?: string
+  busy?: boolean
+  busyText?: string
   onConfirm?: (value: string) => void
   onCancel?: () => void
 }
@@ -131,6 +133,19 @@ export type TuiDialogSelectProps<Value = unknown> = {
   onSelect?: (option: TuiDialogSelectOption<Value>) => void
   skipFilter?: boolean
   current?: Value
+}
+
+export type TuiPromptProps = {
+  workspaceID?: string
+  visible?: boolean
+  disabled?: boolean
+  onSubmit?: () => void
+  hint?: JSX.Element
+  showPlaceholder?: boolean
+  placeholders?: {
+    normal?: string[]
+    shell?: string[]
+  }
 }
 
 export type TuiToast = {
@@ -277,6 +292,9 @@ export type TuiSidebarFileItem = {
 export type TuiSlotMap = {
   app: {}
   home_logo: {}
+  home_prompt: {
+    workspace_id?: string
+  }
   home_bottom: {}
   sidebar_title: {
     session_id: string
@@ -384,6 +402,7 @@ export type TuiPluginApi = {
     DialogConfirm: (props: TuiDialogConfirmProps) => JSX.Element
     DialogPrompt: (props: TuiDialogPromptProps) => JSX.Element
     DialogSelect: <Value = unknown>(props: TuiDialogSelectProps<Value>) => JSX.Element
+    Prompt: (props: TuiPromptProps) => JSX.Element
     toast: (input: TuiToast) => void
     dialog: TuiDialogStack
   }
@@ -414,6 +433,8 @@ export type TuiPluginApi = {
 
 export type TuiPlugin = (api: TuiPluginApi, options: PluginOptions | undefined, meta: TuiPluginMeta) => Promise<void>
 
-export type TuiPluginModule = PluginModule & {
-  tui?: TuiPlugin
+export type TuiPluginModule = {
+  id?: string
+  tui: TuiPlugin
+  server?: never
 }
