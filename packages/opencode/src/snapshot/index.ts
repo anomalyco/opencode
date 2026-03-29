@@ -260,14 +260,17 @@ export namespace Snapshot {
                   log.warn("failed to get diff", { hash, exitCode: result.code })
                   return { hash, files: [] }
                 }
+                const files = result.text
+                  .trim()
+                  .split("\n")
+                  .map((x) => x.trim())
+                  .filter(Boolean)
+                if (files.length > 1000) {
+                  log.warn("patch file count exceeds cap", { hash, count: files.length, cap: 1000 })
+                }
                 return {
                   hash,
-                  files: result.text
-                    .trim()
-                    .split("\n")
-                    .map((x) => x.trim())
-                    .filter(Boolean)
-                    .map((x) => path.join(state.worktree, x).replaceAll("\\", "/")),
+                  files: files.slice(0, 1000).map((x) => x.replaceAll("\\", "/")),
                 }
               }),
             )
@@ -306,12 +309,17 @@ export namespace Snapshot {
                 const seen = new Set<string>()
                 for (const item of patches) {
                   for (const file of item.files) {
-                    if (seen.has(file)) continue
-                    seen.add(file)
+                    // normalize to relative for dedup (backward compat with old absolute paths)
+                    const rel = path.isAbsolute(file)
+                      ? path.relative(state.worktree, file).replaceAll("\\", "/")
+                      : file.replaceAll("\\", "/")
+                    if (seen.has(rel)) continue
+                    seen.add(rel)
+                    const abs = path.isAbsolute(file) ? file : path.join(state.worktree, file)
                     ops.push({
                       hash: item.hash,
-                      file,
-                      rel: path.relative(state.worktree, file).replaceAll("\\", "/"),
+                      file: abs,
+                      rel,
                     })
                   }
                 }
