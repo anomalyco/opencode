@@ -1,12 +1,18 @@
 import path from "path"
 import { describe, expect, test } from "bun:test"
+import { jsonSchema } from "ai"
 import { NamedError } from "@opencode-ai/util/error"
 import { fileURLToPath } from "url"
 import { Instance } from "../../src/project/instance"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Session } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
+import { Permission } from "../../src/permission"
 import { SessionPrompt } from "../../src/session/prompt"
+import { MCP } from "../../src/mcp"
+import { MessageID } from "../../src/session/schema"
+import { Plugin } from "../../src/plugin"
+import { ToolRegistry } from "../../src/tool/registry"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
 
@@ -515,4 +521,84 @@ describe("session.agent-resolution", () => {
       },
     })
   }, 30000)
+})
+
+describe("session.prompt mcp permission patterns", () => {
+  test("uses mcp tool key instead of wildcard in permission request", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    const key = "nextcloud_nc_webdav_delete_resource"
+    const priorTools = MCP.tools
+    const priorAsk = Permission.ask
+    const priorTrigger = Plugin.trigger
+    const priorToolList = ToolRegistry.tools
+
+    const asked: Array<{ permission: string; patterns: string[]; always: string[] }> = []
+
+    ;(MCP as unknown as { tools: typeof MCP.tools }).tools = async () => ({
+      [key]: {
+        id: key,
+        description: "mock",
+        inputSchema: jsonSchema({ type: "object", properties: {} } as any),
+        execute: async () => ({ content: [{ type: "text", text: "ok" }], metadata: {} }),
+      } as any,
+    })
+    ;(Permission as unknown as { ask: typeof Permission.ask }).ask = async (input) => {
+      asked.push({ permission: input.permission, patterns: input.patterns, always: input.always })
+    }
+    ;(Plugin as unknown as { trigger: typeof Plugin.trigger }).trigger = async (_name, _input, output) => output
+    ;(ToolRegistry as unknown as { tools: typeof ToolRegistry.tools }).tools = async () => []
+
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const session = await Session.create({})
+
+          const tools = await SessionPrompt.resolveTools({
+            agent: {
+              name: "build",
+              mode: "primary",
+              permission: [],
+              options: {},
+            },
+            model: {
+              providerID: ProviderID.make("openai"),
+              modelID: ModelID.make("gpt-5"),
+              api: { id: "gpt-5", npm: "@ai-sdk/openai" },
+              capabilities: {
+                toolcall: true,
+                reasoning: false,
+                temperature: true,
+                input: { text: true },
+                output: { text: true },
+              },
+            } as any,
+            session,
+            tools: { [key]: true },
+            processor: {
+              message: { id: MessageID.make("msg_test") },
+              partFromToolCall: () => undefined,
+            } as any,
+            bypassAgentCheck: false,
+            messages: [],
+          })
+
+          const item = tools[key] as any
+          expect(item).toBeDefined()
+          await item.execute({}, { abortSignal: new AbortController().signal, toolCallId: "call_test" })
+        },
+      })
+    } finally {
+      ;(MCP as unknown as { tools: typeof MCP.tools }).tools = priorTools
+      ;(Permission as unknown as { ask: typeof Permission.ask }).ask = priorAsk
+      ;(Plugin as unknown as { trigger: typeof Plugin.trigger }).trigger = priorTrigger
+      ;(ToolRegistry as unknown as { tools: typeof ToolRegistry.tools }).tools = priorToolList
+    }
+
+    const req = asked.find((item) => item.permission === key)
+    expect(req).toBeDefined()
+    expect(req?.patterns).toEqual([key])
+    expect(req?.always).toEqual([key])
+  })
 })
