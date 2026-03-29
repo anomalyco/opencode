@@ -118,8 +118,15 @@ export namespace Clipboard {
         return async (text: string) => {
           const proc = Process.spawn(["wl-copy"], { stdin: "pipe", stdout: "ignore", stderr: "ignore" })
           if (!proc.stdin) return
-          proc.stdin.write(text)
-          proc.stdin.end()
+          await new Promise<void>((resolve, reject) => {
+            proc.stdin!.write(text, (err) => {
+              if (err) reject(err)
+              else {
+                proc.stdin!.end()
+                resolve()
+              }
+            })
+          })
           await proc.exited.catch(() => {})
         }
       }
