@@ -773,6 +773,20 @@ export namespace MessageV2 {
               ...(differentModel ? {} : { providerMetadata: part.metadata }),
             })
           }
+          if (part.type === "tool-result") {
+            result.push({
+              role: "tool",
+              parts: [
+                {
+                  type: "tool-result" as const,
+                  toolCallId: part.toolCallId,
+                  toolName: part.toolName,
+                  result: part.result,
+                  ...(differentModel ? {} : { providerOptions: part.metadata }),
+                } as any,
+              ],
+            } as any)
+          }
         }
         if (assistantMessage.parts.length > 0) {
           result.push(assistantMessage)

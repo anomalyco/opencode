@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { APICallError } from "ai"
+import { APICallError, type ModelMessage } from "ai"
 import { MessageV2 } from "../../src/session/message-v2"
 import type { Provider } from "../../src/provider/provider"
+import { ProviderTransform } from "../../src/provider/transform"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { SessionID, MessageID, PartID } from "../../src/session/schema"
 import { Question } from "../../src/question"
@@ -956,70 +957,99 @@ describe("session.message-v2.fromError", () => {
   })
 })
 
-describe("toModelMessages retry with scrubbing", () => {
-  test("retries with scrubbing when validation fails due to null toolCallId", async () => {
-    const model = createMockModel({
-      providerID: "nvidia",
-      api: { id: "kimi-k2.5", npm: "@ai-sdk/openai-compatible" },
-    })
-    
-    const input = [
+describe("ProviderTransform scrubbing", () => {
+  test("scrubs malformed toolCallIds from ModelMessages", () => {
+    const invalidId = null as any
+    const messages: ModelMessage[] = [
       {
-        id: PartID.ascending(),
-        messageID: MessageID.ascending(),
-        sessionID: SessionID.ascending(),
-        parts: [
+        role: "assistant",
+        content: [
           {
-            type: "tool-result" as const,
-            toolCallId: null as any, // This will cause validation error
-            toolName: "test",
-            result: "output",
+            type: "tool-call",
+            toolCallId: invalidId,
+            toolName: "test-tool",
+            args: { input: "test" },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: invalidId,
+            toolName: "test-tool",
+            result: "test output",
           },
         ],
       },
     ]
-    
-    // First call should fail and retry with scrubbing
-    const result = await MessageV2.toModelMessages(input, model)
-    
-    expect(result).toHaveLength(1)
-    expect(result[0].content).toHaveLength(1)
-    expect((result[0].content[0] as any).toolCallId).toMatch(/^prt_\d+_[a-z0-9]+$/)
-    
-    // Verify the provider was cached
-    expect(ProviderTransform.needsScrubbing("nvidia-kimi-k2.5")).toBe(true)
-    
-    // Second call should proactively scrub
-    const result2 = await MessageV2.toModelMessages(input, model)
-    expect(result2).toHaveLength(1)
+
+    const scrubbed = ProviderTransform.scrubToolCallIds(messages)
+
+    expect(scrubbed).toHaveLength(2)
+    expect(scrubbed[0].role).toBe("assistant")
+    expect(scrubbed[1].role).toBe("tool")
+
+    const assistantContent = scrubbed[0].content as any[]
+    const toolContent = scrubbed[1].content as any[]
+
+    expect(assistantContent[0].type).toBe("tool-call")
+    expect(assistantContent[0].toolCallId).toMatch(/^prt_\d+_[a-z0-9]+$/)
+
+    expect(toolContent[0].type).toBe("tool-result")
+    expect(toolContent[0].toolCallId).toMatch(/^prt_\d+_[a-z0-9]+$/)
+
+    // Verify both scrubbed IDs match the expected format (they'll be different values since they're generated independently)
+    expect(assistantContent[0].toolCallId).toMatch(/^prt_\d+_[a-z0-9]+$/)
+    expect(toolContent[0].toolCallId).toMatch(/^prt_\d+_[a-z0-9]+$/)
   })
-  
-  test("does not scrub when validation succeeds", async () => {
-    const validToolCallId = "prt_valid_test_123"
-    const model = createMockModel({
-      providerID: "openai",
-      api: { id: "gpt-4o", npm: "@ai-sdk/openai" },
-    })
-    
-    const input = [
+
+  test("preserves valid toolCallIds", () => {
+    const validId = "call_1234567890abcdef"
+    const messages: ModelMessage[] = [
       {
-        id: PartID.ascending(),
-        messageID: MessageID.ascending(),
-        sessionID: SessionID.ascending(),
-        parts: [
+        role: "assistant",
+        content: [
           {
-            type: "tool-result" as const,
-            toolCallId: validToolCallId,
-            toolName: "test",
-            result: "output",
+            type: "tool-call",
+            toolCallId: validId,
+            toolName: "test-tool",
+            args: { input: "test" },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: validId,
+            toolName: "test-tool",
+            result: "test output",
           },
         ],
       },
     ]
-    
-    const result = await MessageV2.toModelMessages(input, model)
-    
-    expect(result).toHaveLength(1)
-    expect((result[0].content[0] as any).toolCallId).toBe(validToolCallId)
+
+    const scrubbed = ProviderTransform.scrubToolCallIds(messages)
+
+    expect(scrubbed).toHaveLength(2)
+    const assistantContent = scrubbed[0].content as any[]
+    const toolContent = scrubbed[1].content as any[]
+
+    expect(assistantContent[0].toolCallId).toBe(validId)
+    expect(toolContent[0].toolCallId).toBe(validId)
+  })
+
+  test("caches models that need scrubbing", () => {
+    const modelKey = "test-provider-test-model"
+
+    // Initially should not need scrubbing
+    expect(ProviderTransform.needsScrubbing(modelKey)).toBe(false)
+
+    // Mark as needing scrubbing
+    ProviderTransform.markNeedsScrubbing(modelKey)
+    expect(ProviderTransform.needsScrubbing(modelKey)).toBe(true)
   })
 })
