@@ -54,6 +54,7 @@ import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
 import { animate } from "motion"
 import { attached, inline, kind } from "./message-file"
+import { skillText } from "./message-skill"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -1024,9 +1025,7 @@ export function UserMessageDisplay(props: {
 
   const text = createMemo(() => textPart()?.text || "")
 
-  const skillTemplatePart = createMemo(() => {
-    return props.parts?.find((p) => p.type === "text" && (p as TextPart).synthetic) as TextPart | undefined
-  })
+  const skillTemplatePart = createMemo(() => skillText(props.parts))
 
   const files = createMemo(() => (props.parts?.filter((p) => p.type === "file") as FilePart[]) ?? [])
 

@@ -1989,6 +1989,25 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   const argsRegex = /(?:\[Image\s+\d+\]|"[^"]*"|'[^']*'|[^\s"']+)/gi
   const placeholderRegex = /\$(\d+)/g
   const quoteTrimRegex = /^["']|["']$/g
+
+  export function skillify(parts: PromptInput["parts"]) {
+    const next: PromptInput["parts"] = []
+    for (const part of parts) {
+      if (part.type === "text") {
+        next.push({
+          ...part,
+          synthetic: true,
+          metadata: {
+            ...part.metadata,
+            kind: "skill-template",
+          },
+        })
+        continue
+      }
+      next.push(part)
+    }
+    return next
+  }
   /**
    * Regular expression to match @ file references in text
    * Matches @ followed by file paths, excluding commas, periods at end of sentences, and backticks
@@ -2132,14 +2151,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           text: input.arguments,
         })
       }
-      // Mark all template parts as synthetic so they're hidden from the user message display
-      for (const part of templateParts) {
-        if (part.type === "text") {
-          skillParts.push({ ...part, synthetic: true })
-        } else {
-          skillParts.push(part)
-        }
-      }
+      skillParts.push(...skillify(templateParts))
       parts = [...skillParts, ...(input.parts ?? [])]
     } else {
       parts = [...templateParts, ...(input.parts ?? [])]

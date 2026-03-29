@@ -212,6 +212,34 @@ describe("session.prompt agent variant", () => {
   })
 })
 
+describe("session.prompt skill metadata", () => {
+  test("marks skill template text explicitly", () => {
+    const parts = SessionPrompt.skillify([
+      {
+        type: "text",
+        text: "Use this skill.",
+      },
+      {
+        type: "agent",
+        name: "build",
+      },
+    ])
+
+    expect(parts[0]).toMatchObject({
+      type: "text",
+      text: "Use this skill.",
+      synthetic: true,
+      metadata: {
+        kind: "skill-template",
+      },
+    })
+    expect(parts[1]).toMatchObject({
+      type: "agent",
+      name: "build",
+    })
+  })
+})
+
 describe("session.agent-resolution", () => {
   test("unknown agent throws typed error", async () => {
     await using tmp = await tmpdir({ git: true })
