@@ -17,6 +17,11 @@ if (!semver.satisfies(process.versions.bun, expectedBunVersionRange)) {
   throw new Error(`This script requires bun@${expectedBunVersionRange}, but you are using bun@${process.versions.bun}`)
 }
 
+function slug(raw: string) {
+  const id = raw.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "")
+  return id || "preview"
+}
+
 const env = {
   OPENCODE_CHANNEL: process.env["OPENCODE_CHANNEL"],
   OPENCODE_BUMP: process.env["OPENCODE_BUMP"],
@@ -33,7 +38,7 @@ const IS_PREVIEW = CHANNEL !== "latest"
 
 const VERSION = await (async () => {
   if (env.OPENCODE_VERSION) return env.OPENCODE_VERSION
-  if (IS_PREVIEW) return `0.0.0-${CHANNEL}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
+  if (IS_PREVIEW) return `0.0.0-${slug(CHANNEL)}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
   const version = await fetch("https://registry.npmjs.org/opencode-ai/latest")
     .then((res) => {
       if (!res.ok) throw new Error(res.statusText)

@@ -18,6 +18,7 @@ import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
 import { Global } from "../global"
 import path from "path"
+import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib"
 import { Filesystem } from "../util/filesystem"
 
 // Direct imports for bundled providers
@@ -108,6 +109,79 @@ export namespace Provider {
       status: res.status,
       statusText: res.statusText,
     })
+  }
+
+  async function* openwebuiDecodedWebChunks(
+    webBody: ReadableStream<Uint8Array>,
+    contentEncoding: string | null | undefined,
+  ) {
+    const enc = contentEncoding?.toLowerCase() ?? ""
+    const reader = webBody.getReader()
+    const first = await reader.read()
+    if (first.done || !first.value?.byteLength) return
+    const head = Buffer.from(first.value.buffer, first.value.byteOffset, first.value.byteLength)
+    const gzipMagic = head.length >= 2 && head[0] === 0x1f && head[1] === 0x8b
+    const prefix = head
+      .toString("utf8", 0, Math.min(head.length, 48))
+      .replace(/^\uFEFF/, "")
+      .trimStart()
+    const alreadyPlain =
+      prefix.startsWith("data:") ||
+      prefix.startsWith("event:") ||
+      prefix.startsWith("{") ||
+      prefix.startsWith("[") ||
+      prefix.startsWith("<")
+    const skipDecode =
+      alreadyPlain &&
+      !gzipMagic &&
+      (enc.includes("gzip") || enc.includes("x-gzip") || enc.includes("deflate") || enc.includes("br"))
+    const wantGzip = gzipMagic || enc.includes("gzip") || enc.includes("x-gzip")
+
+    if (wantGzip && !skipDecode) {
+      const gunzip = createGunzip()
+      const pump = async () => {
+        gunzip.write(head)
+        for (;;) {
+          const n = await reader.read()
+          if (n.done) {
+            gunzip.end()
+            return
+          }
+          const v = n.value
+          gunzip.write(Buffer.from(v.buffer, v.byteOffset, v.byteLength))
+        }
+      }
+      void pump().catch((e) => gunzip.destroy(e))
+      for await (const c of gunzip) yield Buffer.isBuffer(c) ? c : Buffer.from(c)
+      return
+    }
+
+    if ((enc.includes("deflate") || enc.includes("br")) && !skipDecode) {
+      const z = enc.includes("br") ? createBrotliDecompress() : createInflate()
+      const pump = async () => {
+        z.write(head)
+        for (;;) {
+          const n = await reader.read()
+          if (n.done) {
+            z.end()
+            return
+          }
+          const v = n.value
+          z.write(Buffer.from(v.buffer, v.byteOffset, v.byteLength))
+        }
+      }
+      void pump().catch((e) => z.destroy(e))
+      for await (const c of z) yield Buffer.isBuffer(c) ? c : Buffer.from(c)
+      return
+    }
+
+    yield head
+    for (;;) {
+      const n = await reader.read()
+      if (n.done) return
+      const v = n.value
+      yield Buffer.from(v.buffer, v.byteOffset, v.byteLength)
+    }
   }
 
   type BundledSDK = {
@@ -940,6 +1014,7 @@ export namespace Provider {
     const config = await Config.get()
     const modelsDev = await ModelsDev.get()
     const database = mapValues(modelsDev, fromModelsDevProvider)
+    if (database["openwebui"]) database["openwebui"].name = "Open WebUI"
 
     const disabled = new Set(config.disabled_providers ?? [])
     const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
@@ -967,6 +1042,130 @@ export namespace Provider {
 
     const configProviders = Object.entries(config.provider ?? {})
 
+    {
+      const cfg = config.provider?.["openwebui"]
+      const raw = (cfg?.options?.baseURL ?? Env.get("OPEN_WEBUI_BASE_URL"))?.replace(/\/+$/, "")
+      const secret = await (async () => {
+        if (cfg?.options?.apiKey) return cfg.options.apiKey
+        const envKey = Env.get("OPEN_WEBUI_API_KEY")
+        if (envKey) return envKey
+        const auth = await Auth.get("openwebui")
+        if (auth?.type === "api") return auth.key
+        return undefined
+      })()
+
+      if (raw && secret) {
+        const base = ProviderTransform.openwebuiOpenAICompatibleBase(raw)
+        const models: Record<string, Model> = {}
+        const urls = ProviderTransform.openwebuiModelListUrls(base)
+
+        for (const url of urls) {
+          if (Object.keys(models).length > 0) break
+
+          const response = await fetch(url, {
+            headers: {
+              Authorization: `Bearer ${secret}`,
+              Accept: "application/json",
+            },
+            signal: AbortSignal.timeout(5_000),
+          }).catch((error) => {
+            log.error("Failed to fetch Open WebUI models", { endpoint: url, error })
+            return undefined
+          })
+          if (!response) continue
+          if (!response.ok) continue
+
+          const text = await response.text().catch(() => "")
+          const data = await Promise.resolve(text)
+            .then((x) => (x ? JSON.parse(x) : undefined))
+            .catch(() => undefined)
+          if (!data) {
+            log.error("Open WebUI models endpoint returned non-JSON body", {
+              endpoint: url,
+              preview: text.slice(0, 200),
+            })
+            continue
+          }
+
+          type OwuiEntry = { id?: string; name?: string; model?: string; info?: { id?: string } }
+          const entries = Array.isArray(data)
+            ? data
+            : data && typeof data === "object" && "data" in data && Array.isArray(data.data)
+              ? data.data
+              : data && typeof data === "object" && "models" in data && Array.isArray(data.models)
+                ? data.models
+                : []
+
+          for (const item of entries) {
+            const rawID = (() => {
+              if (typeof item === "string") return item
+              if (!item || typeof item !== "object") return undefined
+              const e = item as OwuiEntry
+              if (typeof e.id === "string" && e.id) return e.id
+              if (typeof e.name === "string" && e.name) return e.name
+              if (typeof e.model === "string" && e.model) return e.model
+              if (e.info && typeof e.info.id === "string" && e.info.id) return e.info.id
+              return undefined
+            })()
+            if (!rawID) continue
+            const e = item && typeof item === "object" ? (item as OwuiEntry) : undefined
+            const label = typeof e?.name === "string" ? e.name : rawID
+            models[rawID] = {
+              id: ModelID.make(rawID),
+              providerID: ProviderID.make("openwebui"),
+              name: label,
+              api: {
+                id: rawID,
+                url: base,
+                npm: "@ai-sdk/openai-compatible",
+              },
+              status: "active",
+              headers: {},
+              options: {},
+              cost: {
+                input: 0,
+                output: 0,
+                cache: { read: 0, write: 0 },
+              },
+              limit: {
+                context: 128_000,
+                output: 4_096,
+              },
+              capabilities: {
+                temperature: true,
+                reasoning: false,
+                attachment: false,
+                toolcall: true,
+                input: { text: true, audio: false, image: false, video: false, pdf: false },
+                output: { text: true, audio: false, image: false, video: false, pdf: false },
+                interleaved: false,
+              },
+              release_date: "",
+              variants: {},
+            }
+          }
+        }
+
+        if (Object.keys(models).length === 0) {
+          log.error("Open WebUI instance returned no models after trying all endpoints", {
+            baseURL: raw,
+            normalized: base,
+          })
+        }
+
+        if (Object.keys(models).length > 0) {
+          database["openwebui"] = {
+            id: ProviderID.make("openwebui"),
+            name: "Open WebUI",
+            source: "custom",
+            env: ["OPEN_WEBUI_API_KEY"],
+            options: {},
+            models,
+          }
+        }
+      }
+    }
+
     function mergeProvider(providerID: ProviderID, provider: Partial<Info>) {
       const existing = providers[providerID]
       if (existing) {
@@ -985,7 +1184,7 @@ export namespace Provider {
       const existing = database[providerID]
       const parsed: Info = {
         id: ProviderID.make(providerID),
-        name: provider.name ?? existing?.name ?? providerID,
+        name: provider.name ?? existing?.name ?? (providerID === "openwebui" ? "Open WebUI" : providerID),
         env: provider.env ?? existing?.env ?? [],
         options: mergeDeep(existing?.options ?? {}, provider.options ?? {}),
         source: "config",
@@ -1213,6 +1412,14 @@ export namespace Provider {
       const provider = s.providers[model.providerID]
       const options = { ...provider.options }
 
+      if (model.providerID === "openwebui") {
+        const raw =
+          typeof options["baseURL"] === "string" && options["baseURL"] !== "" ? options["baseURL"] : model.api.url
+        if (typeof raw === "string" && raw !== "") {
+          options["baseURL"] = ProviderTransform.openwebuiOpenAICompatibleBase(raw)
+        }
+      }
+
       if (model.providerID === "google-vertex" && !model.api.npm.includes("@ai-sdk/openai-compatible")) {
         delete options.fetch
       }
@@ -1253,6 +1460,13 @@ export namespace Provider {
           ...model.headers,
         }
 
+      if (model.providerID === "openwebui") {
+        options["headers"] = {
+          ...options["headers"],
+          "Accept-Encoding": "identity",
+        }
+      }
+
       const key = Hash.fast(
         JSON.stringify({
           providerID: model.providerID,
@@ -1271,6 +1485,24 @@ export namespace Provider {
         // Preserve custom fetch if it exists, wrap it with timeout logic
         const fetchFn = customFetch ?? fetch
         const opts = init ?? {}
+        const scrub = (raw: string) => {
+          const parsed = JSON.parse(raw)
+          if (!parsed || typeof parsed !== "object") return { body: raw, changed: false }
+          const keys = [
+            "tools",
+            "tool_choice",
+            "parallel_tool_calls",
+            "function_call",
+            "functions",
+            "reasoning_effort",
+            "reasoningEffort",
+          ]
+          const found = keys.filter((k) => k in (parsed as Record<string, unknown>))
+          if (found.length === 0) return { body: raw, changed: false }
+          const clean = { ...(parsed as Record<string, unknown>) }
+          for (const k of found) delete clean[k]
+          return { body: JSON.stringify(clean), changed: true }
+        }
         const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
         const signals: AbortSignal[] = []
 
@@ -1281,6 +1513,123 @@ export namespace Provider {
 
         const combined = signals.length === 0 ? null : signals.length === 1 ? signals[0] : AbortSignal.any(signals)
         if (combined) opts.signal = combined
+
+        if (model.providerID === "openwebui") {
+          const fetchWebui = (body?: BodyInit | null) =>
+            fetch(input, {
+              ...opts,
+              ...(body !== undefined ? { body } : {}),
+              timeout: false,
+              decompress: false,
+            } as RequestInit & { decompress?: boolean; timeout?: boolean })
+
+          const initial = await fetchWebui()
+
+          const ctype = initial.headers.get("content-type") ?? "text/event-stream; charset=utf-8"
+          const contentEncoding = initial.headers.get("content-encoding")
+          const outHeaders = new Headers()
+          outHeaders.set("content-type", ctype)
+
+          const res = await (async () => {
+            if (initial.ok) return initial
+            const text = await initial.text().catch(() => "")
+            if (
+              initial.status === 400 &&
+              text.includes("Function tools with reasoning_effort are not supported") &&
+              typeof opts.body === "string"
+            ) {
+              const next = scrub(opts.body as string)
+              if (next.changed) {
+                log.warn(
+                  "Open WebUI chat endpoint rejects tools (claims reasoning_effort incompatibility); retrying as normal chat without tools",
+                  { modelID: model.api.id, providerID: model.providerID },
+                )
+                return fetchWebui(next.body)
+              }
+            }
+            return new Response(text, {
+              status: initial.status,
+              statusText: initial.statusText,
+              headers: initial.headers,
+            })
+          })()
+
+          if (!res.ok) {
+            const text = await res.text().catch(() => "")
+            const errRes = new Response(text, {
+              status: res.status,
+              statusText: res.statusText,
+              headers: outHeaders,
+            })
+            if (text) {
+              const t = text.trim()
+              const parsed =
+                t.startsWith("[") || t.startsWith("{")
+                  ? await Promise.resolve(t)
+                      .then((s) => JSON.parse(s) as unknown)
+                      .catch(() => null)
+                  : null
+              const row = iife(() => {
+                if (parsed === null || typeof parsed !== "object") return null
+                return Array.isArray(parsed) ? parsed[0] : parsed
+              })
+              const inner =
+                row && typeof row === "object" && row !== null && "error" in row
+                  ? (row as { error?: { message?: string } }).error?.message
+                  : undefined
+              const line =
+                typeof inner === "string" && inner.length > 0
+                  ? `Open WebUI Error (${res.status}): ${inner}`
+                  : `Open WebUI Error (${res.status} ${res.statusText}): ${text.slice(0, 500)}`
+              const body = text.length > 4000 ? text.slice(0, 4000) + "\n...(truncated)" : text
+              const file = Log.file()
+              log.error(line, file ? { logFile: file, body } : { body })
+              const tail = file ? ` Full response: ${file}` : ""
+              Object.defineProperty(errRes, "statusText", { value: line + tail })
+            }
+            return errRes
+          }
+
+          if (!res.body)
+            return new Response(null, { status: res.status, statusText: res.statusText, headers: outHeaders })
+
+          const chunkIter = openwebuiDecodedWebChunks(res.body, contentEncoding)
+          if (opts.signal) {
+            opts.signal.addEventListener(
+              "abort",
+              () => {
+                void res.body?.cancel()
+              },
+              { once: true },
+            )
+          }
+
+          const bodyStream = new ReadableStream<Uint8Array>({
+            async pull(controller) {
+              await chunkIter
+                .next()
+                .then((n) => {
+                  if (n.done) {
+                    controller.close()
+                    return
+                  }
+                  controller.enqueue(new Uint8Array(n.value))
+                })
+                .catch((e) => {
+                  controller.error(e)
+                })
+            },
+            cancel() {
+              void res.body?.cancel()
+            },
+          })
+
+          return new Response(bodyStream, {
+            status: res.status,
+            statusText: res.statusText,
+            headers: outHeaders,
+          })
+        }
 
         // Strip openai itemId metadata following what codex does
         // Codex uses #[serde(skip_serializing)] on id fields for all item types:

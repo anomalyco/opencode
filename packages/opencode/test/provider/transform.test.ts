@@ -2756,3 +2756,45 @@ describe("ProviderTransform.variants", () => {
     })
   })
 })
+
+describe("ProviderTransform.openwebuiOpenAICompatibleBase", () => {
+  test("origin becomes /api/v1", () => {
+    expect(ProviderTransform.openwebuiOpenAICompatibleBase("https://chat.example.com")).toBe(
+      "https://chat.example.com/api/v1",
+    )
+  })
+  test("/api suffix becomes /api/v1", () => {
+    expect(ProviderTransform.openwebuiOpenAICompatibleBase("https://chat.example.com/api")).toBe(
+      "https://chat.example.com/api/v1",
+    )
+  })
+  test("leaves /api/v1 unchanged", () => {
+    expect(ProviderTransform.openwebuiOpenAICompatibleBase("https://chat.example.com/api/v1")).toBe(
+      "https://chat.example.com/api/v1",
+    )
+  })
+  test("leaves bare /v1 unchanged", () => {
+    expect(ProviderTransform.openwebuiOpenAICompatibleBase("https://chat.example.com/v1")).toBe(
+      "https://chat.example.com/v1",
+    )
+  })
+  test("path segment gets /api/v1 suffix", () => {
+    expect(ProviderTransform.openwebuiOpenAICompatibleBase("https://chat.example.com/owui")).toBe(
+      "https://chat.example.com/owui/api/v1",
+    )
+  })
+  test("invalid URL returns trimmed input", () => {
+    expect(ProviderTransform.openwebuiOpenAICompatibleBase("not-a-url")).toBe("not-a-url")
+  })
+})
+
+describe("ProviderTransform.openwebuiModelListUrls", () => {
+  test("lists normalized base plus origin fallbacks", () => {
+    const base = ProviderTransform.openwebuiOpenAICompatibleBase("https://chat.example.com")
+    expect(ProviderTransform.openwebuiModelListUrls(base)).toEqual([
+      "https://chat.example.com/api/v1/models",
+      "https://chat.example.com/api/models",
+      "https://chat.example.com/v1/models",
+    ])
+  })
+})

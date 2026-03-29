@@ -119,6 +119,25 @@ export namespace ModelsDev {
       ModelsDev.Data.reset()
     }
   }
+
+  export function injectOpenWebUIPlaceholder(
+    filtered: Record<string, Provider>,
+    enabled: Set<string> | undefined,
+    disabled: Set<string>,
+    server: boolean,
+  ) {
+    if (!filtered["openwebui"] && (enabled ? enabled.has("openwebui") : true) && !disabled.has("openwebui")) {
+      filtered["openwebui"] = {
+        id: "openwebui",
+        name: "Open WebUI",
+        env: ["OPEN_WEBUI_API_KEY"],
+        models: {},
+        ...(server ? { api: "" } : {}),
+      }
+    }
+    const row = filtered["openwebui"]
+    if (row) row.name = "Open WebUI"
+  }
 }
 
 if (!Flag.OPENCODE_DISABLE_MODELS_FETCH && !process.argv.includes("--get-yargs-completions")) {

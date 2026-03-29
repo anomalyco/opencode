@@ -10,7 +10,9 @@ import { Global } from "@/global"
 export namespace ConfigPaths {
   export async function projectFiles(name: string, directory: string, worktree: string) {
     const files: string[] = []
-    for (const file of [`${name}.jsonc`, `${name}.json`]) {
+    const std = [`${name}.jsonc`, `${name}.json`] as const
+    const legacy = name === "opencode" ? (["config.jsonc", "config.json"] as const) : []
+    for (const file of [...legacy, ...std]) {
       const found = await Filesystem.findUp(file, directory, worktree)
       for (const resolved of found.toReversed()) {
         files.push(resolved)

@@ -45,6 +45,15 @@ export namespace PackageRegistry {
     const isRange = /[\s^~*xX<>|=]/.test(cachedVersion)
     if (isRange) return !semver.satisfies(latestVersion, cachedVersion)
 
+    if (!semver.valid(cachedVersion) || !semver.valid(latestVersion)) {
+      log.warn("Skipping version compare: non-semver value from bun info", {
+        pkg,
+        cachedVersion,
+        latestVersion,
+      })
+      return false
+    }
+
     return semver.lt(cachedVersion, latestVersion)
   }
 }

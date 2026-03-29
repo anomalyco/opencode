@@ -362,6 +362,7 @@ export namespace ProviderTransform {
 
   export function variants(model: Provider.Model): Record<string, Record<string, any>> {
     if (!model.capabilities.reasoning) return {}
+    if (model.providerID === "openwebui") return {}
 
     const id = model.id.toLowerCase()
     const isAnthropicAdaptive = ["opus-4-6", "opus-4.6", "sonnet-4-6", "sonnet-4.6"].some((v) =>
@@ -747,6 +748,8 @@ export namespace ProviderTransform {
     sessionID: string
     providerOptions?: Record<string, any>
   }): Record<string, any> {
+    if (input.model.providerID === "openwebui") return {}
+
     const result: Record<string, any> = {}
 
     // openai and providers using openai package should set store to false by default.
@@ -863,6 +866,8 @@ export namespace ProviderTransform {
   }
 
   export function smallOptions(model: Provider.Model) {
+    if (model.providerID === "openwebui") return {}
+
     if (
       model.providerID === "openai" ||
       model.api.npm === "@ai-sdk/openai" ||
@@ -1041,5 +1046,30 @@ export namespace ProviderTransform {
     }
 
     return schema as JSONSchema7
+  }
+
+  export function openwebuiOpenAICompatibleBase(text: string): string {
+    const trimmed = text.trim().replace(/\/+$/, "")
+    if (!URL.canParse(trimmed)) return trimmed
+    const parsed = new URL(trimmed)
+    const pathname = parsed.pathname.replace(/\/+$/, "") || ""
+    const base = `${parsed.origin}${pathname}`
+    if (base.endsWith("/api/v1")) return base
+    if (/\/v1$/.test(base)) return base
+    if (!pathname || pathname === "/") return `${parsed.origin}/api/v1`
+    if (pathname.endsWith("/api")) return `${base}/v1`
+    return `${base}/api/v1`
+  }
+
+  /** Candidate model-list URLs for Open WebUI (normalized OpenAI-compat base from {@link openwebuiOpenAICompatibleBase}). */
+  export function openwebuiModelListUrls(normalized: string): string[] {
+    const trim = normalized.trim().replace(/\/+$/, "")
+    const origin = URL.canParse(trim) ? new URL(trim).origin : ""
+    return Array.from(
+      new Set([
+        `${trim}/models`,
+        ...(origin ? [`${origin}/api/models`, `${origin}/api/v1/models`, `${origin}/v1/models`] : []),
+      ]),
+    )
   }
 }

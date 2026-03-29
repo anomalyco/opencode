@@ -6,7 +6,7 @@ import { Provider } from "../../provider/provider"
 import { ModelsDev } from "../../provider/models"
 import { ProviderAuth } from "../../provider/auth"
 import { ProviderID } from "../../provider/schema"
-import { mapValues } from "remeda"
+import { mapValues, pickBy } from "remeda"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { Log } from "../../util/log"
@@ -51,6 +51,8 @@ export const ProviderRoutes = lazy(() =>
           }
         }
 
+        ModelsDev.injectOpenWebUIPlaceholder(filteredProviders, enabled, disabled, true)
+
         const connected = await Provider.list()
         const providers = Object.assign(
           mapValues(filteredProviders, (x) => Provider.fromModelsDevProvider(x)),
@@ -58,7 +60,10 @@ export const ProviderRoutes = lazy(() =>
         )
         return c.json({
           all: Object.values(providers),
-          default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
+          default: mapValues(
+            pickBy(providers, (item) => Object.keys(item.models).length > 0),
+            (item) => Provider.sort(Object.values(item.models))[0].id,
+          ),
           connected: Object.keys(connected),
         })
       },
