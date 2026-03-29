@@ -619,6 +619,51 @@ Klucz `experimental` zawiera opcje, które są we wczesnej fazie rozwoju.
 Opcje eksperymentalne nie są stabilne. Mogą ulec zmianie lub zostać usunięte bez ostrzeżenia.
 :::
 
+### Sandbox
+
+OpenCode może sandboxować polecenia bash, polecenia powłoki sesji i uruchamianie PTY na macOS.
+Sandboxowanie jest eksperymentalne, wymaga włączenia i jest domyślnie wyłączone.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "sandbox": {
+      "enabled": true,
+      "preset": "default",
+      "mode": "workspace-write",
+      "network": false,
+      "excluded_commands": ["rm"],
+      "allow_unsandboxed_retry": true,
+      "extra_read_roots": ["/Volumes/shared"]
+    }
+  }
+}
+```
+
+Dostępne opcje:
+
+| Opcja                     | Typ                                | Opis                                                                                                         |
+| ------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `enabled`                 | `boolean`                          | Włącz sandboxowanie dla obsługiwanych ścieżek wykonawczych macOS.                                            |
+| `preset`                  | `string`                           | Wybierz wbudowany preset (`default`, `strict`, `network`) lub nazwę niestandardowego.                        |
+| `mode`                    | `"workspace-write" \| "read-only"` | Nadpisz tryb presetu.                                                                                        |
+| `network`                 | `boolean`                          | Nadpisz, czy dozwolony jest wychodzący dostęp do sieci.                                                      |
+| `protected_roots`         | `string[]`                         | Ścieżki względne do workspace, które pozostają chronione przed zapisem nawet wewnątrz zapisywalnych korzeni. |
+| `extra_read_roots`        | `string[]`                         | Dodatkowe ścieżki absolutne, które sandbox może odczytywać.                                                  |
+| `extra_write_roots`       | `string[]`                         | Dodatkowe ścieżki absolutne, do których sandbox może zapisywać.                                              |
+| `extra_deny_paths`        | `string[]`                         | Dodatkowe ścieżki absolutne, które sandbox musi odrzucać.                                                    |
+| `excluded_commands`       | `string[]`                         | Prefiksy poleceń, które muszą być zablokowane przed wykonaniem.                                              |
+| `allow_unsandboxed_retry` | `boolean`                          | Zezwól na osobne ponowienie z uprawnieniem `bash:unsandboxed` po odrzuceniu przez sandbox.                   |
+| `fail_if_unavailable`     | `boolean`                          | Twardy błąd, gdy sandboxowanie jest włączone, ale nie może być aktywowane.                                   |
+| `presets`                 | `Record<string, object>`           | Zdefiniuj niestandardowe presety z `mode`, `network`, korzeniami i nadpisaniami uprawnień.                   |
+
+:::note
+Polecenia w sandboxie mogą odczytywać wbudowane korzenie systemowe, takie jak `/bin`, `/usr`, `/opt/homebrew`, `/System`, `/Library`, `/dev`, `/tmp` i `/private/etc`.
+Wrażliwe ścieżki domowe, takie jak `~/.ssh`, `~/.gnupg` i katalogi poświadczeń chmury, pozostają domyślnie odrzucone.
+Zobacz [politykę bezpieczeństwa](https://github.com/anomalyco/opencode/blob/dev/SECURITY.md), aby poznać pełny model zagrożeń, pokryte powierzchnie i aktualne ograniczenia.
+:::
+
 ---
 
 ## Zmienne

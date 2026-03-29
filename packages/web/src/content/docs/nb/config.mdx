@@ -627,6 +627,51 @@ Hvis en leverandør vises i både `enabled_providers` og `disabled_providers`, h
 Eksperimentelle alternativer er ikke stabile. De kan endres eller fjernes uten varsel.
 :::
 
+### Sandbox
+
+OpenCode kan sandkasse bash-kommandoer, øktskallkommandoer og PTY-oppstart på macOS.
+Sandkassing er eksperimentelt, opt-in og deaktivert som standard.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "sandbox": {
+      "enabled": true,
+      "preset": "default",
+      "mode": "workspace-write",
+      "network": false,
+      "excluded_commands": ["rm"],
+      "allow_unsandboxed_retry": true,
+      "extra_read_roots": ["/Volumes/shared"]
+    }
+  }
+}
+```
+
+Tilgjengelige alternativer:
+
+| Alternativ                | Type                               | Beskrivelse                                                                                        |
+| ------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `enabled`                 | `boolean`                          | Aktiver sandkassing for de støttede macOS-kjørebanene.                                             |
+| `preset`                  | `string`                           | Velg et innebygd forhåndsvalg (`default`, `strict`, `network`) eller et egendefinert navn.         |
+| `mode`                    | `"workspace-write" \| "read-only"` | Overstyr forhåndsvalgmodusen.                                                                      |
+| `network`                 | `boolean`                          | Overstyr om utgående nettverkstilgang er tillatt.                                                  |
+| `protected_roots`         | `string[]`                         | Arbeidsområde-relative stier som forblir skrivebeskyttet selv inne i skrivbare røtter.             |
+| `extra_read_roots`        | `string[]`                         | Ekstra absolutte stier sandkassen kan lese.                                                        |
+| `extra_write_roots`       | `string[]`                         | Ekstra absolutte stier sandkassen kan skrive.                                                      |
+| `extra_deny_paths`        | `string[]`                         | Ekstra absolutte stier sandkassen må nekte.                                                        |
+| `excluded_commands`       | `string[]`                         | Kommandoprefikser som må blokkeres før kjøring.                                                    |
+| `allow_unsandboxed_retry` | `boolean`                          | Tillat et separat `bash:unsandboxed`-tillatelsesbeskyttet nytt forsøk etter en sandkasseavvisning. |
+| `fail_if_unavailable`     | `boolean`                          | Hard-feil når sandkassing er aktivert men ikke kan aktiveres.                                      |
+| `presets`                 | `Record<string, object>`           | Definer egendefinerte forhåndsvalg med `mode`, `network`, røtter og tillatelsesoverstyrelser.      |
+
+:::note
+Sandkassede kommandoer kan lese innebygde systemrøtter som `/bin`, `/usr`, `/opt/homebrew`, `/System`, `/Library`, `/dev`, `/tmp` og `/private/etc`.
+Sensitive hjemmestier som `~/.ssh`, `~/.gnupg` og skylegitimjonskatalogene forblir nektet som standard.
+Se [sikkerhetspolicyen](https://github.com/anomalyco/opencode/blob/dev/SECURITY.md) for den fullstendige trusselmodellen, dekkede overflater og nåværende begrensninger.
+:::
+
 ---
 
 ## Variabler

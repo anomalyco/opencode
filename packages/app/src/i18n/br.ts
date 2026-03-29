@@ -717,12 +717,15 @@ export const dict = {
   "settings.permissions.tool.list.description": "Listar arquivos dentro de um diretório",
   "settings.permissions.tool.bash.title": "Bash",
   "settings.permissions.tool.bash.description": "Executar comandos shell",
-  "settings.permissions.tool.bash_unsandboxed.title": "Bash (Unsandboxed)",
-  "settings.permissions.tool.bash_unsandboxed.description": "Retry a shell command without sandbox restrictions",
-  "settings.permissions.tool.bash_unsandboxed_network.title": "Bash (Unsandboxed)",
-  "settings.permissions.tool.bash_unsandboxed_network.description": "Sandbox networking is disabled, so the previous attempt may have failed because of the sandbox.",
-  "settings.permissions.tool.bash_unsandboxed_explicit.title": "Bash (Unsandboxed)",
-  "settings.permissions.tool.bash_unsandboxed_explicit.description": "The command requested to run without sandbox restrictions.",
+  "settings.permissions.tool.bash_unsandboxed.title": "Bash (sem sandbox)",
+  "settings.permissions.tool.bash_unsandboxed.description":
+    "Tente novamente um comando de shell sem restrições de sandbox",
+  "settings.permissions.tool.bash_unsandboxed_network.title": "Bash (sem sandbox)",
+  "settings.permissions.tool.bash_unsandboxed_network.description":
+    "A rede do sandbox está desativada, então a tentativa anterior pode ter falhado por causa do sandbox.",
+  "settings.permissions.tool.bash_unsandboxed_explicit.title": "Bash (sem sandbox)",
+  "settings.permissions.tool.bash_unsandboxed_explicit.description":
+    "O comando solicitou a execução sem restrições de sandbox.",
   "settings.permissions.tool.task.title": "Tarefa",
   "settings.permissions.tool.task.description": "Lançar sub-agentes",
   "settings.permissions.tool.skill.title": "Habilidade",

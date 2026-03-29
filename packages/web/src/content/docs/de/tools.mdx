@@ -64,6 +64,12 @@ Fuehrt Shell-Befehle in deiner Projektumgebung aus.
 
 Damit kann das LLM Terminal-Befehle wie `npm install`, `git status` oder andere Shell-Kommandos ausfuehren.
 
+:::note
+Wenn macOS-Sandboxing aktiviert ist, laeuft bash mit Dateisystembeschraenkungen und kann bei Bedarf einen separaten Wiederholungsversuch ohne Sandbox anfordern.
+Wenn du weisst, dass ein Befehl ausserhalb der Sandbox starten muss, setze `# opencode:unsandboxed <reason>` in die erste nicht-leere Zeile des Befehls.
+Siehe [Sandbox-Konfiguration](/docs/config#sandbox) fuer das unterstuetzte Verhalten und Einschraenkungen.
+:::
+
 ---
 
 ### edit

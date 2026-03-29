@@ -626,6 +626,51 @@ OpenCode 啟動時會自動下載新版本。您可以使用 `autoupdate` 選項
 實驗性選項不穩定。它們可能會在不另行通知的情況下被變更或移除。
 :::
 
+### Sandbox
+
+OpenCode 可以在 macOS 上對 bash 指令、工作階段 shell 指令和 PTY 啟動進行沙箱隔離。
+沙箱功能為實驗性功能，需要手動啟用，預設處於關閉狀態。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "sandbox": {
+      "enabled": true,
+      "preset": "default",
+      "mode": "workspace-write",
+      "network": false,
+      "excluded_commands": ["rm"],
+      "allow_unsandboxed_retry": true,
+      "extra_read_roots": ["/Volumes/shared"]
+    }
+  }
+}
+```
+
+可用選項：
+
+| 選項                      | 類型                               | 描述                                                           |
+| ------------------------- | ---------------------------------- | -------------------------------------------------------------- |
+| `enabled`                 | `boolean`                          | 為支援的 macOS 執行路徑啟用沙箱。                              |
+| `preset`                  | `string`                           | 選擇內建預設（`default`、`strict`、`network`）或自訂預設名稱。 |
+| `mode`                    | `"workspace-write" \| "read-only"` | 覆寫預設模式。                                                 |
+| `network`                 | `boolean`                          | 覆寫是否允許出站網路存取。                                     |
+| `protected_roots`         | `string[]`                         | 即使在可寫根目錄內也保持寫入保護的工作空間相對路徑。           |
+| `extra_read_roots`        | `string[]`                         | 沙箱可以讀取的額外絕對路徑。                                   |
+| `extra_write_roots`       | `string[]`                         | 沙箱可以寫入的額外絕對路徑。                                   |
+| `extra_deny_paths`        | `string[]`                         | 沙箱必須拒絕的額外絕對路徑。                                   |
+| `excluded_commands`       | `string[]`                         | 執行前必須阻止的指令前綴。                                     |
+| `allow_unsandboxed_retry` | `boolean`                          | 允許在沙箱拒絕後進行單獨的 `bash:unsandboxed` 權限控制重試。   |
+| `fail_if_unavailable`     | `boolean`                          | 當沙箱已啟用但無法啟動時硬性失敗。                             |
+| `presets`                 | `Record<string, object>`           | 使用 `mode`、`network`、根路徑和權限覆寫定義自訂預設。         |
+
+:::note
+沙箱中的指令可以讀取內建系統根目錄，如 `/bin`、`/usr`、`/opt/homebrew`、`/System`、`/Library`、`/dev`、`/tmp` 和 `/private/etc`。
+敏感的主目錄路徑（如 `~/.ssh`、`~/.gnupg` 和雲端憑證目錄）預設被拒絕。
+請參閱[安全政策](https://github.com/anomalyco/opencode/blob/dev/SECURITY.md)了解完整的威脅模型、涵蓋範圍和目前限制。
+:::
+
 ---
 
 ## 變數

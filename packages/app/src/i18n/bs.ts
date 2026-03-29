@@ -791,12 +791,15 @@ export const dict = {
   "settings.permissions.tool.list.description": "Listanje datoteka unutar direktorija",
   "settings.permissions.tool.bash.title": "Bash",
   "settings.permissions.tool.bash.description": "Pokretanje shell komandi",
-  "settings.permissions.tool.bash_unsandboxed.title": "Bash (Unsandboxed)",
-  "settings.permissions.tool.bash_unsandboxed.description": "Retry a shell command without sandbox restrictions",
-  "settings.permissions.tool.bash_unsandboxed_network.title": "Bash (Unsandboxed)",
-  "settings.permissions.tool.bash_unsandboxed_network.description": "Sandbox networking is disabled, so the previous attempt may have failed because of the sandbox.",
-  "settings.permissions.tool.bash_unsandboxed_explicit.title": "Bash (Unsandboxed)",
-  "settings.permissions.tool.bash_unsandboxed_explicit.description": "The command requested to run without sandbox restrictions.",
+  "settings.permissions.tool.bash_unsandboxed.title": "Bash (bez sandboxa)",
+  "settings.permissions.tool.bash_unsandboxed.description":
+    "Ponovo pokušaj pokrenuti shell naredbu bez ograničenja sandboxa",
+  "settings.permissions.tool.bash_unsandboxed_network.title": "Bash (bez sandboxa)",
+  "settings.permissions.tool.bash_unsandboxed_network.description":
+    "Mreža u sandboxu je onemogućena, pa je prethodni pokušaj možda neuspješno završio zbog sandboxa.",
+  "settings.permissions.tool.bash_unsandboxed_explicit.title": "Bash (bez sandboxa)",
+  "settings.permissions.tool.bash_unsandboxed_explicit.description":
+    "Naredba je zatražila pokretanje bez ograničenja sandboxa.",
   "settings.permissions.tool.task.title": "Zadatak",
   "settings.permissions.tool.task.description": "Pokretanje pod-agenta",
   "settings.permissions.tool.skill.title": "Vještina",

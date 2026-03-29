@@ -129,6 +129,7 @@ Dozvole OpenCode su označene imenom alata, plus nekoliko sigurnosnih mjera:
 - `glob` — globbiranje fajla (odgovara glob uzorku)
 - `grep` — pretraga sadržaja (podudara se sa regularnim izrazom)
 - `bash` — izvođenje komandi ljuske (podudara se s raščlanjenim komandama kao što je `git status --porcelain`)
+- `bash:unsandboxed` — ponovno pokretanje shell komande izvan sandboxa nakon odbijanja ili nakon eksplicitnog zahtjeva za pokretanje bez sandboxa
 - `task` — pokretanje subagenta (odgovara tipu podagenta)
 - `skill` — učitavanje vještine (odgovara nazivu vještine)
 - `lsp` — pokretanje LSP upita (trenutno negranularno)
@@ -226,3 +227,11 @@ Only analyze code and suggest changes.
 :::tip
 Koristite podudaranje uzoraka za naredbe s argumentima. `"grep *"` dozvoljava `grep pattern file.txt`, dok bi ga samo `"grep"` blokirao. Naredbe poput `git status` rade za zadano ponašanje, ali zahtijevaju eksplicitnu dozvolu (kao `"git status *"`) kada se prosljeđuju argumenti.
 :::
+
+---
+
+## Interakcija sa sandboxom
+
+Kada je macOS sandboxing omogućen, blokirana bash komanda može pokrenuti odvojeni `bash:unsandboxed` zahtjev za dozvolom.
+Ovo se dešava kada OpenCode detektuje vjerovatno odbijanje sandboxa, ili kada komanda eksplicitno traži preskakanje sandboxa sa `# opencode:unsandboxed <reason>` na prvom nepraznom redu.
+Konfigurirajte sam sandbox u [`experimental.sandbox`](/docs/config#sandbox).

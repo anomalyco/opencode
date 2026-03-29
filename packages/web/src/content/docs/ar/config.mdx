@@ -624,6 +624,51 @@ opencode run "Hello world"
 الخيارات التجريبية غير مستقرة. قد تتغير أو تُزال دون إشعار.
 :::
 
+### Sandbox
+
+يمكن لـ OpenCode تشغيل أوامر bash وأوامر shell للجلسة وبدء PTY داخل بيئة معزولة (sandbox) على macOS.
+ميزة Sandbox تجريبية واختيارية ومعطّلة افتراضيًا.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "sandbox": {
+      "enabled": true,
+      "preset": "default",
+      "mode": "workspace-write",
+      "network": false,
+      "excluded_commands": ["rm"],
+      "allow_unsandboxed_retry": true,
+      "extra_read_roots": ["/Volumes/shared"]
+    }
+  }
+}
+```
+
+الخيارات المتاحة:
+
+| الخيار                    | النوع                              | الوصف                                                                            |
+| ------------------------- | ---------------------------------- | -------------------------------------------------------------------------------- |
+| `enabled`                 | `boolean`                          | تفعيل البيئة المعزولة لمسارات التنفيذ المدعومة على macOS.                        |
+| `preset`                  | `string`                           | اختيار إعداد مسبق مدمج (`default` أو `strict` أو `network`) أو اسم مخصص.         |
+| `mode`                    | `"workspace-write" \| "read-only"` | تجاوز وضع الإعداد المسبق.                                                        |
+| `network`                 | `boolean`                          | تجاوز ما إذا كان الوصول إلى الشبكة مسموحًا.                                      |
+| `protected_roots`         | `string[]`                         | مسارات نسبية لمساحة العمل تبقى محمية ضد الكتابة حتى داخل الجذور القابلة للكتابة. |
+| `extra_read_roots`        | `string[]`                         | مسارات مطلقة إضافية يمكن للبيئة المعزولة قراءتها.                                |
+| `extra_write_roots`       | `string[]`                         | مسارات مطلقة إضافية يمكن للبيئة المعزولة الكتابة فيها.                           |
+| `extra_deny_paths`        | `string[]`                         | مسارات مطلقة إضافية يجب على البيئة المعزولة رفضها.                               |
+| `excluded_commands`       | `string[]`                         | بادئات أوامر يجب حظرها قبل التنفيذ.                                              |
+| `allow_unsandboxed_retry` | `boolean`                          | السماح بإعادة محاولة منفصلة عبر إذن `bash:unsandboxed` بعد رفض البيئة المعزولة.  |
+| `fail_if_unavailable`     | `boolean`                          | فشل صريح عندما تكون البيئة المعزولة مفعّلة لكن لا يمكن تنشيطها.                  |
+| `presets`                 | `Record<string, object>`           | تعريف إعدادات مسبقة مخصصة مع `mode` و`network` والجذور وتجاوزات الأذونات.        |
+
+:::note
+يمكن للأوامر المعزولة قراءة جذور النظام المدمجة مثل `/bin` و`/usr` و`/opt/homebrew` و`/System` و`/Library` و`/dev` و`/tmp` و`/private/etc`.
+تظل المسارات الحساسة في المنزل مثل `~/.ssh` و`~/.gnupg` وأدلة بيانات الاعتماد السحابية مرفوضة افتراضيًا.
+راجع [سياسة الأمان](https://github.com/anomalyco/opencode/blob/dev/SECURITY.md) لنموذج التهديد الكامل والأسطح المغطاة والقيود الحالية.
+:::
+
 ---
 
 ## المتغيرات

@@ -134,6 +134,7 @@ OpenCode-tillatelser tastes inn etter verktøynavn, pluss et par sikkerhetsvakte
 - `glob` — fil-globing (tilsvarer glob-mønsteret)
 - `grep` — innholdssøk (samsvarer med regex-mønsteret)
 - `bash` — kjører skallkommandoer (matcher analyserte kommandoer som `git status --porcelain`)
+- `bash:unsandboxed` — kjører en skallkommando på nytt utenfor sandkassen etter avvisning eller etter en eksplisitt forespørsel uten sandkasse
 - `task` — start av subagenter (tilsvarer subagenttypen)
 - `skill` — laster en ferdighet (tilsvarer navnet på ferdigheten)
 - `lsp` — kjører LSP-spørringer (for øyeblikket ikke-granulære)
@@ -233,3 +234,11 @@ Only analyze code and suggest changes.
 :::tip
 Bruk mønstertilpasning for kommandoer med argumenter. `"grep *"` tillater `grep pattern file.txt`, mens `"grep"` alene ville blokkert den. Kommandoer som `git status` fungerer for standard oppførsel, men krever eksplisitt tillatelse (som `"git status *"`) når argumenter sendes.
 :::
+
+---
+
+## Sandkasse-interaksjon
+
+Når macOS-sandkassing er aktivert, kan en blokkert bash-kommando utløse en separat `bash:unsandboxed`-tillatelsesforespørsel.
+Dette skjer når OpenCode oppdager en sannsynlig sandkasseavvisning, eller når kommandoen eksplisitt ber om å hoppe over sandkassen med `# opencode:unsandboxed <reason>` på den første ikke-tomme linjen.
+Konfigurer sandkassen selv i [`experimental.sandbox`](/docs/config#sandbox).

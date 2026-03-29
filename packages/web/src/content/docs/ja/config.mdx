@@ -623,6 +623,51 @@ OpenCode は起動時に新しいアップデートを自動的にダウンロ�
 実験的なオプションは安定していません。予告なく変更または削除される場合があります。
 :::
 
+### サンドボックス
+
+OpenCode は macOS 上で bash コマンド、セッションシェルコマンド、PTY の起動をサンドボックス化できます。
+サンドボックスは実験的な機能であり、オプトインで、デフォルトでは無効になっています。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "sandbox": {
+      "enabled": true,
+      "preset": "default",
+      "mode": "workspace-write",
+      "network": false,
+      "excluded_commands": ["rm"],
+      "allow_unsandboxed_retry": true,
+      "extra_read_roots": ["/Volumes/shared"]
+    }
+  }
+}
+```
+
+利用可能なオプション:
+
+| オプション                | 型                                 | 説明                                                                                         |
+| ------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------------- |
+| `enabled`                 | `boolean`                          | macOS でサポートされている実行パスのサンドボックスを有効にします。                           |
+| `preset`                  | `string`                           | 組み込みプリセット (`default`、`strict`、`network`) またはカスタムプリセット名を選択します。 |
+| `mode`                    | `"workspace-write" \| "read-only"` | プリセットのモードをオーバーライドします。                                                   |
+| `network`                 | `boolean`                          | 送信ネットワークアクセスを許可するかどうかをオーバーライドします。                           |
+| `protected_roots`         | `string[]`                         | 書き込み可能なルート内でも書き込み保護のままにするワークスペース相対パス。                   |
+| `extra_read_roots`        | `string[]`                         | サンドボックスが読み取れる追加の絶対パス。                                                   |
+| `extra_write_roots`       | `string[]`                         | サンドボックスが書き込める追加の絶対パス。                                                   |
+| `extra_deny_paths`        | `string[]`                         | サンドボックスが拒否する追加の絶対パス。                                                     |
+| `excluded_commands`       | `string[]`                         | 実行前にブロックする必要があるコマンドプレフィックス。                                       |
+| `allow_unsandboxed_retry` | `boolean`                          | サンドボックス拒否後に、別の `bash:unsandboxed` 権限付きリトライを許可します。               |
+| `fail_if_unavailable`     | `boolean`                          | サンドボックスが有効だが起動できない場合にハードフェイルします。                             |
+| `presets`                 | `Record<string, object>`           | `mode`、`network`、ルート、権限オーバーライドを使用してカスタムプリセットを定義します。      |
+
+:::note
+サンドボックス化されたコマンドは、`/bin`、`/usr`、`/opt/homebrew`、`/System`、`/Library`、`/dev`、`/tmp`、`/private/etc` などの組み込みシステムルートを読み取ることができます。
+`~/.ssh`、`~/.gnupg`、クラウド認証ディレクトリなどの機密性の高いホームパスは、デフォルトで拒否されたままです。
+完全な脅威モデル、カバーされる範囲、および現在の制限事項については、[セキュリティポリシー](https://github.com/anomalyco/opencode/blob/dev/SECURITY.md) を参照してください。
+:::
+
 ---
 
 ## 変数

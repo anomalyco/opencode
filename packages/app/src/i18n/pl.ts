@@ -714,12 +714,15 @@ export const dict = {
   "settings.permissions.tool.list.description": "Wyświetlanie listy plików w katalogu",
   "settings.permissions.tool.bash.title": "Bash",
   "settings.permissions.tool.bash.description": "Uruchamianie poleceń powłoki",
-  "settings.permissions.tool.bash_unsandboxed.title": "Bash (Unsandboxed)",
-  "settings.permissions.tool.bash_unsandboxed.description": "Retry a shell command without sandbox restrictions",
-  "settings.permissions.tool.bash_unsandboxed_network.title": "Bash (Unsandboxed)",
-  "settings.permissions.tool.bash_unsandboxed_network.description": "Sandbox networking is disabled, so the previous attempt may have failed because of the sandbox.",
-  "settings.permissions.tool.bash_unsandboxed_explicit.title": "Bash (Unsandboxed)",
-  "settings.permissions.tool.bash_unsandboxed_explicit.description": "The command requested to run without sandbox restrictions.",
+  "settings.permissions.tool.bash_unsandboxed.title": "Bash (bez sandboxa)",
+  "settings.permissions.tool.bash_unsandboxed.description":
+    "Ponów próbę uruchomienia polecenia powłoki bez ograniczeń sandboxa",
+  "settings.permissions.tool.bash_unsandboxed_network.title": "Bash (bez sandboxa)",
+  "settings.permissions.tool.bash_unsandboxed_network.description":
+    "Sieć sandboxa jest wyłączona, więc poprzednia próba mogła nie powieść się z powodu sandboxa.",
+  "settings.permissions.tool.bash_unsandboxed_explicit.title": "Bash (bez sandboxa)",
+  "settings.permissions.tool.bash_unsandboxed_explicit.description":
+    "Polecenie zażądało uruchomienia bez ograniczeń sandboxa.",
   "settings.permissions.tool.task.title": "Zadanie",
   "settings.permissions.tool.task.description": "Uruchamianie pod-agentów",
   "settings.permissions.tool.skill.title": "Umiejętność",

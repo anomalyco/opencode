@@ -60,6 +60,12 @@ Execute comandos de shell no ambiente do seu projeto.
 
 Esta ferramenta permite que o LLM execute comandos de terminal como `npm install`, `git status` ou qualquer outro comando de shell.
 
+:::note
+Quando o sandboxing do macOS está habilitado, o bash é executado com restrições de sistema de arquivos e pode solicitar uma nova tentativa separada sem sandbox quando necessário.
+Se você sabe que um comando precisa iniciar fora do sandbox, coloque `# opencode:unsandboxed <reason>` na primeira linha não vazia do comando.
+Veja [configuração do sandbox](/docs/config#sandbox) para o comportamento suportado e limites.
+:::
+
 ---
 
 ### edit

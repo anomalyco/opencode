@@ -800,12 +800,15 @@ export const dict = {
   "settings.permissions.tool.list.description": "Bir dizindeki dosyaları listele",
   "settings.permissions.tool.bash.title": "Bash",
   "settings.permissions.tool.bash.description": "Kabuk komutları çalıştır",
-  "settings.permissions.tool.bash_unsandboxed.title": "Bash (Unsandboxed)",
-  "settings.permissions.tool.bash_unsandboxed.description": "Retry a shell command without sandbox restrictions",
-  "settings.permissions.tool.bash_unsandboxed_network.title": "Bash (Unsandboxed)",
-  "settings.permissions.tool.bash_unsandboxed_network.description": "Sandbox networking is disabled, so the previous attempt may have failed because of the sandbox.",
-  "settings.permissions.tool.bash_unsandboxed_explicit.title": "Bash (Unsandboxed)",
-  "settings.permissions.tool.bash_unsandboxed_explicit.description": "The command requested to run without sandbox restrictions.",
+  "settings.permissions.tool.bash_unsandboxed.title": "Bash (sandbox olmadan)",
+  "settings.permissions.tool.bash_unsandboxed.description":
+    "Bir kabuk komutunu sandbox kısıtlamaları olmadan yeniden dene",
+  "settings.permissions.tool.bash_unsandboxed_network.title": "Bash (sandbox olmadan)",
+  "settings.permissions.tool.bash_unsandboxed_network.description":
+    "Sandbox ağı devre dışı, bu yüzden önceki deneme sandbox nedeniyle başarısız olmuş olabilir.",
+  "settings.permissions.tool.bash_unsandboxed_explicit.title": "Bash (sandbox olmadan)",
+  "settings.permissions.tool.bash_unsandboxed_explicit.description":
+    "Komut, sandbox kısıtlamaları olmadan çalıştırılmayı istedi.",
   "settings.permissions.tool.task.title": "Görev",
   "settings.permissions.tool.task.description": "Alt ajanlar başlat",
   "settings.permissions.tool.skill.title": "Beceri",

@@ -626,6 +626,51 @@ Bir sağlayıcı hem `enabled_providers` hem de `disabled_providers`'de görün�
 Deneysel seçenekler kararlı değildir. Bildirim yapılmaksızın değişebilir veya kaldırılabilirler.
 :::
 
+### Sandbox
+
+OpenCode, macOS üzerinde bash komutlarını, oturum kabuk komutlarını ve PTY başlangıcını sandbox'layabilir.
+Sandbox deneyseldir, isteğe bağlıdır ve varsayılan olarak devre dışıdır.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "sandbox": {
+      "enabled": true,
+      "preset": "default",
+      "mode": "workspace-write",
+      "network": false,
+      "excluded_commands": ["rm"],
+      "allow_unsandboxed_retry": true,
+      "extra_read_roots": ["/Volumes/shared"]
+    }
+  }
+}
+```
+
+Mevcut seçenekler:
+
+| Seçenek                   | Tür                                | Açıklama                                                                                          |
+| ------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `enabled`                 | `boolean`                          | Desteklenen macOS yürütme yolları için sandbox'ı etkinleştirin.                                   |
+| `preset`                  | `string`                           | Yerleşik bir ön ayar (`default`, `strict`, `network`) veya özel ön ayar adı seçin.                |
+| `mode`                    | `"workspace-write" \| "read-only"` | Ön ayar modunu geçersiz kılın.                                                                    |
+| `network`                 | `boolean`                          | Giden ağ erişimine izin verilip verilmeyeceğini geçersiz kılın.                                   |
+| `protected_roots`         | `string[]`                         | Yazılabilir kökler içinde bile yazma korumalı kalan çalışma alanına göreli yollar.                |
+| `extra_read_roots`        | `string[]`                         | Sandbox'ın okuyabileceği ek mutlak yollar.                                                        |
+| `extra_write_roots`       | `string[]`                         | Sandbox'ın yazabileceği ek mutlak yollar.                                                         |
+| `extra_deny_paths`        | `string[]`                         | Sandbox'ın reddetmesi gereken ek mutlak yollar.                                                   |
+| `excluded_commands`       | `string[]`                         | Yürütme öncesinde engellenmesi gereken komut önekleri.                                            |
+| `allow_unsandboxed_retry` | `boolean`                          | Sandbox reddinden sonra ayrı bir izin denetimli `bash:unsandboxed` yeniden denemesine izin verin. |
+| `fail_if_unavailable`     | `boolean`                          | Sandbox etkinleştirildiğinde ancak aktif edilemediğinde kesin hata verin.                         |
+| `presets`                 | `Record<string, object>`           | `mode`, `network`, kökler ve izin geçersiz kılmalarıyla özel ön ayarlar tanımlayın.               |
+
+:::note
+Sandbox'lı komutlar `/bin`, `/usr`, `/opt/homebrew`, `/System`, `/Library`, `/dev`, `/tmp` ve `/private/etc` gibi yerleşik sistem köklerini okuyabilir.
+`~/.ssh`, `~/.gnupg` gibi hassas ev dizini yolları ve bulut kimlik bilgileri dizinleri varsayılan olarak reddedilir.
+Tam tehdit modeli, kapsanan yüzeyler ve mevcut sınırlamalar için [güvenlik politikasına](https://github.com/anomalyco/opencode/blob/dev/SECURITY.md) bakın.
+:::
+
 ---
 
 ## Değişkenler

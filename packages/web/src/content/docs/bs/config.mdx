@@ -624,6 +624,51 @@ Ključ `experimental` sadrži opcije koje su u aktivnom razvoju.
 Eksperimentalne opcije nisu stabilne. Mogu se promijeniti ili ukloniti bez prethodne najave.
 :::
 
+### Sandbox
+
+OpenCode može pokrenuti bash komande, shell komande sesije i PTY pokretanje u sandbox okruženju na macOS-u.
+Sandboxing je eksperimentalan, opcionalan i isključen po defaultu.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "sandbox": {
+      "enabled": true,
+      "preset": "default",
+      "mode": "workspace-write",
+      "network": false,
+      "excluded_commands": ["rm"],
+      "allow_unsandboxed_retry": true,
+      "extra_read_roots": ["/Volumes/shared"]
+    }
+  }
+}
+```
+
+Dostupne opcije:
+
+| Opcija                    | Tip                                | Opis                                                                                            |
+| ------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `enabled`                 | `boolean`                          | Omogući sandboxing za podržane macOS putanje izvršavanja.                                       |
+| `preset`                  | `string`                           | Izaberite ugrađeni preset (`default`, `strict`, `network`) ili prilagođeni naziv.               |
+| `mode`                    | `"workspace-write" \| "read-only"` | Zaobiđi preset mod.                                                                             |
+| `network`                 | `boolean`                          | Zaobiđi da li je pristup mreži dozvoljen.                                                       |
+| `protected_roots`         | `string[]`                         | Putanje relativne radnom prostoru koje ostaju zaštićene od pisanja čak i unutar piših korijena. |
+| `extra_read_roots`        | `string[]`                         | Dodatne apsolutne putanje koje sandbox može čitati.                                             |
+| `extra_write_roots`       | `string[]`                         | Dodatne apsolutne putanje u koje sandbox može pisati.                                           |
+| `extra_deny_paths`        | `string[]`                         | Dodatne apsolutne putanje koje sandbox mora odbiti.                                             |
+| `excluded_commands`       | `string[]`                         | Prefiksi komandi koji moraju biti blokirani prije izvršavanja.                                  |
+| `allow_unsandboxed_retry` | `boolean`                          | Dozvoli odvojeni pokušaj putem `bash:unsandboxed` dozvole nakon odbijanja sandboxa.             |
+| `fail_if_unavailable`     | `boolean`                          | Potpuni neuspjeh kada je sandboxing omogućen ali se ne može aktivirati.                         |
+| `presets`                 | `Record<string, object>`           | Definirajte prilagođene presete sa `mode`, `network`, korijenima i dozvolama.                   |
+
+:::note
+Sandbox komande mogu čitati ugrađene sistemske korijene kao što su `/bin`, `/usr`, `/opt/homebrew`, `/System`, `/Library`, `/dev`, `/tmp` i `/private/etc`.
+Osjetljive putanje u kućnom direktoriju kao što su `~/.ssh`, `~/.gnupg` i direktoriji cloud kredencijala ostaju odbijene po defaultu.
+Pogledajte [sigurnosnu politiku](https://github.com/anomalyco/opencode/blob/dev/SECURITY.md) za potpuni model prijetnji, pokrivene površine i trenutna ograničenja.
+:::
+
 ---
 
 ## Varijable
