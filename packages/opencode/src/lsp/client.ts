@@ -57,7 +57,12 @@ export namespace LSPClient {
         count: params.diagnostics.length,
       })
       const exists = diagnostics.has(filePath)
-      diagnostics.set(filePath, params.diagnostics)
+      if (params.diagnostics.length === 0) {
+        if (!exists) return
+        diagnostics.delete(filePath)
+      } else {
+        diagnostics.set(filePath, params.diagnostics)
+      }
       if (!exists && input.serverID === "typescript") return
       Bus.publish(Event.Diagnostics, { path: filePath, serverID: input.serverID })
     })
