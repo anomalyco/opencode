@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { captureScroll, itemStyle, restoreScroll, virtualize } from "./message-timeline-utils"
+import {
+  captureScroll,
+  itemStyle,
+  pickPin,
+  restorePinnedTop,
+  restoreScroll,
+  virtualize,
+} from "./message-timeline-utils"
 
 describe("message timeline helpers", () => {
   test("keeps virtualization off while a turn is still working", () => {
@@ -58,6 +65,32 @@ describe("message timeline helpers", () => {
         clientHeight: 200,
       }),
     ).toBe(320)
+  })
+
+  test("pins the visible message nearest the reading line", () => {
+    expect(
+      pickPin({
+        viewTop: 200,
+        viewBottom: 700,
+        items: [
+          { id: "a", top: 120, bottom: 180 },
+          { id: "b", top: 240, bottom: 360 },
+          { id: "c", top: 420, bottom: 560 },
+        ],
+      }),
+    ).toEqual({ id: "b", top: 40 })
+  })
+
+  test("restores scroll from a pinned message after layout changes", () => {
+    expect(
+      restorePinnedTop({
+        scrollTop: 780,
+        scrollHeight: 1800,
+        clientHeight: 200,
+        pinTop: 40,
+        nextTop: 120,
+      }),
+    ).toBe(860)
   })
 
   test("keeps centered item layout without intrinsic size shortcuts", () => {

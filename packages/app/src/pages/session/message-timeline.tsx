@@ -28,7 +28,14 @@ import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
-import { captureScroll, itemStyle, restoreScroll, virtualize } from "@/pages/session/message-timeline-utils"
+import {
+  captureScroll,
+  itemStyle,
+  pickPin,
+  restorePinnedTop,
+  restoreScroll,
+  virtualize,
+} from "@/pages/session/message-timeline-utils"
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
 import { Virtualizer, type VirtualizerHandle } from "virtua/solid"
 import { messageAgentColor } from "@/utils/agent"
@@ -224,6 +231,7 @@ export function MessageTimeline(props: {
   onAutoScrollInteraction: (event: MouseEvent) => void
   centered: boolean
   scrollRef: () => HTMLDivElement | undefined
+  userScrolled: () => boolean
   onVirtualizedChange?: (value: boolean) => void
   setContentRef: (el: HTMLDivElement) => void
   setVirtualizerRef: (handle: VirtualizerHandle | undefined) => void
@@ -277,13 +285,15 @@ export function MessageTimeline(props: {
     return sync.data.session_status[id] ?? idle
   })
   const isWorking = createMemo(() => working(sessionStatus(), sessionMessages()))
-  const shouldVirtualize = createMemo(() =>
-    virtualize({
+  const shouldVirtualize = createMemo<boolean>((prev) => {
+    const next = virtualize({
       desktop: platform.platform === "desktop",
       count: rendered().length,
       working: isWorking(),
-    }),
-  )
+    })
+    if (!props.userScrolled()) return next
+    return prev ?? next
+  })
   createEffect(() => props.onVirtualizedChange?.(shouldVirtualize()))
   createEffect(
     on(
@@ -299,6 +309,24 @@ export function MessageTimeline(props: {
           scrollHeight: root.scrollHeight,
           clientHeight: root.clientHeight,
         })
+        const pin = state.bottom
+          ? undefined
+          : (() => {
+              const box = root.getBoundingClientRect()
+              const list = [...root.querySelectorAll<HTMLElement>("[data-message-id]")]
+                .map((node) => {
+                  const id = node.dataset.messageId
+                  if (!id) return
+                  const rect = node.getBoundingClientRect()
+                  return { id, top: rect.top, bottom: rect.bottom }
+                })
+                .filter((item): item is { id: string; top: number; bottom: number } => !!item)
+              return pickPin({
+                viewTop: box.top,
+                viewBottom: box.bottom,
+                items: list,
+              })
+            })()
 
         if (restoreA !== undefined) cancelAnimationFrame(restoreA)
         if (restoreB !== undefined) cancelAnimationFrame(restoreB)
@@ -310,6 +338,24 @@ export function MessageTimeline(props: {
 
             const nextRoot = props.scrollRef()
             if (!nextRoot) return
+
+            if (pin) {
+              const key = typeof CSS === "undefined" ? pin.id : CSS.escape(pin.id)
+              const node = nextRoot.querySelector<HTMLElement>(`[data-message-id="${key}"]`)
+              if (node) {
+                const box = nextRoot.getBoundingClientRect()
+                const top = restorePinnedTop({
+                  scrollTop: nextRoot.scrollTop,
+                  scrollHeight: nextRoot.scrollHeight,
+                  clientHeight: nextRoot.clientHeight,
+                  pinTop: pin.top,
+                  nextTop: node.getBoundingClientRect().top - box.top,
+                })
+                if (Math.abs(nextRoot.scrollTop - top) > 1) nextRoot.scrollTop = top
+                props.onScheduleScrollState(nextRoot)
+                return
+              }
+            }
 
             const top = restoreScroll({
               ...state,
@@ -700,9 +746,9 @@ export function MessageTimeline(props: {
           onScroll={(e) => {
             props.onScheduleScrollState(e.currentTarget)
             props.onTurnBackfillScroll()
+            props.onAutoScrollHandleScroll()
             if (!props.hasScrollGesture()) return
             props.onUserScroll()
-            props.onAutoScrollHandleScroll()
             props.onMarkScrollGesture(e.currentTarget)
           }}
           onClick={props.onAutoScrollInteraction}
