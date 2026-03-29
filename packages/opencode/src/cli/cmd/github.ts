@@ -168,8 +168,35 @@ export function parseGitHubRemote(url: string): { owner: string; repo: string } 
  * Throws only for truly empty responses.
  */
 export function extractResponseText(parts: MessageV2.Part[]): string | null {
-  const textPart = parts.findLast((p) => p.type === "text")
-  if (textPart) return textPart.text
+  const list = parts
+    .filter((part) => part.type === "text")
+    .map((part) => part.text.trim())
+    .filter((part) => part.length > 0)
+
+  if (list.length === 1) return list[0]
+
+  if (list.length > 1) {
+    const seen = new Set<string>()
+    const uniq = list.filter((part) => {
+      if (seen.has(part)) return false
+      seen.add(part)
+      return true
+    })
+
+    const pick = uniq
+      .map((part, i) => {
+        const score =
+          part.length +
+          (i === uniq.length - 1 ? 16 : 0) +
+          (part.includes("\n") ? 32 : 0) +
+          (/^[-*]\s/m.test(part) || /^#{1,6}\s/m.test(part) ? 32 : 0) +
+          (part.toLowerCase().includes("review is complete") && part.length < 500 ? -128 : 0)
+        return { part, score }
+      })
+      .toSorted((a, b) => b.score - a.score || b.part.length - a.part.length)
+
+    return pick[0]?.part ?? null
+  }
 
   // Non-text parts (tools, reasoning, step-start/step-finish, etc.) - signal summary needed
   if (parts.length > 0) return null

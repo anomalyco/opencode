@@ -86,9 +86,30 @@ describe("extractResponseText", () => {
     expect(extractResponseText(parts)).toBe("Hello world")
   })
 
-  test("returns last text part when multiple exist", () => {
-    const parts = [createTextPart("First"), createTextPart("Last")]
-    expect(extractResponseText(parts)).toBe("Last")
+  test("prefers richer multi-line review body over trailing short summary", () => {
+    const parts = [
+      createTextPart(
+        "## Code Review\n\n- High: null check needed\n- Medium: typo in UI\n- Low: unused import cleanup\n\nDetailed reasoning.",
+      ),
+      createTextPart(
+        "The review is complete. The summary above covers all changed files with findings organized by severity.",
+      ),
+    ]
+    expect(extractResponseText(parts)).toStartWith("## Code Review")
+  })
+
+  test("deduplicates repeated text chunks and returns content", () => {
+    const parts = [createTextPart("Result"), createTextPart("Result")]
+    expect(extractResponseText(parts)).toBe("Result")
+  })
+
+  test("returns longest informative text when multiple short updates exist", () => {
+    const parts = [
+      createTextPart("Working..."),
+      createTextPart("Still checking..."),
+      createTextPart("Found 3 issues:\n- bug A\n- bug B\n- bug C"),
+    ]
+    expect(extractResponseText(parts)).toContain("Found 3 issues")
   })
 
   test("returns text even when tool parts follow", () => {
