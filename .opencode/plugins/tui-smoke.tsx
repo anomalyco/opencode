@@ -1,7 +1,14 @@
 /** @jsxImportSource @opentui/solid */
-import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
+import { useKeyboard, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { RGBA, VignetteEffect } from "@opentui/core"
-import type { TuiKeybindSet, TuiPluginApi, TuiPluginMeta, TuiSlotPlugin } from "@opencode-ai/plugin/tui"
+import type {
+  TuiKeybindSet,
+  TuiPlugin,
+  TuiPluginApi,
+  TuiPluginMeta,
+  TuiPluginModule,
+  TuiSlotPlugin,
+} from "@opencode-ai/plugin/tui"
 
 const tabs = ["overview", "counter", "help"]
 const bind = {
@@ -608,7 +615,7 @@ const Modal = (props: {
   )
 }
 
-const home = (input: Cfg): TuiSlotPlugin => ({
+const home = (api: TuiPluginApi, input: Cfg) => ({
   slots: {
     home_logo(ctx) {
       const map = ctx.theme.current
@@ -641,6 +648,36 @@ const home = (input: Cfg): TuiSlotPlugin => ({
           ))}
         </box>
       )
+    },
+    home_prompt(ctx, value) {
+      const skin = look(ctx.theme.current)
+      type Prompt = (props: {
+        workspaceID?: string
+        hint?: JSX.Element
+        placeholders?: {
+          normal?: string[]
+          shell?: string[]
+        }
+      }) => JSX.Element
+      if (!("Prompt" in api.ui)) return null
+      const view = api.ui.Prompt
+      if (typeof view !== "function") return null
+      const Prompt = view as Prompt
+      const normal = [
+        `[SMOKE] route check for ${input.label}`,
+        "[SMOKE] confirm home_prompt slot override",
+        "[SMOKE] verify api.ui.Prompt rendering",
+      ]
+      const shell = ["printf '[SMOKE] home prompt\n'", "git status --short", "bun --version"]
+      const Hint = (
+        <box flexShrink={0} flexDirection="row" gap={1}>
+          <text fg={skin.muted}>
+            <span style={{ fg: skin.accent }}>•</span> smoke home prompt
+          </text>
+        </box>
+      )
+
+      return <Prompt workspaceID={value.workspace_id} hint={Hint} placeholders={{ normal, shell }} />
     },
     home_bottom(ctx) {
       const skin = look(ctx.theme.current)
@@ -699,8 +736,8 @@ const block = (input: Cfg, order: number, title: string, text: string): TuiSlotP
   },
 })
 
-const slot = (input: Cfg): TuiSlotPlugin[] => [
-  home(input),
+const slot = (api: TuiPluginApi, input: Cfg): TuiSlotPlugin[] => [
+  home(api, input),
   block(input, 50, "Smoke above", "renders above internal sidebar blocks"),
   block(input, 250, "Smoke between", "renders between internal sidebar blocks"),
   block(input, 650, "Smoke below", "renders below internal sidebar blocks"),
@@ -813,7 +850,7 @@ const reg = (api: TuiPluginApi, input: Cfg, keys: Keys) => {
   ])
 }
 
-const tui = async (api: TuiPluginApi, options: Record<string, unknown> | null, meta: TuiPluginMeta) => {
+const tui: TuiPlugin = async (api, options, meta) => {
   if (options?.enabled === false) return
 
   await api.theme.install("./smoke-theme.json")
@@ -841,12 +878,14 @@ const tui = async (api: TuiPluginApi, options: Record<string, unknown> | null, m
   ])
 
   reg(api, value, keys)
-  for (const item of slot(value)) {
+  for (const item of slot(api, value)) {
     api.slots.register(item)
   }
 }
 
-export default {
+const plugin: TuiPluginModule & { id: string } = {
   id: "tui-smoke",
   tui,
 }
+
+export default plugin

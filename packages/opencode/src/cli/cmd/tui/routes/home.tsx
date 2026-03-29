@@ -15,6 +15,10 @@ import { TuiPluginRuntime } from "../plugin"
 
 // TODO: what is the best way to do this?
 let once = false
+const placeholder = {
+  normal: ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"],
+  shell: ["ls -la", "git status", "pwd"],
+}
 
 export function Home() {
   const sync = useSync()
@@ -49,11 +53,12 @@ export function Home() {
     </box>
   )
 
-  let prompt: PromptRef
+  let prompt: PromptRef | undefined
   const args = useArgs()
   const local = useLocal()
   onMount(() => {
     if (once) return
+    if (!prompt) return
     if (route.initialPrompt) {
       prompt.set(route.initialPrompt)
       once = true
@@ -69,6 +74,7 @@ export function Home() {
       () => sync.ready && local.model.ready,
       (ready) => {
         if (!ready) return
+        if (!prompt) return
         if (!args.prompt) return
         if (prompt.current?.input !== args.prompt) return
         prompt.submit()
@@ -89,14 +95,17 @@ export function Home() {
         </box>
         <box height={1} minHeight={0} flexShrink={1} />
         <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0}>
-          <Prompt
-            ref={(r) => {
-              prompt = r
-              promptRef.set(r)
-            }}
-            hint={Hint}
-            workspaceID={route.workspaceID}
-          />
+          <TuiPluginRuntime.Slot name="home_prompt" mode="replace" workspace_id={route.workspaceID}>
+            <Prompt
+              ref={(r) => {
+                prompt = r
+                promptRef.set(r)
+              }}
+              hint={Hint}
+              workspaceID={route.workspaceID}
+              placeholders={placeholder}
+            />
+          </TuiPluginRuntime.Slot>
         </box>
         <TuiPluginRuntime.Slot name="home_bottom" />
         <box flexGrow={1} minHeight={0} />
