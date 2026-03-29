@@ -27,6 +27,20 @@ import { Log } from "@/util/log"
 import { LspTool } from "./lsp"
 import { Truncate } from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
+import {
+  BrowserOpenTool,
+  BrowserNavigateTool,
+  BrowserClickTool,
+  BrowserTypeTool,
+  BrowserScreenshotTool,
+  BrowserSnapshotTool,
+  BrowserScrollTool,
+  BrowserExtractTool,
+  BrowserEvaluateTool,
+  BrowserCloseTool,
+  BrowserWaitTool,
+  BrowserTabTool,
+} from "./browser"
 import { Glob } from "../util/glob"
 import { pathToFileURL } from "url"
 import { Effect, Layer, ServiceMap } from "effect"
@@ -134,6 +148,19 @@ export namespace ToolRegistry {
           ...(Flag.ATHENA_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
           ...(cfg.experimental?.batch_tool === true ? [BatchTool] : []),
           ...(Flag.ATHENA_EXPERIMENTAL_PLAN_MODE && Flag.ATHENA_CLIENT === "cli" ? [PlanExitTool] : []),
+          // Browser automation tools
+          BrowserOpenTool,
+          BrowserNavigateTool,
+          BrowserClickTool,
+          BrowserTypeTool,
+          BrowserScreenshotTool,
+          BrowserSnapshotTool,
+          BrowserScrollTool,
+          BrowserExtractTool,
+          BrowserEvaluateTool,
+          BrowserCloseTool,
+          BrowserWaitTool,
+          BrowserTabTool,
           ...custom,
         ]
       })

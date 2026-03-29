@@ -949,7 +949,7 @@ export namespace Config {
         .string()
         .optional()
         .describe(
-          "Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.",
+          "Default agent to use when none is specified. Must be a primary agent. Falls back to 'auto' if not set or if the specified agent is invalid.",
         ),
       username: z
         .string()
@@ -965,7 +965,10 @@ export namespace Config {
         .describe("@deprecated Use `agent` field instead."),
       agent: z
         .object({
-          // primary
+          // primary (browser automation)
+          auto: Agent.optional(),
+          interactive: Agent.optional(),
+          // primary (legacy coding)
           plan: Agent.optional(),
           build: Agent.optional(),
           // subagent
@@ -1068,6 +1071,23 @@ export namespace Config {
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
         })
         .optional(),
+      browser: z
+        .object({
+          headed: z.boolean().optional().describe("Show browser window (headed mode). Default: true."),
+          defaultUrl: z.string().optional().describe("Default URL to open when browser starts."),
+          timeout: z.number().int().positive().optional().describe("Default timeout for browser actions in milliseconds. Default: 30000."),
+          viewport: z
+            .object({
+              width: z.number().int().positive(),
+              height: z.number().int().positive(),
+            })
+            .optional()
+            .describe("Browser viewport size."),
+          userAgent: z.string().optional().describe("Custom User-Agent string for the browser."),
+          idleTimeout: z.number().int().positive().optional().describe("Idle timeout in ms before browser daemon auto-stops."),
+        })
+        .optional()
+        .describe("Browser automation configuration for Athena Browser Agent"),
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),

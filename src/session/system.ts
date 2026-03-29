@@ -14,6 +14,8 @@ import type { Provider } from "@/provider/provider"
 import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
 import { Skill } from "@/skill"
+import { BrowserState } from "../browser/state"
+import { Global } from "@/global"
 
 export namespace SystemPrompt {
   export function provider(model: Provider.Model) {
@@ -31,8 +33,17 @@ export namespace SystemPrompt {
     return [PROMPT_DEFAULT]
   }
 
-  export async function environment(model: Provider.Model) {
+  export async function environment(model: Provider.Model, sessionID?: string) {
     const project = Instance.project
+    const browserInfo = sessionID ? BrowserState.get(sessionID) : undefined
+    const browserLines = browserInfo
+      ? [
+          `  Browser: ${browserInfo.isRunning ? "running" : "stopped"}${browserInfo.headed ? " (headed/visible)" : " (headless)"}`,
+          browserInfo.currentUrl ? `  Browser URL: ${browserInfo.currentUrl}` : "",
+          `  Data directory: ${Global.Path.data}`,
+        ].filter(Boolean)
+      : [`  Data directory: ${Global.Path.data}`]
+
     return [
       [
         `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
@@ -43,6 +54,7 @@ export namespace SystemPrompt {
         `  Is directory a git repo: ${project.vcs === "git" ? "yes" : "no"}`,
         `  Platform: ${process.platform}`,
         `  Today's date: ${new Date().toDateString()}`,
+        ...browserLines,
         `</env>`,
         `<directories>`,
         `  ${

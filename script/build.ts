@@ -220,6 +220,15 @@ for (const item of targets) {
   }
 
   await $`rm -rf ./dist/${name}/bin/tui`
+
+  // Bundle agent-browser binary for this platform
+  const agentBrowserBinary = await bundleAgentBrowser(item.os, item.arch, `dist/${name}/bin`)
+  if (agentBrowserBinary) {
+    console.log(`  Bundled agent-browser for ${item.os}-${item.arch}`)
+  } else {
+    console.log(`  Warning: agent-browser not bundled for ${item.os}-${item.arch}`)
+  }
+
   await Bun.file(`dist/${name}/package.json`).write(
     JSON.stringify(
       {
@@ -244,6 +253,80 @@ if (process.env.ATHENA_RELEASE) {
     }
   }
   await $`gh release upload v${VERSION} ./dist/*.zip ./dist/*.tar.gz --clobber --repo ${process.env.GH_REPO}`
+}
+
+/**
+ * Bundle the agent-browser binary for a specific platform.
+ * Tries to copy from node_modules first, then falls back to npx-based resolution.
+ */
+async function bundleAgentBrowser(os: string, arch: string, outDir: string): Promise<boolean> {
+  const ext = os === "win32" ? ".exe" : ""
+  const outPath = path.join(outDir, `agent-browser${ext}`)
+
+  // Map our target naming to agent-browser's naming convention
+  const platformMap: Record<string, string> = {
+    darwin: "darwin",
+    linux: "linux",
+    win32: "win32",
+  }
+  const agentBrowserPlatform = platformMap[os]
+  if (!agentBrowserPlatform) return false
+
+  // Try to find agent-browser binary from node_modules
+  const nmBin = path.join(dir, "node_modules", ".bin", `agent-browser${ext}`)
+  try {
+    if (fs.existsSync(nmBin)) {
+      const realPath = fs.realpathSync(nmBin)
+      fs.copyFileSync(realPath, outPath)
+      if (os !== "win32") {
+        fs.chmodSync(outPath, 0o755)
+      }
+      return true
+    }
+  } catch {}
+
+  // Try to find in the agent-browser package directory
+  const agentBrowserPkg = path.join(dir, "node_modules", "agent-browser")
+  try {
+    if (fs.existsSync(agentBrowserPkg)) {
+      // Look for platform-specific binaries in the package
+      const binDir = path.join(agentBrowserPkg, "bin")
+      if (fs.existsSync(binDir)) {
+        const candidates = [
+          `agent-browser-${agentBrowserPlatform}-${arch}${ext}`,
+          `agent-browser${ext}`,
+        ]
+        for (const candidate of candidates) {
+          const candidatePath = path.join(binDir, candidate)
+          if (fs.existsSync(candidatePath)) {
+            fs.copyFileSync(candidatePath, outPath)
+            if (os !== "win32") {
+              fs.chmodSync(outPath, 0o755)
+            }
+            return true
+          }
+        }
+      }
+    }
+  } catch {}
+
+  // If building for current platform, try to find it in PATH
+  if (os === process.platform && arch === process.arch) {
+    try {
+      const whichCmd = process.platform === "win32" ? "where" : "which"
+      const result = await $`${whichCmd} agent-browser`.text()
+      const binaryPath = result.trim().split("\n")[0]?.trim()
+      if (binaryPath && fs.existsSync(binaryPath)) {
+        fs.copyFileSync(binaryPath, outPath)
+        if (os !== "win32") {
+          fs.chmodSync(outPath, 0o755)
+        }
+        return true
+      }
+    } catch {}
+  }
+
+  return false
 }
 
 export { binaries }
