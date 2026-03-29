@@ -3,7 +3,7 @@ import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { createSignal } from "solid-js"
 import { Installation } from "@/installation"
-import { win32FlushInputBuffer } from "../win32"
+import { flushInputBuffer } from "../console"
 
 export function ErrorComponent(props: {
   error: Error
@@ -19,7 +19,7 @@ export function ErrorComponent(props: {
     await props.onBeforeExit?.()
     renderer.setTerminalTitle("")
     renderer.destroy()
-    win32FlushInputBuffer()
+    flushInputBuffer()
     await props.onExit()
   }
 

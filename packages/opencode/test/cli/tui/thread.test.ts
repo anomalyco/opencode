@@ -7,7 +7,7 @@ import { Rpc } from "../../../src/util/rpc"
 import { UI } from "../../../src/cli/ui"
 import * as Timeout from "../../../src/util/timeout"
 import * as Network from "../../../src/cli/network"
-import * as Win32 from "../../../src/cli/cmd/tui/win32"
+import * as Win32 from "../../../src/cli/cmd/tui/console"
 import { TuiConfig } from "../../../src/config/tui"
 import { Instance } from "../../../src/project/instance"
 
