@@ -6,6 +6,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
 import {
   CallToolResultSchema,
+  LoggingMessageNotificationSchema,
   type Tool as MCPToolDef,
   ToolListChangedNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js"
@@ -57,6 +58,15 @@ export namespace MCP {
     z.object({
       mcpName: z.string(),
       url: z.string(),
+    }),
+  )
+
+  export const MessageReceived = BusEvent.define(
+    "mcp.message.received",
+    z.object({
+      server: z.string(),
+      level: z.string(),
+      data: z.string(),
     }),
   )
 
@@ -474,6 +484,17 @@ export namespace MCP {
 
           s.defs[name] = listed
           await Effect.runPromise(bus.publish(ToolsChanged, { server: name }).pipe(Effect.ignore))
+        })
+
+        client.setNotificationHandler(LoggingMessageNotificationSchema, async (notification) => {
+          const level = notification.params.level ?? "info"
+          const data = typeof notification.params.data === "string"
+            ? notification.params.data
+            : JSON.stringify(notification.params.data)
+          log.info("message notification received", { server: name, level, data: data.slice(0, 200) })
+          await Effect.runPromise(
+            bus.publish(MessageReceived, { server: name, level, data }).pipe(Effect.ignore),
+          )
         })
       }
 
