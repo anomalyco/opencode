@@ -509,7 +509,7 @@ description: A test skill for toggle testing.
   })
 })
 
-test("Skill.disable writes to config and persists across restart", async () => {
+test("Config.update persists skill enabled state across restart", async () => {
   await using tmp = await tmpdir({
     git: true,
     init: async (dir) => {

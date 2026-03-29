@@ -383,8 +383,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         const status = sync.data.skill[name]
         return (status?.status ?? "enabled") === "enabled"
       },
-      async toggle(name: string, enabled = (sync.data.skill[name]?.status ?? "enabled") === "enabled") {
-        if (enabled) {
+      async toggle(name: string, currentlyEnabled = (sync.data.skill[name]?.status ?? "enabled") === "enabled") {
+        if (currentlyEnabled) {
           await sdk.client.skill.disable({ name }, { throwOnError: true })
           return
         }
