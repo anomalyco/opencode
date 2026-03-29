@@ -11,6 +11,9 @@ let
       hash = lib.fakeHash;
     };
   });
+
+  # Generate opencode.json from Nix attrs
+  opencodeConfigFile = pkgs.writeText "opencode.json" (builtins.toJSON cfg.settings);
 in
 {
   options.services.opencode-telegram = {
@@ -29,7 +32,7 @@ in
           };
         })
       '';
-      description = "The opencode package to use. Defaults to nixpkgs opencode with Avimitin/opencode source.";
+      description = "The opencode package to use.";
     };
 
     user = lib.mkOption {
@@ -54,30 +57,43 @@ in
       type = lib.types.path;
       description = ''
         Path to a file containing the Telegram bot token.
-        The file should contain just the token string.
         Use agenix or sops-nix to manage this secret.
       '';
     };
 
-    anthropicKeyFile = lib.mkOption {
-      type = lib.types.nullOr lib.types.path;
-      default = null;
+    settings = lib.mkOption {
+      type = lib.types.attrs;
+      default = {};
       description = ''
-        Path to a file containing the Anthropic API key.
-        The file should contain just the key string.
+        OpenCode configuration as a Nix attribute set.
+        This will be serialized to opencode.json.
+        See https://opencode.ai/docs/configuration for all options.
+
+        Example:
+          settings = {
+            model = "anthropic/claude-sonnet-4-6";
+            provider = {
+              anthropic = {
+                api_key_env = "ANTHROPIC_API_KEY";
+              };
+            };
+            mcp = { };
+            permission = {
+              "*" = "auto";
+            };
+          };
       '';
-    };
-
-    provider = lib.mkOption {
-      type = lib.types.str;
-      default = "anthropic";
-      description = "LLM provider to use (anthropic, openai, etc).";
-    };
-
-    model = lib.mkOption {
-      type = lib.types.str;
-      default = "claude-sonnet-4-6";
-      description = "Model ID to use.";
+      example = lib.literalExpression ''
+        {
+          model = "anthropic/claude-sonnet-4-6";
+          provider = {
+            anthropic = {
+              api_key_env = "ANTHROPIC_API_KEY";
+            };
+          };
+          permission = { "*" = "auto"; };
+        }
+      '';
     };
 
     accessConfig = lib.mkOption {
@@ -90,6 +106,16 @@ in
         mentionPatterns = [];
       };
       description = "Telegram channel access.json configuration.";
+    };
+
+    environmentFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.path;
+      default = null;
+      description = ''
+        Path to an environment file (EnvironmentFile= in systemd).
+        Use this for secrets like ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.
+        Format: KEY=VALUE per line.
+      '';
     };
 
     extraEnvironment = lib.mkOption {
@@ -136,9 +162,14 @@ in
         ProtectHome = "yes";
         PrivateTmp = true;
         ReadWritePaths = [ cfg.stateDir ];
+      } // lib.optionalAttrs (cfg.environmentFile != null) {
+        EnvironmentFile = cfg.environmentFile;
       };
 
       preStart = ''
+        # Write opencode.json
+        cp ${opencodeConfigFile} ${cfg.stateDir}/opencode.json
+
         # Write access.json
         cat > ${cfg.stateDir}/.opencode/channels/telegram/access.json <<'ACCESSEOF'
         ${builtins.toJSON cfg.accessConfig}
@@ -155,11 +186,6 @@ in
       } // cfg.extraEnvironment;
 
       script = ''
-        # Load API key if provided
-        ${lib.optionalString (cfg.anthropicKeyFile != null) ''
-          export ANTHROPIC_API_KEY="$(cat ${cfg.anthropicKeyFile})"
-        ''}
-
         exec ${cfg.package}/bin/bun run ${cfg.package}/lib/opencode-telegram/src/index.ts
       '';
     };
