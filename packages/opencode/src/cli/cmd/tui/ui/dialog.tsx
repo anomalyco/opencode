@@ -26,8 +26,11 @@ export function Dialog(
 
   return (
     <box
-      onMouseDown={() => {
-        dismiss = !!renderer.getSelection()
+      onMouseDown={(e) => {
+        if (renderer.getSelection()) {
+          renderer.clearSelection()
+        }
+        dismiss = e.button !== MouseButton.LEFT
       }}
       onMouseUp={() => {
         if (dismiss) {
