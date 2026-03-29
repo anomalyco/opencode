@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import path from "path"
 import { Agent } from "../../src/agent/agent"
 import { Instance } from "../../src/project/instance"
+import type { Provider } from "../../src/provider/provider"
 import { SystemPrompt } from "../../src/session/system"
 import { tmpdir } from "../fixture/fixture"
 
@@ -55,5 +56,46 @@ description: ${description}
     } finally {
       process.env.OPENCODE_TEST_HOME = home
     }
+  })
+
+  test("environment includes directory tree for git projects", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "dira", "one.ts"), "export const one = 1\n")
+        await Bun.write(path.join(dir, "dirb", "sub", "two.ts"), "export const two = 2\n")
+        await Bun.write(path.join(dir, ".opencode", "skill", "s", "SKILL.md"), "# hidden\n")
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = {
+          id: "test-model",
+          providerID: "test",
+          name: "Test",
+          limit: { context: 1000, output: 100 },
+          cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+          capabilities: {
+            toolcall: true,
+            attachment: false,
+            reasoning: false,
+            temperature: true,
+            input: { text: true, image: false, audio: false, video: false },
+            output: { text: true, image: false, audio: false, video: false },
+          },
+          api: { id: "gpt-5", npm: "@ai-sdk/openai" },
+          options: {},
+        } as Provider.Model
+
+        const out = (await SystemPrompt.environment(model))[0]
+        expect(out).toContain("<directories>")
+        expect(out).toContain("dira")
+        expect(out).toContain("dirb")
+        expect(out).toContain("dirb/sub")
+        expect(out).not.toContain(".opencode")
+      },
+    })
   })
 })
