@@ -156,13 +156,22 @@ export const layer: Layer.Layer<
             description: def.description,
             execute: (args, toolCtx) =>
               Effect.gen(function* () {
+                let input: unknown = args
+                if (zodParams) {
+                  const validated = zodParams.safeParse(args)
+                  if (!validated.success)
+                    throw new Error(
+                      `The ${id} tool was called with invalid arguments: ${validated.error}.\nPlease rewrite the input so it satisfies the expected schema.`,
+                    )
+                  input = validated.data
+                }
                 const pluginCtx: PluginToolContext = {
                   ...toolCtx,
                   ask: (req) => toolCtx.ask(req),
                   directory: ctx.directory,
                   worktree: ctx.worktree,
                 }
-                const result = yield* Effect.promise(() => def.execute(args as any, pluginCtx))
+                const result = yield* Effect.promise(() => def.execute(input as any, pluginCtx))
                 const output = typeof result === "string" ? result : result.output
                 const metadata = typeof result === "string" ? {} : (result.metadata ?? {})
                 const attachments = typeof result === "string" ? undefined : result.attachments
