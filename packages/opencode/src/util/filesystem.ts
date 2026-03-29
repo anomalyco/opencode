@@ -116,10 +116,18 @@ export namespace Filesystem {
   /**
    * Normalize path separators to forward slashes for consistent database queries.
    * This fixes Windows path compatibility issues where paths might use backslashes
-   * in some cases and forward slashes in others.
+   * in some cases and forward slashes in others, and ensures consistent drive letter casing.
    */
   export function normalizePathSeparators(p: string): string {
-    return p.replace(/\\/g, "/")
+    // Convert backslashes to forward slashes
+    let normalized = p.replace(/\\/g, "/")
+
+    // Normalize Windows drive letters to uppercase (e.g., c:/ -> C:/)
+    if (/^[a-z]:\//.test(normalized)) {
+      normalized = normalized[0].toUpperCase() + normalized.slice(1)
+    }
+
+    return normalized
   }
 
   // We cannot rely on path.resolve() here because git.exe may come from Git Bash, Cygwin, or MSYS2, so we need to translate these paths at the boundary.
