@@ -226,6 +226,20 @@ export namespace SessionPrompt {
         yield* sessions.setTitle({ sessionID: input.session.id, title: t }).pipe(Effect.catchCause(() => Effect.void))
       })
 
+      const getModel = (providerID: ProviderID, modelID: ModelID, sessionID: SessionID) =>
+        Effect.promise(() =>
+          Provider.getModel(providerID, modelID).catch((e) => {
+            if (Provider.ModelNotFoundError.isInstance(e)) {
+              const hint = e.data.suggestions?.length ? ` Did you mean: ${e.data.suggestions.join(", ")}?` : ""
+              Bus.publish(Session.Event.Error, {
+                sessionID,
+                error: new NamedError.Unknown({ message: `Model not found: ${e.data.providerID}/${e.data.modelID}.${hint}` }).toObject(),
+              })
+            }
+            throw e
+          }),
+        )
+
       const prompt = Effect.fn("SessionPrompt.prompt")(function* (input: PromptInput) {
         const session = yield* sessions.get(input.sessionID)
         yield* Effect.promise(() => SessionRevert.cleanup(session))
@@ -298,20 +312,7 @@ export namespace SessionPrompt {
               history: msgs,
             }).pipe(Effect.ignore, Effect.forkIn(scope))
 
-          const model = yield* Effect.promise(() =>
-            Provider.getModel(lastUser!.model.providerID, lastUser!.model.modelID).catch((e) => {
-              if (Provider.ModelNotFoundError.isInstance(e)) {
-                const hint = e.data.suggestions?.length ? ` Did you mean: ${e.data.suggestions.join(", ")}?` : ""
-                Bus.publish(Session.Event.Error, {
-                  sessionID,
-                  error: new NamedError.Unknown({
-                    message: `Model not found: ${e.data.providerID}/${e.data.modelID}.${hint}`,
-                  }).toObject(),
-                })
-              }
-              throw e
-            }),
-          )
+          const model = yield* getModel(lastUser!.model.providerID, lastUser!.model.modelID, sessionID)
           const task = tasks.pop()
 
           if (task?.type === "subtask") {
@@ -596,7 +597,7 @@ export namespace SessionPrompt {
 
         const raw = input.arguments.match(argsRegex) ?? []
         const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
-        const templateCommand = yield* Effect.promise(() => Promise.resolve(cmd.template))
+        const templateCommand = yield* Effect.promise(async () => cmd.template)
 
         const placeholders = templateCommand.match(placeholderRegex) ?? []
         let last = 0
@@ -642,20 +643,7 @@ export namespace SessionPrompt {
           return await lastModelImpl(input.sessionID)
         })
 
-        yield* Effect.promise(() =>
-          Provider.getModel(taskModel.providerID, taskModel.modelID).catch((e) => {
-            if (Provider.ModelNotFoundError.isInstance(e)) {
-              const hint = e.data.suggestions?.length ? ` Did you mean: ${e.data.suggestions.join(", ")}?` : ""
-              Bus.publish(Session.Event.Error, {
-                sessionID: input.sessionID,
-                error: new NamedError.Unknown({
-                  message: `Model not found: ${e.data.providerID}/${e.data.modelID}.${hint}`,
-                }).toObject(),
-              })
-            }
-            throw e
-          }),
-        )
+        yield* getModel(taskModel.providerID, taskModel.modelID, input.sessionID)
 
         const agent = yield* agents.get(agentName)
         if (!agent) {
