@@ -9,7 +9,7 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { getFilename } from "@opencode-ai/util/path"
 import { A, useNavigate, useParams } from "@solidjs/router"
-import { type Accessor, createMemo, For, type JSX, Match, onCleanup, Show, Switch } from "solid-js"
+import { type Accessor, createMemo, For, type JSX, Match, Show, Switch } from "solid-js"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
@@ -17,7 +17,7 @@ import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
-import { hasProjectPermissions } from "./helpers"
+import { hasProjectPermissions, sessionPrefetchCandidates } from "./helpers"
 
 const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
@@ -100,14 +100,12 @@ const SessionRow = (props: {
   warmHover: () => void
   warmPress: () => void
   warmFocus: () => void
-  cancelHoverPrefetch: () => void
 }): JSX.Element => (
   <A
     href={`/${props.slug}/session/${props.session.id}`}
     class={`flex items-center gap-1 min-w-0 w-full text-left focus:outline-none ${props.dense ? "py-0.5" : "py-1"}`}
     onPointerDown={props.warmPress}
     onPointerEnter={props.warmHover}
-    onPointerLeave={props.cancelHoverPrefetch}
     onFocus={props.warmFocus}
     onClick={() => {
       props.setHoverSession(undefined)
@@ -241,44 +239,19 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const hoverEnabled = createMemo(() => (props.popover ?? true) && hoverAllowed())
   const isActive = createMemo(() => props.session.id === params.id)
 
-  const warm = (span: number, priority: "high" | "low") => {
+  const warm = () => {
     const nav = props.navList?.()
     const list = nav?.some((item) => item.id === props.session.id && item.directory === props.session.directory)
       ? nav
       : props.list
 
-    props.prefetchSession(props.session, priority)
-
     const idx = list.findIndex((item) => item.id === props.session.id && item.directory === props.session.directory)
     if (idx === -1) return
 
-    for (let step = 1; step <= span; step++) {
-      const next = list[idx + step]
-      if (next) props.prefetchSession(next, step === 1 ? "high" : priority)
-
-      const prev = list[idx - step]
-      if (prev) props.prefetchSession(prev, step === 1 ? "high" : priority)
+    for (const item of sessionPrefetchCandidates(list, idx)) {
+      props.prefetchSession(item.session, item.priority)
     }
   }
-
-  const hoverPrefetch = {
-    current: undefined as ReturnType<typeof setTimeout> | undefined,
-  }
-  const cancelHoverPrefetch = () => {
-    if (hoverPrefetch.current === undefined) return
-    clearTimeout(hoverPrefetch.current)
-    hoverPrefetch.current = undefined
-  }
-  const scheduleHoverPrefetch = () => {
-    warm(1, "high")
-    if (hoverPrefetch.current !== undefined) return
-    hoverPrefetch.current = setTimeout(() => {
-      hoverPrefetch.current = undefined
-      warm(2, "low")
-    }, 80)
-  }
-
-  onCleanup(cancelHoverPrefetch)
 
   const messageLabel = (message: Message) => {
     const parts = sessionStore.part[message.id] ?? []
@@ -299,10 +272,9 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       setHoverSession={props.setHoverSession}
       clearHoverProjectSoon={props.clearHoverProjectSoon}
       sidebarOpened={layout.sidebar.opened}
-      warmHover={scheduleHoverPrefetch}
-      warmPress={() => warm(2, "high")}
-      warmFocus={() => warm(2, "high")}
-      cancelHoverPrefetch={cancelHoverPrefetch}
+      warmHover={warm}
+      warmPress={warm}
+      warmFocus={warm}
     />
   )
 

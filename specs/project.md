@@ -35,6 +35,8 @@ POST /project/:projectID/session/:sessionID/compact
 
 GET /project/:projectID/session/:sessionID/message -> { info: Message, parts: Part[] }[]
 
+Session open and sidebar prefetch should request a bounded first page from this endpoint and lazy-load older history instead of eagerly hydrating deep message ranges.
+
 GET /project/:projectID/session/:sessionID/message/:messageID -> { info: Message, parts: Part[] }
 
 POST /project/:projectID/session/:sessionID/message -> { info: Message, parts: Part[] }

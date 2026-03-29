@@ -13,6 +13,7 @@ import {
   errorMessage,
   hasProjectPermissions,
   latestRootSession,
+  sessionPrefetchCandidates,
   workspaceKey,
 } from "./helpers"
 
@@ -207,5 +208,46 @@ describe("layout workspace helpers", () => {
     expect(errorMessage({ data: { message: "boom" } }, "fallback")).toBe("boom")
     expect(errorMessage(new Error("broken"), "fallback")).toBe("broken")
     expect(errorMessage("unknown", "fallback")).toBe("fallback")
+  })
+
+  test("prefetch candidates default to the selected session", () => {
+    const list = [
+      session({ id: "one", directory: "/tmp/app" }),
+      session({ id: "two", directory: "/tmp/app" }),
+      session({ id: "three", directory: "/tmp/app" }),
+    ]
+
+    expect(sessionPrefetchCandidates(list, 1)).toEqual([{ session: list[1], priority: "high" }])
+  })
+
+  test("prefetch candidates can expand to nearby sessions", () => {
+    const list = [
+      session({ id: "one", directory: "/tmp/app" }),
+      session({ id: "two", directory: "/tmp/app" }),
+      session({ id: "three", directory: "/tmp/app" }),
+      session({ id: "four", directory: "/tmp/app" }),
+      session({ id: "five", directory: "/tmp/app" }),
+    ]
+
+    expect(sessionPrefetchCandidates(list, 2, { span: 2 })).toEqual([
+      { session: list[2], priority: "high" },
+      { session: list[3], priority: "high" },
+      { session: list[1], priority: "high" },
+      { session: list[4], priority: "low" },
+      { session: list[0], priority: "low" },
+    ])
+  })
+
+  test("prefetch candidates can omit the selected session", () => {
+    const list = [
+      session({ id: "one", directory: "/tmp/app" }),
+      session({ id: "two", directory: "/tmp/app" }),
+      session({ id: "three", directory: "/tmp/app" }),
+    ]
+
+    expect(sessionPrefetchCandidates(list, 1, { current: false, span: 1 })).toEqual([
+      { session: list[2], priority: "high" },
+      { session: list[0], priority: "high" },
+    ])
   })
 })

@@ -1,5 +1,7 @@
 const key = (directory: string, sessionID: string) => `${directory}\n${sessionID}`
 
+export const SESSION_PAGE_SIZE = 80
+
 export const SESSION_PREFETCH_TTL = 15_000
 
 type Meta = {

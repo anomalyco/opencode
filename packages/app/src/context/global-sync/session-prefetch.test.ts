@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  SESSION_PAGE_SIZE,
   clearSessionPrefetch,
   clearSessionPrefetchDirectory,
   getSessionPrefetch,
@@ -67,8 +68,8 @@ describe("session prefetch", () => {
     expect(
       shouldSkipSessionPrefetch({
         message: true,
-        info: { limit: 200, cursor: "x", complete: false, at: 1 },
-        chunk: 200,
+        info: { limit: SESSION_PAGE_SIZE, cursor: "x", complete: false, at: 1 },
+        chunk: SESSION_PAGE_SIZE,
         now: 1 + 15_001,
       }),
     ).toBe(false)
@@ -78,8 +79,8 @@ describe("session prefetch", () => {
     expect(
       shouldSkipSessionPrefetch({
         message: true,
-        info: { limit: 400, cursor: "x", complete: false, at: 1 },
-        chunk: 200,
+        info: { limit: SESSION_PAGE_SIZE * 2, cursor: "x", complete: false, at: 1 },
+        chunk: SESSION_PAGE_SIZE,
         now: 1 + 15_001,
       }),
     ).toBe(true)
@@ -88,7 +89,7 @@ describe("session prefetch", () => {
       shouldSkipSessionPrefetch({
         message: true,
         info: { limit: 120, complete: true, at: 1 },
-        chunk: 200,
+        chunk: SESSION_PAGE_SIZE,
         now: 1 + 15_001,
       }),
     ).toBe(true)

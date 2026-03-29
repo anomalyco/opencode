@@ -37,6 +37,7 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { clearWorkspaceTerminals } from "@/context/terminal"
 import { dropSessionCaches, pickSessionCacheEvictions } from "@/context/global-sync/session-cache"
 import {
+  SESSION_PAGE_SIZE,
   clearSessionPrefetchInflight,
   clearSessionPrefetch,
   getSessionPrefetch,
@@ -68,6 +69,7 @@ import {
   effectiveWorkspaceOrder,
   errorMessage,
   latestRootSession,
+  sessionPrefetchCandidates,
   sortedRootSessions,
   workspaceKey,
 } from "./layout/helpers"
@@ -685,10 +687,9 @@ export default function Layout(props: ParentProps) {
     running: number
   }
 
-  const prefetchChunk = 200
+  const prefetchChunk = SESSION_PAGE_SIZE
   const prefetchConcurrency = 2
   const prefetchPendingLimit = 10
-  const span = 4
   const prefetchToken = { value: 0 }
   const prefetchQueues = new Map<string, PrefetchQueue>()
 
@@ -901,13 +902,9 @@ export default function Layout(props: ParentProps) {
     pumpPrefetch(directory)
   }
 
-  const warm = (sessions: Session[], index: number) => {
-    for (let offset = 1; offset <= span; offset++) {
-      const next = sessions[index + offset]
-      if (next) prefetchSession(next, offset === 1 ? "high" : "low")
-
-      const prev = sessions[index - offset]
-      if (prev) prefetchSession(prev, offset === 1 ? "high" : "low")
+  const warm = (sessions: Session[], index: number, opts?: { current?: boolean; span?: number }) => {
+    for (const item of sessionPrefetchCandidates(sessions, index, opts)) {
+      prefetchSession(item.session, item.priority)
     }
   }
 
@@ -918,12 +915,7 @@ export default function Layout(props: ParentProps) {
     const index = params.id ? sessions.findIndex((s) => s.id === params.id) : 0
     if (index === -1) return
 
-    if (!params.id) {
-      const first = sessions[index]
-      if (first) prefetchSession(first, "high")
-    }
-
-    warm(sessions, index)
+    if (!params.id) warm(sessions, index)
   })
 
   function navigateSessionByOffset(offset: number) {
@@ -942,7 +934,6 @@ export default function Layout(props: ParentProps) {
     const session = sessions[targetIndex]
     if (!session) return
 
-    prefetchSession(session, "high")
     warm(sessions, targetIndex)
 
     navigateToSession(session)
@@ -986,7 +977,6 @@ export default function Layout(props: ParentProps) {
       if (!session) continue
       if (notification.session.unseenCount(session.id) === 0) continue
 
-      prefetchSession(session, "high")
       warm(sessions, index)
 
       navigateToSession(session)

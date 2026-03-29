@@ -60,6 +60,29 @@ export const childMapByParent = (sessions: Session[] | undefined) => {
   return map
 }
 
+export const sessionPrefetchCandidates = (
+  sessions: Session[],
+  index: number,
+  opts: { current?: boolean; span?: number } = {},
+) => {
+  const root = sessions[index]
+  if (!root) return [] as Array<{ session: Session; priority: "high" | "low" }>
+
+  const span = opts.span ?? 0
+  const items: Array<{ session: Session; priority: "high" | "low" }> =
+    opts.current === false ? [] : [{ session: root, priority: "high" }]
+
+  for (let step = 1; step <= span; step++) {
+    const priority = step === 1 ? "high" : "low"
+    const next = sessions[index + step]
+    if (next) items.push({ session: next, priority })
+    const prev = sessions[index - step]
+    if (prev) items.push({ session: prev, priority })
+  }
+
+  return items
+}
+
 export const displayName = (project: { name?: string; worktree: string }) =>
   project.name || getFilename(project.worktree)
 

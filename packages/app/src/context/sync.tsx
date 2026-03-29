@@ -4,6 +4,7 @@ import { Binary } from "@opencode-ai/util/binary"
 import { retry } from "@opencode-ai/util/retry"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import {
+  SESSION_PAGE_SIZE,
   clearSessionPrefetch,
   getSessionPrefetch,
   getSessionPrefetchPromise,
@@ -180,7 +181,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       return globalSync.child(directory)
     }
     const absolute = (path: string) => (current()[0].path.directory + "/" + path).replace("//", "/")
-    const initialMessagePageSize = 80
+    const initialMessagePageSize = SESSION_PAGE_SIZE
     const historyMessagePageSize = 200
     const inflight = new Map<string, Promise<void>>()
     const inflightDiff = new Map<string, Promise<void>>()
