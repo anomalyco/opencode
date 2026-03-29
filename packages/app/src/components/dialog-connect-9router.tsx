@@ -9,6 +9,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { useMutation } from "@tanstack/solid-query"
 import { createSignal, For, Match, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
+import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { DialogSelectProvider } from "./dialog-select-provider"
@@ -30,6 +31,7 @@ type FetchState =
 export function DialogConnect9Router(props: Props) {
   const dialog = useDialog()
   const globalSync = useGlobalSync()
+  const globalSDK = useGlobalSDK()
   const language = useLanguage()
 
   const [baseURL, setBaseURL] = createSignal(DEFAULT_BASE_URL)
@@ -116,8 +118,9 @@ export function DialogConnect9Router(props: Props) {
       })
       return { name: NINEROUTER_NAME, count: chosenIDs.length }
     },
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       if (!result) return
+      await globalSDK.client.global.dispose()
       dialog.close()
       showToast({
         variant: "success",
