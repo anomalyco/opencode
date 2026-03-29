@@ -22,25 +22,17 @@ export const WorktreeAdaptor: Adaptor = {
   },
   async create(info) {
     const config = Config.parse(info)
-    const bootstrap = await Worktree.createFromInfo({
+    await Worktree.createFromInfo({
       name: config.name,
       directory: config.directory,
       branch: config.branch,
     })
-    return bootstrap()
   },
   async remove(info) {
     const config = Config.parse(info)
     await Worktree.remove({ directory: config.directory })
   },
-  async fetch(info, input: RequestInfo | URL, init?: RequestInit) {
-    const config = Config.parse(info)
-    const { WorkspaceServer } = await import("../workspace-server/server")
-    const url = input instanceof Request || input instanceof URL ? input : new URL(input, "http://opencode.internal")
-    const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
-    headers.set("x-opencode-directory", config.directory)
-
-    const request = new Request(url, { ...init, headers })
-    return WorkspaceServer.App().fetch(request)
+  async fetch(_info, _input: RequestInfo | URL, _init?: RequestInit) {
+    throw new Error("fetch not implemented")
   },
 }

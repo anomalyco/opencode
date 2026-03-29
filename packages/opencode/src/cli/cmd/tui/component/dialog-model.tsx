@@ -5,6 +5,7 @@ import { map, pipe, flatMap, entries, filter, sortBy, take } from "remeda"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
 import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
+import { DialogVariant } from "./dialog-variant"
 import { useKeybind } from "../context/keybind"
 import * as fuzzysort from "fuzzysort"
 
@@ -50,8 +51,7 @@ export function DialogModel(props: { providerID?: string }) {
             disabled: provider.id === "opencode" && model.id.includes("-nano"),
             footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
             onSelect: () => {
-              dialog.clear()
-              local.model.set({ providerID: provider.id, modelID: model.id }, { recent: true })
+              onSelect(provider.id, model.id)
             },
           },
         ]
@@ -88,8 +88,7 @@ export function DialogModel(props: { providerID?: string }) {
             disabled: provider.id === "opencode" && model.includes("-nano"),
             footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
             onSelect() {
-              dialog.clear()
-              local.model.set({ providerID: provider.id, modelID: model }, { recent: true })
+              onSelect(provider.id, model)
             },
           })),
           filter((x) => {
@@ -134,6 +133,15 @@ export function DialogModel(props: { providerID?: string }) {
   )
 
   const title = createMemo(() => provider()?.name ?? "Select model")
+
+  function onSelect(providerID: string, modelID: string) {
+    local.model.set({ providerID, modelID }, { recent: true })
+    if (local.model.variant.list().length > 0) {
+      dialog.replace(() => <DialogVariant />)
+      return
+    }
+    dialog.clear()
+  }
 
   return (
     <DialogSelect<ReturnType<typeof options>[number]["value"]>
