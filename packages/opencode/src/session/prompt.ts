@@ -375,7 +375,7 @@ export namespace SessionPrompt {
           })
           const ctrl = new AbortController()
           const handle = yield* processor.create({
-            assistantMessage: msg,
+            assistantMessage: msg as MessageV2.Assistant,
             sessionID,
             model,
             abort: ctrl.signal,
@@ -882,7 +882,7 @@ export namespace SessionPrompt {
     const { task, model, lastUser, sessionID, session, msgs, signal } = input
     const taskTool = await TaskTool.init()
     const taskModel = task.model ? await Provider.getModel(task.model.providerID, task.model.modelID) : model
-    const assistantMessage: MessageV2.Assistant = await Session.updateMessage({
+    const assistantMessage = (await Session.updateMessage({
       id: MessageID.ascending(),
       role: "assistant",
       parentID: lastUser.id,
@@ -896,8 +896,8 @@ export namespace SessionPrompt {
       modelID: taskModel.id,
       providerID: taskModel.providerID,
       time: { created: Date.now() },
-    })
-    let part: MessageV2.ToolPart = await Session.updatePart({
+    })) as MessageV2.Assistant
+    let part = (await Session.updatePart({
       id: PartID.ascending(),
       messageID: assistantMessage.id,
       sessionID: assistantMessage.sessionID,
@@ -909,7 +909,7 @@ export namespace SessionPrompt {
         input: { prompt: task.prompt, description: task.description, subagent_type: task.agent, command: task.command },
         time: { start: Date.now() },
       },
-    })
+    })) as MessageV2.ToolPart
     const taskArgs = {
       prompt: task.prompt,
       description: task.description,
@@ -935,11 +935,11 @@ export namespace SessionPrompt {
       extra: { bypassAgentCheck: true },
       messages: msgs,
       async metadata(val) {
-        part = await Session.updatePart({
+        part = (await Session.updatePart({
           ...part,
           type: "tool",
           state: { ...part.state, ...val },
-        } satisfies MessageV2.ToolPart)
+        } satisfies MessageV2.ToolPart)) as MessageV2.ToolPart
       },
       async ask(req) {
         await Permission.ask({
