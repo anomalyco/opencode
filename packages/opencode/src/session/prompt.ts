@@ -100,6 +100,7 @@ export namespace SessionPrompt {
       const compaction = yield* SessionCompaction.Service
       const plugin = yield* Plugin.Service
       const commands = yield* Command.Service
+      const permission = yield* Permission.Service
       const fsys = yield* AppFileSystem.Service
       const mcp = yield* MCP.Service
       const lsp = yield* LSP.Service
@@ -373,6 +374,173 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         })
         userMessage.parts.push(part)
         return input.messages
+      })
+
+      const resolveTools = Effect.fn("SessionPrompt.resolveTools")(function* (input: {
+        agent: Agent.Info
+        model: Provider.Model
+        session: Session.Info
+        tools?: Record<string, boolean>
+        processor: Pick<SessionProcessor.Handle, "message" | "partFromToolCall">
+        bypassAgentCheck: boolean
+        messages: MessageV2.WithParts[]
+      }) {
+        using _ = log.time("resolveTools")
+        const tools: Record<string, AITool> = {}
+
+        const context = (args: any, options: ToolExecutionOptions): Tool.Context => ({
+          sessionID: input.session.id,
+          abort: options.abortSignal!,
+          messageID: input.processor.message.id,
+          callID: options.toolCallId,
+          extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck },
+          agent: input.agent.name,
+          messages: input.messages,
+          metadata: (val) =>
+            Effect.runPromise(
+              Effect.gen(function* () {
+                const match = input.processor.partFromToolCall(options.toolCallId)
+                if (!match || match.state.status !== "running") return
+                yield* sessions.updatePart({
+                  ...match,
+                  state: {
+                    title: val.title,
+                    metadata: val.metadata,
+                    status: "running",
+                    input: args,
+                    time: { start: Date.now() },
+                  },
+                })
+              }),
+            ),
+          ask: (req) =>
+            Effect.runPromise(
+              permission.ask({
+                ...req,
+                sessionID: input.session.id,
+                tool: { messageID: input.processor.message.id, callID: options.toolCallId },
+                ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
+              }),
+            ),
+        })
+
+        for (const item of yield* Effect.promise(() =>
+          ToolRegistry.tools(
+            { modelID: ModelID.make(input.model.api.id), providerID: input.model.providerID },
+            input.agent,
+          ),
+        )) {
+          const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
+          tools[item.id] = tool({
+            id: item.id as any,
+            description: item.description,
+            inputSchema: jsonSchema(schema as any),
+            execute(args, options) {
+              return Effect.runPromise(
+                Effect.gen(function* () {
+                  const ctx = context(args, options)
+                  yield* plugin.trigger(
+                    "tool.execute.before",
+                    { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
+                    { args },
+                  )
+                  const result = yield* Effect.promise(() => item.execute(args, ctx))
+                  const output = {
+                    ...result,
+                    attachments: result.attachments?.map((attachment) => ({
+                      ...attachment,
+                      id: PartID.ascending(),
+                      sessionID: ctx.sessionID,
+                      messageID: input.processor.message.id,
+                    })),
+                  }
+                  yield* plugin.trigger(
+                    "tool.execute.after",
+                    { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args },
+                    output,
+                  )
+                  return output
+                }),
+              )
+            },
+          })
+        }
+
+        for (const [key, item] of Object.entries(yield* mcp.tools())) {
+          const execute = item.execute
+          if (!execute) continue
+
+          const schema = yield* Effect.promise(() => Promise.resolve(asSchema(item.inputSchema).jsonSchema))
+          const transformed = ProviderTransform.schema(input.model, schema)
+          item.inputSchema = jsonSchema(transformed)
+          item.execute = (args, opts) =>
+            Effect.runPromise(
+              Effect.gen(function* () {
+                const ctx = context(args, opts)
+                yield* plugin.trigger(
+                  "tool.execute.before",
+                  { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },
+                  { args },
+                )
+                yield* Effect.promise(() => ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] }))
+                const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.promise(() =>
+                  execute(args, opts),
+                )
+                yield* plugin.trigger(
+                  "tool.execute.after",
+                  { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId, args },
+                  result,
+                )
+
+                const textParts: string[] = []
+                const attachments: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[] = []
+                for (const contentItem of result.content) {
+                  if (contentItem.type === "text") textParts.push(contentItem.text)
+                  else if (contentItem.type === "image") {
+                    attachments.push({
+                      type: "file",
+                      mime: contentItem.mimeType,
+                      url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
+                    })
+                  } else if (contentItem.type === "resource") {
+                    const { resource } = contentItem
+                    if (resource.text) textParts.push(resource.text)
+                    if (resource.blob) {
+                      attachments.push({
+                        type: "file",
+                        mime: resource.mimeType ?? "application/octet-stream",
+                        url: `data:${resource.mimeType ?? "application/octet-stream"};base64,${resource.blob}`,
+                        filename: resource.uri,
+                      })
+                    }
+                  }
+                }
+
+                const truncated = yield* Effect.promise(() => Truncate.output(textParts.join("\n\n"), {}, input.agent))
+                const metadata = {
+                  ...(result.metadata ?? {}),
+                  truncated: truncated.truncated,
+                  ...(truncated.truncated && { outputPath: truncated.outputPath }),
+                }
+
+                return {
+                  title: "",
+                  metadata,
+                  output: truncated.content,
+                  attachments: attachments.map((attachment) => ({
+                    ...attachment,
+                    id: PartID.ascending(),
+                    sessionID: ctx.sessionID,
+                    messageID: input.processor.message.id,
+                  })),
+                  content: result.content,
+                }
+              }),
+            )
+          tools[key] = item
+        }
+
+        return tools
       })
 
       const getModel = (providerID: ProviderID, modelID: ModelID, sessionID: SessionID) =>
@@ -860,17 +1028,15 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
               const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
 
-              const tools = yield* Effect.promise(() =>
-                resolveTools({
-                  agent,
-                  session,
-                  model,
-                  tools: lastUser!.tools,
-                  processor: handle,
-                  bypassAgentCheck,
-                  messages: msgs,
-                }),
-              )
+              const tools = yield* resolveTools({
+                agent,
+                session,
+                model,
+                tools: lastUser!.tools,
+                processor: handle,
+                bypassAgentCheck,
+                messages: msgs,
+              })
 
               if (lastUser!.format?.type === "json_schema") {
                 tools["StructuredOutput"] = createStructuredOutputTool({
@@ -1193,6 +1359,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         Layer.provide(SessionCompaction.defaultLayer),
         Layer.provide(SessionProcessor.defaultLayer),
         Layer.provide(Command.defaultLayer),
+        Layer.provide(Permission.layer),
         Layer.provide(MCP.defaultLayer),
         Layer.provide(LSP.defaultLayer),
         Layer.provide(FileTime.layer),
@@ -1490,198 +1657,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         synthetic: true,
       } satisfies MessageV2.TextPart)
     }
-  }
-
-  /** @internal Exported for testing */
-  export async function resolveTools(input: {
-    agent: Agent.Info
-    model: Provider.Model
-    session: Session.Info
-    tools?: Record<string, boolean>
-    processor: Pick<SessionProcessor.Handle, "message" | "partFromToolCall">
-    bypassAgentCheck: boolean
-    messages: MessageV2.WithParts[]
-  }) {
-    using _ = log.time("resolveTools")
-    const tools: Record<string, AITool> = {}
-
-    const context = (args: any, options: ToolExecutionOptions): Tool.Context => ({
-      sessionID: input.session.id,
-      abort: options.abortSignal!,
-      messageID: input.processor.message.id,
-      callID: options.toolCallId,
-      extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck },
-      agent: input.agent.name,
-      messages: input.messages,
-      metadata: async (val: { title?: string; metadata?: any }) => {
-        const match = input.processor.partFromToolCall(options.toolCallId)
-        if (match && match.state.status === "running") {
-          await Session.updatePart({
-            ...match,
-            state: {
-              title: val.title,
-              metadata: val.metadata,
-              status: "running",
-              input: args,
-              time: {
-                start: Date.now(),
-              },
-            },
-          })
-        }
-      },
-      async ask(req) {
-        await Permission.ask({
-          ...req,
-          sessionID: input.session.id,
-          tool: { messageID: input.processor.message.id, callID: options.toolCallId },
-          ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
-        })
-      },
-    })
-
-    for (const item of await ToolRegistry.tools(
-      { modelID: ModelID.make(input.model.api.id), providerID: input.model.providerID },
-      input.agent,
-    )) {
-      const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
-      tools[item.id] = tool({
-        id: item.id as any,
-        description: item.description,
-        inputSchema: jsonSchema(schema as any),
-        async execute(args, options) {
-          const ctx = context(args, options)
-          await Plugin.trigger(
-            "tool.execute.before",
-            {
-              tool: item.id,
-              sessionID: ctx.sessionID,
-              callID: ctx.callID,
-            },
-            {
-              args,
-            },
-          )
-          const result = await item.execute(args, ctx)
-          const output = {
-            ...result,
-            attachments: result.attachments?.map((attachment) => ({
-              ...attachment,
-              id: PartID.ascending(),
-              sessionID: ctx.sessionID,
-              messageID: input.processor.message.id,
-            })),
-          }
-          await Plugin.trigger(
-            "tool.execute.after",
-            {
-              tool: item.id,
-              sessionID: ctx.sessionID,
-              callID: ctx.callID,
-              args,
-            },
-            output,
-          )
-          return output
-        },
-      })
-    }
-
-    for (const [key, item] of Object.entries(await MCP.tools())) {
-      const execute = item.execute
-      if (!execute) continue
-
-      const schema = await asSchema(item.inputSchema).jsonSchema
-      const transformed = ProviderTransform.schema(input.model, schema)
-      item.inputSchema = jsonSchema(transformed)
-      // Wrap execute to add plugin hooks and format output
-      item.execute = async (args, opts) => {
-        const ctx = context(args, opts)
-
-        await Plugin.trigger(
-          "tool.execute.before",
-          {
-            tool: key,
-            sessionID: ctx.sessionID,
-            callID: opts.toolCallId,
-          },
-          {
-            args,
-          },
-        )
-
-        await ctx.ask({
-          permission: key,
-          metadata: {},
-          patterns: ["*"],
-          always: ["*"],
-        })
-
-        const result = await execute(args, opts)
-
-        await Plugin.trigger(
-          "tool.execute.after",
-          {
-            tool: key,
-            sessionID: ctx.sessionID,
-            callID: opts.toolCallId,
-            args,
-          },
-          result,
-        )
-
-        const textParts: string[] = []
-        const attachments: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[] = []
-
-        for (const contentItem of result.content) {
-          if (contentItem.type === "text") {
-            textParts.push(contentItem.text)
-          } else if (contentItem.type === "image") {
-            attachments.push({
-              type: "file",
-              mime: contentItem.mimeType,
-              url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
-            })
-          } else if (contentItem.type === "resource") {
-            const { resource } = contentItem
-            if (resource.text) {
-              textParts.push(resource.text)
-            }
-            if (resource.blob) {
-              attachments.push({
-                type: "file",
-                mime: resource.mimeType ?? "application/octet-stream",
-                url: `data:${resource.mimeType ?? "application/octet-stream"};base64,${resource.blob}`,
-                filename: resource.uri,
-              })
-            }
-          }
-        }
-
-        const truncated = await Truncate.output(textParts.join("\n\n"), {}, input.agent)
-        const metadata = {
-          ...(result.metadata ?? {}),
-          truncated: truncated.truncated,
-          ...(truncated.truncated && { outputPath: truncated.outputPath }),
-        }
-
-        return {
-          title: "",
-          metadata,
-          output: truncated.content,
-          attachments: attachments.map((attachment) => ({
-            ...attachment,
-            id: PartID.ascending(),
-            sessionID: ctx.sessionID,
-            messageID: input.processor.message.id,
-          })),
-          content: result.content, // directly return content to preserve ordering when outputting to model
-        }
-      }
-      tools[key] = item
-    }
-
-    return tools
   }
 
   /** @internal Exported for testing */
