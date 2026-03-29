@@ -16,12 +16,6 @@ import { parsePluginSpecifier, readPluginPackage, resolvePluginTarget } from "./
 
 type Mode = "noop" | "add" | "replace"
 type Kind = "server" | "tui"
-type Key = string | number
-
-type Op = {
-  path: Key[]
-  value: unknown
-}
 
 export type Target = {
   kind: Kind
@@ -131,15 +125,28 @@ function parseTargets(raw: unknown) {
   return [...map.values()]
 }
 
-function patchPluginOps(
-  list: unknown[],
+function patch(text: string, path: Array<string | number>, value: unknown, insert = false) {
+  return applyEdits(
+    text,
+    modify(text, path, value, {
+      formattingOptions: {
+        tabSize: 2,
+        insertSpaces: true,
+      },
+      isArrayInsertion: insert,
+    }),
+  )
+}
+
+function patchPluginList(
+  text: string,
+  list: unknown[] | undefined,
   spec: string,
   next: unknown,
   force = false,
-  array = true,
-): { mode: Mode; ops: Op[] } {
+): { mode: Mode; text: string } {
   const pkg = parsePluginSpecifier(spec).pkg
-  const rows = list.map((item, i) => ({
+  const rows = (list ?? []).map((item, i) => ({
     item,
     i,
     spec: pluginSpec(item),
@@ -152,21 +159,22 @@ function patchPluginOps(
   })
 
   if (!dup.length) {
+    if (!list) {
+      return {
+        mode: "add",
+        text: patch(text, ["plugin"], [next]),
+      }
+    }
     return {
       mode: "add",
-      ops: [
-        {
-          path: array ? ["plugin", list.length] : ["plugin"],
-          value: array ? next : [next],
-        },
-      ],
+      text: patch(text, ["plugin", list.length], next, true),
     }
   }
 
   if (!force) {
     return {
       mode: "noop",
-      ops: [],
+      text,
     }
   }
 
@@ -174,57 +182,38 @@ function patchPluginOps(
   if (!keep) {
     return {
       mode: "noop",
-      ops: [],
+      text,
     }
   }
 
   if (dup.length === 1 && keep.spec === spec) {
     return {
       mode: "noop",
-      ops: [],
+      text,
     }
   }
 
-  const set = (() => {
-    if (typeof keep.item === "string") {
-      return {
-        path: ["plugin", keep.i],
-        value: next,
-      }
-    }
-    if (Array.isArray(keep.item) && typeof keep.item[0] === "string") {
-      return {
-        path: ["plugin", keep.i, 0],
-        value: spec,
-      }
-    }
-  })()
+  let out = text
+  if (typeof keep.item === "string") {
+    out = patch(out, ["plugin", keep.i], next)
+  }
+  if (Array.isArray(keep.item) && typeof keep.item[0] === "string") {
+    out = patch(out, ["plugin", keep.i, 0], spec)
+  }
 
   const del = dup
     .map((item) => item.i)
     .filter((i) => i !== keep.i)
     .sort((a, b) => b - a)
-    .map((i) => ({
-      path: ["plugin", i],
-      value: undefined,
-    }))
+
+  for (const i of del) {
+    out = patch(out, ["plugin", i], undefined)
+  }
 
   return {
     mode: "replace",
-    ops: set ? [set, ...del] : del,
+    text: out,
   }
-}
-
-function patchText(text: string, ops: Op[]) {
-  return ops.reduce((acc, op) => {
-    const edits = modify(acc, op.path, op.value, {
-      formattingOptions: {
-        tabSize: 2,
-        insertSpaces: true,
-      },
-    })
-    return applyEdits(acc, edits)
-  }, text)
 }
 
 export async function installPlugin(spec: string, dep: InstallDeps = defaultInstallDeps): Promise<InstallResult> {
@@ -342,7 +331,7 @@ async function patchOne(dir: string, target: Target, spec: string, force: boolea
 
   const list = pluginList(data)
   const item = target.opts ? [spec, target.opts] : spec
-  const out = patchPluginOps(list ?? [], spec, item, force, Boolean(list))
+  const out = patchPluginList(text, list, spec, item, force)
   if (out.mode === "noop") {
     return {
       ok: true,
@@ -354,7 +343,7 @@ async function patchOne(dir: string, target: Target, spec: string, force: boolea
     }
   }
 
-  const write = await dep.write(cfg, patchText(text, out.ops)).catch((error: unknown) => error)
+  const write = await dep.write(cfg, out.text).catch((error: unknown) => error)
   if (write instanceof Error) {
     return {
       ok: false,
