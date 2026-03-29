@@ -63,14 +63,15 @@ export namespace SystemPrompt {
 
     const list = await Skill.available(agent)
     const status = await Skill.status()
+    const enabled = list.filter((s) => (status[s.name]?.status ?? "enabled") === "enabled")
+    if (enabled.length === 0) return
 
     return [
       "Skills provide specialized instructions and workflows for specific tasks.",
-      "Disabled skills remain visible but cannot be loaded until they are re-enabled.",
-      "Use the skill tool to load a skill when a task matches its description and is enabled.",
+      "Use the skill tool to load a skill when a task matches its description.",
       // the agents seem to ingest the information about skills a bit better if we present a more verbose
       // version of them here and a less verbose version in tool description, rather than vice versa.
-      Skill.fmt(list, { verbose: true, status }),
+      Skill.fmt(enabled, { verbose: true }),
     ].join("\n")
   }
 }

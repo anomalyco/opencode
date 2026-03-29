@@ -297,7 +297,7 @@ export namespace Skill {
     Layer.provide(Bus.layer),
   )
 
-  export function fmt(list: Info[], opts: { verbose: boolean; status?: Record<string, Status> }) {
+  export function fmt(list: Info[], opts: { verbose: boolean }) {
     if (list.length === 0) return "No skills are currently available."
 
     if (opts.verbose) {
@@ -307,7 +307,6 @@ export namespace Skill {
           "  <skill>",
           `    <name>${skill.name}</name>`,
           `    <description>${skill.description}</description>`,
-          `    <status>${opts.status?.[skill.name]?.status ?? "enabled"}</status>`,
           `    <location>${pathToFileURL(skill.location).href}</location>`,
           "  </skill>",
         ]),
@@ -317,11 +316,7 @@ export namespace Skill {
 
     return [
       "## Available Skills",
-      ...list.map((skill) => {
-        const status = opts.status?.[skill.name]?.status ?? "enabled"
-        const name = status === "disabled" ? `${skill.name} (disabled)` : skill.name
-        return `- **${name}**: ${skill.description}`
-      }),
+      ...list.map((skill) => `- **${skill.name}**: ${skill.description}`),
     ].join("\n")
   }
 

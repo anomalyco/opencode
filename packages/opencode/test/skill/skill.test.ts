@@ -1,5 +1,6 @@
 import { afterEach, test, expect } from "bun:test"
 import { Skill } from "../../src/skill"
+import { Config } from "../../src/config/config"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import path from "node:path"
@@ -468,4 +469,86 @@ description: A skill in the .opencode/skills directory.
       expect(dirs.length).toBe(4)
     },
   })
+})
+
+test("Skill.disable and Skill.enable update runtime status", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      const skillDir = path.join(dir, ".opencode", "skill", "test-skill")
+      await Bun.write(
+        path.join(skillDir, "SKILL.md"),
+        `---
+name: test-skill
+description: A test skill for toggle testing.
+---
+
+# Test Skill
+`,
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await Skill.disable("test-skill")
+      const statusAfterDisable = await Skill.status()
+      expect(statusAfterDisable["test-skill"]?.status).toBe("disabled")
+
+      await Instance.disposeAll()
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          await Skill.enable("test-skill")
+          const statusAfterEnable = await Skill.status()
+          expect(statusAfterEnable["test-skill"]?.status).toBe("enabled")
+        },
+      })
+    },
+  })
+})
+
+test("Skill.disable writes to config and persists across restart", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      const skillDir = path.join(dir, ".opencode", "skill", "test-skill")
+      await Bun.write(
+        path.join(skillDir, "SKILL.md"),
+        `---
+name: test-skill
+description: A test skill for persistence testing.
+---
+
+# Test Skill
+`,
+      )
+    },
+  })
+
+  // Simulate route handler: disable in-memory, then persist to config file
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await Skill.disable("test-skill")
+      await Config.update({ skills: { enabled: { "test-skill": false } } })
+    },
+  })
+
+  const configPath = path.join(tmp.path, "config.json")
+  const config = JSON.parse(await fs.readFile(configPath, "utf-8"))
+  expect(config.skills?.enabled?.["test-skill"]).toBe(false)
+
+  // Simulate route handler: re-enable in-memory, then persist to config file
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await Skill.enable("test-skill")
+      await Config.update({ skills: { enabled: { "test-skill": true } } })
+    },
+  })
+
+  const config2 = JSON.parse(await fs.readFile(configPath, "utf-8"))
+  expect(config2.skills?.enabled?.["test-skill"]).toBe(true)
 })

@@ -70,7 +70,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         [key: string]: McpStatus
       }
       skill: {
-        [key: string]: SkillStatus
+        [key: string]: SkillStatus & { description?: string }
       }
       mcp_resource: {
         [key: string]: McpResource
@@ -419,7 +419,17 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.command.list().then((x) => setStore("command", reconcile(x.data ?? []))),
             sdk.client.lsp.status().then((x) => setStore("lsp", reconcile(x.data!))),
             sdk.client.mcp.status().then((x) => setStore("mcp", reconcile(x.data!))),
-            sdk.client.skill.status().then((x) => setStore("skill", reconcile(x.data ?? {}))),
+            Promise.all([sdk.client.app.skills(), sdk.client.skill.status()]).then(([skillsRes, statusRes]) => {
+              const status = statusRes.data ?? {}
+              const combined: Record<string, SkillStatus & { description?: string }> = {}
+              for (const skill of skillsRes.data ?? []) {
+                combined[skill.name] = {
+                  ...(status[skill.name] ?? { status: "enabled" }),
+                  description: skill.description,
+                }
+              }
+              setStore("skill", reconcile(combined))
+            }),
             sdk.client.experimental.resource.list().then((x) => setStore("mcp_resource", reconcile(x.data ?? {}))),
             sdk.client.formatter.status().then((x) => setStore("formatter", reconcile(x.data!))),
             sdk.client.session.status().then((x) => {

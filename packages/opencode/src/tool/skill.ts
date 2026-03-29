@@ -9,9 +9,10 @@ import { iife } from "@/util/iife"
 export const SkillTool = Tool.define("skill", async (ctx) => {
   const list = await Skill.available(ctx?.agent)
   const status = await Skill.status()
+  const enabled = list.filter((s) => (status[s.name]?.status ?? "enabled") === "enabled")
 
   const description =
-    list.length === 0
+    enabled.length === 0
       ? "Load a specialized skill that provides domain-specific instructions and workflows. No skills are currently available."
       : [
           "Load a specialized skill that provides domain-specific instructions and workflows.",
@@ -22,15 +23,13 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
           "",
           'Tool output includes a `<skill_content name="...">` block with the loaded content.',
           "",
-          "Disabled skills remain visible but cannot be loaded until they are re-enabled.",
-          "",
           "The following skills provide specialized sets of instructions for particular tasks.",
           "Invoke this tool to load a skill when a task matches one of the skills listed below:",
           "",
-          Skill.fmt(list, { verbose: false, status }),
+          Skill.fmt(enabled, { verbose: false }),
         ].join("\n")
 
-  const examples = list
+  const examples = enabled
     .map((skill) => `'${skill.name}'`)
     .slice(0, 3)
     .join(", ")

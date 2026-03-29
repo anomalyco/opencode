@@ -49,6 +49,7 @@ export function DialogMcp() {
     {
       keybind: Keybind.parse("space")[0],
       title: "toggle",
+      disabled: loading() !== null,
       onTrigger: async (option: DialogSelectOption<string>) => {
         // Prevent toggling while an operation is already in progress
         if (loading() !== null) return
@@ -78,7 +79,7 @@ export function DialogMcp() {
       title="MCPs"
       options={options()}
       keybind={keybinds()}
-      onSelect={(option) => {
+      onSelect={() => {
         // Don't close on select, only on escape
       }}
     />

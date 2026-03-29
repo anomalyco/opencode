@@ -1,5 +1,5 @@
 import { TextAttributes } from "@opentui/core"
-import { createMemo, createResource, createSignal } from "solid-js"
+import { createMemo, createSignal } from "solid-js"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { useLocal } from "@tui/context/local"
 import { useSDK } from "@tui/context/sdk"
@@ -12,9 +12,12 @@ export type DialogSkillProps = {
   readonly onSelect: (skill: string) => void
 }
 
-function Status(props: { readonly status: "enabled" | "disabled" }) {
+function Status(props: { readonly enabled: boolean; readonly loading: boolean }) {
   const { theme } = useTheme()
-  if (props.status === "enabled") {
+  if (props.loading) {
+    return <span style={{ fg: theme.textMuted }}>⋯ Loading</span>
+  }
+  if (props.enabled) {
     return <span style={{ fg: theme.success, attributes: TextAttributes.BOLD }}>✓ Enabled</span>
   }
   return <span style={{ fg: theme.textMuted }}>○ Disabled</span>
@@ -28,22 +31,19 @@ export function DialogSkill(props: DialogSkillProps) {
   const [loading, setLoading] = createSignal<string | null>(null)
   dialog.setSize("large")
 
-  const [data] = createResource(async () => {
-    const result = await sdk.client.app.skills({}, { throwOnError: true })
-    return result.data ?? []
-  })
-
   const options = createMemo<DialogSelectOption<string>[]>(() => {
-    const list = data() ?? []
-    const max = Math.max(0, ...list.map((skill) => skill.name.length))
-    return list.map((skill) => ({
-      title: skill.name.padEnd(max),
-      description: skill.description?.replaceAll(/\s+/g, " ").trim(),
-      value: skill.name,
+    const skillData = sync.data.skill
+    const loadingSkill = loading()
+    const list = Object.entries(skillData)
+    const max = Math.max(0, ...list.map(([name]) => name.length))
+    return list.map(([name, entry]) => ({
+      title: name.padEnd(max),
+      description: entry.description?.replaceAll(/\s+/g, " ").trim(),
+      value: name,
       category: "Skills",
-      footer: <Status status={sync.data.skill[skill.name]?.status ?? "enabled"} />,
+      footer: <Status enabled={local.skill.isEnabled(name)} loading={loadingSkill === name} />,
       onSelect: () => {
-        props.onSelect(skill.name)
+        props.onSelect(name)
         dialog.clear()
       },
     }))
@@ -63,20 +63,18 @@ export function DialogSkill(props: DialogSkillProps) {
             if (loading() !== null) return
             const name = option.value
             const state = sync.data.skill[name]?.status ?? "enabled"
-            const next = state === "enabled" ? "disabled" : "enabled"
 
             setLoading(name)
-            sync.set("skill", name, { status: next })
-
             try {
               await local.skill.toggle(name, state === "enabled")
               const result = await sdk.client.skill.status({}, { throwOnError: true })
-              sync.set("skill", result.data ?? {})
+              if (result.data) {
+                for (const [skillName, status] of Object.entries(result.data)) {
+                  sync.set("skill", skillName, status)
+                }
+              }
             } catch (err) {
               console.error("Failed to toggle skill:", err)
-              const result = await sdk.client.skill.status().catch(() => undefined)
-              if (result?.data) sync.set("skill", result.data)
-              else sync.set("skill", name, { status: state })
             } finally {
               setLoading(null)
             }
