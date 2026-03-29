@@ -296,7 +296,6 @@ export namespace LLM {
             specificationVersion: "v3" as const,
             async transformParams(args) {
               if (args.type === "stream") {
-                // TODO: verify that LanguageModelV3Prompt is still compat here!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 // @ts-expect-error
                 args.params.prompt = ProviderTransform.message(args.params.prompt, input.model, options)
               }
