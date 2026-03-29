@@ -1,0 +1,104 @@
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -2105,6 +2105,7 @@
+       fetch: this.config.fetch
+     });
+     const content = [];
++    let hasFunctionCall = false;
+     const webSearchSubTools = [
+       "web_search",
+       "web_search_with_snippets",
+@@ -2189,6 +2190,7 @@
+           break;
+         }
+         case "function_call": {
++          hasFunctionCall = true;
+           content.push({
+             type: "tool-call",
+             toolCallId: part.call_id,
+@@ -2231,7 +2233,7 @@
+     return {
+       content,
+       finishReason: {
+-        unified: mapXaiResponsesFinishReason(response.status),
++        unified: hasFunctionCall ? "tool-calls" : mapXaiResponsesFinishReason(response.status),
+         raw: (_m = response.status) != null ? _m : void 0
+       },
+       usage: response.usage ? convertXaiResponsesUsage(response.usage) : {
+@@ -2283,6 +2285,7 @@
+     const seenToolCalls = /* @__PURE__ */ new Set();
+     const ongoingToolCalls = {};
+     const activeReasoning = {};
++    let hasFunctionCall = false;
+     const self = this;
+     return {
+       stream: response.pipeThrough(
+@@ -2421,7 +2424,7 @@
+               }
+               if (response2.status) {
+                 finishReason = {
+-                  unified: mapXaiResponsesFinishReason(response2.status),
++                  unified: hasFunctionCall ? "tool-calls" : mapXaiResponsesFinishReason(response2.status),
+                   raw: response2.status
+                 };
+               }
+@@ -2614,6 +2617,7 @@
+                     toolName: part.name
+                   });
+                 } else if (event.type === "response.output_item.done") {
++                  hasFunctionCall = true;
+                   ongoingToolCalls[event.output_index] = void 0;
+                   controller.enqueue({
+                     type: "tool-input-end",
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -2126,6 +2126,7 @@
+       fetch: this.config.fetch
+     });
+     const content = [];
++    let hasFunctionCall = false;
+     const webSearchSubTools = [
+       "web_search",
+       "web_search_with_snippets",
+@@ -2210,6 +2211,7 @@
+           break;
+         }
+         case "function_call": {
++          hasFunctionCall = true;
+           content.push({
+             type: "tool-call",
+             toolCallId: part.call_id,
+@@ -2252,7 +2254,7 @@
+     return {
+       content,
+       finishReason: {
+-        unified: mapXaiResponsesFinishReason(response.status),
++        unified: hasFunctionCall ? "tool-calls" : mapXaiResponsesFinishReason(response.status),
+         raw: (_m = response.status) != null ? _m : void 0
+       },
+       usage: response.usage ? convertXaiResponsesUsage(response.usage) : {
+@@ -2304,6 +2306,7 @@
+     const seenToolCalls = /* @__PURE__ */ new Set();
+     const ongoingToolCalls = {};
+     const activeReasoning = {};
++    let hasFunctionCall = false;
+     const self = this;
+     return {
+       stream: response.pipeThrough(
+@@ -2442,7 +2445,7 @@
+               }
+               if (response2.status) {
+                 finishReason = {
+-                  unified: mapXaiResponsesFinishReason(response2.status),
++                  unified: hasFunctionCall ? "tool-calls" : mapXaiResponsesFinishReason(response2.status),
+                   raw: response2.status
+                 };
+               }
+@@ -2635,6 +2638,7 @@
+                     toolName: part.name
+                   });
+                 } else if (event.type === "response.output_item.done") {
++                  hasFunctionCall = true;
+                   ongoingToolCalls[event.output_index] = void 0;
+                   controller.enqueue({
+                     type: "tool-input-end",
