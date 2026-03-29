@@ -1,6 +1,7 @@
 import { afterEach, describe, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
+import z from "zod"
 import { Effect, Layer } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { ToolRegistry } from "@/tool/registry"
@@ -184,5 +185,51 @@ describe("tool.registry", () => {
       const ids = yield* registry.ids()
       expect(ids).toContain("cowsay")
     }),
+  )
+
+  it.live("preserves described arg metadata for plugin tools", () =>
+    provideTmpdirInstance((dir) =>
+      Effect.gen(function* () {
+        const opencode = path.join(dir, ".opencode")
+        const tools = path.join(opencode, "tools")
+        yield* Effect.promise(() => fs.mkdir(tools, { recursive: true }))
+        yield* Effect.promise(() =>
+          Bun.write(
+            path.join(tools, "search.ts"),
+            [
+              "import { tool } from '@opencode-ai/plugin'",
+              "",
+              "export default tool({",
+              "  description: 'search custom docs',",
+              "  args: {",
+              "    query: tool.schema.string().describe('query to search for'),",
+              "    type: tool.schema",
+              "      .union([tool.schema.literal('regex'), tool.schema.literal('text')])",
+              "      .describe('regex or text mode'),",
+              "  },",
+              "  async execute() {",
+              "    return 'ok'",
+              "  },",
+              "})",
+              "",
+            ].join("\n"),
+          ),
+        )
+        const registry = yield* ToolRegistry.Service
+        const list = yield* registry.tools({
+          providerID: "openai" as any,
+          modelID: "gpt-5" as any,
+          agent: { name: "build", mode: "primary", permission: [], options: {} },
+        })
+        const search = list.find((item) => item.id === "search")
+        expect(search).toBeDefined()
+
+        const schema = z.toJSONSchema(search!.parameters) as {
+          properties?: { query?: { description?: string }; type?: { description?: string } }
+        }
+        expect(schema.properties?.query?.description).toBe("query to search for")
+        expect(schema.properties?.type?.description).toBe("regex or text mode")
+      }),
+    ),
   )
 })

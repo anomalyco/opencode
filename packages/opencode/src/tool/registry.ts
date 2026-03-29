@@ -119,11 +119,37 @@ export const layer: Layer.Layer<
       Effect.fn("ToolRegistry.state")(function* (ctx) {
         const custom: Tool.Def[] = []
 
+        // custom tools can load a different zod instance whose per-instance
+        // .describe()/.meta() registry won't survive z.toJSONSchema(). walk
+        // schemas once and copy metadata into this runtime's registry.
+        function rehydrateZodMeta(value: unknown, seen = new WeakSet<object>()): void {
+          if (!value || typeof value !== "object" || seen.has(value)) return
+          seen.add(value)
+
+          if ("_zod" in value) {
+            const schema = value as z.ZodType
+            const metaFn = Reflect.get(schema, "meta")
+            const meta = metaFn instanceof Function ? Reflect.apply(metaFn, schema, []) : undefined
+            const base = {} as Record<string, unknown>
+            if (meta && typeof meta === "object" && !("_zod" in meta))
+              Object.assign(base, meta as Record<string, unknown>)
+            const description = Reflect.get(schema, "description")
+            if (typeof description === "string" && base.description === undefined) base.description = description
+            if (Object.keys(base).length > 0) z.globalRegistry.add(schema, base)
+            rehydrateZodMeta(Reflect.get(Reflect.get(schema, "_zod") as object, "def"), seen)
+            return
+          }
+
+          const items = Array.isArray(value) ? value : Object.values(value as Record<string, unknown>)
+          for (const item of items) rehydrateZodMeta(item, seen)
+        }
+
         function fromPlugin(id: string, def: ToolDefinition): Tool.Def {
           // Plugin tools define their args as a raw Zod shape. Wrap the
           // derived Zod object in a `Schema.declare` so it slots into the
           // Schema-typed framework, and annotate with `ZodOverride` so the
           // walker emits the original Zod object for LLM JSON Schema.
+          for (const value of Object.values(def.args)) rehydrateZodMeta(value)
           const zodParams = z.object(def.args)
           const parameters = Schema.declare<unknown>((u): u is unknown => zodParams.safeParse(u).success).annotate({
             [ZodOverride]: zodParams,
@@ -134,13 +160,18 @@ export const layer: Layer.Layer<
             description: def.description,
             execute: (args, toolCtx) =>
               Effect.gen(function* () {
+                const validated = zodParams.safeParse(args)
+                if (!validated.success)
+                  throw new Error(
+                    `The ${id} tool was called with invalid arguments: ${validated.error}.\nPlease rewrite the input so it satisfies the expected schema.`,
+                  )
                 const pluginCtx: PluginToolContext = {
                   ...toolCtx,
                   ask: (req) => toolCtx.ask(req),
                   directory: ctx.directory,
                   worktree: ctx.worktree,
                 }
-                const result = yield* Effect.promise(() => def.execute(args as any, pluginCtx))
+                const result = yield* Effect.promise(() => def.execute(validated.data as any, pluginCtx))
                 const output = typeof result === "string" ? result : result.output
                 const metadata = typeof result === "string" ? {} : (result.metadata ?? {})
                 const info = yield* agent.get(toolCtx.agent)
