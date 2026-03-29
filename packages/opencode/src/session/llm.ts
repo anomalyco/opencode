@@ -1,16 +1,8 @@
-import { Installation } from "@/installation"
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
-import {
-  streamText,
-  wrapLanguageModel,
-  type ModelMessage,
-  type StreamTextResult,
-  type Tool,
-  type ToolSet,
-  tool,
-  jsonSchema,
-} from "ai"
+import { Effect, Layer, ServiceMap } from "effect"
+import * as Stream from "effect/Stream"
+import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, jsonSchema } from "ai"
 import { mergeDeep, pipe } from "remeda"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 import { ProviderTransform } from "@/provider/transform"
@@ -23,6 +15,7 @@ import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { Permission } from "@/permission"
 import { Auth } from "@/auth"
+import { Installation } from "@/installation"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -43,7 +36,34 @@ export namespace LLM {
     toolChoice?: "auto" | "required" | "none"
   }
 
-  export type StreamOutput = StreamTextResult<ToolSet, unknown>
+  export type Event = Awaited<ReturnType<typeof stream>>["fullStream"] extends AsyncIterable<infer T> ? T : never
+
+  export interface Interface {
+    readonly stream: (input: StreamInput) => Stream.Stream<Event, unknown>
+  }
+
+  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/LLM") {}
+
+  export const layer = Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      return Service.of({
+        stream(input) {
+          return Stream.unwrap(
+            Effect.promise(() => LLM.stream(input)).pipe(
+              Effect.map((result) =>
+                Stream.fromAsyncIterable(result.fullStream, (err) => err).pipe(
+                  Stream.mapEffect((event) => Effect.succeed(event)),
+                ),
+              ),
+            ),
+          )
+        },
+      })
+    }),
+  )
+
+  export const defaultLayer = layer
 
   export async function stream(input: StreamInput) {
     const l = log
@@ -113,17 +133,20 @@ export namespace LLM {
       options.instructions = system.join("\n")
     }
 
+    const isWorkflow = language instanceof GitLabWorkflowLanguageModel
     const messages = isOpenaiOauth
       ? input.messages
-      : [
-          ...system.map(
-            (x): ModelMessage => ({
-              role: "system",
-              content: x,
-            }),
-          ),
-          ...input.messages,
-        ]
+      : isWorkflow
+        ? input.messages
+        : [
+            ...system.map(
+              (x): ModelMessage => ({
+                role: "system",
+                content: x,
+              }),
+            ),
+            ...input.messages,
+          ]
 
     const params = await Plugin.trigger(
       "chat.params",
@@ -190,6 +213,7 @@ export namespace LLM {
     // and results sent back over the WebSocket.
     if (language instanceof GitLabWorkflowLanguageModel) {
       const workflowModel = language
+      workflowModel.systemPrompt = system.join("\n")
       workflowModel.toolExecutor = async (toolName, argsJson, _requestID) => {
         const t = tools[toolName]
         if (!t || !t.execute) {
@@ -250,12 +274,16 @@ export namespace LLM {
       maxOutputTokens,
       abortSignal: input.abort,
       headers: {
-        ...(input.model.providerID.startsWith("opencode") && {
-          "x-opencode-project": Instance.project.id,
-          "x-opencode-session": input.sessionID,
-          "x-opencode-request": input.user.id,
-          "x-opencode-client": Flag.OPENCODE_CLIENT,
-        }),
+        ...(input.model.providerID.startsWith("opencode")
+          ? {
+              "x-opencode-project": Instance.project.id,
+              "x-opencode-session": input.sessionID,
+              "x-opencode-request": input.user.id,
+              "x-opencode-client": Flag.OPENCODE_CLIENT,
+            }
+          : {
+              "User-Agent": `opencode/${Installation.VERSION}`,
+            }),
         ...input.model.headers,
         ...headers,
       },
@@ -265,6 +293,7 @@ export namespace LLM {
         model: language,
         middleware: [
           {
+            specificationVersion: "v3" as const,
             async transformParams(args) {
               if (args.type === "stream") {
                 // @ts-expect-error

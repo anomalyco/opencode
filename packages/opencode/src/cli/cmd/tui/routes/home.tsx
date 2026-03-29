@@ -1,9 +1,7 @@
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import { createEffect, createMemo, Match, on, onMount, Show, Switch } from "solid-js"
 import { useTheme } from "@tui/context/theme"
-import { useKeybind } from "@tui/context/keybind"
 import { Logo } from "../component/logo"
-import { Tips } from "../component/tips"
 import { Locale } from "@/util/locale"
 import { useSync } from "../context/sync"
 import { Toast } from "../ui/toast"
@@ -12,20 +10,21 @@ import { useDirectory } from "../context/directory"
 import { useRouteData } from "@tui/context/route"
 import { usePromptRef } from "../context/prompt"
 import { Installation } from "@/installation"
-import { useKV } from "../context/kv"
-import { useCommandDialog } from "../component/dialog-command"
 import { useLocal } from "../context/local"
+import { TuiPluginRuntime } from "../plugin"
 
 // TODO: what is the best way to do this?
 let once = false
+const placeholder = {
+  normal: ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"],
+  shell: ["ls -la", "git status", "pwd"],
+}
 
 export function Home() {
   const sync = useSync()
-  const kv = useKV()
   const { theme } = useTheme()
   const route = useRouteData("home")
   const promptRef = usePromptRef()
-  const command = useCommandDialog()
   const mcp = createMemo(() => Object.keys(sync.data.mcp).length > 0)
   const mcpError = createMemo(() => {
     return Object.values(sync.data.mcp).some((x) => x.status === "failed")
@@ -35,30 +34,9 @@ export function Home() {
     return Object.values(sync.data.mcp).filter((x) => x.status === "connected").length
   })
 
-  const isFirstTimeUser = createMemo(() => sync.data.session.length === 0)
-  const tipsHidden = createMemo(() => kv.get("tips_hidden", false))
-  const showTips = createMemo(() => {
-    // Don't show tips for first-time users
-    if (isFirstTimeUser()) return false
-    return !tipsHidden()
-  })
-
-  command.register(() => [
-    {
-      title: tipsHidden() ? "Show tips" : "Hide tips",
-      value: "tips.toggle",
-      keybind: "tips_toggle",
-      category: "System",
-      onSelect: (dialog) => {
-        kv.set("tips_hidden", !tipsHidden())
-        dialog.clear()
-      },
-    },
-  ])
-
   const Hint = (
-    <Show when={connectedMcpCount() > 0}>
-      <box flexShrink={0} flexDirection="row" gap={1}>
+    <box flexShrink={0} flexDirection="row" gap={1}>
+      <Show when={connectedMcpCount() > 0}>
         <text fg={theme.text}>
           <Switch>
             <Match when={mcpError()}>
@@ -71,15 +49,16 @@ export function Home() {
             </Match>
           </Switch>
         </text>
-      </box>
-    </Show>
+      </Show>
+    </box>
   )
 
-  let prompt: PromptRef
+  let prompt: PromptRef | undefined
   const args = useArgs()
   const local = useLocal()
   onMount(() => {
     if (once) return
+    if (!prompt) return
     if (route.initialPrompt) {
       prompt.set(route.initialPrompt)
       once = true
@@ -95,6 +74,7 @@ export function Home() {
       () => sync.ready && local.model.ready,
       (ready) => {
         if (!ready) return
+        if (!prompt) return
         if (!args.prompt) return
         if (prompt.current?.input !== args.prompt) return
         prompt.submit()
@@ -103,32 +83,31 @@ export function Home() {
   )
   const directory = useDirectory()
 
-  const keybind = useKeybind()
-
   return (
     <>
       <box flexGrow={1} alignItems="center" paddingLeft={2} paddingRight={2}>
         <box flexGrow={1} minHeight={0} />
         <box height={4} minHeight={0} flexShrink={1} />
         <box flexShrink={0}>
-          <Logo />
+          <TuiPluginRuntime.Slot name="home_logo" mode="replace">
+            <Logo />
+          </TuiPluginRuntime.Slot>
         </box>
         <box height={1} minHeight={0} flexShrink={1} />
         <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0}>
-          <Prompt
-            ref={(r) => {
-              prompt = r
-              promptRef.set(r)
-            }}
-            hint={Hint}
-            workspaceID={route.workspaceID}
-          />
+          <TuiPluginRuntime.Slot name="home_prompt" mode="replace" workspace_id={route.workspaceID}>
+            <Prompt
+              ref={(r) => {
+                prompt = r
+                promptRef.set(r)
+              }}
+              hint={Hint}
+              workspaceID={route.workspaceID}
+              placeholders={placeholder}
+            />
+          </TuiPluginRuntime.Slot>
         </box>
-        <box height={4} minHeight={0} width="100%" maxWidth={75} alignItems="center" paddingTop={3} flexShrink={1}>
-          <Show when={showTips()}>
-            <Tips />
-          </Show>
-        </box>
+        <TuiPluginRuntime.Slot name="home_bottom" />
         <box flexGrow={1} minHeight={0} />
         <Toast />
       </box>

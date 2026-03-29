@@ -355,7 +355,6 @@ export default function Share(props: {
                           if (x.type === "patch") return false
                           if (x.type === "step-finish") return false
                           if (x.type === "text" && x.synthetic === true) return false
-                          if (x.type === "tool" && x.tool === "todoread") return false
                           if (x.type === "text" && !x.text) return false
                           if (x.type === "tool" && (x.state.status === "pending" || x.state.status === "running"))
                             return false
