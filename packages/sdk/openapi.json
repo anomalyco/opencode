@@ -8172,6 +8172,21 @@
             "properties": {
               "branch": {
                 "type": "string"
+              },
+              "dirty": {
+                "type": "boolean"
+              },
+              "staged": {
+                "type": "number"
+              },
+              "unstaged": {
+                "type": "number"
+              },
+              "untracked": {
+                "type": "number"
+              },
+              "conflicted": {
+                "type": "number"
               }
             }
           }
@@ -12500,6 +12515,21 @@
         "properties": {
           "branch": {
             "type": "string"
+          },
+          "dirty": {
+            "type": "boolean"
+          },
+          "staged": {
+            "type": "number"
+          },
+          "unstaged": {
+            "type": "number"
+          },
+          "untracked": {
+            "type": "number"
+          },
+          "conflicted": {
+            "type": "number"
           }
         }
       },
