@@ -1042,4 +1042,38 @@ export namespace ProviderTransform {
 
     return schema as JSONSchema7
   }
+
+  // Cache of provider/model combinations that need tool call ID scrubbing
+  const SCRUB_CACHE = new Set<string>()
+
+  export function needsScrubbing(modelKey: string): boolean {
+    return SCRUB_CACHE.has(modelKey)
+  }
+
+  export function markNeedsScrubbing(modelKey: string): void {
+    SCRUB_CACHE.add(modelKey)
+  }
+
+  // Universal scrubber for tool call IDs that ensures they meet PartID requirements
+  export function scrubToolCallIds(msgs: ModelMessage[]): ModelMessage[] {
+    const scrub = (id: string): string => {
+      if (!id || typeof id !== "string") {
+        return `prt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      }
+      return id.replace(/[^a-zA-Z0-9_-]/g, "_").substring(0, 64)
+    }
+
+    return msgs.map((msg) => {
+      if (Array.isArray(msg.content)) {
+        const content = msg.content.map((part) => {
+          if (part.type === "tool-call" || part.type === "tool-result") {
+            return { ...part, toolCallId: scrub(part.toolCallId) }
+          }
+          return part
+        })
+        return { ...msg, content }
+      }
+      return msg
+    }) as ModelMessage[]
+  }
 }

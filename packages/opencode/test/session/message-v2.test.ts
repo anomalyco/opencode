@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { APICallError } from "ai"
+import { APICallError, type ModelMessage } from "ai"
 import { MessageV2 } from "../../src/session/message-v2"
 import type { Provider } from "../../src/provider/provider"
+import { ProviderTransform } from "../../src/provider/transform"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { SessionID, MessageID, PartID } from "../../src/session/schema"
 import { Question } from "../../src/question"
@@ -953,5 +954,102 @@ describe("session.message-v2.fromError", () => {
     const result = MessageV2.fromError(zlibError, { providerID, aborted: true })
 
     expect(result.name).toBe("MessageAbortedError")
+  })
+})
+
+describe("ProviderTransform scrubbing", () => {
+  test("scrubs malformed toolCallIds from ModelMessages", () => {
+    const invalidId = null as any
+    const messages: ModelMessage[] = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: invalidId,
+            toolName: "test-tool",
+            input: { input: "test" },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: invalidId,
+            toolName: "test-tool",
+            output: { type: "text", value: "test output" },
+          },
+        ],
+      },
+    ]
+
+    const scrubbed = ProviderTransform.scrubToolCallIds(messages)
+
+    expect(scrubbed).toHaveLength(2)
+    expect(scrubbed[0].role).toBe("assistant")
+    expect(scrubbed[1].role).toBe("tool")
+
+    const assistantContent = scrubbed[0].content as any[]
+    const toolContent = scrubbed[1].content as any[]
+
+    expect(assistantContent[0].type).toBe("tool-call")
+    expect(assistantContent[0].toolCallId).toMatch(/^prt_\d+_[a-z0-9]+$/)
+
+    expect(toolContent[0].type).toBe("tool-result")
+    expect(toolContent[0].toolCallId).toMatch(/^prt_\d+_[a-z0-9]+$/)
+
+    // Verify both scrubbed IDs match the expected format (they'll be different values since they're generated independently)
+    expect(assistantContent[0].toolCallId).toMatch(/^prt_\d+_[a-z0-9]+$/)
+    expect(toolContent[0].toolCallId).toMatch(/^prt_\d+_[a-z0-9]+$/)
+  })
+
+  test("preserves valid toolCallIds", () => {
+    const validId = "call_1234567890abcdef"
+    const messages: ModelMessage[] = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: validId,
+            toolName: "test-tool",
+            input: { input: "test" },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: validId,
+            toolName: "test-tool",
+            output: { type: "text", value: "test output" },
+          },
+        ],
+      },
+    ]
+
+    const scrubbed = ProviderTransform.scrubToolCallIds(messages)
+
+    expect(scrubbed).toHaveLength(2)
+    const assistantContent = scrubbed[0].content as any[]
+    const toolContent = scrubbed[1].content as any[]
+
+    expect(assistantContent[0].toolCallId).toBe(validId)
+    expect(toolContent[0].toolCallId).toBe(validId)
+  })
+
+  test("caches models that need scrubbing", () => {
+    const modelKey = "test-provider-test-model"
+
+    // Initially should not need scrubbing
+    expect(ProviderTransform.needsScrubbing(modelKey)).toBe(false)
+
+    // Mark as needing scrubbing
+    ProviderTransform.markNeedsScrubbing(modelKey)
+    expect(ProviderTransform.needsScrubbing(modelKey)).toBe(true)
   })
 })
