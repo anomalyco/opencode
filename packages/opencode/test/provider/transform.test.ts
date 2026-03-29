@@ -2756,3 +2756,86 @@ describe("ProviderTransform.variants", () => {
     })
   })
 })
+
+describe("scrubToolCallIds", () => {
+  test("handles null tool call IDs", () => {
+    const input: ModelMessage[] = [{
+      role: "assistant",
+      content: [
+        { type: "tool-call", toolCallId: null as any, toolName: "test", input: {} },
+        { type: "tool-call", toolCallId: undefined as any, toolName: "test", input: {} },
+      ],
+    }]
+    const result = ProviderTransform.scrubToolCallIds(input)
+    expect(result[0].content[0].toolCallId).toMatch(/^prt_\d+_[a-z0-9]+$/)
+    expect(result[0].content[1].toolCallId).toMatch(/^prt_\d+_[a-z0-9]+$/)
+  })
+
+  test("handles numeric tool call IDs", () => {
+    const input: ModelMessage[] = [{
+      role: "assistant",
+      content: [
+        { type: "tool-call", toolCallId: 12345 as any, toolName: "test", input: {} },
+      ],
+    }]
+    const result = ProviderTransform.scrubToolCallIds(input)
+    expect(result[0].content[0].toolCallId).toMatch(/^prt_\d+_[a-z0-9]+$/)
+  })
+
+  test("handles special characters in tool call IDs", () => {
+    const input: ModelMessage[] = [{
+      role: "assistant",
+      content: [
+        { type: "tool-call", toolCallId: "call@#$%^&*()!", toolName: "test", input: {} },
+      ],
+    }]
+    const result = ProviderTransform.scrubToolCallIds(input)
+    expect(result[0].content[0].toolCallId).toBe("call___________")
+  })
+
+  test("handles tool-result messages", () => {
+    const input: ModelMessage[] = [{
+      role: "tool",
+      content: [
+        { type: "tool-result", toolCallId: null as any, toolName: "test", result: "output" },
+      ],
+    }]
+    const result = ProviderTransform.scrubToolCallIds(input)
+    expect(result[0].content[0].toolCallId).toMatch(/^prt_\d+_[a-z0-9]+$/)
+  })
+
+  test("preserves valid tool call IDs", () => {
+    const validId = "prt_1234567890abcdef"
+    const input: ModelMessage[] = [{
+      role: "assistant",
+      content: [
+        { type: "tool-call", toolCallId: validId, toolName: "test", input: {} },
+      ],
+    }]
+    const result = ProviderTransform.scrubToolCallIds(input)
+    expect(result[0].content[0].toolCallId).toBe(validId)
+  })
+
+  test("truncates long tool call IDs", () => {
+    const longId = "a".repeat(100)
+    const input: ModelMessage[] = [{
+      role: "assistant",
+      content: [
+        { type: "tool-call", toolCallId: longId, toolName: "test", input: {} },
+      ],
+    }]
+    const result = ProviderTransform.scrubToolCallIds(input)
+    expect(result[0].content[0].toolCallId).toBe(longId.substring(0, 64))
+  })
+})
+
+describe("SCRUB_CACHE", () => {
+  test("needsScrubbing returns false for new model", () => {
+    expect(ProviderTransform.needsScrubbing("nvidia-kimi-k2.5")).toBe(false)
+  })
+
+  test("markNeedsScrubbing marks model as needing scrub", () => {
+    ProviderTransform.markNeedsScrubbing("nvidia-kimi-k2.5")
+    expect(ProviderTransform.needsScrubbing("nvidia-kimi-k2.5")).toBe(true)
+  })
+})

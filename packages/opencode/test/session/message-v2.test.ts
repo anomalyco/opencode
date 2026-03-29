@@ -955,3 +955,71 @@ describe("session.message-v2.fromError", () => {
     expect(result.name).toBe("MessageAbortedError")
   })
 })
+
+describe("toModelMessages retry with scrubbing", () => {
+  test("retries with scrubbing when validation fails due to null toolCallId", async () => {
+    const model = createMockModel({
+      providerID: "nvidia",
+      api: { id: "kimi-k2.5", npm: "@ai-sdk/openai-compatible" },
+    })
+    
+    const input = [
+      {
+        id: PartID.ascending(),
+        messageID: MessageID.ascending(),
+        sessionID: SessionID.ascending(),
+        parts: [
+          {
+            type: "tool-result" as const,
+            toolCallId: null as any, // This will cause validation error
+            toolName: "test",
+            result: "output",
+          },
+        ],
+      },
+    ]
+    
+    // First call should fail and retry with scrubbing
+    const result = await MessageV2.toModelMessages(input, model)
+    
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(1)
+    expect((result[0].content[0] as any).toolCallId).toMatch(/^prt_\d+_[a-z0-9]+$/)
+    
+    // Verify the provider was cached
+    expect(ProviderTransform.needsScrubbing("nvidia-kimi-k2.5")).toBe(true)
+    
+    // Second call should proactively scrub
+    const result2 = await MessageV2.toModelMessages(input, model)
+    expect(result2).toHaveLength(1)
+  })
+  
+  test("does not scrub when validation succeeds", async () => {
+    const validToolCallId = "prt_valid_test_123"
+    const model = createMockModel({
+      providerID: "openai",
+      api: { id: "gpt-4o", npm: "@ai-sdk/openai" },
+    })
+    
+    const input = [
+      {
+        id: PartID.ascending(),
+        messageID: MessageID.ascending(),
+        sessionID: SessionID.ascending(),
+        parts: [
+          {
+            type: "tool-result" as const,
+            toolCallId: validToolCallId,
+            toolName: "test",
+            result: "output",
+          },
+        ],
+      },
+    ]
+    
+    const result = await MessageV2.toModelMessages(input, model)
+    
+    expect(result).toHaveLength(1)
+    expect((result[0].content[0] as any).toolCallId).toBe(validToolCallId)
+  })
+})

@@ -1,6 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import { SessionID, MessageID, PartID } from "./schema"
 import z from "zod"
+import { ProviderTransform } from "@/provider/transform"
 import { NamedError } from "@opencode-ai/util/error"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
 import { LSP } from "../lsp"
@@ -800,13 +801,36 @@ export namespace MessageV2 {
 
     const tools = Object.fromEntries(Array.from(toolNames).map((toolName) => [toolName, { toModelOutput }]))
 
-    return await convertToModelMessages(
-      result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")),
-      {
-        //@ts-expect-error (convertToModelMessages expects a ToolSet but only actually needs tools[name]?.toModelOutput)
-        tools,
-      },
-    )
+    // Attempt conversion - if it fails due to tool call ID validation errors, scrub and retry
+    const modelKey = `${model.providerID}-${model.api.id}`
+    const messages = result.filter((msg) => msg.parts.some((part) => part.type !== "step-start"))
+
+    // If we've already determined this model needs scrubbing, apply it proactively
+    if (ProviderTransform.needsScrubbing(modelKey)) {
+      const scrubbedMessages = ProviderTransform.scrubToolCallIds(messages)
+      return await convertToModelMessages(scrubbedMessages, { tools })
+    }
+
+    // First attempt without scrubbing
+    try {
+      return await convertToModelMessages(messages, { tools })
+    } catch (e: any) {
+      // Check if it's a Zod validation error related to ID fields
+      if (e instanceof z.ZodError || (e?.issues && Array.isArray(e.issues))) {
+        const hasIdError = e.issues.some(
+          (issue: any) => issue.path?.includes("toolCallId") || issue.path?.includes("id"),
+        )
+        if (hasIdError) {
+          // Cache that this model needs scrubbing
+          ProviderTransform.markNeedsScrubbing(modelKey)
+          // Apply scrubbing and retry
+          const scrubbedMessages = ProviderTransform.scrubToolCallIds(messages)
+          return await convertToModelMessages(scrubbedMessages, { tools })
+        }
+      }
+      // Not an ID validation error, re-throw
+      throw e
+    }
   }
 
   export const page = fn(
