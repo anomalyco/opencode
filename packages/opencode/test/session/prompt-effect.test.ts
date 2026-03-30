@@ -543,7 +543,7 @@ it.effect("loop sets status to busy then idle", () =>
 // Cancel semantics
 
 it.effect(
-  "cancel interrupts loop joiners",
+  "cancel interrupts loop and resolves with an assistant message",
   () =>
     provideTmpdirInstance(
       (dir) =>
@@ -563,7 +563,10 @@ it.effect(
           yield* prompt.cancel(chat.id)
 
           const exit = yield* Fiber.await(fiber)
-          expect(Exit.isFailure(exit)).toBe(true)
+          expect(Exit.isSuccess(exit)).toBe(true)
+          if (Exit.isSuccess(exit)) {
+            expect(exit.value.info.role).toBe("assistant")
+          }
         }),
       { git: true, config: cfg },
     ),
@@ -571,7 +574,7 @@ it.effect(
 )
 
 it.effect(
-  "cancel interrupts loop after LLM stream starts",
+  "cancel records MessageAbortedError on interrupted process",
   () =>
     provideTmpdirInstance(
       (dir) =>
@@ -591,7 +594,13 @@ it.effect(
           yield* prompt.cancel(chat.id)
 
           const exit = yield* Fiber.await(fiber)
-          expect(Exit.isFailure(exit)).toBe(true)
+          expect(Exit.isSuccess(exit)).toBe(true)
+          if (Exit.isSuccess(exit)) {
+            const info = exit.value.info
+            if (info.role === "assistant") {
+              expect(info.error?.name).toBe("MessageAbortedError")
+            }
+          }
         }),
       { git: true, config: cfg },
     ),
@@ -599,7 +608,7 @@ it.effect(
 )
 
 it.effect(
-  "cancel with queued callers interrupts all",
+  "cancel with queued callers resolves all cleanly",
   () =>
     provideTmpdirInstance(
       (dir) =>
@@ -623,8 +632,11 @@ it.effect(
           yield* prompt.cancel(chat.id)
 
           const [exitA, exitB] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
-          expect(Exit.isFailure(exitA)).toBe(true)
-          expect(Exit.isFailure(exitB)).toBe(true)
+          expect(Exit.isSuccess(exitA)).toBe(true)
+          expect(Exit.isSuccess(exitB)).toBe(true)
+          if (Exit.isSuccess(exitA) && Exit.isSuccess(exitB)) {
+            expect(exitA.value.info.id).toBe(exitB.value.info.id)
+          }
         }),
       { git: true, config: cfg },
     ),
@@ -948,7 +960,7 @@ it.effect(
           yield* prompt.cancel(chat.id)
 
           const exit = yield* Fiber.await(run)
-          expect(Exit.isFailure(exit)).toBe(true)
+          expect(Exit.isSuccess(exit)).toBe(true)
 
           yield* Fiber.await(sh)
         }),

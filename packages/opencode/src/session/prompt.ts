@@ -23,7 +23,7 @@ import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { fn } from "../util/fn"
 import { ToolRegistry } from "../tool/registry"
-import { SingleFlight } from "@/effect/single-flight"
+import { Cancelled, SingleFlight } from "@/effect/single-flight"
 import { MCP } from "../mcp"
 import { LSP } from "../lsp"
 import { ReadTool } from "../tool/read"
@@ -1545,21 +1545,24 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         return flight
       })
 
+      const joinFlight = (flight: SingleFlight<MessageV2.WithParts, unknown>, sessionID: SessionID) =>
+        SingleFlight.join(flight).pipe(
+          Effect.catch((e) => (e instanceof Cancelled ? lastAssistant(sessionID) : Effect.fail(e))),
+        )
+
       const loop: (input: z.infer<typeof LoopInput>) => Effect.Effect<MessageV2.WithParts, unknown> = Effect.fn(
         "SessionPrompt.loop",
       )(function* (input: z.infer<typeof LoopInput>) {
         const s = yield* InstanceState.get(cache)
         const existing = s.loops.get(input.sessionID)
-        if (existing) {
-          return yield* SingleFlight.join(existing)
-        }
+        if (existing) return yield* joinFlight(existing, input.sessionID)
 
         const flight = yield* makeFlight(s, input.sessionID)
         // If a shell is running, don't start yet — shell cleanup will start it
         if (!s.shells.has(input.sessionID)) {
           yield* SingleFlight.start(flight, scope)
         }
-        return yield* SingleFlight.join(flight)
+        return yield* joinFlight(flight, input.sessionID)
       })
 
       const shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts, unknown> = Effect.fn(
