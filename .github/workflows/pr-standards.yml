@@ -1,4 +1,4 @@
-name: pr-standards
+name: PR Standards
 
 on:
   pull_request_target:
