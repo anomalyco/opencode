@@ -1,6 +1,7 @@
 import semver from "semver"
 import { Log } from "../util/log"
 import { Process } from "../util/process"
+import { online } from "@/util/network"
 
 export namespace PackageRegistry {
   const log = Log.create({ service: "bun" })
@@ -10,6 +11,11 @@ export namespace PackageRegistry {
   }
 
   export async function info(pkg: string, field: string, cwd?: string): Promise<string | null> {
+    if (!online()) {
+      log.debug("offline, skipping bun info", { pkg, field })
+      return null
+    }
+
     const { code, stdout, stderr } = await Process.run([which(), "info", pkg, field], {
       cwd,
       env: {

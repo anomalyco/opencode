@@ -58,12 +58,15 @@ import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { useSessionOpenFile } from "@/pages/session/use-session-open-file"
 import { Identifier } from "@/utils/id"
+import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
 
 const emptyUserMessages: UserMessage[] = []
-const emptyFollowups: (FollowupDraft & { id: string })[] = []
+type FollowupItem = FollowupDraft & { id: string }
+type FollowupEdit = Pick<FollowupItem, "id" | "prompt" | "context">
+const emptyFollowups: FollowupItem[] = []
 
 type SessionHistoryWindowInput = {
   sessionID: () => string | undefined
@@ -513,15 +516,20 @@ export default function Page() {
     deferRender: false,
   })
 
-  const [followup, setFollowup] = createStore({
-    items: {} as Record<string, (FollowupDraft & { id: string })[] | undefined>,
-    failed: {} as Record<string, string | undefined>,
-    paused: {} as Record<string, boolean | undefined>,
-    edit: {} as Record<
-      string,
-      { id: string; prompt: FollowupDraft["prompt"]; context: FollowupDraft["context"] } | undefined
-    >,
-  })
+  const [followup, setFollowup] = persisted(
+    Persist.workspace(sdk.directory, "followup", ["followup.v1"]),
+    createStore<{
+      items: Record<string, FollowupItem[] | undefined>
+      failed: Record<string, string | undefined>
+      paused: Record<string, boolean | undefined>
+      edit: Record<string, FollowupEdit | undefined>
+    }>({
+      items: {},
+      failed: {},
+      paused: {},
+      edit: {},
+    }),
+  )
 
   createComputed((prev) => {
     const key = sessionKey()
@@ -537,6 +545,8 @@ export default function Page() {
   let reviewFrame: number | undefined
   let refreshFrame: number | undefined
   let refreshTimer: number | undefined
+  let todoFrame: number | undefined
+  let todoTimer: number | undefined
   let diffFrame: number | undefined
   let diffTimer: number | undefined
 
@@ -711,7 +721,6 @@ export default function Page() {
             if (!info) return true
             return Date.now() - info.at > SESSION_PREFETCH_TTL
           })()
-      const todos = untrack(() => sync.data.todo[id] !== undefined || globalSync.data.session_todo[id] !== undefined)
       untrack(() => {
         void sync.session.sync(id)
       })
@@ -723,11 +732,45 @@ export default function Page() {
           if (params.id !== id) return
           untrack(() => {
             if (stale) void sync.session.sync(id, { force: true })
-            void sync.session.todo(id, todos ? { force: true } : undefined)
           })
         }, 0)
       })
     }),
+  )
+
+  createEffect(
+    on(
+      () => {
+        const id = params.id
+        return [
+          sdk.directory,
+          id,
+          id ? (sync.data.session_status[id]?.type ?? "idle") : "idle",
+          id ? composer.blocked() : false,
+        ] as const
+      },
+      ([dir, id, status, blocked]) => {
+        if (todoFrame !== undefined) cancelAnimationFrame(todoFrame)
+        if (todoTimer !== undefined) window.clearTimeout(todoTimer)
+        todoFrame = undefined
+        todoTimer = undefined
+        if (!id) return
+        if (status === "idle" && !blocked) return
+        const cached = untrack(() => sync.data.todo[id] !== undefined || globalSync.data.session_todo[id] !== undefined)
+
+        todoFrame = requestAnimationFrame(() => {
+          todoFrame = undefined
+          todoTimer = window.setTimeout(() => {
+            todoTimer = undefined
+            if (sdk.directory !== dir || params.id !== id) return
+            untrack(() => {
+              void sync.session.todo(id, cached ? { force: true } : undefined)
+            })
+          }, 0)
+        })
+      },
+      { defer: true },
+    ),
   )
 
   createEffect(
@@ -1644,6 +1687,15 @@ export default function Page() {
     consumePendingMessage: layout.pendingMessage.consume,
   })
 
+  createEffect(
+    on(
+      () => params.id,
+      (id) => {
+        if (!id) requestAnimationFrame(() => inputRef?.focus())
+      },
+    ),
+  )
+
   onMount(() => {
     document.addEventListener("keydown", handleKeyDown)
   })
@@ -1653,6 +1705,8 @@ export default function Page() {
     if (reviewFrame !== undefined) cancelAnimationFrame(reviewFrame)
     if (refreshFrame !== undefined) cancelAnimationFrame(refreshFrame)
     if (refreshTimer !== undefined) window.clearTimeout(refreshTimer)
+    if (todoFrame !== undefined) cancelAnimationFrame(todoFrame)
+    if (todoTimer !== undefined) window.clearTimeout(todoTimer)
     if (diffFrame !== undefined) cancelAnimationFrame(diffFrame)
     if (diffTimer !== undefined) window.clearTimeout(diffTimer)
     if (scrollStateFrame !== undefined) cancelAnimationFrame(scrollStateFrame)

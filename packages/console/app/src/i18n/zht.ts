@@ -319,8 +319,8 @@ export const dict = {
   "go.faq.a4.p2.accountLink": "帳戶",
   "go.faq.a4.p3": "中管理訂閱。隨時取消。",
   "go.faq.q5": "資料與隱私怎麼辦？",
-  "go.faq.a5.body": "該方案主要面向國際用戶設計，模型託管在美國、歐盟和新加坡，以確保全球穩定存取。",
-  "go.faq.a5.contactAfter": "如果你有任何問題。",
+  "go.faq.a5.body":
+    "該方案主要面向國際用戶設計，模型託管在美國、歐盟和新加坡，以確保全球穩定存取。我們的供應商遵循零留存政策，不會將你的資料用於模型訓練。",
   "go.faq.a5.beforeExceptions": "Go 模型託管在美國。供應商遵循零留存政策，不會將你的資料用於模型訓練，但有",
   "go.faq.a5.exceptionsLink": "以下例外",
   "go.faq.q6": "我可以儲值額度嗎？",
