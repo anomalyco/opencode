@@ -175,7 +175,7 @@ export namespace SessionPrompt {
               mime: stat.type === "Directory" ? "application/x-directory" : "text/plain",
             })
           }),
-          { concurrency: "unbounded" },
+          { concurrency: "unbounded", discard: true },
         )
         return parts
       })
@@ -605,92 +605,114 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           throw error
         }
 
-        let executionError: Error | undefined
-        const result = yield* Effect.promise((signal) =>
-          taskTool
-            .execute(taskArgs, {
-              agent: task.agent,
-              messageID: assistantMessage.id,
-              sessionID,
-              abort: signal,
-              callID: part.callID,
-              extra: { bypassAgentCheck: true },
-              messages: msgs,
-              metadata(val: { title?: string; metadata?: Record<string, any> }) {
-                return Effect.runPromise(
-                  Effect.gen(function* () {
-                    part = yield* sessions.updatePart({
-                      ...part,
-                      type: "tool",
-                      state: { ...part.state, ...val },
-                    } satisfies MessageV2.ToolPart)
-                  }),
-                )
-              },
-              ask(req: any) {
-                return Effect.runPromise(
-                  permission.ask({
-                    ...req,
-                    sessionID,
-                    ruleset: Permission.merge(taskAgent.permission, session.permission ?? []),
-                  }),
-                )
-              },
-            })
-            .catch((error) => {
-              executionError = error instanceof Error ? error : new Error(String(error))
-              log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
-              return undefined
+        let err: Error | undefined
+        const done = (result: Awaited<ReturnType<typeof taskTool.execute>> | undefined, stop: boolean) =>
+          Effect.uninterruptible(
+            Effect.gen(function* () {
+              const attachments = result?.attachments?.map((attachment) => ({
+                ...attachment,
+                id: PartID.ascending(),
+                sessionID,
+                messageID: assistantMessage.id,
+              }))
+
+              yield* plugin.trigger(
+                "tool.execute.after",
+                { tool: "task", sessionID, callID: part.id, args: taskArgs },
+                result,
+              )
+
+              if (!assistantMessage.time.completed) {
+                assistantMessage.finish = "tool-calls"
+                assistantMessage.time.completed = Date.now()
+                yield* sessions.updateMessage(assistantMessage)
+              }
+
+              if (result && part.state.status === "running") {
+                yield* sessions.updatePart({
+                  ...part,
+                  state: {
+                    status: "completed",
+                    input: part.state.input,
+                    title: result.title,
+                    metadata: result.metadata,
+                    output: result.output,
+                    attachments,
+                    time: { ...part.state.time, end: Date.now() },
+                  },
+                } satisfies MessageV2.ToolPart)
+                return
+              }
+
+              if (part.state.status === "running") {
+                yield* sessions.updatePart({
+                  ...part,
+                  state: {
+                    status: "error",
+                    error: stop
+                      ? "Tool execution aborted"
+                      : err
+                        ? `Tool execution failed: ${err.message}`
+                        : "Tool execution failed",
+                    time: {
+                      start: part.state.time.start,
+                      end: Date.now(),
+                    },
+                    metadata: part.state.metadata,
+                    input: part.state.input,
+                  },
+                } satisfies MessageV2.ToolPart)
+              }
             }),
-        )
+          )
 
-        const attachments = result?.attachments?.map((attachment) => ({
-          ...attachment,
-          id: PartID.ascending(),
-          sessionID,
-          messageID: assistantMessage.id,
-        }))
-
-        yield* plugin.trigger(
-          "tool.execute.after",
-          { tool: "task", sessionID, callID: part.id, args: taskArgs },
-          result,
-        )
-
-        assistantMessage.finish = "tool-calls"
-        assistantMessage.time.completed = Date.now()
-        yield* sessions.updateMessage(assistantMessage)
-
-        if (result && part.state.status === "running") {
-          yield* sessions.updatePart({
-            ...part,
-            state: {
-              status: "completed",
-              input: part.state.input,
-              title: result.title,
-              metadata: result.metadata,
-              output: result.output,
-              attachments,
-              time: { ...part.state.time, end: Date.now() },
+        const result = yield* Effect.promise((signal) =>
+          taskTool.execute(taskArgs, {
+            agent: task.agent,
+            messageID: assistantMessage.id,
+            sessionID,
+            abort: signal,
+            callID: part.callID,
+            extra: { bypassAgentCheck: true },
+            messages: msgs,
+            metadata(val: { title?: string; metadata?: Record<string, any> }) {
+              return Effect.runPromise(
+                Effect.gen(function* () {
+                  part = yield* sessions.updatePart({
+                    ...part,
+                    type: "tool",
+                    state: { ...part.state, ...val },
+                  } satisfies MessageV2.ToolPart)
+                }),
+              )
             },
-          } satisfies MessageV2.ToolPart)
-        }
-
-        if (!result) {
-          yield* sessions.updatePart({
-            ...part,
-            state: {
-              status: "error",
-              error: executionError ? `Tool execution failed: ${executionError.message}` : "Tool execution failed",
-              time: {
-                start: part.state.status === "running" ? part.state.time.start : Date.now(),
-                end: Date.now(),
-              },
-              metadata: part.state.status === "pending" ? undefined : part.state.metadata,
-              input: part.state.input,
+            ask(req: any) {
+              return Effect.runPromise(
+                permission.ask({
+                  ...req,
+                  sessionID,
+                  ruleset: Permission.merge(taskAgent.permission, session.permission ?? []),
+                }),
+              )
             },
-          } satisfies MessageV2.ToolPart)
-        }
+          }),
+        ).pipe(
+          Effect.onExit(
+            Effect.fnUntraced(function* (exit) {
+              const stop = Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)
+              if (Exit.isFailure(exit) && !stop) {
+                const squashed = Cause.squash(exit.cause)
+                err = squashed instanceof Error ? squashed : new Error(String(squashed))
+                log.error("subtask execution failed", { error: err, agent: task.agent, description: task.description })
+              }
+              yield* done(Exit.isSuccess(exit) ? exit.value : undefined, stop)
+            }),
+          ),
+          Effect.catchCauseIf(
+            (cause) => !Cause.hasInterruptsOnly(cause),
+            () => Effect.succeed(undefined),
+          ),
+        )
 
         if (!task.command) return
 
@@ -1230,10 +1252,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           return [{ ...part, messageID: info.id, sessionID: input.sessionID }]
         })
 
-        const parts = yield* Effect.all(
-          input.parts.map((part) => resolvePart(part)),
-          { concurrency: "unbounded" },
-        ).pipe(Effect.map((x) => x.flat().map(assign)))
+        const parts = yield* Effect.forEach(input.parts, resolvePart, { concurrency: "unbounded" }).pipe(
+          Effect.map((x) => x.flat().map(assign)),
+        )
 
         yield* plugin.trigger(
           "chat.message",
