@@ -1,43 +1,58 @@
 {
-  "$schema": "https://raw.githubusercontent.com/nickel-org/nickel.rs/master/schema/tauri-conf.json",
+  "$schema": "https://schema.tauri.app/config/2",
   "productName": "Athena Browser",
-  "identifier": "ai.athena.browser",
-  "version": "1.0.0",
+  "identifier": "ai.athena.browser.dev",
+  "mainBinaryName": "Athena",
+  "version": "../package.json",
   "build": {
+    "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "bun run build",
     "frontendDist": "../dist"
   },
   "app": {
+    "windows": [
+      {
+        "label": "main",
+        "create": false
+      }
+    ],
     "withGlobalTauri": true,
     "security": {
       "csp": null
     },
-    "windows": []
+    "macOSPrivateApi": true
   },
   "bundle": {
-    "active": true,
-    "targets": "all",
     "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
+      "icons/dev/32x32.png",
+      "icons/dev/128x128.png",
+      "icons/dev/128x128@2x.png",
+      "icons/dev/icon.icns",
+      "icons/dev/icon.ico"
     ],
-    "externalBin": [
-      "athena-cli"
-    ],
+    "active": true,
+    "targets": ["deb", "rpm", "dmg", "nsis", "app"],
+    "externalBin": ["sidecars/athena-cli"],
+    "linux": {
+      "rpm": {
+        "compression": {
+          "type": "none"
+        }
+      }
+    },
     "macOS": {
-      "privateApi": true,
-      "entitlements": null
+      "entitlements": "./entitlements.plist"
     },
     "windows": {
-      "nsis": {}
-    },
-    "linux": {
-      "deb": {},
-      "rpm": {
-        "compression": "none"
+      "signCommand": {
+        "cmd": "powershell",
+        "args": ["-ExecutionPolicy", "Bypass", "-File", "../../../script/sign-windows.ps1", "%1"]
+      },
+      "nsis": {
+        "installerIcon": "icons/dev/icon.ico",
+        "headerImage": "assets/nsis-header.bmp",
+        "sidebarImage": "assets/nsis-sidebar.bmp"
       }
     }
   },
@@ -46,10 +61,6 @@
       "desktop": {
         "schemes": ["athena"]
       }
-    },
-    "updater": {
-      "pubkey": "",
-      "endpoints": []
     }
   }
 }

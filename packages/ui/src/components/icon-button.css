@@ -1,0 +1,181 @@
+[data-component="icon-button"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  user-select: none;
+  aspect-ratio: 1;
+  flex-shrink: 0;
+
+  &[data-variant="primary"] {
+    background-color: var(--icon-strong-base);
+
+    [data-slot="icon-svg"] {
+      /* color: var(--icon-weak-base); */
+      color: var(--icon-invert-base);
+
+      /* &:hover:not(:disabled) { */
+      /*   color: var(--icon-weak-hover); */
+      /* } */
+      /* &:active:not(:disabled) { */
+      /*   color: var(--icon-strong-active); */
+      /* } */
+    }
+
+    &:hover:not(:disabled) {
+      background-color: var(--icon-strong-hover);
+    }
+    &:focus:not(:disabled) {
+      background-color: var(--icon-strong-focus);
+    }
+    &:active:not(:disabled) {
+      background-color: var(--icon-strong-active);
+    }
+    &:disabled {
+      background-color: var(--icon-strong-disabled);
+
+      [data-slot="icon-svg"] {
+        color: var(--icon-invert-base);
+      }
+    }
+  }
+
+  &[data-variant="secondary"] {
+    border: transparent;
+    background-color: var(--button-secondary-base);
+    color: var(--text-strong);
+    box-shadow: var(--shadow-xs-border-base);
+
+    &:hover:not(:disabled) {
+      background-color: var(--button-secondary-hover);
+    }
+    &:focus:not(:disabled) {
+      background-color: var(--button-secondary-base);
+    }
+    &:focus-visible:not(:active) {
+      background-color: var(--button-secondary-base);
+      box-shadow: var(--shadow-xs-border-focus);
+    }
+    &:focus-visible:active {
+      box-shadow: none;
+    }
+    &:active:not(:disabled) {
+      background-color: var(--button-secondary-base);
+    }
+
+    [data-slot="icon-svg"] {
+      color: var(--icon-strong-base);
+    }
+
+    &:disabled {
+      background-color: var(--icon-strong-disabled);
+      color: var(--icon-invert-base);
+      cursor: not-allowed;
+    }
+  }
+
+  &[data-variant="ghost"] {
+    background-color: transparent;
+    /* color: var(--icon-base); */
+
+    [data-slot="icon-svg"] {
+      color: var(--icon-base);
+    }
+
+    &:hover:not(:disabled) {
+      background-color: var(--surface-base-hover);
+
+      /* [data-slot="icon-svg"] { */
+      /*   color: var(--icon-hover); */
+      /* } */
+    }
+    &:focus-visible:not(:disabled) {
+      background-color: var(--surface-base-hover);
+    }
+    &:active:not(:disabled) {
+      background-color: var(--surface-base-active);
+      /* [data-slot="icon-svg"] { */
+      /*   color: var(--icon-active); */
+      /* } */
+    }
+    &:selected:not(:disabled) {
+      background-color: var(--surface-base-active);
+      /* [data-slot="icon-svg"] { */
+      /*   color: var(--icon-selected); */
+      /* } */
+    }
+    &:disabled {
+      color: var(--icon-invert-base);
+      cursor: not-allowed;
+    }
+  }
+
+  &[data-size="normal"] {
+    width: 24px;
+    height: 24px;
+
+    font-size: var(--font-size-small);
+    line-height: var(--line-height-large);
+    gap: calc(var(--spacing) * 0.5);
+  }
+
+  &[data-size="small"] {
+    width: 20px;
+    height: 20px;
+  }
+
+  &[data-size="large"] {
+    height: 32px;
+    /* padding: 0 8px 0 6px; */
+    gap: 8px;
+
+    /* text-12-medium */
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-style: normal;
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large); /* 166.667% */
+    letter-spacing: var(--letter-spacing-normal);
+  }
+
+  &:focus {
+    outline: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-component="icon-button"][data-icon="stop"] [data-slot="icon-svg"] rect {
+    transform-origin: center;
+    transform-box: fill-box;
+    animation: stop-pulse 1.8s ease-in-out infinite;
+  }
+}
+
+@keyframes stop-pulse {
+  0%,
+  100% {
+    transform: scale(0.95);
+  }
+  50% {
+    transform: scale(1.12);
+  }
+}
+
+[data-component="icon-button"].titlebar-icon {
+  width: 32px;
+  height: 24px;
+  aspect-ratio: auto;
+}
+
+[data-component="icon-button"].titlebar-icon[data-variant="ghost"][aria-expanded="true"] {
+  background-color: var(--surface-raised-base-active);
+}
+
+[data-component="icon-button"].titlebar-icon[data-variant="ghost"][aria-expanded="true"] [data-slot="icon-svg"] {
+  color: var(--icon-strong-base);
+}
+
+[data-component="icon-button"].titlebar-icon[data-variant="ghost"][aria-expanded="true"]:hover:not(:disabled) {
+  background-color: var(--surface-raised-base-active);
+}
