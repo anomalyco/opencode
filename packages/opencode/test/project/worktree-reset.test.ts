@@ -127,6 +127,33 @@ describe("Worktree.reset", () => {
     expect((await $`git status --porcelain=v1`.cwd(info.directory).quiet().text()).trim()).toBe("")
   })
 
+  test("uses configured default branch when not main or master", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const root = tmp.path
+    const name = `dev-${Date.now().toString(36)}`
+    const file = path.join(root, "README.md")
+    await Bun.write(file, "# reset\n")
+    await $`git branch -m ${name}`.cwd(root).quiet()
+    await $`git config init.defaultBranch ${name}`.cwd(root).quiet()
+    await $`git add README.md`.cwd(root).quiet()
+    await $`git commit -m "add readme"`.cwd(root).quiet()
+
+    const info = await make(root, `reset-config-${Date.now().toString(36)}`)
+
+    const readme = path.join(info.directory, "README.md")
+    const extra = path.join(info.directory, `extra-${Date.now().toString(36)}.txt`)
+    const text = await fs.readFile(readme, "utf8")
+    await fs.writeFile(readme, `${text.trimEnd()}\nchange\n`, "utf8")
+    await fs.writeFile(extra, "extra\n", "utf8")
+
+    const ok = await withInstance(root, () => Worktree.reset({ directory: info.directory }))
+    expect(ok).toBe(true)
+
+    expect(await fs.readFile(readme, "utf8")).toBe(text)
+    expect(await fs.stat(extra).then(() => true).catch(() => false)).toBe(false)
+    expect((await $`git status --porcelain=v1`.cwd(info.directory).quiet().text()).trim()).toBe("")
+  })
+
   wintest("stops fsmonitor before resetting a worktree", async () => {
     await using tmp = await tmpdir({ git: true })
     const root = tmp.path

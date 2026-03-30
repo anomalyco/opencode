@@ -10,6 +10,7 @@ import { Filesystem } from "../util/filesystem"
 import { Process } from "../util/process"
 import { which } from "../util/which"
 import { text } from "node:stream/consumers"
+import { Glob } from "../util/glob"
 
 import { ZipReader, BlobReader, BlobWriter } from "@zip.js/zip.js"
 import { Log } from "@/util/log"
@@ -127,13 +128,27 @@ export namespace Ripgrep {
     }),
   )
 
-  const state = lazy(async () => {
+  type Local = {
+    filepath?: string
+  }
+
+  async function probe(): Promise<Local> {
     const system = which("rg")
     if (system) {
       const stat = await fs.stat(system).catch(() => undefined)
       if (stat?.isFile()) return { filepath: system }
       log.warn("bun.which returned invalid rg path", { filepath: system })
     }
+
+    const filepath = path.join(Global.Path.bin, "rg" + (process.platform === "win32" ? ".exe" : ""))
+    if (await Filesystem.exists(filepath)) return { filepath }
+    return {}
+  }
+
+  const state = lazy(async (): Promise<Local> => {
+    const local = await probe()
+    if (local.filepath) return local
+
     const filepath = path.join(Global.Path.bin, "rg" + (process.platform === "win32" ? ".exe" : ""))
 
     if (!(await Filesystem.exists(filepath))) {
@@ -210,7 +225,138 @@ export namespace Ripgrep {
 
   export async function filepath() {
     const { filepath } = await state()
+    if (!filepath) throw new Error("ripgrep not available")
     return filepath
+  }
+
+  async function available() {
+    return probe().catch((err) => {
+      log.warn("ripgrep unavailable, using local fallback", { error: err instanceof Error ? err.message : String(err) })
+      return {} satisfies Local
+    })
+  }
+
+  async function* walk(input: {
+    cwd: string
+    dir: string
+    glob?: string[]
+    hidden?: boolean
+    follow?: boolean
+    maxDepth?: number
+    depth?: number
+    signal?: AbortSignal
+  }): AsyncGenerator<string> {
+    input.signal?.throwIfAborted()
+    const list = await fs.readdir(input.dir, { withFileTypes: true }).catch(() => [] as fs.Dirent[])
+    for (const entry of list) {
+      input.signal?.throwIfAborted()
+      if (entry.name === ".git") continue
+      if (input.hidden === false && entry.name.startsWith(".")) continue
+
+      const abs = path.join(input.dir, entry.name)
+      const rel = path.relative(input.cwd, abs)
+      const key = rel.replaceAll("\\", "/")
+      const next = input.depth ?? 0
+
+      if (entry.isSymbolicLink()) {
+        if (!input.follow) continue
+        const stat = await fs.stat(abs).catch(() => undefined)
+        if (!stat) continue
+        if (stat.isDirectory()) {
+          if (input.maxDepth !== undefined && next >= input.maxDepth) continue
+          yield* walk({
+            ...input,
+            dir: abs,
+            depth: next + 1,
+          })
+          continue
+        }
+      }
+
+      if (entry.isDirectory()) {
+        if (input.maxDepth !== undefined && next >= input.maxDepth) continue
+        yield* walk({
+          ...input,
+          dir: abs,
+          depth: next + 1,
+        })
+        continue
+      }
+
+      if (input.glob && !input.glob.some((glob) => Glob.match(glob, key))) continue
+      yield rel
+    }
+  }
+
+  function localFiles(input: {
+    cwd: string
+    glob?: string[]
+    hidden?: boolean
+    follow?: boolean
+    maxDepth?: number
+    signal?: AbortSignal
+  }) {
+    return walk({
+      ...input,
+      dir: input.cwd,
+      depth: 0,
+    })
+  }
+
+  async function localSearch(input: {
+    cwd: string
+    pattern: string
+    glob?: string[]
+    limit?: number
+    follow?: boolean
+  }) {
+    const rx = new RegExp(input.pattern, "g")
+    const out: Match["data"][] = []
+
+    for await (const file of localFiles({
+      cwd: input.cwd,
+      glob: input.glob,
+      hidden: true,
+      follow: input.follow,
+    })) {
+      if (input.limit && out.length >= input.limit) break
+      const abs = path.join(input.cwd, file)
+      const text = await fs.readFile(abs, "utf8").catch(() => undefined)
+      if (text === undefined) continue
+
+      const lines = text.split(/\r?\n/)
+      let offset = 0
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i]
+        if (!line) {
+          offset += 1
+          continue
+        }
+
+        rx.lastIndex = 0
+        const parts = Array.from(line.matchAll(rx))
+        if (!parts.length) {
+          offset += line.length + 1
+          continue
+        }
+
+        out.push({
+          path: { text: file },
+          lines: { text: line },
+          line_number: i + 1,
+          absolute_offset: offset,
+          submatches: parts.map((match) => ({
+            match: { text: match[0] },
+            start: match.index ?? 0,
+            end: (match.index ?? 0) + match[0].length,
+          })),
+        })
+        if (input.limit && out.length >= input.limit) break
+        offset += line.length + 1
+      }
+    }
+
+    return out
   }
 
   export async function* files(input: {
@@ -223,7 +369,13 @@ export namespace Ripgrep {
   }) {
     input.signal?.throwIfAborted()
 
-    const args = [await filepath(), "--files", "--glob=!.git/*"]
+    const local = await available()
+    if (!local.filepath) {
+      yield* localFiles(input)
+      return
+    }
+
+    const args = [local.filepath, "--files", "--glob=!.git/*"]
     if (input.follow) args.push("--follow")
     if (input.hidden !== false) args.push("--hidden")
     if (input.maxDepth !== undefined) args.push(`--max-depth=${input.maxDepth}`)
@@ -339,7 +491,10 @@ export namespace Ripgrep {
     limit?: number
     follow?: boolean
   }) {
-    const args = [`${await filepath()}`, "--json", "--hidden", "--glob=!.git/*"]
+    const local = await available()
+    if (!local.filepath) return localSearch(input)
+
+    const args = [local.filepath, "--json", "--hidden", "--glob=!.git/*"]
     if (input.follow) args.push("--follow")
 
     if (input.glob) {

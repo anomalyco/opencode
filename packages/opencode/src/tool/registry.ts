@@ -60,6 +60,7 @@ export namespace ToolRegistry {
       const cache = yield* InstanceState.make<State>(
         Effect.fn("ToolRegistry.state")(function* (ctx) {
           const custom: Tool.Info[] = []
+          const spec = (file: string) => (process.platform === "win32" ? file : pathToFileURL(file).href)
 
           function fromPlugin(id: string, def: ToolDefinition): Tool.Info {
             return {
@@ -85,18 +86,38 @@ export namespace ToolRegistry {
             }
           }
 
+          function fromFile(file: string, id: string, err?: unknown): Tool.Info {
+            return {
+              id,
+              init: async (initCtx) => {
+                await Config.waitForDependencies().catch(() => undefined)
+                const mod = await import(spec(file))
+                const def = mod.default as ToolDefinition | undefined
+                if (!def) {
+                  throw err instanceof Error ? err : new Error(`Tool "${id}" failed to load`)
+                }
+                return fromPlugin(id, def).init(initCtx)
+              },
+            }
+          }
+
           const dirs = yield* config.directories()
           const matches = dirs.flatMap((dir) =>
             Glob.scanSync("{tool,tools}/*.{js,ts}", { cwd: dir, absolute: true, dot: true, symlink: true }),
           )
-          if (matches.length) yield* config.waitForDependencies()
           for (const match of matches) {
             const namespace = path.basename(match, path.extname(match))
-            const mod = yield* Effect.promise(
-              () => import(process.platform === "win32" ? match : pathToFileURL(match).href),
-            )
-            for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
-              custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
+            try {
+              const mod = yield* Effect.promise(() => import(spec(match)))
+              for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
+                custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
+              }
+            } catch (err) {
+              log.warn("failed to load custom tool", {
+                file: match,
+                error: err instanceof Error ? err.message : String(err),
+              })
+              custom.push(fromFile(match, namespace, err))
             }
           }
 

@@ -187,12 +187,11 @@ export namespace Config {
       return false
     }
 
-    const mod = path.join(dir, "node_modules", "@opencode-ai", "plugin")
-    if (!existsSync(mod)) return true
-
     const pkg = path.join(dir, "package.json")
     const pkgExists = await Filesystem.exists(pkg)
-    if (!pkgExists) return true
+    if (!pkgExists) return dir === Flag.OPENCODE_CONFIG_DIR
+    const mod = path.join(dir, "node_modules", "@opencode-ai", "plugin")
+    if (!existsSync(mod)) return true
 
     const parsed = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => null)
     const dependencies = parsed?.dependencies ?? {}

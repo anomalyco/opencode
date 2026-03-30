@@ -1,9 +1,7 @@
 import z from "zod"
-import { text } from "node:stream/consumers"
 import { Tool } from "./tool"
 import { Filesystem } from "../util/filesystem"
 import { Ripgrep } from "../file/ripgrep"
-import { Process } from "../util/process"
 
 import DESCRIPTION from "./grep.txt"
 import { Instance } from "../project/instance"
@@ -39,65 +37,21 @@ export const GrepTool = Tool.define("grep", {
     searchPath = path.isAbsolute(searchPath) ? searchPath : path.resolve(Instance.directory, searchPath)
     await assertExternalDirectory(ctx, searchPath, { kind: "directory" })
 
-    const rgPath = await Ripgrep.filepath()
-    const args = ["-nH", "--hidden", "--no-messages", "--field-match-separator=|", "--regexp", params.pattern]
-    if (params.include) {
-      args.push("--glob", params.include)
-    }
-    args.push(searchPath)
-
-    const proc = Process.spawn([rgPath, ...args], {
-      stdout: "pipe",
-      stderr: "pipe",
-      abort: ctx.abort,
-    })
-
-    if (!proc.stdout || !proc.stderr) {
-      throw new Error("Process output not available")
-    }
-
-    const output = await text(proc.stdout)
-    const errorOutput = await text(proc.stderr)
-    const exitCode = await proc.exited
-
-    // Exit codes: 0 = matches found, 1 = no matches, 2 = errors (but may still have matches)
-    // With --no-messages, we suppress error output but still get exit code 2 for broken symlinks etc.
-    // Only fail if exit code is 2 AND no output was produced
-    if (exitCode === 1 || (exitCode === 2 && !output.trim())) {
-      return {
-        title: params.pattern,
-        metadata: { matches: 0, truncated: false },
-        output: "No files found",
-      }
-    }
-
-    if (exitCode !== 0 && exitCode !== 2) {
-      throw new Error(`ripgrep failed: ${errorOutput}`)
-    }
-
-    const hasErrors = exitCode === 2
-
-    // Handle both Unix (\n) and Windows (\r\n) line endings
-    const lines = output.trim().split(/\r?\n/)
     const matches = []
-
-    for (const line of lines) {
-      if (!line) continue
-
-      const [filePath, lineNumStr, ...lineTextParts] = line.split("|")
-      if (!filePath || !lineNumStr || lineTextParts.length === 0) continue
-
-      const lineNum = parseInt(lineNumStr, 10)
-      const lineText = lineTextParts.join("|")
-
+    for (const item of await Ripgrep.search({
+      cwd: searchPath,
+      pattern: params.pattern,
+      glob: params.include ? [params.include] : undefined,
+    })) {
+      const filePath = path.join(searchPath, item.path.text)
       const stats = Filesystem.stat(filePath)
       if (!stats) continue
 
       matches.push({
         path: filePath,
         modTime: stats.mtime.getTime(),
-        lineNum,
-        lineText,
+        lineNum: item.line_number,
+        lineText: item.lines.text,
       })
     }
 
@@ -137,11 +91,6 @@ export const GrepTool = Tool.define("grep", {
       outputLines.push(
         `(Results truncated: showing ${limit} of ${totalMatches} matches (${totalMatches - limit} hidden). Consider using a more specific path or pattern.)`,
       )
-    }
-
-    if (hasErrors) {
-      outputLines.push("")
-      outputLines.push("(Some paths were inaccessible and skipped)")
     }
 
     return {

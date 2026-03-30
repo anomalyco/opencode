@@ -555,6 +555,11 @@ export namespace Worktree {
         const remoteBranch =
           remote && remoteTarget.startsWith(`${remote}/`) ? remoteTarget.slice(`${remote}/`.length) : ""
 
+        const cfg = yield* git(["config", "init.defaultBranch"], { cwd: Instance.worktree })
+        const pref = cfg.code === 0 ? cfg.text.trim() : ""
+        const prefCheck = pref
+          ? yield* git(["show-ref", "--verify", "--quiet", `refs/heads/${pref}`], { cwd: Instance.worktree })
+          : undefined
         const [mainCheck, masterCheck] = yield* Effect.all(
           [
             git(["show-ref", "--verify", "--quiet", "refs/heads/main"], { cwd: Instance.worktree }),
@@ -562,7 +567,8 @@ export namespace Worktree {
           ],
           { concurrency: 2 },
         )
-        const localBranch = mainCheck.code === 0 ? "main" : masterCheck.code === 0 ? "master" : ""
+        const localBranch =
+          prefCheck?.code === 0 ? pref : mainCheck.code === 0 ? "main" : masterCheck.code === 0 ? "master" : ""
 
         const target = remoteBranch ? `${remote}/${remoteBranch}` : localBranch
         if (!target) {
