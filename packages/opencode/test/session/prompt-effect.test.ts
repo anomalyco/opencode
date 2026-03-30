@@ -599,6 +599,7 @@ it.live(
               subagent_type: z.string(),
               task_id: z.string().optional(),
               command: z.string().optional(),
+              timeout: z.number().optional(),
             }),
             execute: async (_args, ctx) => {
               ready.resolve()
