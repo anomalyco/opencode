@@ -11,6 +11,8 @@ afterEach(async () => {
   await Instance.disposeAll()
 })
 
+const wintest = process.platform === "win32" ? test : test.skip
+
 async function touch(file: string, time: number) {
   const date = new Date(time)
   await fs.utimes(file, date, date)
@@ -178,6 +180,23 @@ describe("file/time", () => {
           expect(error).toBeDefined()
           expect(error!.message).toContain("Last modification:")
           expect(error!.message).toContain("Last read:")
+        },
+      })
+    })
+
+    wintest("treats equivalent Windows path variants as the same file", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "file.txt")
+      const variant = filepath.replace(/^[A-Za-z]:/, "").replaceAll("\\", "/").toLowerCase()
+      await fs.writeFile(filepath, "content", "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          await FileTime.read(sessionID, variant)
+
+          expect(await FileTime.get(sessionID, filepath)).toBeInstanceOf(Date)
+          await FileTime.assert(sessionID, filepath)
         },
       })
     })
