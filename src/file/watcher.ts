@@ -18,6 +18,10 @@ export namespace FileWatcher {
         path: z.string(),
       }),
     ),
+    Updated: BusEvent.define(
+      "file.updated",
+      z.any(),
+    ),
   }
 
   export interface Interface {
@@ -39,6 +43,7 @@ export namespace FileWatcher {
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
+  export const init = () => {}
   export const start = async () => {}
   export const stop = async () => {}
 }

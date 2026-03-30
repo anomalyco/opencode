@@ -13,4 +13,12 @@ export namespace FileTime {
   }
 
   export function clear(_sessionID: string): void {}
+
+  export async function read(_sessionID: string, _file: string): Promise<void> {}
+
+  export async function assert(_sessionID: string, _file: string): Promise<void> {}
+
+  export async function withLock<T>(_file: string, fn: () => Promise<T>): Promise<T> {
+    return fn()
+  }
 }
