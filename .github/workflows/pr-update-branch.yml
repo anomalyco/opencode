@@ -1,0 +1,73 @@
+name: PR Branch Sync
+
+# When main changes (typically after a PR merge), automatically update all
+# open PR branches so they stay current. This prevents CI failures caused by
+# stale branches missing fixes that landed on main after the PR was created.
+#
+# Uses the GitHub API's updateBranch endpoint which performs a merge-update
+# (not rebase), preserving PR commit history. Only updates PRs that are
+# actually behind — already-current PRs are skipped.
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: pr-update-branch
+  cancel-in-progress: true
+
+jobs:
+  update-branches:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Update open PR branches
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const pulls = await github.rest.pulls.list({
+              owner,
+              repo,
+              state: 'open',
+              base: 'main',
+              per_page: 50,
+            });
+
+            console.log(`Found ${pulls.data.length} open PRs targeting main`);
+
+            let updated = 0;
+            let skipped = 0;
+            let failed = 0;
+
+            for (const pr of pulls.data) {
+              // Skip draft PRs — they're still being worked on
+              if (pr.draft) {
+                console.log(`#${pr.number}: draft — skipped`);
+                skipped++;
+                continue;
+              }
+
+              try {
+                await github.rest.pulls.updateBranch({
+                  owner,
+                  repo,
+                  pull_number: pr.number,
+                });
+                console.log(`#${pr.number}: updated`);
+                updated++;
+              } catch (e) {
+                if (e.status === 422) {
+                  // Already up to date or merge conflict
+                  console.log(`#${pr.number}: already up to date or conflict — skipped`);
+                  skipped++;
+                } else {
+                  console.log(`#${pr.number}: error ${e.status} — ${e.message}`);
+                  failed++;
+                }
+              }
+            }
+
+            console.log(`\nDone: ${updated} updated, ${skipped} skipped, ${failed} failed`);
