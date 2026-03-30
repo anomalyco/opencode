@@ -39,7 +39,7 @@ export function Tips() {
       <text flexShrink={0} style={{ fg: theme.warning }}>
         ● Tip{" "}
       </text>
-      <text flexShrink={1}>
+      <text flexShrink={1} wrapMode="word">
         <For each={parts}>
           {(part) => <span style={{ fg: part.highlight ? theme.text : theme.textMuted }}>{part.text}</span>}
         </For>
