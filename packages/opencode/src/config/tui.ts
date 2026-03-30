@@ -24,8 +24,6 @@ export namespace TuiConfig {
 
   export type PluginRecord = {
     item: Config.PluginSpec
-    spec: string
-    options: Config.PluginOptions | undefined
     scope: PluginMeta["scope"]
     source: string
   }
@@ -41,7 +39,8 @@ export namespace TuiConfig {
   }
 
   export type Info = z.output<typeof Info> & {
-    plugins?: PluginRecord[]
+    // Internal resolved plugin list used by runtime loading.
+    plugin_records?: PluginRecord[]
   }
 
   function pluginScope(file: string): PluginMeta["scope"] {
@@ -157,15 +156,13 @@ export namespace TuiConfig {
 
     const merged = dedupePlugins(acc.entries)
     acc.result.keybinds = Config.Keybinds.parse(acc.result.keybinds ?? {})
-    const plugins = merged.map((item) => ({
+    const list = merged.map((item) => ({
       item: item.item,
-      spec: Config.pluginSpecifier(item.item),
-      options: Config.pluginOptions(item.item),
       scope: item.meta.scope,
       source: item.meta.source,
     }))
-    acc.result.plugin = plugins.map((item) => item.item)
-    acc.result.plugins = plugins.length ? plugins : undefined
+    acc.result.plugin = list.map((item) => item.item)
+    acc.result.plugin_records = list.length ? list : undefined
 
     const deps: Promise<void>[] = []
     if (acc.result.plugin?.length) {

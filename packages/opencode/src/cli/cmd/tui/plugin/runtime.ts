@@ -18,7 +18,7 @@ import { Log } from "@/util/log"
 import { errorData, errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
 import { Instance } from "@/project/instance"
-import { readPluginId, readV1Plugin, resolvePluginId, type PluginSource } from "@/plugin/shared"
+import { pluginSource, readPluginId, readV1Plugin, resolvePluginId, type PluginSource } from "@/plugin/shared"
 import { PluginLoader } from "@/plugin/loader"
 import { PluginMeta } from "@/plugin/meta"
 import { installPlugin as installModulePlugin, patchPluginConfig, readPluginManifest } from "@/plugin/install"
@@ -280,7 +280,7 @@ async function loadExternalPlugin(cfg: TuiConfig.PluginRecord, retry = false): P
   if (!id) return
 
   return {
-    options: cfg.options,
+    options: plan.options,
     spec: plan.spec,
     target: loaded.value.target,
     retry,
@@ -633,8 +633,7 @@ async function resolveExternalPlugins(list: TuiConfig.PluginRecord[], wait: () =
     if (!entry) {
       const item = list[i]
       if (!item) continue
-      const plan = PluginLoader.plan(item.item)
-      if (plan.source !== "file") continue
+      if (pluginSource(Config.pluginSpecifier(item.item)) !== "file") continue
       deps ??= wait().catch((error) => {
         log.warn("failed waiting for tui plugin dependencies", { error })
       })
@@ -702,8 +701,6 @@ async function addExternalPluginEntries(state: RuntimeState, ready: PluginLoad[]
 function defaultPluginRecord(state: RuntimeState, spec: string): TuiConfig.PluginRecord {
   return {
     item: spec,
-    spec,
-    options: undefined,
     scope: "local",
     source: state.api.state.path.config || path.join(state.directory, ".opencode", "tui.json"),
   }
@@ -742,7 +739,8 @@ async function addPluginBySpec(state: RuntimeState | undefined, raw: string) {
   if (!spec) return false
 
   const cfg = state.pending.get(spec) ?? defaultPluginRecord(state, spec)
-  if (state.plugins.some((plugin) => plugin.load.spec === cfg.spec)) {
+  const next = Config.pluginSpecifier(cfg.item)
+  if (state.plugins.some((plugin) => plugin.load.spec === next)) {
     state.pending.delete(spec)
     return true
   }
@@ -751,17 +749,17 @@ async function addPluginBySpec(state: RuntimeState | undefined, raw: string) {
     directory: state.directory,
     fn: () => resolveExternalPlugins([cfg], () => TuiConfig.waitForDependencies()),
   }).catch((error) => {
-    fail("failed to add tui plugin", { path: cfg.spec, error })
+    fail("failed to add tui plugin", { path: next, error })
     return [] as PluginLoad[]
   })
   if (!ready.length) {
-    fail("failed to add tui plugin", { path: cfg.spec })
+    fail("failed to add tui plugin", { path: next })
     return false
   }
 
   const first = ready[0]
   if (!first) {
-    fail("failed to add tui plugin", { path: cfg.spec })
+    fail("failed to add tui plugin", { path: next })
     return false
   }
   if (state.plugins_by_id.has(first.id)) {
@@ -778,7 +776,7 @@ async function addPluginBySpec(state: RuntimeState | undefined, raw: string) {
 
   if (ok) state.pending.delete(spec)
   if (!ok) {
-    fail("failed to add tui plugin", { path: cfg.spec })
+    fail("failed to add tui plugin", { path: next })
   }
   return ok
 }
@@ -864,8 +862,6 @@ async function installPluginBySpec(
     const item = tui.opts ? ([spec, tui.opts] as Config.PluginSpec) : spec
     state.pending.set(spec, {
       item,
-      spec: Config.pluginSpecifier(item),
-      options: Config.pluginOptions(item),
       scope: global ? "global" : "local",
       source: (file ?? dir.config) || path.join(patch.dir, "tui.json"),
     })
@@ -950,9 +946,9 @@ export namespace TuiPluginRuntime {
       directory: cwd,
       fn: async () => {
         const config = await TuiConfig.get()
-        const plugins = Flag.OPENCODE_PURE ? [] : (config.plugins ?? [])
-        if (Flag.OPENCODE_PURE && config.plugins?.length) {
-          log.info("skipping external tui plugins in pure mode", { count: config.plugins.length })
+        const records = Flag.OPENCODE_PURE ? [] : (config.plugin_records ?? [])
+        if (Flag.OPENCODE_PURE && config.plugin_records?.length) {
+          log.info("skipping external tui plugins in pure mode", { count: config.plugin_records.length })
         }
 
         for (const item of INTERNAL_TUI_PLUGINS) {
@@ -969,7 +965,7 @@ export namespace TuiPluginRuntime {
           })
         }
 
-        const ready = await resolveExternalPlugins(plugins, () => TuiConfig.waitForDependencies())
+        const ready = await resolveExternalPlugins(records, () => TuiConfig.waitForDependencies())
         await addExternalPluginEntries(next, ready)
 
         applyInitialPluginEnabledState(next, config)

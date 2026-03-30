@@ -4,8 +4,6 @@ import {
   checkPluginCompatibility,
   createPluginEntry,
   isDeprecatedPlugin,
-  parsePluginSpecifier,
-  pluginSource,
   resolvePluginTarget,
   type PluginKind,
   type PluginPackage,
@@ -17,15 +15,11 @@ export namespace PluginLoader {
     item: Config.PluginSpec
     spec: string
     options: Config.PluginOptions | undefined
-    parsed: {
-      pkg: string
-      version: string
-    }
-    source: PluginSource
     deprecated: boolean
   }
 
   export type Resolved = Plan & {
+    source: PluginSource
     target: string
     entry: string
     pkg?: PluginPackage
@@ -41,8 +35,6 @@ export namespace PluginLoader {
       item,
       spec,
       options: Config.pluginOptions(item),
-      parsed: parsePluginSpecifier(spec),
-      source: pluginSource(spec),
       deprecated: isDeprecatedPlugin(spec),
     }
   }
@@ -55,7 +47,7 @@ export namespace PluginLoader {
   > {
     let target = ""
     try {
-      target = await resolvePluginTarget(plan.spec, plan.parsed)
+      target = await resolvePluginTarget(plan.spec)
     } catch (error) {
       return {
         ok: false,

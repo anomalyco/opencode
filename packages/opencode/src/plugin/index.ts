@@ -15,7 +15,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { errorMessage } from "@/util/error"
 import { PluginLoader } from "./loader"
-import { readPluginId, readV1Plugin, resolvePluginId } from "./shared"
+import { parsePluginSpecifier, readPluginId, readV1Plugin, resolvePluginId } from "./shared"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -162,14 +162,15 @@ export namespace Plugin {
                   const message = errorMessage(cause)
 
                   if (resolved.stage === "install") {
+                    const parsed = parsePluginSpecifier(plan.spec)
                     log.error("failed to install plugin", {
-                      pkg: plan.parsed.pkg,
-                      version: plan.parsed.version,
+                      pkg: parsed.pkg,
+                      version: parsed.version,
                       error: message,
                     })
                     Bus.publish(Session.Event.Error, {
                       error: new NamedError.Unknown({
-                        message: `Failed to install plugin ${plan.parsed.pkg}@${plan.parsed.version}: ${message}`,
+                        message: `Failed to install plugin ${parsed.pkg}@${parsed.version}: ${message}`,
                       }).toObject(),
                     })
                     return
