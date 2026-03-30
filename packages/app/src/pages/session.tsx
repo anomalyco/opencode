@@ -53,7 +53,9 @@ import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
-import { TerminalPanel } from "@/pages/session/terminal-panel"
+import { BrowserLivePanel } from "@/pages/session/browser-live-panel"
+// Terminal panel removed — browser agent uses browser live view instead
+// import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { Identifier } from "@/utils/id"
@@ -396,12 +398,12 @@ export default function Page() {
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
   const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
+  // Chat panel takes ~40% on desktop, browser live view takes the rest
   const sessionPanelWidth = createMemo(() => {
-    if (!desktopSidePanelOpen()) return "100%"
-    if (desktopReviewOpen()) return `${layout.session.width()}px`
-    return `calc(100% - ${layout.fileTree.width()}px)`
+    if (!isDesktop()) return "100%"
+    return "420px"
   })
-  const centered = createMemo(() => isDesktop() && !desktopReviewOpen())
+  const centered = createMemo(() => false)
 
   function normalizeTab(tab: string) {
     if (!tab.startsWith("file://")) return tab
@@ -1717,14 +1719,12 @@ export default function Page() {
                 {language.t("session.tab.session")}
               </Tabs.Trigger>
               <Tabs.Trigger
-                value="changes"
+                value="browser"
                 class="!w-1/2 !max-w-none !border-r-0"
                 classes={{ button: "w-full" }}
-                onClick={() => setStore("mobileTab", "changes")}
+                onClick={() => setStore("mobileTab", "browser")}
               >
-                {hasReview()
-                  ? language.t("session.review.filesChanged", { count: reviewCount() })
-                  : language.t("session.review.change.other")}
+                ◆ Browser
               </Tabs.Trigger>
             </Tabs.List>
           </Tabs>
@@ -1843,13 +1843,14 @@ export default function Page() {
             }}
           />
 
-          <Show when={desktopReviewOpen()}>
+          {/* Resize handle between chat and browser panels */}
+          <Show when={isDesktop()}>
             <div onPointerDown={() => size.start()}>
               <ResizeHandle
                 direction="horizontal"
                 size={layout.session.width()}
-                min={450}
-                max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.45}
+                min={320}
+                max={typeof window === "undefined" ? 600 : window.innerWidth * 0.5}
                 onResize={(width) => {
                   size.touch()
                   layout.session.resize(width)
@@ -1859,16 +1860,8 @@ export default function Page() {
           </Show>
         </div>
 
-        <SessionSidePanel
-          reviewPanel={reviewPanel}
-          activeDiff={tree.activeDiff}
-          focusReviewDiff={focusReviewDiff}
-          reviewSnap={ui.reviewSnap}
-          size={size}
-        />
+        <BrowserLivePanel />
       </div>
-
-      <TerminalPanel />
     </div>
   )
 }
