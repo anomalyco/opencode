@@ -18,8 +18,32 @@ env:
   BUN_VERSION: "1.3.11"
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      source: ${{ steps.filter.outputs.source }}
+      app: ${{ steps.filter.outputs.app }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            source:
+              - 'packages/**'
+              - 'package.json'
+              - 'bun.lock'
+              - 'tsconfig.json'
+              - 'turbo.json'
+            app:
+              - 'packages/app/**'
+              - 'packages/ui/**'
+
   unit:
     name: unit (${{ matrix.settings.name }})
+    needs: changes
+    if: needs.changes.outputs.source == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     strategy:
       fail-fast: false
       matrix:
@@ -64,6 +88,8 @@ jobs:
 
   e2e:
     name: e2e (${{ matrix.settings.name }})
+    needs: changes
+    if: needs.changes.outputs.app == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     strategy:
       fail-fast: false
       matrix:
