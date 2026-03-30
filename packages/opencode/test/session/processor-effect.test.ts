@@ -644,6 +644,55 @@ it.live("session.processor effect tests compact on structured context overflow",
   ),
 )
 
+it.live("session.processor effect tests stop on structured context overflow when compaction.auto is false", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        yield* llm.error(400, { type: "error", error: { code: "context_length_exceeded" } })
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "stop json")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies MessageV2.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "stop json" }],
+          tools: {},
+        })
+
+        expect(value).toBe("stop")
+        expect(yield* llm.calls).toBe(1)
+        expect(handle.message.error?.name).toBe("ContextOverflowError")
+      }),
+    {
+      git: true,
+      config: (url) => ({
+        ...providerCfg(url),
+        compaction: { auto: false },
+      }),
+    },
+  ),
+)
+
 it.live("session.processor effect tests mark pending tools as aborted on cleanup", () =>
   provideTmpdirServer(
     ({ dir, llm }) =>
