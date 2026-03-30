@@ -1,8 +1,9 @@
-import { Config } from "../config/config"
+import { TuiConfig } from "../config/tui"
 import { Plugin } from "../plugin"
 import { Vcs } from "../project/vcs"
 import { Instance } from "../project/instance"
 import { Session } from "../session"
+import { SessionID } from "../session/schema"
 import { MessageV2 } from "../session/message-v2"
 import { SessionStatus } from "../session/status"
 import { Provider } from "../provider/provider"
@@ -30,21 +31,22 @@ export namespace StatusLine {
 
     if (!sessionID) return vars
 
-    const session = await Session.get(sessionID).catch(() => undefined)
+    const sid = SessionID.make(sessionID)
+    const session = await Session.get(sid).catch(() => undefined)
     if (!session) return vars
 
     vars.session_id = session.id
     vars.session_title = session.title
     vars.session_slug = session.slug
 
-    const status = SessionStatus.get(sessionID)
+    const status = await SessionStatus.get(sid)
     vars.session_status = status.type
 
     vars.session_created = String(session.time.created)
     vars.session_updated = String(session.time.updated)
     vars.session_duration = String(Date.now() - session.time.created)
 
-    const msgs = await Session.messages({ sessionID }).catch(() => [] as never[])
+    const msgs = await Session.messages({ sessionID: sid }).catch(() => [] as never[])
     if (msgs.length === 0) return vars
 
     vars.message_count = String(msgs.length)
@@ -214,8 +216,8 @@ export namespace StatusLine {
   }
 
   export async function get(sessionID?: string) {
-    const config = await Config.get()
-    const sl = config.tui?.status_line
+    const config = await TuiConfig.get()
+    const sl = config.status_line
     if (!sl?.templates || Object.keys(sl.templates).length === 0) return undefined
 
     const [builtin, shell, plugin] = await Promise.all([
