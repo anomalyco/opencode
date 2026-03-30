@@ -60,12 +60,7 @@ export namespace SessionRetry {
 
     const json = iife(() => {
       try {
-        if (typeof error.data?.message === "string") {
-          const parsed = JSON.parse(error.data.message)
-          return parsed
-        }
-
-        return JSON.parse(error.data.message)
+        return JSON.parse(error.data?.message)
       } catch {
         return undefined
       }

@@ -21,6 +21,7 @@ import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { Bus } from "../../bus"
 import { NamedError } from "@opencode-ai/util/error"
+import { ToolRegistry } from "../../tool/registry"
 
 const log = Log.create({ service: "server" })
 
@@ -185,6 +186,58 @@ export const SessionRoutes = lazy(() =>
         const sessionID = c.req.valid("param").sessionID
         const todos = await Todo.get(sessionID)
         return c.json(todos)
+      },
+    )
+    .post(
+      "/:sessionID/todo",
+      describeRoute({
+        summary: "Create session todo",
+        description: "Create a new todo item for the session.",
+        operationId: "session.todo.create",
+        responses: {
+          200: { description: "Created todo", content: { "application/json": { schema: resolver(Todo.Info) } } },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ sessionID: SessionID.zod })),
+      validator(
+        "json",
+        z.object({ content: z.string(), status: z.string().optional(), priority: z.string().optional() }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const body = c.req.valid("json")
+        const todo: Todo.Info = {
+          content: body.content,
+          status: body.status ?? "pending",
+          priority: body.priority ?? "medium",
+        }
+        const existing = Todo.get(sessionID)
+        Todo.update({ sessionID, todos: [...existing, todo] })
+        return c.json(todo)
+      },
+    )
+    .put(
+      "/:sessionID/todo",
+      describeRoute({
+        summary: "Update session todos",
+        description: "Replace all todos for a session (bulk update).",
+        operationId: "session.todo.update",
+        responses: {
+          200: {
+            description: "Updated todos",
+            content: { "application/json": { schema: resolver(Todo.Info.array()) } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ sessionID: SessionID.zod })),
+      validator("json", z.object({ todos: z.array(Todo.Info) })),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const body = c.req.valid("json")
+        Todo.update({ sessionID, todos: body.todos })
+        return c.json(body.todos)
       },
     )
     .post(
@@ -612,8 +665,7 @@ export const SessionRoutes = lazy(() =>
 
         if (query.limit === 0) {
           await Session.get(sessionID)
-          const messages = await Session.messages({ sessionID })
-          return c.json(messages)
+          return c.json([])
         }
 
         const page = await MessageV2.page({
@@ -772,8 +824,9 @@ export const SessionRoutes = lazy(() =>
         const params = c.req.valid("param")
         const body = c.req.valid("json")
         if (body.id !== params.partID || body.messageID !== params.messageID || body.sessionID !== params.sessionID) {
-          throw new Error(
+          return c.text(
             `Part mismatch: body.id='${body.id}' vs partID='${params.partID}', body.messageID='${body.messageID}' vs messageID='${params.messageID}', body.sessionID='${body.sessionID}' vs sessionID='${params.sessionID}'`,
+            400,
           )
         }
         const part = await Session.updatePart(body)
@@ -1026,6 +1079,328 @@ export const SessionRoutes = lazy(() =>
           reply: c.req.valid("json").response,
         })
         return c.json(true)
+      },
+    )
+    // oc exec: AI judgment via child session
+    .post(
+      "/:sessionID/exec",
+      describeRoute({
+        summary: "Execute AI prompt",
+        description:
+          "Create a child session, send a prompt, wait for the AI response, and return the assistant's text. Designed for bash script callbacks via the oc CLI.",
+        operationId: "session.exec",
+        responses: {
+          200: {
+            description: "AI response as plain text",
+            content: { "text/plain": { schema: resolver(z.string()) } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ sessionID: SessionID.zod })),
+      validator(
+        "json",
+        z.object({
+          prompt: z.string().describe("The prompt text to send to the AI"),
+          system: z.string().optional().describe("Custom system prompt for specialist creation"),
+          agent: z.string().optional().describe("Agent type"),
+          model: z.object({ providerID: ProviderID.zod, modelID: ModelID.zod }).optional().describe("Model override"),
+          files: z
+            .array(z.object({ filename: z.string(), mime: z.string(), url: z.string() }))
+            .optional()
+            .describe("File attachments (PDFs, images) for multimodal prompts"),
+          format: z
+            .object({ type: z.literal("json_schema"), schema: z.record(z.string(), z.unknown()) })
+            .optional()
+            .describe("Force structured output via StructuredOutput tool (e.g. for oc check boolean)"),
+          messageID: z.string().optional().describe("Parent message ID — creates visual ToolPart when present"),
+        }),
+      ),
+      async (c) => {
+        const parent = c.req.valid("param").sessionID
+        const body = c.req.valid("json")
+
+        // Detect oc command in script to disable provider timeout (any long-running operation)
+        const noTimeout = c.req.header("x-opencode-no-timeout") === "true"
+
+        await Session.get(parent)
+
+        // Inherit model from parent session if not explicitly provided
+        const model = await (async () => {
+          if (body.model) return body.model
+          const msgs = await Session.messages({ sessionID: parent })
+          for (let i = msgs.length - 1; i >= 0; i--) {
+            const info = msgs[i].info
+            if (info.role === "user" && info.model) return info.model
+          }
+        })()
+
+        const child = await Session.create({
+          parentID: parent,
+          title: body.system ? `oc prompt -s "${body.system}"` : "oc prompt",
+        })
+        const cleanup = () => SessionPrompt.cancel(child.id)
+        if (c.req.raw.signal.aborted) {
+          cleanup()
+          return c.text("aborted", 503)
+        }
+        c.req.raw.signal.addEventListener("abort", cleanup)
+
+        // Create task ToolPart for subagent visibility (opt-in via messageID)
+        const mid = body.messageID ? MessageID.make(body.messageID) : undefined
+        const pid = mid ? PartID.ascending() : undefined
+        const t0 = Date.now()
+        const preview = body.prompt.substring(0, 80) + (body.prompt.length > 80 ? "..." : "")
+        const title = body.system ? `oc prompt -s "${body.system}"` : "oc prompt"
+
+        const emit = (state: z.infer<typeof MessageV2.ToolState>) =>
+          mid && pid
+            ? Session.updatePart({
+                id: pid,
+                messageID: mid,
+                sessionID: parent,
+                type: "tool",
+                tool: "task",
+                callID: pid,
+                metadata: { oc: true },
+                state,
+              })
+            : undefined
+
+        await emit({
+          status: "running",
+          input: { prompt: preview, description: preview, subagent_type: "oc" },
+          title,
+          metadata: { sessionId: child.id, model },
+          time: { start: t0 },
+        })
+
+        c.status(200)
+        c.header("Content-Type", "text/plain")
+        return stream(c, async (stream) => {
+          let delta = ""
+          const unsub =
+            mid && pid
+              ? Bus.subscribe(MessageV2.Event.PartDelta, (event) => {
+                  if (event.properties.sessionID === child.id && event.properties.field === "text") {
+                    delta += event.properties.delta
+                    emit({
+                      status: "running",
+                      input: { prompt: preview },
+                      title,
+                      metadata: { sessionId: child.id, model, output: delta.substring(0, 2000) },
+                      time: { start: t0 },
+                    })?.catch(() => {})
+                  }
+                })
+              : undefined
+
+          // Send periodic keepalive to prevent HTTP idle timeout (child sessions can take hours).
+          // Use \x00OC_KEEPALIVE\x00 — a null-byte delimited marker that oc.ts strips before
+          // returning the response, so it never contaminates the AI text output.
+          const KEEPALIVE = "\x00OC_KEEPALIVE\x00"
+          const keepalive = setInterval(() => stream.write(KEEPALIVE).catch(() => {}), 15_000)
+
+          try {
+            const parts: Parameters<typeof SessionPrompt.prompt>[0]["parts"] = [{ type: "text", text: body.prompt }]
+            if (body.files?.length) {
+              for (const file of body.files) {
+                parts.push({ type: "file", mime: file.mime, url: file.url, filename: file.filename })
+              }
+            }
+            const msg = await SessionPrompt.prompt({
+              sessionID: child.id,
+              parts,
+              system: body.system,
+              agent: body.agent,
+              model,
+              format: body.format ? { ...body.format, retryCount: 3 } : undefined,
+              noTimeout,
+            })
+            const out =
+              body.format && msg.info.role === "assistant" && msg.info.structured !== undefined
+                ? JSON.stringify(msg.info.structured)
+                : ((msg.parts.findLast((p) => p.type === "text") as { type: "text"; text: string } | undefined)?.text ??
+                  "")
+
+            await emit({
+              status: "completed",
+              input: { prompt: preview },
+              output: out.substring(0, 2000),
+              title,
+              metadata: { sessionId: child.id, model },
+              time: { start: t0, end: Date.now() },
+            })
+            await stream.write(out)
+          } catch (error) {
+            await emit({
+              status: "error",
+              input: { prompt: preview },
+              error: error instanceof Error ? error.message : String(error),
+              time: { start: t0, end: Date.now() },
+            })
+            throw error
+          } finally {
+            clearInterval(keepalive)
+            unsub?.()
+            c.req.raw.signal.removeEventListener("abort", cleanup)
+          }
+        })
+      },
+    )
+    // oc tool: Direct tool execution — no LLM, deterministic
+    .post(
+      "/:sessionID/tool",
+      describeRoute({
+        summary: "Execute tool directly",
+        description:
+          "Execute an openCode tool directly without LLM involvement. Deterministic operations from bash scripts via the oc CLI.",
+        operationId: "session.tool",
+        responses: {
+          200: {
+            description: "Tool output as plain text",
+            content: { "text/plain": { schema: resolver(z.string()) } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ sessionID: SessionID.zod })),
+      validator(
+        "json",
+        z.object({
+          name: z.string().describe("Tool name (e.g. read, edit, grep, glob)"),
+          args: z.record(z.string(), z.unknown()).describe("Tool arguments"),
+          agent: z.string().optional().describe("Agent context for permissions"),
+          messageID: z.string().optional().describe("Parent message ID — creates visual ToolParts when present"),
+        }),
+      ),
+      async (c) => {
+        const param = c.req.valid("param")
+        const body = c.req.valid("json")
+        const tools = await ToolRegistry.tools({ providerID: ProviderID.make(""), modelID: ModelID.make("") })
+        const tool = tools.find((t) => t.id === body.name)
+        if (!tool) return c.text(`Tool not found: ${body.name}`, 404)
+
+        const session = await Session.get(param.sessionID)
+        const agent = body.agent ?? "build"
+        const ag = await Agent.get(agent)
+
+        const mid = body.messageID ? MessageID.make(body.messageID) : undefined
+        const pid = mid ? PartID.ascending() : undefined
+        const t0 = Date.now()
+
+        const emit = (state: z.infer<typeof MessageV2.ToolState>) =>
+          mid && pid
+            ? Session.updatePart({
+                id: pid,
+                messageID: mid,
+                sessionID: param.sessionID,
+                type: "tool",
+                tool: body.name,
+                callID: pid,
+                metadata: { oc: true },
+                state,
+              })
+            : undefined
+
+        await emit({ status: "running", input: body.args, time: { start: t0 } })
+
+        const ctx = {
+          sessionID: param.sessionID,
+          messageID: mid ?? MessageID.ascending(),
+          callID: pid ?? PartID.ascending(),
+          agent,
+          abort: c.req.raw.signal,
+          messages: [] as MessageV2.WithParts[],
+          metadata: async (val: { title?: string; metadata?: Record<string, unknown> }) => {
+            await emit({
+              status: "running",
+              input: body.args,
+              title: val.title,
+              metadata: val.metadata,
+              time: { start: t0 },
+            })
+          },
+          async ask(req: Omit<Permission.Request, "id" | "sessionID" | "tool">) {
+            await Permission.ask({
+              ...req,
+              sessionID: param.sessionID,
+              ruleset: Permission.merge(ag?.permission ?? [], session.permission ?? []),
+            })
+          },
+        }
+
+        c.status(200)
+        c.header("Content-Type", "text/plain")
+        return stream(c, async (stream) => {
+          try {
+            const result = await tool.execute(body.args, ctx)
+            await emit({
+              status: "completed",
+              input: body.args,
+              output: result.output,
+              title: result.title ?? "",
+              metadata: result.metadata ?? {},
+              time: { start: t0, end: Date.now() },
+            })
+            await stream.write(
+              result.output +
+                (result.attachments?.length && body.args?.filePath ? `\n\x00OC_FILE\x00:${body.args.filePath}` : "") +
+                (result.metadata?.truncated
+                  ? `\n\x00OC_TRUNCATED\x00:Results limited to ${result.metadata.count ?? "unknown"} items. Use a more specific pattern to get all results.`
+                  : ""),
+            )
+          } catch (error) {
+            await emit({
+              status: "error",
+              input: body.args,
+              error: error instanceof Error ? error.message : String(error),
+              time: { start: t0, end: Date.now() },
+            })
+            await stream.write(`Error: ${error instanceof Error ? error.message : String(error)}`)
+          }
+        })
+      },
+    )
+    // POST /session/:id/status — create a visible status ToolPart (used by oc status)
+    .post(
+      "/:sessionID/status",
+      describeRoute({
+        summary: "Post status message",
+        description: "Create a visible status ToolPart in the session thread. Used by the oc CLI to show progress.",
+        operationId: "session.status.post",
+        responses: {
+          200: { description: "Status accepted", content: { "text/plain": { schema: resolver(z.string()) } } },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ sessionID: SessionID.zod })),
+      validator("json", z.object({ message: z.string(), messageID: z.string().optional() })),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const body = c.req.valid("json")
+        const mid = body.messageID ? MessageID.make(body.messageID) : undefined
+        if (mid && body.message) {
+          const pid = PartID.ascending()
+          await Session.updatePart({
+            id: pid,
+            messageID: mid,
+            sessionID,
+            type: "tool",
+            tool: "status",
+            callID: pid,
+            metadata: { oc: true },
+            state: {
+              status: "completed",
+              input: { message: body.message },
+              output: body.message,
+              title: "",
+              metadata: {},
+              time: { start: Date.now(), end: Date.now() },
+            },
+          })
+        }
+        return c.text("ok")
       },
     ),
 )

@@ -463,6 +463,9 @@ export namespace MessageV2 {
         sessionID: SessionID.zod,
         info: Info,
       }),
+      busSchema: z.object({
+        info: Info,
+      }),
     }),
     Removed: SyncEvent.define({
       type: "message.removed",
@@ -481,6 +484,9 @@ export namespace MessageV2 {
         sessionID: SessionID.zod,
         part: Part,
         time: z.number(),
+      }),
+      busSchema: z.object({
+        part: Part,
       }),
     }),
     PartDelta: BusEvent.define(
@@ -713,6 +719,8 @@ export namespace MessageV2 {
               type: "step-start",
             })
           if (part.type === "tool") {
+            // Skip oc-injected Parts — they have no corresponding tool_use from the LLM
+            if (part.metadata?.oc) continue
             toolNames.add(part.tool)
             if (part.state.status === "completed") {
               const outputText = part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output

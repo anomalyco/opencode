@@ -288,6 +288,8 @@ export namespace Server {
     }
     const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
+    // Update url with actual port (port 0 gets OS-assigned port after Bun.serve)
+    url = new URL(`http://${opts.hostname}:${server.port}`)
 
     const shouldPublishMDNS =
       opts.mdns &&

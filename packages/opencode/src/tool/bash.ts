@@ -19,8 +19,12 @@ import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncate"
 import { Plugin } from "@/plugin"
 
+// Lazy import to avoid circular dependency (server → session → tool → server)
+let _server: typeof import("@/server/server") | undefined
+const getServer = async () => (_server ??= await import("@/server/server"))
+
 const MAX_METADATA_LENGTH = 30_000
-const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
+const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS ?? 2 * 60 * 1000
 const PS = new Set(["powershell", "pwsh"])
 const CWD = new Set(["cd", "push-location", "set-location"])
 const FILES = new Set([
@@ -290,6 +294,12 @@ async function shellEnv(ctx: Tool.Context, cwd: string) {
   return {
     ...process.env,
     ...extra.env,
+    // Enable oc callbacks into the running openCode instance
+    OPENCODE_SESSION_ID: ctx.sessionID,
+    OPENCODE_MESSAGE_ID: ctx.messageID,
+    OPENCODE_AGENT: ctx.agent,
+    OPENCODE_SERVER_URL: (await getServer()).Server.url?.toString() ?? "",
+    PATH: `${path.resolve(fileURLToPath(import.meta.url), "../../../bin")}${path.delimiter}${process.env.PATH ?? ""}`,
   }
 }
 
@@ -323,6 +333,7 @@ async function run(
     env: NodeJS.ProcessEnv
     timeout: number
     description: string
+    noTruncate?: boolean
   },
   ctx: Tool.Context,
 ) {
@@ -366,10 +377,14 @@ async function run(
   }
 
   ctx.abort.addEventListener("abort", abort, { once: true })
-  const timer = setTimeout(() => {
-    expired = true
-    void kill()
-  }, input.timeout + 100)
+  // timeout === 0 means no timeout (DACMICU scripts with oc callbacks)
+  const timer =
+    input.timeout > 0
+      ? setTimeout(() => {
+          expired = true
+          void kill()
+        }, input.timeout + 100)
+      : undefined
 
   await new Promise<void>((resolve, reject) => {
     const cleanup = () => {
@@ -407,6 +422,7 @@ async function run(
       output: preview(output),
       exit: proc.exitCode,
       description: input.description,
+      ...(input.noTruncate && { noTruncate: true }),
     },
     output,
   }
@@ -476,12 +492,20 @@ export const BashTool = Tool.define("bash", async () => {
       if (params.timeout !== undefined && params.timeout < 0) {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
-      const timeout = params.timeout ?? DEFAULT_TIMEOUT
       const ps = PS.has(name)
       const root = await parse(params.command, ps)
       const scan = await collect(root, cwd, ps, shell)
       if (!Instance.containsPath(cwd)) scan.dirs.add(cwd)
       await ask(ctx, scan)
+
+      // Any oc call can trigger LLM callbacks (oc prompt, oc check, oc agent)
+      // that run arbitrarily long — disable timeout and truncation for the whole script.
+      const usesOc = root.descendantsOfType("command").some((n) => {
+        if (!n) return false
+        const cmd = n.childForFieldName("name") ?? n.firstChild
+        return cmd !== null && /^(oc|\.\/oc)$/.test(cmd.text)
+      })
+      const timeout = usesOc ? 0 : (params.timeout ?? DEFAULT_TIMEOUT)
 
       return run(
         {
@@ -492,6 +516,7 @@ export const BashTool = Tool.define("bash", async () => {
           env: await shellEnv(ctx, cwd),
           timeout,
           description: params.description,
+          noTruncate: usesOc,
         },
         ctx,
       )

@@ -460,6 +460,8 @@ export const RunCommand = cmd({
           if (event.type === "message.part.updated") {
             const part = event.properties.part
             if (part.sessionID !== sessionID) continue
+            // Skip oc-injected parts — they are internal scaffolding, not LLM tool calls
+            if (part.type === "tool" && part.metadata?.oc) continue
 
             if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
               if (emit("tool_use", { part })) continue
@@ -665,12 +667,14 @@ export const RunCommand = cmd({
     }
 
     await bootstrap(process.cwd(), async () => {
-      const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
-        const request = new Request(input, init)
-        return Server.Default().fetch(request)
-      }) as typeof globalThis.fetch
-      const sdk = createOpencodeClient({ baseUrl: "http://opencode.internal", fetch: fetchFn })
-      await execute(sdk)
+      // Start HTTP server on random port so oc callbacks work in headless mode
+      const server = Server.listen({ port: 0, hostname: "127.0.0.1" })
+      try {
+        const sdk = createOpencodeClient({ baseUrl: server.url.toString(), directory })
+        await execute(sdk)
+      } finally {
+        await server.stop()
+      }
     })
   },
 })

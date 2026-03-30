@@ -29,3 +29,25 @@ export const TodoWriteTool = Tool.define("todowrite", {
     }
   },
 })
+
+export const TodoReadTool = Tool.define("todoread", {
+  description: "Use this tool to read your todo list",
+  parameters: z.object({}),
+  async execute(_params, ctx) {
+    await ctx.ask({
+      permission: "todoread",
+      patterns: ["*"],
+      always: ["*"],
+      metadata: {},
+    })
+
+    const todos = Todo.get(ctx.sessionID)
+    return {
+      title: `${todos.filter((x) => x.status !== "completed").length} todos`,
+      metadata: {
+        todos,
+      },
+      output: JSON.stringify(todos, null, 2),
+    }
+  },
+})

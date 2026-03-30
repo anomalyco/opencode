@@ -68,8 +68,8 @@ export namespace Tool {
             )
           }
           const result = await execute(args, ctx)
-          // skip truncation for tools that handle it themselves
-          if (result.metadata.truncated !== undefined) {
+          // skip truncation for tools that handle it themselves (bash with oc, etc)
+          if (result.metadata.truncated !== undefined || result.metadata.noTruncate) {
             return result
           }
           const truncated = await Truncate.output(result.output, {}, initCtx?.agent)

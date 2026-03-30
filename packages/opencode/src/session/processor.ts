@@ -62,8 +62,6 @@ export namespace SessionProcessor {
     reasoningMap: Record<string, MessageV2.ReasoningPart>
   }
 
-  type StreamEvent = Event
-
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/SessionProcessor") {}
 
   export const layer: Layer.Layer<
@@ -112,7 +110,7 @@ export namespace SessionProcessor {
             aborted: input.abort.aborted,
           })
 
-        const handleEvent = Effect.fn("SessionProcessor.handleEvent")(function* (value: StreamEvent) {
+        const handleEvent = Effect.fn("SessionProcessor.handleEvent")(function* (value: Event) {
           switch (value.type) {
             case "start":
               yield* status.set(ctx.sessionID, { type: "busy" })
@@ -183,11 +181,11 @@ export namespace SessionProcessor {
               })) as MessageV2.ToolPart
 
               const parts = yield* Effect.promise(() => MessageV2.parts(ctx.assistantMessage.id))
-              const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
+              const recent = parts.slice(-DOOM_LOOP_THRESHOLD)
 
               if (
-                recentParts.length !== DOOM_LOOP_THRESHOLD ||
-                !recentParts.every(
+                recent.length !== DOOM_LOOP_THRESHOLD ||
+                !recent.every(
                   (part) =>
                     part.type === "tool" &&
                     part.tool === value.toolName &&
@@ -349,7 +347,7 @@ export namespace SessionProcessor {
                 },
                 { text: ctx.currentText.text },
               )).text
-              ctx.currentText.time = { start: Date.now(), end: Date.now() }
+              ctx.currentText.time = { start: ctx.currentText.time?.start ?? Date.now(), end: Date.now() }
               if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
               yield* session.updatePart(ctx.currentText)
               ctx.currentText = undefined
@@ -414,7 +412,7 @@ export namespace SessionProcessor {
         })
 
         const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {
-          log.error("process", { error: e, stack: JSON.stringify((e as any)?.stack) })
+          log.error("process", { error: e, stack: JSON.stringify((e instanceof Error ? e : null)?.stack) })
           const error = parse(e)
           if (MessageV2.ContextOverflowError.isInstance(error)) {
             ctx.needsCompaction = true
@@ -437,6 +435,8 @@ export namespace SessionProcessor {
           yield* Effect.gen(function* () {
             ctx.currentText = undefined
             ctx.reasoningMap = {}
+            ctx.blocked = false
+            ctx.toolcalls = {}
             const stream = llm.stream(streamInput)
 
             yield* stream.pipe(

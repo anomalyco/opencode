@@ -1276,7 +1276,25 @@ export namespace Provider {
 
         if (opts.signal) signals.push(opts.signal)
         if (chunkAbortCtl) signals.push(chunkAbortCtl.signal)
-        if (options["timeout"] !== undefined && options["timeout"] !== null && options["timeout"] !== false)
+
+        // Skip provider timeout when noTimeout header is present
+        const noTimeout = (() => {
+          const headers = opts.headers
+          if (!headers) return false
+          if (headers instanceof Headers) {
+            return headers.get("x-opencode-no-timeout") === "true"
+          }
+          if (Array.isArray(headers)) {
+            return headers.some(([key, value]) => key.toLowerCase() === "x-opencode-no-timeout" && value === "true")
+          }
+          return (headers as Record<string, string>)["x-opencode-no-timeout"]?.toLowerCase() === "true"
+        })()
+        if (
+          !noTimeout &&
+          options["timeout"] !== undefined &&
+          options["timeout"] !== null &&
+          options["timeout"] !== false
+        )
           signals.push(AbortSignal.timeout(options["timeout"]))
 
         const combined = signals.length === 0 ? null : signals.length === 1 ? signals[0] : AbortSignal.any(signals)

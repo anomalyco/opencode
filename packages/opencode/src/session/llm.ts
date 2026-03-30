@@ -34,6 +34,7 @@ export namespace LLM {
     tools: Record<string, Tool>
     retries?: number
     toolChoice?: "auto" | "required" | "none"
+    noTimeout?: boolean
   }
 
   export type Event = Awaited<ReturnType<typeof stream>>["fullStream"] extends AsyncIterable<infer T> ? T : never
@@ -51,11 +52,7 @@ export namespace LLM {
         stream(input) {
           return Stream.unwrap(
             Effect.promise(() => LLM.stream(input)).pipe(
-              Effect.map((result) =>
-                Stream.fromAsyncIterable(result.fullStream, (err) => err).pipe(
-                  Stream.mapEffect((event) => Effect.succeed(event)),
-                ),
-              ),
+              Effect.map((result) => Stream.fromAsyncIterable(result.fullStream, (err) => err)),
             ),
           )
         },
@@ -123,7 +120,7 @@ export namespace LLM {
           sessionID: input.sessionID,
           providerOptions: provider.options,
         })
-    const options: Record<string, any> = pipe(
+    const options: Record<string, unknown> = pipe(
       base,
       mergeDeep(input.model.options),
       mergeDeep(input.agent.options),
@@ -239,8 +236,8 @@ export namespace LLM {
             metadata: typeof result === "object" ? result?.metadata : undefined,
             title: typeof result === "object" ? result?.title : undefined,
           }
-        } catch (e: any) {
-          return { result: "", error: e.message ?? String(e) }
+        } catch (e: unknown) {
+          return { result: "", error: e instanceof Error ? e.message : String(e) }
         }
       }
     }
@@ -294,6 +291,7 @@ export namespace LLM {
             }),
         ...input.model.headers,
         ...headers,
+        ...(input.noTimeout ? { "x-opencode-no-timeout": "true" } : {}),
       },
       maxRetries: input.retries ?? 0,
       messages,

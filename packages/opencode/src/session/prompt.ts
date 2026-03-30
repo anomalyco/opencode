@@ -112,6 +112,7 @@ export namespace SessionPrompt {
     format: MessageV2.Format.optional(),
     system: z.string().optional(),
     variant: z.string().optional(),
+    noTimeout: z.boolean().optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -185,7 +186,7 @@ export namespace SessionPrompt {
       return message
     }
 
-    return loop({ sessionID: input.sessionID })
+    return loop({ sessionID: input.sessionID, noTimeout: input.noTimeout })
   })
 
   export async function resolvePromptParts(template: string): Promise<PromptInput["parts"]> {
@@ -274,9 +275,10 @@ export namespace SessionPrompt {
   export const LoopInput = z.object({
     sessionID: SessionID.zod,
     resume_existing: z.boolean().optional(),
+    noTimeout: z.boolean().optional(),
   })
   export const loop = fn(LoopInput, async (input) => {
-    const { sessionID, resume_existing } = input
+    const { sessionID, resume_existing, noTimeout } = input
 
     const abort = resume_existing ? resume(sessionID) : start(sessionID)
     if (!abort) {
@@ -711,6 +713,7 @@ export namespace SessionPrompt {
         tools,
         model,
         toolChoice: format.type === "json_schema" ? "required" : undefined,
+        noTimeout,
       })
 
       // If structured output was captured, save it and exit immediately
@@ -781,7 +784,7 @@ export namespace SessionPrompt {
     using _ = log.time("resolveTools")
     const tools: Record<string, AITool> = {}
 
-    const context = (args: any, options: ToolExecutionOptions): Tool.Context => ({
+    const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => ({
       sessionID: input.session.id,
       abort: options.abortSignal!,
       messageID: input.processor.message.id,
@@ -789,7 +792,7 @@ export namespace SessionPrompt {
       extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck },
       agent: input.agent.name,
       messages: input.messages,
-      metadata: async (val: { title?: string; metadata?: any }) => {
+      metadata: async (val: { title?: string; metadata?: Record<string, unknown> }) => {
         const match = input.processor.partFromToolCall(options.toolCallId)
         if (match && match.state.status === "running") {
           await Session.updatePart({
@@ -934,7 +937,10 @@ export namespace SessionPrompt {
           }
         }
 
-        const truncated = await Truncate.output(textParts.join("\n\n"), {}, input.agent)
+        const text = textParts.join("\n\n")
+        const truncated = result.metadata?.noTruncate
+          ? { content: text, truncated: false as const }
+          : await Truncate.output(text, {}, input.agent)
         const metadata = {
           ...(result.metadata ?? {}),
           truncated: truncated.truncated,
@@ -962,7 +968,7 @@ export namespace SessionPrompt {
 
   /** @internal Exported for testing */
   export function createStructuredOutputTool(input: {
-    schema: Record<string, any>
+    schema: Record<string, unknown>
     onSuccess: (output: unknown) => void
   }): AITool {
     // Remove $schema property if present (not needed for tool input)

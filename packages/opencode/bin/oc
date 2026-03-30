@@ -1,0 +1,116 @@
+#!/usr/bin/env sh
+# oc — openCode CLI callback shell wrapper
+# Fast path: oc tool read/glob/grep use curl directly (~5ms)
+# Full path: oc prompt/agent/todo use compiled bun binary (~40ms)
+set -e
+
+# Env validation
+if [ -z "$OPENCODE_SERVER_URL" ]; then
+  echo "oc: OPENCODE_SERVER_URL not set — are you running inside an openCode bash tool?" >&2
+  exit 1
+fi
+if [ -z "$OPENCODE_SESSION_ID" ]; then
+  echo "oc: OPENCODE_SESSION_ID not set — are you running inside an openCode bash tool?" >&2
+  exit 1
+fi
+
+DIR="$(cd "$(dirname "$0")" && pwd)"
+# _oc_exec <args>: runs the TypeScript binary via native binary or bun fallback
+_oc_exec() {
+  if [ -f "$DIR/oc-native" ]; then
+    exec "$DIR/oc-native" "$@"
+  else
+    exec bun run "$DIR/oc.ts" "$@"
+  fi
+}
+AGENT="${OPENCODE_AGENT:-build}"
+# Strip trailing slash to prevent double-slash routing to web UI
+SERVER="${OPENCODE_SERVER_URL%/}"
+URL="$SERVER/session/$OPENCODE_SESSION_ID"
+
+# Auto-announce to stderr (visible in TUI bash block)
+_announce() {
+  [ "$OPENCODE_QUIET" = "1" ] && return
+  printf '\033[2m[oc] %s\033[0m\n' "$1" >&2
+}
+
+# JSON-encode a string (requires jq)
+_json() {
+  printf '%s' "$1" | jq -Rs .
+}
+
+# Build tool request JSON body
+_tool_body() {
+  name="$1" args_json="$2"
+  body="{\"name\":$(_json "$name"),\"args\":$args_json,\"agent\":$(_json "$AGENT")"
+  [ -n "$OPENCODE_MESSAGE_ID" ] && body="$body,\"messageID\":$(_json "$OPENCODE_MESSAGE_ID")"
+  body="$body}"
+  printf '%s' "$body"
+}
+
+# URL-encode a string for use in HTTP headers (requires jq)
+_urlencode() {
+  printf '%s' "$1" | jq -sRr @uri
+}
+
+# POST to /tool endpoint
+# Respect OPENCODE_TOOL_TIMEOUT_MS for tests; default 60s for production.
+_tool_call() {
+  name="$1" args_json="$2"
+  _timeout="${OPENCODE_TOOL_TIMEOUT_MS:-60000}"
+  _timeout_sec=$(( _timeout / 1000 + 1 ))
+  curl -sS -X POST "$URL/tool" \
+    -H "Content-Type: application/json" \
+    -H "x-opencode-directory: $(_urlencode "$PWD")" \
+    --max-time "$_timeout_sec" \
+    -d "$(_tool_body "$name" "$args_json")"
+}
+
+case "$1" in
+  tool)
+    shift
+    subcmd="$1"; shift 2>/dev/null || true
+
+    # Check if jq is available for the fast path
+    if command -v jq >/dev/null 2>&1; then
+      case "$subcmd" in
+        read)
+          _announce "tool read ${1:-}"
+          _tool_call "read" "{\"filePath\":$(_json "$1")}"
+          exit $?
+          ;;
+        glob)
+          _announce "tool glob ${1:-} ${2:-}"
+          args="{\"pattern\":$(_json "$1")"
+          [ -n "$2" ] && args="$args,\"path\":$(_json "$2")"
+          args="$args}"
+          # Capture curl output separately to preserve its exit code.
+          # Piping directly (curl | tr | grep) would mask curl failures
+          # because $? reflects the last pipeline command, not curl.
+          _output=$(_tool_call "glob" "$args") || exit $?
+          # Strip null-byte OC_TRUNCATED marker — null bytes cause grep to emit
+          # "Binary file matches" instead of filtering, breaking downstream pipes.
+          printf '%s\n' "$_output" | tr -d '\0' | { grep -v 'OC_TRUNCATED' || true; }
+          exit 0
+          ;;
+        grep)
+          _announce "tool grep ${1:-} ${2:-}"
+          _tool_call "grep" "{\"pattern\":$(_json "$1"),\"path\":$(_json "${2:-.}")}"
+          exit $?
+          ;;
+      esac
+    fi
+
+    # Fall through to full binary for complex tools or when jq unavailable
+    _oc_exec tool "$subcmd" "$@"
+    ;;
+
+  # Everything else goes to the full binary
+  prompt|agent|todo|status|check|help|--help|-h)
+    _oc_exec "$@"
+    ;;
+
+  *)
+    _oc_exec "$@"
+    ;;
+esac
