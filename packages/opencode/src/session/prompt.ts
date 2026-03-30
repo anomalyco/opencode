@@ -94,6 +94,7 @@ export namespace SessionPrompt {
       const lsp = yield* LSP.Service
       const filetime = yield* FileTime.Service
       const registry = yield* ToolRegistry.Service
+      const truncate = yield* Truncate.Service
       const scope = yield* Scope.Scope
 
       const cache = yield* InstanceState.make(
@@ -517,7 +518,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   }
                 }
 
-                const truncated = yield* Effect.promise(() => Truncate.output(textParts.join("\n\n"), {}, input.agent))
+                const truncated = yield* truncate.output(textParts.join("\n\n"), {}, input.agent)
                 const metadata = {
                   ...(result.metadata ?? {}),
                   truncated: truncated.truncated,
@@ -1687,6 +1688,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         Layer.provide(LSP.defaultLayer),
         Layer.provide(FileTime.layer),
         Layer.provide(ToolRegistry.defaultLayer),
+        Layer.provide(Truncate.layer),
         Layer.provide(AppFileSystem.defaultLayer),
         Layer.provide(Plugin.defaultLayer),
         Layer.provide(Session.defaultLayer),
