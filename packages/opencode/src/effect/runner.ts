@@ -3,8 +3,8 @@ import { Cause, Deferred, Effect, Exit, Fiber, Option, Schema, Scope, Synchroniz
 export interface Runner<A, E = never> {
   readonly state: Runner.State<A, E>
   readonly busy: boolean
-  readonly ensureRunning: (work: Effect.Effect<A, E>) => Effect.Effect<A, E | Runner.Cancelled>
-  readonly startShell: (work: (signal: AbortSignal) => Effect.Effect<A, E>) => Effect.Effect<A, E | Runner.Cancelled>
+  readonly ensureRunning: (work: Effect.Effect<A, E>) => Effect.Effect<A, E>
+  readonly startShell: (work: (signal: AbortSignal) => Effect.Effect<A, E>) => Effect.Effect<A, E>
   readonly cancel: Effect.Effect<void>
 }
 
@@ -135,7 +135,9 @@ export namespace Runner {
         }),
       ).pipe(
         Effect.flatten,
-        Effect.catch((e) => (e instanceof Cancelled && onInterrupt ? onInterrupt : Effect.fail(e))),
+        Effect.catch((e): Effect.Effect<A, E> =>
+          e instanceof Cancelled ? (onInterrupt ?? Effect.die(e)) : Effect.fail(e as E),
+        ),
       )
 
     const startShell = (work: (signal: AbortSignal) => Effect.Effect<A, E>) =>

@@ -1548,14 +1548,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       )(function* (input: z.infer<typeof LoopInput>) {
         const s = yield* InstanceState.get(cache)
         const runner = getRunner(s.runners, input.sessionID)
-        return yield* runner.ensureRunning(runLoop(input.sessionID)).pipe(Effect.catch(Effect.die))
+        return yield* runner.ensureRunning(runLoop(input.sessionID))
       })
 
       const shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.shell")(
         function* (input: ShellInput) {
           const s = yield* InstanceState.get(cache)
           const runner = getRunner(s.runners, input.sessionID)
-          return yield* runner.startShell((signal) => shellImpl(input, signal)).pipe(Effect.catch(Effect.die))
+          return yield* runner.startShell((signal) => shellImpl(input, signal))
         },
       )
 
