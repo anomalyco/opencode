@@ -14,6 +14,7 @@ import { DialogAlert } from "../ui/dialog-alert"
 import { DialogConfirm } from "../ui/dialog-confirm"
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { DialogSelect, type DialogSelectOption as SelectOption } from "../ui/dialog-select"
+import { Prompt } from "../component/prompt"
 import type { useToast } from "../ui/toast"
 import { Installation } from "@/installation"
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
@@ -284,6 +285,19 @@ export function createTuiApi(input: Input): TuiHostPluginApi {
             onSelect={mapOptionCb(props.onSelect)}
             skipFilter={props.skipFilter}
             current={props.current}
+          />
+        )
+      },
+      Prompt(props) {
+        return (
+          <Prompt
+            workspaceID={props.workspaceID}
+            visible={props.visible}
+            disabled={props.disabled}
+            onSubmit={props.onSubmit}
+            hint={props.hint}
+            showPlaceholder={props.showPlaceholder}
+            placeholders={props.placeholders}
           />
         )
       },
