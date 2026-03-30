@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
+import { parse as parseJsonc } from "jsonc-parser"
 import { Filesystem } from "../../src/util/filesystem"
 import { createPlugTask, type PlugCtx, type PlugDeps } from "../../src/cli/cmd/plug"
 import { tmpdir } from "../fixture/fixture"
@@ -118,6 +119,99 @@ describe("plugin.install.task", () => {
     const tui = await read(path.join(tmp.path, ".opencode", "tui.jsonc"))
     expect(server.plugin).toEqual([["acme@1.2.3", { custom: true, other: false }]])
     expect(tui.plugin).toEqual([["acme@1.2.3", { compact: true }]])
+  })
+
+  test("preserves JSONC comments when adding plugins to server and tui config", async () => {
+    await using tmp = await tmpdir()
+    const target = await plugin(tmp.path, ["server", "tui"])
+    const cfg = path.join(tmp.path, ".opencode")
+    const server = path.join(cfg, "opencode.jsonc")
+    const tui = path.join(cfg, "tui.jsonc")
+    await fs.mkdir(cfg, { recursive: true })
+    await Bun.write(
+      server,
+      `{
+  // server head
+  "plugin": [
+    // server keep
+    "seed@1.0.0"
+  ],
+  // server tail
+  "model": "x"
+}
+`,
+    )
+    await Bun.write(
+      tui,
+      `{
+  // tui head
+  "plugin": [
+    // tui keep
+    "seed@1.0.0"
+  ],
+  // tui tail
+  "theme": "opencode"
+}
+`,
+    )
+
+    const run = createPlugTask(
+      {
+        mod: "acme@1.2.3",
+      },
+      deps(path.join(tmp.path, "global"), target),
+    )
+
+    const ok = await run(ctx(tmp.path))
+    expect(ok).toBe(true)
+
+    const serverText = await fs.readFile(server, "utf8")
+    const tuiText = await fs.readFile(tui, "utf8")
+    expect(serverText).toContain("// server head")
+    expect(serverText).toContain("// server keep")
+    expect(serverText).toContain("// server tail")
+    expect(tuiText).toContain("// tui head")
+    expect(tuiText).toContain("// tui keep")
+    expect(tuiText).toContain("// tui tail")
+
+    const serverJson = parseJsonc(serverText) as { plugin?: unknown[] }
+    const tuiJson = parseJsonc(tuiText) as { plugin?: unknown[] }
+    expect(serverJson.plugin).toEqual(["seed@1.0.0", "acme@1.2.3"])
+    expect(tuiJson.plugin).toEqual(["seed@1.0.0", "acme@1.2.3"])
+  })
+
+  test("preserves JSONC comments when force replacing plugin version", async () => {
+    await using tmp = await tmpdir()
+    const target = await plugin(tmp.path, ["server"])
+    const cfg = path.join(tmp.path, ".opencode", "opencode.jsonc")
+    await fs.mkdir(path.dirname(cfg), { recursive: true })
+    await Bun.write(
+      cfg,
+      `{
+  "plugin": [
+    // keep this note
+    "acme@1.0.0"
+  ]
+}
+`,
+    )
+
+    const run = createPlugTask(
+      {
+        mod: "acme@2.0.0",
+        force: true,
+      },
+      deps(path.join(tmp.path, "global"), target),
+    )
+
+    const ok = await run(ctx(tmp.path))
+    expect(ok).toBe(true)
+
+    const text = await fs.readFile(cfg, "utf8")
+    expect(text).toContain("// keep this note")
+
+    const json = parseJsonc(text) as { plugin?: unknown[] }
+    expect(json.plugin).toEqual(["acme@2.0.0"])
   })
 
   test("supports resolver target pointing to a file", async () => {
