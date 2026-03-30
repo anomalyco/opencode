@@ -99,8 +99,8 @@ export namespace SessionPrompt {
       const cache = yield* InstanceState.make(
         Effect.fn("SessionPrompt.state")(function* () {
           const runners = new Map<string, Runner<MessageV2.WithParts>>()
-          yield* Effect.addFinalizer(() =>
-            Effect.gen(function* () {
+          yield* Effect.addFinalizer(
+            Effect.fnUntraced(function* () {
               const entries = [...runners.values()]
               runners.clear()
               yield* Effect.forEach(entries, (r) => r.cancel, { concurrency: "unbounded" })
@@ -153,29 +153,28 @@ export namespace SessionPrompt {
         const seen = new Set<string>()
         yield* Effect.forEach(
           files,
-          (match) =>
-            Effect.gen(function* () {
-              const name = match[1]
-              if (seen.has(name)) return
-              seen.add(name)
-              const filepath = name.startsWith("~/")
-                ? path.join(os.homedir(), name.slice(2))
-                : path.resolve(Instance.worktree, name)
+          Effect.fnUntraced(function* (match) {
+            const name = match[1]
+            if (seen.has(name)) return
+            seen.add(name)
+            const filepath = name.startsWith("~/")
+              ? path.join(os.homedir(), name.slice(2))
+              : path.resolve(Instance.worktree, name)
 
-              const info = yield* fsys.stat(filepath).pipe(Effect.option)
-              if (!info._tag || info._tag === "None") {
-                const found = yield* agents.get(name)
-                if (found) parts.push({ type: "agent", name: found.name })
-                return
-              }
-              const stat = info.value
-              parts.push({
-                type: "file",
-                url: pathToFileURL(filepath).href,
-                filename: name,
-                mime: stat.type === "Directory" ? "application/x-directory" : "text/plain",
-              })
-            }),
+            const info = yield* fsys.stat(filepath).pipe(Effect.option)
+            if (!info._tag || info._tag === "None") {
+              const found = yield* agents.get(name)
+              if (found) parts.push({ type: "agent", name: found.name })
+              return
+            }
+            const stat = info.value
+            parts.push({
+              type: "file",
+              url: pathToFileURL(filepath).href,
+              filename: name,
+              mime: stat.type === "Directory" ? "application/x-directory" : "text/plain",
+            })
+          }),
           { concurrency: "unbounded" },
         )
         return parts
@@ -1528,11 +1527,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 }
                 return "continue" as const
               }),
-              (exit) =>
-                Effect.gen(function* () {
-                  if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) yield* handle.abort()
-                  InstructionPrompt.clear(handle.message.id)
-                }),
+              Effect.fnUntraced(function* (exit) {
+                if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) yield* handle.abort()
+                InstructionPrompt.clear(handle.message.id)
+              }),
             )
             if (outcome === "break") break
             continue
