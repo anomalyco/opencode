@@ -1,4 +1,4 @@
-name: Auto-merge and Release
+name: Auto Merge
 
 # Permanent replacement for GitHub's built-in auto-merge.
 #
@@ -26,7 +26,7 @@ name: Auto-merge and Release
 
 on:
   workflow_run:
-    workflows: [CI, test]
+    workflows: [CI, Tests]
     types: [completed]
   # Manual escape hatch: re-trigger merge+CD for a PR without re-running CI.
   # Use when auto-merge fires but the dispatch step fails silently.
