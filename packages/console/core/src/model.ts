@@ -49,6 +49,7 @@ export namespace ZenData {
     payloadModifier: z.record(z.string(), z.any()).optional(),
     payloadMappings: z.record(z.string(), z.string()).optional(),
     adjustCacheUsage: z.boolean().optional(),
+    safetyIdentifier: z.boolean().optional(),
   })
 
   const ModelsSchema = z.object({

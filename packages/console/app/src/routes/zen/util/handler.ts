@@ -139,19 +139,16 @@ export async function handler(
       const startTimestamp = Date.now()
       const reqUrl = providerInfo.modifyUrl(providerInfo.api, isStream)
       const reqBody = JSON.stringify(
-        providerInfo.modifyBody(
-          {
-            ...createBodyConverter(opts.format, providerInfo.format)(body),
-            model: providerInfo.model,
-            ...(providerInfo.payloadModifier ?? {}),
-            ...Object.fromEntries(
-              Object.entries(providerInfo.payloadMappings ?? {})
-                .map(([k, v]) => [k, input.request.headers.get(v)])
-                .filter(([_k, v]) => !!v),
-            ),
-          },
-          authInfo?.workspaceID,
-        ),
+        providerInfo.modifyBody({
+          ...createBodyConverter(opts.format, providerInfo.format)(body),
+          model: providerInfo.model,
+          ...(providerInfo.payloadModifier ?? {}),
+          ...Object.fromEntries(
+            Object.entries(providerInfo.payloadMappings ?? {})
+              .map(([k, v]) => [k, input.request.headers.get(v)])
+              .filter(([_k, v]) => !!v),
+          ),
+        }),
       )
       logger.debug("REQUEST URL: " + reqUrl)
       logger.debug("REQUEST: " + reqBody.substring(0, 300) + "...")
@@ -470,15 +467,17 @@ export async function handler(
       ...(() => {
         const providerProps = zenData.providers[modelProvider.id]
         const format = providerProps.format
-        const providerModel = modelProvider.model
-        if (format === "anthropic") return anthropicHelper({ reqModel, providerModel })
-        if (format === "google") return googleHelper({ reqModel, providerModel })
-        if (format === "openai") return openaiHelper({ reqModel, providerModel })
-        return oaCompatHelper({
+        const opts = {
           reqModel,
-          providerModel,
+          providerModel: modelProvider.model,
           adjustCacheUsage: providerProps.adjustCacheUsage,
-        })
+          safetyIdentifier: ip,
+          workspaceID: authInfo?.workspaceID,
+        }
+        if (format === "anthropic") return anthropicHelper(opts)
+        if (format === "google") return googleHelper(opts)
+        if (format === "openai") return openaiHelper(opts)
+        return oaCompatHelper(opts)
       })(),
     }
   }
