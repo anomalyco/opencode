@@ -233,9 +233,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     <box gap={1} paddingBottom={1}>
       <box paddingLeft={4} paddingRight={4}>
         <box flexDirection="row" justifyContent="space-between">
-          <text fg={theme.text}>
-            {props.title}
-          </text>
+          <text fg={theme.text}>{props.title}</text>
           <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
             esc
           </text>
@@ -284,9 +282,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
               <>
                 <Show when={category}>
                   <box paddingTop={index() > 0 ? 1 : 0} paddingLeft={3}>
-                    <text fg={theme.accent}>
-                      {category}
-                    </text>
+                    <text fg={theme.accent}>{category}</text>
                   </box>
                 </Show>
                 <For each={options}>

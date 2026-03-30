@@ -62,13 +62,9 @@ export function ErrorComponent(props: {
   return (
     <box flexDirection="column" gap={1} backgroundColor={colors.bg}>
       <box flexDirection="row" gap={1} alignItems="center">
-        <text fg={colors.text}>
-          Please report an issue.
-        </text>
+        <text fg={colors.text}>Please report an issue.</text>
         <box onMouseUp={copyIssueURL} backgroundColor={colors.primary} padding={1}>
-          <text fg={colors.bg}>
-            Copy issue URL (exception info pre-filled)
-          </text>
+          <text fg={colors.bg}>Copy issue URL (exception info pre-filled)</text>
         </box>
         {copied() && <text fg={colors.muted}>Successfully copied</text>}
       </box>
