@@ -52,6 +52,7 @@ import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
 import { ModelID, ProviderID } from "./schema"
+import { ClaudeCodeCredential } from "./claude-code-credential"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -154,12 +155,33 @@ export namespace Provider {
   }
 
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
-    async anthropic() {
+    async anthropic(input) {
+      const baseBetas = "interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14"
+
+      // Only try OAuth if no API key is already configured (env var or auth store)
+      const hasApiKey = input.env.some((e: string) => Env.all()[e]) || !!(await Auth.get("anthropic"))
+
+      if (!hasApiKey) {
+        const credential = await ClaudeCodeCredential.get()
+        if (credential.token && (credential.status === "valid" || credential.status === "expired")) {
+          log.info("using Claude Code OAuth credentials for Anthropic")
+          return {
+            autoload: true,
+            options: {
+              authToken: credential.token.accessToken,
+              headers: {
+                "anthropic-beta": baseBetas + ",claude-code-20250219,oauth-2025-04-20",
+              },
+            },
+          }
+        }
+      }
+
       return {
         autoload: false,
         options: {
           headers: {
-            "anthropic-beta": "interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+            "anthropic-beta": baseBetas,
           },
         },
       }
@@ -1247,6 +1269,8 @@ export namespace Provider {
 
       if (baseURL !== undefined) options["baseURL"] = baseURL
       if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
+      // When using OAuth authToken, ensure apiKey doesn't conflict
+      if (options["authToken"]) delete options["apiKey"]
       if (model.headers)
         options["headers"] = {
           ...options["headers"],
@@ -1298,6 +1322,32 @@ export namespace Provider {
             }
             opts.body = JSON.stringify(body)
           }
+        }
+
+        // Inject billing header and metadata for Anthropic OAuth requests
+        if (options["authToken"] && model.api.npm === "@ai-sdk/anthropic" && opts.body && opts.method === "POST") {
+          const body = JSON.parse(opts.body as string)
+          const billingText =
+            "x-anthropic-billing-header: cc_version=opencode; cc_entrypoint=cli; cch=opencode;"
+          const billingBlock = { type: "text", text: billingText }
+          if (Array.isArray(body.system)) {
+            body.system = [billingBlock, ...body.system.filter((b: any) => b?.text !== billingText)]
+          } else if (typeof body.system === "string") {
+            body.system = [billingBlock, { type: "text", text: body.system }]
+          } else {
+            body.system = [billingBlock]
+          }
+          if (!body.metadata) body.metadata = {}
+          if (!body.metadata.user_id) {
+            const hostname = os.hostname()
+            const deviceId = Hash.fast(`opencode-${hostname}`)
+            body.metadata.user_id = JSON.stringify({
+              device_id: deviceId,
+              account_uuid: "opencode",
+              session_id: crypto.randomUUID(),
+            })
+          }
+          opts.body = JSON.stringify(body)
         }
 
         const res = await fetchFn(input, {
