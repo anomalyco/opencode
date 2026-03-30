@@ -24,7 +24,6 @@ export function DialogVariant() {
       title={"Select variant"}
       current={local.model.variant.current()}
       flat={true}
-      skipFilter={true}
     />
   )
 }
