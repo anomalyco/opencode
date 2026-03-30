@@ -458,9 +458,15 @@ test("applies file substitutions when first identical token is in a commented li
 test("loads managed tui config and gives it highest precedence", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(path.join(dir, "tui.json"), JSON.stringify({ theme: "project-theme" }, null, 2))
+      await Bun.write(
+        path.join(dir, "tui.json"),
+        JSON.stringify({ theme: "project-theme", plugin: ["shared-plugin@1.0.0"] }, null, 2),
+      )
       await fs.mkdir(managedConfigDir, { recursive: true })
-      await Bun.write(path.join(managedConfigDir, "tui.json"), JSON.stringify({ theme: "managed-theme" }, null, 2))
+      await Bun.write(
+        path.join(managedConfigDir, "tui.json"),
+        JSON.stringify({ theme: "managed-theme", plugin: ["shared-plugin@2.0.0"] }, null, 2),
+      )
     },
   })
 
@@ -469,6 +475,13 @@ test("loads managed tui config and gives it highest precedence", async () => {
     fn: async () => {
       const config = await TuiConfig.get()
       expect(config.theme).toBe("managed-theme")
+      expect(config.plugin).toEqual(["shared-plugin@2.0.0"])
+      expect(config.plugin_meta).toEqual({
+        "shared-plugin@2.0.0": {
+          scope: "global",
+          source: path.join(managedConfigDir, "tui.json"),
+        },
+      })
     },
   })
 })
@@ -505,6 +518,150 @@ test("gracefully falls back when tui.json has invalid JSON", async () => {
       const config = await TuiConfig.get()
       expect(config.theme).toBe("managed-fallback")
       expect(config.keybinds).toBeDefined()
+    },
+  })
+})
+
+test("supports tuple plugin specs with options in tui.json", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "tui.json"),
+        JSON.stringify({
+          plugin: [["acme-plugin@1.2.3", { enabled: true, label: "demo" }]],
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await TuiConfig.get()
+      expect(config.plugin).toEqual([["acme-plugin@1.2.3", { enabled: true, label: "demo" }]])
+      expect(config.plugin_meta).toEqual({
+        "acme-plugin@1.2.3": {
+          scope: "local",
+          source: path.join(tmp.path, "tui.json"),
+        },
+      })
+    },
+  })
+})
+
+test("deduplicates tuple plugin specs by name with higher precedence winning", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(Global.Path.config, "tui.json"),
+        JSON.stringify({
+          plugin: [["acme-plugin@1.0.0", { source: "global" }]],
+        }),
+      )
+      await Bun.write(
+        path.join(dir, "tui.json"),
+        JSON.stringify({
+          plugin: [
+            ["acme-plugin@2.0.0", { source: "project" }],
+            ["second-plugin@3.0.0", { source: "project" }],
+          ],
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await TuiConfig.get()
+      expect(config.plugin).toEqual([
+        ["acme-plugin@2.0.0", { source: "project" }],
+        ["second-plugin@3.0.0", { source: "project" }],
+      ])
+      expect(config.plugin_meta).toEqual({
+        "acme-plugin@2.0.0": {
+          scope: "local",
+          source: path.join(tmp.path, "tui.json"),
+        },
+        "second-plugin@3.0.0": {
+          scope: "local",
+          source: path.join(tmp.path, "tui.json"),
+        },
+      })
+    },
+  })
+})
+
+test("tracks global and local plugin metadata in merged tui config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(Global.Path.config, "tui.json"),
+        JSON.stringify({
+          plugin: ["global-plugin@1.0.0"],
+        }),
+      )
+      await Bun.write(
+        path.join(dir, "tui.json"),
+        JSON.stringify({
+          plugin: ["local-plugin@2.0.0"],
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await TuiConfig.get()
+      expect(config.plugin).toEqual(["global-plugin@1.0.0", "local-plugin@2.0.0"])
+      expect(config.plugin_meta).toEqual({
+        "global-plugin@1.0.0": {
+          scope: "global",
+          source: path.join(Global.Path.config, "tui.json"),
+        },
+        "local-plugin@2.0.0": {
+          scope: "local",
+          source: path.join(tmp.path, "tui.json"),
+        },
+      })
+    },
+  })
+})
+
+test("merges plugin_enabled flags across config layers", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(Global.Path.config, "tui.json"),
+        JSON.stringify({
+          plugin_enabled: {
+            "internal:sidebar-context": false,
+            "demo.plugin": true,
+          },
+        }),
+      )
+      await Bun.write(
+        path.join(dir, "tui.json"),
+        JSON.stringify({
+          plugin_enabled: {
+            "demo.plugin": false,
+            "local.plugin": true,
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await TuiConfig.get()
+      expect(config.plugin_enabled).toEqual({
+        "internal:sidebar-context": false,
+        "demo.plugin": false,
+        "local.plugin": true,
+      })
     },
   })
 })

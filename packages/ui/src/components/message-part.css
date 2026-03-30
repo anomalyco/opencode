@@ -636,14 +636,17 @@
 }
 
 [data-component="context-tool-group-list"] {
-  padding: 6px 0 4px 0;
+  padding-top: 6px;
+  padding-right: 0;
+  padding-bottom: 4px;
+  padding-left: 13px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 8px;
 
   [data-slot="context-tool-group-item"] {
     min-width: 0;
-    padding: 6px 0;
+    padding: 0;
   }
 }
 
@@ -1154,8 +1157,8 @@
     position: sticky;
     top: var(--sticky-accordion-top, 0px);
     z-index: 20;
-    height: 40px;
-    padding-bottom: 8px;
+    height: calc(32px + var(--tool-content-gap));
+    padding-bottom: var(--tool-content-gap);
     background-color: var(--background-stronger);
   }
 }
