@@ -3,8 +3,8 @@ import { Cause, Deferred, Effect, Exit, Fiber, Schema, Scope } from "effect"
 export interface Runner<A, E = never> {
   readonly state: Runner.State<A, E>
   readonly busy: boolean
-  readonly ensureRunning: (work: Effect.Effect<A, E>) => Effect.Effect<A, E>
-  readonly startShell: (work: (signal: AbortSignal) => Effect.Effect<A, E>) => Effect.Effect<A, E>
+  readonly ensureRunning: (work: Effect.Effect<A, E>) => Effect.Effect<A, E | Runner.Cancelled>
+  readonly startShell: (work: (signal: AbortSignal) => Effect.Effect<A, E>) => Effect.Effect<A, E | Runner.Cancelled>
   readonly cancel: Effect.Effect<void>
 }
 
@@ -54,7 +54,7 @@ export namespace Runner {
         state = { _tag: "Running", done, fiber }
       })
 
-    const ensureRunning = (work: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+    const ensureRunning = (work: Effect.Effect<A, E>) =>
       Effect.gen(function* () {
         switch (state._tag) {
           case "Running":
@@ -76,9 +76,9 @@ export namespace Runner {
         Effect.catch((e) =>
           e instanceof Cancelled && onInterrupt ? onInterrupt : Effect.fail(e),
         ),
-      ) as Effect.Effect<A, E>
+      )
 
-    const startShell = (work: (signal: AbortSignal) => Effect.Effect<A, E>): Effect.Effect<A, E> =>
+    const startShell = (work: (signal: AbortSignal) => Effect.Effect<A, E>) =>
       Effect.gen(function* () {
         if (state._tag !== "Idle") {
           if (opts?.busy) opts.busy()
@@ -105,7 +105,7 @@ export namespace Runner {
         if (Exit.isSuccess(exit)) return exit.value
         if (Cause.hasInterruptsOnly(exit.cause) && onInterrupt) return yield* onInterrupt
         return yield* Effect.failCause(exit.cause)
-      }) as Effect.Effect<A, E>
+      })
 
     const cancel = Effect.gen(function* () {
       const st = state
