@@ -3,6 +3,7 @@ import { Project } from "../../src/project/project"
 import { Log } from "../../src/util/log"
 import { $ } from "bun"
 import path from "path"
+import { mkdir } from "fs/promises"
 import { tmpdir } from "../fixture/fixture"
 import { GlobalBus } from "../../src/bus/global"
 import { ProjectID } from "../../src/project/schema"
@@ -243,12 +244,15 @@ describe("Project.fromDirectory with worktrees", () => {
 })
 
 describe("Project.discover", () => {
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  const ico = Buffer.from([0x00, 0x00, 0x01, 0x00])
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><rect width="1" height="1" /></svg>`
+
   test("should discover favicon.png in root", async () => {
     await using tmp = await tmpdir({ git: true })
     const { project } = await Project.fromDirectory(tmp.path)
 
-    const pngData = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-    await Bun.write(path.join(tmp.path, "favicon.png"), pngData)
+    await Bun.write(path.join(tmp.path, "favicon.png"), png)
 
     await Project.discover(project)
 
@@ -258,6 +262,91 @@ describe("Project.discover", () => {
     expect(updated!.icon?.url).toStartWith("data:")
     expect(updated!.icon?.url).toContain("base64")
     expect(updated!.icon?.color).toBeUndefined()
+  })
+
+  test("should prefer rel icon from html metadata", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await Project.fromDirectory(tmp.path)
+
+    await Bun.write(path.join(tmp.path, "favicon.ico"), ico)
+    await Bun.write(path.join(tmp.path, "brand.svg"), svg)
+    await Bun.write(
+      path.join(tmp.path, "index.html"),
+      `<html><head><link rel="icon" href="/brand.svg" /></head><body></body></html>`,
+    )
+
+    await Project.discover(project)
+
+    const updated = Project.get(project.id)
+    expect(updated).toBeDefined()
+    expect(updated!.icon?.url).toStartWith("data:image/svg+xml")
+  })
+
+  test("should prefer icons from metadata files", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await Project.fromDirectory(tmp.path)
+
+    await mkdir(path.join(tmp.path, "app"), { recursive: true })
+    await mkdir(path.join(tmp.path, "public"), { recursive: true })
+    await Bun.write(path.join(tmp.path, "favicon.ico"), ico)
+    await Bun.write(path.join(tmp.path, "public", "brand.png"), png)
+    await Bun.write(
+      path.join(tmp.path, "app", "layout.tsx"),
+      `export const metadata = { icons: { icon: "/brand.png" } }`,
+    )
+
+    await Project.discover(project)
+
+    const updated = Project.get(project.id)
+    expect(updated).toBeDefined()
+    expect(updated!.icon?.url).toStartWith("data:image/png")
+  })
+
+  test("should refresh existing discovered data icon when metadata is better", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await Project.fromDirectory(tmp.path)
+
+    await Bun.write(path.join(tmp.path, "favicon.ico"), ico)
+    await Project.discover(project)
+
+    const first = Project.get(project.id)
+    expect(first).toBeDefined()
+    expect(first!.icon?.url).toBeDefined()
+
+    await Bun.write(path.join(tmp.path, "brand.svg"), svg)
+    await Bun.write(
+      path.join(tmp.path, "index.html"),
+      `<html><head><link rel="icon" href="/brand.svg" /></head><body></body></html>`,
+    )
+
+    await Project.discover(first!)
+
+    const updated = Project.get(project.id)
+    expect(updated).toBeDefined()
+    expect(updated!.icon?.url).toStartWith("data:image/svg+xml")
+    expect(updated!.icon?.url).not.toBe(first!.icon?.url)
+  })
+
+  test("should keep explicit icon urls", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await Project.fromDirectory(tmp.path)
+
+    await Project.update({
+      projectID: project.id,
+      icon: { url: "https://example.com/icon.png" },
+    })
+
+    await Bun.write(path.join(tmp.path, "brand.svg"), svg)
+    await Bun.write(
+      path.join(tmp.path, "index.html"),
+      `<html><head><link rel="icon" href="/brand.svg" /></head><body></body></html>`,
+    )
+
+    await Project.discover(Project.get(project.id)!)
+
+    const updated = Project.get(project.id)
+    expect(updated).toBeDefined()
+    expect(updated!.icon?.url).toBe("https://example.com/icon.png")
   })
 
   test("should not discover non-image files", async () => {

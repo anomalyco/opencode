@@ -162,6 +162,106 @@ export namespace Project {
         )
       })
 
+      const sort = (a: string, b: string) => a.length - b.length || (a < b ? -1 : a > b ? 1 : 0)
+
+      const attr = (tag: string, key: string) => {
+        const hit = tag.match(new RegExp(`${key}\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s>]+))`, "i"))
+        return hit?.[1] ?? hit?.[2] ?? hit?.[3]
+      }
+
+      const keep = (text: string) =>
+        !!text &&
+        !text.startsWith("#") &&
+        !/^javascript:/i.test(text) &&
+        (/^(?:https?:|data:|\/|\.{1,2}\/)/i.test(text) ||
+          /\.(?:ico|png|svg|jpe?g|webp|avif)(?:[?#].*)?$/i.test(text))
+
+      const html = (text: string) => {
+        const links = Array.from(text.matchAll(/<link\b[^>]*>/gi))
+          .map((x) => x[0])
+          .map((tag) => ({ rel: attr(tag, "rel")?.toLowerCase(), href: attr(tag, "href") }))
+          .filter((x): x is { rel: string; href: string } => !!x.rel && !!x.href)
+          .filter((x) => x.rel.includes("icon") && !x.rel.includes("mask-icon"))
+        const main = links.filter((x) => !x.rel.includes("apple"))
+        return (main.length ? main : links).map((x) => x.href).filter(keep)
+      }
+
+      const meta = (text: string) => {
+        if (!/\b(?:metadata|generateMetadata|icons)\b/.test(text)) return []
+        return [
+          ...Array.from(text.matchAll(/\bicons\b\s*:\s*["'`]([^"'`]+)["'`]/g)).map((x) => x[1] ?? ""),
+          ...Array.from(
+            text.matchAll(
+              /\b(?:icon|shortcut|apple|favicon)\b\s*:\s*(?:\[\s*)?(?:\{\s*)?(?:url\s*:\s*)?["'`]([^"'`]+)["'`]/g,
+            ),
+          ).map((x) => x[1] ?? ""),
+        ].filter(keep)
+      }
+
+      const roots = (dir: string, worktree: string) =>
+        [...new Set([
+          dir,
+          pathSvc.join(dir, "public"),
+          pathSvc.join(dir, "static"),
+          pathSvc.join(dir, "app"),
+          pathSvc.join(dir, "src"),
+          pathSvc.join(dir, "src", "app"),
+          worktree,
+          pathSvc.join(worktree, "public"),
+          pathSvc.join(worktree, "static"),
+          pathSvc.join(worktree, "app"),
+          pathSvc.join(worktree, "src"),
+          pathSvc.join(worktree, "src", "app"),
+        ])]
+
+      const solve = Effect.fn("Project.solveIcon")(function* (worktree: string, file: string, text: string) {
+        text = text.trim()
+        if (!keep(text)) return
+        if (/^(?:data:|https?:\/\/)/i.test(text)) return text
+
+        const clean = text.split("#")[0]?.split("?")[0] ?? ""
+        if (!clean) return
+
+        const list = clean.startsWith("/")
+          ? roots(pathSvc.dirname(file), worktree).map((root) => pathSvc.join(root, clean.slice(1)))
+          : pathSvc.isAbsolute(clean)
+            ? [clean]
+            : [pathSvc.resolve(pathSvc.dirname(file), clean), pathSvc.resolve(worktree, clean)]
+
+        const hits = yield* Effect.forEach(
+          [...new Set(list)],
+          (item) =>
+            fs.isFile(item).pipe(
+              Effect.orDie,
+              Effect.map((ok) => (ok && AppFileSystem.mimeType(item).startsWith("image/") ? item : undefined)),
+            ),
+          { concurrency: "unbounded" },
+        )
+        return hits.find((x) => x !== undefined)
+      })
+
+      const embed = Effect.fn("Project.embedIcon")(function* (text: string) {
+        if (/^(?:data:|https?:\/\/)/i.test(text)) return text
+        const buf = yield* fs.readFile(text).pipe(Effect.orDie)
+        return `data:${AppFileSystem.mimeType(text)};base64,${Buffer.from(buf).toString("base64")}`
+      })
+
+      const probe = Effect.fn("Project.probeIcon")(function* (
+        files: string[],
+        parse: (text: string) => string[],
+        worktree: string,
+      ) {
+        for (const file of [...files].sort(sort)) {
+          const text = yield* fs.readFileString(file).pipe(Effect.catch(() => Effect.succeed("")))
+          if (!text) continue
+          for (const item of parse(text)) {
+            const hit = yield* solve(worktree, file, item)
+            if (!hit) continue
+            return yield* embed(hit)
+          }
+        }
+      })
+
       const fromDirectory = Effect.fn("Project.fromDirectory")(function* (directory: string) {
         log.info("fromDirectory", { directory })
 
@@ -327,23 +427,53 @@ export namespace Project {
       const discover = Effect.fn("Project.discover")(function* (input: Info) {
         if (input.vcs !== "git") return
         if (input.icon?.override) return
-        if (input.icon?.url) return
+        if (input.icon?.url && !input.icon.url.startsWith("data:")) return
 
-        const matches = yield* fs
-          .glob("**/favicon.{ico,png,svg,jpg,jpeg,webp}", {
-            cwd: input.worktree,
-            absolute: true,
-            include: "file",
-          })
-          .pipe(Effect.orDie)
-        const shortest = matches.sort((a, b) => a.length - b.length)[0]
-        if (!shortest) return
+        const [heads, metas, roots, apps, favs] = yield* Effect.all(
+          [
+            fs.glob("**/{index,app}.html", {
+              cwd: input.worktree,
+              absolute: true,
+              include: "file",
+            }),
+            fs.glob("**/{layout,head,metadata}.{ts,tsx,js,jsx,mts,mjs,astro}", {
+              cwd: input.worktree,
+              absolute: true,
+              include: "file",
+            }),
+            fs.glob("{favicon,icon,apple-icon}.{ico,png,svg,jpg,jpeg,webp,avif}", {
+              cwd: input.worktree,
+              absolute: true,
+              include: "file",
+            }),
+            fs.glob("**/{public,static,app}/**/{favicon,icon,apple-icon}.{ico,png,svg,jpg,jpeg,webp,avif}", {
+              cwd: input.worktree,
+              absolute: true,
+              include: "file",
+            }),
+            fs.glob("**/favicon.{ico,png,svg,jpg,jpeg,webp,avif}", {
+              cwd: input.worktree,
+              absolute: true,
+              include: "file",
+            }),
+          ],
+          { concurrency: 5 },
+        ).pipe(Effect.orDie)
 
-        const buffer = yield* fs.readFile(shortest).pipe(Effect.orDie)
-        const base64 = Buffer.from(buffer).toString("base64")
-        const mime = AppFileSystem.mimeType(shortest)
-        const url = `data:${mime};base64,${base64}`
-        yield* update({ projectID: input.id, icon: { url } })
+        const next =
+          (yield* probe(heads, html, input.worktree)) ??
+          (yield* probe(metas, meta, input.worktree)) ??
+          (yield* Effect.gen(function* () {
+            const file = [...roots, ...apps, ...favs].sort(sort)[0]
+            if (!file) return
+            return yield* embed(file)
+          }))
+
+        if (!next || next === input.icon?.url) return
+        yield* update({
+          projectID: input.id,
+          icon: { url: next, color: input.icon?.color },
+        })
       })
 
       const list = Effect.fn("Project.list")(function* () {
