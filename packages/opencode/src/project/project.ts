@@ -173,7 +173,7 @@ export namespace Project {
         !!text &&
         !text.startsWith("#") &&
         !/^javascript:/i.test(text) &&
-        (/^(?:https?:|data:|\/|\.{1,2}\/)/i.test(text) ||
+        (/^(?:https?:\/\/|data:)/i.test(text) ||
           /\.(?:ico|png|svg|jpe?g|webp|avif)(?:[?#].*)?$/i.test(text))
 
       const html = (text: string) => {
@@ -429,7 +429,7 @@ export namespace Project {
         if (input.icon?.override) return
         if (input.icon?.url && !input.icon.url.startsWith("data:")) return
 
-        const [heads, metas, roots, apps, favs] = yield* Effect.all(
+        const [heads, metas, favs] = yield* Effect.all(
           [
             fs.glob("**/{index,app}.html", {
               cwd: input.worktree,
@@ -441,30 +441,20 @@ export namespace Project {
               absolute: true,
               include: "file",
             }),
-            fs.glob("{favicon,icon,apple-icon}.{ico,png,svg,jpg,jpeg,webp,avif}", {
-              cwd: input.worktree,
-              absolute: true,
-              include: "file",
-            }),
-            fs.glob("**/{public,static,app}/**/{favicon,icon,apple-icon}.{ico,png,svg,jpg,jpeg,webp,avif}", {
-              cwd: input.worktree,
-              absolute: true,
-              include: "file",
-            }),
             fs.glob("**/favicon.{ico,png,svg,jpg,jpeg,webp,avif}", {
               cwd: input.worktree,
               absolute: true,
               include: "file",
             }),
           ],
-          { concurrency: 5 },
+          { concurrency: 3 },
         ).pipe(Effect.orDie)
 
         const next =
           (yield* probe(heads, html, input.worktree)) ??
           (yield* probe(metas, meta, input.worktree)) ??
           (yield* Effect.gen(function* () {
-            const file = [...roots, ...apps, ...favs].sort(sort)[0]
+            const file = [...favs].sort(sort)[0]
             if (!file) return
             return yield* embed(file)
           }))

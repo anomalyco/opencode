@@ -349,6 +349,24 @@ describe("Project.discover", () => {
     expect(updated!.icon?.url).toBe("https://example.com/icon.png")
   })
 
+  test("should ignore extensionless metadata icon routes", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const { project } = await Project.fromDirectory(tmp.path)
+
+    await mkdir(path.join(tmp.path, "app"), { recursive: true })
+    await Bun.write(path.join(tmp.path, "app", "icon.png"), png)
+    await Bun.write(
+      path.join(tmp.path, "app", "layout.tsx"),
+      `export const metadata = { icons: { icon: "/icon" } }`,
+    )
+
+    await Project.discover(project)
+
+    const updated = Project.get(project.id)
+    expect(updated).toBeDefined()
+    expect(updated!.icon).toBeUndefined()
+  })
+
   test("should not discover non-image files", async () => {
     await using tmp = await tmpdir({ git: true })
     const { project } = await Project.fromDirectory(tmp.path)
