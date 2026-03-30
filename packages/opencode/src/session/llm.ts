@@ -94,24 +94,26 @@ export namespace LLM {
         ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
         // any custom prompt passed into this call
         ...input.system,
-        // any custom prompt from last user message
-        ...(input.user.system ? [input.user.system] : []),
       ]
         .filter((x) => x)
         .join("\n"),
     )
+    if (input.user.system) {
+      system.push(input.user.system)
+    }
 
-    const header = system[0]
+    const count = system.length
+    const head = system[0]
     await Plugin.trigger(
       "experimental.chat.system.transform",
       { sessionID: input.sessionID, model: input.model },
       { system },
     )
     // rejoin to maintain 2-part structure for caching if header unchanged
-    if (system.length > 2 && system[0] === header) {
+    if (system.length > count && system[0] === head) {
       const rest = system.slice(1)
       system.length = 0
-      system.push(header, rest.join("\n"))
+      system.push(head, rest.join("\n"))
     }
 
     const variant =

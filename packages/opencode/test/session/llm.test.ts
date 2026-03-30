@@ -777,6 +777,137 @@ describe("session.llm.stream", () => {
     })
   })
 
+  test("keeps dynamic Anthropic system content in a separate message", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const providerID = "anthropic"
+    const modelID = "claude-3-5-sonnet-20241022"
+    const fixture = await loadFixture(providerID, modelID)
+    const model = fixture.model
+
+    const chunks = [
+      {
+        type: "message_start",
+        message: {
+          id: "msg-2",
+          model: model.id,
+          usage: {
+            input_tokens: 3,
+            cache_creation_input_tokens: null,
+            cache_read_input_tokens: null,
+          },
+        },
+      },
+      {
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "text", text: "" },
+      },
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text: "Hello" },
+      },
+      { type: "content_block_stop", index: 0 },
+      {
+        type: "message_delta",
+        delta: { stop_reason: "end_turn", stop_sequence: null, container: null },
+        usage: {
+          input_tokens: 3,
+          output_tokens: 2,
+          cache_creation_input_tokens: null,
+          cache_read_input_tokens: null,
+        },
+      },
+      { type: "message_stop" },
+    ]
+    const request = waitRequest("/messages", createEventResponse(chunks))
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: [providerID],
+            provider: {
+              [providerID]: {
+                options: {
+                  apiKey: "test-anthropic-key",
+                  baseURL: `${server.url.origin}/v1`,
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await Provider.getModel(ProviderID.make(providerID), ModelID.make(model.id))
+        const sessionID = SessionID.make("session-test-4")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const user = {
+          id: MessageID.make("user-4"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderID.make(providerID), modelID: resolved.id },
+          system: "Dynamic caller context.",
+        } satisfies MessageV2.User
+
+        const stream = await LLM.stream({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant.", "Stay concise."],
+          abort: new AbortController().signal,
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+
+        for await (const _ of stream.fullStream) {
+        }
+
+        const capture = await request
+        const system = capture.body.system
+
+        expect(capture.url.pathname.endsWith("/messages")).toBe(true)
+        expect(Array.isArray(system)).toBe(true)
+        if (!Array.isArray(system)) {
+          throw new Error("Expected Anthropic system payload to be an array")
+        }
+
+        const text = system
+          .map((item) => {
+            if (typeof item === "string") return item
+            if (!item || typeof item !== "object") return
+            const text = Reflect.get(item, "text")
+            if (typeof text === "string") return text
+          })
+          .filter((item): item is string => item !== undefined)
+
+        expect(text).toHaveLength(2)
+        expect(text[0]).toContain("You are a helpful assistant.")
+        expect(text[0]).toContain("Stay concise.")
+        expect(text[1]).toBe("Dynamic caller context.")
+      },
+    })
+  })
+
   test("sends Google API payload for Gemini models", async () => {
     const server = state.server
     if (!server) {
