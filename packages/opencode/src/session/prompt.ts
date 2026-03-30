@@ -1,7 +1,6 @@
 import path from "path"
 import os from "os"
 import z from "zod"
-import { Filesystem } from "../util/filesystem"
 import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import { Log } from "../util/log"
@@ -545,14 +544,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         return tools
       })
 
-      const handleSubtask: (input: {
-        task: MessageV2.SubtaskPart
-        model: Provider.Model
-        lastUser: MessageV2.User
-        sessionID: SessionID
-        session: Session.Info
-        msgs: MessageV2.WithParts[]
-      }) => Effect.Effect<void> = Effect.fn("SessionPrompt.handleSubtask")(function* (input: {
+      const handleSubtask = Effect.fn("SessionPrompt.handleSubtask")(function* (input: {
         task: MessageV2.SubtaskPart
         model: Provider.Model
         lastUser: MessageV2.User
@@ -561,7 +553,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         msgs: MessageV2.WithParts[]
       }) {
         const { task, model, lastUser, sessionID, session, msgs } = input
-        const taskTool: Awaited<ReturnType<typeof TaskTool.init>> = yield* Effect.promise(() => TaskTool.init())
+        const taskTool = yield* Effect.promise(() => TaskTool.init())
         const taskModel = task.model ? yield* getModel(task.model.providerID, task.model.modelID, sessionID) : model
         const assistantMessage: MessageV2.Assistant = yield* sessions.updateMessage({
           id: MessageID.ascending(),
@@ -1054,8 +1046,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               case "file:": {
                 log.info("file", { mime: part.mime })
                 const filepath = fileURLToPath(part.url)
-                const s = Filesystem.stat(filepath)
-                if (s?.isDirectory()) part.mime = "application/x-directory"
+                if (yield* fsys.isDir(filepath)) part.mime = "application/x-directory"
 
                 if (part.mime === "text/plain") {
                   let offset: number | undefined
@@ -1208,7 +1199,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     type: "file",
                     url:
                       `data:${part.mime};base64,` +
-                      (yield* Effect.promise(() => Filesystem.readBytes(filepath))).toString("base64"),
+                      Buffer.from(yield* fsys.readFile(filepath).pipe(Effect.catch(Effect.die))).toString("base64"),
                     mime: part.mime,
                     filename: part.filename!,
                     source: part.source,
