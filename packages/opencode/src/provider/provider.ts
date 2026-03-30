@@ -437,11 +437,20 @@ export namespace Provider {
               discovered[m.id] = input.models[m.id]
               continue
             }
+            const id = String(m.id ?? "")
             const hasReasoning =
               m.supported_parameters?.includes("reasoning") || m.supported_parameters?.includes("include_reasoning")
             const hasTools = m.supported_parameters?.includes("tools")
             const inputModalities = m.architecture?.input_modalities ?? ["text"]
             const outputModalities = m.architecture?.output_modalities ?? ["text"]
+            const base = id.endsWith(":free") ? id.slice(0, -5) : ""
+            const inherited = iife(() => {
+              if (!base) return undefined
+              const interleaved = input.models[base]?.capabilities.interleaved
+              if (typeof interleaved !== "object") return undefined
+              return interleaved
+            })
+            const interleaved = inherited ?? false
             const model: Model = {
               id: ModelID.make(m.id),
               providerID: ProviderID.openrouter,
@@ -487,7 +496,7 @@ export namespace Provider {
                   video: outputModalities.includes("video"),
                   pdf: false,
                 },
-                interleaved: false,
+                interleaved,
               },
               release_date: m.created ? new Date(m.created * 1000).toISOString().split("T")[0] : m.knowledge_cutoff ?? "",
               variants: {},
