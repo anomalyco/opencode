@@ -12,7 +12,7 @@ describe("SingleFlight", () => {
           const s = yield* Scope.Scope
           const flight = yield* SingleFlight.make(Effect.succeed({ value: "ok" }))
           yield* SingleFlight.start(flight, s)
-          const result = yield* SingleFlight.await(flight)
+          const result = yield* SingleFlight.join(flight)
           expect(result.value).toBe("ok")
         }),
       ),
@@ -33,7 +33,7 @@ describe("SingleFlight", () => {
 
           const flight = yield* SingleFlight.make<Result, never>(work)
           yield* SingleFlight.start(flight, s)
-          const [a, b] = yield* Effect.all([SingleFlight.await(flight), SingleFlight.await(flight)], {
+          const [a, b] = yield* Effect.all([SingleFlight.join(flight), SingleFlight.join(flight)], {
             concurrency: "unbounded",
           })
 
@@ -57,7 +57,7 @@ describe("SingleFlight", () => {
           })
 
           const flight = yield* SingleFlight.make<Result, never>(work)
-          const waiter = yield* SingleFlight.await(flight).pipe(Effect.forkChild)
+          const waiter = yield* SingleFlight.join(flight).pipe(Effect.forkChild)
           yield* Effect.sleep("10 millis")
           expect(yield* Ref.get(started)).toBe(false)
 
@@ -79,7 +79,7 @@ describe("SingleFlight", () => {
       Effect.scoped(
         Effect.gen(function* () {
           const flight = yield* SingleFlight.make<Result, never>(Effect.succeed({ value: "never" }))
-          const waiter = yield* SingleFlight.await(flight).pipe(Effect.forkChild)
+          const waiter = yield* SingleFlight.join(flight).pipe(Effect.forkChild)
           yield* Effect.sleep("10 millis")
 
           yield* SingleFlight.cancel(flight)
@@ -104,7 +104,7 @@ describe("SingleFlight", () => {
 
           const flight = yield* SingleFlight.make<Result, never>(work)
           yield* SingleFlight.start(flight, s)
-          const waiter = yield* SingleFlight.await(flight).pipe(Effect.forkChild)
+          const waiter = yield* SingleFlight.join(flight).pipe(Effect.forkChild)
           yield* Effect.sleep("10 millis")
 
           yield* SingleFlight.cancel(flight)

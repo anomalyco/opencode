@@ -1524,29 +1524,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         return yield* lastAssistant(sessionID)
       })
 
-      const makeFlight = Effect.fnUntraced(function* (
-        s: { loops: Map<string, SingleFlight<MessageV2.WithParts, unknown>>; shells: Map<string, ShellEntry> },
-        sessionID: SessionID,
-      ) {
-        let flight!: SingleFlight<MessageV2.WithParts, unknown>
-        flight = yield* SingleFlight.make(
-          runLoop(sessionID).pipe(
-            Effect.ensuring(
-              Effect.gen(function* () {
-                if (s.loops.get(sessionID) === flight) s.loops.delete(sessionID)
-                if (!s.loops.has(sessionID) && !s.shells.has(sessionID)) {
-                  yield* status.set(sessionID, { type: "idle" })
-                }
-              }),
-            ),
-          ),
-        )
-        s.loops.set(sessionID, flight)
-        return flight
-      })
-
       const awaitFlight = (flight: SingleFlight<MessageV2.WithParts, unknown>, sessionID: SessionID) =>
-        SingleFlight.await(flight).pipe(
+        SingleFlight.join(flight).pipe(
           Effect.catch((e) => (e instanceof Cancelled ? lastAssistant(sessionID) : Effect.fail(e))),
         )
 
@@ -1557,12 +1536,21 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         const existing = s.loops.get(input.sessionID)
         if (existing) return yield* awaitFlight(existing, input.sessionID)
 
-        const flight = yield* makeFlight(s, input.sessionID)
-        // If a shell is running, don't start yet — shell cleanup will start it
+        const flight = yield* SingleFlight.make(runLoop(input.sessionID))
+        s.loops.set(input.sessionID, flight)
         if (!s.shells.has(input.sessionID)) {
           yield* SingleFlight.start(flight, scope)
         }
-        return yield* awaitFlight(flight, input.sessionID)
+        return yield* awaitFlight(flight, input.sessionID).pipe(
+          Effect.ensuring(
+            Effect.gen(function* () {
+              if (s.loops.get(input.sessionID) === flight) s.loops.delete(input.sessionID)
+              if (!s.loops.has(input.sessionID) && !s.shells.has(input.sessionID)) {
+                yield* status.set(input.sessionID, { type: "idle" })
+              }
+            }),
+          ),
+        )
       })
 
       const shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts, unknown> = Effect.fn(
@@ -1587,7 +1575,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               }
             }),
           ),
-          Effect.forkIn(scope),
+          Effect.forkChild,
         )
         s.shells.set(input.sessionID, { fiber, abort: ctrl })
         const exit = yield* Fiber.await(fiber)
