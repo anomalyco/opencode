@@ -57,12 +57,11 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
             model.api.npm = "@ai-sdk/github-copilot"
           }
 
-          // Add the "auto" virtual model that uses Copilot's model routing API
+          // Add the "auto" virtual model that uses client-side model routing
           provider.models["auto"] = {
             id: "auto" as any,
             providerID: "github-copilot" as any,
             name: "Auto (Best for task)",
-            family: "auto",
             api: {
               id: "auto",
               url: baseURL ?? "https://api.githubcopilot.com",
@@ -81,8 +80,6 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
             limit: { context: 128000, output: 16384 },
             options: {},
             headers: {},
-            release_date: "",
-            variants: {},
           }
         }
 
