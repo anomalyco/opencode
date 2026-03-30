@@ -262,27 +262,27 @@ export namespace Storage {
         yield* fs.writeWithDirs(target, JSON.stringify(content, null, 2))
       })
 
-      const remove: Interface["remove"] = Effect.fn("Storage.remove")(function* (key: string[]) {
+      const resolve = Effect.fnUntraced(function* (key: string[]) {
         const dir = (yield* state).dir
         const target = file(dir, key)
-        const rw = yield* get(target)
+        return [target, yield* get(target)] as const
+      })
+
+      const remove: Interface["remove"] = Effect.fn("Storage.remove")(function* (key: string[]) {
+        const [target, rw] = yield* resolve(key)
         yield* TxReentrantLock.withWriteLock(rw, fs.remove(target).pipe(Effect.catchIf(missing, () => Effect.void)))
       })
 
       const read: Interface["read"] = <T>(key: string[]) =>
         Effect.gen(function* () {
-          const dir = (yield* state).dir
-          const target = file(dir, key)
-          const rw = yield* get(target)
+          const [target, rw] = yield* resolve(key)
           const value = yield* TxReentrantLock.withReadLock(rw, wrap(target, fs.readJson(target)))
           return value as T
         })
 
       const update: Interface["update"] = <T>(key: string[], fn: (draft: T) => void) =>
         Effect.gen(function* () {
-          const dir = (yield* state).dir
-          const target = file(dir, key)
-          const rw = yield* get(target)
+          const [target, rw] = yield* resolve(key)
           const value = yield* TxReentrantLock.withWriteLock(
             rw,
             Effect.gen(function* () {
@@ -297,9 +297,7 @@ export namespace Storage {
 
       const write: Interface["write"] = (key: string[], content: unknown) =>
         Effect.gen(function* () {
-          const dir = (yield* state).dir
-          const target = file(dir, key)
-          const rw = yield* get(target)
+          const [target, rw] = yield* resolve(key)
           yield* TxReentrantLock.withWriteLock(rw, writeJson(target, content))
         })
 
