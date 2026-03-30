@@ -451,11 +451,12 @@ export namespace Provider {
               headers: {},
               options: {},
               cost: {
-                input: Number(m.pricing?.prompt ?? 0) * 1000000,
-                output: (Number(m.pricing?.completion ?? 0) + Number(m.pricing?.internal_reasoning ?? 0)) * 1000000,
+                input: Math.max(0, Number(m.pricing?.prompt ?? 0)) * 1000000,
+                output:
+                  Math.max(0, Number(m.pricing?.completion ?? 0) + Number(m.pricing?.internal_reasoning ?? 0)) * 1000000,
                 cache: {
-                  read: Number(m.pricing?.input_cache_read ?? 0) * 1000000,
-                  write: Number(m.pricing?.input_cache_write ?? 0) * 1000000,
+                  read: Math.max(0, Number(m.pricing?.input_cache_read ?? 0)) * 1000000,
+                  write: Math.max(0, Number(m.pricing?.input_cache_write ?? 0)) * 1000000,
                 },
               },
               limit: {
