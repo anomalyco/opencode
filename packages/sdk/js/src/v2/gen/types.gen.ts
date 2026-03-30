@@ -1432,6 +1432,31 @@ export type Config = {
     }
   }
   /**
+   * Plugin-contributed UI configuration for session buttons and web tabs
+   */
+  ui?: {
+    session?: {
+      tabs?: Array<{
+        id: string
+        title: string
+        src: string
+        icon?: string
+        origins?: Array<string>
+        permissions?: {
+          file?: {
+            read?: Array<string>
+            write?: Array<string>
+          }
+        }
+      }>
+      buttons?: Array<{
+        id: string
+        label: string
+        tab: string
+      }>
+    }
+  }
+  /**
    * Additional skill folder paths
    */
   skills?: {
@@ -1955,6 +1980,11 @@ export type FileContent = {
   }
   encoding?: "base64"
   mimeType?: string
+}
+
+export type FileMutation = {
+  path: string
+  hash: string
 }
 
 export type File = {
@@ -4421,6 +4451,28 @@ export type FileReadResponses = {
 }
 
 export type FileReadResponse = FileReadResponses[keyof FileReadResponses]
+
+export type FileWriteData = {
+  body?: {
+    content: string
+  }
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    path: string
+  }
+  url: "/file/content"
+}
+
+export type FileWriteResponses = {
+  /**
+   * Write result
+   */
+  200: FileMutation
+}
+
+export type FileWriteResponse = FileWriteResponses[keyof FileWriteResponses]
 
 export type FileStatusData = {
   body?: never
