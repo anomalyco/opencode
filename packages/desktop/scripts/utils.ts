@@ -3,32 +3,32 @@ import { $ } from "bun"
 export const SIDECAR_BINARIES: Array<{ rustTarget: string; ocBinary: string; assetExt: string }> = [
   {
     rustTarget: "aarch64-apple-darwin",
-    ocBinary: "athena-darwin-arm64",
+    ocBinary: "athena-agent-darwin-arm64",
     assetExt: "zip",
   },
   {
     rustTarget: "x86_64-apple-darwin",
-    ocBinary: "athena-darwin-x64-baseline",
+    ocBinary: "athena-agent-darwin-x64-baseline",
     assetExt: "zip",
   },
   {
     rustTarget: "aarch64-pc-windows-msvc",
-    ocBinary: "athena-windows-arm64",
+    ocBinary: "athena-agent-windows-arm64",
     assetExt: "zip",
   },
   {
     rustTarget: "x86_64-pc-windows-msvc",
-    ocBinary: "athena-windows-x64-baseline",
+    ocBinary: "athena-agent-windows-x64-baseline",
     assetExt: "zip",
   },
   {
     rustTarget: "x86_64-unknown-linux-gnu",
-    ocBinary: "athena-linux-x64-baseline",
+    ocBinary: "athena-agent-linux-x64-baseline",
     assetExt: "tar.gz",
   },
   {
     rustTarget: "aarch64-unknown-linux-gnu",
-    ocBinary: "athena-linux-arm64",
+    ocBinary: "athena-agent-linux-arm64",
     assetExt: "tar.gz",
   },
 ]
