@@ -9,7 +9,10 @@
  * Reports: p50/p95/p99/max per transport+size
  * Validation: WS p99 < 5ms for small payloads (COB-37 spec target)
  *
- * Run: OPENCODE_WS_SYNC=1 bun test ./test/bench/ws-vs-sse.bench.test.ts --timeout 120000
+ * Run: OPENCODE_BENCH=1 OPENCODE_WS_SYNC=1 bun test ./test/bench/ws-vs-sse.bench.test.ts --timeout 120000
+ *
+ * NOTE: Tests are skipped in standard CI (bun test --timeout 30000).
+ * Set OPENCODE_BENCH=1 to run. Large payloads require --timeout 120000.
  */
 import { tmpdir } from "os"
 import { join } from "path"
@@ -98,10 +101,15 @@ async function* readSSEEvents(
   }
 }
 
+// Large-payload benchmarks require --timeout 120000 and OPENCODE_BENCH=1
+const RUN_BENCH = process.env.OPENCODE_BENCH === "1"
+
 const PAYLOADS: { label: string; bytes: number; iterations: number }[] = [
   { label: "small-100B", bytes: 100, iterations: 1000 },
   { label: "medium-10KB", bytes: 10_000, iterations: 1000 },
-  { label: "large-100KB", bytes: 100_000, iterations: 200 },
+  ...(RUN_BENCH
+    ? [{ label: "large-100KB", bytes: 100_000, iterations: 200 }]
+    : []),
 ]
 
 // ---------------------------------------------------------------------------
