@@ -88,18 +88,17 @@ export namespace Runner {
       })
 
     const finishShell = (id: number) =>
-      SynchronizedRef.modifyEffect(ref, (st) => {
-        return Effect.gen(function* () {
-          if (st._tag === "Shell" && st.shell.id === id) {
-            return [idle, { _tag: "Idle" }] as const
-          }
+      SynchronizedRef.modifyEffect(
+        ref,
+        Effect.fnUntraced(function* (st) {
+          if (st._tag === "Shell" && st.shell.id === id) return [idle, { _tag: "Idle" }] as const
           if (st._tag === "ShellThenRun" && st.shell.id === id) {
             const run = yield* startRun(st.run.work, st.run.done)
             return [Effect.void, { _tag: "Running", run }] as const
           }
           return [Effect.void, st] as const
-        })
-      }).pipe(Effect.flatten)
+        }),
+      ).pipe(Effect.flatten)
 
     const stopShell = (shell: ShellHandle<A, E>) =>
       Effect.gen(function* () {
@@ -115,7 +114,6 @@ export namespace Runner {
         Effect.fnUntraced(function* (st) {
           switch (st._tag) {
             case "Running":
-              return [Deferred.await(st.run.done), st] as const
             case "ShellThenRun":
               return [Deferred.await(st.run.done), st] as const
             case "Shell": {
@@ -141,8 +139,9 @@ export namespace Runner {
       )
 
     const startShell = (work: (signal: AbortSignal) => Effect.Effect<A, E>) =>
-      SynchronizedRef.modifyEffect(ref, (st) => {
-        return Effect.gen(function* () {
+      SynchronizedRef.modifyEffect(
+        ref,
+        Effect.fnUntraced(function* (st) {
           if (st._tag !== "Idle") {
             return [
               Effect.sync(() => {
@@ -166,8 +165,8 @@ export namespace Runner {
             }),
             { _tag: "Shell", shell },
           ] as const
-        })
-      }).pipe(Effect.flatten)
+        }),
+      ).pipe(Effect.flatten)
 
     const cancel = SynchronizedRef.modify(ref, (st) => {
       switch (st._tag) {
