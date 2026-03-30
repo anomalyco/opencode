@@ -1,4 +1,4 @@
-name: Auto-update PR branches
+name: PR Branch Sync
 
 # When main changes (typically after a PR merge), automatically update all
 # open PR branches so they stay current. This prevents CI failures caused by
