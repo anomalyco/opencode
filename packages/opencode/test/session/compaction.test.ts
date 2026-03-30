@@ -964,8 +964,9 @@ describe("session.getUsage", () => {
     expect(result.tokens.cache.write).toBe(300)
   })
 
-  test("does not subtract cached tokens for anthropic provider", () => {
+  test("subtracts cached tokens for anthropic provider", () => {
     const model = createModel({ context: 100_000, output: 32_000 })
+    // AI SDK v6 normalizes inputTokens to include cached tokens for all providers
     const result = Session.getUsage({
       model,
       usage: {
@@ -979,7 +980,7 @@ describe("session.getUsage", () => {
       },
     })
 
-    expect(result.tokens.input).toBe(1000)
+    expect(result.tokens.input).toBe(800)
     expect(result.tokens.cache.read).toBe(200)
   })
 
@@ -1043,11 +1044,10 @@ describe("session.getUsage", () => {
     "computes total from components for %s models",
     (npm) => {
       const model = createModel({ context: 100_000, output: 32_000, npm })
+      // AI SDK v6: inputTokens includes cached tokens for all providers
       const usage = {
         inputTokens: 1000,
         outputTokens: 500,
-        // These providers typically report total as input + output only,
-        // excluding cache read/write.
         totalTokens: 1500,
         cachedInputTokens: 200,
       }
@@ -1064,10 +1064,12 @@ describe("session.getUsage", () => {
           },
         })
 
-        expect(result.tokens.input).toBe(1000)
+        // inputTokens (1000) includes cache, so adjusted = 1000 - 200 - 300 = 500
+        expect(result.tokens.input).toBe(500)
         expect(result.tokens.cache.read).toBe(200)
         expect(result.tokens.cache.write).toBe(300)
-        expect(result.tokens.total).toBe(2000)
+        // total = adjusted (500) + output (500) + cacheRead (200) + cacheWrite (300)
+        expect(result.tokens.total).toBe(1500)
         return
       }
 
@@ -1081,10 +1083,12 @@ describe("session.getUsage", () => {
         },
       })
 
-      expect(result.tokens.input).toBe(1000)
+      // inputTokens (1000) includes cache, so adjusted = 1000 - 200 - 300 = 500
+      expect(result.tokens.input).toBe(500)
       expect(result.tokens.cache.read).toBe(200)
       expect(result.tokens.cache.write).toBe(300)
-      expect(result.tokens.total).toBe(2000)
+      // total = adjusted (500) + output (500) + cacheRead (200) + cacheWrite (300)
+      expect(result.tokens.total).toBe(1500)
     },
   )
 })
