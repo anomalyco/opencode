@@ -341,6 +341,7 @@ export namespace File {
     readonly init: () => Effect.Effect<void>
     readonly status: () => Effect.Effect<File.Info[]>
     readonly read: (file: string) => Effect.Effect<File.Content>
+    readonly write: (file: string, content: string) => Effect.Effect<File.Mutation>
     readonly list: (dir?: string) => Effect.Effect<File.Node[]>
     readonly search: (input: {
       query: string
