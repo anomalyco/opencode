@@ -405,7 +405,10 @@ export namespace SessionProcessor {
                 ...part.state,
                 status: "error",
                 error: "Tool execution aborted",
-                time: { start: Date.now(), end: Date.now() },
+                time: {
+                  start: "time" in part.state ? part.state.time.start : Date.now(),
+                  end: Date.now(),
+                },
               },
             })
           }
