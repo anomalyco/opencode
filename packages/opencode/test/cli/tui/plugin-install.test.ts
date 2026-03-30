@@ -48,7 +48,7 @@ test("installs plugin without loading it", async () => {
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
   let cfg: Awaited<ReturnType<typeof TuiConfig.get>> = {
     plugin: [],
-    plugin_meta: undefined,
+    plugin_records: undefined,
   }
   const get = spyOn(TuiConfig, "get").mockImplementation(async () => cfg)
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
@@ -68,12 +68,13 @@ test("installs plugin without loading it", async () => {
     await TuiPluginRuntime.init(api)
     cfg = {
       plugin: [[tmp.extra.spec, { marker: tmp.extra.marker }]],
-      plugin_meta: {
-        [tmp.extra.spec]: {
+      plugin_records: [
+        {
+          item: [tmp.extra.spec, { marker: tmp.extra.marker }],
           scope: "local",
           source: path.join(tmp.path, "tui.json"),
         },
-      },
+      ],
     }
 
     const out = await TuiPluginRuntime.installPlugin(tmp.extra.spec)
