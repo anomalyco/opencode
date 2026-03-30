@@ -576,6 +576,55 @@ describe("plugin.loader.shared", () => {
     })
   })
 
+  test("initializes server plugins in config order", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const a = path.join(dir, "a-plugin.ts")
+        const b = path.join(dir, "b-plugin.ts")
+        const marker = path.join(dir, "server-order.txt")
+        const aSpec = pathToFileURL(a).href
+        const bSpec = pathToFileURL(b).href
+
+        await Bun.write(
+          a,
+          `import fs from "fs/promises"
+
+export default {
+  id: "demo.order.a",
+  server: async () => {
+    await fs.appendFile(${JSON.stringify(marker)}, "a-start\\n")
+    await Bun.sleep(25)
+    await fs.appendFile(${JSON.stringify(marker)}, "a-end\\n")
+    return {}
+  },
+}
+`,
+        )
+        await Bun.write(
+          b,
+          `import fs from "fs/promises"
+
+export default {
+  id: "demo.order.b",
+  server: async () => {
+    await fs.appendFile(${JSON.stringify(marker)}, "b\\n")
+    return {}
+  },
+}
+`,
+        )
+
+        await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ plugin: [aSpec, bSpec] }, null, 2))
+
+        return { marker }
+      },
+    })
+
+    await load(tmp.path)
+    const lines = (await fs.readFile(tmp.extra.marker, "utf8")).trim().split("\n")
+    expect(lines).toEqual(["a-start", "a-end", "b"])
+  })
+
   test("skips external plugins in pure mode", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
