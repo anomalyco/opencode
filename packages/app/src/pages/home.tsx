@@ -1,35 +1,46 @@
-import { createMemo, For, Match, Switch } from "solid-js"
+import { createMemo, onMount } from "solid-js"
 import { Button } from "@athena/ui/button"
-import { Logo } from "@athena/ui/logo"
 import { useLayout } from "@/context/layout"
 import { useNavigate } from "@solidjs/router"
 import { base64Encode } from "@athena/util/encode"
-import { Icon } from "@athena/ui/icon"
-import { usePlatform } from "@/context/platform"
-import { DateTime } from "luxon"
-import { useDialog } from "@athena/ui/context/dialog"
-import { DialogSelectDirectory } from "@/components/dialog-select-directory"
-import { DialogSelectServer } from "@/components/dialog-select-server"
 import { useServer } from "@/context/server"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 
+/**
+ * Home page for Athena Browser Agent.
+ *
+ * Unlike OpenCode which asks you to open a project directory,
+ * the browser agent auto-opens a data directory and goes straight
+ * to a new session. No project picker needed.
+ */
 export default function Home() {
   const sync = useGlobalSync()
   const layout = useLayout()
-  const platform = usePlatform()
-  const dialog = useDialog()
   const navigate = useNavigate()
   const server = useServer()
   const language = useLanguage()
-  const homedir = createMemo(() => sync.data.path.home)
-  const recent = createMemo(() => {
-    return sync.data.project
-      .slice()
-      .sort((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
-      .slice(0, 5)
+
+  // Auto-open the athena data directory as the "project"
+  // This is ~/.local/share/athena/ — where the agent stores files
+  const dataDir = createMemo(() => {
+    const home = sync.data.path.home
+    if (!home) return undefined
+    return `${home}/.local/share/athena`
   })
 
+  // Auto-navigate to session on mount
+  onMount(() => {
+    const dir = dataDir()
+    if (!dir) return
+
+    // Open data dir as project and navigate
+    layout.projects.open(dir)
+    server.projects.touch(dir)
+    navigate(`/${base64Encode(dir)}`)
+  })
+
+  // If auto-navigate hasn't fired yet, show a simple landing
   const serverDotClass = createMemo(() => {
     const healthy = server.healthy()
     if (healthy === true) return "bg-icon-success-base"
@@ -37,103 +48,37 @@ export default function Home() {
     return "bg-border-weak-base"
   })
 
-  function openProject(directory: string) {
-    layout.projects.open(directory)
-    server.projects.touch(directory)
-    navigate(`/${base64Encode(directory)}`)
-  }
-
-  async function chooseProject() {
-    function resolve(result: string | string[] | null) {
-      if (Array.isArray(result)) {
-        for (const directory of result) {
-          openProject(directory)
-        }
-      } else if (result) {
-        openProject(result)
-      }
-    }
-
-    if (platform.openDirectoryPickerDialog && server.isLocal()) {
-      const result = await platform.openDirectoryPickerDialog?.({
-        title: language.t("command.project.open"),
-        multiple: true,
-      })
-      resolve(result)
-    } else {
-      dialog.show(
-        () => <DialogSelectDirectory multiple={true} onSelect={resolve} />,
-        () => resolve(null),
-      )
-    }
+  function startSession() {
+    const dir = dataDir()
+    if (!dir) return
+    layout.projects.open(dir)
+    server.projects.touch(dir)
+    navigate(`/${base64Encode(dir)}`)
   }
 
   return (
-    <div class="mx-auto mt-55 w-full md:w-auto px-4">
-      <Logo class="md:w-xl opacity-12" />
-      <Button
-        size="large"
-        variant="ghost"
-        class="mt-4 mx-auto text-14-regular text-text-weak"
-        onClick={() => dialog.show(() => <DialogSelectServer />)}
-      >
+    <div class="mx-auto mt-40 w-full md:w-auto px-4 flex flex-col items-center gap-8">
+      <div class="flex flex-col items-center gap-3">
+        <div class="text-48-medium opacity-20" style={{ color: "var(--color-accent-base, #b48efa)" }}>
+          ◆
+        </div>
+        <div class="text-20-medium text-text-strong">athena browser</div>
+        <div class="text-14-regular text-text-weak">automate anything in the browser</div>
+      </div>
+
+      <div class="flex gap-3 items-center">
         <div
           classList={{
             "size-2 rounded-full": true,
             [serverDotClass()]: true,
           }}
         />
-        {server.name}
+        <span class="text-12-regular text-text-weak">{server.name}</span>
+      </div>
+
+      <Button size="large" onClick={startSession}>
+        Start Session
       </Button>
-      <Switch>
-        <Match when={sync.data.project.length > 0}>
-          <div class="mt-20 w-full flex flex-col gap-4">
-            <div class="flex gap-2 items-center justify-between pl-3">
-              <div class="text-14-medium text-text-strong">{language.t("home.recentProjects")}</div>
-              <Button icon="folder-add-left" size="normal" class="pl-2 pr-3" onClick={chooseProject}>
-                {language.t("command.project.open")}
-              </Button>
-            </div>
-            <ul class="flex flex-col gap-2">
-              <For each={recent()}>
-                {(project) => (
-                  <Button
-                    size="large"
-                    variant="ghost"
-                    class="text-14-mono text-left justify-between px-3"
-                    onClick={() => openProject(project.worktree)}
-                  >
-                    {project.worktree.replace(homedir(), "~")}
-                    <div class="text-14-regular text-text-weak">
-                      {DateTime.fromMillis(project.time.updated ?? project.time.created).toRelative()}
-                    </div>
-                  </Button>
-                )}
-              </For>
-            </ul>
-          </div>
-        </Match>
-        <Match when={!sync.ready}>
-          <div class="mt-30 mx-auto flex flex-col items-center gap-3">
-            <div class="text-12-regular text-text-weak">{language.t("common.loading")}</div>
-            <Button class="px-3" onClick={chooseProject}>
-              {language.t("command.project.open")}
-            </Button>
-          </div>
-        </Match>
-        <Match when={true}>
-          <div class="mt-30 mx-auto flex flex-col items-center gap-3">
-            <Icon name="folder-add-left" size="large" />
-            <div class="flex flex-col gap-1 items-center justify-center">
-              <div class="text-14-medium text-text-strong">{language.t("home.empty.title")}</div>
-              <div class="text-12-regular text-text-weak">{language.t("home.empty.description")}</div>
-            </div>
-            <Button class="px-3 mt-1" onClick={chooseProject}>
-              {language.t("command.project.open")}
-            </Button>
-          </div>
-        </Match>
-      </Switch>
     </div>
   )
 }
