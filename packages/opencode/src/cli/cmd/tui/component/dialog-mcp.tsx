@@ -5,7 +5,6 @@ import { map, pipe, entries, sortBy } from "remeda"
 import { DialogSelect, type DialogSelectRef, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { useTheme } from "../context/theme"
 import { Keybind } from "@/util/keybind"
-import { TextAttributes } from "@opentui/core"
 import { useSDK } from "@tui/context/sdk"
 
 function Status(props: { enabled: boolean; loading: boolean }) {
@@ -14,7 +13,7 @@ function Status(props: { enabled: boolean; loading: boolean }) {
     return <span style={{ fg: theme.textMuted }}>⋯ Loading</span>
   }
   if (props.enabled) {
-    return <span style={{ fg: theme.success, attributes: TextAttributes.BOLD }}>✓ Enabled</span>
+    return <span style={{ fg: theme.success }}>✓ Enabled</span>
   }
   return <span style={{ fg: theme.textMuted }}>○ Disabled</span>
 }

@@ -1,4 +1,3 @@
-import { TextAttributes } from "@opentui/core"
 import { useTheme } from "@tui/context/theme"
 import { useDialog } from "./dialog"
 import { useKeyboard } from "@opentui/solid"
@@ -18,7 +17,7 @@ export function DialogHelp() {
   return (
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={theme.text}>
+        <text fg={theme.text}>
           Help
         </text>
         <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>

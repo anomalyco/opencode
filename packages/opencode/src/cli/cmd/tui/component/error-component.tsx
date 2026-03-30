@@ -1,4 +1,3 @@
-import { TextAttributes } from "@opentui/core"
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { createSignal } from "solid-js"
@@ -63,11 +62,11 @@ export function ErrorComponent(props: {
   return (
     <box flexDirection="column" gap={1} backgroundColor={colors.bg}>
       <box flexDirection="row" gap={1} alignItems="center">
-        <text attributes={TextAttributes.BOLD} fg={colors.text}>
+        <text fg={colors.text}>
           Please report an issue.
         </text>
         <box onMouseUp={copyIssueURL} backgroundColor={colors.primary} padding={1}>
-          <text attributes={TextAttributes.BOLD} fg={colors.bg}>
+          <text fg={colors.bg}>
             Copy issue URL (exception info pre-filled)
           </text>
         </box>

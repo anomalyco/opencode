@@ -1076,7 +1076,7 @@ export function Prompt(props: PromptProps) {
                   <Show when={showVariant()}>
                     <text fg={theme.textMuted}>·</text>
                     <text>
-                      <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
+                      <span style={{ fg: theme.warning }}>{local.model.variant.current()}</span>
                     </text>
                   </Show>
                 </box>

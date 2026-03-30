@@ -1,4 +1,4 @@
-import { InputRenderable, RGBA, ScrollBoxRenderable, TextAttributes } from "@opentui/core"
+import { InputRenderable, RGBA, ScrollBoxRenderable } from "@opentui/core"
 import { useTheme, selectedForeground } from "@tui/context/theme"
 import { entries, filter, flatMap, groupBy, pipe, take } from "remeda"
 import { batch, createEffect, createMemo, For, Show, type JSX, on } from "solid-js"
@@ -233,7 +233,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     <box gap={1} paddingBottom={1}>
       <box paddingLeft={4} paddingRight={4}>
         <box flexDirection="row" justifyContent="space-between">
-          <text fg={theme.text} attributes={TextAttributes.BOLD}>
+          <text fg={theme.text}>
             {props.title}
           </text>
           <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
@@ -284,7 +284,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
               <>
                 <Show when={category}>
                   <box paddingTop={index() > 0 ? 1 : 0} paddingLeft={3}>
-                    <text fg={theme.accent} attributes={TextAttributes.BOLD}>
+                    <text fg={theme.accent}>
                       {category}
                     </text>
                   </box>
@@ -382,7 +382,6 @@ function Option(props: {
       <text
         flexGrow={1}
         fg={props.active ? fg : props.current ? theme.primary : theme.text}
-        attributes={props.active ? TextAttributes.BOLD : undefined}
         overflow="hidden"
         wrapMode="none"
         paddingLeft={3}

@@ -1,4 +1,3 @@
-import { TextAttributes } from "@opentui/core"
 import { fileURLToPath } from "bun"
 import { useTheme } from "../context/theme"
 import { useDialog } from "@tui/ui/dialog"
@@ -43,7 +42,7 @@ export function DialogStatus() {
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text fg={theme.text} attributes={TextAttributes.BOLD}>
+        <text fg={theme.text}>
           Status
         </text>
         <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>

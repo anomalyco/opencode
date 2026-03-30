@@ -749,14 +749,12 @@ function getSyntaxRules(theme: Theme) {
       scope: ["extmark.file"],
       style: {
         foreground: theme.warning,
-        bold: true,
       },
     },
     {
       scope: ["extmark.agent"],
       style: {
         foreground: theme.secondary,
-        bold: true,
       },
     },
     {
@@ -810,7 +808,6 @@ function getSyntaxRules(theme: Theme) {
       scope: ["keyword.type"],
       style: {
         foreground: theme.syntaxType,
-        bold: true,
         italic: true,
       },
     },
@@ -957,35 +954,30 @@ function getSyntaxRules(theme: Theme) {
       scope: ["markup.heading.2"],
       style: {
         foreground: theme.markdownHeading,
-        bold: true,
       },
     },
     {
       scope: ["markup.heading.3"],
       style: {
         foreground: theme.markdownHeading,
-        bold: true,
       },
     },
     {
       scope: ["markup.heading.4"],
       style: {
         foreground: theme.markdownHeading,
-        bold: true,
       },
     },
     {
       scope: ["markup.heading.5"],
       style: {
         foreground: theme.markdownHeading,
-        bold: true,
       },
     },
     {
       scope: ["markup.heading.6"],
       style: {
         foreground: theme.markdownHeading,
-        bold: true,
       },
     },
     {
@@ -1092,7 +1084,6 @@ function getSyntaxRules(theme: Theme) {
       style: {
         foreground: theme.error,
         italic: true,
-        bold: true,
       },
     },
     {
@@ -1100,7 +1091,6 @@ function getSyntaxRules(theme: Theme) {
       style: {
         foreground: theme.warning,
         italic: true,
-        bold: true,
       },
     },
     {
@@ -1108,7 +1098,6 @@ function getSyntaxRules(theme: Theme) {
       style: {
         foreground: theme.info,
         italic: true,
-        bold: true,
       },
     },
     {
@@ -1127,7 +1116,6 @@ function getSyntaxRules(theme: Theme) {
       scope: ["type.definition"],
       style: {
         foreground: theme.syntaxType,
-        bold: true,
       },
     },
     {
@@ -1217,7 +1205,6 @@ function getSyntaxRules(theme: Theme) {
       scope: ["warning"],
       style: {
         foreground: theme.warning,
-        bold: true,
       },
     },
     {
