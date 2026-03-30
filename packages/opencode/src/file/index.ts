@@ -1,6 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
+import { AppFileSystem } from "@/filesystem"
 import { git } from "@/util/git"
 import { Effect, Layer, ServiceMap } from "effect"
 import { formatPatch, structuredPatch } from "diff"
@@ -343,6 +344,8 @@ export namespace File {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
+      const appFs = yield* AppFileSystem.Service
+
       const state = yield* InstanceState.make<State>(
         Effect.fn("File.state")(() =>
           Effect.succeed({
@@ -512,57 +515,54 @@ export namespace File {
       })
 
       const read = Effect.fn("File.read")(function* (file: string) {
-        return yield* Effect.promise(async (): Promise<File.Content> => {
-          using _ = log.time("read", { file })
-          const full = path.join(Instance.directory, file)
+        using _ = log.time("read", { file })
+        const full = path.join(Instance.directory, file)
 
-          if (!Instance.containsPath(full)) {
-            throw new Error("Access denied: path escapes project directory")
-          }
+        if (!Instance.containsPath(full)) throw new Error("Access denied: path escapes project directory")
 
-          if (isImageByExtension(file)) {
-            if (await Filesystem.exists(full)) {
-              const buffer = await Filesystem.readBytes(full).catch(() => Buffer.from([]))
-              return {
-                type: "text",
-                content: buffer.toString("base64"),
-                mimeType: getImageMimeType(file),
-                encoding: "base64",
-              }
-            }
-            return { type: "text", content: "" }
-          }
-
-          const knownText = isTextByExtension(file) || isTextByName(file)
-
-          if (isBinaryByExtension(file) && !knownText) {
-            return { type: "binary", content: "" }
-          }
-
-          if (!(await Filesystem.exists(full))) {
-            return { type: "text", content: "" }
-          }
-
-          const mimeType = Filesystem.mimeType(full)
-          const encode = knownText ? false : shouldEncode(mimeType)
-
-          if (encode && !isImage(mimeType)) {
-            return { type: "binary", content: "", mimeType }
-          }
-
-          if (encode) {
-            const buffer = await Filesystem.readBytes(full).catch(() => Buffer.from([]))
+        if (isImageByExtension(file)) {
+          const exists = yield* appFs.existsSafe(full)
+          if (exists) {
+            const bytes = yield* appFs.readFile(full).pipe(Effect.catch(() => Effect.succeed(new Uint8Array())))
             return {
-              type: "text",
-              content: buffer.toString("base64"),
-              mimeType,
-              encoding: "base64",
+              type: "text" as const,
+              content: Buffer.from(bytes).toString("base64"),
+              mimeType: getImageMimeType(file),
+              encoding: "base64" as const,
             }
           }
+          return { type: "text" as const, content: "" }
+        }
 
-          const content = (await Filesystem.readText(full).catch(() => "")).trim()
+        const knownText = isTextByExtension(file) || isTextByName(file)
 
-          if (Instance.project.vcs === "git") {
+        if (isBinaryByExtension(file) && !knownText) return { type: "binary" as const, content: "" }
+
+        const exists = yield* appFs.existsSafe(full)
+        if (!exists) return { type: "text" as const, content: "" }
+
+        const mimeType = Filesystem.mimeType(full)
+        const encode = knownText ? false : shouldEncode(mimeType)
+
+        if (encode && !isImage(mimeType)) return { type: "binary" as const, content: "", mimeType }
+
+        if (encode) {
+          const bytes = yield* appFs.readFile(full).pipe(Effect.catch(() => Effect.succeed(new Uint8Array())))
+          return {
+            type: "text" as const,
+            content: Buffer.from(bytes).toString("base64"),
+            mimeType,
+            encoding: "base64" as const,
+          }
+        }
+
+        const content = yield* appFs.readFileString(full).pipe(
+          Effect.map((s) => s.trim()),
+          Effect.catch(() => Effect.succeed("")),
+        )
+
+        if (Instance.project.vcs === "git") {
+          return yield* Effect.promise(async (): Promise<File.Content> => {
             let diff = (
               await git(["-c", "core.fsmonitor=false", "diff", "--", file], { cwd: Instance.directory })
             ).text()
@@ -579,60 +579,51 @@ export namespace File {
                 context: Infinity,
                 ignoreWhitespace: true,
               })
-              return {
-                type: "text",
-                content,
-                patch,
-                diff: formatPatch(patch),
-              }
+              return { type: "text", content, patch, diff: formatPatch(patch) }
             }
-          }
+            return { type: "text", content }
+          })
+        }
 
-          return { type: "text", content }
-        })
+        return { type: "text" as const, content }
       })
 
       const list = Effect.fn("File.list")(function* (dir?: string) {
-        return yield* Effect.promise(async () => {
-          const exclude = [".git", ".DS_Store"]
-          let ignored = (_: string) => false
-          if (Instance.project.vcs === "git") {
-            const ig = ignore()
-            const gitignore = path.join(Instance.project.worktree, ".gitignore")
-            if (await Filesystem.exists(gitignore)) {
-              ig.add(await Filesystem.readText(gitignore))
-            }
-            const ignoreFile = path.join(Instance.project.worktree, ".ignore")
-            if (await Filesystem.exists(ignoreFile)) {
-              ig.add(await Filesystem.readText(ignoreFile))
-            }
-            ignored = ig.ignores.bind(ig)
-          }
+        const exclude = [".git", ".DS_Store"]
+        let ignored = (_: string) => false
+        if (Instance.project.vcs === "git") {
+          const ig = ignore()
+          const gitignore = path.join(Instance.project.worktree, ".gitignore")
+          const gitignoreText = yield* appFs.readFileString(gitignore).pipe(Effect.catch(() => Effect.succeed("")))
+          if (gitignoreText) ig.add(gitignoreText)
+          const ignoreFile = path.join(Instance.project.worktree, ".ignore")
+          const ignoreText = yield* appFs.readFileString(ignoreFile).pipe(Effect.catch(() => Effect.succeed("")))
+          if (ignoreText) ig.add(ignoreText)
+          ignored = ig.ignores.bind(ig)
+        }
 
-          const resolved = dir ? path.join(Instance.directory, dir) : Instance.directory
-          if (!Instance.containsPath(resolved)) {
-            throw new Error("Access denied: path escapes project directory")
-          }
+        const resolved = dir ? path.join(Instance.directory, dir) : Instance.directory
+        if (!Instance.containsPath(resolved)) throw new Error("Access denied: path escapes project directory")
 
-          const nodes: File.Node[] = []
-          for (const entry of await fs.promises.readdir(resolved, { withFileTypes: true }).catch(() => [])) {
-            if (exclude.includes(entry.name)) continue
-            const absolute = path.join(resolved, entry.name)
-            const file = path.relative(Instance.directory, absolute)
-            const type = entry.isDirectory() ? "directory" : "file"
-            nodes.push({
-              name: entry.name,
-              path: file,
-              absolute,
-              type,
-              ignored: ignored(type === "directory" ? file + "/" : file),
-            })
-          }
+        const entries = yield* appFs.readDirectoryEntries(resolved).pipe(Effect.orElseSucceed(() => []))
 
-          return nodes.sort((a, b) => {
-            if (a.type !== b.type) return a.type === "directory" ? -1 : 1
-            return a.name.localeCompare(b.name)
+        const nodes: File.Node[] = []
+        for (const entry of entries) {
+          if (exclude.includes(entry.name)) continue
+          const absolute = path.join(resolved, entry.name)
+          const file = path.relative(Instance.directory, absolute)
+          const type = entry.type === "directory" ? "directory" : "file"
+          nodes.push({
+            name: entry.name,
+            path: file,
+            absolute,
+            type,
+            ignored: ignored(type === "directory" ? file + "/" : file),
           })
+        }
+        return nodes.sort((a, b) => {
+          if (a.type !== b.type) return a.type === "directory" ? -1 : 1
+          return a.name.localeCompare(b.name)
         })
       })
 
@@ -676,7 +667,9 @@ export namespace File {
     }),
   )
 
-  const { runPromise } = makeRuntime(Service, layer)
+  export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer))
+
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export function init() {
     return runPromise((svc) => svc.init())

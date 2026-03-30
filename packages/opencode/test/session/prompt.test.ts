@@ -161,6 +161,159 @@ describe("session.prompt special characters", () => {
   })
 })
 
+describe("session.prompt regression", () => {
+  test("does not loop empty assistant turns for a simple reply", async () => {
+    let calls = 0
+    const server = Bun.serve({
+      port: 0,
+      fetch(req) {
+        const url = new URL(req.url)
+        if (!url.pathname.endsWith("/chat/completions")) {
+          return new Response("not found", { status: 404 })
+        }
+        calls++
+        return new Response(chat("packages/opencode/src/session/processor.ts"), {
+          status: 200,
+          headers: { "Content-Type": "text/event-stream" },
+        })
+      },
+    })
+
+    try {
+      await using tmp = await tmpdir({
+        git: true,
+        init: async (dir) => {
+          await Bun.write(
+            path.join(dir, "opencode.json"),
+            JSON.stringify({
+              $schema: "https://opencode.ai/config.json",
+              enabled_providers: ["alibaba"],
+              provider: {
+                alibaba: {
+                  options: {
+                    apiKey: "test-key",
+                    baseURL: `${server.url.origin}/v1`,
+                  },
+                },
+              },
+              agent: {
+                build: {
+                  model: "alibaba/qwen-plus",
+                },
+              },
+            }),
+          )
+        },
+      })
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const session = await Session.create({ title: "Prompt regression" })
+          const result = await SessionPrompt.prompt({
+            sessionID: session.id,
+            agent: "build",
+            parts: [{ type: "text", text: "Where is SessionProcessor?" }],
+          })
+
+          expect(result.info.role).toBe("assistant")
+          expect(result.parts.some((part) => part.type === "text" && part.text.includes("processor.ts"))).toBe(true)
+
+          const msgs = await Session.messages({ sessionID: session.id })
+          expect(msgs.filter((msg) => msg.info.role === "assistant")).toHaveLength(1)
+          expect(calls).toBe(1)
+        },
+      })
+    } finally {
+      server.stop(true)
+    }
+  })
+
+  test("records aborted errors when prompt is cancelled mid-stream", async () => {
+    const ready = defer<void>()
+    const server = Bun.serve({
+      port: 0,
+      fetch(req) {
+        const url = new URL(req.url)
+        if (!url.pathname.endsWith("/chat/completions")) {
+          return new Response("not found", { status: 404 })
+        }
+        return new Response(
+          hanging(() => ready.resolve()),
+          {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          },
+        )
+      },
+    })
+
+    try {
+      await using tmp = await tmpdir({
+        git: true,
+        init: async (dir) => {
+          await Bun.write(
+            path.join(dir, "opencode.json"),
+            JSON.stringify({
+              $schema: "https://opencode.ai/config.json",
+              enabled_providers: ["alibaba"],
+              provider: {
+                alibaba: {
+                  options: {
+                    apiKey: "test-key",
+                    baseURL: `${server.url.origin}/v1`,
+                  },
+                },
+              },
+              agent: {
+                build: {
+                  model: "alibaba/qwen-plus",
+                },
+              },
+            }),
+          )
+        },
+      })
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const session = await Session.create({ title: "Prompt cancel regression" })
+          const run = SessionPrompt.prompt({
+            sessionID: session.id,
+            agent: "build",
+            parts: [{ type: "text", text: "Cancel me" }],
+          })
+
+          await ready.promise
+          await SessionPrompt.cancel(session.id)
+
+          const result = await Promise.race([
+            run,
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error("timed out waiting for cancel")), 1000),
+            ),
+          ])
+
+          expect(result.info.role).toBe("assistant")
+          if (result.info.role === "assistant") {
+            expect(result.info.error?.name).toBe("MessageAbortedError")
+          }
+
+          const msgs = await Session.messages({ sessionID: session.id })
+          const last = msgs.findLast((msg) => msg.info.role === "assistant")
+          expect(last?.info.role).toBe("assistant")
+          if (last?.info.role === "assistant") {
+            expect(last.info.error?.name).toBe("MessageAbortedError")
+          }
+        },
+      })
+    } finally {
+      server.stop(true)
+    }
+  })
+})
+
 describe("session.prompt agent variant", () => {
   test("applies agent variant only when using agent model", async () => {
     const prev = process.env.OPENAI_API_KEY
