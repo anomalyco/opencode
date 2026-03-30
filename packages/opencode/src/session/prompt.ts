@@ -1392,7 +1392,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           const isLastStep = step >= maxSteps
           msgs = yield* insertReminders({ messages: msgs, agent, session })
 
-          const msg = yield* sessions.updateMessage({
+          const msg: MessageV2.Assistant = {
             id: MessageID.ascending(),
             parentID: lastUser!.id,
             role: "assistant",
@@ -1406,9 +1406,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             providerID: model.providerID,
             time: { created: Date.now() },
             sessionID,
-          })
+          }
+          yield* sessions.updateMessage(msg)
           const handle = yield* processor.create({
-            assistantMessage: msg as MessageV2.Assistant,
+            assistantMessage: msg,
             sessionID,
             model,
           })
