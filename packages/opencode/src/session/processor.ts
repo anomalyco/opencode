@@ -147,6 +147,9 @@ export namespace SessionProcessor {
               return
 
             case "tool-input-start":
+              if (ctx.assistantMessage.summary) {
+                throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
+              }
               ctx.toolcalls[value.id] = yield* session.updatePart({
                 id: ctx.toolcalls[value.id]?.id ?? PartID.ascending(),
                 messageID: ctx.assistantMessage.id,
@@ -165,6 +168,9 @@ export namespace SessionProcessor {
               return
 
             case "tool-call": {
+              if (ctx.assistantMessage.summary) {
+                throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
+              }
               const match = ctx.toolcalls[value.toolCallId]
               if (!match) return
               ctx.toolcalls[value.toolCallId] = yield* session.updatePart({
@@ -421,58 +427,6 @@ export namespace SessionProcessor {
           yield* status.set(ctx.sessionID, { type: "idle" })
         })
 
-        const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
-          log.info("process")
-          ctx.needsCompaction = false
-          ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
-
-          yield* Effect.gen(function* () {
-            ctx.currentText = undefined
-            ctx.reasoningMap = {}
-            const stream = llm.stream(streamInput)
-
-            yield* stream.pipe(
-              Stream.tap((event) => handleEvent(event)),
-              Stream.takeUntil(() => ctx.needsCompaction),
-              Stream.runDrain,
-            )
-          }).pipe(
-            Effect.onInterrupt(() => Effect.sync(() => void (aborted = true))),
-            Effect.catchCauseIf(
-              (cause) => !Cause.hasInterruptsOnly(cause),
-              (cause) => Effect.fail(Cause.squash(cause)),
-            ),
-            Effect.retry(
-              SessionRetry.policy({
-                parse,
-                set: (info) =>
-                  status.set(ctx.sessionID, {
-                    type: "retry",
-                    attempt: info.attempt,
-                    message: info.message,
-                    next: info.next,
-                  }),
-              }),
-            ),
-            Effect.catchCause((cause) =>
-              Cause.hasInterruptsOnly(cause)
-                ? Effect.gen(function* () {
-                    aborted = true
-                    yield* halt(new DOMException("Aborted", "AbortError"))
-                  })
-                : halt(Cause.squash(cause)),
-            ),
-            Effect.ensuring(cleanup()),
-          )
-
-          if (aborted && !ctx.assistantMessage.error) {
-            yield* abort()
-          }
-          if (ctx.needsCompaction) return "compact"
-          if (ctx.blocked || ctx.assistantMessage.error || aborted) return "stop"
-          return "continue"
-        })
-
         const abort = Effect.fn("SessionProcessor.abort")(() =>
           Effect.gen(function* () {
             if (!ctx.assistantMessage.error) {
@@ -485,6 +439,60 @@ export namespace SessionProcessor {
             yield* session.updateMessage(ctx.assistantMessage)
           }),
         )
+
+        const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
+          log.info("process")
+          ctx.needsCompaction = false
+          ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
+
+          return yield* Effect.gen(function* () {
+            yield* Effect.gen(function* () {
+              ctx.currentText = undefined
+              ctx.reasoningMap = {}
+              const stream = llm.stream(streamInput)
+
+              yield* stream.pipe(
+                Stream.tap((event) => handleEvent(event)),
+                Stream.takeUntil(() => ctx.needsCompaction),
+                Stream.runDrain,
+              )
+            }).pipe(
+              Effect.onInterrupt(() => Effect.sync(() => void (aborted = true))),
+              Effect.catchCauseIf(
+                (cause) => !Cause.hasInterruptsOnly(cause),
+                (cause) => Effect.fail(Cause.squash(cause)),
+              ),
+              Effect.retry(
+                SessionRetry.policy({
+                  parse,
+                  set: (info) =>
+                    status.set(ctx.sessionID, {
+                      type: "retry",
+                      attempt: info.attempt,
+                      message: info.message,
+                      next: info.next,
+                    }),
+                }),
+              ),
+              Effect.catchCause((cause) =>
+                Cause.hasInterruptsOnly(cause)
+                  ? Effect.gen(function* () {
+                      aborted = true
+                      yield* halt(new DOMException("Aborted", "AbortError"))
+                    })
+                  : halt(Cause.squash(cause)),
+              ),
+              Effect.ensuring(cleanup()),
+            )
+
+            if (aborted && !ctx.assistantMessage.error) {
+              yield* abort()
+            }
+            if (ctx.needsCompaction) return "compact"
+            if (ctx.blocked || ctx.assistantMessage.error || aborted) return "stop"
+            return "continue"
+          }).pipe(Effect.onInterrupt(() => abort().pipe(Effect.asVoid)))
+        })
 
         return {
           get message() {

@@ -806,3 +806,67 @@ it.effect("session.processor effect tests record aborted errors and idle state",
     { git: true },
   )
 })
+
+it.effect("session.processor effect tests mark interruptions aborted without manual abort", () => {
+  return provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const ready = defer<void>()
+        const processors = yield* SessionProcessor.Service
+        const session = yield* Session.Service
+        const status = yield* SessionStatus.Service
+        const test = yield* TestLLM
+
+        yield* test.push((input) =>
+          hang(input, start()).pipe(
+            Stream.tap((event) => (event.type === "start" ? Effect.sync(() => ready.resolve()) : Effect.void)),
+          ),
+        )
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "interrupt")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = model(100)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const run = yield* handle
+          .process({
+            user: {
+              id: parent.id,
+              sessionID: chat.id,
+              role: "user",
+              time: parent.time,
+              agent: parent.agent,
+              model: { providerID: ref.providerID, modelID: ref.modelID },
+            } satisfies MessageV2.User,
+            sessionID: chat.id,
+            model: mdl,
+            agent: agent(),
+            system: [],
+            messages: [{ role: "user", content: "interrupt" }],
+            tools: {},
+          })
+          .pipe(Effect.forkChild)
+
+        yield* Effect.promise(() => ready.promise)
+        yield* Fiber.interrupt(run)
+
+        const exit = yield* Fiber.await(run)
+        const stored = yield* Effect.promise(() => MessageV2.get({ sessionID: chat.id, messageID: msg.id }))
+        const state = yield* status.get(chat.id)
+
+        expect(Exit.isFailure(exit)).toBe(true)
+        expect(handle.message.error?.name).toBe("MessageAbortedError")
+        expect(stored.info.role).toBe("assistant")
+        if (stored.info.role === "assistant") {
+          expect(stored.info.error?.name).toBe("MessageAbortedError")
+        }
+        expect(state).toMatchObject({ type: "idle" })
+      }),
+    { git: true },
+  )
+})

@@ -121,7 +121,9 @@ export namespace SessionPrompt {
           }),
           onBusy: status.set(sessionID, { type: "busy" }),
           onInterrupt: lastAssistant(sessionID),
-          busy: () => { throw new Session.BusyError(sessionID) },
+          busy: () => {
+            throw new Session.BusyError(sessionID)
+          },
         })
         runners.set(sessionID, runner)
         return runner
@@ -859,18 +861,15 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         let exited = false
         const kill = Effect.promise(() => Shell.killTree(proc, { exited: () => exited }))
 
-        if (signal.aborted) {
-          aborted = true
-          yield* kill
-        }
-
         const abortHandler = () => {
+          if (aborted) return
           aborted = true
           void Effect.runFork(kill)
         }
 
         yield* Effect.promise(() => {
           signal.addEventListener("abort", abortHandler, { once: true })
+          if (signal.aborted) abortHandler()
           return new Promise<void>((resolve) => {
             const close = () => {
               exited = true
@@ -1290,10 +1289,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
       const lastAssistant = (sessionID: SessionID) =>
         Effect.promise(async () => {
+          let latest: MessageV2.WithParts | undefined
           for await (const item of MessageV2.stream(sessionID)) {
-            if (item.info.role === "user") continue
-            return item
+            latest ??= item
+            if (item.info.role !== "user") return item
           }
+          if (latest) return latest
           throw new Error("Impossible")
         })
 
