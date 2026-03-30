@@ -19,12 +19,12 @@ import { errorData, errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
 import { Instance } from "@/project/instance"
 import {
+  createPluginEntry,
   checkPluginCompatibility,
   isDeprecatedPlugin,
   pluginSource,
   readPluginId,
   readV1Plugin,
-  resolvePluginEntrypoint,
   resolvePluginId,
   resolvePluginTarget,
   type PluginSource,
@@ -246,25 +246,6 @@ async function loadExternalPlugin(
 ): Promise<PluginLoad | undefined> {
   const spec = Config.pluginSpecifier(item)
   if (isDeprecatedPlugin(spec)) return
-  log.info("loading tui plugin", { path: spec, retry })
-  const resolved = await resolvePluginTarget(spec).catch((error) => {
-    fail("failed to resolve tui plugin", { path: spec, retry, error })
-    return
-  })
-  if (!resolved) return
-
-  const source = pluginSource(spec)
-  if (source === "npm") {
-    const ok = await checkPluginCompatibility(resolved, Installation.VERSION)
-      .then(() => true)
-      .catch((error) => {
-        fail("tui plugin incompatible", { path: spec, retry, error })
-        return false
-      })
-    if (!ok) return
-  }
-
-  const target = resolved
   if (!meta) {
     fail("missing tui plugin metadata", {
       path: spec,
@@ -273,35 +254,55 @@ async function loadExternalPlugin(
     return
   }
 
-  const root = resolveRoot(source === "file" ? spec : target)
-  const entry = await resolvePluginEntrypoint(spec, target, "tui").catch((error) => {
+  log.info("loading tui plugin", { path: spec, retry })
+  const target = await resolvePluginTarget(spec).catch((error) => {
+    fail("failed to resolve tui plugin", { path: spec, retry, error })
+    return
+  })
+  if (!target) return
+
+  const base = await createPluginEntry(spec, target, "tui").catch((error) => {
     fail("failed to resolve tui plugin entry", { path: spec, target, retry, error })
     return
   })
-  if (!entry) return
+  if (!base) return
 
-  const mod = await import(entry)
+  if (base.source === "npm") {
+    const ok = await checkPluginCompatibility(base.target, Installation.VERSION, base.pkg)
+      .then(() => true)
+      .catch((error) => {
+        fail("tui plugin incompatible", { path: spec, retry, error })
+        return false
+      })
+    if (!ok) return
+  }
+
+  const root = resolveRoot(base.source === "file" ? spec : base.target)
+
+  const mod = await import(base.entry)
     .then((raw) => {
       return readV1Plugin(raw as Record<string, unknown>, spec, "tui") as TuiPluginModule
     })
     .catch((error) => {
-      fail("failed to load tui plugin", { path: spec, target: entry, retry, error })
+      fail("failed to load tui plugin", { path: spec, target: base.entry, retry, error })
       return
     })
   if (!mod) return
 
-  const id = await resolvePluginId(source, spec, target, readPluginId(mod.id, spec)).catch((error) => {
-    fail("failed to load tui plugin", { path: spec, target, retry, error })
-    return
-  })
+  const id = await resolvePluginId(base.source, spec, base.target, readPluginId(mod.id, spec), base.pkg).catch(
+    (error) => {
+      fail("failed to load tui plugin", { path: spec, target: base.target, retry, error })
+      return
+    },
+  )
   if (!id) return
 
   return {
     item,
     spec,
-    target,
+    target: base.target,
     retry,
-    source,
+    source: base.source,
     id,
     module: mod,
     theme_meta: meta,

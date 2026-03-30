@@ -16,13 +16,13 @@ import { makeRuntime } from "@/effect/run-service"
 import { errorMessage } from "@/util/error"
 import { Installation } from "@/installation"
 import {
+  createPluginEntry,
   checkPluginCompatibility,
   isDeprecatedPlugin,
   parsePluginSpecifier,
-  pluginSource,
+  type PluginPackage,
   readPluginId,
   readV1Plugin,
-  resolvePluginEntrypoint,
   resolvePluginId,
   resolvePluginTarget,
   type PluginSource,
@@ -40,6 +40,7 @@ export namespace Plugin {
     spec: string
     target: string
     source: PluginSource
+    pkg?: PluginPackage
     mod: Record<string, unknown>
   }
 
@@ -114,12 +115,23 @@ export namespace Plugin {
     const spec = Config.pluginSpecifier(item)
     if (isDeprecatedPlugin(spec)) return
     log.info("loading plugin", { path: spec })
-    const resolved = await resolvePlugin(spec)
-    if (!resolved) return
+    const target = await resolvePlugin(spec)
+    if (!target) return
 
-    const source = pluginSource(spec)
-    if (source === "npm") {
-      const incompatible = await checkPluginCompatibility(resolved, Installation.VERSION)
+    const base = await createPluginEntry(spec, target, "server").catch((err) => {
+      const message = errorMessage(err)
+      log.error("failed to resolve plugin server entry", { path: spec, target, error: message })
+      Bus.publish(Session.Event.Error, {
+        error: new NamedError.Unknown({
+          message: `Failed to load plugin ${spec}: ${message}`,
+        }).toObject(),
+      })
+      return
+    })
+    if (!base) return
+
+    if (base.source === "npm") {
+      const incompatible = await checkPluginCompatibility(base.target, Installation.VERSION, base.pkg)
         .then(() => false)
         .catch((err) => {
           const message = errorMessage(err)
@@ -134,22 +146,9 @@ export namespace Plugin {
       if (incompatible) return
     }
 
-    const target = resolved
-    const entry = await resolvePluginEntrypoint(spec, target, "server").catch((err) => {
+    const mod = await import(base.entry).catch((err) => {
       const message = errorMessage(err)
-      log.error("failed to resolve plugin server entry", { path: spec, target, error: message })
-      Bus.publish(Session.Event.Error, {
-        error: new NamedError.Unknown({
-          message: `Failed to load plugin ${spec}: ${message}`,
-        }).toObject(),
-      })
-      return
-    })
-    if (!entry) return
-
-    const mod = await import(entry).catch((err) => {
-      const message = errorMessage(err)
-      log.error("failed to load plugin", { path: spec, target: entry, error: message })
+      log.error("failed to load plugin", { path: spec, target: base.entry, error: message })
       Bus.publish(Session.Event.Error, {
         error: new NamedError.Unknown({
           message: `Failed to load plugin ${spec}: ${message}`,
@@ -162,8 +161,9 @@ export namespace Plugin {
     return {
       item,
       spec,
-      target,
-      source,
+      target: base.target,
+      source: base.source,
+      pkg: base.pkg,
       mod,
     }
   }
@@ -171,7 +171,7 @@ export namespace Plugin {
   async function applyPlugin(load: Loaded, input: PluginInput, hooks: Hooks[]) {
     const plugin = readV1Plugin(load.mod, load.spec, "server", "detect")
     if (plugin) {
-      await resolvePluginId(load.source, load.spec, load.target, readPluginId(plugin.id, load.spec))
+      await resolvePluginId(load.source, load.spec, load.target, readPluginId(plugin.id, load.spec), load.pkg)
       hooks.push(await (plugin as PluginModule).server(input, Config.pluginOptions(load.item)))
       return
     }

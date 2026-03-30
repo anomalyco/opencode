@@ -1834,7 +1834,7 @@ describe("resolvePluginSpec", () => {
     expect(Config.pluginSpecifier(hit)).toBe(pathToFileURL(path.join(tmp.path, "plugin.ts")).href)
   })
 
-  test("resolves plugin directory paths to package main files", async () => {
+  test("resolves plugin directory paths to directory urls", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
         const plugin = path.join(dir, "plugin")
@@ -1850,7 +1850,7 @@ describe("resolvePluginSpec", () => {
 
     const file = path.join(tmp.path, "opencode.json")
     const hit = await Config.resolvePluginSpec("./plugin", file)
-    expect(Config.pluginSpecifier(hit)).toBe(pathToFileURL(path.join(tmp.path, "plugin", "index.ts")).href)
+    expect(Config.pluginSpecifier(hit)).toBe(pathToFileURL(path.join(tmp.path, "plugin")).href)
   })
 })
 
