@@ -712,6 +712,7 @@ export namespace SessionPrompt {
         model,
         toolChoice: format.type === "json_schema" ? "required" : undefined,
       })
+      msgs.length = 0
 
       // If structured output was captured, save it and exit immediately
       // This takes priority because the StructuredOutput tool was called successfully

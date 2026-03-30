@@ -217,6 +217,9 @@ export namespace LSP {
           yield* Effect.addFinalizer(() =>
             Effect.promise(async () => {
               await Promise.all(s.clients.map((client) => client.shutdown()))
+              s.clients.length = 0
+              s.broken.clear()
+              s.spawning.clear()
             }),
           )
 

@@ -35,6 +35,7 @@ import { JsonMigration } from "./storage/json-migration"
 import { Database } from "./storage/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
+import { registerSignals } from "./signal"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -47,6 +48,8 @@ process.on("uncaughtException", (e) => {
     e: errorMessage(e),
   })
 })
+
+registerSignals()
 
 const cli = yargs(hideBin(process.argv))
   .parserConfiguration({ "populate--": true })
