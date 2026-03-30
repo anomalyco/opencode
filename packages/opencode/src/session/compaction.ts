@@ -176,6 +176,7 @@ export namespace SessionCompaction {
         const defaultPrompt = `Provide a detailed prompt for continuing our conversation above.
 Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next.
 The summary that you construct will be used so that another agent can read it and continue the work.
+Do not call any tools. Respond only with the summary text.
 
 When constructing the summary, try to stick to this template:
 ---
