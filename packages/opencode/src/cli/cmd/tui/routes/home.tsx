@@ -2,7 +2,6 @@ import { Prompt, type PromptRef } from "@tui/component/prompt"
 import { createEffect, createMemo, Match, on, onMount, Show, Switch } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { Logo } from "../component/logo"
-import { Locale } from "@/util/locale"
 import { useSync } from "../context/sync"
 import { Toast } from "../ui/toast"
 import { useArgs } from "../context/args"
@@ -33,25 +32,6 @@ export function Home() {
   const connectedMcpCount = createMemo(() => {
     return Object.values(sync.data.mcp).filter((x) => x.status === "connected").length
   })
-
-  const Hint = (
-    <box flexShrink={0} flexDirection="row" gap={1}>
-      <Show when={connectedMcpCount() > 0}>
-        <text fg={theme.text}>
-          <Switch>
-            <Match when={mcpError()}>
-              <span style={{ fg: theme.error }}>•</span> mcp errors{" "}
-              <span style={{ fg: theme.textMuted }}>ctrl+x s</span>
-            </Match>
-            <Match when={true}>
-              <span style={{ fg: theme.success }}>•</span>{" "}
-              {Locale.pluralize(connectedMcpCount(), "{} mcp server", "{} mcp servers")}
-            </Match>
-          </Switch>
-        </text>
-      </Show>
-    </box>
-  )
 
   let prompt: PromptRef | undefined
   const args = useArgs()
@@ -101,7 +81,6 @@ export function Home() {
                 prompt = r
                 promptRef.set(r)
               }}
-              hint={Hint}
               workspaceID={route.workspaceID}
               placeholders={placeholder}
             />
