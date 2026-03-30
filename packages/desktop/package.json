@@ -16,7 +16,7 @@
     "@athena/app": "workspace:*",
     "@athena/ui": "workspace:*",
     "@solid-primitives/i18n": "2.2.1",
-    "@solid-primitives/storage": "catalog:",
+    "@solid-primitives/storage": "latest",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-clipboard-manager": "~2",
     "@tauri-apps/plugin-deep-link": "~2",
@@ -30,15 +30,15 @@
     "@tauri-apps/plugin-updater": "~2",
     "@tauri-apps/plugin-http": "~2",
     "@tauri-apps/plugin-window-state": "~2",
-    "solid-js": "catalog:",
-    "@solidjs/meta": "catalog:"
+    "solid-js": "latest",
+    "@solidjs/meta": "latest"
   },
   "devDependencies": {
     "@actions/artifact": "4.0.0",
     "@tauri-apps/cli": "^2",
-    "@types/bun": "catalog:",
-    "@typescript/native-preview": "catalog:",
+    "@types/bun": "latest",
+    "@typescript/native-preview": "latest",
     "typescript": "~5.6.2",
-    "vite": "catalog:"
+    "vite": "latest"
   }
 }

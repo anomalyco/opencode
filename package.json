@@ -7,6 +7,9 @@
   "license": "MIT",
   "private": true,
   "packageManager": "bun@1.3.11",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "prepare": "effect-language-service patch || true",
     "postinstall": "npx patchright install chrome || true",

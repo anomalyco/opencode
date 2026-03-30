@@ -22,10 +22,10 @@
   ],
   "devDependencies": {
     "@hey-api/openapi-ts": "0.90.10",
-    "@tsconfig/node22": "catalog:",
-    "@types/node": "catalog:",
-    "typescript": "catalog:",
-    "@typescript/native-preview": "catalog:"
+    "@tsconfig/node22": "latest",
+    "@types/node": "latest",
+    "typescript": "latest",
+    "@typescript/native-preview": "latest"
   },
   "dependencies": {}
 }
