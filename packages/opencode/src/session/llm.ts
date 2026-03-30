@@ -1,4 +1,5 @@
 import { Provider } from "@/provider/provider"
+import { ProviderID, ModelID } from "@/provider/schema"
 import { Log } from "@/util/log"
 import { Cause, Effect, Layer, Record, ServiceMap } from "effect"
 import * as Queue from "effect/Queue"
@@ -7,6 +8,7 @@ import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, json
 import { mergeDeep, pipe } from "remeda"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 import { ProviderTransform } from "@/provider/transform"
+import { ProviderFallback } from "@/provider/fallback"
 import { Config } from "@/config/config"
 import { Instance } from "@/project/instance"
 import type { Agent } from "@/agent/agent"
@@ -97,6 +99,18 @@ export namespace LLM {
     ])
     // TODO: move this to a proper hook
     const isOpenaiOauth = provider.id === "openai" && auth?.type === "oauth"
+
+    // Resolve fallback provider if configured
+    const target = ProviderFallback.resolve(input.model.providerID, input.model.id, cfg.fallback)
+    let fallback: Awaited<ReturnType<typeof Provider.getLanguage>> | undefined
+    if (target) {
+      try {
+        const model = await Provider.getModel(ProviderID.make(target.providerID), ModelID.make(target.modelID))
+        fallback = await Provider.getLanguage(model)
+      } catch {
+        l.warn("fallback unavailable", { target: `${target.providerID}/${target.modelID}` })
+      }
+    }
 
     const system: string[] = []
     system.push(
@@ -321,6 +335,7 @@ export namespace LLM {
               return args.params
             },
           },
+          ...(fallback ? [ProviderFallback.middleware(fallback)] : []),
         ],
       }),
       experimental_telemetry: {

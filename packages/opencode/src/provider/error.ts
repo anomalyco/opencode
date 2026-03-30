@@ -35,6 +35,16 @@ export namespace ProviderError {
     return status === 404 || e.isRetryable
   }
 
+  // Copilot gateway returns bare text 400s for transient issues.
+  // These are gateway-level rejections, not model errors, and should be retried.
+  // 403s are also transient — the copilot gateway sometimes returns 403 for
+  // rate/capacity reasons that resolve on retry or fallback.
+  function isCopilotErrorRetryable(e: APICallError) {
+    if (e.statusCode === 403) return true
+    if (e.statusCode === 400 && e.responseBody && !json(e.responseBody)) return true
+    return e.isRetryable ?? false
+  }
+
   // Providers not reliably handled in this function:
   // - z.ai: can accept overflow silently (needs token-count/context-window checks)
   function isOverflow(message: string) {
@@ -47,8 +57,12 @@ export namespace ProviderError {
   }
 
   function message(providerID: ProviderID, e: APICallError) {
+    if (providerID.includes("github-copilot") && e.statusCode === 403) {
+      return "Please reauthenticate with the copilot provider to ensure your credentials work properly with OpenCode."
+    }
+
     return iife(() => {
-      const msg = e.message
+      const msg = e.message ?? ""
       if (msg === "") {
         if (e.responseBody) return e.responseBody
         if (e.statusCode) {
@@ -60,6 +74,13 @@ export namespace ProviderError {
 
       if (!e.responseBody || (e.statusCode && msg !== STATUS_CODES[e.statusCode])) {
         return msg
+      }
+
+      // Avoid tautological "X: X" when response body is just the status text
+      const text = e.responseBody.trim()
+      if (e.statusCode && text.toLowerCase() === (STATUS_CODES[e.statusCode] ?? "").toLowerCase()) {
+        const provider = providerID.split("/")[0] ?? providerID
+        return `${provider} rejected the request (HTTP ${e.statusCode}). This may indicate context overflow, an unsupported request, or a gateway-level rejection.`
       }
 
       try {
@@ -188,7 +209,9 @@ export namespace ProviderError {
       statusCode: input.error.statusCode,
       isRetryable: input.providerID.startsWith("openai")
         ? isOpenAiErrorRetryable(input.error)
-        : input.error.isRetryable,
+        : input.providerID.includes("github-copilot")
+          ? isCopilotErrorRetryable(input.error)
+          : input.error.isRetryable,
       responseHeaders: input.error.responseHeaders,
       responseBody: input.error.responseBody,
       metadata,
