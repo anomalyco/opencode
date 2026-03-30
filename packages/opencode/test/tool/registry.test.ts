@@ -123,4 +123,40 @@ describe("tool.registry", () => {
       },
     })
   })
+
+  test("gates team tool behind experimental.team_tool", async () => {
+    await using off = await tmpdir({
+      git: true,
+      config: {
+        experimental: {
+          team_tool: false,
+        },
+      },
+    })
+
+    await Instance.provide({
+      directory: off.path,
+      fn: async () => {
+        const ids = await ToolRegistry.ids()
+        expect(ids).not.toContain("team")
+      },
+    })
+
+    await using on = await tmpdir({
+      git: true,
+      config: {
+        experimental: {
+          team_tool: true,
+        },
+      },
+    })
+
+    await Instance.provide({
+      directory: on.path,
+      fn: async () => {
+        const ids = await ToolRegistry.ids()
+        expect(ids).toContain("team")
+      },
+    })
+  })
 })

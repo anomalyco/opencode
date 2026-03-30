@@ -1,0 +1,22 @@
+Run multiple sub-agent tasks in parallel as an ephemeral team.
+
+Use this tool when work can be safely split into independent subtasks that do not require strict ordering.
+
+Key behavior:
+- Spawns child sub-agent tasks and executes them concurrently (bounded by `concurrency`).
+- Aggregates all child outputs into one combined result.
+- Team state is ephemeral (runtime-only). Child sessions remain available via returned `task_id` values.
+- If one child fails, other children still continue (collect-all behavior).
+
+Use this tool for:
+- Parallel research across files/directories
+- Splitting implementation vs testing vs review work
+- Running multiple independent specialist agents at once
+
+Avoid this tool when:
+- Tasks have hard dependencies on each other (run those sequentially with `task`)
+- You need persistent shared memory between children
+
+Tips:
+- Keep each child task narrowly scoped.
+- Set `concurrency` to a reasonable value to control resource usage.
