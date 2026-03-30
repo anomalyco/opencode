@@ -45,7 +45,7 @@ import { AppFileSystem } from "@/filesystem"
 import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
-import { Cause, Effect, Exit, Fiber, Layer, Option, Scope, ServiceMap } from "effect"
+import { Cause, Effect, Exit, Layer, Option, Scope, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 
@@ -726,7 +726,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           yield* bus.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
           throw error
         }
-        const model = input.model ?? agent.model ?? (yield* Effect.promise(() => lastModelImpl(input.sessionID)))
+        const model = input.model ?? agent.model ?? (yield* lastModel(input.sessionID))
         const userMsg: MessageV2.User = {
           id: MessageID.ascending(),
           sessionID: input.sessionID,
@@ -936,7 +936,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           throw error
         }
 
-        const model = input.model ?? ag.model ?? (yield* Effect.promise(() => lastModelImpl(input.sessionID)))
+        const model = input.model ?? ag.model ?? (yield* lastModel(input.sessionID))
         const full =
           !input.variant && ag.variant
             ? yield* Effect.promise(() => Provider.getModel(model.providerID, model.modelID).catch(() => undefined))
@@ -1597,14 +1597,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         }
         template = template.trim()
 
-        const taskModel = yield* Effect.promise(async () => {
+        const taskModel = yield* Effect.gen(function* () {
           if (cmd.model) return Provider.parseModel(cmd.model)
           if (cmd.agent) {
-            const cmdAgent = await Agent.get(cmd.agent)
+            const cmdAgent = yield* agents.get(cmd.agent)
             if (cmdAgent?.model) return cmdAgent.model
           }
           if (input.model) return Provider.parseModel(input.model)
-          return await lastModelImpl(input.sessionID)
+          return yield* lastModel(input.sessionID)
         })
 
         yield* getModel(taskModel.providerID, taskModel.modelID, input.sessionID)
@@ -1637,7 +1637,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         const userModel = isSubtask
           ? input.model
             ? Provider.parseModel(input.model)
-            : yield* Effect.promise(() => lastModelImpl(input.sessionID))
+            : yield* lastModel(input.sessionID)
           : taskModel
 
         yield* plugin.trigger(
@@ -1832,12 +1832,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     return runPromise((svc) => svc.command(CommandInput.parse(input)))
   }
 
-  async function lastModelImpl(sessionID: SessionID) {
-    for await (const item of MessageV2.stream(sessionID)) {
-      if (item.info.role === "user" && item.info.model) return item.info.model
-    }
-    return Provider.defaultModel()
-  }
+  const lastModel = Effect.fnUntraced(function* (sessionID: SessionID) {
+    return yield* Effect.promise(async () => {
+      for await (const item of MessageV2.stream(sessionID)) {
+        if (item.info.role === "user" && item.info.model) return item.info.model
+      }
+      return Provider.defaultModel()
+    })
+  })
 
   /** @internal Exported for testing */
   export function createStructuredOutputTool(input: {
