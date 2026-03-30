@@ -1,4 +1,5 @@
 import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
@@ -74,6 +75,16 @@ export namespace File {
       ref: "FileContent",
     })
   export type Content = z.infer<typeof Content>
+
+  export const Mutation = z
+    .object({
+      path: z.string(),
+      hash: z.string(),
+    })
+    .meta({
+      ref: "FileMutation",
+    })
+  export type Mutation = z.infer<typeof Mutation>
 
   export const Event = {
     Edited: BusEvent.define(
@@ -588,6 +599,27 @@ export namespace File {
         return { type: "text" as const, content }
       })
 
+      const write = Effect.fn("File.write")(function* (file: string, content: string) {
+        return yield* Effect.promise(async () => {
+          using _ = log.time("write", { file })
+          const full = path.join(Instance.directory, file)
+          if (!Instance.containsPath(full)) {
+            throw new Error("Access denied: path escapes project directory")
+          }
+
+          await fs.promises.mkdir(path.dirname(full), { recursive: true })
+          await Bun.write(full, content)
+          await Bus.publish(Event.Edited, {
+            file: full,
+          })
+
+          return {
+            path: file,
+            hash: hash(content),
+          }
+        })
+      })
+
       const list = Effect.fn("File.list")(function* (dir?: string) {
         const exclude = [".git", ".DS_Store"]
         let ignored = (_: string) => false
@@ -663,7 +695,7 @@ export namespace File {
       })
 
       log.info("init")
-      return Service.of({ init, status, read, list, search })
+      return Service.of({ init, status, read, write, list, search })
     }),
   )
 
@@ -679,8 +711,16 @@ export namespace File {
     return runPromise((svc) => svc.status())
   }
 
+  export function hash(content: string) {
+    return new Bun.CryptoHasher("sha256").update(content).digest("hex")
+  }
+
   export async function read(file: string): Promise<Content> {
     return runPromise((svc) => svc.read(file))
+  }
+
+  export async function write(file: string, content: string): Promise<Mutation> {
+    return runPromise((svc) => svc.write(file, content))
   }
 
   export async function list(dir?: string) {

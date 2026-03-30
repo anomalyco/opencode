@@ -545,6 +545,50 @@ export namespace Config {
   })
   export type Command = z.infer<typeof Command>
 
+  const UIFilePermission = z
+    .object({
+      read: z.array(z.string()).optional(),
+      write: z.array(z.string()).optional(),
+    })
+    .strict()
+
+  const UIPermission = z
+    .object({
+      file: UIFilePermission.optional(),
+    })
+    .strict()
+
+  const UISessionTab = z
+    .object({
+      id: z.string(),
+      title: z.string(),
+      src: z.string(),
+      icon: z.string().optional(),
+      origins: z.array(z.string()).optional(),
+      permissions: UIPermission.optional(),
+    })
+    .strict()
+
+  const UISessionButton = z
+    .object({
+      id: z.string(),
+      label: z.string(),
+      tab: z.string(),
+    })
+    .strict()
+
+  const UI = z
+    .object({
+      session: z
+        .object({
+          tabs: z.array(UISessionTab).optional(),
+          buttons: z.array(UISessionButton).optional(),
+        })
+        .strict()
+        .optional(),
+    })
+    .strict()
+
   export const Skills = z.object({
     paths: z.array(z.string()).optional().describe("Additional paths to skill folders"),
     urls: z
@@ -891,6 +935,7 @@ export namespace Config {
         .record(z.string(), Command)
         .optional()
         .describe("Command configuration, see https://opencode.ai/docs/commands"),
+      ui: UI.optional().describe("Plugin-contributed UI configuration for session buttons and web tabs"),
       skills: Skills.optional().describe("Additional skill folder paths"),
       watcher: z
         .object({

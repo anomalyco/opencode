@@ -12,6 +12,7 @@ import { createEffect, createMemo, For, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { useCommand } from "@/context/command"
+import { useGlobalSDK } from "@/context/global-sdk"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
@@ -23,6 +24,7 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 import { messageAgentColor } from "@/utils/agent"
 import { decode64 } from "@/utils/base64"
 import { Persist, persisted } from "@/utils/persist"
+import { resolveSessionPluginUI } from "@/utils/plugin-ui"
 import { StatusPopover } from "../status-popover"
 
 const OPEN_APPS = [
@@ -131,6 +133,7 @@ const showRequestError = (language: ReturnType<typeof useLanguage>, err: unknown
 export function SessionHeader() {
   const layout = useLayout()
   const command = useCommand()
+  const globalSDK = useGlobalSDK()
   const server = useServer()
   const platform = usePlatform()
   const language = useLanguage()
@@ -139,6 +142,8 @@ export function SessionHeader() {
   const { params, view } = useSessionLayout()
 
   const projectDirectory = createMemo(() => decode64(params.dir) ?? "")
+  const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
+  const tabs = createMemo(() => layout.tabs(sessionKey))
   const project = createMemo(() => {
     const directory = projectDirectory()
     if (!directory) return
@@ -151,6 +156,8 @@ export function SessionHeader() {
   })
   const hotkey = createMemo(() => command.keybind("file.open"))
   const os = createMemo(() => detectOS(platform))
+  const pluginUI = createMemo(() => resolveSessionPluginUI(sync.data.config, projectDirectory(), globalSDK.url))
+  const webButtons = createMemo(() => pluginUI().buttons)
 
   const [exists, setExists] = createStore<Partial<Record<OpenApp, boolean>>>({
     finder: true,
@@ -260,6 +267,11 @@ export function SessionHeader() {
         })
       })
       .catch((err: unknown) => showRequestError(language, err))
+  }
+
+  const openWebTab = (tab: string) => {
+    view().reviewPanel.open()
+    tabs().open(tab)
   }
 
   const centerMount = createMemo(() => document.getElementById("opencode-titlebar-center"))
@@ -418,6 +430,18 @@ export function SessionHeader() {
                 <Tooltip placement="bottom" value={language.t("status.popover.trigger")}>
                   <StatusPopover />
                 </Tooltip>
+                <For each={webButtons()}>
+                  {(button) => (
+                    <Button
+                      variant="ghost"
+                      class="hidden md:flex h-[24px] px-2 rounded-md border border-border-base bg-surface-panel text-text-strong"
+                      onClick={() => openWebTab(button.tab)}
+                      aria-label={`Open ${button.label}`}
+                    >
+                      <span class="text-12-regular">{button.label}</span>
+                    </Button>
+                  )}
+                </For>
                 <TooltipKeybind
                   title={language.t("command.terminal.toggle")}
                   keybind={command.keybind("terminal.toggle")}

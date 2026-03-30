@@ -60,6 +60,12 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const layout = useLayout()
 
     const scope = createMemo(() => sdk.directory)
+    const encodedDirectory = createMemo(() => {
+      const value = sdk.directory
+      if (!value) return ""
+      const isNonASCII = /[^\x00-\x7F]/.test(value)
+      return isNonASCII ? encodeURIComponent(value) : value
+    })
     const path = createPathHelpers(scope)
     const tabs = layout.tabs(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
 
@@ -200,6 +206,55 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         () => [],
       )
 
+    const write = async (input: { path: string; content: string }) => {
+      const file = path.normalize(input.path)
+      if (!file) throw new Error("Invalid path")
+
+      const url = new URL("/file/content", sdk.url)
+      url.searchParams.set("path", file)
+
+      const response = await fetch(url, {
+        method: "PUT",
+        headers: {
+          "content-type": "application/json",
+          "x-opencode-directory": encodedDirectory(),
+        },
+        body: JSON.stringify({ content: input.content }),
+      })
+
+      if (!response.ok) {
+        const message = await response.text().catch(() => "")
+        throw new Error(message || `Failed to write ${file}`)
+      }
+
+      const result = (await response.json().catch(() => ({ path: file, hash: "" }))) as {
+        path: string
+        hash: string
+      }
+
+      const next = {
+        type: "text",
+        content: input.content,
+      } as const
+
+      setStore(
+        "file",
+        file,
+        produce((draft) => {
+          draft.path = file
+          draft.name = getFilename(file)
+          draft.loaded = true
+          draft.loading = false
+          draft.error = undefined
+          draft.content = next
+        }),
+      )
+
+      touchFileContent(file, approxBytes(next))
+      evictContent(new Set([file]))
+      return result
+    }
+
     const stop = sdk.event.listen((e) => {
       invalidateFromWatcher(e.details, {
         normalize: path.normalize,
@@ -267,6 +322,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       },
       get,
       load,
+      write,
       scrollTop,
       scrollLeft,
       setScrollTop,

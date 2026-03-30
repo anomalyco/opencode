@@ -24,6 +24,20 @@ import { FileTabContent } from "@/pages/session/file-tabs"
 import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type Sizing } from "@/pages/session/helpers"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import type { PluginWebTab } from "@/utils/plugin-ui"
+import { hashText, inScopes, isAllowedOrigin, normalizeBridgePath } from "@/pages/session/webview-bridge"
+
+type WebviewRequest = {
+  type: "opencode.bridge.request"
+  requestId: string
+  action: "file.read" | "file.write"
+  token: string
+  payload?: {
+    path?: string
+    content?: string
+    expectedHash?: string
+  }
+}
 
 export function SessionSidePanel(props: {
   reviewPanel: () => JSX.Element
@@ -31,6 +45,8 @@ export function SessionSidePanel(props: {
   focusReviewDiff: (path: string) => void
   reviewSnap: boolean
   size: Sizing
+  webTabs: () => PluginWebTab[]
+  directory: string
 }) {
   const layout = useLayout()
   const sync = useSync()
@@ -39,6 +55,164 @@ export function SessionSidePanel(props: {
   const command = useCommand()
   const dialog = useDialog()
   const { params, sessionKey, tabs, view } = useSessionLayout()
+  const frames = new Map<string, HTMLIFrameElement>()
+  const tokens = new Map<string, string>()
+
+  const isRequest = (value: unknown): value is WebviewRequest => {
+    if (!value || typeof value !== "object") return false
+    if (!("type" in value) || value.type !== "opencode.bridge.request") return false
+    if (!("requestId" in value) || typeof value.requestId !== "string") return false
+    if (!("action" in value)) return false
+    if (value.action !== "file.read" && value.action !== "file.write") return false
+    if (!("token" in value) || typeof value.token !== "string") return false
+    return true
+  }
+
+  const tabsByKey = createMemo(() => {
+    const map = new Map<string, PluginWebTab>()
+    for (const tab of props.webTabs()) map.set(tab.tab, tab)
+    return map
+  })
+
+  const webSet = createMemo(() => new Set(props.webTabs().map((tab) => tab.tab)))
+
+  const tokenFor = (tab: string) => {
+    const current = tokens.get(tab)
+    if (current) return current
+    const next = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    tokens.set(tab, next)
+    return next
+  }
+
+  const postResponse = (input: {
+    source: MessageEventSource | null
+    requestId: string
+    ok: boolean
+    payload?: unknown
+    error?: string
+  }) => {
+    const target = input.source
+    if (!target || typeof (target as Window).postMessage !== "function") return
+    ;(target as Window).postMessage(
+      {
+        type: "opencode.bridge.response",
+        requestId: input.requestId,
+        ok: input.ok,
+        payload: input.payload,
+        error: input.error,
+      },
+      "*",
+    )
+  }
+
+  const resolveTabBySource = (source: MessageEventSource | null) => {
+    for (const [tab, frame] of frames.entries()) {
+      if (frame.contentWindow !== source) continue
+      return tab
+    }
+  }
+
+  const postReady = (tab: string) => {
+    const frame = frames.get(tab)
+    const cfg = tabsByKey().get(tab)
+    if (!frame || !cfg || !frame.contentWindow) return
+    frame.contentWindow.postMessage(
+      {
+        type: "opencode.bridge.ready",
+        token: tokenFor(tab),
+      },
+      "*",
+    )
+  }
+
+  createEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (!isRequest(event.data)) return
+      const tab = resolveTabBySource(event.source)
+      if (!tab) return
+      const cfg = tabsByKey().get(tab)
+      if (!cfg) return
+      if (!isAllowedOrigin(event.origin, cfg.origins)) return
+      if (event.data.token !== tokenFor(tab)) return
+
+      const run = async () => {
+        const raw = event.data.payload?.path
+        const path = normalizeBridgePath(props.directory, typeof raw === "string" ? raw : "")
+        if (!path) {
+          postResponse({ source: event.source, requestId: event.data.requestId, ok: false, error: "Invalid path" })
+          return
+        }
+
+        if (event.data.action === "file.read") {
+          if (!inScopes(path, cfg.permissions.file.read)) {
+            postResponse({ source: event.source, requestId: event.data.requestId, ok: false, error: "Read blocked" })
+            return
+          }
+          await file.load(path)
+          const state = file.get(path)
+          const content = state?.content
+          if (!content || content.type !== "text") {
+            postResponse({ source: event.source, requestId: event.data.requestId, ok: false, error: "File unreadable" })
+            return
+          }
+          const hash = await hashText(content.content)
+          postResponse({
+            source: event.source,
+            requestId: event.data.requestId,
+            ok: true,
+            payload: {
+              path,
+              content: content.content,
+              hash,
+            },
+          })
+          return
+        }
+
+        if (!inScopes(path, cfg.permissions.file.write)) {
+          postResponse({ source: event.source, requestId: event.data.requestId, ok: false, error: "Write blocked" })
+          return
+        }
+
+        const next = event.data.payload?.content
+        if (typeof next !== "string") {
+          postResponse({ source: event.source, requestId: event.data.requestId, ok: false, error: "Invalid content" })
+          return
+        }
+
+        const expected = event.data.payload?.expectedHash
+        if (expected) {
+          await file.load(path)
+          const state = file.get(path)
+          const current = state?.content
+          if (!current || current.type !== "text") {
+            postResponse({ source: event.source, requestId: event.data.requestId, ok: false, error: "File unreadable" })
+            return
+          }
+          const hash = await hashText(current.content)
+          if (hash !== expected) {
+            postResponse({ source: event.source, requestId: event.data.requestId, ok: false, error: "Hash mismatch" })
+            return
+          }
+        }
+
+        const wrote = await file.write({ path, content: next })
+        postResponse({ source: event.source, requestId: event.data.requestId, ok: true, payload: wrote })
+      }
+
+      void run().catch((err) => {
+        postResponse({
+          source: event.source,
+          requestId: event.data.requestId,
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      })
+    }
+
+    window.addEventListener("message", handler)
+    onCleanup(() => window.removeEventListener("message", handler))
+  })
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
 
@@ -130,12 +304,23 @@ export function SessionSidePanel(props: {
     setActive: tabs().setActive,
   })
 
+  const openPanelTab = (value: string) => {
+    if (webSet().has(value)) {
+      tabs().open(value)
+      tabs().setActive(value)
+      openReviewPanel()
+      return
+    }
+    openTab(value)
+  }
+
   const tabState = createSessionTabs({
     tabs,
     pathFromTab: file.pathFromTab,
     normalizeTab,
     review: reviewTab,
     hasReview,
+    isExtraTab: (tab) => webSet().has(tab),
   })
   const contextOpen = tabState.contextOpen
   const openedTabs = tabState.openedTabs
@@ -232,7 +417,7 @@ export function SessionSidePanel(props: {
               >
                 <DragDropSensors />
                 <ConstrainDragYAxis />
-                <Tabs value={activeTab()} onChange={openTab}>
+                <Tabs value={activeTab()} onChange={openPanelTab}>
                   <div class="sticky top-0 shrink-0 flex">
                     <Tabs.List
                       ref={(el: HTMLDivElement) => {
@@ -278,6 +463,15 @@ export function SessionSidePanel(props: {
                           </div>
                         </Tabs.Trigger>
                       </Show>
+                      <For each={props.webTabs()}>
+                        {(tab) => (
+                          <Tabs.Trigger value={tab.tab}>
+                            <div class="flex items-center gap-2">
+                              <div>{tab.title}</div>
+                            </div>
+                          </Tabs.Trigger>
+                        )}
+                      </For>
                       <SortableProvider ids={openedTabs()}>
                         <For each={openedTabs()}>{(tab) => <SortableTab tab={tab} onTabClose={tabs().close} />}</For>
                       </SortableProvider>
@@ -332,6 +526,28 @@ export function SessionSidePanel(props: {
                       </Show>
                     </Tabs.Content>
                   </Show>
+
+                  <For each={props.webTabs()}>
+                    {(tab) => (
+                      <Tabs.Content value={tab.tab} class="flex flex-col h-full overflow-hidden contain-strict">
+                        <Show when={activeTab() === tab.tab}>
+                          <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+                            <iframe
+                              ref={(el) => {
+                                if (el) frames.set(tab.tab, el)
+                                else frames.delete(tab.tab)
+                              }}
+                              src={tab.src}
+                              class="size-full border-0 bg-background-base"
+                              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
+                              loading="lazy"
+                              onLoad={() => postReady(tab.tab)}
+                            />
+                          </div>
+                        </Show>
+                      </Tabs.Content>
+                    )}
+                  </For>
 
                   <Show when={activeFileTab()} keyed>
                     {(tab) => <FileTabContent tab={tab} />}

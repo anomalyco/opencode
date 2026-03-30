@@ -30,6 +30,7 @@ import { checksum } from "@opencode-ai/util/encode"
 import { useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
+import { useGlobalSDK } from "@/context/global-sdk"
 import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
@@ -58,6 +59,7 @@ import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { Identifier } from "@/utils/id"
 import { Persist, persisted } from "@/utils/persist"
+import { resolveSessionPluginUI } from "@/utils/plugin-ui"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
@@ -313,6 +315,7 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
 }
 
 export default function Page() {
+  const globalSDK = useGlobalSDK()
   const globalSync = useGlobalSync()
   const layout = useLayout()
   const local = useLocal()
@@ -429,12 +432,16 @@ export default function Page() {
   const reviewCount = createMemo(() => Math.max(info()?.summary?.files ?? 0, diffs().length))
   const hasReview = createMemo(() => reviewCount() > 0)
   const reviewTab = createMemo(() => isDesktop())
+  const pluginUI = createMemo(() => resolveSessionPluginUI(sync.data.config, sdk.directory, globalSDK.url))
+  const webTabs = createMemo(() => pluginUI().tabs)
+  const webSet = createMemo(() => new Set(webTabs().map((tab) => tab.tab)))
   const tabState = createSessionTabs({
     tabs,
     pathFromTab: file.pathFromTab,
     normalizeTab,
     review: reviewTab,
     hasReview,
+    isExtraTab: (tab) => webSet().has(tab),
   })
   const contextOpen = tabState.contextOpen
   const openedTabs = tabState.openedTabs
@@ -1865,6 +1872,8 @@ export default function Page() {
           focusReviewDiff={focusReviewDiff}
           reviewSnap={ui.reviewSnap}
           size={size}
+          webTabs={webTabs}
+          directory={sdk.directory}
         />
       </div>
 
