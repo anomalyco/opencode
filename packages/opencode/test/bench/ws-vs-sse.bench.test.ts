@@ -101,13 +101,14 @@ async function* readSSEEvents(
   }
 }
 
-// All benchmarks require OPENCODE_BENCH=1 — they test performance, not correctness,
-// and their Validation gates depend on hardware speed that varies across CI runners.
+// Large-payload benchmarks and Validation gates require OPENCODE_BENCH=1 — they
+// need --timeout 120000 and results depend on hardware speed that varies across
+// CI runners.  Small/medium tests run unconditionally as WS transport canaries.
 const RUN_BENCH = process.env.OPENCODE_BENCH === "1"
 
 if (!RUN_BENCH) {
   // eslint-disable-next-line no-console
-  console.log("Skipping bench tests (set OPENCODE_BENCH=1 to run)")
+  console.log("Large bench tests skipped (set OPENCODE_BENCH=1 to run)")
 }
 
 const PAYLOADS: { label: string; bytes: number; iterations: number }[] = [
@@ -125,7 +126,6 @@ let baseUrl: string
 const results: BenchResult[] = []
 
 beforeAll(() => {
-  if (!RUN_BENCH) return
   const { Hono } = require("hono") as typeof import("hono")
   const { streamSSE } = require("hono/streaming") as typeof import("hono/streaming")
   const { upgradeWebSocket } = require("hono/bun") as typeof import("hono/bun")
@@ -194,7 +194,6 @@ beforeAll(() => {
 })
 
 afterAll(async () => {
-  if (!RUN_BENCH) return
   server?.stop(true)
 
   // Print console summary table
@@ -223,9 +222,10 @@ afterAll(async () => {
 // SSE benchmark — uses fetch streaming (Bun has no EventSource)
 // ---------------------------------------------------------------------------
 
-describe.skipIf(!RUN_BENCH)("SSE latency", () => {
+describe("SSE latency", () => {
   for (const { label, bytes, iterations } of PAYLOADS) {
-    test(
+    const isLarge = label.startsWith("large")
+    test.skipIf(isLarge && !RUN_BENCH)(
       `SSE ${label} (${iterations} events)`,
       async () => {
         const payload = makePayload(bytes)
@@ -300,9 +300,10 @@ describe.skipIf(!RUN_BENCH)("SSE latency", () => {
 // WS benchmark
 // ---------------------------------------------------------------------------
 
-describe.skipIf(!RUN_BENCH)("WS binary diff latency", () => {
+describe("WS binary diff latency", () => {
   for (const { label, bytes, iterations } of PAYLOADS) {
-    test(
+    const isLarge = label.startsWith("large")
+    test.skipIf(isLarge && !RUN_BENCH)(
       `WS ${label} (${iterations} events)`,
       async () => {
         const payload = makePayload(bytes)
