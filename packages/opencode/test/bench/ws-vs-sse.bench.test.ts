@@ -101,15 +101,19 @@ async function* readSSEEvents(
   }
 }
 
-// Large-payload benchmarks require --timeout 120000 and OPENCODE_BENCH=1
+// All benchmarks require OPENCODE_BENCH=1 — they test performance, not correctness,
+// and their Validation gates depend on hardware speed that varies across CI runners.
 const RUN_BENCH = process.env.OPENCODE_BENCH === "1"
+
+if (!RUN_BENCH) {
+  // eslint-disable-next-line no-console
+  console.log("Skipping bench tests (set OPENCODE_BENCH=1 to run)")
+}
 
 const PAYLOADS: { label: string; bytes: number; iterations: number }[] = [
   { label: "small-100B", bytes: 100, iterations: 1000 },
   { label: "medium-10KB", bytes: 10_000, iterations: 1000 },
-  ...(RUN_BENCH
-    ? [{ label: "large-100KB", bytes: 100_000, iterations: 200 }]
-    : []),
+  { label: "large-100KB", bytes: 100_000, iterations: 200 },
 ]
 
 // ---------------------------------------------------------------------------
@@ -121,6 +125,7 @@ let baseUrl: string
 const results: BenchResult[] = []
 
 beforeAll(() => {
+  if (!RUN_BENCH) return
   const { Hono } = require("hono") as typeof import("hono")
   const { streamSSE } = require("hono/streaming") as typeof import("hono/streaming")
   const { upgradeWebSocket } = require("hono/bun") as typeof import("hono/bun")
@@ -189,6 +194,7 @@ beforeAll(() => {
 })
 
 afterAll(async () => {
+  if (!RUN_BENCH) return
   server?.stop(true)
 
   // Print console summary table
@@ -217,7 +223,7 @@ afterAll(async () => {
 // SSE benchmark — uses fetch streaming (Bun has no EventSource)
 // ---------------------------------------------------------------------------
 
-describe("SSE latency", () => {
+describe.skipIf(!RUN_BENCH)("SSE latency", () => {
   for (const { label, bytes, iterations } of PAYLOADS) {
     test(
       `SSE ${label} (${iterations} events)`,
@@ -294,7 +300,7 @@ describe("SSE latency", () => {
 // WS benchmark
 // ---------------------------------------------------------------------------
 
-describe("WS binary diff latency", () => {
+describe.skipIf(!RUN_BENCH)("WS binary diff latency", () => {
   for (const { label, bytes, iterations } of PAYLOADS) {
     test(
       `WS ${label} (${iterations} events)`,
@@ -377,7 +383,7 @@ describe("WS binary diff latency", () => {
 // Validation gate
 // ---------------------------------------------------------------------------
 
-describe("Validation", () => {
+describe.skipIf(!RUN_BENCH)("Validation", () => {
   test("WS p99 < 5ms for small payloads (COB-37 spec target)", () => {
     const wsSmall = results.find(
       (r) => r.transport === "WS" && r.payloadLabel === "small-100B",
