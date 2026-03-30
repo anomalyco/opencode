@@ -77,6 +77,10 @@ jobs:
         run: |
           cd packages/desktop
           VERSION="${APP_VERSION#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            TAG=$(printf '%s' "${APP_VERSION}" | tr -cs '0-9A-Za-z.-' '-' | sed 's/^-*//; s/-*$//')
+            VERSION="0.0.0-${TAG:-dev}.${GITHUB_RUN_NUMBER}"
+          fi
           # Update version
           jq --arg version "$VERSION" '.version = $version' package.json > package.json.tmp
           mv package.json.tmp package.json
@@ -161,6 +165,10 @@ jobs:
         run: |
           cd packages/desktop
           VERSION="${APP_VERSION#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            TAG=$(printf '%s' "${APP_VERSION}" | tr -cs '0-9A-Za-z.-' '-' | sed 's/^-*//; s/-*$//')
+            VERSION="0.0.0-${TAG:-dev}.${GITHUB_RUN_NUMBER}"
+          fi
           # Update version
           jq --arg version "$VERSION" '.version = $version' package.json > package.json.tmp
           mv package.json.tmp package.json
