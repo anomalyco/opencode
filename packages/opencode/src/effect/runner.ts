@@ -25,6 +25,7 @@ export const make = <A>(scope: Scope.Scope, opts?: {
   onIdle?: Effect.Effect<void>
   onBusy?: Effect.Effect<void>
   onInterrupt?: Effect.Effect<A, unknown>
+  busy?: () => never
 }): Runner<A> => {
   let state: State<A> = { type: "idle" }
   const idle = opts?.onIdle ?? Effect.void
@@ -78,7 +79,10 @@ export const make = <A>(scope: Scope.Scope, opts?: {
 
   const startShell = (work: (signal: AbortSignal) => Effect.Effect<A, unknown>) =>
     Effect.gen(function* () {
-      if (state.type !== "idle") throw new Error("Runner is busy")
+      if (state.type !== "idle") {
+        if (opts?.busy) opts.busy()
+        throw new Error("Runner is busy")
+      }
       yield* busy
       const ctrl = new AbortController()
       const fiber = yield* work(ctrl.signal).pipe(
@@ -99,8 +103,7 @@ export const make = <A>(scope: Scope.Scope, opts?: {
       const exit = yield* Fiber.await(fiber)
       if (Exit.isSuccess(exit)) return exit.value
       if (Cause.hasInterruptsOnly(exit.cause) && onInterrupt) return yield* onInterrupt
-      if (Exit.isFailure(exit)) return yield* Effect.failCause(exit.cause)
-      return exit.value
+      return yield* Effect.failCause(exit.cause)
     })
 
   const cancel = Effect.gen(function* () {
@@ -118,7 +121,7 @@ export const make = <A>(scope: Scope.Scope, opts?: {
       case "shell": {
         state = { type: "idle" }
         st.shell.abort.abort()
-        yield* Fiber.interrupt(st.shell.fiber).pipe(Effect.asVoid)
+        yield* Fiber.await(st.shell.fiber).pipe(Effect.exit, Effect.asVoid)
         yield* idle
         return
       }
@@ -126,7 +129,7 @@ export const make = <A>(scope: Scope.Scope, opts?: {
         state = { type: "idle" }
         yield* Deferred.fail(st.done, new Cancelled()).pipe(Effect.asVoid)
         st.shell.abort.abort()
-        yield* Fiber.interrupt(st.shell.fiber).pipe(Effect.asVoid)
+        yield* Fiber.await(st.shell.fiber).pipe(Effect.exit, Effect.asVoid)
         yield* idle
         return
       }
