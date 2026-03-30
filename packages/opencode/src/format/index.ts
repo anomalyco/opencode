@@ -100,12 +100,24 @@ export namespace Format {
             return checks.filter((x) => x.enabled).map((x) => x.item)
           }
 
+          function extensions(filepath: string) {
+            const parts = path.basename(filepath).split(".")
+            return parts.slice(1).map((_, i) => "." + parts.slice(i + 1).join("."))
+          }
+
           function formatFile(filepath: string) {
             return Effect.gen(function* () {
               log.info("formatting", { file: filepath })
-              const ext = path.extname(filepath)
+              const exts = extensions(filepath)
+              const matches = yield* Effect.promise(async () => {
+                for (const ext of exts) {
+                  const found = await getFormatter(ext)
+                  if (found.length > 0) return found
+                }
+                return []
+              })
 
-              for (const item of yield* Effect.promise(() => getFormatter(ext))) {
+              for (const item of matches) {
                 log.info("running", { command: item.command })
                 const cmd = item.command.map((x) => x.replace("$FILE", filepath))
                 const code = yield* spawner
