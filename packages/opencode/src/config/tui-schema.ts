@@ -11,6 +11,10 @@ const KeybindOverride = z
   .strict()
 
 export const TuiOptions = z.object({
+  theme_mode: z
+    .enum(["system", "light", "dark"])
+    .optional()
+    .describe("Override terminal light/dark mode detection"),
   scroll_speed: z.number().min(0.001).optional().describe("TUI scroll speed"),
   scroll_acceleration: z
     .object({

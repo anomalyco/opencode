@@ -19,6 +19,7 @@ Example:
 {
   "$schema": "https://opencode.ai/tui.json",
   "theme": "smoke-theme",
+  "theme_mode": "light",
   "plugin": ["@acme/opencode-plugin@1.2.3", ["./plugins/demo.tsx", { "label": "demo" }]],
   "plugin_enabled": {
     "acme.demo": false
@@ -27,6 +28,7 @@ Example:
 ```
 
 - `plugin` entries can be either a string spec or `[spec, options]`.
+- `theme_mode` can be `system`, `light`, or `dark` to override terminal light/dark detection when a multiplexer or IDE terminal reports the wrong mode.
 - Plugin specs can be npm specs, `file://` URLs, relative paths, or absolute paths.
 - Relative path specs are resolved relative to the config file that declared them.
 - A file module listed in `tui.json` must be a TUI module (`default export { id?, tui }`) and must not export `server`.

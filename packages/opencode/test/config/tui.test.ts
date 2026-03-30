@@ -40,6 +40,22 @@ test("loads tui config with the same precedence order as server config paths", a
   })
 })
 
+test("loads theme_mode from tui config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "tui.json"), JSON.stringify({ theme_mode: "light" }, null, 2))
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await TuiConfig.get()
+      expect(config.theme_mode).toBe("light")
+    },
+  })
+})
+
 test("migrates tui-specific keys from opencode.json when tui.json does not exist", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
@@ -141,6 +157,36 @@ test("drops unknown legacy tui keys during migration", async () => {
       const migrated = JSON.parse(text)
       expect(migrated.scroll_speed).toBe(2)
       expect(migrated.foo).toBeUndefined()
+    },
+  })
+})
+
+test("migrates legacy theme_mode from nested tui config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify(
+          {
+            tui: { theme_mode: "light" },
+          },
+          null,
+          2,
+        ),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await TuiConfig.get()
+      expect(config.theme_mode).toBe("light")
+
+      const text = await Filesystem.readText(path.join(tmp.path, "tui.json"))
+      expect(JSON.parse(text)).toMatchObject({
+        theme_mode: "light",
+      })
     },
   })
 })

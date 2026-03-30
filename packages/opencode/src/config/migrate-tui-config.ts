@@ -19,6 +19,7 @@ const LegacyRecord = z.record(z.string(), z.unknown()).optional()
 
 const TuiLegacy = z
   .object({
+    theme_mode: TuiOptions.shape.theme_mode.catch(undefined),
     scroll_speed: TuiOptions.shape.scroll_speed.catch(undefined),
     scroll_acceleration: TuiOptions.shape.scroll_acceleration.catch(undefined),
     diff_style: TuiOptions.shape.diff_style.catch(undefined),
@@ -90,6 +91,7 @@ export async function migrateTuiConfig(input: MigrateInput) {
 function normalizeTui(data: Record<string, unknown>) {
   const parsed = TuiLegacy.parse(data)
   if (
+    parsed.theme_mode === undefined &&
     parsed.scroll_speed === undefined &&
     parsed.diff_style === undefined &&
     parsed.scroll_acceleration === undefined

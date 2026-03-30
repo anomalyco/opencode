@@ -163,6 +163,42 @@ export function allThemes() {
   return store.themes
 }
 
+type ThemeMode = State["mode"]
+type ThemeModeConfig = ThemeMode | "system"
+
+function pickThemeMode(value: unknown): ThemeMode | undefined {
+  if (value === "dark" || value === "light") return value
+  return
+}
+
+export function resolveThemeModeState(input: {
+  detected: ThemeMode
+  config?: ThemeModeConfig
+  persisted?: unknown
+  lock?: unknown
+}) {
+  if (input.config === "dark" || input.config === "light") {
+    return {
+      mode: input.config,
+      lock: input.config,
+    }
+  }
+
+  if (input.config === "system") {
+    return {
+      mode: input.detected,
+      lock: undefined,
+    }
+  }
+
+  const lock = pickThemeMode(input.lock)
+  const mode = pickThemeMode(input.persisted) ?? input.detected
+  return {
+    mode: lock ?? mode,
+    lock,
+  }
+}
+
 function isTheme(theme: unknown): theme is ThemeJson {
   if (!isRecord(theme)) return false
   if (!isRecord(theme.theme)) return false
@@ -294,17 +330,17 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     const renderer = useRenderer()
     const config = useTuiConfig()
     const kv = useKV()
-    const pick = (value: unknown) => {
-      if (value === "dark" || value === "light") return value
-      return
-    }
 
     setStore(
       produce((draft) => {
-        const lock = pick(kv.get("theme_mode_lock"))
-        const mode = pick(kv.get("theme_mode", props.mode))
-        draft.mode = lock ?? mode ?? props.mode
-        draft.lock = lock
+        const resolved = resolveThemeModeState({
+          detected: props.mode,
+          config: config.theme_mode,
+          persisted: kv.get("theme_mode", props.mode),
+          lock: kv.get("theme_mode_lock"),
+        })
+        draft.mode = resolved.mode
+        draft.lock = resolved.lock
         const active = config.theme ?? kv.get("theme", "opencode")
         draft.active = typeof active === "string" ? active : "opencode"
         draft.ready = false
