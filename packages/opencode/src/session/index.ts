@@ -635,7 +635,7 @@ export namespace Session {
         field: string
         delta: string
       }) {
-        yield* bus.publish(MessageV2.Event.PartDelta, input)
+        yield* Effect.sync(() => SyncEvent.run(MessageV2.Event.PartDelta, input))
       })
 
       const initialize = Effect.fn("Session.initialize")(function* (input: {

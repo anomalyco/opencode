@@ -483,16 +483,18 @@ export namespace MessageV2 {
         time: z.number(),
       }),
     }),
-    PartDelta: BusEvent.define(
-      "message.part.delta",
-      z.object({
+    PartDelta: SyncEvent.define({
+      type: "message.part.delta",
+      version: 1,
+      aggregate: "sessionID",
+      schema: z.object({
         sessionID: SessionID.zod,
         messageID: MessageID.zod,
         partID: PartID.zod,
         field: z.string(),
         delta: z.string(),
       }),
-    ),
+    }),
     PartRemoved: SyncEvent.define({
       type: "message.part.removed",
       version: 1,
@@ -601,8 +603,9 @@ export namespace MessageV2 {
       return false
     })()
 
-    const toModelOutput = (options: { toolCallId: string; input: unknown; output: unknown }) => {
-      const output = options.output
+    const toModelOutput = (value: unknown) => {
+      const output =
+        value && typeof value === "object" && "output" in value ? (value as { output: unknown }).output : value
       if (typeof output === "string") {
         return { type: "text", value: output }
       }

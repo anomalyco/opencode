@@ -788,6 +788,73 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ])
   })
+
+  test("serializes completed tool output when tool output is passed directly", async () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1"),
+            type: "text",
+            text: "run tool",
+          },
+        ] as MessageV2.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "tool",
+            callID: "call-complete",
+            tool: "mcp_fetch",
+            state: {
+              status: "completed",
+              input: { query: "status" },
+              output: "done",
+              time: { start: 0, end: 1 },
+            },
+          },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model)
+
+    expect(result).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "run tool" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-complete",
+            toolName: "mcp_fetch",
+            input: { query: "status" },
+            providerExecuted: undefined,
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-complete",
+            toolName: "mcp_fetch",
+            output: { type: "text", value: "done" },
+          },
+        ],
+      },
+    ])
+  })
 })
 
 describe("session.message-v2.fromError", () => {

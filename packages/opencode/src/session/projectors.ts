@@ -132,4 +132,13 @@ export default [
       log.warn("ignored late part update", { partID: id, messageID, sessionID })
     }
   }),
+
+  SyncEvent.project(MessageV2.Event.PartDelta, (db, data) => {
+    const row = db.select().from(PartTable).where(eq(PartTable.id, data.partID)).get()
+    if (!row) throw new NotFoundError({ message: `Part not found: ${data.partID}` })
+    const next = structuredClone(row.data) as Record<string, unknown>
+    const prev = next[data.field]
+    next[data.field] = (typeof prev === "string" ? prev : "") + data.delta
+    db.update(PartTable).set({ data: next }).where(eq(PartTable.id, data.partID)).run()
+  }),
 ]

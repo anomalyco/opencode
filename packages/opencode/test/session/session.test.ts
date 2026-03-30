@@ -140,3 +140,68 @@ describe("step-finish token propagation via Bus event", () => {
     { timeout: 30000 },
   )
 })
+
+describe("part delta persistence", () => {
+  test("persists text deltas into the stored part", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const session = await Session.create({})
+
+        const messageID = MessageID.ascending()
+        await Session.updateMessage({
+          id: messageID,
+          sessionID: session.id,
+          role: "assistant",
+          parentID: MessageID.ascending(),
+          time: { created: Date.now() },
+          agent: "test",
+          modelID: "test",
+          providerID: "test",
+          mode: "",
+          path: { cwd: "/", root: "/" },
+          cost: 0,
+          tokens: {
+            input: 0,
+            output: 0,
+            reasoning: 0,
+            cache: { read: 0, write: 0 },
+          },
+        } as unknown as MessageV2.Info)
+
+        const partID = PartID.ascending()
+        await Session.updatePart({
+          id: partID,
+          messageID,
+          sessionID: session.id,
+          type: "text",
+          text: "",
+          time: { start: Date.now() },
+        })
+
+        await Session.updatePartDelta({
+          sessionID: session.id,
+          messageID,
+          partID,
+          field: "text",
+          delta: "hello",
+        })
+        await Session.updatePartDelta({
+          sessionID: session.id,
+          messageID,
+          partID,
+          field: "text",
+          delta: " world",
+        })
+
+        const parts = await MessageV2.parts(messageID)
+        const part = parts.find((item) => item.id === partID) as MessageV2.TextPart | undefined
+
+        expect(part?.type).toBe("text")
+        expect(part?.text).toBe("hello world")
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+})
