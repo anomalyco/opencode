@@ -56,37 +56,7 @@ export function App() {
 
       {/* Main — split view */}
       <div class="main">
-        {/* Left: Browser live view */}
-        <div class="browser-panel">
-          <Show when={browserUrl()}>
-            <div class="url-bar">
-              <span class="url-icon">◆</span>
-              <span class="url-text">{browserUrl()}</span>
-            </div>
-          </Show>
-          <div class="browser-viewport">
-            <Show
-              when={browserRunning()}
-              fallback={
-                <div class="browser-placeholder">
-                  <div class="diamond-large">◆</div>
-                  <div>Give a task to start the browser</div>
-                  <div style={{ "margin-top": "8px", color: "var(--text-muted)", "font-size": "12px" }}>
-                    "Go to google.com and search for..."
-                  </div>
-                </div>
-              }
-            >
-              {/* Browser viewport stream connects here */}
-              {/* agent-browser streams to ws://localhost:9223 */}
-              <div style={{ color: "var(--text-muted)", "font-size": "13px" }}>
-                Browser view streaming...
-              </div>
-            </Show>
-          </div>
-        </div>
-
-        {/* Right: Agent chat panel */}
+        {/* Left: Agent chat panel */}
         <div class="agent-panel">
           <div class="agent-header">
             Agent — {mode() === "auto" ? "autonomous" : "interactive"}
@@ -131,6 +101,36 @@ export function App() {
                 rows={1}
               />
             </div>
+          </div>
+        </div>
+
+        {/* Right: Browser live view */}
+        <div class="browser-panel">
+          <Show when={browserUrl()}>
+            <div class="url-bar">
+              <span class="url-icon">◆</span>
+              <span class="url-text">{browserUrl()}</span>
+            </div>
+          </Show>
+          <div class="browser-viewport">
+            <Show
+              when={browserRunning()}
+              fallback={
+                <div class="browser-placeholder">
+                  <div class="diamond-large">◆</div>
+                  <div>Give a task to start the browser</div>
+                  <div style={{ "margin-top": "8px", color: "var(--text-muted)", "font-size": "12px" }}>
+                    "Go to google.com and search for..."
+                  </div>
+                </div>
+              }
+            >
+              {/* Browser viewport stream connects here */}
+              {/* agent-browser streams to ws://localhost:9223 */}
+              <div style={{ color: "var(--text-muted)", "font-size": "13px" }}>
+                Browser view streaming...
+              </div>
+            </Show>
           </div>
         </div>
       </div>

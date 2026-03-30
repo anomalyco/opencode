@@ -137,7 +137,7 @@ body {
   display: flex;
   flex-direction: column;
   background: var(--bg);
-  border-right: 1px solid var(--border);
+  border-left: 1px solid var(--border);
 }
 
 .url-bar {
