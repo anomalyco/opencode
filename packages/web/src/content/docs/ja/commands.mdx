@@ -1,0 +1,322 @@
+---
+title: コマンド
+description: 反復的なタスク用のカスタムコマンドを作成します。
+---
+
+カスタムコマンドを使用すると、TUI でコマンドを実行するときに実行するプロンプトを指定できます。
+
+```bash frame="none"
+/my-command
+```
+
+カスタムコマンドは、`/init`、`/undo`、`/redo`、`/share`、`/help` などの組み込みコマンドに追加されます。 [詳細はこちら](/docs/tui#commands)。
+
+---
+
+## コマンドファイルの作成
+
+カスタムコマンドを定義するには、`commands/` ディレクトリに Markdown ファイルを作成します。
+
+`.opencode/commands/test.md` を作成します。
+
+```md title=".opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+フロントマターはコマンドのプロパティを定義します。内容がテンプレートとなります。
+
+`/` に続けてコマンド名を入力して、コマンドを使用します。
+
+```bash frame="none"
+"/test"
+```
+
+---
+
+## 設定
+
+カスタムコマンドは、OpenCode 設定を通じて、または `commands/` ディレクトリに Markdown ファイルを作成することによって追加できます。
+
+---
+
+### JSON
+
+OpenCode [設定](/docs/config)で `command` オプションを使用します:
+
+```json title="opencode.jsonc" {4-12}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    // This becomes the name of the command
+    "test": {
+      // This is the prompt that will be sent to the LLM
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
+      // This is shown as the description in the TUI
+      "description": "Run tests with coverage",
+      "agent": "build",
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+これで、TUI で次のコマンドを実行できるようになります。
+
+```bash frame="none"
+/test
+```
+
+---
+
+### Markdown
+
+Markdown ファイルを使用してコマンドを定義することもできます。それらを次の場所に置きます。
+
+- グローバル: `~/.config/opencode/commands/`
+- プロジェクトごと: `.opencode/commands/`
+
+```markdown title="~/.config/opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+Markdown ファイル名がコマンド名になります。たとえば、`test.md` を使用すると、
+あなたは実行します:
+
+```bash frame="none"
+/test
+```
+
+---
+
+## プロンプト構成
+
+カスタムコマンドのプロンプトは、いくつかの特別なプレースホルダーと構文をサポートしています。
+
+---
+
+### 引数
+
+`$ARGUMENTS` プレースホルダーを使用してコマンドに引数を渡します。
+
+```md title=".opencode/commands/component.md"
+---
+description: Create a new component
+---
+
+Create a new React component named $ARGUMENTS with TypeScript support.
+Include proper typing and basic structure.
+```
+
+引数を指定してコマンドを実行します。
+
+```bash frame="none"
+/component Button
+```
+
+そして、`$ARGUMENTS` は `Button` に置き換えられます。
+
+位置パラメータを使用して個々の引数にアクセスすることもできます。
+
+- `$1` - 最初の引数
+- `$2` - 2 番目の引数
+- `$3` - 3 番目の引数
+- 等々...
+
+例えば：
+
+```md title=".opencode/commands/create-file.md"
+---
+description: Create a new file with content
+---
+
+Create a file named $1 in the directory $2
+with the following content: $3
+```
+
+次のコマンドを実行します。
+
+```bash frame="none"
+/create-file config.json src "{ \"key\": \"value\" }"
+```
+
+これは以下を置き換えます。
+
+- `$1` と `config.json`
+- `$2` と `src`
+- `$3` と `{ "key": "value" }`
+
+---
+
+### シェル出力
+
+_!`command`_ を使用して、[bash コマンド](/docs/tui#bash-commands) の出力をプロンプトに挿入します。
+
+たとえば、テストカバレッジを分析するカスタムコマンドを作成するには、次のようにします。
+
+```md title=".opencode/commands/analyze-coverage.md"
+---
+description: Analyze test coverage
+---
+
+Here are the current test results:
+!`npm test`
+
+Based on these results, suggest improvements to increase coverage.
+```
+
+または、最近の変更を確認するには:
+
+```md title=".opencode/commands/review-changes.md"
+---
+description: Review recent changes
+---
+
+Recent git commits:
+!`git log --oneline -10`
+
+Review these changes and suggest any improvements.
+```
+
+コマンドはプロジェクトのルートディレクトリで実行され、その出力はプロンプトの一部になります。
+
+---
+
+### ファイル参照
+
+`@` の後にファイル名を指定して、コマンドにファイルを含めます。
+
+```md title=".opencode/commands/review-component.md"
+---
+description: Review component
+---
+
+Review the component in @src/components/Button.tsx.
+Check for performance issues and suggest improvements.
+```
+
+ファイルの内容はプロンプトに自動的に含まれます。
+
+---
+
+## オプション
+
+設定オプションを詳しく見てみましょう。
+
+---
+
+### テンプレート
+
+`template` オプションは、コマンドの実行時に LLM に送信されるプロンプトを定義します。
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes."
+    }
+  }
+}
+```
+
+これは**必須**の設定オプションです。
+
+---
+
+### 説明
+
+`description` オプションを使用して、コマンドの動作の簡単な説明を入力します。
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "description": "Run tests with coverage"
+    }
+  }
+}
+```
+
+これは、コマンドを入力すると TUI に説明として表示されます。
+
+---
+
+### エージェント
+
+オプションで、`agent` 設定を使用して、このコマンドを実行する [agent](/docs/agents) を指定します。
+これが [subagent](/docs/agents/#subagents) の場合、コマンドはデフォルトでサブエージェントの呼び出しをトリガーします。
+この動作を無効にするには、`subtask` を `false` に設定します。
+
+```json title="opencode.json"
+{
+  "command": {
+    "review": {
+      "agent": "plan"
+    }
+  }
+}
+```
+
+これは**オプション**の設定オプションです。指定しない場合、デフォルトで現在のエージェントが使用されます。
+
+---
+
+### サブタスク
+
+`subtask` ブール値を使用して、コマンドが [subagent](/docs/agents/#subagents) 呼び出しを強制的にトリガーします。
+これは、コマンドがプライマリコンテキストを汚染せず、エージェントがサブエージェントとして動作するように**強制**する場合に便利です。
+[agent](/docs/agents) 設定で `mode` が `primary` に設定されている場合でも。
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "subtask": true
+    }
+  }
+}
+```
+
+これは**オプション**の設定オプションです。
+
+---
+
+### モデル
+
+`model` 設定を使用して、このコマンドのデフォルトモデルをオーバーライドします。
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+これは**オプション**の設定オプションです。
+
+---
+
+## 組み込み
+
+OpenCode には、`/init`、`/undo`、`/redo`、`/share`、`/help` などのいくつかの組み込みコマンドが含まれています。 [詳細はこちら](/docs/tui#commands)。
+
+:::note
+カスタムコマンドは組み込みコマンドをオーバーライドできます。
+:::
+同じ名前のカスタムコマンドを定義すると、組み込みコマンドがオーバーライドされます。

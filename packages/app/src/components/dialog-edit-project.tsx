@@ -2,6 +2,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { TextField } from "@opencode-ai/ui/text-field"
+import { useMutation } from "@tanstack/solid-query"
 import { Icon } from "@opencode-ai/ui/icon"
 import { createMemo, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -28,10 +29,11 @@ export function DialogEditProject(props: { project: LocalProject }) {
     color: props.project.icon?.color || "pink",
     iconUrl: props.project.icon?.override || "",
     startup: props.project.commands?.start ?? "",
-    saving: false,
     dragOver: false,
     iconHover: false,
   })
+
+  let iconInput: HTMLInputElement | undefined
 
   function handleFileSelect(file: File) {
     if (!file.type.startsWith("image/")) return
@@ -69,34 +71,37 @@ export function DialogEditProject(props: { project: LocalProject }) {
     setStore("iconUrl", "")
   }
 
-  async function handleSubmit(e: SubmitEvent) {
-    e.preventDefault()
+  const saveMutation = useMutation(() => ({
+    mutationFn: async () => {
+      const name = store.name.trim() === folderName() ? "" : store.name.trim()
+      const start = store.startup.trim()
 
-    setStore("saving", true)
-    const name = store.name.trim() === folderName() ? "" : store.name.trim()
-    const start = store.startup.trim()
+      if (props.project.id && props.project.id !== "global") {
+        await globalSDK.client.project.update({
+          projectID: props.project.id,
+          directory: props.project.worktree,
+          name,
+          icon: { color: store.color, override: store.iconUrl },
+          commands: { start },
+        })
+        globalSync.project.icon(props.project.worktree, store.iconUrl || undefined)
+        dialog.close()
+        return
+      }
 
-    if (props.project.id && props.project.id !== "global") {
-      await globalSDK.client.project.update({
-        projectID: props.project.id,
-        directory: props.project.worktree,
+      globalSync.project.meta(props.project.worktree, {
         name,
-        icon: { color: store.color, override: store.iconUrl },
-        commands: { start },
+        icon: { color: store.color, override: store.iconUrl || undefined },
+        commands: { start: start || undefined },
       })
-      globalSync.project.icon(props.project.worktree, store.iconUrl || undefined)
-      setStore("saving", false)
       dialog.close()
-      return
-    }
+    },
+  }))
 
-    globalSync.project.meta(props.project.worktree, {
-      name,
-      icon: { color: store.color, override: store.iconUrl || undefined },
-      commands: { start: start || undefined },
-    })
-    setStore("saving", false)
-    dialog.close()
+  function handleSubmit(e: SubmitEvent) {
+    e.preventDefault()
+    if (saveMutation.isPending) return
+    saveMutation.mutate()
   }
 
   return (
@@ -134,7 +139,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
                     if (store.iconUrl && store.iconHover) {
                       clearIcon()
                     } else {
-                      document.getElementById("icon-upload")?.click()
+                      iconInput?.click()
                     }
                   }}
                 >
@@ -158,25 +163,34 @@ export function DialogEditProject(props: { project: LocalProject }) {
                   </Show>
                 </div>
                 <div
-                  class="absolute inset-0 size-16 bg-black/60 rounded-[6px] z-10 pointer-events-none flex items-center justify-center transition-opacity"
+                  class="absolute inset-0 size-16 bg-surface-raised-stronger-non-alpha/90 rounded-[6px] z-10 pointer-events-none flex items-center justify-center transition-opacity"
                   classList={{
                     "opacity-100": store.iconHover && !store.iconUrl,
                     "opacity-0": !(store.iconHover && !store.iconUrl),
                   }}
                 >
-                  <Icon name="cloud-upload" size="large" class="text-icon-invert-base" />
+                  <Icon name="cloud-upload" size="large" class="text-icon-on-interactive-base drop-shadow-sm" />
                 </div>
                 <div
-                  class="absolute inset-0 size-16 bg-black/60 rounded-[6px] z-10 pointer-events-none flex items-center justify-center transition-opacity"
+                  class="absolute inset-0 size-16 bg-surface-raised-stronger-non-alpha/90 rounded-[6px] z-10 pointer-events-none flex items-center justify-center transition-opacity"
                   classList={{
                     "opacity-100": store.iconHover && !!store.iconUrl,
                     "opacity-0": !(store.iconHover && !!store.iconUrl),
                   }}
                 >
-                  <Icon name="trash" size="large" class="text-icon-invert-base" />
+                  <Icon name="trash" size="large" class="text-icon-on-interactive-base drop-shadow-sm" />
                 </div>
               </div>
-              <input id="icon-upload" type="file" accept="image/*" class="hidden" onChange={handleInputChange} />
+              <input
+                id="icon-upload"
+                ref={(el) => {
+                  iconInput = el
+                }}
+                type="file"
+                accept="image/*"
+                class="hidden"
+                onChange={handleInputChange}
+              />
               <div class="flex flex-col gap-1.5 text-12-regular text-text-weak self-center">
                 <span>{language.t("dialog.project.edit.icon.hint")}</span>
                 <span>{language.t("dialog.project.edit.icon.recommended")}</span>
@@ -223,7 +237,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
             value={store.startup}
             onChange={(v) => setStore("startup", v)}
             spellcheck={false}
-            class="max-h-40 w-full font-mono text-xs no-scrollbar"
+            class="max-h-14 w-full overflow-y-auto font-mono text-xs"
           />
         </div>
 
@@ -231,8 +245,8 @@ export function DialogEditProject(props: { project: LocalProject }) {
           <Button type="button" variant="ghost" size="large" onClick={() => dialog.close()}>
             {language.t("common.cancel")}
           </Button>
-          <Button type="submit" variant="primary" size="large" disabled={store.saving}>
-            {store.saving ? language.t("common.saving") : language.t("common.save")}
+          <Button type="submit" variant="primary" size="large" disabled={saveMutation.isPending}>
+            {saveMutation.isPending ? language.t("common.saving") : language.t("common.save")}
           </Button>
         </div>
       </form>

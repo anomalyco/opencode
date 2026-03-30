@@ -1,0 +1,139 @@
+---
+title: Go
+description: Niskokosztowa subskrypcja na otwarte modele do kodowania.
+---
+
+import config from "../../../../config.mjs"
+export const console = config.console
+export const email = `mailto:${config.email}`
+
+OpenCode Go to niskokosztowa subskrypcja — **5 $ za pierwszy miesiąc**, a następnie **10 $/miesiąc** — która zapewnia niezawodny dostęp do popularnych otwartych modeli do kodowania.
+
+:::note
+OpenCode Go jest obecnie w fazie beta.
+:::
+
+Go działa jak każdy inny dostawca w OpenCode. Subskrybujesz OpenCode Go i
+otrzymujesz swój klucz API. Jest to **całkowicie opcjonalne** i nie musisz z tego korzystać, aby
+używać OpenCode.
+
+Jest przeznaczony przede wszystkim dla użytkowników międzynarodowych, a modele są hostowane w USA, UE i Singapurze, co zapewnia stabilny globalny dostęp.
+
+---
+
+## Tło
+
+Otwarte modele stały się naprawdę dobre. Obecnie osiągają wydajność zbliżoną do modeli własnościowych w zadaniach związanych z kodowaniem. A ponieważ wielu dostawców może je oferować konkurencyjnie, są one zazwyczaj znacznie tańsze.
+
+Jednak uzyskanie do nich niezawodnego dostępu o niskich opóźnieniach może być trudne. Dostawcy różnią się pod względem jakości i dostępności.
+
+:::tip
+Przetestowaliśmy wybraną grupę modeli i dostawców, którzy dobrze współpracują z OpenCode.
+:::
+
+Aby to naprawić, zrobiliśmy kilka rzeczy:
+
+1. Przetestowaliśmy wybraną grupę otwartych modeli i porozmawialiśmy z ich zespołami na temat najlepszych sposobów ich uruchamiania.
+2. Następnie nawiązaliśmy współpracę z kilkoma dostawcami, aby upewnić się, że są one obsługiwane poprawnie.
+3. Na koniec przetestowaliśmy kombinację modelu/dostawcy i stworzyliśmy listę, którą możemy z przekonaniem polecić.
+
+OpenCode Go daje Ci dostęp do tych modeli za **5 $ za pierwszy miesiąc**, a następnie **10 $/miesiąc**.
+
+---
+
+## Jak to działa
+
+OpenCode Go działa jak każdy inny dostawca w OpenCode.
+
+1. Logujesz się do **<a href={console}>OpenCode Zen</a>**, subskrybujesz Go i
+   kopiujesz swój klucz API.
+2. Uruchamiasz komendę `/connect` w TUI, wybierasz `OpenCode Go` i wklejasz
+   swój klucz API.
+3. Uruchom `/models` w TUI, aby zobaczyć listę modeli dostępnych w ramach Go.
+
+:::note
+Tylko jeden członek na obszar roboczy (workspace) może zasubskrybować OpenCode Go.
+:::
+
+Obecna lista modeli obejmuje:
+
+- **GLM-5**
+- **Kimi K2.5**
+- **MiniMax M2.5**
+- **MiniMax M2.7**
+
+Lista modeli może ulec zmianie w miarę testowania i dodawania nowych.
+
+---
+
+## Limity użycia
+
+OpenCode Go zawiera następujące limity:
+
+- **Limit 5-godzinny** — użycie o wartości 12 $
+- **Limit tygodniowy** — użycie o wartości 30 $
+- **Limit miesięczny** — użycie o wartości 60 $
+
+Limity są zdefiniowane w wartości w dolarach. Oznacza to, że rzeczywista liczba żądań zależy od używanego modelu. Tańsze modele, takie jak MiniMax M2.5, pozwalają na więcej żądań, podczas gdy modele o wyższym koszcie, takie jak GLM-5, pozwalają na mniej.
+
+Poniższa tabela przedstawia szacunkową liczbę żądań na podstawie typowych wzorców korzystania z Go:
+
+|                     | GLM-5 | Kimi K2.5 | MiniMax M2.7 | MiniMax M2.5 |
+| ------------------- | ----- | --------- | ------------ | ------------ |
+| żądania na 5 godzin | 1,150 | 1,850     | 14,000       | 20,000       |
+| żądania na tydzień  | 2,880 | 4,630     | 35,000       | 50,000       |
+| żądania na miesiąc  | 5,750 | 9,250     | 70,000       | 100,000      |
+
+Szacunki opierają się na zaobserwowanych średnich wzorcach żądań:
+
+- GLM-5 — 700 tokenów wejściowych, 52 000 w pamięci podręcznej, 150 tokenów wyjściowych na żądanie
+- Kimi K2.5 — 870 tokenów wejściowych, 55 000 w pamięci podręcznej, 200 tokenów wyjściowych na żądanie
+- MiniMax M2.7/M2.5 — 300 tokenów wejściowych, 55 000 w pamięci podręcznej, 125 tokenów wyjściowych na żądanie
+
+Możesz śledzić swoje bieżące zużycie w **<a href={console}>konsoli</a>**.
+
+:::tip
+Jeśli osiągniesz limit użycia, możesz nadal korzystać z darmowych modeli.
+:::
+
+Limity użycia mogą ulec zmianie w miarę wyciągania wniosków z wczesnego użytkowania i opinii.
+
+---
+
+### Użycie ponad limity
+
+Jeśli masz również środki na swoim saldzie Zen, możesz włączyć opcję **Użyj salda** (Use balance) w konsoli. Po włączeniu Go będzie korzystać z Twojego salda Zen po osiągnięciu limitów użycia zamiast blokować żądania.
+
+---
+
+## Punkty końcowe
+
+Możesz również uzyskać dostęp do modeli Go za pośrednictwem następujących punktów końcowych API.
+
+| Model        | ID modelu    | Punkt końcowy                                    | Pakiet AI SDK               |
+| ------------ | ------------ | ------------------------------------------------ | --------------------------- |
+| GLM-5        | glm-5        | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.5    | kimi-k2.5    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiniMax M2.7 | minimax-m2.7 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| MiniMax M2.5 | minimax-m2.5 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+
+[ID modelu](/docs/config/#models) w Twojej konfiguracji OpenCode
+używa formatu `opencode-go/<model-id>`. Na przykład dla Kimi K2.5 należy użyć
+`opencode-go/kimi-k2.5` w swojej konfiguracji.
+
+---
+
+## Prywatność
+
+Plan został zaprojektowany przede wszystkim z myślą o użytkownikach międzynarodowych, a modele są hostowane w US, EU i Singapore, aby zapewnić stabilny dostęp na całym świecie. Nasi dostawcy stosują politykę zerowej retencji i nie wykorzystują Twoich danych do trenowania modeli.
+
+---
+
+## Cele
+
+Stworzyliśmy OpenCode Go, aby:
+
+1. Uczynić kodowanie z pomocą sztucznej inteligencji **dostępnym** dla większej liczby osób dzięki niskokosztowej subskrypcji.
+2. Zapewnić **niezawodny** dostęp do najlepszych otwartych modeli do kodowania.
+3. Wybierać modele, które są **przetestowane i sprawdzone w testach wydajności** do użytku przez agentów kodujących.
+4. Zapewnić **brak ograniczeń (no lock-in)**, pozwalając na korzystanie z dowolnego innego dostawcy wraz z OpenCode.

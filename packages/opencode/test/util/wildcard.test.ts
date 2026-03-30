@@ -73,3 +73,18 @@ test("allStructured handles sed flags", () => {
   expect(Wildcard.allStructured({ head: "sed", tail: ["-n", "1p", "file"] }, rules)).toBe("allow")
   expect(Wildcard.allStructured({ head: "sed", tail: ["-i", "-n", "/./p", "myfile.txt"] }, rules)).toBe("ask")
 })
+
+test("match normalizes slashes for cross-platform globbing", () => {
+  expect(Wildcard.match("C:\\Windows\\System32\\*", "C:/Windows/System32/*")).toBe(true)
+  expect(Wildcard.match("C:/Windows/System32/drivers", "C:\\Windows\\System32\\*")).toBe(true)
+})
+
+test("match handles case-insensitivity on Windows", () => {
+  if (process.platform === "win32") {
+    expect(Wildcard.match("C:\\windows\\system32\\hosts", "C:/Windows/System32/*")).toBe(true)
+    expect(Wildcard.match("c:/windows/system32/hosts", "C:\\Windows\\System32\\*")).toBe(true)
+  } else {
+    // Unix paths are case-sensitive
+    expect(Wildcard.match("/users/test/file", "/Users/test/*")).toBe(false)
+  }
+})

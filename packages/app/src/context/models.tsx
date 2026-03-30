@@ -16,6 +16,12 @@ type Store = {
   variant?: Record<string, string | undefined>
 }
 
+const RECENT_LIMIT = 5
+
+function modelKey(model: ModelKey) {
+  return `${model.providerID}:${model.modelID}`
+}
+
 export const { use: useModels, provider: ModelsProvider } = createSimpleContext({
   name: "Models",
   init: () => {
@@ -39,10 +45,27 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       ),
     )
 
+    const release = createMemo(
+      () =>
+        new Map(
+          available().map((model) => {
+            const parsed = DateTime.fromISO(model.release_date)
+            return [modelKey({ providerID: model.provider.id, modelID: model.id }), parsed] as const
+          }),
+        ),
+    )
+
     const latest = createMemo(() =>
       pipe(
         available(),
-        filter((x) => Math.abs(DateTime.fromISO(x.release_date).diffNow().as("months")) < 6),
+        filter(
+          (x) =>
+            Math.abs(
+              (release().get(modelKey({ providerID: x.provider.id, modelID: x.id })) ?? DateTime.invalid("invalid"))
+                .diffNow()
+                .as("months"),
+            ) < 6,
+        ),
         groupBy((x) => x.provider.id),
         mapValues((models) =>
           pipe(
@@ -61,7 +84,7 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       ),
     )
 
-    const latestSet = createMemo(() => new Set(latest().map((x) => `${x.providerID}:${x.modelID}`)))
+    const latestSet = createMemo(() => new Set(latest().map((x) => modelKey(x))))
 
     const visibility = createMemo(() => {
       const map = new Map<string, Visibility>()
@@ -82,20 +105,20 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
     function update(model: ModelKey, state: Visibility) {
       const index = store.user.findIndex((x) => x.modelID === model.modelID && x.providerID === model.providerID)
       if (index >= 0) {
-        setStore("user", index, { visibility: state })
+        setStore("user", index, (current) => ({ ...current, visibility: state }))
         return
       }
       setStore("user", store.user.length, { ...model, visibility: state })
     }
 
     const visible = (model: ModelKey) => {
-      const key = `${model.providerID}:${model.modelID}`
+      const key = modelKey(model)
       const state = visibility().get(key)
       if (state === "hide") return false
       if (state === "show") return true
       if (latestSet().has(key)) return true
-      const m = find(model)
-      if (!m?.release_date || !DateTime.fromISO(m.release_date).isValid) return true
+      const date = release().get(key)
+      if (!date?.isValid) return true
       return false
     }
 
@@ -104,8 +127,8 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
     }
 
     const push = (model: ModelKey) => {
-      const uniq = uniqueBy([model, ...store.recent], (x) => x.providerID + x.modelID)
-      if (uniq.length > 5) uniq.pop()
+      const uniq = uniqueBy([model, ...store.recent], (x) => `${x.providerID}:${x.modelID}`)
+      if (uniq.length > RECENT_LIMIT) uniq.pop()
       setStore("recent", uniq)
     }
 

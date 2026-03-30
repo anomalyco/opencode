@@ -1,4 +1,5 @@
-import { $, semver } from "bun"
+import { $ } from "bun"
+import semver from "semver"
 import path from "path"
 
 const rootPkgPath = path.resolve(import.meta.dir, "../../../package.json")
@@ -46,6 +47,16 @@ const VERSION = await (async () => {
   return `${major}.${minor}.${patch + 1}`
 })()
 
+const bot = ["actions-user", "opencode", "opencode-agent[bot]"]
+const teamPath = path.resolve(import.meta.dir, "../../../.github/TEAM_MEMBERS")
+const team = [
+  ...(await Bun.file(teamPath)
+    .text()
+    .then((x) => x.split(/\r?\n/).map((x) => x.trim()))
+    .then((x) => x.filter((x) => x && !x.startsWith("#")))),
+  ...bot,
+]
+
 export const Script = {
   get channel() {
     return CHANNEL
@@ -56,8 +67,11 @@ export const Script = {
   get preview() {
     return IS_PREVIEW
   },
-  get release() {
-    return env.OPENCODE_RELEASE
+  get release(): boolean {
+    return !!env.OPENCODE_RELEASE
+  },
+  get team() {
+    return team
   },
 }
 console.log(`opencode script`, JSON.stringify(Script, null, 2))

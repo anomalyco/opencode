@@ -6,23 +6,25 @@ import { Config } from "../config/config"
 import { Instance } from "../project/instance"
 import { Flag } from "@/flag/flag"
 import { Log } from "../util/log"
+import { Glob } from "../util/glob"
 import type { MessageV2 } from "./message-v2"
 
 const log = Log.create({ service: "instruction" })
 
 const FILES = [
   "AGENTS.md",
-  "CLAUDE.md",
+  ...(Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT ? [] : ["CLAUDE.md"]),
   "CONTEXT.md", // deprecated
 ]
 
 function globalFiles() {
-  const files = [path.join(Global.Path.config, "AGENTS.md")]
-  if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT) {
-    files.push(path.join(os.homedir(), ".claude", "CLAUDE.md"))
-  }
+  const files = []
   if (Flag.OPENCODE_CONFIG_DIR) {
     files.push(path.join(Flag.OPENCODE_CONFIG_DIR, "AGENTS.md"))
+  }
+  files.push(path.join(Global.Path.config, "AGENTS.md"))
+  if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT) {
+    files.push(path.join(os.homedir(), ".claude", "CLAUDE.md"))
   }
   return files
 }
@@ -84,7 +86,7 @@ export namespace InstructionPrompt {
     }
 
     for (const file of globalFiles()) {
-      if (await Bun.file(file).exists()) {
+      if (await Filesystem.exists(file)) {
         paths.add(path.resolve(file))
         break
       }
@@ -97,13 +99,11 @@ export namespace InstructionPrompt {
           instruction = path.join(os.homedir(), instruction.slice(2))
         }
         const matches = path.isAbsolute(instruction)
-          ? await Array.fromAsync(
-              new Bun.Glob(path.basename(instruction)).scan({
-                cwd: path.dirname(instruction),
-                absolute: true,
-                onlyFiles: true,
-              }),
-            ).catch(() => [])
+          ? await Glob.scan(path.basename(instruction), {
+              cwd: path.dirname(instruction),
+              absolute: true,
+              include: "file",
+            }).catch(() => [])
           : await resolveRelative(instruction)
         matches.forEach((p) => {
           paths.add(path.resolve(p))
@@ -119,9 +119,7 @@ export namespace InstructionPrompt {
     const paths = await systemPaths()
 
     const files = Array.from(paths).map(async (p) => {
-      const content = await Bun.file(p)
-        .text()
-        .catch(() => "")
+      const content = await Filesystem.readText(p).catch(() => "")
       return content ? "Instructions from: " + p + "\n" + content : ""
     })
 
@@ -163,7 +161,7 @@ export namespace InstructionPrompt {
   export async function find(dir: string) {
     for (const file of FILES) {
       const filepath = path.resolve(path.join(dir, file))
-      if (await Bun.file(filepath).exists()) return filepath
+      if (await Filesystem.exists(filepath)) return filepath
     }
   }
 
@@ -181,9 +179,7 @@ export namespace InstructionPrompt {
 
       if (found && found !== target && !system.has(found) && !already.has(found) && !isClaimed(messageID, found)) {
         claim(messageID, found)
-        const content = await Bun.file(found)
-          .text()
-          .catch(() => undefined)
+        const content = await Filesystem.readText(found).catch(() => undefined)
         if (content) {
           results.push({ filepath: found, content: "Instructions from: " + found + "\n" + content })
         }

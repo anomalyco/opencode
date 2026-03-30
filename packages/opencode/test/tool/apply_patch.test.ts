@@ -4,10 +4,11 @@ import * as fs from "fs/promises"
 import { ApplyPatchTool } from "../../src/tool/apply_patch"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
+import { SessionID, MessageID } from "../../src/session/schema"
 
 const baseCtx = {
-  sessionID: "test",
-  messageID: "",
+  sessionID: SessionID.make("ses_test"),
+  messageID: MessageID.make(""),
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),
@@ -93,6 +94,13 @@ describe("tool.apply_patch freeform", () => {
 
         expect(result.title).toContain("Success. Updated the following files")
         expect(result.output).toContain("Success. Updated the following files")
+        // Strict formatting assertions for slashes
+        expect(result.output).toMatch(/A nested\/new\.txt/)
+        expect(result.output).toMatch(/D delete\.txt/)
+        expect(result.output).toMatch(/M modify\.txt/)
+        if (process.platform === "win32") {
+          expect(result.output).not.toContain("\\")
+        }
         expect(result.metadata.diff).toContain("Index:")
         expect(calls.length).toBe(1)
 

@@ -1,16 +1,67 @@
-import { Component, createMemo, createSignal, Show } from "solid-js"
+import { useMutation } from "@tanstack/solid-query"
+import { Component, createEffect, createMemo, on, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { Switch } from "@opencode-ai/ui/switch"
+import { showToast } from "@opencode-ai/ui/toast"
 import { useLanguage } from "@/context/language"
+
+const statusLabels = {
+  connected: "mcp.status.connected",
+  failed: "mcp.status.failed",
+  needs_auth: "mcp.status.needs_auth",
+  disabled: "mcp.status.disabled",
+} as const
 
 export const DialogSelectMcp: Component = () => {
   const sync = useSync()
   const sdk = useSDK()
   const language = useLanguage()
-  const [loading, setLoading] = createSignal<string | null>(null)
+  const [state, setState] = createStore({
+    done: false,
+    loading: false,
+  })
+
+  createEffect(
+    on(
+      () => sync.data.mcp_ready,
+      (ready, prev) => {
+        if (!ready && prev) setState("done", false)
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(() => {
+    if (state.done || state.loading) return
+    if (sync.data.mcp_ready) {
+      setState("done", true)
+      return
+    }
+
+    setState("loading", true)
+    void sdk.client.mcp
+      .status()
+      .then((result) => {
+        sync.set("mcp", result.data ?? {})
+        sync.set("mcp_ready", true)
+        setState("done", true)
+      })
+      .catch((err) => {
+        setState("done", true)
+        showToast({
+          variant: "error",
+          title: language.t("common.requestFailed"),
+          description: err instanceof Error ? err.message : String(err),
+        })
+      })
+      .finally(() => {
+        setState("loading", false)
+      })
+  })
 
   const items = createMemo(() =>
     Object.entries(sync.data.mcp ?? {})
@@ -18,19 +69,19 @@ export const DialogSelectMcp: Component = () => {
       .sort((a, b) => a.name.localeCompare(b.name)),
   )
 
-  const toggle = async (name: string) => {
-    if (loading()) return
-    setLoading(name)
-    const status = sync.data.mcp[name]
-    if (status?.status === "connected") {
-      await sdk.client.mcp.disconnect({ name })
-    } else {
-      await sdk.client.mcp.connect({ name })
-    }
-    const result = await sdk.client.mcp.status()
-    if (result.data) sync.set("mcp", result.data)
-    setLoading(null)
-  }
+  const toggle = useMutation(() => ({
+    mutationFn: async (name: string) => {
+      const status = sync.data.mcp[name]
+      if (status?.status === "connected") {
+        await sdk.client.mcp.disconnect({ name })
+      } else {
+        await sdk.client.mcp.connect({ name })
+      }
+
+      const result = await sdk.client.mcp.status()
+      if (result.data) sync.set("mcp", result.data)
+    },
+  }))
 
   const enabledCount = createMemo(() => items().filter((i) => i.status === "connected").length)
   const totalCount = createMemo(() => items().length)
@@ -48,12 +99,18 @@ export const DialogSelectMcp: Component = () => {
         filterKeys={["name", "status"]}
         sortBy={(a, b) => a.name.localeCompare(b.name)}
         onSelect={(x) => {
-          if (x) toggle(x.name)
+          if (!x || toggle.isPending) return
+          toggle.mutate(x.name)
         }}
       >
         {(i) => {
           const mcpStatus = () => sync.data.mcp[i.name]
           const status = () => mcpStatus()?.status
+          const statusLabel = () => {
+            const key = status() ? statusLabels[status() as keyof typeof statusLabels] : undefined
+            if (!key) return
+            return language.t(key)
+          }
           const error = () => {
             const s = mcpStatus()
             return s?.status === "failed" ? s.error : undefined
@@ -64,19 +121,10 @@ export const DialogSelectMcp: Component = () => {
               <div class="flex flex-col gap-0.5 min-w-0">
                 <div class="flex items-center gap-2">
                   <span class="truncate">{i.name}</span>
-                  <Show when={status() === "connected"}>
-                    <span class="text-11-regular text-text-weaker">{language.t("mcp.status.connected")}</span>
+                  <Show when={statusLabel()}>
+                    <span class="text-11-regular text-text-weaker">{statusLabel()}</span>
                   </Show>
-                  <Show when={status() === "failed"}>
-                    <span class="text-11-regular text-text-weaker">{language.t("mcp.status.failed")}</span>
-                  </Show>
-                  <Show when={status() === "needs_auth"}>
-                    <span class="text-11-regular text-text-weaker">{language.t("mcp.status.needs_auth")}</span>
-                  </Show>
-                  <Show when={status() === "disabled"}>
-                    <span class="text-11-regular text-text-weaker">{language.t("mcp.status.disabled")}</span>
-                  </Show>
-                  <Show when={loading() === i.name}>
+                  <Show when={toggle.isPending && toggle.variables === i.name}>
                     <span class="text-11-regular text-text-weak">{language.t("common.loading.ellipsis")}</span>
                   </Show>
                 </div>
@@ -85,7 +133,14 @@ export const DialogSelectMcp: Component = () => {
                 </Show>
               </div>
               <div onClick={(e) => e.stopPropagation()}>
-                <Switch checked={enabled()} disabled={loading() === i.name} onChange={() => toggle(i.name)} />
+                <Switch
+                  checked={enabled()}
+                  disabled={toggle.isPending && toggle.variables === i.name}
+                  onChange={() => {
+                    if (toggle.isPending) return
+                    toggle.mutate(i.name)
+                  }}
+                />
               </div>
             </div>
           )
