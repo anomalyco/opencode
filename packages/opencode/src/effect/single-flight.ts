@@ -1,10 +1,9 @@
+import { Schema } from "effect"
 import { Cause, Deferred, Effect, Exit, Fiber, Scope } from "effect"
 
 const TypeId = Symbol.for("@opencode/SingleFlight")
 
-export class Cancelled {
-  readonly _tag = "SingleFlight.Cancelled"
-}
+export class Cancelled extends Schema.TaggedErrorClass<Cancelled>()("SingleFlight.Cancelled", {}) {}
 
 export interface SingleFlight<A = unknown, E = never> {
   readonly [TypeId]: typeof TypeId
