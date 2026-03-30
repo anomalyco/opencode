@@ -12,28 +12,60 @@ import { Log } from "../../util/log"
 import { lazy } from "../../util/lazy"
 import { Config } from "../../config/config"
 import { errors } from "../error"
+import { Flag } from "@/flag/flag"
 
 const log = Log.create({ service: "server" })
 
 export const GlobalDisposedEvent = BusEvent.define("global.disposed", z.object({}))
 
-async function streamEvents(c: Context, subscribe: (q: AsyncQueue<string | null>) => () => void) {
+async function streamEvents(c: Context, subscribe: (push: (data: string) => void) => () => void) {
   return streamSSE(c, async (stream) => {
-    const q = new AsyncQueue<string | null>()
+    const limit = Flag.OPENCODE_EXPERIMENTAL_EVENT_QUEUE_MAX ?? 1000
+    const q = new AsyncQueue<string | null>({ max: limit })
     let done = false
+    let dropped = 0
+    let drain = Date.now()
 
-    q.push(
+    const watch = setInterval(() => {
+      if (q.size() > 0 && Date.now() - drain > 30_000) {
+        log.warn("disconnecting slow global event client (backlog timeout)", { size: q.size() })
+        stop()
+      }
+    }, 5_000)
+
+    function push(data: string, input?: { force?: boolean }) {
+      if (q.push(data, input)) return
+      dropped++
+      q.clear()
+      q.push(
+        JSON.stringify({
+          payload: {
+            type: BusEvent.StreamLagged.type,
+            properties: {
+              limit,
+              queued: q.size(),
+              dropped,
+            },
+          },
+        }),
+        { force: true },
+      )
+      q.push(null, { force: true })
+    }
+
+    push(
       JSON.stringify({
         payload: {
           type: "server.connected",
           properties: {},
         },
       }),
+      { force: true },
     )
 
     // Send heartbeat every 10s to prevent stalled proxy streams.
     const heartbeat = setInterval(() => {
-      q.push(
+      push(
         JSON.stringify({
           payload: {
             type: "server.heartbeat",
@@ -47,12 +79,13 @@ async function streamEvents(c: Context, subscribe: (q: AsyncQueue<string | null>
       if (done) return
       done = true
       clearInterval(heartbeat)
+      clearInterval(watch)
       unsub()
-      q.push(null)
+      q.push(null, { force: true })
       log.info("global event disconnected")
     }
 
-    const unsub = subscribe(q)
+    const unsub = subscribe((data) => push(data))
 
     stream.onAbort(stop)
 
@@ -60,6 +93,7 @@ async function streamEvents(c: Context, subscribe: (q: AsyncQueue<string | null>
       for await (const data of q) {
         if (data === null) return
         await stream.writeSSE({ data })
+        drain = Date.now()
       }
     } finally {
       stop()
@@ -122,9 +156,9 @@ export const GlobalRoutes = lazy(() =>
         c.header("X-Accel-Buffering", "no")
         c.header("X-Content-Type-Options", "nosniff")
 
-        return streamEvents(c, (q) => {
+        return streamEvents(c, (push) => {
           async function handler(event: any) {
-            q.push(JSON.stringify(event))
+            push(JSON.stringify(event))
           }
           GlobalBus.on("event", handler)
           return () => GlobalBus.off("event", handler)
@@ -161,11 +195,11 @@ export const GlobalRoutes = lazy(() =>
         c.header("Cache-Control", "no-cache, no-transform")
         c.header("X-Accel-Buffering", "no")
         c.header("X-Content-Type-Options", "nosniff")
-        return streamEvents(c, (q) => {
+        return streamEvents(c, (push) => {
           return SyncEvent.subscribeAll(({ def, event }) => {
             // TODO: don't pass def, just pass the type (and it should
             // be versioned)
-            q.push(
+            push(
               JSON.stringify({
                 payload: {
                   ...event,
