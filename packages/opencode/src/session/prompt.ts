@@ -23,7 +23,7 @@ import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { fn } from "../util/fn"
 import { ToolRegistry } from "../tool/registry"
-import { Cancelled, make as makeRunner, type Runner } from "@/effect/runner"
+import { Runner } from "@/effect/runner"
 import { MCP } from "../mcp"
 import { LSP } from "../lsp"
 import { ReadTool } from "../tool/read"
@@ -99,7 +99,7 @@ export namespace SessionPrompt {
 
       const cache = yield* InstanceState.make(
         Effect.fn("SessionPrompt.state")(function* () {
-          const runners = new Map<string, Runner<MessageV2.WithParts>>()
+          const runners = new Map<string, Runner<MessageV2.WithParts, unknown>>()
           yield* Effect.addFinalizer(() =>
             Effect.gen(function* () {
               const entries = [...runners.values()]
@@ -111,10 +111,10 @@ export namespace SessionPrompt {
         }),
       )
 
-      const getRunner = (runners: Map<string, Runner<MessageV2.WithParts>>, sessionID: SessionID) => {
+      const getRunner = (runners: Map<string, Runner<MessageV2.WithParts, unknown>>, sessionID: SessionID) => {
         const existing = runners.get(sessionID)
         if (existing) return existing
-        const runner = makeRunner<MessageV2.WithParts>(scope, {
+        const runner = Runner.make<MessageV2.WithParts, unknown>(scope, {
           onIdle: Effect.gen(function* () {
             runners.delete(sessionID)
             yield* status.set(sessionID, { type: "idle" })

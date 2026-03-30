@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Exit, Fiber, Ref, Scope } from "effect"
-import { Cancelled, make as makeRunner } from "../../src/effect/runner"
+import { Runner } from "../../src/effect/runner"
 import { it } from "../lib/effect"
 
 describe("Runner", () => {
@@ -9,10 +9,10 @@ describe("Runner", () => {
   it.effect("ensureRunning starts work and returns result",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
-      const runner = makeRunner<string>(s)
+      const runner = Runner.make<string>(s)
       const result = yield* runner.ensureRunning(Effect.succeed("hello"))
       expect(result).toBe("hello")
-      expect(runner.state.type).toBe("idle")
+      expect(runner.state._tag).toBe("Idle")
       expect(runner.busy).toBe(false)
     }),
   )
@@ -20,17 +20,17 @@ describe("Runner", () => {
   it.effect("ensureRunning propagates work failures",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
-      const runner = makeRunner<string>(s)
+      const runner = Runner.make<string, string>(s)
       const exit = yield* runner.ensureRunning(Effect.fail("boom")).pipe(Effect.exit)
       expect(Exit.isFailure(exit)).toBe(true)
-      expect(runner.state.type).toBe("idle")
+      expect(runner.state._tag).toBe("Idle")
     }),
   )
 
   it.effect("concurrent callers share the same run",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
-      const runner = makeRunner<string>(s)
+      const runner = Runner.make<string>(s)
       const calls = yield* Ref.make(0)
       const work = Effect.gen(function* () {
         yield* Ref.update(calls, (n) => n + 1)
@@ -52,7 +52,7 @@ describe("Runner", () => {
   it.effect("concurrent callers all receive same error",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
-      const runner = makeRunner<string>(s)
+      const runner = Runner.make<string, string>(s)
       const work = Effect.gen(function* () {
         yield* Effect.sleep("10 millis")
         return yield* Effect.fail("boom")
@@ -71,7 +71,7 @@ describe("Runner", () => {
   it.effect("ensureRunning can be called again after previous run completes",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
-      const runner = makeRunner<string>(s)
+      const runner = Runner.make<string>(s)
       expect(yield* runner.ensureRunning(Effect.succeed("first"))).toBe("first")
       expect(yield* runner.ensureRunning(Effect.succeed("second"))).toBe("second")
     }),
@@ -80,7 +80,7 @@ describe("Runner", () => {
   it.effect("second ensureRunning ignores new work if already running",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
-      const runner = makeRunner<string>(s)
+      const runner = Runner.make<string>(s)
       const ran = yield* Ref.make<string[]>([])
 
       const first = Effect.gen(function* () {
@@ -109,11 +109,11 @@ describe("Runner", () => {
   it.effect("cancel interrupts running work",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
-      const runner = makeRunner<string>(s)
+      const runner = Runner.make<string>(s)
       const fiber = yield* runner.ensureRunning(Effect.never.pipe(Effect.as("never"))).pipe(Effect.forkChild)
       yield* Effect.sleep("10 millis")
       expect(runner.busy).toBe(true)
-      expect(runner.state.type).toBe("running")
+      expect(runner.state._tag).toBe("Running")
 
       yield* runner.cancel
       expect(runner.busy).toBe(false)
@@ -126,7 +126,7 @@ describe("Runner", () => {
   it.effect("cancel on idle is a no-op",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
-      const runner = makeRunner<string>(s)
+      const runner = Runner.make<string>(s)
       yield* runner.cancel
       expect(runner.busy).toBe(false)
     }),
@@ -135,7 +135,7 @@ describe("Runner", () => {
   it.effect("cancel with onInterrupt resolves callers gracefully",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
-      const runner = makeRunner<string>(s, { onInterrupt: Effect.succeed("fallback") })
+      const runner = Runner.make<string>(s, { onInterrupt: Effect.succeed("fallback") })
       const fiber = yield* runner.ensureRunning(Effect.never.pipe(Effect.as("never"))).pipe(Effect.forkChild)
       yield* Effect.sleep("10 millis")
 
@@ -150,7 +150,7 @@ describe("Runner", () => {
   it.effect("cancel with queued callers resolves all",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
-      const runner = makeRunner<string>(s, { onInterrupt: Effect.succeed("fallback") })
+      const runner = Runner.make<string>(s, { onInterrupt: Effect.succeed("fallback") })
 
       const a = yield* runner.ensureRunning(Effect.never.pipe(Effect.as("x"))).pipe(Effect.forkChild)
       yield* Effect.sleep("10 millis")
@@ -170,7 +170,7 @@ describe("Runner", () => {
   it.effect("work can be started after cancel",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
-      const runner = makeRunner<string>(s)
+      const runner = Runner.make<string>(s)
       const fiber = yield* runner.ensureRunning(Effect.never.pipe(Effect.as("x"))).pipe(Effect.forkChild)
       yield* Effect.sleep("10 millis")
       yield* runner.cancel
@@ -186,7 +186,7 @@ describe("Runner", () => {
   it.effect("shell runs exclusively",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
-      const runner = makeRunner<string>(s)
+      const runner = Runner.make<string>(s)
       const result = yield* runner.startShell((_signal) => Effect.succeed("shell-done"))
       expect(result).toBe("shell-done")
       expect(runner.busy).toBe(false)
@@ -196,7 +196,7 @@ describe("Runner", () => {
   it.effect("shell rejects when run is active",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
-      const runner = makeRunner<string>(s)
+      const runner = Runner.make<string>(s)
       const fiber = yield* runner.ensureRunning(Effect.never.pipe(Effect.as("x"))).pipe(Effect.forkChild)
       yield* Effect.sleep("10 millis")
 
@@ -211,7 +211,7 @@ describe("Runner", () => {
   it.effect("shell rejects when another shell is running",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
-      const runner = makeRunner<string>(s)
+      const runner = Runner.make<string>(s)
       const gate = yield* Deferred.make<void>()
 
       const sh = yield* runner
@@ -232,18 +232,18 @@ describe("Runner", () => {
   it.effect("ensureRunning queues behind shell then runs after",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
-      const runner = makeRunner<string>(s)
+      const runner = Runner.make<string>(s)
       const gate = yield* Deferred.make<void>()
 
       const sh = yield* runner
         .startShell((_signal) => Deferred.await(gate).pipe(Effect.as("shell-result")))
         .pipe(Effect.forkChild)
       yield* Effect.sleep("10 millis")
-      expect(runner.state.type).toBe("shell")
+      expect(runner.state._tag).toBe("Shell")
 
       const run = yield* runner.ensureRunning(Effect.succeed("run-result")).pipe(Effect.forkChild)
       yield* Effect.sleep("10 millis")
-      expect(runner.state.type).toBe("shell_then_run")
+      expect(runner.state._tag).toBe("ShellThenRun")
 
       yield* Deferred.succeed(gate, undefined)
       yield* Fiber.await(sh)
@@ -251,14 +251,14 @@ describe("Runner", () => {
       const exit = yield* Fiber.await(run)
       expect(Exit.isSuccess(exit)).toBe(true)
       if (Exit.isSuccess(exit)) expect(exit.value).toBe("run-result")
-      expect(runner.state.type).toBe("idle")
+      expect(runner.state._tag).toBe("Idle")
     }),
   )
 
   it.effect("multiple ensureRunning callers share the queued run behind shell",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
-      const runner = makeRunner<string>(s)
+      const runner = Runner.make<string>(s)
       const calls = yield* Ref.make(0)
       const gate = yield* Deferred.make<void>()
 
@@ -288,7 +288,7 @@ describe("Runner", () => {
   it.effect("cancel during shell_then_run cancels both",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
-      const runner = makeRunner<string>(s)
+      const runner = Runner.make<string>(s)
       const gate = yield* Deferred.make<void>()
 
       const sh = yield* runner
@@ -302,7 +302,7 @@ describe("Runner", () => {
 
       const run = yield* runner.ensureRunning(Effect.succeed("y")).pipe(Effect.forkChild)
       yield* Effect.sleep("10 millis")
-      expect(runner.state.type).toBe("shell_then_run")
+      expect(runner.state._tag).toBe("ShellThenRun")
 
       yield* runner.cancel
       expect(runner.busy).toBe(false)
@@ -319,7 +319,7 @@ describe("Runner", () => {
     Effect.gen(function* () {
       const s = yield* Scope.Scope
       const count = yield* Ref.make(0)
-      const runner = makeRunner<string>(s, {
+      const runner = Runner.make<string>(s, {
         onIdle: Ref.update(count, (n) => n + 1),
       })
       yield* runner.ensureRunning(Effect.succeed("ok"))
@@ -331,7 +331,7 @@ describe("Runner", () => {
     Effect.gen(function* () {
       const s = yield* Scope.Scope
       const count = yield* Ref.make(0)
-      const runner = makeRunner<string>(s, {
+      const runner = Runner.make<string>(s, {
         onIdle: Ref.update(count, (n) => n + 1),
       })
       const fiber = yield* runner.ensureRunning(Effect.never.pipe(Effect.as("x"))).pipe(Effect.forkChild)
@@ -346,7 +346,7 @@ describe("Runner", () => {
     Effect.gen(function* () {
       const s = yield* Scope.Scope
       const count = yield* Ref.make(0)
-      const runner = makeRunner<string>(s, {
+      const runner = Runner.make<string>(s, {
         onBusy: Ref.update(count, (n) => n + 1),
       })
       yield* runner.startShell((_signal) => Effect.succeed("done"))
@@ -359,7 +359,7 @@ describe("Runner", () => {
   it.effect("busy is true during run",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
-      const runner = makeRunner<string>(s)
+      const runner = Runner.make<string>(s)
       const gate = yield* Deferred.make<void>()
 
       const fiber = yield* runner
@@ -377,7 +377,7 @@ describe("Runner", () => {
   it.effect("busy is true during shell",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
-      const runner = makeRunner<string>(s)
+      const runner = Runner.make<string>(s)
       const gate = yield* Deferred.make<void>()
 
       const fiber = yield* runner
