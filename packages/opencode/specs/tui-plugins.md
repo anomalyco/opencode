@@ -150,6 +150,8 @@ npm plugins can declare a version compatibility range in `package.json` using th
 - `patchPluginConfig` uses targeted `jsonc-parser` edits, so existing JSONC comments are preserved when plugin entries are added or replaced.
 - Without `--force`, an already-configured npm package name is a no-op.
 - With `--force`, replacement matches by package name. If the existing row is `[spec, options]`, those tuple options are kept.
+- Explicit npm specs with a version suffix (for example `pkg@1.2.3`) are pinned. Runtime install requests that exact version and does not run stale/latest checks for newer registry versions.
+- Bare npm specs (`pkg`) are treated as `latest` and can refresh when the cached version is stale.
 - Tuple targets in `oc-plugin` provide default options written into config.
 - A package can target `server`, `tui`, or both.
 - If a package targets both, each target must still resolve to a separate target-only module. Do not export `{ server, tui }` from one module.
