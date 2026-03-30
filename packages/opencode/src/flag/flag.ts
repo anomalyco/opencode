@@ -19,6 +19,7 @@ export namespace Flag {
   export declare const OPENCODE_CONFIG_DIR: string | undefined
   export declare const OPENCODE_PLUGIN_META_FILE: string | undefined
   export const OPENCODE_CONFIG_CONTENT = process.env["OPENCODE_CONFIG_CONTENT"]
+  export const OPENCODE_APPNAME = process.env["OPENCODE_APPNAME"]
   export const OPENCODE_DATA_DIR = process.env["OPENCODE_DATA_DIR"]
   export const OPENCODE_CACHE_DIR = process.env["OPENCODE_CACHE_DIR"]
   export const OPENCODE_LOG_DIR = process.env["OPENCODE_LOG_DIR"]

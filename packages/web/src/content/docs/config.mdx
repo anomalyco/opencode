@@ -147,6 +147,41 @@ opencode run "Hello world"
 
 The custom directory is loaded after the global config and `.opencode` directories, so it **can override** their settings.
 
+---
+
+### Profile isolation with custom app name
+
+Use the `OPENCODE_APPNAME` environment variable to create isolated profiles
+with separate data, cache, config, and state directories. This is useful for
+managing multiple identities (e.g., work and personal) with separate OAuth
+credentials, settings, and history.
+
+```bash
+# Work profile
+OPENCODE_APPNAME=opencode-work opencode
+
+# Personal profile
+OPENCODE_APPNAME=opencode-personal opencode
+```
+
+Each profile gets its own XDG directories:
+
+- Data: `~/.local/share/opencode-work` (auth tokens, logs, etc.)
+- Cache: `~/.cache/opencode-work` (plugins, binaries)
+- Config: `~/.config/opencode-work` (settings)
+- State: `~/.local/state/opencode-work` (UI state, history)
+
+You can create shell aliases for convenient switching:
+
+```bash
+alias oc-work='OPENCODE_APPNAME=opencode-work opencode'
+alias oc-personal='OPENCODE_APPNAME=opencode-personal opencode'
+```
+
+**Note:** Explicit path overrides (below) take precedence over `OPENCODE_APPNAME`.
+
+---
+
 ### Custom data directory
 
 Specify a custom data directory using the `OPENCODE_DATA_DIR`
