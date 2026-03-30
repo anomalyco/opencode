@@ -849,7 +849,8 @@ export namespace Session {
   export const children = fn(SessionID.zod, (id) => runPromise((svc) => svc.children(id)))
   export const remove = fn(SessionID.zod, (id) => runPromise((svc) => svc.remove(id)))
   export async function updateMessage<T extends MessageV2.Info>(msg: T): Promise<T> {
-    return runPromise((svc) => svc.updateMessage(MessageV2.Info.parse(msg) as T))
+    MessageV2.Info.parse(msg)
+    return runPromise((svc) => svc.updateMessage(msg))
   }
 
   export const removeMessage = fn(z.object({ sessionID: SessionID.zod, messageID: MessageID.zod }), (input) =>
@@ -862,7 +863,8 @@ export namespace Session {
   )
 
   export async function updatePart<T extends MessageV2.Part>(part: T): Promise<T> {
-    return runPromise((svc) => svc.updatePart(MessageV2.Part.parse(part) as T))
+    MessageV2.Part.parse(part)
+    return runPromise((svc) => svc.updatePart(part))
   }
 
   export const updatePartDelta = fn(

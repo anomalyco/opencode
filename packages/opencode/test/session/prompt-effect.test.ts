@@ -1,7 +1,8 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { expect } from "bun:test"
+import { expect, spyOn } from "bun:test"
 import { Cause, Effect, Exit, Fiber, Layer, ServiceMap } from "effect"
 import * as Stream from "effect/Stream"
+import z from "zod"
 import type { Agent } from "../../src/agent/agent"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { Bus } from "../../src/bus"
@@ -25,6 +26,7 @@ import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { Shell } from "../../src/shell/shell"
 import { Snapshot } from "../../src/snapshot"
+import { TaskTool } from "../../src/tool/task"
 import { ToolRegistry } from "../../src/tool/registry"
 import { Truncate } from "../../src/tool/truncate"
 import { Log } from "../../src/util/log"
@@ -624,6 +626,69 @@ it.effect(
               expect(info.error?.name).toBe("MessageAbortedError")
             }
           }
+        }),
+      { git: true, config: cfg },
+    ),
+  30_000,
+)
+
+it.effect(
+  "cancel finalizes subtask tool state",
+  () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const ready = defer<void>()
+          const aborted = defer<void>()
+          const init = spyOn(TaskTool, "init").mockImplementation(async () => ({
+            description: "task",
+            parameters: z.object({
+              description: z.string(),
+              prompt: z.string(),
+              subagent_type: z.string(),
+              task_id: z.string().optional(),
+              command: z.string().optional(),
+            }),
+            execute: async (_args, ctx) => {
+              ready.resolve()
+              ctx.abort.addEventListener("abort", () => aborted.resolve(), { once: true })
+              await new Promise<void>(() => {})
+              return {
+                title: "",
+                metadata: {
+                  sessionId: SessionID.make("task"),
+                  model: ref,
+                },
+                output: "",
+              }
+            },
+          }))
+          yield* Effect.addFinalizer(() => Effect.sync(() => init.mockRestore()))
+
+          const { prompt, chat } = yield* boot()
+          const msg = yield* user(chat.id, "hello")
+          yield* addSubtask(chat.id, msg.id)
+
+          const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+          yield* Effect.promise(() => ready.promise)
+          yield* prompt.cancel(chat.id)
+          yield* Effect.promise(() => aborted.promise)
+
+          const exit = yield* Fiber.await(fiber)
+          expect(Exit.isSuccess(exit)).toBe(true)
+
+          const msgs = yield* Effect.promise(() => MessageV2.filterCompacted(MessageV2.stream(chat.id)))
+          const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
+          expect(taskMsg?.info.role).toBe("assistant")
+          if (!taskMsg || taskMsg.info.role !== "assistant") return
+
+          const tool = toolPart(taskMsg.parts)
+          expect(tool?.type).toBe("tool")
+          if (!tool) return
+
+          expect(tool.state.status).not.toBe("running")
+          expect(taskMsg.info.time.completed).toBeDefined()
+          expect(taskMsg.info.finish).toBeDefined()
         }),
       { git: true, config: cfg },
     ),

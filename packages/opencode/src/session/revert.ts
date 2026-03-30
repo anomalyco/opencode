@@ -92,12 +92,10 @@ export namespace SessionRevert {
     const sessionID = session.id
     const msgs = await Session.messages({ sessionID })
     const messageID = session.revert.messageID
-    const preserve = [] as MessageV2.WithParts[]
     const remove = [] as MessageV2.WithParts[]
     let target: MessageV2.WithParts | undefined
     for (const msg of msgs) {
       if (msg.info.id < messageID) {
-        preserve.push(msg)
         continue
       }
       if (msg.info.id > messageID) {
@@ -105,7 +103,6 @@ export namespace SessionRevert {
         continue
       }
       if (session.revert.partID) {
-        preserve.push(msg)
         target = msg
         continue
       }

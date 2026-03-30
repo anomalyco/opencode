@@ -509,6 +509,36 @@ describe("session.compaction.prune", () => {
 })
 
 describe("session.compaction.process", () => {
+  test("throws when parent is not a user message", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const msg = await user(session.id, "hello")
+        const reply = await assistant(session.id, msg.id, tmp.path)
+        const rt = runtime("continue")
+        try {
+          const msgs = await Session.messages({ sessionID: session.id })
+          await expect(
+            rt.runPromise(
+              SessionCompaction.Service.use((svc) =>
+                svc.process({
+                  parentID: reply.id,
+                  messages: msgs,
+                  sessionID: session.id,
+                  auto: false,
+                }),
+              ),
+            ),
+          ).rejects.toThrow(`Compaction parent must be a user message: ${reply.id}`)
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
   test("publishes compacted event on continue", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
