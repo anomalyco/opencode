@@ -110,8 +110,9 @@ export namespace Runner {
       })
 
     const ensureRunning = (work: Effect.Effect<A, E>) =>
-      SynchronizedRef.modifyEffect(ref, (st) => {
-        return Effect.gen(function* () {
+      SynchronizedRef.modifyEffect(
+        ref,
+        Effect.fnUntraced(function* (st: State<A, E>) {
           switch (st._tag) {
             case "Running":
               return [Deferred.await(st.run.done), st] as const
@@ -131,8 +132,8 @@ export namespace Runner {
               return [Deferred.await(done), { _tag: "Running", run } as const] as const
             }
           }
-        })
-      }).pipe(
+        }),
+      ).pipe(
         Effect.flatten,
         Effect.catch((e) => (e instanceof Cancelled && onInterrupt ? onInterrupt : Effect.fail(e))),
       )
