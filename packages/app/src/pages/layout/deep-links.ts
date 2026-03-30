@@ -37,14 +37,14 @@ export const collectNewSessionDeepLinks = (urls: string[]) =>
   urls.map(parseNewSessionDeepLink).filter((link): link is { directory: string; prompt?: string } => !!link)
 
 type AthenaWindow = Window & {
-  __OPENCODE__?: {
+  __ATHENA__?: {
     deepLinks?: string[]
   }
 }
 
 export const drainPendingDeepLinks = (target: AthenaWindow) => {
-  const pending = target.__OPENCODE__?.deepLinks ?? []
+  const pending = target.__ATHENA__?.deepLinks ?? []
   if (pending.length === 0) return []
-  if (target.__OPENCODE__) target.__OPENCODE__.deepLinks = []
+  if (target.__ATHENA__) target.__ATHENA__.deepLinks = []
   return pending
 }

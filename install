@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Athena Browser Agent — CLI installer
+# Usage: ./install [--binary /path/to/athena]
+
+INSTALL_DIR="$HOME/.athena/bin"
+BINARY_NAME="athena"
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --binary)
+      SOURCE="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+if [ -z "${SOURCE:-}" ]; then
+  echo "Usage: $0 --binary /path/to/athena"
+  exit 1
+fi
+
+if [ ! -f "$SOURCE" ]; then
+  echo "Error: Binary not found at $SOURCE"
+  exit 1
+fi
+
+mkdir -p "$INSTALL_DIR"
+cp "$SOURCE" "$INSTALL_DIR/$BINARY_NAME"
+chmod +x "$INSTALL_DIR/$BINARY_NAME"
+
+echo "Installed athena to $INSTALL_DIR/$BINARY_NAME"
+
+# Add to PATH hint
+if ! echo "$PATH" | grep -q "$INSTALL_DIR"; then
+  echo ""
+  echo "Add to your shell profile:"
+  echo "  export PATH=\"$INSTALL_DIR:\$PATH\""
+fi
