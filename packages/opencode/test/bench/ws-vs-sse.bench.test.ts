@@ -9,7 +9,10 @@
  * Reports: p50/p95/p99/max per transport+size
  * Validation: WS p99 < 5ms for small payloads (COB-37 spec target)
  *
- * Run: OPENCODE_WS_SYNC=1 bun test ./test/bench/ws-vs-sse.bench.test.ts --timeout 120000
+ * Run: OPENCODE_BENCH=1 OPENCODE_WS_SYNC=1 bun test ./test/bench/ws-vs-sse.bench.test.ts --timeout 120000
+ *
+ * NOTE: Tests are skipped in standard CI (bun test --timeout 30000).
+ * Set OPENCODE_BENCH=1 to run. Large payloads require --timeout 120000.
  */
 import { tmpdir } from "os"
 import { join } from "path"
@@ -96,6 +99,16 @@ async function* readSSEEvents(
   } finally {
     reader.releaseLock()
   }
+}
+
+// Large-payload benchmarks and Validation gates require OPENCODE_BENCH=1 — they
+// need --timeout 120000 and results depend on hardware speed that varies across
+// CI runners.  Small/medium tests run unconditionally as WS transport canaries.
+const RUN_BENCH = process.env.OPENCODE_BENCH === "1"
+
+if (!RUN_BENCH) {
+  // eslint-disable-next-line no-console
+  console.log("Large bench tests skipped (set OPENCODE_BENCH=1 to run)")
 }
 
 const PAYLOADS: { label: string; bytes: number; iterations: number }[] = [
@@ -211,7 +224,8 @@ afterAll(async () => {
 
 describe("SSE latency", () => {
   for (const { label, bytes, iterations } of PAYLOADS) {
-    test(
+    const isLarge = label.startsWith("large")
+    test.skipIf(isLarge && !RUN_BENCH)(
       `SSE ${label} (${iterations} events)`,
       async () => {
         const payload = makePayload(bytes)
@@ -288,7 +302,8 @@ describe("SSE latency", () => {
 
 describe("WS binary diff latency", () => {
   for (const { label, bytes, iterations } of PAYLOADS) {
-    test(
+    const isLarge = label.startsWith("large")
+    test.skipIf(isLarge && !RUN_BENCH)(
       `WS ${label} (${iterations} events)`,
       async () => {
         const payload = makePayload(bytes)
@@ -369,7 +384,7 @@ describe("WS binary diff latency", () => {
 // Validation gate
 // ---------------------------------------------------------------------------
 
-describe("Validation", () => {
+describe.skipIf(!RUN_BENCH)("Validation", () => {
   test("WS p99 < 5ms for small payloads (COB-37 spec target)", () => {
     const wsSmall = results.find(
       (r) => r.transport === "WS" && r.payloadLabel === "small-100B",
