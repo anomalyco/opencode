@@ -429,9 +429,14 @@ export namespace Provider {
           }
 
           const res = await fetch("https://openrouter.ai/api/v1/models").then((x) => x.json() as Promise<{ data: any[] }>)
+          if (!res.data?.length) return {}
+
           const discovered: Record<string, Model> = {}
           for (const m of res.data) {
-            if (input.models[m.id]) continue
+            if (input.models[m.id]) {
+              discovered[m.id] = input.models[m.id]
+              continue
+            }
             const hasReasoning =
               m.supported_parameters?.includes("reasoning") || m.supported_parameters?.includes("include_reasoning")
             const hasTools = m.supported_parameters?.includes("tools")
@@ -1266,6 +1271,15 @@ export namespace Provider {
 
       await (async () => {
         const discovered = await discover()
+
+        if (providerID === ProviderID.openrouter) {
+          for (const modelID of Object.keys(provider.models)) {
+            if (!discovered[modelID]) {
+              delete provider.models[modelID]
+            }
+          }
+        }
+
         for (const [modelID, model] of Object.entries(discovered)) {
           if (!provider.models[modelID]) {
             provider.models[modelID] = model
