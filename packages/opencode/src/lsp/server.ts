@@ -562,63 +562,76 @@ export namespace LSPServer {
     },
   }
 
-  export const ElixirLS: Info = {
-    id: "elixir-ls",
+  export const Expert: Info = {
+    id: "expert",
     extensions: [".ex", ".exs"],
     root: NearestRoot(["mix.exs", "mix.lock"]),
     async spawn(root) {
-      let binary = which("elixir-ls")
-      if (!binary) {
-        const elixirLsPath = path.join(Global.Path.bin, "elixir-ls")
-        binary = path.join(
-          Global.Path.bin,
-          "elixir-ls-master",
-          "release",
-          process.platform === "win32" ? "language_server.bat" : "language_server.sh",
-        )
+      const ext = process.platform === "win32" ? ".exe" : ""
+      let bin = which("expert", {
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
+      })
 
-        if (!(await Filesystem.exists(binary))) {
-          const elixir = which("elixir")
-          if (!elixir) {
-            log.error("elixir is required to run elixir-ls")
-            return
-          }
+      if (!bin) {
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+        log.info("downloading expert from GitHub releases")
 
-          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-          log.info("downloading elixir-ls from GitHub releases")
+        const platform = process.platform
+        const arch = process.arch
 
-          const response = await fetch("https://github.com/elixir-lsp/elixir-ls/archive/refs/heads/master.zip")
-          if (!response.ok) return
-          const zipPath = path.join(Global.Path.bin, "elixir-ls.zip")
-          if (response.body) await Filesystem.writeStream(zipPath, response.body)
+        let goPlatform: string = platform
+        if (platform === "darwin") goPlatform = "darwin"
+        else if (platform === "win32") goPlatform = "windows"
 
-          const ok = await Archive.extractZip(zipPath, Global.Path.bin)
-            .then(() => true)
-            .catch((error) => {
-              log.error("Failed to extract elixir-ls archive", { error })
-              return false
-            })
-          if (!ok) return
+        let goArch: string = arch
+        if (arch === "arm64") goArch = "arm64"
+        else if (arch === "x64") goArch = "amd64"
 
-          await fs.rm(zipPath, {
-            force: true,
-            recursive: true,
-          })
+        const name = `expert_${goPlatform}_${goArch}${ext}`
+        const supported = [
+          "expert_darwin_amd64",
+          "expert_darwin_arm64",
+          "expert_linux_amd64",
+          "expert_linux_arm64",
+          "expert_windows_amd64.exe",
+        ]
 
-          const cwd = path.join(Global.Path.bin, "elixir-ls-master")
-          const env = { MIX_ENV: "prod", ...process.env }
-          await Process.run(["mix", "deps.get"], { cwd, env })
-          await Process.run(["mix", "compile"], { cwd, env })
-          await Process.run(["mix", "elixir_ls.release2", "-o", "release"], { cwd, env })
-
-          log.info(`installed elixir-ls`, {
-            path: elixirLsPath,
-          })
+        if (!supported.includes(name)) {
+          log.error(`platform ${platform}/${arch} is not supported by expert`)
+          return
         }
+
+        const release = await fetch("https://api.github.com/repos/elixir-lang/expert/releases/latest")
+        if (!release.ok) {
+          log.error("failed to fetch expert release info")
+          return
+        }
+
+        const json = (await release.json()) as any
+        const asset = json.assets.find((a: any) => a.name === name)
+        if (!asset) {
+          log.error(`could not find asset ${name} in latest expert release`)
+          return
+        }
+
+        const response = await fetch(asset.browser_download_url)
+        if (!response.ok) {
+          log.error("failed to download expert")
+          return
+        }
+
+        bin = path.join(Global.Path.bin, "expert" + ext)
+        if (response.body) await Filesystem.writeStream(bin, response.body)
+
+        if (platform !== "win32") {
+          await fs.chmod(bin, 0o755).catch(() => {})
+        }
+
+        log.info("installed expert", { bin })
       }
 
       return {
-        process: spawn(binary, {
+        process: spawn(bin, ["--stdio"], {
           cwd: root,
         }),
       }
