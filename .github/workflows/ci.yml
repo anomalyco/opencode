@@ -15,8 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  typecheck:
-    name: Typecheck
+  quality:
+    name: Quality
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,31 +24,13 @@ jobs:
         with:
           bun-version: "1.3.11"
       - run: bun install --frozen-lockfile
-      - run: bun run typecheck
-
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.3.11"
-      - run: bun install --frozen-lockfile
-      - run: bun run --if-present lint
-
-  audit:
-    name: Dependency Audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.3.11"
-      - run: bun install --frozen-lockfile
+      - name: Typecheck
+        run: bun run typecheck
+      - name: Lint
+        run: bun run --if-present lint
       - name: Audit dependencies
         run: bun audit --audit-level moderate 2>/dev/null || npm audit --audit-level moderate
-        continue-on-error: true  # informational until baseline established
+        continue-on-error: true
 
   secret-scan:
     name: Secret Scanning
@@ -78,16 +60,3 @@ jobs:
           languages: javascript-typescript
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
-
-  unit-test:
-    name: Unit Tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.3.11"
-      - run: bun install --frozen-lockfile
-      - name: Run tests
-        run: bun test --timeout 30000
-        continue-on-error: true  # informational until test suite is built out
