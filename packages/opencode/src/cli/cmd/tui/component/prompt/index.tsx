@@ -28,6 +28,7 @@ import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
 import { formatDuration } from "@/util/format"
 import { createColors, createFrames } from "../../ui/spinner.ts"
+import { useTuiConfig } from "../../context/tui-config"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
 import { DialogAlert } from "../../ui/dialog-alert"
@@ -86,6 +87,7 @@ export function Prompt(props: PromptProps) {
   const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
   const history = usePromptHistory()
   const stash = usePromptStash()
+  const tuiConfig = useTuiConfig()
   const command = useCommandDialog()
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
@@ -822,21 +824,22 @@ export function Prompt(props: PromptProps) {
 
   const spinnerDef = createMemo(() => {
     const color = local.agent.color(local.agent.current().name)
+    const cfg = tuiConfig?.spinner ?? {}
+    const opts = {
+      color,
+      style: cfg.style ?? "blocks" as const,
+      width: cfg.width ?? 12,
+      holdStart: cfg.hold_start ?? 0,
+      holdEnd: cfg.hold_end ?? 0,
+      trailSteps: cfg.trail_steps ?? 11,
+      inactiveFactor: cfg.inactive_factor ?? 0.3,
+      enableFading: false,
+      minAlpha: cfg.min_alpha ?? 0.3,
+    }
     return {
-      frames: createFrames({
-        color,
-        style: "blocks",
-        inactiveFactor: 0.6,
-        // enableFading: false,
-        minAlpha: 0.3,
-      }),
-      color: createColors({
-        color,
-        style: "blocks",
-        inactiveFactor: 0.6,
-        // enableFading: false,
-        minAlpha: 0.3,
-      }),
+      frames: createFrames(opts),
+      color: createColors(opts),
+      interval: cfg.interval ?? 180,
     }
   })
 
@@ -1118,7 +1121,7 @@ export function Prompt(props: PromptProps) {
               <box flexShrink={0} flexDirection="row" gap={1}>
                 <box marginLeft={1}>
                   <Show when={kv.get("animations_enabled", true)} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
-                    <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+                    <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={spinnerDef().interval} />
                   </Show>
                 </box>
                 <box flexDirection="row" gap={1} flexShrink={0}>

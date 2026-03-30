@@ -111,28 +111,31 @@ function calculateColorIndex(
   state?: ScannerState,
 ): number {
   const { trailLength } = options
-  const { activePosition, isHolding, holdProgress, isMovingForward } =
+  const { activePosition, isHolding, holdProgress } =
     state ?? getScannerState(frameIndex, totalChars, options)
 
-  // Calculate directional distance (positive means trailing behind)
-  const directionalDistance = isMovingForward
-    ? activePosition - charIndex // For forward: trail is to the left (lower indices)
-    : charIndex - activePosition // For backward: trail is to the right (higher indices)
+  // Symmetric glow with 2-char wide active center
+  // Active occupies both activePosition and activePosition+1
+  const distFromCenter = Math.min(
+    Math.abs(charIndex - activePosition),
+    Math.abs(charIndex - (activePosition + 1)),
+  )
 
   // Handle hold frame fading: keep the lead bright, fade the trail
   if (isHolding) {
-    // Shift the color index by how long we've been holding
-    return directionalDistance + holdProgress
+    const shifted = distFromCenter + holdProgress
+    if (distFromCenter === 0) return Math.min(shifted, trailLength - 1)
+    return shifted
   }
 
-  // Normal movement - show gradient trail only behind the movement direction
-  if (directionalDistance > 0 && directionalDistance < trailLength) {
-    return directionalDistance
-  }
-
-  // At the active position, show the brightest color
-  if (directionalDistance === 0) {
+  // At the active positions (2-wide center), show the brightest color
+  if (distFromCenter === 0) {
     return 0
+  }
+
+  // Symmetric trail on both sides
+  if (distFromCenter < trailLength) {
+    return distFromCenter
   }
 
   return -1
@@ -207,16 +210,12 @@ export function deriveTrailColors(brightColor: ColorInput, steps: number = 6): R
     let brightnessFactor: number
 
     if (i === 0) {
-      // Lead position: full brightness and opacity
-      alpha = 1.0
+      // Lead position: subdued brightness
+      alpha = 0.5
       brightnessFactor = 1.0
-    } else if (i === 1) {
-      // Slight bloom/glare effect: brighten color but reduce opacity slightly
-      alpha = 0.9
-      brightnessFactor = 1.15
     } else {
-      // Exponential alpha decay for natural-looking trail fade
-      alpha = Math.pow(0.65, i - 1)
+      // Linear decay from lead alpha
+      alpha = 0.5 * Math.max(0, 1 - i / steps)
       brightnessFactor = 1.0
     }
 
@@ -318,10 +317,11 @@ export function createFrames(options: KnightRiderOptions = {}): string[] {
         return "·"
       }
 
-      // Default to blocks
-      // It's active if we have a valid color index that is within our colors array
+      // Size gradient: brightest = largest square, trail shrinks, inactive = blank
       const isActive = index >= 0 && index < trailOptions.colors.length
-      return isActive ? "■" : "⬝"
+      if (!isActive) return " "
+      const sizes = ["■", "▪", "▪", "·", "·", "·", "·", "·", "·", "·", "·"]
+      return sizes[Math.min(index, sizes.length - 1)]
     }).join("")
   })
 
