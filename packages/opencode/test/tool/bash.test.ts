@@ -31,6 +31,12 @@ const bash = (() => {
   if (Shell.name(shell) === "bash") return shell
   return Shell.gitbash()
 })()
+
+// Shell that supports POSIX $VAR variable expansion.
+// On Windows the acceptable shell is PowerShell which uses $env:VAR instead;
+// fall back to Git Bash. On other platforms use the acceptable shell directly.
+const posixShell = process.platform !== "win32" ? Shell.acceptable() : bash
+const posixLabel = posixShell ? Shell.name(posixShell) : ""
 const shells = (() => {
   if (process.platform !== "win32") {
     const shell = Shell.acceptable()
@@ -979,6 +985,235 @@ describe("tool.bash truncation", () => {
         expect(lines[0]).toBe("1")
         expect(lines[lineCount - 1]).toBe(String(lineCount))
       },
+    })
+  })
+
+  test("does NOT truncate when oc command is detected", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const lineCount = Truncate.MAX_LINES + 500
+        const result = await bash.execute(
+          {
+            // oc in the command should disable truncation (even if oc fails)
+            command: `echo "start" && ${fill("lines", lineCount)} && oc --help 2>/dev/null; echo "end"`,
+            description: "Generate large output with oc command",
+          },
+          ctx,
+        )
+        // Should NOT be truncated because oc is detected
+        expect((result.metadata as { truncated?: boolean; noTruncate?: boolean }).truncated).toBeFalsy()
+        expect((result.metadata as { noTruncate?: boolean }).noTruncate).toBe(true)
+        // Output should contain start and end markers (not truncated)
+        expect(result.output).toContain("start")
+        expect(result.output).toContain("end")
+        // Should have all the lines (not truncated to 2000)
+        const lines = result.output.split("\n")
+        expect(lines.length).toBeGreaterThan(Truncate.MAX_LINES)
+      },
+    })
+  })
+
+  // oc env var injection
+  describe("oc env vars", () => {
+    if (posixShell) {
+      test(
+        "OPENCODE_SESSION_ID is injected into bash subprocess",
+        withShell({ label: posixLabel, shell: posixShell }, async () => {
+          await Instance.provide({
+            directory: projectRoot,
+            fn: async () => {
+              const tool = await BashTool.init()
+              const result = await tool.execute(
+                { command: 'echo "$OPENCODE_SESSION_ID"', timeout: 5000, description: "test" },
+                ctx,
+              )
+              expect(result.output.trim()).toBe("ses_test")
+            },
+          })
+        }),
+      )
+
+      test(
+        "OPENCODE_AGENT is injected into bash subprocess",
+        withShell({ label: posixLabel, shell: posixShell }, async () => {
+          await Instance.provide({
+            directory: projectRoot,
+            fn: async () => {
+              const tool = await BashTool.init()
+              const result = await tool.execute(
+                { command: 'echo "$OPENCODE_AGENT"', timeout: 5000, description: "test" },
+                ctx,
+              )
+              expect(result.output.trim()).toBe("build")
+            },
+          })
+        }),
+      )
+
+      test(
+        "OPENCODE_MESSAGE_ID is injected into bash subprocess",
+        withShell({ label: posixLabel, shell: posixShell }, async () => {
+          await Instance.provide({
+            directory: projectRoot,
+            fn: async () => {
+              const tool = await BashTool.init()
+              const ctxWithMsg = { ...ctx, messageID: MessageID.make("msg_test123") }
+              const result = await tool.execute(
+                { command: 'echo "$OPENCODE_MESSAGE_ID"', timeout: 5000, description: "test" },
+                ctxWithMsg,
+              )
+              expect(result.output.trim()).toBe("msg_test123")
+            },
+          })
+        }),
+      )
+    }
+
+    test("oc is on PATH inside bash subprocess", async () => {
+      await Instance.provide({
+        directory: projectRoot,
+        fn: async () => {
+          const bash = await BashTool.init()
+          const result = await bash.execute({ command: "which oc", timeout: 5000, description: "test" }, ctx)
+          expect(result.output.trim()).toContain("bin/oc")
+        },
+      })
+    })
+
+    if (posixShell) {
+      test(
+        "OPENCODE_SERVER_URL is set (not empty) when Server.url exists",
+        withShell({ label: posixLabel, shell: posixShell }, async () => {
+          const { Server } = await import("../../src/server/server")
+          const prev = Server.url
+          Server.url = new URL("http://127.0.0.1:4096")
+          try {
+            await Instance.provide({
+              directory: projectRoot,
+              fn: async () => {
+                const tool = await BashTool.init()
+                const result = await tool.execute(
+                  { command: 'echo "$OPENCODE_SERVER_URL"', timeout: 5000, description: "test" },
+                  ctx,
+                )
+                expect(result.output.trim()).toBe("http://127.0.0.1:4096/")
+              },
+            })
+          } finally {
+            Server.url = prev
+          }
+        }),
+      )
+    }
+
+    test("Server.url gets actual port, not 0, after listen()", async () => {
+      const { Server } = await import("../../src/server/server")
+      // When port 0 is requested, the OS assigns a random port.
+      // Server.url must reflect the actual port, not 0.
+      const prev = Server.url
+      try {
+        const server = Server.listen({ port: 0, hostname: "127.0.0.1" })
+        expect(Server.url).toBeDefined()
+        expect(Server.url.port).not.toBe("0")
+        expect(parseInt(Server.url.port)).toBeGreaterThan(0)
+        await server.stop(true)
+      } finally {
+        Server.url = prev
+      }
+    })
+
+    if (posixShell) {
+      test(
+        "OPENCODE_SERVER_URL has no double slash when Server.url has trailing slash",
+        withShell({ label: posixLabel, shell: posixShell }, async () => {
+          const { Server } = await import("../../src/server/server")
+          const prev = Server.url
+          Server.url = new URL("http://127.0.0.1:4096/")
+          try {
+            await Instance.provide({
+              directory: projectRoot,
+              fn: async () => {
+                const tool = await BashTool.init()
+                const result = await tool.execute(
+                  { command: 'echo "$OPENCODE_SERVER_URL"', timeout: 5000, description: "test" },
+                  ctx,
+                )
+                const url = result.output.trim()
+                expect(url).toBe("http://127.0.0.1:4096/")
+                // Simulate what bin/oc does: ${URL%/}/session/...
+                const stripped = url.replace(/\/$/, "")
+                const apiUrl = `${stripped}/session/test/tool`
+                expect(apiUrl).not.toContain("//session")
+                expect(apiUrl).toBe("http://127.0.0.1:4096/session/test/tool")
+              },
+            })
+          } finally {
+            Server.url = prev
+          }
+        }),
+      )
+    }
+
+    // ── no-timeout for oc scripts ──────────────────
+    test("regular command respects explicit timeout", async () => {
+      await Instance.provide({
+        directory: projectRoot,
+        fn: async () => {
+          const bash = await BashTool.init()
+          // sleep 1s with 50ms timeout → the timer fires and kills it
+          const result = await bash.execute(
+            { command: "sleep 1", timeout: 50, description: "sleep that should time out" },
+            ctx,
+          )
+          expect(result.output).toContain("terminated command after exceeding timeout")
+        },
+      })
+    })
+
+    test("oc script ignores explicit timeout — Ralph loop can run without being killed", async () => {
+      await Instance.provide({
+        directory: projectRoot,
+        fn: async () => {
+          const bash = await BashTool.init()
+          // while loop using oc — timeout: 50 would kill a normal command in ~150ms,
+          // but usesOc=true && hasWhileLoop forces timeout=0, so no timer is created
+          const result = await bash.execute(
+            {
+              command: "i=0; while [ $i -lt 1 ]; do sleep 0.2; oc tool read /dev/null; i=$((i+1)); done",
+              timeout: 50,
+              description: "oc while loop — timeout param must be ignored",
+            },
+            ctx,
+          )
+          // Process ran to completion (oc may fail on HTTP, but that is not a timeout kill)
+          expect(result.output).not.toContain("terminated command after exceeding timeout")
+        },
+      })
+    })
+
+    test("OPENCODE_SERVER_URL is empty when Server.url is undefined", async () => {
+      const { Server } = await import("../../src/server/server")
+      const prev = Server.url
+      // @ts-expect-error - simulate undefined
+      Server.url = undefined
+      try {
+        await Instance.provide({
+          directory: projectRoot,
+          fn: async () => {
+            const bash = await BashTool.init()
+            const result = await bash.execute(
+              { command: 'echo "URL=$OPENCODE_SERVER_URL"', timeout: 5000, description: "test" },
+              ctx,
+            )
+            // Empty string — oc will error, which is the bug we fixed in thread.ts
+            expect(result.output.trim()).toBe("URL=")
+          },
+        })
+      } finally {
+        Server.url = prev
+      }
     })
   })
 })

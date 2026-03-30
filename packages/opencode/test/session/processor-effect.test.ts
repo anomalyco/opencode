@@ -696,7 +696,6 @@ it.effect("session.processor effect tests mark pending tools as aborted on clean
     (dir) =>
       Effect.gen(function* () {
         const ready = defer<void>()
-        const seen = defer<void>()
         const test = yield* TestLLM
         const processors = yield* SessionProcessor.Service
         const session = yield* Session.Service

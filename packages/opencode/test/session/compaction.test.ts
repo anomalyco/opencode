@@ -191,7 +191,7 @@ function llm() {
         stream: (input) => {
           const item = queue.shift() ?? Stream.empty
           const stream = typeof item === "function" ? item(input) : item
-          return stream.pipe(Stream.mapEffect((event) => Effect.succeed(event)))
+          return stream
         },
       }),
     ),
