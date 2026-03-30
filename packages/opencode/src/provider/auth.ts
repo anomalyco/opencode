@@ -1,4 +1,4 @@
-import type { AuthOuathResult, Hooks } from "@opencode-ai/plugin"
+import type { AuthOAuthResult, Hooks } from "@opencode-ai/plugin"
 import { NamedError } from "@opencode-ai/util/error"
 import { Auth } from "@/auth"
 import { InstanceState } from "@/effect/instance-state"
@@ -106,7 +106,7 @@ export namespace ProviderAuth {
 
   interface State {
     hooks: Record<ProviderID, Hook>
-    pending: Map<ProviderID, AuthOuathResult>
+    pending: Map<ProviderID, AuthOAuthResult>
   }
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/ProviderAuth") {}
@@ -127,7 +127,7 @@ export namespace ProviderAuth {
                     : Result.failVoid,
                 ),
               ),
-              pending: new Map<ProviderID, AuthOuathResult>(),
+              pending: new Map<ProviderID, AuthOAuthResult>(),
             }
           }),
         ),

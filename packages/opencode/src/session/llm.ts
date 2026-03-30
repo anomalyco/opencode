@@ -1,16 +1,8 @@
-import { Installation } from "@/installation"
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
-import {
-  streamText,
-  wrapLanguageModel,
-  type ModelMessage,
-  type StreamTextResult,
-  type Tool,
-  type ToolSet,
-  tool,
-  jsonSchema,
-} from "ai"
+import { Effect, Layer, ServiceMap } from "effect"
+import * as Stream from "effect/Stream"
+import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, jsonSchema } from "ai"
 import { mergeDeep, pipe } from "remeda"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 import { ProviderTransform } from "@/provider/transform"
@@ -25,6 +17,7 @@ import { Permission } from "@/permission"
 import { Auth } from "@/auth"
 import { SessionID } from "./schema"
 import { SessionStart } from "./start"
+import { Installation } from "@/installation"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -49,7 +42,34 @@ export namespace LLM {
     toolChoice?: "auto" | "required" | "none"
   }
 
-  export type StreamOutput = StreamTextResult<ToolSet, unknown>
+  export type Event = Awaited<ReturnType<typeof stream>>["fullStream"] extends AsyncIterable<infer T> ? T : never
+
+  export interface Interface {
+    readonly stream: (input: StreamInput) => Stream.Stream<Event, unknown>
+  }
+
+  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/LLM") {}
+
+  export const layer = Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      return Service.of({
+        stream(input) {
+          return Stream.unwrap(
+            Effect.promise(() => LLM.stream(input)).pipe(
+              Effect.map((result) =>
+                Stream.fromAsyncIterable(result.fullStream, (err) => err).pipe(
+                  Stream.mapEffect((event) => Effect.succeed(event)),
+                ),
+              ),
+            ),
+          )
+        },
+      })
+    }),
+  )
+
+  export const defaultLayer = layer
 
   export async function stream(input: StreamInput) {
     const l = log
@@ -148,7 +168,7 @@ export namespace LLM {
       "chat.params",
       {
         sessionID: input.sessionID,
-        agent: input.agent,
+        agent: input.agent.name,
         model: input.model,
         provider,
         message: input.user,
@@ -167,7 +187,7 @@ export namespace LLM {
       "chat.headers",
       {
         sessionID: input.sessionID,
-        agent: input.agent,
+        agent: input.agent.name,
         model: input.model,
         provider,
         message: input.user,
@@ -195,11 +215,19 @@ export namespace LLM {
       input.model.providerID.toLowerCase().includes("litellm") ||
       input.model.api.id.toLowerCase().includes("litellm")
 
+    // LiteLLM/Bedrock rejects requests where the message history contains tool
+    // calls but no tools param is present. When there are no active tools (e.g.
+    // during compaction), inject a stub tool to satisfy the validation requirement.
+    // The stub description explicitly tells the model not to call it.
     if (isLiteLLMProxy && Object.keys(tools).length === 0 && hasToolCalls(input.messages)) {
       tools["_noop"] = tool({
-        description:
-          "Placeholder for LiteLLM/Anthropic proxy compatibility - required when message history contains tool calls but no active tools are needed",
-        inputSchema: jsonSchema({ type: "object", properties: {} }),
+        description: "Do not call this tool. It exists only for API compatibility and must never be invoked.",
+        inputSchema: jsonSchema({
+          type: "object",
+          properties: {
+            reason: { type: "string", description: "Unused" },
+          },
+        }),
         execute: async () => ({ output: "", title: "", metadata: {} }),
       })
     }
@@ -292,6 +320,7 @@ export namespace LLM {
         model: language,
         middleware: [
           {
+            specificationVersion: "v3" as const,
             async transformParams(args) {
               if (args.type === "stream") {
                 // @ts-expect-error
