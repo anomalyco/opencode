@@ -23,6 +23,7 @@ import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { fn } from "../util/fn"
 import { ToolRegistry } from "../tool/registry"
+import { SingleFlight } from "@/effect/single-flight"
 import { MCP } from "../mcp"
 import { LSP } from "../lsp"
 import { ReadTool } from "../tool/read"
@@ -46,7 +47,7 @@ import { AppFileSystem } from "@/filesystem"
 import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
-import { Cause, Deferred, Effect, Exit, Fiber, Layer, Scope, ServiceMap } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer, Scope, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 
@@ -66,13 +67,8 @@ const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested struc
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
 
-  interface LoopEntry {
-    fiber?: Fiber.Fiber<MessageV2.WithParts, unknown>
-    queue: Deferred.Deferred<MessageV2.WithParts, unknown>[]
-  }
-
   interface ShellEntry {
-    fiber?: Fiber.Fiber<MessageV2.WithParts, unknown>
+    fiber: Fiber.Fiber<MessageV2.WithParts, unknown>
     abort: AbortController
   }
 
@@ -108,19 +104,17 @@ export namespace SessionPrompt {
 
       const cache = yield* InstanceState.make(
         Effect.fn("SessionPrompt.state")(function* () {
-          const loops = new Map<string, LoopEntry>()
+          const loops = new Map<string, SingleFlight<MessageV2.WithParts, unknown>>()
           const shells = new Map<string, ShellEntry>()
           yield* Effect.addFinalizer(() =>
             Effect.gen(function* () {
-              for (const item of shells.values()) item.abort.abort()
-              yield* Fiber.interruptAll([
-                ...loops.values().flatMap((e) => (e.fiber ? [e.fiber] : [])),
-                ...shells.values().flatMap((x) => (x.fiber ? [x.fiber] : [])),
-              ])
-              for (const entry of loops.values()) {
-                if (entry.fiber) continue
-                for (const d of entry.queue) yield* Deferred.interrupt(d)
-              }
+              const flights = [...loops.values()]
+              const entries = [...shells.values()]
+              loops.clear()
+              shells.clear()
+              for (const item of entries) item.abort.abort()
+              yield* Fiber.interruptAll(entries.map((x) => x.fiber))
+              yield* Effect.forEach(flights, (f) => SingleFlight.cancel(f), { concurrency: "unbounded" })
             }),
           )
           return { loops, shells }
@@ -135,26 +129,19 @@ export namespace SessionPrompt {
       const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
         log.info("cancel", { sessionID })
         const s = yield* InstanceState.get(cache)
-        const loopEntry = s.loops.get(sessionID)
-        const shellEntry = s.shells.get(sessionID)
-        if (!loopEntry && !shellEntry) {
+        const flight = s.loops.get(sessionID)
+        const entry = s.shells.get(sessionID)
+        if (!flight && !entry) {
           yield* status.set(sessionID, { type: "idle" })
           return
         }
-        if (loopEntry) {
-          if (loopEntry.fiber) {
-            s.loops.delete(sessionID)
-            yield* Fiber.interrupt(loopEntry.fiber)
-            yield* Fiber.await(loopEntry.fiber)
-          } else {
-            for (const d of loopEntry.queue) yield* Deferred.interrupt(d)
-            s.loops.delete(sessionID)
-          }
+        if (flight) {
+          s.loops.delete(sessionID)
+          yield* SingleFlight.cancel(flight)
         }
-        if (shellEntry) {
-          shellEntry.abort.abort()
-          if (shellEntry.fiber) yield* Fiber.await(shellEntry.fiber)
-          else if (s.shells.get(sessionID) === shellEntry) s.shells.delete(sessionID)
+        if (entry) {
+          entry.abort.abort()
+          yield* Fiber.await(entry.fiber)
         }
         if (!s.loops.has(sessionID) && !s.shells.has(sessionID)) {
           yield* status.set(sessionID, { type: "idle" })
@@ -1537,61 +1524,42 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         return yield* lastAssistant(sessionID)
       })
 
-      type State = { loops: Map<string, LoopEntry>; shells: Map<string, ShellEntry> }
-
-      const awaitFiber = <A>(fiber: Fiber.Fiber<A, unknown>, fallback: Effect.Effect<A>) =>
-        Effect.gen(function* () {
-          const exit = yield* Fiber.await(fiber)
-          if (Exit.isSuccess(exit)) return exit.value
-          if (Cause.hasInterruptsOnly(exit.cause)) return yield* fallback
-          return yield* Effect.failCause(exit.cause)
-        })
-
-      const startLoop: (s: State, sessionID: SessionID) => Effect.Effect<MessageV2.WithParts, unknown> =
-        Effect.fnUntraced(function* (s: State, sessionID: SessionID) {
-          const entry = s.loops.get(sessionID) ?? { queue: [] }
-          s.loops.set(sessionID, entry)
-          const fiber = yield* runLoop(sessionID).pipe(
-            Effect.onExit((exit) =>
+      const makeFlight = Effect.fnUntraced(function* (
+        s: { loops: Map<string, SingleFlight<MessageV2.WithParts, unknown>>; shells: Map<string, ShellEntry> },
+        sessionID: SessionID,
+      ) {
+        let flight!: SingleFlight<MessageV2.WithParts, unknown>
+        flight = yield* SingleFlight.make(
+          runLoop(sessionID).pipe(
+            Effect.ensuring(
               Effect.gen(function* () {
-                // On interrupt, resolve queued callers with the last assistant message
-                const resolved =
-                  Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)
-                    ? Exit.succeed(yield* lastAssistant(sessionID))
-                    : exit
-                for (const d of entry.queue) yield* Deferred.done(d, resolved)
-                if (s.loops.get(sessionID) === entry) s.loops.delete(sessionID)
+                if (s.loops.get(sessionID) === flight) s.loops.delete(sessionID)
                 if (!s.loops.has(sessionID) && !s.shells.has(sessionID)) {
                   yield* status.set(sessionID, { type: "idle" })
                 }
               }),
             ),
-            Effect.forkChild,
-          )
-          entry.fiber = fiber
-          return yield* awaitFiber(fiber, lastAssistant(sessionID))
-        })
+          ),
+        )
+        s.loops.set(sessionID, flight)
+        return flight
+      })
 
       const loop: (input: z.infer<typeof LoopInput>) => Effect.Effect<MessageV2.WithParts, unknown> = Effect.fn(
         "SessionPrompt.loop",
       )(function* (input: z.infer<typeof LoopInput>) {
         const s = yield* InstanceState.get(cache)
         const existing = s.loops.get(input.sessionID)
-
         if (existing) {
-          const d = yield* Deferred.make<MessageV2.WithParts, unknown>()
-          existing.queue.push(d)
-          return yield* Deferred.await(d)
+          return yield* SingleFlight.join(existing)
         }
 
-        // If a shell is running, queue — shell cleanup will start the loop
-        if (s.shells.has(input.sessionID)) {
-          const d = yield* Deferred.make<MessageV2.WithParts, unknown>()
-          s.loops.set(input.sessionID, { queue: [d] })
-          return yield* Deferred.await(d)
+        const flight = yield* makeFlight(s, input.sessionID)
+        // If a shell is running, don't start yet — shell cleanup will start it
+        if (!s.shells.has(input.sessionID)) {
+          yield* SingleFlight.start(flight, scope)
         }
-
-        return yield* startLoop(s, input.sessionID)
+        return yield* SingleFlight.join(flight)
       })
 
       const shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts, unknown> = Effect.fn(
@@ -1604,26 +1572,25 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
         yield* status.set(input.sessionID, { type: "busy" })
         const ctrl = new AbortController()
-        const entry: ShellEntry = { abort: ctrl }
-        s.shells.set(input.sessionID, entry)
         const fiber = yield* shellImpl(input, ctrl.signal).pipe(
           Effect.ensuring(
             Effect.gen(function* () {
-              if (s.shells.get(input.sessionID) === entry) s.shells.delete(input.sessionID)
-              // If callers queued a loop while the shell was running, start it
+              s.shells.delete(input.sessionID)
               const pending = s.loops.get(input.sessionID)
-              if (pending && pending.queue.length > 0) {
-                yield* startLoop(s, input.sessionID).pipe(Effect.ignore, Effect.forkIn(scope))
-              } else if (!s.loops.has(input.sessionID) && !s.shells.has(input.sessionID)) {
+              if (pending) {
+                yield* SingleFlight.start(pending, scope)
+              } else if (!s.loops.has(input.sessionID)) {
                 yield* status.set(input.sessionID, { type: "idle" })
               }
             }),
           ),
-          Effect.forkChild,
+          Effect.forkIn(scope),
         )
-
-        entry.fiber = fiber
-        return yield* awaitFiber(fiber, lastAssistant(input.sessionID))
+        s.shells.set(input.sessionID, { fiber, abort: ctrl })
+        const exit = yield* Fiber.await(fiber)
+        if (Exit.isSuccess(exit)) return exit.value
+        if (Cause.hasInterruptsOnly(exit.cause)) return yield* lastAssistant(input.sessionID)
+        return yield* Effect.failCause(exit.cause)
       })
 
       const command = Effect.fn("SessionPrompt.command")(function* (input: CommandInput) {

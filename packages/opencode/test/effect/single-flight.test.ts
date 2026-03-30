@@ -1,15 +1,17 @@
 import { describe, expect, test } from "bun:test"
-import { Deferred, Effect, Exit, Fiber, Ref } from "effect"
+import { Deferred, Effect, Exit, Fiber, Ref, Scope } from "effect"
 import { SingleFlight } from "../../src/effect/single-flight"
 
 type Result = { value: string }
 
 describe("SingleFlight", () => {
-  test("autoStart true runs immediately and join returns the result", async () => {
+  test("start + join returns the result", async () => {
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
+          const s = yield* Scope.Scope
           const flight = yield* SingleFlight.make(Effect.succeed({ value: "ok" }))
+          yield* SingleFlight.start(flight, s)
           const result = yield* SingleFlight.join(flight)
           expect(result.value).toBe("ok")
         }),
@@ -21,6 +23,7 @@ describe("SingleFlight", () => {
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
+          const s = yield* Scope.Scope
           const calls = yield* Ref.make(0)
           const work = Effect.gen(function* () {
             yield* Ref.update(calls, (n) => n + 1)
@@ -29,6 +32,7 @@ describe("SingleFlight", () => {
           })
 
           const flight = yield* SingleFlight.make<Result, never>(work)
+          yield* SingleFlight.start(flight, s)
           const [a, b] = yield* Effect.all([SingleFlight.join(flight), SingleFlight.join(flight)], {
             concurrency: "unbounded",
           })
@@ -41,22 +45,23 @@ describe("SingleFlight", () => {
     )
   })
 
-  test("autoStart false does not begin until started", async () => {
+  test("idle flight does not begin until started", async () => {
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
+          const s = yield* Scope.Scope
           const started = yield* Ref.make(false)
           const work = Effect.gen(function* () {
             yield* Ref.set(started, true)
             return { value: "later" }
           })
 
-          const flight = yield* SingleFlight.make<Result, never>(work, { autoStart: false })
+          const flight = yield* SingleFlight.make<Result, never>(work)
           const waiter = yield* SingleFlight.join(flight).pipe(Effect.forkChild)
           yield* Effect.sleep("10 millis")
           expect(yield* Ref.get(started)).toBe(false)
 
-          yield* SingleFlight.start(flight)
+          yield* SingleFlight.start(flight, s)
 
           const exit = yield* Fiber.await(waiter)
           expect(yield* Ref.get(started)).toBe(true)
@@ -73,9 +78,7 @@ describe("SingleFlight", () => {
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
-          const flight = yield* SingleFlight.make<Result, never>(Effect.succeed({ value: "never" }), {
-            autoStart: false,
-          })
+          const flight = yield* SingleFlight.make<Result, never>(Effect.succeed({ value: "never" }))
           const waiter = yield* SingleFlight.join(flight).pipe(Effect.forkChild)
           yield* Effect.sleep("10 millis")
 
@@ -92,6 +95,7 @@ describe("SingleFlight", () => {
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
+          const s = yield* Scope.Scope
           const cleanup = yield* Deferred.make<void>()
           const work = Effect.never.pipe(
             Effect.ensuring(Deferred.succeed(cleanup, undefined).pipe(Effect.asVoid)),
@@ -99,6 +103,7 @@ describe("SingleFlight", () => {
           )
 
           const flight = yield* SingleFlight.make<Result, never>(work)
+          yield* SingleFlight.start(flight, s)
           const waiter = yield* SingleFlight.join(flight).pipe(Effect.forkChild)
           yield* Effect.sleep("10 millis")
 
