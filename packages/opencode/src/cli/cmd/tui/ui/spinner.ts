@@ -111,15 +111,11 @@ function calculateColorIndex(
   state?: ScannerState,
 ): number {
   const { trailLength } = options
-  const { activePosition, isHolding, holdProgress } =
-    state ?? getScannerState(frameIndex, totalChars, options)
+  const { activePosition, isHolding, holdProgress } = state ?? getScannerState(frameIndex, totalChars, options)
 
   // Symmetric glow with 2-char wide active center
   // Active occupies both activePosition and activePosition+1
-  const distFromCenter = Math.min(
-    Math.abs(charIndex - activePosition),
-    Math.abs(charIndex - (activePosition + 1)),
-  )
+  const distFromCenter = Math.min(Math.abs(charIndex - activePosition), Math.abs(charIndex - (activePosition + 1)))
 
   // Handle hold frame fading: keep the lead bright, fade the trail
   if (isHolding) {

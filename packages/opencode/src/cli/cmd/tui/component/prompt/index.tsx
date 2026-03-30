@@ -827,7 +827,7 @@ export function Prompt(props: PromptProps) {
     const cfg = tuiConfig?.spinner ?? {}
     const opts = {
       color,
-      style: cfg.style ?? "blocks" as const,
+      style: cfg.style ?? ("blocks" as const),
       width: cfg.width ?? 12,
       holdStart: cfg.hold_start ?? 0,
       holdEnd: cfg.hold_end ?? 0,
