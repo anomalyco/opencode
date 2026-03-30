@@ -842,6 +842,11 @@ export const dict = {
 
   "settings.models.title": "模型",
   "settings.models.description": "模型设置将在此处可配置。",
+  "settings.assistant.title": "助手",
+  "settings.assistant.description": "配置悬浮快捷助手。",
+  "settings.assistant.model.title": "助手模型",
+  "settings.assistant.model.description": "选择快捷助手使用的模型。自动会回退到当前可用的默认模型。",
+  "settings.assistant.model.option.auto": "自动",
 
   "settings.agents.title": "智能体",
   "settings.agents.description": "智能体设置将在此处可配置。",

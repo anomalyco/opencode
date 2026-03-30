@@ -23,6 +23,8 @@ import { ProviderID, type ModelID } from "../provider/schema"
 import { WebSearchTool } from "./websearch"
 import { CodeSearchTool } from "./codesearch"
 import { Flag } from "@/flag/flag"
+import { Instance } from "@/project/instance"
+import { QuickAssistant } from "@/quick-assistant"
 import { Log } from "@/util/log"
 import { LspTool } from "./lsp"
 import { Truncate } from "./truncate"
@@ -112,6 +114,10 @@ export namespace ToolRegistry {
       async function all(custom: Tool.Info[]): Promise<Tool.Info[]> {
         const cfg = await Config.get()
         const question = ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
+
+        if (QuickAssistant.active(Instance.directory)) {
+          return [InvalidTool, ReadTool, GlobTool, GrepTool, WebFetchTool, WebSearchTool, CodeSearchTool]
+        }
 
         return [
           InvalidTool,

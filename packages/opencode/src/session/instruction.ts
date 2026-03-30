@@ -5,6 +5,7 @@ import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
 import { Flag } from "@/flag/flag"
+import { QuickAssistant } from "@/quick-assistant"
 import { Log } from "../util/log"
 import { Glob } from "../util/glob"
 import type { MessageV2 } from "./message-v2"
@@ -70,6 +71,8 @@ export namespace InstructionPrompt {
   }
 
   export async function systemPaths() {
+    if (QuickAssistant.active(Instance.directory)) return new Set<string>()
+
     const config = await Config.get()
     const paths = new Set<string>()
 
@@ -115,6 +118,8 @@ export namespace InstructionPrompt {
   }
 
   export async function system() {
+    if (QuickAssistant.active(Instance.directory)) return []
+
     const config = await Config.get()
     const paths = await systemPaths()
 
@@ -166,6 +171,8 @@ export namespace InstructionPrompt {
   }
 
   export async function resolve(messages: MessageV2.WithParts[], filepath: string, messageID: string) {
+    if (QuickAssistant.active(Instance.directory)) return []
+
     const system = await systemPaths()
     const already = loaded(messages)
     const results: { filepath: string; content: string }[] = []

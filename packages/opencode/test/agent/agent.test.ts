@@ -407,7 +407,9 @@ test("Agent.list keeps the default agent first and sorts the rest by name", asyn
     fn: async () => {
       const names = (await Agent.list()).map((a) => a.name)
       expect(names[0]).toBe("plan")
-      expect(names.slice(1)).toEqual(names.slice(1).toSorted((a, b) => a.localeCompare(b)))
+      expect(names).toContain("assistant")
+      const rest = names.slice(1)
+      expect(rest).toEqual(rest.toSorted((a, b) => a.localeCompare(b)))
     },
   })
 })
@@ -710,7 +712,7 @@ test("defaultAgent throws when all primary agents are disabled", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      // build and plan are disabled, no primary-capable agents remain
+      // build and plan are disabled, no visible primary-capable agents remain
       await expect(Agent.defaultAgent()).rejects.toThrow("no primary visible agent found")
     },
   })

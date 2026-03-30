@@ -35,9 +35,14 @@ describe("session-working", () => {
     expect(pending([assistant({ created: 1, completed: 2 })])).toBe(false)
   })
 
-  test("prefers explicit non-idle status", () => {
-    expect(working({ type: "busy" } as SessionStatus, [assistant({ created: 1, completed: 2 })])).toBe(true)
+  test("keeps non-idle status when the turn is still live", () => {
     expect(working({ type: "retry", attempt: 1, message: "retry", next: 2 } as SessionStatus, [])).toBe(true)
+    expect(working({ type: "busy" } as SessionStatus, [user()])).toBe(true)
+    expect(working({ type: "busy" } as SessionStatus, [assistant({ created: 1 })])).toBe(true)
+  })
+
+  test("ignores stale non-idle status after the last assistant completed", () => {
+    expect(working({ type: "busy" } as SessionStatus, [assistant({ created: 1, completed: 2 })])).toBe(false)
   })
 
   test("falls back to pending last assistant when status is idle", () => {

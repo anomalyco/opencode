@@ -966,6 +966,12 @@ export const dict = {
   "settings.providers.tag.other": "Other",
   "settings.models.title": "Models",
   "settings.models.description": "Model settings will be configurable here.",
+  "settings.assistant.title": "Assistant",
+  "settings.assistant.description": "Configure the floating quick assistant.",
+  "settings.assistant.model.title": "Assistant model",
+  "settings.assistant.model.description":
+    "Choose the model used by the quick assistant. Auto uses the best available default.",
+  "settings.assistant.model.option.auto": "Auto",
   "settings.agents.title": "Agents",
   "settings.agents.description": "Agent settings will be configurable here.",
   "settings.commands.title": "Commands",

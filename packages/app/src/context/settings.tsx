@@ -18,6 +18,11 @@ export interface SoundSettings {
   errors: string
 }
 
+type ModelKey = {
+  providerID: string
+  modelID: string
+}
+
 export interface Settings {
   general: {
     autoSave: boolean
@@ -40,6 +45,9 @@ export interface Settings {
   keybinds: Record<string, string>
   permissions: {
     autoApprove: boolean
+  }
+  assistant: {
+    model?: ModelKey
   }
   notifications: NotificationSettings
   sounds: SoundSettings
@@ -67,6 +75,9 @@ const defaultSettings: Settings = {
   keybinds: {},
   permissions: {
     autoApprove: false,
+  },
+  assistant: {
+    model: undefined,
   },
   notifications: {
     agent: true,
@@ -238,6 +249,12 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         autoApprove: withFallback(() => store.permissions?.autoApprove, defaultSettings.permissions.autoApprove),
         setAutoApprove(value: boolean) {
           setStore("permissions", "autoApprove", value)
+        },
+      },
+      assistant: {
+        model: createMemo(() => store.assistant?.model),
+        setModel(value: ModelKey | undefined) {
+          setStore("assistant", "model", value)
         },
       },
       notifications: {

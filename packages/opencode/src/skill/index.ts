@@ -11,6 +11,7 @@ import { makeRunPromise } from "@/effect/run-service"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 import { Permission } from "@/permission"
+import { QuickAssistant } from "@/quick-assistant"
 import { Filesystem } from "@/util/filesystem"
 import { Config } from "../config/config"
 import { ConfigMarkdown } from "../config/markdown"
@@ -125,6 +126,11 @@ export namespace Skill {
     }
 
     const load = async () => {
+      if (QuickAssistant.active(directory)) {
+        log.info("skip quick assistant skills", { directory })
+        return
+      }
+
       if (!Flag.OPENCODE_DISABLE_EXTERNAL_SKILLS) {
         for (const dir of EXTERNAL_DIRS) {
           const root = path.join(Global.Path.home, dir)

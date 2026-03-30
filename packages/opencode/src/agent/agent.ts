@@ -114,6 +114,48 @@ export namespace Agent {
         mode: "primary",
         native: true,
       },
+      assistant: {
+        name: "assistant",
+        description:
+          "Lightweight quick assistant for the floating in-app helper. Avoids user follow-up flows, subagents, and editing workflows.",
+        hidden: true,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            "*": "deny",
+            read: "allow",
+            grep: "allow",
+            glob: "allow",
+            list: "allow",
+            codesearch: "allow",
+            webfetch: "allow",
+            question: "deny",
+            task: "deny",
+            plan_enter: "deny",
+            plan_exit: "deny",
+            edit: "deny",
+            bash: "deny",
+            todowrite: "deny",
+            todoread: "deny",
+          }),
+          user,
+        ),
+        prompt: [
+          "You are the quick assistant for OpenCode.",
+          "You run inside a small floating assistant UI and should keep interactions low-friction.",
+          "",
+          "Rules:",
+          "- Prefer answering directly in one response.",
+          "- Do not ask follow-up questions through the question tool.",
+          "- Do not launch subagents or use the task tool.",
+          "- Do not edit files or perform write workflows.",
+          "- Focus on lightweight help: explain code, summarize context, answer questions about the current project or session, and suggest concise next steps.",
+          "- If the request needs richer interaction, permissions, or code changes, tell the user to continue in the full session view.",
+        ].join("\n"),
+        options: {},
+        mode: "primary",
+        native: true,
+      },
       general: {
         name: "general",
         description: `General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel.`,
@@ -258,11 +300,13 @@ export namespace Agent {
 
   export async function list() {
     const cfg = await Config.get()
-    return pipe(
-      await state(),
-      values(),
-      sortBy([(x) => (cfg.default_agent ? x.name === cfg.default_agent : x.name === "build"), "desc"]),
-    )
+    const all = pipe(await state(), values())
+    const first = cfg.default_agent ?? "build"
+    return all.toSorted((a, b) => {
+      if (a.name === first && b.name !== first) return -1
+      if (b.name === first && a.name !== first) return 1
+      return a.name.localeCompare(b.name)
+    })
   }
 
   export async function defaultAgent() {

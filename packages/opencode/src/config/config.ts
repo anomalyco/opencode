@@ -38,6 +38,7 @@ import { ConfigPaths } from "./paths"
 import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
 import { Lock } from "@/util/lock"
+import { QuickAssistant } from "@/quick-assistant"
 
 export namespace Config {
   const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
@@ -77,6 +78,36 @@ export namespace Config {
 
   export const state = Instance.state(async () => {
     const auth = await Auth.all()
+
+    if (QuickAssistant.active(Instance.directory)) {
+      let result: Info = {}
+      const root = QuickAssistant.root()
+      const directories = [root, path.join(root, ".opencode")]
+
+      for (const file of ["opencode.jsonc", "opencode.json"]) {
+        result = mergeConfigConcatArrays(result, await loadFile(path.join(root, file)))
+      }
+
+      result.agent = result.agent || {}
+      result.mode = result.mode || {}
+      result.plugin = result.plugin || []
+
+      for (const dir of directories) {
+        result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
+        result.agent = mergeDeep(result.agent, await loadAgent(dir))
+        result.agent = mergeDeep(result.agent, await loadMode(dir))
+        result.plugin.push(...(await loadPlugin(dir)))
+      }
+
+      result.plugin = deduplicatePlugins(result.plugin ?? [])
+      if (!result.username) result.username = os.userInfo().username
+
+      return {
+        config: result,
+        directories,
+        deps: [],
+      }
+    }
 
     // Config loading order (low -> high precedence): https://opencode.ai/docs/config#precedence-order
     // 1) Remote .well-known/opencode (org defaults)

@@ -66,6 +66,7 @@ import { DialogPromptEditor } from "@/components/dialog-prompt-editor"
 import { Popover } from "@opencode-ai/ui/popover"
 import { getFilename } from "@opencode-ai/util/path"
 import { merge, value } from "./prompt-input/expand"
+import { working as sessionWorking } from "@/pages/session/session-working"
 
 interface PromptInputProps {
   class?: string
@@ -473,7 +474,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         type: "idle",
       },
   )
-  const working = createMemo(() => status()?.type !== "idle")
+  const messages = createMemo(() => {
+    const id = params.id
+    if (!id) return []
+    return sync.data.message[id] ?? []
+  })
+  const working = createMemo(() => sessionWorking(status(), messages()))
   const tip = () => {
     if (working()) {
       return (
