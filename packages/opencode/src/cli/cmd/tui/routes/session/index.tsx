@@ -1155,6 +1155,7 @@ export function Session() {
                   )}
                 </For>
               </scrollbox>
+              <CallTraceBar />
               <box flexShrink={0}>
                 <Show when={permissions().length > 0}>
                   <PermissionPrompt request={permissions()[0]} />
@@ -1208,6 +1209,95 @@ export function Session() {
         </box>
       </context.Provider>
     </CallTraceProvider>
+  )
+}
+
+function CallTraceBar() {
+  const { theme } = useTheme()
+  const callTrace = useCallTrace()
+  const ctx = use()
+  const categorized = createMemo(() => callTrace.categorized(ctx.sessionID))
+  const formatDuration = (ms: number) => (ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`)
+  const formatCost = (cost?: number) => (cost !== undefined ? `$${cost.toFixed(4)}` : "")
+
+  return (
+    <Show
+      when={
+        categorized().user.length > 0 ||
+        categorized().opencode.length > 0 ||
+        categorized().llm.length > 0 ||
+        categorized().plugin.length > 0
+      }
+    >
+      <box
+        flexShrink={0}
+        paddingTop={1}
+        paddingBottom={1}
+        paddingLeft={2}
+        paddingRight={2}
+        gap={1}
+        backgroundColor={theme.backgroundElement}
+      >
+        <box paddingLeft={1} flexDirection="row" flexShrink={0} gap={2}>
+          <text fg={theme.textMuted}>CallTrace</text>
+          <Show when={categorized().user.length > 0}>
+            <text fg={theme.textMuted}>User: {categorized().user.length}</text>
+          </Show>
+          <Show when={categorized().llm.length > 0}>
+            <text fg={theme.textMuted}>LLM: {categorized().llm.length}</text>
+          </Show>
+          <Show when={categorized().opencode.length > 0}>
+            <text fg={theme.textMuted}>Tools: {categorized().opencode.length}</text>
+          </Show>
+          <Show when={categorized().plugin.length > 0}>
+            <text fg={theme.textMuted}>Plugin: {categorized().plugin.length}</text>
+          </Show>
+        </box>
+        <For each={categorized().llm}>
+          {(trace) => (
+            <box paddingLeft={2} flexDirection="row" flexShrink={0} gap={2}>
+              <text fg={theme.textMuted}>{trace.name}</text>
+              <Show when={trace.tokens}>
+                <text fg={theme.textMuted}>
+                  {trace.tokens!.input}→{trace.tokens!.output}
+                </text>
+              </Show>
+              <Show when={trace.cost !== undefined}>
+                <text fg={theme.textMuted}>{formatCost(trace.cost)}</text>
+              </Show>
+              <Show when={trace.duration !== undefined}>
+                <text fg={theme.textMuted}>{formatDuration(trace.duration!)}</text>
+              </Show>
+            </box>
+          )}
+        </For>
+        <For each={categorized().opencode}>
+          {(trace) => (
+            <box paddingLeft={2} flexDirection="row" flexShrink={0} gap={2}>
+              <text fg={theme.textMuted}>{trace.toolName ?? trace.name}</text>
+              <Show when={trace.duration !== undefined}>
+                <text fg={theme.textMuted}>{formatDuration(trace.duration!)}</text>
+              </Show>
+              <text
+                fg={trace.status === "error" ? theme.error : trace.status === "running" ? theme.info : theme.textMuted}
+              >
+                {trace.status}
+              </text>
+            </box>
+          )}
+        </For>
+        <For each={categorized().plugin}>
+          {(trace) => (
+            <box paddingLeft={2} flexDirection="row" flexShrink={0} gap={2}>
+              <text fg={theme.info}>{trace.agentName ?? trace.name}</text>
+              <Show when={trace.description}>
+                <text fg={theme.textMuted}>{trace.description}</text>
+              </Show>
+            </box>
+          )}
+        </For>
+      </box>
+    </Show>
   )
 }
 
