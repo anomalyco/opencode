@@ -824,6 +824,7 @@ export const layer = Layer.effect(
   const ext = (file: string) => path.extname(file).toLowerCase().slice(1)
   const name = (file: string) => path.basename(file).toLowerCase()
   const isImageByExtension = (file: string) => image.has(ext(file))
+  const isPdfByExtension = (file: string) => ext(file) === "pdf"
   const isTextByExtension = (file: string) => text.has(ext(file))
   const isTextByName = (file: string) => textName.has(name(file))
   const isBinaryByExtension = (file: string) => binary.has(ext(file))
@@ -1040,13 +1041,13 @@ export const defaultLayer = layer.pipe(
             throw new Error("Access denied: path escapes project directory")
           }
 
-          if (isImageByExtension(file)) {
+          if (isImageByExtension(file) || isPdfByExtension(file)) {
             if (await Filesystem.exists(full)) {
               const buffer = await Filesystem.readBytes(full).catch(() => Buffer.from([]))
               return {
                 type: "text",
                 content: buffer.toString("base64"),
-                mimeType: getImageMimeType(file),
+                mimeType: isPdfByExtension(file) ? "application/pdf" : getImageMimeType(file),
                 encoding: "base64",
               }
             }
