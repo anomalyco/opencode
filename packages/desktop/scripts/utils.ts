@@ -49,7 +49,7 @@ export async function copyBinaryToSidecarFolder(source: string, target = RUST_TA
   const dest = windowsify(`src-tauri/sidecars/athena-cli-${target}`)
   await $`cp ${source} ${dest}`
   if (process.platform === "win32" && process.env.GITHUB_ACTIONS === "true") {
-    await $`pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ../../script/sign-windows.ps1 ${dest}`
+    await $`pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ../../../script/sign-windows.ps1 ${dest}`
   }
 
   console.log(`Copied ${source} to ${dest}`)
