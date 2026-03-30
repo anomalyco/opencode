@@ -1,0 +1,34 @@
+Launch multiple sub-agents in parallel with optional dependency ordering.
+
+Use the team tool when you have 2+ independent tasks that can run concurrently, or a set of tasks where some depend on others completing first.
+
+Each task creates its own sub-agent session (like the task tool) but they execute in parallel. Tasks with dependencies wait for their prerequisites to complete before starting.
+
+Parameters:
+- tasks: Array of task objects, each with:
+  - id: Unique identifier for this task (used in depends references)
+  - description: Short (3-5 words) description
+  - prompt: Full task prompt for the sub-agent
+  - subagent_type: Agent type to use (same as task tool)
+  - depends: Optional array of task IDs this task depends on. Results of dependencies are prepended to the prompt.
+- concurrency: Optional max number of simultaneous sub-agents (default: unbounded)
+
+Available agent types:
+{agents}
+
+Rules:
+- Tasks with no depends run immediately in parallel
+- Tasks with depends wait for ALL listed dependencies to complete
+- If a dependency fails, dependent tasks are skipped
+- Circular dependencies are rejected
+- Use the task tool instead when you only have a single task
+- Each sub-agent gets its own session — they do not share context except through dependency results
+
+Example:
+{
+  "tasks": [
+    {"id": "analyze-auth", "description": "Analyze auth module", "prompt": "Review the auth module for security issues", "subagent_type": "explore"},
+    {"id": "analyze-api", "description": "Analyze API routes", "prompt": "Review the API routes for consistency", "subagent_type": "explore"},
+    {"id": "synthesize", "description": "Combine findings", "prompt": "Synthesize the analysis results into recommendations", "subagent_type": "general", "depends": ["analyze-auth", "analyze-api"]}
+  ]
+}
