@@ -848,17 +848,9 @@ export namespace Session {
 
   export const children = fn(SessionID.zod, (id) => runPromise((svc) => svc.children(id)))
   export const remove = fn(SessionID.zod, (id) => runPromise((svc) => svc.remove(id)))
-  export const updateMessage = Object.assign(
-    async function updateMessage<T extends MessageV2.Info>(msg: T): Promise<T> {
-      return runPromise((svc) => svc.updateMessage(MessageV2.Info.parse(msg) as T))
-    },
-    {
-      schema: MessageV2.Info,
-      force<T extends MessageV2.Info>(msg: T): Promise<T> {
-        return runPromise((svc) => svc.updateMessage(msg))
-      },
-    },
-  )
+  export async function updateMessage<T extends MessageV2.Info>(msg: T): Promise<T> {
+    return runPromise((svc) => svc.updateMessage(MessageV2.Info.parse(msg) as T))
+  }
 
   export const removeMessage = fn(z.object({ sessionID: SessionID.zod, messageID: MessageID.zod }), (input) =>
     runPromise((svc) => svc.removeMessage(input)),
@@ -869,17 +861,9 @@ export namespace Session {
     (input) => runPromise((svc) => svc.removePart(input)),
   )
 
-  export const updatePart = Object.assign(
-    async function updatePart<T extends MessageV2.Part>(part: T): Promise<T> {
-      return runPromise((svc) => svc.updatePart(MessageV2.Part.parse(part) as T))
-    },
-    {
-      schema: MessageV2.Part,
-      force<T extends MessageV2.Part>(part: T): Promise<T> {
-        return runPromise((svc) => svc.updatePart(part))
-      },
-    },
-  )
+  export async function updatePart<T extends MessageV2.Part>(part: T): Promise<T> {
+    return runPromise((svc) => svc.updatePart(MessageV2.Part.parse(part) as T))
+  }
 
   export const updatePartDelta = fn(
     z.object({
