@@ -275,7 +275,7 @@ export namespace Plugin {
         for (const hook of state.hooks) {
           const fn = hook[name] as any
           if (!fn) continue
-          yield* Effect.promise(async () => fn(input, output))
+          yield* Effect.promise(() => Promise.resolve(fn(input, output)))
         }
         return output
       })
