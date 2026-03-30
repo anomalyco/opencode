@@ -117,6 +117,10 @@ export namespace SessionPrompt {
                 ...loops.values().flatMap((e) => (e.fiber ? [e.fiber] : [])),
                 ...shells.values().flatMap((x) => (x.fiber ? [x.fiber] : [])),
               ])
+              for (const entry of loops.values()) {
+                if (entry.fiber) continue
+                for (const d of entry.queue) yield* Deferred.interrupt(d)
+              }
             }),
           )
           return { loops, shells }
@@ -138,9 +142,14 @@ export namespace SessionPrompt {
           return
         }
         if (loopEntry) {
-          if (loopEntry.fiber) yield* Fiber.interrupt(loopEntry.fiber)
-          for (const d of loopEntry.queue) yield* Deferred.interrupt(d)
-          s.loops.delete(sessionID)
+          if (loopEntry.fiber) {
+            s.loops.delete(sessionID)
+            yield* Fiber.interrupt(loopEntry.fiber)
+            yield* Fiber.await(loopEntry.fiber)
+          } else {
+            for (const d of loopEntry.queue) yield* Deferred.interrupt(d)
+            s.loops.delete(sessionID)
+          }
         }
         if (shellEntry) {
           shellEntry.abort.abort()
@@ -1535,7 +1544,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           const exit = yield* Fiber.await(fiber)
           if (Exit.isSuccess(exit)) return exit.value
           if (Cause.hasInterruptsOnly(exit.cause)) return yield* fallback
-          return yield* Effect.failCause(exit.cause as Cause.Cause<never>)
+          return yield* Effect.failCause(exit.cause)
         })
 
       const startLoop: (s: State, sessionID: SessionID) => Effect.Effect<MessageV2.WithParts, unknown> =

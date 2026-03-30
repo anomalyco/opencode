@@ -110,8 +110,8 @@ export namespace SessionSummary {
       (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
     )
     const msgWithParts = messages.find((m) => m.info.id === input.messageID)
-    if (!msgWithParts) return
-    const userMsg = msgWithParts.info as MessageV2.User
+    if (!msgWithParts || msgWithParts.info.role !== "user") return
+    const userMsg = msgWithParts.info
     const diffs = await computeDiff({ messages })
     userMsg.summary = {
       ...userMsg.summary,

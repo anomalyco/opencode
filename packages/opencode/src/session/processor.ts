@@ -1,4 +1,4 @@
-import { Cause, Effect, Exit, Layer, ServiceMap } from "effect"
+import { Cause, Effect, Layer, ServiceMap } from "effect"
 import * as Stream from "effect/Stream"
 import { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
