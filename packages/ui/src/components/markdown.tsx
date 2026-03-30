@@ -21,6 +21,8 @@ type Entry = {
   html: string
 }
 
+type MarkedApi = ReturnType<typeof useMarked>
+
 const max = 200
 const cache = new Map<string, Entry>()
 const debugKey = "opencode:debug:markdown"
@@ -343,6 +345,35 @@ function wrapCodeBlocks(container: HTMLElement) {
   }
 }
 
+function readLang(code: Element) {
+  const cls = code.getAttribute("class") ?? ""
+  const match = cls.match(/(?:^|\s)language-([^\s]+)/)
+  return match?.[1]
+}
+
+async function upgradeNode(marked: MarkedApi, node: Element) {
+  const host = document.createElement("div")
+  host.innerHTML = marked.renderMath ? marked.renderMath(node.outerHTML) : node.outerHTML
+
+  for (const code of Array.from(host.querySelectorAll("pre > code"))) {
+    const pre = code.parentElement
+    if (!(pre instanceof HTMLPreElement)) continue
+    if (!marked.highlight) continue
+    const html = await marked.highlight(code.textContent ?? "", readLang(code))
+    const temp = document.createElement("div")
+    temp.innerHTML = html
+    const next = temp.firstElementChild
+    if (!next) continue
+    pre.replaceWith(next)
+  }
+
+  const frag = document.createDocumentFragment()
+  for (const child of Array.from(host.childNodes)) {
+    frag.appendChild(child)
+  }
+  node.replaceWith(frag)
+}
+
 function normalize(text: string) {
   const ws = /[\t \u00A0\u200B\u3000]/
 
@@ -456,6 +487,7 @@ function math(el: Element) {
 
 // Debounce delay before upgrading from fast parse to full parse (with shiki)
 const HIGHLIGHT_DEBOUNCE_MS = 600
+const HIGHLIGHT_IDLE_TIMEOUT_MS = 4_000
 
 export function Markdown(
   props: ComponentProps<"div"> & {
@@ -465,10 +497,21 @@ export function Markdown(
     class?: string
     classList?: Record<string, boolean>
     streaming?: boolean
+    highlight?: "full" | "defer"
+    chunked?: boolean
   },
 ) {
   const id = ++seq
-  const [local, others] = splitProps(props, ["text", "cacheKey", "eager", "class", "classList", "streaming"])
+  const [local, others] = splitProps(props, [
+    "text",
+    "cacheKey",
+    "eager",
+    "class",
+    "classList",
+    "streaming",
+    "highlight",
+    "chunked",
+  ])
   const marked = useMarked()
   const i18n = useI18n()
   const [root, setRoot] = createSignal<HTMLDivElement>()
@@ -481,6 +524,10 @@ export function Markdown(
   // Track whether we used fast parse (no shiki) for the current content
   let usedFastParse = false
   let highlightTimer: ReturnType<typeof setTimeout> | undefined
+  let highlightIdle: number | undefined
+  let chunkTimer: ReturnType<typeof setTimeout> | undefined
+  let chunkIdle: number | undefined
+  let chunkGeneration = 0
   // Monotonically increasing generation counter to discard stale full-parse results
   let parseGeneration = 0
 
@@ -506,13 +553,20 @@ export function Markdown(
         }
       }
 
-      // During streaming, use fast parse (no shiki highlighting) to reduce main thread blocking
+      // Fast parse avoids shiki on first paint, then upgrades when needed.
+      const defer = local.highlight === "defer"
       const streaming = local.streaming
-      const parseFn = streaming && marked.parseFast ? marked.parseFast : marked.parse
+      const chunked = local.chunked && marked.parseLite
+      const fast = !chunked && (streaming || defer) && marked.parseFast
+      const parseFn = chunked ? marked.parseLite : fast ? marked.parseFast : marked.parse
 
       let safe = ""
       try {
-        log(id, streaming ? "render parse (fast)" : "render parse", { key, hash, text: markdown.length })
+        log(id, chunked ? "render parse (lite)" : fast ? "render parse (fast)" : "render parse", {
+          key,
+          hash,
+          text: markdown.length,
+        })
         safe = sanitize(await parseFn(normalized))
       } catch (err) {
         console.error("markdown render failed", err)
@@ -520,9 +574,9 @@ export function Markdown(
       }
       log(id, "render done", { key, hash, html: safe.length, ms: Math.round(performance.now() - start) })
 
-      if (streaming) {
+      if (chunked || fast) {
         usedFastParse = true
-        // Don't cache fast-parsed results — they lack syntax highlighting
+        // Don't cache fast or lite results — they lack final highlighting/upgrades
       } else {
         usedFastParse = false
         if (key && hash) touch(key, { hash, html: safe })
@@ -535,6 +589,7 @@ export function Markdown(
 
   // When streaming stops, schedule a full re-parse with shiki highlighting
   createEffect(() => {
+    const defer = local.highlight === "defer"
     const streaming = local.streaming
     const text = local.text
 
@@ -542,25 +597,52 @@ export function Markdown(
       clearTimeout(highlightTimer)
       highlightTimer = undefined
     }
+    if (highlightIdle !== undefined) {
+      cancelIdleCallback(highlightIdle)
+      highlightIdle = undefined
+    }
+    if (chunkTimer) {
+      clearTimeout(chunkTimer)
+      chunkTimer = undefined
+    }
+    if (chunkIdle !== undefined) {
+      cancelIdleCallback(chunkIdle)
+      chunkIdle = undefined
+    }
 
-    if (!streaming && usedFastParse && text) {
+    if (!streaming && defer && usedFastParse && text) {
+      if (local.chunked) return
       const gen = ++parseGeneration
-      highlightTimer = setTimeout(async () => {
-        try {
-          const normalized = normalize(text)
-          const hash = checksum(normalized)
-          const key = local.cacheKey ?? hash
-          log(id, "render upgrade (full shiki)", { key, text: text.length })
-          const safe = sanitize(await marked.parse(normalized))
-          // Only apply if content hasn't changed since we scheduled the upgrade
-          if (gen === parseGeneration) {
-            setHtml(safe)
-            usedFastParse = false
-            if (key && hash) touch(key, { hash, html: safe })
+      highlightTimer = setTimeout(() => {
+        const run = async () => {
+          try {
+            const normalized = normalize(text)
+            const hash = checksum(normalized)
+            const key = local.cacheKey ?? hash
+            log(id, "render upgrade (full shiki)", { key, text: text.length })
+            const safe = sanitize(await marked.parse(normalized))
+            if (gen === parseGeneration) {
+              setHtml(safe)
+              usedFastParse = false
+              if (key && hash) touch(key, { hash, html: safe })
+            }
+          } catch (err) {
+            console.error("markdown highlight upgrade failed", err)
           }
-        } catch (err) {
-          console.error("markdown highlight upgrade failed", err)
         }
+
+        if (typeof requestIdleCallback !== "function") {
+          void run()
+          return
+        }
+
+        highlightIdle = requestIdleCallback(
+          () => {
+            highlightIdle = undefined
+            void run()
+          },
+          { timeout: HIGHLIGHT_IDLE_TIMEOUT_MS },
+        )
       }, HIGHLIGHT_DEBOUNCE_MS)
     }
   })
@@ -658,6 +740,7 @@ export function Markdown(
     const next = untrack(labels)
     const prevHtml = container.dataset.html ?? ""
     const isStreaming = local.streaming
+    const chunked = local.chunked
 
     // Fast-append path: during streaming, if new HTML starts with the previous HTML,
     // find the common top-level node boundary and only morphdom the tail.
@@ -713,12 +796,28 @@ export function Markdown(
       }
     }
 
-    // Full morphdom path
+    // Chunked path prefers a simple replace on first mount to avoid expensive diffing.
     const temp = document.createElement("div")
     temp.innerHTML = content
     wrapCodeBlocks(temp)
     let same = 0
     let keep = 0
+
+    if (chunked && !prevHtml) {
+      log(id, "patch replace", {
+        next: content.length,
+        nodes: temp.childNodes.length,
+      })
+      container.replaceChildren(...Array.from(temp.childNodes))
+      container.dataset.html = content
+      if (copySetupTimer) clearTimeout(copySetupTimer)
+      copySetupTimer = setTimeout(() => {
+        if (copyCleanup) copyCleanup()
+        copyCleanup = setupCodeCopy(container, next)
+        setLabels(container, next)
+      }, 150)
+      return
+    }
 
     log(id, "patch start", {
       prev: prevHtml.length,
@@ -768,6 +867,69 @@ export function Markdown(
 
   createEffect(() => {
     const container = root()
+    const content = html()
+    if (!container || !content || !local.chunked) return
+    if (isServer) return
+    if (!container.dataset.html) return
+
+    const gen = ++chunkGeneration
+    const queue = Array.from(container.children).filter((node): node is Element => node instanceof Element)
+    if (queue.length === 0) return
+
+    log(id, "chunk schedule", { blocks: queue.length, html: content.length })
+
+    const setup = () => {
+      if (copySetupTimer) clearTimeout(copySetupTimer)
+      copySetupTimer = setTimeout(() => {
+        if (gen !== chunkGeneration) return
+        if (copyCleanup) copyCleanup()
+        copyCleanup = setupCodeCopy(container, labels())
+        setLabels(container, labels())
+        log(id, "chunk copy setup", {
+          buttons: count(container, '[data-slot="markdown-copy-button"]'),
+        })
+      }, 150)
+    }
+
+    const run = async () => {
+      const start = performance.now()
+      while (queue.length > 0) {
+        if (gen !== chunkGeneration) return
+        const node = queue.shift()
+        if (!node || !node.isConnected) continue
+        await upgradeNode(marked, node)
+        if (performance.now() - start > 12) break
+      }
+
+      setup()
+
+      if (queue.length === 0) {
+        usedFastParse = false
+        log(id, "chunk done", {
+          blocks: Array.from(container.children).length,
+          katex: count(container, ".katex, .katex-display"),
+        })
+        return
+      }
+
+      const nextRun = () => {
+        chunkIdle = undefined
+        void run()
+      }
+
+      if (typeof requestIdleCallback === "function") {
+        chunkIdle = requestIdleCallback(nextRun, { timeout: 120 })
+        return
+      }
+
+      chunkTimer = setTimeout(nextRun, 16)
+    }
+
+    void run()
+  })
+
+  createEffect(() => {
+    const container = root()
     const next = labels()
     if (!container) return
     if (isServer) return
@@ -792,6 +954,9 @@ export function Markdown(
     if (copySetupTimer) clearTimeout(copySetupTimer)
     if (copyCleanup) copyCleanup()
     if (highlightTimer) clearTimeout(highlightTimer)
+    if (highlightIdle !== undefined) cancelIdleCallback(highlightIdle)
+    if (chunkTimer) clearTimeout(chunkTimer)
+    if (chunkIdle !== undefined) cancelIdleCallback(chunkIdle)
   })
 
   return (

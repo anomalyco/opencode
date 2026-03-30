@@ -90,11 +90,12 @@ declare global {
 }
 
 function MarkedProviderWithNativeParser(props: ParentProps) {
-  // Note: Native parser removed as of commit 692249052 to fix math rendering issues
-  // Now using JS parser with KaTeX for all platforms
   const platform = usePlatform()
   return (
-    <MarkedProvider mathOutput={platform.platform === "desktop" ? "html" : "htmlAndMathml"}>
+    <MarkedProvider
+      nativeParser={platform.platform === "desktop" ? platform.parseMarkdown : undefined}
+      mathOutput={platform.platform === "desktop" ? "html" : "htmlAndMathml"}
+    >
       {props.children}
     </MarkedProvider>
   )

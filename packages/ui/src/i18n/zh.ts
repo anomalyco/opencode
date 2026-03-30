@@ -22,6 +22,7 @@ export const dict = {
   "ui.sessionReview.largeDiff.renderAnyway": "仍然渲染",
   "ui.fileMedia.kind.image": "图片",
   "ui.fileMedia.kind.audio": "音频",
+  "ui.fileMedia.kind.pdf": "PDF",
   "ui.fileMedia.state.removed": "{{kind}}已移除",
   "ui.fileMedia.state.loading": "正在加载{{kind}}...",
   "ui.fileMedia.state.error": "加载{{kind}}失败",
@@ -31,6 +32,9 @@ export const dict = {
   "ui.fileMedia.binary.description.default": "无法显示此文件，因为它是二进制文件。",
   "ui.file.preview": "预览",
   "ui.file.source": "源码",
+  "ui.file.largePreview.title": "已暂停大型 Markdown 预览",
+  "ui.file.largePreview.meta": "可打开源码获得更接近编辑器的视图，或继续渲染 {{size}} 的完整预览。",
+  "ui.file.largePreview.render": "渲染完整预览",
 
   "ui.lineComment.label.prefix": "评论 ",
   "ui.lineComment.label.suffix": "",

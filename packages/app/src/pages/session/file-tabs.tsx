@@ -5,7 +5,6 @@ import type { FileSearchHandle } from "@opencode-ai/ui/file"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { cloneSelectedLineRange, previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { createLineCommentController } from "@opencode-ai/ui/line-comment-annotations"
-import { sampledChecksum } from "@opencode-ai/util/encode"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tabs } from "@opencode-ai/ui/tabs"
@@ -17,6 +16,7 @@ import { usePrompt } from "@/context/prompt"
 import { getSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
+import { fileOpenEnd, fileOpenTrace } from "@/utils/file-open-debug"
 
 function FileCommentMenu(props: {
   moreLabel: string
@@ -78,13 +78,19 @@ export function FileTabContent(props: { tab: string }) {
   }
 
   const path = createMemo(() => file.pathFromTab(props.tab))
+  createEffect(() => {
+    const p = path()
+    if (!p) return
+    fileOpenTrace(p, "file tab mount", { tab: props.tab })
+  })
+
   const state = createMemo(() => {
     const p = path()
     if (!p) return
     return file.get(p)
   })
+  const md = createMemo(() => /\.(md|markdown|mdx)$/i.test(path() ?? ""))
   const contents = createMemo(() => state()?.content?.content ?? "")
-  const cacheKey = createMemo(() => sampledChecksum(contents()))
   const selectedLines = createMemo<SelectedLineRange | null>(() => {
     const p = path()
     if (!p) return null
@@ -394,23 +400,27 @@ export function FileTabContent(props: { tab: string }) {
         file={{
           name: path() ?? "",
           contents: source,
-          cacheKey: cacheKey(),
+          cacheKey: path() ?? "",
         }}
-        enableLineSelection
-        enableHoverUtility
-        selectedLines={activeSelection()}
-        commentedLines={commentedLines()}
+        enableLineSelection={!md()}
+        enableHoverUtility={!md()}
+        selectedLines={md() ? null : activeSelection()}
+        commentedLines={md() ? [] : commentedLines()}
         onRendered={() => {
+          const p = path()
+          if (p) fileOpenEnd(p, "viewer rendered", { markdown: md(), chars: source.length })
           queueRestore()
         }}
-        annotations={commentsUi.annotations()}
-        renderAnnotation={commentsUi.renderAnnotation}
-        renderHoverUtility={commentsUi.renderHoverUtility}
+        annotations={md() ? [] : commentsUi.annotations()}
+        renderAnnotation={md() ? undefined : commentsUi.renderAnnotation}
+        renderHoverUtility={md() ? undefined : commentsUi.renderHoverUtility}
         onLineSelected={(range: SelectedLineRange | null) => {
+          if (md()) return
           commentsUi.onLineSelected(range)
         }}
         onLineNumberSelectionEnd={commentsUi.onLineNumberSelectionEnd}
         onLineSelectionEnd={(range: SelectedLineRange | null) => {
+          if (md()) return
           commentsUi.onLineSelectionEnd(range)
         }}
         search={search}

@@ -575,6 +575,24 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
   name: "Marked",
   init: (props: { nativeParser?: NativeMarkdownParser; mathOutput?: MathOutput }) => {
     const output = props.mathOutput ?? "htmlAndMathml"
+    const native = props.nativeParser
+
+    const highlight = async (code: string, lang?: string) => {
+      const highlighter = await getSharedHighlighter({
+        themes: ["OpenCode"],
+        langs: [],
+        preferredHighlighter: "shiki-wasm",
+      })
+      const value = lang && lang in bundledLanguages ? lang : "text"
+      if (!highlighter.getLoadedLanguages().includes(value)) {
+        await highlighter.loadLanguage(value as BundledLanguage)
+      }
+      return highlighter.codeToHtml(code, {
+        lang: value,
+        theme: "OpenCode",
+        tabindex: false,
+      })
+    }
 
     const linkRenderer = {
       renderer: {
@@ -588,6 +606,8 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
       },
     }
 
+    const liteParser = marked.use(linkRenderer)
+
     // Full parser with shiki highlighting — used for final render
     const fullParser = marked.use(
       linkRenderer,
@@ -598,22 +618,7 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
       }),
       markedShiki({
         async highlight(code, lang) {
-          const highlighter = await getSharedHighlighter({
-            themes: ["OpenCode"],
-            langs: [],
-            preferredHighlighter: "shiki-wasm",
-          })
-          if (!(lang in bundledLanguages)) {
-            lang = "text"
-          }
-          if (!highlighter.getLoadedLanguages().includes(lang)) {
-            await highlighter.loadLanguage(lang as BundledLanguage)
-          }
-          return highlighter.codeToHtml(code, {
-            lang: lang || "text",
-            theme: "OpenCode",
-            tabindex: false,
-          })
+          return highlight(code, lang)
         },
       }),
     )
@@ -628,17 +633,25 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
       }),
     )
 
-    if (props.nativeParser) {
-      const nativeParser = props.nativeParser
+    if (native) {
       return {
         async parse(markdown: string): Promise<string> {
-          const html = await nativeParser(markdown)
+          const html = await native(markdown)
           const withMath = renderMathExpressions(html, output)
           return highlightCodeBlocks(withMath)
         },
         async parseFast(markdown: string): Promise<string> {
-          const html = await nativeParser(markdown)
+          const html = await native(markdown)
           return renderMathExpressions(html, output)
+        },
+        async parseLite(markdown: string): Promise<string> {
+          return native(markdown)
+        },
+        renderMath(html: string) {
+          return renderMathExpressions(html, output)
+        },
+        async highlight(code: string, lang?: string) {
+          return highlight(code, lang)
         },
       }
     }
@@ -651,6 +664,15 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
       async parseFast(markdown: string): Promise<string> {
         const html = await fastParser.parse(normalizeDisplayMath(markdown))
         return renderMathExpressions(html, output)
+      },
+      async parseLite(markdown: string): Promise<string> {
+        return liteParser.parse(normalizeDisplayMath(markdown))
+      },
+      renderMath(html: string) {
+        return renderMathExpressions(html, output)
+      },
+      async highlight(code: string, lang?: string) {
+        return highlight(code, lang)
       },
     }
   },

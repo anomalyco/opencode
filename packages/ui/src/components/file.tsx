@@ -33,6 +33,7 @@ import { createDefaultOptions, styleVariables } from "../pierre"
 import { markCommentedDiffLines, markCommentedFileLines } from "../pierre/commented-lines"
 import { fixDiffSelection, findDiffSide, type DiffSelectionSide } from "../pierre/diff-selection"
 import { createFileFind } from "../pierre/file-find"
+import { dataUrlFromMediaValue, mediaKindFromPath } from "../pierre/media"
 import {
   applyViewerScheme,
   clearReadyWatcher,
@@ -52,12 +53,19 @@ import {
 import { createLineNumberSelectionBridge, restoreShadowTextSelection } from "../pierre/selection-bridge"
 import { acquireVirtualizer, virtualMetrics } from "../pierre/virtualizer"
 import { getWorkerPool } from "../pierre/worker"
+import { Button } from "./button"
 import { FileMedia, type FileMediaOptions } from "./file-media"
 import { FileSearchBar } from "./file-search"
 import { Markdown } from "./markdown"
 import { RadioGroup } from "./radio-group"
 
 const VIRTUALIZE_BYTES = 500_000
+const MARKDOWN_VIRTUALIZE_BYTES = 180_000
+const MARKDOWN_VIRTUALIZE_LINES = 4_000
+const MARKDOWN_PREVIEW_BYTES = 180_000
+const MARKDOWN_PREVIEW_LINES = 4_000
+const MARKDOWN_PREVIEW_CHARS = 12_000
+const MARKDOWN_PREVIEW_HEAD = 160
 
 const codeMetrics = {
   ...DEFAULT_VIRTUAL_FILE_METRICS,
@@ -143,6 +151,18 @@ function fileBytes(file: FileContents) {
 
 function markdownFile(name: string) {
   return /\.(md|markdown|mdx)$/i.test(name)
+}
+
+function fileLines(text: string) {
+  const total = text.split("\n").length - (text.endsWith("\n") ? 1 : 0)
+  return Math.max(1, total)
+}
+
+function previewText(text: string) {
+  const rows = text.split("\n")
+  const head = rows.slice(0, MARKDOWN_PREVIEW_HEAD).join("\n").slice(0, MARKDOWN_PREVIEW_CHARS).trimEnd()
+  if (head.length >= text.length) return head
+  return `${head}\n\n...`
 }
 
 // ---------------------------------------------------------------------------
@@ -743,16 +763,21 @@ function SourceViewer<T>(props: SourceProps<T>) {
   const [local, others] = splitProps(props, [...textKeys, "head"] as const)
 
   const text = () => fileText(local.file)
+  const md = () => markdownFile(local.file.name)
 
-  const lineCount = () => {
+  const lines = createMemo(() => {
     const value = text()
     const total = value.split("\n").length - (value.endsWith("\n") ? 1 : 0)
     return Math.max(1, total)
-  }
+  })
 
   const bytes = createMemo(() => fileBytes(local.file))
 
-  const virtual = createMemo(() => bytes() > VIRTUALIZE_BYTES)
+  const virtual = createMemo(() => {
+    if (bytes() > VIRTUALIZE_BYTES) return true
+    if (!md()) return false
+    return bytes() > MARKDOWN_VIRTUALIZE_BYTES || lines() > MARKDOWN_VIRTUALIZE_LINES
+  })
 
   const virtuals = createLocalVirtualStrategy(() => viewer.wrapper, virtual)
 
@@ -770,7 +795,7 @@ function SourceViewer<T>(props: SourceProps<T>) {
     const root = viewer.getRoot()
     if (!root) return false
 
-    const total = lineCount()
+    const total = lines()
     if (root.querySelectorAll("[data-line]").length < total) return false
 
     if (!range) {
@@ -867,7 +892,7 @@ function SourceViewer<T>(props: SourceProps<T>) {
       viewer,
       isReady: (root) => {
         if (virtual()) return root.querySelector("[data-line]") != null
-        return root.querySelectorAll("[data-line]").length >= lineCount()
+        return root.querySelectorAll("[data-line]").length >= lines()
       },
       onReady: () => {
         applySelection(viewer.lastSelection)
@@ -933,16 +958,29 @@ function SourceViewer<T>(props: SourceProps<T>) {
 function TextViewer<T>(props: TextFileProps<T>) {
   const i18n = useI18n()
   const md = () => markdownFile(props.file.name)
+  const svg = () => mediaKindFromPath(props.file.name) === "svg"
   const Source = SourceViewer as (props: SourceProps<T>) => JSX.Element
   const text = createMemo(() => fileText(props.file))
+  const lines = createMemo(() => fileLines(text()))
+  const bytes = createMemo(() => fileBytes(props.file))
+  const large = createMemo(() => md() && (bytes() > MARKDOWN_PREVIEW_BYTES || lines() > MARKDOWN_PREVIEW_LINES))
+  const meta = createMemo(() => `${Intl.NumberFormat().format(lines())} lines, ${Intl.NumberFormat().format(bytes())} chars`)
+  const preview = createMemo(() => (large() ? previewText(text()) : ""))
+  const svgSrc = createMemo(() => {
+    if (!svg()) return
+    return dataUrlFromMediaValue(props.media?.current ?? props.file.contents, "svg")
+  })
 
-  if (!md()) return SourceViewer<T>(props)
+  if (!md() && !svg()) return SourceViewer<T>(props)
 
-  const [mode, setMode] = createSignal<"preview" | "source">(props.enableLineSelection === true ? "source" : "preview")
+  const [mode, setMode] = createSignal<"preview" | "source">("preview")
+  const [full, setFull] = createSignal(false)
   const bar = (
     <div
       data-slot="file-markdown-actions"
       class="flex items-center justify-end border-b border-border-weak-base bg-background-base px-3 py-2"
+      data-prevent-autofocus=""
+      onPointerDown={(event) => event.stopPropagation()}
     >
       <RadioGroup
         options={["preview", "source"] as const}
@@ -953,6 +991,14 @@ function TextViewer<T>(props: TextFileProps<T>) {
         onSelect={(value) => value && setMode(value)}
       />
     </div>
+  )
+
+  createEffect(
+    on(
+      () => props.file.cacheKey ?? props.file.name,
+      () => setFull(false),
+      { defer: true },
+    ),
   )
 
   createEffect(
@@ -974,7 +1020,53 @@ function TextViewer<T>(props: TextFileProps<T>) {
           <div class="flex min-h-0 flex-col overflow-hidden">
             {bar}
             <div data-slot="file-markdown-preview" class="overflow-auto px-4 py-4">
-              <Markdown text={text()} cacheKey={props.file.name} />
+              <Show
+                when={md()}
+                fallback={
+                  <Show
+                    when={svgSrc()}
+                    fallback={<div class="px-2 py-6 text-center text-text-weak">{props.file.name}</div>}
+                  >
+                    {(value) => (
+                      <div class="flex justify-center">
+                        <img
+                          src={value()}
+                          alt={props.file.name}
+                          class="max-h-[60vh] max-w-full rounded border border-border-weak-base bg-background-base object-contain"
+                          onLoad={() => props.media?.onLoad?.()}
+                        />
+                      </div>
+                    )}
+                  </Show>
+                }
+              >
+                <Show
+                  when={!large() || full()}
+                  fallback={
+                    <div class="mx-auto flex w-full max-w-4xl flex-col gap-4">
+                      <div class="rounded-lg border border-border-weak-base bg-background-stronger p-4">
+                        <div class="text-14-medium text-text-base">{i18n.t("ui.file.largePreview.title")}</div>
+                        <div class="mt-2 text-13-regular text-text-weak">
+                          {i18n.t("ui.file.largePreview.meta", { size: meta() })}
+                        </div>
+                        <div class="mt-4 flex flex-wrap gap-2">
+                          <Button size="small" variant="secondary" onClick={() => setMode("source")}>
+                            {i18n.t("ui.file.source")}
+                          </Button>
+                          <Button size="small" variant="primary" onClick={() => setFull(true)}>
+                            {i18n.t("ui.file.largePreview.render")}
+                          </Button>
+                        </div>
+                      </div>
+                      <pre class="overflow-auto rounded-lg border border-border-weak-base bg-background-stronger p-4 text-12-regular leading-6 text-text-muted">
+                        {preview()}
+                      </pre>
+                    </div>
+                  }
+                >
+                  <Markdown text={text()} cacheKey={props.file.name} highlight="defer" chunked={large()} />
+                </Show>
+              </Show>
             </div>
           </div>
         </FileRoot>
@@ -1192,6 +1284,9 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
 
 export function File<T>(props: FileProps<T>) {
   if (props.mode === "text") {
+    if (mediaKindFromPath(props.file.name) === "svg") {
+      return TextViewer(props)
+    }
     return <FileMedia media={props.media} fallback={() => TextViewer(props)} />
   }
 
