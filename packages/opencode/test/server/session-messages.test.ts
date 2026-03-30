@@ -1,14 +1,17 @@
-import { describe, expect, test } from "bun:test"
-import path from "path"
+import { afterEach, describe, expect, test } from "bun:test"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
 import { Session } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { Log } from "../../src/util/log"
+import { tmpdir } from "../fixture/fixture"
 
-const root = path.join(__dirname, "../..")
 Log.init({ print: false })
+
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 async function fill(sessionID: SessionID, count: number, time = (i: number) => Date.now() + i) {
   const ids = [] as MessageID[]
@@ -38,8 +41,9 @@ async function fill(sessionID: SessionID, count: number, time = (i: number) => D
 
 describe("session messages endpoint", () => {
   test("returns cursor headers for older pages", async () => {
+    await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: root,
+      directory: tmp.path,
       fn: async () => {
         const session = await Session.create({})
         const ids = await fill(session.id, 5)
@@ -64,8 +68,9 @@ describe("session messages endpoint", () => {
   })
 
   test("keeps full-history responses when limit is omitted", async () => {
+    await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: root,
+      directory: tmp.path,
       fn: async () => {
         const session = await Session.create({})
         const ids = await fill(session.id, 3)
@@ -82,8 +87,9 @@ describe("session messages endpoint", () => {
   })
 
   test("rejects invalid cursors and missing sessions", async () => {
+    await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: root,
+      directory: tmp.path,
       fn: async () => {
         const session = await Session.create({})
         const app = Server.Default()
@@ -100,8 +106,9 @@ describe("session messages endpoint", () => {
   })
 
   test("does not truncate large legacy limit requests", async () => {
+    await using tmp = await tmpdir({ git: true })
     await Instance.provide({
-      directory: root,
+      directory: tmp.path,
       fn: async () => {
         const session = await Session.create({})
         await fill(session.id, 520)
@@ -120,7 +127,7 @@ describe("session messages endpoint", () => {
 
 describe("session.prompt_async error handling", () => {
   test("prompt_async route has error handler for detached prompt call", async () => {
-    const src = await Bun.file(path.join(import.meta.dir, "../../src/server/routes/session.ts")).text()
+    const src = await Bun.file(new URL("../../src/server/routes/session.ts", import.meta.url)).text()
     const start = src.indexOf('"/:sessionID/prompt_async"')
     const end = src.indexOf('"/:sessionID/command"', start)
     expect(start).toBeGreaterThan(-1)
