@@ -46,7 +46,7 @@ import { AppFileSystem } from "@/filesystem"
 import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
-import { Cause, Effect, Exit, Fiber, Layer, Scope, ServiceMap } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer, Option, Scope, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 
@@ -163,7 +163,7 @@ export namespace SessionPrompt {
               : path.resolve(Instance.worktree, name)
 
             const info = yield* fsys.stat(filepath).pipe(Effect.option)
-            if (!info._tag || info._tag === "None") {
+            if (Option.isNone(info)) {
               const found = yield* agents.get(name)
               if (found) parts.push({ type: "agent", name: found.name })
               return
