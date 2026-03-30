@@ -78,19 +78,6 @@ export namespace SessionSummary {
     return Buffer.from(bytes).toString()
   }
 
-  const DIFF_BUDGET = 1_000_000 // ~1 MB byte budget for diff payloads
-
-  function capDiffs(diffs: Snapshot.FileDiff[]) {
-    let bytes = 0
-    const result: Snapshot.FileDiff[] = []
-    for (const diff of diffs) {
-      bytes += (diff.before?.length ?? 0) + (diff.after?.length ?? 0)
-      if (bytes > DIFF_BUDGET && result.length > 0) break
-      result.push(diff)
-    }
-    return result
-  }
-
   export interface Interface {
     readonly summarize: (input: { sessionID: SessionID; messageID: MessageID }) => Effect.Effect<void>
     readonly diff: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Snapshot.FileDiff[]>
