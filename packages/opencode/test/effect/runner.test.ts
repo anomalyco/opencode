@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Deferred, Effect, Exit, Fiber, Ref, Scope } from "effect"
 import { Runner } from "../../src/effect/runner"
 import { it } from "../lib/effect"
@@ -190,6 +190,59 @@ describe("Runner", () => {
     }),
   )
 
+  test("cancel does not deadlock when replacement work starts before interrupted run exits", async () => {
+    function defer() {
+      let resolve!: () => void
+      const promise = new Promise<void>((done) => {
+        resolve = done
+      })
+      return { promise, resolve }
+    }
+
+    function fail(ms: number, msg: string) {
+      return new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error(msg)), ms)
+      })
+    }
+
+    const s = await Effect.runPromise(Scope.make())
+    const hit = defer()
+    const hold = defer()
+    const done = defer()
+    try {
+      const runner = Runner.make<string>(s)
+      const first = Effect.never.pipe(
+        Effect.onInterrupt(() => Effect.sync(() => hit.resolve())),
+        Effect.ensuring(Effect.promise(() => hold.promise)),
+        Effect.as("first"),
+      )
+
+      const a = Effect.runPromiseExit(runner.ensureRunning(first))
+      await Bun.sleep(10)
+
+      const stop = Effect.runPromise(runner.cancel)
+      await Promise.race([hit.promise, fail(250, "cancel did not interrupt running work")])
+
+      const b = Effect.runPromise(runner.ensureRunning(Effect.promise(() => done.promise).pipe(Effect.as("second"))))
+      expect(runner.busy).toBe(true)
+
+      hold.resolve()
+      await Promise.race([stop, fail(250, "cancel deadlocked while replacement run was active")])
+
+      expect(runner.busy).toBe(true)
+      done.resolve()
+      expect(await b).toBe("second")
+      expect(runner.busy).toBe(false)
+
+      const exit = await a
+      expect(Exit.isFailure(exit)).toBe(true)
+    } finally {
+      hold.resolve()
+      done.resolve()
+      await Promise.race([Effect.runPromise(Scope.close(s, Exit.void)), fail(1000, "runner scope did not close")])
+    }
+  })
+
   // --- shell semantics ---
 
   it.effect(
@@ -267,6 +320,30 @@ describe("Runner", () => {
       yield* runner.cancel
       const done = yield* Fiber.await(sh)
       expect(Exit.isSuccess(done)).toBe(true)
+    }),
+  )
+
+  it.effect(
+    "cancel interrupts shell that ignores abort signal",
+    Effect.gen(function* () {
+      const s = yield* Scope.Scope
+      const runner = Runner.make<string>(s)
+      const gate = yield* Deferred.make<void>()
+
+      const sh = yield* runner
+        .startShell((_signal) => Deferred.await(gate).pipe(Effect.as("ignored")))
+        .pipe(Effect.forkChild)
+      yield* Effect.sleep("10 millis")
+
+      const stop = yield* runner.cancel.pipe(Effect.forkChild)
+      const stopExit = yield* Fiber.await(stop).pipe(Effect.timeout("250 millis"))
+      expect(Exit.isSuccess(stopExit)).toBe(true)
+      expect(runner.busy).toBe(false)
+
+      const shellExit = yield* Fiber.await(sh)
+      expect(Exit.isFailure(shellExit)).toBe(true)
+
+      yield* Deferred.succeed(gate, undefined).pipe(Effect.ignore)
     }),
   )
 

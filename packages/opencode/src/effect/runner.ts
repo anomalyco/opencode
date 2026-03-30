@@ -1,4 +1,4 @@
-import { Cause, Deferred, Effect, Exit, Fiber, Schema, Scope, SynchronizedRef } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Option, Schema, Scope, SynchronizedRef } from "effect"
 
 export interface Runner<A, E = never> {
   readonly state: Runner.State<A, E>
@@ -101,6 +101,14 @@ export namespace Runner {
         })
       }).pipe(Effect.flatten)
 
+    const stopShell = (shell: ShellHandle<A, E>) =>
+      Effect.gen(function* () {
+        shell.abort.abort()
+        const exit = yield* Fiber.await(shell.fiber).pipe(Effect.timeoutOption("100 millis"))
+        if (Option.isNone(exit)) yield* Fiber.interrupt(shell.fiber)
+        yield* Fiber.await(shell.fiber).pipe(Effect.exit, Effect.asVoid)
+      })
+
     const ensureRunning = (work: Effect.Effect<A, E>) =>
       SynchronizedRef.modifyEffect(ref, (st) => {
         return Effect.gen(function* () {
@@ -174,8 +182,7 @@ export namespace Runner {
         case "Shell":
           return [
             Effect.gen(function* () {
-              st.shell.abort.abort()
-              yield* Fiber.await(st.shell.fiber).pipe(Effect.exit, Effect.asVoid)
+              yield* stopShell(st.shell)
               yield* idleIfCurrent()
             }),
             { _tag: "Idle" } as const,
@@ -184,8 +191,7 @@ export namespace Runner {
           return [
             Effect.gen(function* () {
               yield* Deferred.fail(st.run.done, new Cancelled()).pipe(Effect.asVoid)
-              st.shell.abort.abort()
-              yield* Fiber.await(st.shell.fiber).pipe(Effect.exit, Effect.asVoid)
+              yield* stopShell(st.shell)
               yield* idleIfCurrent()
             }),
             { _tag: "Idle" } as const,

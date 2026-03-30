@@ -172,7 +172,6 @@ function toolPart(parts: MessageV2.Part[]) {
 
 type CompletedToolPart = MessageV2.ToolPart & { state: MessageV2.ToolStateCompleted }
 type ErrorToolPart = MessageV2.ToolPart & { state: MessageV2.ToolStateError }
-type RunningToolPart = MessageV2.ToolPart & { state: MessageV2.ToolStateRunning }
 
 function completedTool(parts: MessageV2.Part[]) {
   const part = toolPart(parts)
@@ -184,12 +183,6 @@ function errorTool(parts: MessageV2.Part[]) {
   const part = toolPart(parts)
   expect(part?.state.status).toBe("error")
   return part?.state.status === "error" ? (part as ErrorToolPart) : undefined
-}
-
-function runningTool(parts: MessageV2.Part[]) {
-  const part = toolPart(parts)
-  expect(part?.state.status).toBe("running")
-  return part?.state.status === "running" ? (part as RunningToolPart) : undefined
 }
 
 const llm = Layer.unwrap(
@@ -712,6 +705,86 @@ it.effect("concurrent loop callers all receive same error result", () =>
 )
 
 it.effect(
+  "prompt submitted during an active run gets a follow-up assistant turn",
+  () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const ready = defer<void>()
+          const gate = defer<void>()
+          const { test, prompt, sessions, chat } = yield* boot()
+
+          yield* test.push((_input) =>
+            stream(start()).pipe(
+              Stream.tap((event) => (event.type === "start" ? Effect.sync(() => ready.resolve()) : Effect.void)),
+              Stream.concat(
+                Stream.fromEffect(Effect.promise(() => gate.promise)).pipe(
+                  Stream.flatMap(() =>
+                    stream(textStart("a"), textDelta("a", "first"), textEnd("a"), finishStep(), finish()),
+                  ),
+                ),
+              ),
+            ),
+          )
+
+          const a = yield* prompt
+            .prompt({
+              sessionID: chat.id,
+              agent: "build",
+              model: ref,
+              parts: [{ type: "text", text: "first" }],
+            })
+            .pipe(Effect.forkChild)
+
+          yield* Effect.promise(() => ready.promise)
+
+          const id = MessageID.ascending()
+          const b = yield* prompt
+            .prompt({
+              sessionID: chat.id,
+              messageID: id,
+              agent: "build",
+              model: ref,
+              parts: [{ type: "text", text: "second" }],
+            })
+            .pipe(Effect.forkChild)
+
+          yield* Effect.promise(async () => {
+            const end = Date.now() + 5000
+            while (Date.now() < end) {
+              const msgs = await Effect.runPromise(sessions.messages({ sessionID: chat.id }))
+              if (msgs.some((msg) => msg.info.role === "user" && msg.info.id === id)) return
+              await new Promise((done) => setTimeout(done, 20))
+            }
+            throw new Error("timed out waiting for second prompt to save")
+          })
+
+          yield* test.reply(...replyStop("second"))
+          gate.resolve()
+
+          const [ea, eb] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
+          expect(Exit.isSuccess(ea)).toBe(true)
+          expect(Exit.isSuccess(eb)).toBe(true)
+          expect(yield* test.calls).toBe(2)
+
+          const msgs = yield* sessions.messages({ sessionID: chat.id })
+          const assistants = msgs.filter((msg) => msg.info.role === "assistant")
+          expect(assistants).toHaveLength(2)
+          const last = assistants.at(-1)
+          if (!last || last.info.role !== "assistant") throw new Error("expected second assistant")
+          expect(last.info.parentID).toBe(id)
+          expect(last.parts.some((part) => part.type === "text" && part.text === "second")).toBe(true)
+
+          const inputs = yield* test.inputs
+          expect(inputs).toHaveLength(2)
+          expect(JSON.stringify(inputs.at(-1)?.messages)).toContain("second")
+        }),
+      { git: true, config: cfg },
+    ),
+  30_000,
+)
+
+it.effect(
   "assertNotBusy throws BusyError when loop running",
   () =>
     provideTmpdirInstance(
@@ -947,6 +1020,38 @@ it.effect(
             expect((yield* status.get(chat.id)).type).toBe("idle")
             const busy = yield* prompt.assertNotBusy(chat.id).pipe(Effect.exit)
             expect(Exit.isSuccess(busy)).toBe(true)
+
+            const exit = yield* Fiber.await(sh)
+            expect(Exit.isSuccess(exit)).toBe(true)
+            if (Exit.isSuccess(exit)) {
+              expect(exit.value.info.role).toBe("assistant")
+              const tool = completedTool(exit.value.parts)
+              if (tool) {
+                expect(tool.state.output).toContain("User aborted the command")
+              }
+            }
+          }),
+        { git: true, config: cfg },
+      ),
+    ),
+  30_000,
+)
+
+it.effect(
+  "cancel persists aborted shell result when shell ignores TERM",
+  () =>
+    withSh(() =>
+      provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            const { prompt, chat } = yield* boot()
+
+            const sh = yield* prompt
+              .shell({ sessionID: chat.id, agent: "build", command: "trap '' TERM; sleep 30" })
+              .pipe(Effect.forkChild)
+            yield* waitMs(50)
+
+            yield* prompt.cancel(chat.id)
 
             const exit = yield* Fiber.await(sh)
             expect(Exit.isSuccess(exit)).toBe(true)

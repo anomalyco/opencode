@@ -474,14 +474,7 @@ export namespace SessionProcessor {
                     }),
                 }),
               ),
-              Effect.catchCause((cause) =>
-                Cause.hasInterruptsOnly(cause)
-                  ? Effect.gen(function* () {
-                      aborted = true
-                      yield* halt(new DOMException("Aborted", "AbortError"))
-                    })
-                  : halt(Cause.squash(cause)),
-              ),
+              Effect.catch(halt),
               Effect.ensuring(cleanup()),
             )
 

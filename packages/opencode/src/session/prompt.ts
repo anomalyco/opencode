@@ -859,6 +859,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
         let aborted = false
         let exited = false
+        let finished = false
         const kill = Effect.promise(() => Shell.killTree(proc, { exited: () => exited }))
 
         const abortHandler = () => {
@@ -867,7 +868,32 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           void Effect.runFork(kill)
         }
 
-        yield* Effect.promise(() => {
+        const finish = Effect.uninterruptible(
+          Effect.gen(function* () {
+            if (finished) return
+            finished = true
+            if (aborted) {
+              output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
+            }
+            if (!msg.time.completed) {
+              msg.time.completed = Date.now()
+              yield* sessions.updateMessage(msg)
+            }
+            if (part.state.status === "running") {
+              part.state = {
+                status: "completed",
+                time: { ...part.state.time, end: Date.now() },
+                input: part.state.input,
+                title: "",
+                metadata: { output, description: "" },
+                output,
+              }
+              yield* sessions.updatePart(part)
+            }
+          }),
+        )
+
+        const exit = yield* Effect.promise(() => {
           signal.addEventListener("abort", abortHandler, { once: true })
           if (signal.aborted) abortHandler()
           return new Promise<void>((resolve) => {
@@ -878,24 +904,17 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             }
             proc.once("close", close)
           })
-        }).pipe(Effect.ensuring(Effect.sync(() => signal.removeEventListener("abort", abortHandler))))
+        }).pipe(
+          Effect.onInterrupt(() => Effect.sync(abortHandler)),
+          Effect.ensuring(Effect.sync(() => signal.removeEventListener("abort", abortHandler))),
+          Effect.ensuring(finish),
+          Effect.exit,
+        )
 
-        if (aborted) {
-          output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
+        if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) {
+          return yield* Effect.failCause(exit.cause)
         }
-        msg.time.completed = Date.now()
-        yield* sessions.updateMessage(msg)
-        if (part.state.status === "running") {
-          part.state = {
-            status: "completed",
-            time: { ...part.state.time, end: Date.now() },
-            input: part.state.input,
-            title: "",
-            metadata: { output, description: "" },
-            output,
-          }
-          yield* sessions.updatePart(part)
-        }
+
         return { info: msg, parts: [part] }
       })
 
@@ -1220,9 +1239,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             return [{ ...part, messageID: info.id, sessionID: input.sessionID }]
           })
 
-        const parts = yield* Effect.all(input.parts.map((part) => resolvePart(part))).pipe(
-          Effect.map((x) => x.flat().map(assign)),
-        )
+        const parts = yield* Effect.all(
+          input.parts.map((part) => resolvePart(part)),
+          { concurrency: "unbounded" },
+        ).pipe(Effect.map((x) => x.flat().map(assign)))
 
         yield* plugin.trigger(
           "chat.message",
