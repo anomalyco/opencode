@@ -269,7 +269,9 @@ Theme install behavior:
 
 - Relative theme paths are resolved from the plugin root.
 - Theme name is the JSON basename.
-- Install is skipped if that theme name already exists.
+- First install writes only when the destination file is missing.
+- If the theme name already exists, install is skipped unless plugin metadata state is `updated`.
+- On `updated`, host only rewrites themes previously tracked for that plugin and only when source `mtime`/`size` changed.
 - Local plugins persist installed themes under the local `.opencode/themes` area near the plugin config source.
 - Global plugins persist installed themes under the global `themes` dir.
 - Invalid or unreadable theme files are ignored.
