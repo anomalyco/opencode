@@ -4,6 +4,7 @@ import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Agent } from "../../src/agent/agent"
 import { Permission } from "../../src/permission"
+import { ModelID, ProviderID } from "../../src/provider/schema"
 
 // Helper to evaluate permission for a tool with wildcard pattern
 function evalPerm(agent: Agent.Info | undefined, permission: string): Permission.Action | undefined {
@@ -592,6 +593,125 @@ description: Permission skill.
   }
 })
 
+test("resolveModel uses agent model as highest priority", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        custom: {
+          model: "openai/gpt-5",
+          model_tiers: {
+            quick: { model: "anthropic/claude-haiku-4-5" },
+          },
+        },
+      },
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agent = await Agent.get("custom")
+      const model = await Agent.resolveModel(agent, "quick", undefined)
+
+      expect(model.providerID).toBe(ProviderID.make("openai"))
+      expect(model.modelID).toBe(ModelID.make("gpt-5"))
+    },
+  })
+})
+
+test("resolveModel falls back to parent session model when no tier", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agent = await Agent.get("build")
+      const parentModel = { modelID: ModelID.make("gpt-5"), providerID: ProviderID.make("openai") }
+      const model = await Agent.resolveModel(agent!, undefined, parentModel)
+
+      expect(model).toEqual(parentModel)
+    },
+  })
+})
+
+test("resolveModel hierarchy: agent tier > global tier > parent session", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      model_tiers: {
+        quick: { model: "anthropic/claude-haiku-4-5" },
+      },
+      agent: {
+        custom: {
+          model_tiers: {
+            quick: { model: "anthropic/claude-sonnet-4-5" },
+          },
+        },
+      },
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agent = await Agent.get("custom")
+      const parentModel = { modelID: ModelID.make("gpt-5"), providerID: ProviderID.make("openai") }
+      const model = await Agent.resolveModel(agent!, "quick", parentModel)
+
+      expect(model.providerID).toBe(ProviderID.make("anthropic"))
+      expect(model.modelID).toBe(ModelID.make("claude-sonnet-4-5"))
+    },
+  })
+})
+
+test("resolveModel uses global tier when agent tier not defined", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      model_tiers: {
+        quick: { model: "anthropic/claude-haiku-4-5" },
+      },
+      agent: {
+        custom: {
+          model_tiers: {
+            standard: { model: "anthropic/claude-sonnet-4-5" },
+          },
+        },
+      },
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agent = await Agent.get("custom")
+      const parentModel = { modelID: ModelID.make("gpt-5"), providerID: ProviderID.make("openai") }
+      const model = await Agent.resolveModel(agent!, "quick", parentModel)
+
+      expect(model.providerID).toBe(ProviderID.make("anthropic"))
+      expect(model.modelID).toBe(ModelID.make("claude-haiku-4-5"))
+    },
+  })
+})
+
+test("resolveModel falls back to parent session when tier not configured", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        custom: {},
+      },
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agent = await Agent.get("custom")
+      const parentModel = { modelID: ModelID.make("gpt-5"), providerID: ProviderID.make("openai") }
+      const model = await Agent.resolveModel(agent!, "quick", parentModel)
+
+      expect(model).toEqual(parentModel)
+    },
+  })
+})
+
 test("defaultAgent returns build when no default_agent config", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
@@ -712,6 +832,108 @@ test("defaultAgent throws when all primary agents are disabled", async () => {
     fn: async () => {
       // build and plan are disabled, no primary-capable agents remain
       await expect(Agent.defaultAgent()).rejects.toThrow("no primary visible agent found")
+    },
+  })
+})
+
+test("resolveModel extracts variant from agent tier", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        custom: {
+          model_tiers: {
+            quick: { model: "openai/gpt-4o-mini", variant: "minimal" },
+          },
+        },
+      },
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agent = await Agent.get("custom")
+      const model = await Agent.resolveModel(agent, "quick", undefined)
+
+      expect(model.modelID).toBe(ModelID.make("gpt-4o-mini"))
+      expect(model.providerID).toBe(ProviderID.make("openai"))
+      expect(model.variant).toBe("minimal")
+    },
+  })
+})
+
+test("resolveModel extracts variant from global tier", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      model_tiers: {
+        quick: { model: "anthropic/claude-haiku-4-5", variant: "minimal" },
+      },
+      agent: {
+        custom: {},
+      },
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agent = await Agent.get("custom")
+      const model = await Agent.resolveModel(agent, "quick", undefined)
+
+      expect(model.modelID).toBe(ModelID.make("claude-haiku-4-5"))
+      expect(model.providerID).toBe(ProviderID.make("anthropic"))
+      expect(model.variant).toBe("minimal")
+    },
+  })
+})
+
+test("resolveModel uses agent tier variant over global tier variant", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      model_tiers: {
+        quick: { model: "openai/gpt-4", variant: "global-variant" },
+      },
+      agent: {
+        custom: {
+          model_tiers: {
+            quick: { model: "anthropic/claude-haiku", variant: "agent-variant" },
+          },
+        },
+      },
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agent = await Agent.get("custom")
+      const model = await Agent.resolveModel(agent, "quick", undefined)
+
+      expect(model.providerID).toBe(ProviderID.make("anthropic"))
+      expect(model.variant).toBe("agent-variant")
+    },
+  })
+})
+
+test("resolveModel returns no variant when using explicit agent model", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        custom: {
+          model: "openai/gpt-4o",
+        },
+      },
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agent = await Agent.get("custom")
+      const model = await Agent.resolveModel(agent, "quick", undefined)
+
+      expect(model.modelID).toBe(ModelID.make("gpt-4o"))
+      expect(model.variant).toBeUndefined()
     },
   })
 })

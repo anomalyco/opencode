@@ -1218,6 +1218,23 @@ export type AgentConfig = {
    */
   maxSteps?: number
   permission?: PermissionConfig
+  /**
+   * Model tier mappings for this agent
+   */
+  model_tiers?: {
+    quick?: {
+      model: string
+      variant?: string
+    }
+    standard?: {
+      model: string
+      variant?: string
+    }
+    advanced?: {
+      model: string
+      variant?: string
+    }
+  }
   [key: string]:
     | unknown
     | string
@@ -1242,6 +1259,20 @@ export type AgentConfig = {
     | "info"
     | number
     | PermissionConfig
+    | {
+        quick?: {
+          model: string
+          variant?: string
+        }
+        standard?: {
+          model: string
+          variant?: string
+        }
+        advanced?: {
+          model: string
+          variant?: string
+        }
+      }
     | undefined
 }
 
@@ -1488,6 +1519,23 @@ export type Config = {
    * Small model to use for tasks like title generation in the format of provider/model
    */
   small_model?: string
+  /**
+   * Global model tier mappings
+   */
+  model_tiers?: {
+    quick?: {
+      model: string
+      variant?: string
+    }
+    standard?: {
+      model: string
+      variant?: string
+    }
+    advanced?: {
+      model: string
+      variant?: string
+    }
+  }
   /**
    * Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.
    */
@@ -2036,6 +2084,23 @@ export type Agent = {
     [key: string]: unknown
   }
   steps?: number
+  modelTiers?: {
+    quick?: {
+      modelID: string
+      providerID: string
+      variant?: string
+    }
+    standard?: {
+      modelID: string
+      providerID: string
+      variant?: string
+    }
+    advanced?: {
+      modelID: string
+      providerID: string
+      variant?: string
+    }
+  }
 }
 
 export type LspStatus = {

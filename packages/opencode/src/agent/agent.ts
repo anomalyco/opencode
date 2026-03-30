@@ -45,6 +45,19 @@ export namespace Agent {
       prompt: z.string().optional(),
       options: z.record(z.string(), z.any()),
       steps: z.number().int().positive().optional(),
+      modelTiers: z
+        .object({
+          quick: z
+            .object({ modelID: ModelID.zod, providerID: ProviderID.zod, variant: z.string().optional() })
+            .optional(),
+          standard: z
+            .object({ modelID: ModelID.zod, providerID: ProviderID.zod, variant: z.string().optional() })
+            .optional(),
+          advanced: z
+            .object({ modelID: ModelID.zod, providerID: ProviderID.zod, variant: z.string().optional() })
+            .optional(),
+        })
+        .optional(),
     })
     .meta({
       ref: "Agent",
@@ -259,6 +272,16 @@ export namespace Agent {
             item.steps = value.steps ?? item.steps
             item.options = mergeDeep(item.options, value.options ?? {})
             item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
+      
+            if (value.model_tiers) {
+              const modelTiers: Partial<Record<Provider.ModelTier, Provider.ModelReference>> = {}
+
+              for (const [tier, tierConfig] of Object.entries(value.model_tiers)) {
+                modelTiers[tier as Provider.ModelTier] = Provider.parseTierConfig(tierConfig)
+              }
+
+              item.modelTiers = modelTiers
+            }
           }
 
           // Ensure Truncate.GLOB is allowed unless explicitly configured
@@ -414,5 +437,23 @@ export namespace Agent {
 
   export async function generate(input: { description: string; model?: { providerID: ProviderID; modelID: ModelID } }) {
     return runPromise((svc) => svc.generate(input))
+  }
+
+  export async function resolveModel(
+    agent: Info,
+    tier?: Provider.ModelTier,
+    parentSessionModel?: Provider.ModelReference,
+  ): Promise<Provider.ModelReference> {
+    const config = await Config.get()
+
+    if (agent?.model) return agent.model
+
+    if (tier) {
+      if (agent?.modelTiers?.[tier]) return agent.modelTiers[tier]
+
+      if (config?.model_tiers?.[tier]) return Provider.parseTierConfig(config?.model_tiers?.[tier])
+    }
+
+    return parentSessionModel ?? (await Provider.defaultModel())
   }
 }

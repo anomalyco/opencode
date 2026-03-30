@@ -5,8 +5,15 @@ Available agent types and the tools they have access to:
 
 When using the Task tool, you must specify a subagent_type parameter to select which agent type to use.
 
-When to use the Task tool:
-- When you are instructed to execute custom slash commands. Use the Task tool with the slash command invocation as the entire prompt. The slash command can take arguments. For example: Task(description="Check the file", prompt="/check-file path/to/file.py")
+You can also specify a model_tier parameter to control which model the subagent uses and also optimize cost and performance.
+- `quick` for fast and inexpensive model for simple tasks
+- `standard` for balanced model for most tasks
+- `advanced` for powerful model for complex tasks.
+
+Use this when spawning subagents in parallel with varying complexity. For example: Task(subagent_type="file-checker", description="Check the file", prompt="/check-file path/to/file.py", model_tier="quick") and Task(subagent_type="data-analyzer", description="Analyze the data", prompt="/analyze-data path/to/data.csv", model_tier="advanced"). If not specified, the agent's configured model or parent session's model is used.
+
+When to use Task tool:
+- When you are instructed to execute custom slash commands. Use the Task tool with the slash command invocation as the entire prompt. The slash command can take arguments. For example: Task(subagent_type="file-checker", description="Check the file", prompt="/check-file path/to/file.py")
 
 When NOT to use the Task tool:
 - If you want to read a specific file path, use the Read or Glob tool instead of the Task tool, to find the match more quickly
@@ -15,7 +22,7 @@ When NOT to use the Task tool:
 - Other tasks that are not related to the agent descriptions above
 
 
-Usage notes:
+Usage Notes:
 1. Launch multiple agents concurrently whenever possible, to maximize performance; to do that, use a single message with multiple tool uses
 2. When the agent is done, it will return a single message back to you. The result returned by the agent is not visible to the user. To show the user the result, you should send a text message back to the user with a concise summary of the result. The output includes a task_id you can reuse later to continue the same subagent session.
 3. Each agent invocation starts with a fresh context unless you provide task_id to resume the same subagent session (which continues with its previous messages and tool outputs). When starting fresh, your prompt should contain a highly detailed task description for the agent to perform autonomously and you should specify exactly what information the agent should return back to you in its final and only message to you.
@@ -28,7 +35,7 @@ Example usage (NOTE: The agents below are fictional examples for illustration on
 <example_agent_descriptions>
 "code-reviewer": use this agent after you are done writing a significant piece of code
 "greeting-responder": use this agent when to respond to user greetings with a friendly joke
-</example_agent_description>
+</example_agent_descriptions>
 
 <example>
 user: "Please write a function that checks if a number is prime"

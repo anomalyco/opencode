@@ -23,6 +23,12 @@ const parameters = z.object({
     )
     .optional(),
   command: z.string().describe("The command that triggered this task").optional(),
+  model_tier: z
+    .enum(["quick", "standard", "advanced"])
+    .describe(
+      "Model tier for this subagent: 'quick' for fast and inexpensive model for simple tasks, 'standard' for balanced model for most tasks, 'advanced' for powerful model for complex tasks",
+    )
+    .optional(),
 })
 
 export const TaskTool = Tool.define("task", async (ctx) => {
@@ -105,10 +111,10 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
 
-      const model = agent.model ?? {
+      const model = await Agent.resolveModel(agent, params.model_tier, {
         modelID: msg.info.modelID,
         providerID: msg.info.providerID,
-      }
+      })
 
       ctx.metadata({
         title: params.description,
@@ -135,6 +141,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           providerID: model.providerID,
         },
         agent: agent.name,
+        variant: model.variant,
         tools: {
           ...(hasTodoWritePermission ? {} : { todowrite: false }),
           ...(hasTaskPermission ? {} : { task: false }),
