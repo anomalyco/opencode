@@ -382,6 +382,50 @@ describe("plugin.loader.shared", () => {
     }
   })
 
+  test("uses npm package main without dot prefix for server entry", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const mod = path.join(dir, "mods", "acme-plugin")
+        const mark = path.join(dir, "main-server.txt")
+        await fs.mkdir(mod, { recursive: true })
+
+        await Bun.write(
+          path.join(mod, "package.json"),
+          JSON.stringify({
+            name: "acme-plugin",
+            type: "module",
+            main: "server.js",
+          }),
+        )
+        await Bun.write(
+          path.join(mod, "server.js"),
+          [
+            "export default {",
+            "  server: async () => {",
+            `    await Bun.write(${JSON.stringify(mark)}, "called")`,
+            "    return {}",
+            "  },",
+            "}",
+            "",
+          ].join("\n"),
+        )
+
+        await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ plugin: ["acme-plugin@1.0.0"] }, null, 2))
+
+        return { mod, mark }
+      },
+    })
+
+    const install = spyOn(BunProc, "install").mockResolvedValue(tmp.extra.mod)
+
+    try {
+      await load(tmp.path)
+      expect(await Bun.file(tmp.extra.mark).text()).toBe("called")
+    } finally {
+      install.mockRestore()
+    }
+  })
+
   test("rejects npm server export that resolves outside plugin directory", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
