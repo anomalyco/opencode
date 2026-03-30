@@ -9,10 +9,12 @@
   "packageManager": "bun@1.3.11",
   "scripts": {
     "prepare": "effect-language-service patch || true",
+    "postinstall": "npx patchright install chrome || true",
     "typecheck": "tsgo --noEmit",
     "test": "bun test --timeout 30000",
     "build": "bun run script/build.ts",
     "dev": "bun run --conditions=browser ./src/index.ts",
+    "setup": "bun install && npx patchright install chrome",
     "db": "bun drizzle-kit"
   },
   "bin": {
