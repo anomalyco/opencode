@@ -21,6 +21,7 @@ export const dict: Record<string, string> = {
 
   "ui.fileMedia.kind.image": "image",
   "ui.fileMedia.kind.audio": "audio",
+  "ui.fileMedia.kind.pdf": "PDF",
   "ui.fileMedia.state.removed": "Removed {{kind}} file.",
   "ui.fileMedia.state.loading": "Loading {{kind}}...",
   "ui.fileMedia.state.error": "Unable to load {{kind}}.",
@@ -30,6 +31,9 @@ export const dict: Record<string, string> = {
   "ui.fileMedia.binary.description.default": "Binary content",
   "ui.file.preview": "Preview",
   "ui.file.source": "Source",
+  "ui.file.largePreview.title": "Large markdown preview is paused",
+  "ui.file.largePreview.meta": "Open source for an editor-like view, or render the full preview for {{size}}.",
+  "ui.file.largePreview.render": "Render full preview",
 
   "ui.lineComment.label.prefix": "Comment on ",
   "ui.lineComment.label.suffix": "",

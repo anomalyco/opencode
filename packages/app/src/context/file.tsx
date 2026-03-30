@@ -32,6 +32,7 @@ import {
   type SelectedLineRange,
 } from "./file/types"
 import { permissionNotice } from "@/utils/server-errors"
+import { fileOpenEnd, fileOpenReady, fileOpenTrace } from "@/utils/file-open-debug"
 
 export type { FileSelection, SelectedLineRange, FileViewState, FileState }
 export { selectionFromLines }
@@ -55,6 +56,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
   name: "File",
   gate: false,
   init: () => {
+    fileOpenReady("FileProvider")
     const sdk = useSDK()
     useSync()
     const params = useParams()
@@ -123,6 +125,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     }
 
     const setLoading = (file: string) => {
+      fileOpenTrace(file, "store loading")
       setStore(
         "file",
         file,
@@ -134,6 +137,11 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     }
 
     const setLoaded = (file: string, content: FileState["content"]) => {
+      fileOpenTrace(file, "store loaded", {
+        type: content?.type,
+        chars: content?.content.length,
+        mime: content?.mimeType,
+      })
       setStore(
         "file",
         file,
@@ -146,6 +154,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     }
 
     const setLoadError = (file: string, message: string) => {
+      fileOpenEnd(file, "load error", { message })
       setStore(
         "file",
         file,
@@ -170,29 +179,43 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       ensure(file)
 
       const current = store.file[file]
-      if (!options?.force && current?.loaded) return Promise.resolve()
+      if (!options?.force && current?.loaded) {
+        fileOpenEnd(file, "load skip cached")
+        return Promise.resolve()
+      }
 
       const pending = inflight.get(key)
-      if (pending) return pending
+      if (pending) {
+        fileOpenTrace(file, "load join inflight")
+        return pending
+      }
 
       setLoading(file)
+      fileOpenTrace(file, "sdk read start", { force: options?.force === true })
 
       const promise = sdk.client.file
         .read({ path: file })
         .then((x) => {
           if (scope() !== directory) return
+          fileOpenTrace(file, "sdk read done", {
+            chars: x.data?.content.length,
+            type: x.data?.type,
+            mime: x.data?.mimeType,
+          })
           const content = x.data
           setLoaded(file, content)
 
           if (!content) return
           touchFileContent(file, approxBytes(content))
           evictContent(new Set([file]))
+          fileOpenTrace(file, "content cached", { bytes: approxBytes(content) })
         })
         .catch((e) => {
           if (scope() !== directory) return
           setLoadError(file, errorMessage(e, language.t("error.chain.unknown")))
         })
         .finally(() => {
+          fileOpenTrace(file, "load finalize")
           inflight.delete(key)
         })
 

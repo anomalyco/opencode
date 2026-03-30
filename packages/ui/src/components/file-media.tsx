@@ -19,10 +19,10 @@ export type FileMediaOptions = {
   deleted?: boolean
   readFile?: (path: string) => Promise<FileContent | undefined>
   onLoad?: () => void
-  onError?: (ctx: { kind: "image" | "audio" | "svg" }) => void
+  onError?: (ctx: { kind: "image" | "audio" | "svg" | "pdf" }) => void
 }
 
-function mediaValue(cfg: FileMediaOptions, mode: "image" | "audio") {
+function mediaValue(cfg: FileMediaOptions, mode: "image" | "audio" | "pdf") {
   if (cfg.current !== undefined) return cfg.current
   if (mode === "image") return cfg.after ?? cfg.before
   return cfg.after ?? cfg.before
@@ -59,14 +59,14 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
   const direct = createMemo(() => {
     const media = cfg()
     const k = kind()
-    if (!media || (k !== "image" && k !== "audio")) return
+    if (!media || (k !== "image" && k !== "audio" && k !== "pdf")) return
     return dataUrlFromMediaValue(mediaValue(media, k), k)
   })
 
   const request = createMemo(() => {
     const media = cfg()
     const k = kind()
-    if (!media || (k !== "image" && k !== "audio")) return
+    if (!media || (k !== "image" && k !== "audio" && k !== "pdf")) return
     if (media.current !== undefined) return
     if (deleted()) return
     if (direct()) return
@@ -93,7 +93,7 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
         return {
           key: input.key,
           src,
-          mime: input.kind === "audio" ? normalizeMimeType(result?.mimeType) : undefined,
+          mime: input.kind === "audio" || input.kind === "pdf" ? normalizeMimeType(result?.mimeType) : undefined,
         }
       },
       () => {
@@ -123,6 +123,10 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
     return "idle" as const
   })
   const audioMime = createMemo(() => {
+    const value = remote()
+    return value && "mime" in value ? value.mime : undefined
+  })
+  const pdfMime = createMemo(() => {
     const value = remote()
     return value && "mime" in value ? value.mime : undefined
   })
@@ -156,18 +160,24 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
     ),
   )
 
-  const kindLabel = (value: "image" | "audio") =>
-    i18n.t(value === "image" ? "ui.fileMedia.kind.image" : "ui.fileMedia.kind.audio")
+  const kindLabel = (value: "image" | "audio" | "pdf") =>
+    i18n.t(
+      value === "image"
+        ? "ui.fileMedia.kind.image"
+        : value === "audio"
+          ? "ui.fileMedia.kind.audio"
+          : "ui.fileMedia.kind.pdf",
+    )
 
   return (
     <Switch>
-      <Match when={kind() === "image" || kind() === "audio"}>
+      <Match when={kind() === "image" || kind() === "audio" || kind() === "pdf"}>
         <Show
           when={src()}
           fallback={(() => {
             const media = cfg()
             const k = kind()
-            if (!media || (k !== "image" && k !== "audio")) return props.fallback()
+            if (!media || (k !== "image" && k !== "audio" && k !== "pdf")) return props.fallback()
             const label = kindLabel(k)
 
             if (deleted()) {
@@ -200,7 +210,7 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
         >
           {(value) => {
             const k = kind()
-            if (k !== "image" && k !== "audio") return props.fallback()
+            if (k !== "image" && k !== "audio" && k !== "pdf") return props.fallback()
             if (k === "image") {
               return (
                 <div class="flex justify-center bg-background-stronger px-6 py-4">
@@ -210,6 +220,24 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
                     class="max-h-[60vh] max-w-full rounded border border-border-weak-base bg-background-base object-contain"
                     onLoad={onLoad}
                   />
+                </div>
+              )
+            }
+
+            if (k === "pdf") {
+              return (
+                <div class="bg-background-stronger px-6 py-4">
+                  <div class="overflow-hidden rounded border border-border-weak-base bg-background-base">
+                    <iframe
+                      src={value()}
+                      title={cfg()?.path ?? i18n.t("ui.fileMedia.kind.pdf")}
+                      class="h-[70vh] w-full min-w-0"
+                      onLoad={onLoad}
+                    />
+                  </div>
+                  <Show when={pdfMime()}>
+                    {(mime) => <div class="pt-3 text-12-regular text-text-weak">{mime()}</div>}
+                  </Show>
                 </div>
               )
             }
