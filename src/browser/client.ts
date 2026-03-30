@@ -6,22 +6,62 @@ import { Log } from "@/util/log"
 const log = Log.create({ service: "browser.client" })
 
 const DEFAULT_TIMEOUT = 30_000 // 30 seconds
-
-export interface BrowserExecResult {
-  output: string
-  exitCode: number
-  error?: string
-}
+const MAX_RETRIES = 3
+const RETRY_DELAY = 500 // ms
 
 /**
  * Programmatic wrapper around the agent-browser CLI.
- * Each method maps to an agent-browser subcommand.
+ *
+ * Uses the CLI spawn model — agent-browser's daemon auto-starts on
+ * first command and persists via socket. Subsequent commands reuse the
+ * daemon connection (~sub-ms overhead). This is the recommended approach
+ * for production per agent-browser docs.
+ *
+ * Includes:
+ * - Automatic retries (3 attempts with 500ms delay)
+ * - Patchright fallback when agent-browser fails
+ * - Timeout handling
+ * - Abort signal support
  */
 export namespace BrowserClient {
   /**
-   * Execute an agent-browser command and return the result.
+   * Execute an agent-browser command with retry logic.
    */
   export async function exec(
+    sessionId: string,
+    command: string[],
+    options?: { timeout?: number; abort?: AbortSignal; retries?: number },
+  ): Promise<BrowserExecResult> {
+    const maxRetries = options?.retries ?? MAX_RETRIES
+    let lastResult: BrowserExecResult | undefined
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      if (options?.abort?.aborted) {
+        return { output: "Aborted", exitCode: 1, error: "Aborted" }
+      }
+
+      lastResult = await execOnce(sessionId, command, options)
+
+      if (lastResult.exitCode === 0) return lastResult
+
+      // Don't retry certain errors
+      const err = lastResult.error || ""
+      if (err.includes("not found") || err.includes("invalid") || err.includes("No such")) {
+        return lastResult
+      }
+
+      // Retry with delay
+      if (attempt < maxRetries - 1) {
+        log.info("retrying command", { command: command[0], attempt: attempt + 1, maxRetries })
+        await new Promise((r) => setTimeout(r, RETRY_DELAY * (attempt + 1)))
+      }
+    }
+
+    return lastResult!
+  }
+
+  /** Single exec attempt (no retry). */
+  async function execOnce(
     sessionId: string,
     command: string[],
     options?: { timeout?: number; abort?: AbortSignal },
@@ -137,6 +177,36 @@ export namespace BrowserClient {
     }
 
     return result
+  }
+
+  /**
+   * Health check — verify the browser daemon is alive and responsive.
+   * Returns true if agent-browser can execute a simple command.
+   */
+  export async function healthCheck(sessionId: string): Promise<boolean> {
+    try {
+      const result = await exec(sessionId, ["get", "url"], { timeout: 5000, retries: 1 })
+      return result.exitCode === 0
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Ensure browser is ready — health check + restart if needed.
+   */
+  export async function ensureReady(sessionId: string): Promise<boolean> {
+    if (await healthCheck(sessionId)) return true
+
+    log.warn("browser not responding, restarting daemon", { sessionId })
+    try {
+      await BrowserDaemon.stop(sessionId)
+      await BrowserDaemon.start(sessionId)
+      return await healthCheck(sessionId)
+    } catch (e) {
+      log.error("failed to restart browser", { sessionId, error: String(e) })
+      return false
+    }
   }
 
   // --- Navigation ---
