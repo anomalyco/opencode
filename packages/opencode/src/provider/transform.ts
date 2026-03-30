@@ -275,9 +275,24 @@ export namespace ProviderTransform {
     })
   }
 
+  function sanitizeBedrockFilenames(msgs: ModelMessage[]): ModelMessage[] {
+    return msgs.map((msg) => {
+      if (msg.role !== "user" || !Array.isArray(msg.content)) return msg
+      const content = msg.content.map((part) => {
+        if (part.type !== "file" || !part.filename) return part
+        const sanitized = part.filename.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9\s\-()[\]]/g, "-")
+        return { ...part, filename: sanitized || "file" }
+      })
+      return { ...msg, content }
+    })
+  }
+
   export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
     msgs = unsupportedParts(msgs, model)
     msgs = normalizeMessages(msgs, model, options)
+    if (model.providerID.includes("bedrock") || model.api.npm === "@ai-sdk/amazon-bedrock") {
+      msgs = sanitizeBedrockFilenames(msgs)
+    }
     if (
       (model.providerID === "anthropic" ||
         model.api.id.includes("anthropic") ||
