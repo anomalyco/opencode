@@ -1074,6 +1074,24 @@ export namespace Config {
             .positive()
             .optional()
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
+          tool_timeout: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Maximum duration in milliseconds before the watchdog force-errors a stuck tool"),
+          task_timeout: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Maximum duration in milliseconds before the watchdog force-errors a stuck task tool"),
+          idle_timeout: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Duration in milliseconds of inactivity before the watchdog cancels an idle session"),
         })
         .optional(),
     })
