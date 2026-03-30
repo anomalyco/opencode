@@ -185,6 +185,10 @@ for (const item of targets) {
     conditions: ["browser"],
     tsconfig: "./tsconfig.json",
     plugins: [plugin],
+    // Patchright must be excluded from bundling — it has native deps
+    // (chromium-bidi, electron) that can't be statically compiled.
+    // It's lazy-imported at runtime via `await import("patchright")`.
+    external: ["patchright", "patchright-core"],
     compile: {
       autoloadBunfig: false,
       autoloadDotenv: false,
