@@ -432,10 +432,7 @@ export default function Home() {
                 </Faq>
               </li>
               <li>
-                <Faq question={i18n.t("go.faq.q5")}>
-                  {i18n.t("go.faq.a5.body")} <a href="mailto:contact@anoma.ly">{i18n.t("common.contactUs")}</a>{" "}
-                  {i18n.t("go.faq.a5.contactAfter")}
-                </Faq>
+                <Faq question={i18n.t("go.faq.q5")}>{i18n.t("go.faq.a5.body")}</Faq>
               </li>
               <li>
                 <Faq question={i18n.t("go.faq.q6")}>{i18n.t("go.faq.a6")}</Faq>

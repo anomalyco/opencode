@@ -1,5 +1,5 @@
 import { Effect, ScopedCache, Scope } from "effect"
-import { Instance, type Shape } from "@/project/instance"
+import { Instance, type InstanceContext } from "@/project/instance"
 import { registerDisposer } from "./instance-registry"
 
 const TypeId = "~opencode/InstanceState"
@@ -11,7 +11,7 @@ export interface InstanceState<A, E = never, R = never> {
 
 export namespace InstanceState {
   export const make = <A, E = never, R = never>(
-    init: (ctx: Shape) => Effect.Effect<A, E, R | Scope.Scope>,
+    init: (ctx: InstanceContext) => Effect.Effect<A, E, R | Scope.Scope>,
   ): Effect.Effect<InstanceState<A, E, Exclude<R, Scope.Scope>>, never, R | Scope.Scope> =>
     Effect.gen(function* () {
       const cache = yield* ScopedCache.make<string, A, E, R>({

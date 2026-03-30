@@ -1,4 +1,4 @@
-import type { FileDiff, Project, UserMessage } from "@opencode-ai/sdk/v2"
+import type { Project, UserMessage } from "@opencode-ai/sdk/v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useMutation } from "@tanstack/solid-query"
 import {
@@ -26,8 +26,8 @@ import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@opencode-ai/ui/toast"
-import { base64Encode, checksum } from "@opencode-ai/util/encode"
-import { useNavigate, useSearchParams } from "@solidjs/router"
+import { checksum } from "@opencode-ai/util/encode"
+import { useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
 import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
@@ -57,15 +57,15 @@ import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { Identifier } from "@/utils/id"
+import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
 
 const emptyUserMessages: UserMessage[] = []
-const emptyFollowups: (FollowupDraft & { id: string })[] = []
-
-type ChangeMode = "git" | "branch" | "session" | "turn"
-type VcsMode = "git" | "branch"
+type FollowupItem = FollowupDraft & { id: string }
+type FollowupEdit = Pick<FollowupItem, "id" | "prompt" | "context">
+const emptyFollowups: FollowupItem[] = []
 
 type SessionHistoryWindowInput = {
   sessionID: () => string | undefined
@@ -320,7 +320,6 @@ export default function Page() {
   const sync = useSync()
   const dialog = useDialog()
   const language = useLanguage()
-  const navigate = useNavigate()
   const sdk = useSDK()
   const settings = useSettings()
   const prompt = usePrompt()
@@ -427,16 +426,15 @@ export default function Page() {
 
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
-  const sessionCount = createMemo(() => Math.max(info()?.summary?.files ?? 0, diffs().length))
-  const hasSessionReview = createMemo(() => sessionCount() > 0)
-  const canReview = createMemo(() => !!params.id)
+  const reviewCount = createMemo(() => Math.max(info()?.summary?.files ?? 0, diffs().length))
+  const hasReview = createMemo(() => reviewCount() > 0)
   const reviewTab = createMemo(() => isDesktop())
   const tabState = createSessionTabs({
     tabs,
     pathFromTab: file.pathFromTab,
     normalizeTab,
     review: reviewTab,
-    hasReview: canReview,
+    hasReview,
   })
   const contextOpen = tabState.contextOpen
   const openedTabs = tabState.openedTabs
@@ -458,12 +456,6 @@ export default function Page() {
     const id = params.id
     if (!id) return false
     return sync.session.history.loading(id)
-  })
-  const diffsReady = createMemo(() => {
-    const id = params.id
-    if (!id) return true
-    if (!hasSessionReview()) return true
-    return sync.data.session_diff[id] !== undefined
   })
 
   const userMessages = createMemo(
@@ -518,31 +510,25 @@ export default function Page() {
   const [store, setStore] = createStore({
     messageId: undefined as string | undefined,
     mobileTab: "session" as "session" | "changes",
-    changes: "git" as ChangeMode,
+    changes: "session" as "session" | "turn",
     newSessionWorktree: "main",
     deferRender: false,
   })
 
-  const [vcs, setVcs] = createStore({
-    diff: {
-      git: [] as FileDiff[],
-      branch: [] as FileDiff[],
-    },
-    ready: {
-      git: false,
-      branch: false,
-    },
-  })
-
-  const [followup, setFollowup] = createStore({
-    items: {} as Record<string, (FollowupDraft & { id: string })[] | undefined>,
-    failed: {} as Record<string, string | undefined>,
-    paused: {} as Record<string, boolean | undefined>,
-    edit: {} as Record<
-      string,
-      { id: string; prompt: FollowupDraft["prompt"]; context: FollowupDraft["context"] } | undefined
-    >,
-  })
+  const [followup, setFollowup] = persisted(
+    Persist.workspace(sdk.directory, "followup", ["followup.v1"]),
+    createStore<{
+      items: Record<string, FollowupItem[] | undefined>
+      failed: Record<string, string | undefined>
+      paused: Record<string, boolean | undefined>
+      edit: Record<string, FollowupEdit | undefined>
+    }>({
+      items: {},
+      failed: {},
+      paused: {},
+      edit: {},
+    }),
+  )
 
   createComputed((prev) => {
     const key = sessionKey()
@@ -558,70 +544,10 @@ export default function Page() {
   let reviewFrame: number | undefined
   let refreshFrame: number | undefined
   let refreshTimer: number | undefined
+  let todoFrame: number | undefined
+  let todoTimer: number | undefined
   let diffFrame: number | undefined
   let diffTimer: number | undefined
-  const vcsTask = new Map<VcsMode, Promise<void>>()
-  const vcsRun = new Map<VcsMode, number>()
-
-  const bumpVcs = (mode: VcsMode) => {
-    const next = (vcsRun.get(mode) ?? 0) + 1
-    vcsRun.set(mode, next)
-    return next
-  }
-
-  const resetVcs = (mode?: VcsMode) => {
-    const list = mode ? [mode] : (["git", "branch"] as const)
-    list.forEach((item) => {
-      bumpVcs(item)
-      vcsTask.delete(item)
-      setVcs("diff", item, [])
-      setVcs("ready", item, false)
-    })
-  }
-
-  const loadVcs = (mode: VcsMode, force = false) => {
-    if (sync.project?.vcs !== "git") return Promise.resolve()
-    if (!force && vcs.ready[mode]) return Promise.resolve()
-
-    if (force) {
-      if (vcsTask.has(mode)) bumpVcs(mode)
-      vcsTask.delete(mode)
-      setVcs("ready", mode, false)
-    }
-
-    const current = vcsTask.get(mode)
-    if (current) return current
-
-    const run = bumpVcs(mode)
-
-    const task = sdk.client.vcs
-      .diff({ mode })
-      .then((result) => {
-        if (vcsRun.get(mode) !== run) return
-        setVcs("diff", mode, result.data ?? [])
-        setVcs("ready", mode, true)
-      })
-      .catch((error) => {
-        if (vcsRun.get(mode) !== run) return
-        console.debug("[session-review] failed to load vcs diff", { mode, error })
-        setVcs("diff", mode, [])
-        setVcs("ready", mode, true)
-      })
-      .finally(() => {
-        if (vcsTask.get(mode) === task) vcsTask.delete(mode)
-      })
-
-    vcsTask.set(mode, task)
-    return task
-  }
-
-  const refreshVcs = () => {
-    resetVcs()
-    const mode = untrack(vcsMode)
-    if (!mode) return
-    if (!untrack(wantsReview)) return
-    void loadVcs(mode, true)
-  }
 
   createComputed((prev) => {
     const open = desktopReviewOpen()
@@ -637,42 +563,7 @@ export default function Page() {
   }, desktopReviewOpen())
 
   const turnDiffs = createMemo(() => lastUserMessage()?.summary?.diffs ?? [])
-  const changesOptions = createMemo<ChangeMode[]>(() => {
-    const list: ChangeMode[] = []
-    if (sync.project?.vcs === "git") list.push("git")
-    if (
-      sync.project?.vcs === "git" &&
-      sync.data.vcs?.branch &&
-      sync.data.vcs?.default_branch &&
-      sync.data.vcs.branch !== sync.data.vcs.default_branch
-    ) {
-      list.push("branch")
-    }
-    list.push("session", "turn")
-    return list
-  })
-  const vcsMode = createMemo<VcsMode | undefined>(() => {
-    if (store.changes === "git" || store.changes === "branch") return store.changes
-  })
-  const reviewDiffs = createMemo(() => {
-    if (store.changes === "git") return vcs.diff.git
-    if (store.changes === "branch") return vcs.diff.branch
-    if (store.changes === "session") return diffs()
-    return turnDiffs()
-  })
-  const reviewCount = createMemo(() => {
-    if (store.changes === "git") return vcs.diff.git.length
-    if (store.changes === "branch") return vcs.diff.branch.length
-    if (store.changes === "session") return sessionCount()
-    return turnDiffs().length
-  })
-  const hasReview = createMemo(() => reviewCount() > 0)
-  const reviewReady = createMemo(() => {
-    if (store.changes === "git") return vcs.ready.git
-    if (store.changes === "branch") return vcs.ready.branch
-    if (store.changes === "session") return !hasSessionReview() || diffsReady()
-    return true
-  })
+  const reviewDiffs = createMemo(() => (store.changes === "session" ? diffs() : turnDiffs()))
 
   const newSessionWorktree = createMemo(() => {
     if (store.newSessionWorktree === "create") return "create"
@@ -738,7 +629,13 @@ export default function Page() {
     scrollToMessage(msgs[targetIndex], "auto")
   }
 
-  const sessionEmptyKey = createMemo(() => {
+  const diffsReady = createMemo(() => {
+    const id = params.id
+    if (!id) return true
+    if (!hasReview()) return true
+    return sync.data.session_diff[id] !== undefined
+  })
+  const reviewEmptyKey = createMemo(() => {
     const project = sync.project
     if (project && !project.vcs) return "session.review.noVcs"
     if (sync.data.config.snapshot === false) return "session.review.noSnapshot"
@@ -823,8 +720,6 @@ export default function Page() {
             if (!info) return true
             return Date.now() - info.at > SESSION_PREFETCH_TTL
           })()
-      const todos = untrack(() => sync.data.todo[id] !== undefined || globalSync.data.session_todo[id] !== undefined)
-
       untrack(() => {
         void sync.session.sync(id)
       })
@@ -836,11 +731,45 @@ export default function Page() {
           if (params.id !== id) return
           untrack(() => {
             if (stale) void sync.session.sync(id, { force: true })
-            void sync.session.todo(id, todos ? { force: true } : undefined)
           })
         }, 0)
       })
     }),
+  )
+
+  createEffect(
+    on(
+      () => {
+        const id = params.id
+        return [
+          sdk.directory,
+          id,
+          id ? (sync.data.session_status[id]?.type ?? "idle") : "idle",
+          id ? composer.blocked() : false,
+        ] as const
+      },
+      ([dir, id, status, blocked]) => {
+        if (todoFrame !== undefined) cancelAnimationFrame(todoFrame)
+        if (todoTimer !== undefined) window.clearTimeout(todoTimer)
+        todoFrame = undefined
+        todoTimer = undefined
+        if (!id) return
+        if (status === "idle" && !blocked) return
+        const cached = untrack(() => sync.data.todo[id] !== undefined || globalSync.data.session_todo[id] !== undefined)
+
+        todoFrame = requestAnimationFrame(() => {
+          todoFrame = undefined
+          todoTimer = window.setTimeout(() => {
+            todoTimer = undefined
+            if (sdk.directory !== dir || params.id !== id) return
+            untrack(() => {
+              void sync.session.todo(id, cached ? { force: true } : undefined)
+            })
+          }, 0)
+        })
+      },
+      { defer: true },
+    ),
   )
 
   createEffect(
@@ -860,45 +789,12 @@ export default function Page() {
       sessionKey,
       () => {
         setStore("messageId", undefined)
-        setStore("changes", "git")
+        setStore("changes", "session")
         setUi("pendingMessage", undefined)
       },
       { defer: true },
     ),
   )
-
-  createEffect(
-    on(
-      () => sdk.directory,
-      () => {
-        resetVcs()
-      },
-      { defer: true },
-    ),
-  )
-
-  createEffect(
-    on(
-      () => [sync.data.vcs?.branch, sync.data.vcs?.default_branch] as const,
-      (next, prev) => {
-        if (prev === undefined || same(next, prev)) return
-        refreshVcs()
-      },
-      { defer: true },
-    ),
-  )
-
-  const stopVcs = sdk.event.listen((evt) => {
-    if (evt.details.type !== "file.watcher.updated") return
-    const props =
-      typeof evt.details.properties === "object" && evt.details.properties
-        ? (evt.details.properties as Record<string, unknown>)
-        : undefined
-    const file = typeof props?.file === "string" ? props.file : undefined
-    if (!file || file.startsWith(".git/")) return
-    refreshVcs()
-  })
-  onCleanup(stopVcs)
 
   createEffect(
     on(
@@ -1022,40 +918,6 @@ export default function Page() {
   }
 
   const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
-  const wantsReview = createMemo(() =>
-    isDesktop()
-      ? desktopFileTreeOpen() || (desktopReviewOpen() && activeTab() === "review")
-      : store.mobileTab === "changes",
-  )
-
-  createEffect(() => {
-    const list = changesOptions()
-    if (list.includes(store.changes)) return
-    const next = list[0]
-    if (!next) return
-    setStore("changes", next)
-  })
-
-  createEffect(() => {
-    const mode = vcsMode()
-    if (!mode) return
-    if (!wantsReview()) return
-    void loadVcs(mode)
-  })
-
-  createEffect(
-    on(
-      () => sync.data.session_status[params.id ?? ""]?.type,
-      (next, prev) => {
-        const mode = vcsMode()
-        if (!mode) return
-        if (!wantsReview()) return
-        if (next !== "idle" || prev === undefined || prev === "idle") return
-        void loadVcs(mode, true)
-      },
-      { defer: true },
-    ),
-  )
 
   const fileTreeTab = () => layout.fileTree.tab()
   const setFileTreeTab = (value: "changes" | "all") => layout.fileTree.setTab(value)
@@ -1102,23 +964,21 @@ export default function Page() {
     loadFile: file.load,
   })
 
-  const changesTitle = () => {
-    if (!canReview()) {
-      return null
-    }
+  const changesOptions = ["session", "turn"] as const
+  const changesOptionsList = [...changesOptions]
 
-    const label = (option: ChangeMode) => {
-      if (option === "git") return language.t("ui.sessionReview.title.git")
-      if (option === "branch") return language.t("ui.sessionReview.title.branch")
-      if (option === "session") return language.t("ui.sessionReview.title")
-      return language.t("ui.sessionReview.title.lastTurn")
+  const changesTitle = () => {
+    if (!hasReview()) {
+      return null
     }
 
     return (
       <Select
-        options={changesOptions()}
+        options={changesOptionsList}
         current={store.changes}
-        label={label}
+        label={(option) =>
+          option === "session" ? language.t("ui.sessionReview.title") : language.t("ui.sessionReview.title.lastTurn")
+        }
         onSelect={(option) => option && setStore("changes", option)}
         variant="ghost"
         size="small"
@@ -1127,34 +987,20 @@ export default function Page() {
     )
   }
 
-  const empty = (text: string) => (
+  const emptyTurn = () => (
     <div class="h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6">
-      <div class="text-14-regular text-text-weak max-w-56">{text}</div>
+      <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.noChanges")}</div>
     </div>
   )
 
-  const reviewEmptyText = createMemo(() => {
-    if (store.changes === "git") return language.t("session.review.noUncommittedChanges")
-    if (store.changes === "branch") return language.t("session.review.noBranchChanges")
-    if (store.changes === "turn") return language.t("session.review.noChanges")
-    return language.t(sessionEmptyKey())
-  })
-
   const reviewEmpty = (input: { loadingClass: string; emptyClass: string }) => {
-    if (store.changes === "git" || store.changes === "branch") {
-      if (!reviewReady()) return <div class={input.loadingClass}>{language.t("session.review.loadingChanges")}</div>
-      return empty(reviewEmptyText())
-    }
+    if (store.changes === "turn") return emptyTurn()
 
-    if (store.changes === "turn") {
-      return empty(reviewEmptyText())
-    }
-
-    if (hasSessionReview() && !diffsReady()) {
+    if (hasReview() && !diffsReady()) {
       return <div class={input.loadingClass}>{language.t("session.review.loadingChanges")}</div>
     }
 
-    if (sessionEmptyKey() === "session.review.noVcs") {
+    if (reviewEmptyKey() === "session.review.noVcs") {
       return (
         <div class={input.emptyClass}>
           <div class="flex flex-col gap-3">
@@ -1174,7 +1020,7 @@ export default function Page() {
 
     return (
       <div class={input.emptyClass}>
-        <div class="text-14-regular text-text-weak max-w-56">{reviewEmptyText()}</div>
+        <div class="text-14-regular text-text-weak max-w-56">{language.t(reviewEmptyKey())}</div>
       </div>
     )
   }
@@ -1278,7 +1124,7 @@ export default function Page() {
     const pending = tree.pendingDiff
     if (!pending) return
     if (!tree.reviewScroll) return
-    if (!reviewReady()) return
+    if (!diffsReady()) return
 
     const attempt = (count: number) => {
       if (tree.pendingDiff !== pending) return
@@ -1319,7 +1165,10 @@ export default function Page() {
     const id = params.id
     if (!id) return
 
-    if (!wantsReview()) return
+    const wants = isDesktop()
+      ? desktopFileTreeOpen() || (desktopReviewOpen() && activeTab() === "review")
+      : store.mobileTab === "changes"
+    if (!wants) return
     if (sync.data.session_diff[id] !== undefined) return
     if (sync.status === "loading") return
 
@@ -1328,7 +1177,13 @@ export default function Page() {
 
   createEffect(
     on(
-      () => [sessionKey(), wantsReview()] as const,
+      () =>
+        [
+          sessionKey(),
+          isDesktop()
+            ? desktopFileTreeOpen() || (desktopReviewOpen() && activeTab() === "review")
+            : store.mobileTab === "changes",
+        ] as const,
       ([key, wants]) => {
         if (diffFrame !== undefined) cancelAnimationFrame(diffFrame)
         if (diffTimer !== undefined) window.clearTimeout(diffTimer)
@@ -1742,26 +1597,6 @@ export default function Page() {
   const reverting = createMemo(() => revertMutation.isPending || restoreMutation.isPending)
   const restoring = createMemo(() => (restoreMutation.isPending ? restoreMutation.variables : undefined))
 
-  const fork = (input: { sessionID: string; messageID: string }) => {
-    const value = draft(input.messageID)
-    const dir = base64Encode(sdk.directory)
-    return sdk.client.session
-      .fork(input)
-      .then((result) => {
-        const next = result.data
-        if (!next) {
-          showToast({
-            variant: "error",
-            title: language.t("common.requestFailed"),
-          })
-          return
-        }
-        prompt.set(value, undefined, { dir, id: next.id })
-        navigate(`/${dir}/session/${next.id}`)
-      })
-      .catch(fail)
-  }
-
   const revert = (input: { sessionID: string; messageID: string }) => {
     if (reverting()) return
     return revertMutation.mutateAsync(input)
@@ -1780,7 +1615,7 @@ export default function Page() {
       .map((item) => ({ id: item.id, text: line(item.id) }))
   })
 
-  const actions = { fork, revert }
+  const actions = { revert }
 
   createEffect(() => {
     const sessionID = params.id
@@ -1840,6 +1675,15 @@ export default function Page() {
     consumePendingMessage: layout.pendingMessage.consume,
   })
 
+  createEffect(
+    on(
+      () => params.id,
+      (id) => {
+        if (!id) requestAnimationFrame(() => inputRef?.focus())
+      },
+    ),
+  )
+
   onMount(() => {
     document.addEventListener("keydown", handleKeyDown)
   })
@@ -1849,6 +1693,8 @@ export default function Page() {
     if (reviewFrame !== undefined) cancelAnimationFrame(reviewFrame)
     if (refreshFrame !== undefined) cancelAnimationFrame(refreshFrame)
     if (refreshTimer !== undefined) window.clearTimeout(refreshTimer)
+    if (todoFrame !== undefined) cancelAnimationFrame(todoFrame)
+    if (todoTimer !== undefined) window.clearTimeout(todoTimer)
     if (diffFrame !== undefined) cancelAnimationFrame(diffFrame)
     if (diffTimer !== undefined) window.clearTimeout(diffTimer)
     if (scrollStateFrame !== undefined) cancelAnimationFrame(scrollStateFrame)
@@ -2014,12 +1860,6 @@ export default function Page() {
         </div>
 
         <SessionSidePanel
-          canReview={canReview}
-          diffs={reviewDiffs}
-          diffsReady={reviewReady}
-          empty={reviewEmptyText}
-          hasReview={hasReview}
-          reviewCount={reviewCount}
           reviewPanel={reviewPanel}
           activeDiff={tree.activeDiff}
           focusReviewDiff={focusReviewDiff}
