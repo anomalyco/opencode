@@ -295,6 +295,14 @@
         "typescript": "catalog:",
       },
     },
+    "packages/local": {
+      "name": "@opencode-ai/local",
+      "version": "1.3.3",
+      "devDependencies": {
+        "@types/node": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/opencode": {
       "name": "opencode",
       "version": "1.3.7",
@@ -1440,6 +1448,8 @@
     "@opencode-ai/enterprise": ["@opencode-ai/enterprise@workspace:packages/enterprise"],
 
     "@opencode-ai/function": ["@opencode-ai/function@workspace:packages/function"],
+
+    "@opencode-ai/local": ["@opencode-ai/local@workspace:packages/local"],
 
     "@opencode-ai/plugin": ["@opencode-ai/plugin@workspace:packages/plugin"],
 
