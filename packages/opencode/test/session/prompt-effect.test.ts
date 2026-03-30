@@ -705,7 +705,7 @@ it.effect("concurrent loop callers all receive same error result", () =>
 )
 
 it.effect(
-  "prompt submitted during an active run gets a follow-up assistant turn",
+  "prompt submitted during an active run is included in the next LLM input",
   () =>
     provideTmpdirInstance(
       (dir) =>
