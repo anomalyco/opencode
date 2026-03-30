@@ -73,30 +73,28 @@ Keep it specific enough for the agent to choose correctly.
 
 ## Use an example
 
-Create `.opencode/skills/git-release/SKILL.md` like this:
+Create `.agents/skills/roll-dice/SKILL.md` like this:
 
-```markdown
+````markdown
 ---
-name: git-release
-description: Create consistent releases and changelogs
-license: MIT
-compatibility: opencode
-metadata:
-  audience: maintainers
-  workflow: github
+name: roll-dice
+description: Roll dice using a random number generator. Use when asked to roll a die (d6, d20, etc.), roll dice, or generate a random dice roll.
 ---
 
-## What I do
+To roll a die, use the following command that generates a random number from 1
+to the given number of sides:
 
-- Draft release notes from merged PRs
-- Propose a version bump
-- Provide a copy-pasteable `gh release create` command
-
-## When to use me
-
-Use this when you are preparing a tagged release.
-Ask clarifying questions if the target versioning scheme is unclear.
+```bash
+echo $((RANDOM % <sides> + 1))
 ```
+
+```powershell
+Get-Random -Minimum 1 -Maximum (<sides> + 1)
+```
+
+Replace `<sides>` with the number of sides on the die (e.g., 6 for a standard
+die, 20 for a d20).
+````
 
 ---
 
@@ -108,8 +106,8 @@ Each entry includes the skill name and description:
 ```xml
 <available_skills>
   <skill>
-    <name>git-release</name>
-    <description>Create consistent releases and changelogs</description>
+    <name>roll-dice</name>
+    <description>Roll dice using a random number generator. Use when asked to roll a die (d6, d20, etc.), roll dice, or generate a random dice roll.</description>
   </skill>
 </available_skills>
 ```
@@ -117,7 +115,7 @@ Each entry includes the skill name and description:
 The agent loads a skill by calling the tool:
 
 ```
-skill({ name: "git-release" })
+skill({ name: "roll-dice" })
 ```
 
 ---
