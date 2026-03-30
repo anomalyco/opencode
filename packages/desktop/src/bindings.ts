@@ -13,7 +13,11 @@ export const commands = {
 	password: string | null,
 } | null>("sync_openclaw_server"),
 	installCli: () => __TAURI_INVOKE<string>("install_cli"),
-	awaitInitialization: (events: Channel) => __TAURI_INVOKE<ServerReadyData>("await_initialization", { events }),
+	awaitInitialization: (events: Channel) => __TAURI_INVOKE<{
+	url: string,
+	username: string | null,
+	password: string | null,
+} | null>("await_initialization", { events }),
 	recordStartupProfile: (origin: string, phase: string, detail: string | null, frontendElapsedMs: number | null) => __TAURI_INVOKE<void>("record_startup_profile", { origin, phase, detail, frontendElapsedMs }),
 	listStartupProfile: () => __TAURI_INVOKE<StartupSample[]>("list_startup_profile"),
 	getDefaultServerUrl: () => __TAURI_INVOKE<string | null>("get_default_server_url"),
@@ -88,7 +92,7 @@ export type ConfigWorkspaceFile = {
 		kind: string,
 	};
 
-export type InitStep = { phase: "server_waiting" } | { phase: "sqlite_waiting" } | { phase: "done" };
+export type InitStep = { phase: "server_waiting" } | { phase: "sqlite_waiting" } | { phase: "done" } | { phase: "failed"; detail: string };
 
 export type LinuxDisplayBackend = "wayland" | "auto";
 

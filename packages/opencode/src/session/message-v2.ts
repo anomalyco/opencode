@@ -525,11 +525,19 @@ export namespace MessageV2 {
   }
 
   const info = (row: typeof MessageTable.$inferSelect) =>
-    ({
-      ...row.data,
-      id: row.id,
-      sessionID: row.session_id,
-    }) as MessageV2.Info
+    (() => {
+      const value = {
+        ...row.data,
+        id: row.id,
+        sessionID: row.session_id,
+      } as MessageV2.Info
+
+      if (value.role === "user" && value.summary && !Array.isArray(value.summary.diffs)) {
+        value.summary.diffs = []
+      }
+
+      return value
+    })()
 
   const part = (row: typeof PartTable.$inferSelect) =>
     ({

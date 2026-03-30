@@ -57,9 +57,13 @@ export const dict = {
   "desktop.loading.status.done": "All done",
   "desktop.loading.status.migrating": "Migrating your database",
   "desktop.loading.status.waiting": "This may take a couple of minutes",
+  "desktop.loading.status.failed": "Startup failed",
   "desktop.loading.progressAria": "Database migration progress",
   "desktop.loading.reload.title": "Reloading backend",
   "desktop.loading.reload.message": "Restarting the local backend and refreshing its state.",
+  "desktop.startup.failed.title": "OpenCode couldn't start the local backend",
+  "desktop.startup.failed.message": "Restart the app after fixing the local backend issue.",
+  "desktop.startup.failed.restart": "Restart app",
   "desktop.server.local": "Local Server",
   "desktop.server.openclaw": "OpenClaw",
 }

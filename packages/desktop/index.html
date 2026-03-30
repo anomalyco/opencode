@@ -123,7 +123,8 @@
       .desktop-startup-copy {
         display: flex;
         flex-direction: column;
-        gap: 0;
+        align-items: center;
+        gap: 10px;
       }
 
       .desktop-startup-title {
@@ -186,6 +187,57 @@
         }
       }
 
+      .desktop-startup-note {
+        max-width: 360px;
+        color: rgba(243, 239, 231, 0.76);
+        font-size: 13px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+      }
+
+      @media (prefers-color-scheme: light) {
+        .desktop-startup-note {
+          color: rgba(35, 28, 20, 0.72);
+        }
+      }
+
+      .desktop-startup-actions {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .desktop-startup-action {
+        appearance: none;
+        border: 0;
+        border-radius: 999px;
+        padding: 10px 16px;
+        background: rgba(218, 126, 27, 0.95);
+        color: #1f1405;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition:
+          transform 160ms ease,
+          opacity 160ms ease;
+      }
+
+      .desktop-startup-action:hover {
+        transform: translateY(-1px);
+      }
+
+      .desktop-startup-action:active {
+        transform: translateY(0);
+      }
+
+      .desktop-startup-action:disabled {
+        cursor: default;
+        opacity: 0.7;
+        transform: none;
+      }
+
       .desktop-startup-steps {
         display: flex;
         width: 100%;
@@ -226,6 +278,12 @@
         background: rgba(84, 181, 112, 0.95);
       }
 
+      .desktop-startup-step[data-state="failed"] {
+        color: #21090d;
+        border-color: rgba(228, 88, 88, 0.82);
+        background: rgba(228, 88, 88, 0.95);
+      }
+
       @media (prefers-color-scheme: light) {
         .desktop-startup-step {
           border-color: rgba(0, 0, 0, 0.1);
@@ -243,6 +301,12 @@
           color: #12331b;
           border-color: rgba(84, 181, 112, 0.75);
           background: rgba(84, 181, 112, 0.28);
+        }
+
+        .desktop-startup-step[data-state="failed"] {
+          color: #4b1115;
+          border-color: rgba(228, 88, 88, 0.42);
+          background: rgba(228, 88, 88, 0.18);
         }
       }
 
@@ -345,6 +409,10 @@
         </div>
         <div class="desktop-startup-copy">
           <div id="oc-startup-title" class="desktop-startup-title" data-text="Opening OpenCode">Opening OpenCode</div>
+          <div id="oc-startup-note" class="desktop-startup-note" hidden></div>
+          <div id="oc-startup-actions" class="desktop-startup-actions" hidden>
+            <button id="oc-startup-retry" class="desktop-startup-action" type="button">Restart app</button>
+          </div>
         </div>
         <div class="desktop-startup-steps" aria-hidden="true">
           <div class="desktop-startup-step" data-step="backend" data-state="pending">

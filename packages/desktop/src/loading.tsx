@@ -4,10 +4,12 @@ import "@opencode-ai/app/index.css"
 import { Font } from "@opencode-ai/ui/font"
 import { Splash } from "@opencode-ai/ui/logo"
 import { Progress } from "@opencode-ai/ui/progress"
+import { Button } from "@opencode-ai/ui/button"
 import "./styles.css"
 import { createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { commands, events, type InitStep, type SqliteMigrationProgress } from "./bindings"
 import { Channel } from "@tauri-apps/api/core"
+import { relaunch } from "@tauri-apps/plugin-process"
 import { initI18n, t } from "./i18n"
 
 const root = document.getElementById("root")!
@@ -31,6 +33,11 @@ render(() => {
   void profile("entry.module")
 
   const phase = createMemo(() => step()?.phase)
+  const detail = createMemo(() => {
+    const next = step()
+    if (next?.phase !== "failed") return ""
+    return next.detail
+  })
   const lines = createMemo(() => {
     tick()
     return [
@@ -41,6 +48,7 @@ render(() => {
   })
 
   const value = createMemo(() => {
+    if (phase() === "failed") return 100
     if (phase() === "done") return 100
     return Math.max(25, Math.min(100, percent()))
   })
@@ -48,7 +56,7 @@ render(() => {
   const channel = new Channel<InitStep>()
   channel.onmessage = (next) => {
     setStep(next)
-    void profile(`init.${next.phase}`)
+    void profile(`init.${next.phase}`, next.phase === "failed" ? next.detail : undefined)
   }
   commands.awaitInitialization(channel as any).catch(() => undefined)
 
@@ -79,6 +87,7 @@ render(() => {
 
   const status = createMemo(() => {
     tick()
+    if (phase() === "failed") return t("desktop.loading.status.failed")
     if (phase() === "done") return t("desktop.loading.status.done")
     if (phase() === "sqlite_waiting") return lines()[line()]
     return t("desktop.loading.status.initial")
@@ -99,12 +108,24 @@ render(() => {
             <span class="w-full text-center text-balance text-text-strong text-14-normal leading-6 min-h-12 flex items-center justify-center">
               {status()}
             </span>
-            <Progress
-              value={value()}
-              class="w-24 [&_[data-slot='progress-track']]:h-1 [&_[data-slot='progress-track']]:border-0 [&_[data-slot='progress-track']]:rounded-none [&_[data-slot='progress-track']]:bg-surface-weak [&_[data-slot='progress-fill']]:rounded-none [&_[data-slot='progress-fill']]:bg-icon-warning-base"
-              aria-label={t("desktop.loading.progressAria")}
-              getValueLabel={({ value }) => `${Math.round(value)}%`}
-            />
+            {phase() === "failed" ? (
+              <>
+                <div class="w-full text-center text-balance text-text-weak text-12-normal leading-5">
+                  {t("desktop.startup.failed.message")}
+                </div>
+                {detail() ? <div class="w-full text-center text-balance text-text-danger text-12-normal leading-5">{detail()}</div> : null}
+                <Button class="px-4" onClick={() => void relaunch()}>
+                  {t("desktop.startup.failed.restart")}
+                </Button>
+              </>
+            ) : (
+              <Progress
+                value={value()}
+                class="w-24 [&_[data-slot='progress-track']]:h-1 [&_[data-slot='progress-track']]:border-0 [&_[data-slot='progress-track']]:rounded-none [&_[data-slot='progress-track']]:bg-surface-weak [&_[data-slot='progress-fill']]:rounded-none [&_[data-slot='progress-fill']]:bg-icon-warning-base"
+                aria-label={t("desktop.loading.progressAria")}
+                getValueLabel={({ value }) => `${Math.round(value)}%`}
+              />
+            )}
           </div>
         </div>
       </div>

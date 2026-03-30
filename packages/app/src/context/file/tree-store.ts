@@ -109,15 +109,16 @@ export function createFileTreeStore(options: TreeStoreOptions) {
       })
       .catch((e) => {
         if (options.scope() !== directory) return
+        const msg = e instanceof Error ? e.message : String(e)
         setTree(
           "dir",
           dir,
           produce((draft) => {
             draft.loading = false
-            draft.error = e.message
+            draft.error = msg
           }),
         )
-        options.onError(e.message)
+        options.onError(msg)
       })
       .finally(() => {
         inflight.delete(dir)

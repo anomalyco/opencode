@@ -60,7 +60,7 @@ export namespace Session {
             additions: row.summary_additions ?? 0,
             deletions: row.summary_deletions ?? 0,
             files: row.summary_files ?? 0,
-            diffs: row.summary_diffs ?? undefined,
+            diffs: Array.isArray(row.summary_diffs) ? row.summary_diffs : undefined,
           }
         : undefined
     const share = row.share_url ? { url: row.share_url } : undefined

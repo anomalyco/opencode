@@ -442,15 +442,11 @@ pub fn spawn_command(
         let sidecar = get_sidecar_path(app);
         let shell = get_user_shell();
         let envs = merge_shell_env(load_shell_env(&shell), envs);
-
-        let line = if shell.ends_with("/nu") {
-            format!("^\"{}\" {}", sidecar.display(), args)
-        } else {
-            format!("\"{}\" {}", sidecar.display(), args)
-        };
-
-        let mut cmd = Command::new(shell);
-        cmd.args(["-l", "-c", &line]);
+        // Load the login shell environment once, then exec the bundled sidecar directly.
+        // Putting desktop startup back behind `shell -l -c ...` makes shell rc side effects
+        // part of app launch again and is much easier to break.
+        let mut cmd = Command::new(sidecar);
+        cmd.args(args.split_whitespace());
 
         for (key, value) in envs {
             cmd.env(key, value);
@@ -552,7 +548,7 @@ pub fn serve(
     hostname: &str,
     port: u32,
     password: &str,
-) -> (CommandChild, oneshot::Receiver<TerminatedPayload>) {
+) -> Result<(CommandChild, oneshot::Receiver<TerminatedPayload>), String> {
     let (exit_tx, exit_rx) = oneshot::channel::<TerminatedPayload>();
 
     tracing::info!(port, "Spawning sidecar");
@@ -567,7 +563,7 @@ pub fn serve(
         format!("--print-logs --log-level WARN serve --hostname {hostname} --port {port}").as_str(),
         &envs,
     )
-    .expect("Failed to spawn opencode");
+    .map_err(|e| format!("Failed to spawn opencode: {e}"))?;
 
     let mut exit_tx = Some(exit_tx);
     tokio::spawn(
@@ -601,7 +597,7 @@ pub fn serve(
             .instrument(tracing::info_span!("sidecar")),
     );
 
-    (child, exit_rx)
+    Ok((child, exit_rx))
 }
 
 pub fn serve_openclaw(

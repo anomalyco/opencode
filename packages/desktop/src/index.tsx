@@ -49,6 +49,16 @@ function profile(phase: string, detail?: string) {
   return commands.recordStartupProfile("frontend", phase, detail ?? null, performance.now() - startupClock).catch(() => {})
 }
 
+function loopback(url: string) {
+  try {
+    const next = new URL(url)
+    if (next.protocol !== "http:") return false
+    return next.hostname === "localhost" || next.hostname === "127.0.0.1" || next.hostname === "::1"
+  } catch {
+    return false
+  }
+}
+
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
   throw new Error(t("error.dev.rootNotFound"))
@@ -71,11 +81,33 @@ function startupShell() {
   const root = document.getElementById("oc-startup-shell")
   const app = document.getElementById("root")
   const title = document.getElementById("oc-startup-title")
+  const note = document.getElementById("oc-startup-note")
+  const actions = document.getElementById("oc-startup-actions")
+  const retry = document.getElementById("oc-startup-retry")
   const steps = Array.from(document.querySelectorAll<HTMLElement>(".desktop-startup-step[data-step]"))
-  if (!(root instanceof HTMLElement) || !(app instanceof HTMLElement) || !(title instanceof HTMLElement)) return
+  if (
+    !(root instanceof HTMLElement) ||
+    !(app instanceof HTMLElement) ||
+    !(title instanceof HTMLElement) ||
+    !(note instanceof HTMLElement) ||
+    !(actions instanceof HTMLElement) ||
+    !(retry instanceof HTMLButtonElement)
+  ) {
+    return
+  }
 
   const state = {
     hidden: false,
+  }
+
+  const setNote = (value?: string) => {
+    const text = value?.trim()
+    note.textContent = text ?? ""
+    note.hidden = !text
+  }
+
+  const setActions = (value: boolean) => {
+    actions.hidden = !value
   }
 
   const complete = () => {
@@ -91,9 +123,12 @@ function startupShell() {
   window.addEventListener(startupReadyEvent, onReady, { once: true })
   window.addEventListener("opencode:startup-ready", onStartup)
   window.addEventListener(startupReadyEvent, onStartup)
-  const fallback = window.setTimeout(() => {
-    complete()
-  }, 12000)
+  retry.onclick = () => {
+    retry.disabled = true
+    void relaunch().finally(() => {
+      retry.disabled = false
+    })
+  }
 
   // This shell intentionally lives in the main window, not in styles.css, so we can
   // keep painting a localized loading state after the native loading window closes.
@@ -120,9 +155,12 @@ function startupShell() {
   const show = (phase: StartupPhase) => {
     if (state.hidden) return
     root.dataset.phase = phase
+    root.setAttribute("aria-busy", "true")
     const next = copy[phase]()
     title.textContent = next.title
     title.dataset.text = next.title
+    setNote()
+    setActions(false)
     const current = order.indexOf(phase)
     const names = startup()
     for (const step of steps) {
@@ -136,13 +174,25 @@ function startupShell() {
     }
   }
 
+  const fail = (detail?: string) => {
+    if (state.hidden) return
+    root.dataset.phase = "failed"
+    root.setAttribute("aria-busy", "false")
+    title.textContent = t("desktop.startup.failed.title")
+    title.dataset.text = t("desktop.startup.failed.title")
+    setNote(detail ? `${t("desktop.startup.failed.message")}\n${detail}` : t("desktop.startup.failed.message"))
+    setActions(true)
+    for (const step of steps) {
+      step.dataset.state = step.dataset.step === "backend" ? "failed" : "pending"
+    }
+  }
+
   const hide = () => {
     if (state.hidden) return
     state.hidden = true
     window.removeEventListener(startupReadyEvent, onReady)
     window.removeEventListener("opencode:startup-ready", onStartup)
     window.removeEventListener(startupReadyEvent, onStartup)
-    window.clearTimeout(fallback)
     app.classList.add("is-ready")
     root.dataset.phase = "ready"
     root.classList.add("is-hidden")
@@ -151,7 +201,7 @@ function startupShell() {
   }
 
   show("launch")
-  return { show, hide }
+  return { show, hide, fail }
 }
 
 const reload = async () => {
@@ -591,12 +641,15 @@ const createPlatform = (): Platform => {
         .catch(() => undefined)
     },
 
-    fetch: (input, init) => {
-      if (input instanceof Request) {
-        return tauriFetch(input)
-      } else {
-        return tauriFetch(input, init)
+    fetch: async (input, init) => {
+      const url = input instanceof Request ? input.url : typeof input === "string" ? input : input.toString()
+      // Loopback requests must stay on the webview fetch path. Sending desktop localhost
+      // traffic through plugin-http brought back old startup/session regressions such as
+      // "无法列出文件" even though the sidecar itself was healthy.
+      if (loopback(url)) {
+        return input instanceof Request ? fetch(input) : fetch(input, init)
       }
+      return input instanceof Request ? tauriFetch(input) : tauriFetch(input, init)
     },
 
     getWslEnabled: async () => {
@@ -711,6 +764,9 @@ void listenForDragDrop()
 render(() => {
   const platform = createPlatform()
   const shell = startupShell()
+  const channel = new Channel<InitStep>()
+  const [init, setInit] = createSignal<InitStep>({ phase: "server_waiting" })
+  channel.onmessage = (next) => setInit(next)
   const loadLocale = async () => {
     shell?.show("launch")
     const current = await platform.storage?.("opencode.global.dat").getItem("language")
@@ -727,7 +783,7 @@ render(() => {
   // Fetch sidecar credentials from Rust (available immediately, before health check)
   const [sidecar] = createResource(async () => {
     shell?.show("backend")
-    return commands.awaitInitialization(new Channel<InitStep>() as any)
+    return commands.awaitInitialization(channel as any)
   })
   const [openclaw] = createResource(openclawTick, syncOpenclaw)
 
@@ -739,6 +795,7 @@ render(() => {
   })
   const [locale] = createResource(loadLocale)
   const local = ServerConnection.Key.make("sidecar")
+  const wantsLocal = () => (defaultServer.latest ?? local) === local
 
   // Build the sidecar server connection once credentials arrive
   const servers = () => {
@@ -812,10 +869,16 @@ render(() => {
     })
   })
 
-  const boot = () => !defaultServer.loading && !sidecar.loading && !locale.loading
+  const boot = () => !defaultServer.loading && !locale.loading && (!wantsLocal() || !sidecar.loading)
 
-  const ready = () => !!sidecar() && !locale.loading
-  const skipHealth = () => (defaultServer.latest ?? local) === local
+  const detail = () => {
+    const next = init()
+    if (next.phase !== "failed") return undefined
+    return next.detail
+  }
+  const ready = () => boot() && (!wantsLocal() || !!sidecar()) && init().phase !== "failed"
+  const failed = () => boot() && wantsLocal() && init().phase === "failed"
+  const skipHealth = () => wantsLocal()
 
   createEffect(() => {
     if (!ready()) return
@@ -824,7 +887,12 @@ render(() => {
 
   createEffect(() => {
     if (!shell) return
-    if (!sidecar()) {
+    if (failed()) {
+      void profile("phase.failed", detail())
+      shell.fail(detail())
+      return
+    }
+    if (wantsLocal() && !sidecar()) {
       void profile("phase.backend")
       shell.show("backend")
       return

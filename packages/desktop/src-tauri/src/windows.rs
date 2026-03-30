@@ -40,40 +40,24 @@ impl MainWindow {
     pub const LABEL: &str = "main";
 
     pub fn present(window: &WebviewWindow) {
-        let _ = window.show();
-        ensure_window_visible(window);
-        let _ = window.set_focus();
+        present(window, true);
     }
 
     // During startup, macOS can still report a disconnected monitor in
     // available_monitors(). The loading window reliably appears on the visible
     // screen, so we use its current monitor as the anchor for the main window.
     pub fn present_on(window: &WebviewWindow, monitor: &Monitor) {
-        let _ = window.show();
+        present_on(window, monitor, true);
+    }
 
-        if window
-            .current_monitor()
-            .ok()
-            .flatten()
-            .is_some_and(|current| same_monitor(&current, monitor))
-        {
-            let _ = window.set_focus();
-            return;
-        }
+    pub fn anchor(window: &WebviewWindow) {
+        present(window, false);
+    }
 
-        let max = window.is_maximized().unwrap_or(false);
-        if max {
-            let _ = window.unmaximize();
-        }
-
-        if let Err(err) = set_window_to_monitor(window, monitor) {
-            tracing::warn!(label = %window.label(), error = ?err, "failed to place window on target monitor");
-        }
-
-        if max {
-            let _ = window.maximize();
-        }
-        let _ = window.set_focus();
+    pub fn anchor_on(window: &WebviewWindow, monitor: &Monitor) {
+        // Startup monitor repair may keep running after the user has already switched
+        // away from OpenCode. This path repositions the window without reclaiming focus.
+        present_on(window, monitor, false);
     }
 
     pub fn reveal(window: &WebviewWindow, path: Option<&str>) {
@@ -134,8 +118,11 @@ impl MainWindow {
 
         ensure_window_visible(&window);
 
-        // Ensure window is focused after creation (e.g., after update/relaunch)
-        let _ = window.set_focus();
+        // Hidden startup creation must not focus the app. Doing so on macOS can pull
+        // OpenCode to the foreground before the user has chosen to activate it.
+        if visible {
+            let _ = window.set_focus();
+        }
 
         setup_window_state_listener(app, &window);
 
@@ -146,6 +133,46 @@ impl MainWindow {
         }
 
         Ok(Self(window))
+    }
+}
+
+fn present(window: &WebviewWindow, focus: bool) {
+    let _ = window.show();
+    ensure_window_visible(window);
+    if focus {
+        let _ = window.set_focus();
+    }
+}
+
+fn present_on(window: &WebviewWindow, monitor: &Monitor, focus: bool) {
+    let _ = window.show();
+
+    if window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .is_some_and(|current| same_monitor(&current, monitor))
+    {
+        if focus {
+            let _ = window.set_focus();
+        }
+        return;
+    }
+
+    let max = window.is_maximized().unwrap_or(false);
+    if max {
+        let _ = window.unmaximize();
+    }
+
+    if let Err(err) = set_window_to_monitor(window, monitor) {
+        tracing::warn!(label = %window.label(), error = ?err, "failed to place window on target monitor");
+    }
+
+    if max {
+        let _ = window.maximize();
+    }
+    if focus {
+        let _ = window.set_focus();
     }
 }
 
@@ -160,7 +187,11 @@ fn monitor_has_point(monitor: &Monitor, x: i32, y: i32) -> bool {
     x >= left && x < right && y >= top && y < bottom
 }
 
-fn monitor_intersects(monitor: &Monitor, pos: PhysicalPosition<i32>, size: PhysicalSize<u32>) -> bool {
+fn monitor_intersects(
+    monitor: &Monitor,
+    pos: PhysicalPosition<i32>,
+    size: PhysicalSize<u32>,
+) -> bool {
     let right = pos.x + size.width.saturating_sub(1) as i32;
     let bottom = pos.y + size.height.saturating_sub(1) as i32;
 
@@ -188,9 +219,12 @@ fn same_monitor(a: &Monitor, b: &Monitor) -> bool {
 
 fn reset_window_position(window: &WebviewWindow) -> tauri::Result<()> {
     let size = window.outer_size()?;
-    let monitor = window
-        .primary_monitor()?
-        .or_else(|| window.available_monitors().ok().and_then(|list| list.into_iter().next()));
+    let monitor = window.primary_monitor()?.or_else(|| {
+        window
+            .available_monitors()
+            .ok()
+            .and_then(|list| list.into_iter().next())
+    });
 
     let Some(monitor) = monitor else {
         return window.center();
@@ -236,7 +270,10 @@ fn ensure_window_visible(window: &WebviewWindow) {
         return;
     };
 
-    if monitors.iter().any(|monitor| monitor_intersects(monitor, pos, size)) {
+    if monitors
+        .iter()
+        .any(|monitor| monitor_intersects(monitor, pos, size))
+    {
         return;
     }
 

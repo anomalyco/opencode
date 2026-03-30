@@ -70,6 +70,13 @@ const emptyFollowups: (FollowupDraft & { id: string })[] = []
 type ChangeMode = "git" | "branch" | "session" | "turn"
 type VcsMode = "git" | "branch"
 
+function list(value: unknown): FileDiff[] {
+  // Older/local session records have previously persisted malformed `summary.diffs`
+  // values. Treat anything non-array as "no diffs" so a bad record can't crash
+  // the entire session view while opening review.
+  return Array.isArray(value) ? value : []
+}
+
 type SessionHistoryWindowInput = {
   sessionID: () => string | undefined
   messagesReady: () => boolean
@@ -761,7 +768,7 @@ export default function Page() {
     return open
   }, desktopReviewOpen())
 
-  const turnDiffs = createMemo(() => lastUserMessage()?.summary?.diffs ?? [])
+  const turnDiffs = createMemo(() => list(lastUserMessage()?.summary?.diffs))
   const changesOptions = createMemo<ChangeMode[]>(() => {
     const list: ChangeMode[] = []
     if (sync.project?.vcs === "git") list.push("git")

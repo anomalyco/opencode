@@ -1,8 +1,8 @@
+use futures::FutureExt;
 use std::time::{Duration, Instant};
 
 use tauri::AppHandle;
 use tauri_plugin_store::StoreExt;
-use tokio::task::JoinHandle;
 
 use crate::{
     cli,
@@ -67,17 +67,16 @@ pub async fn set_default_server_url(app: AppHandle, url: Option<String>) -> Resu
 #[tauri::command]
 #[specta::specta]
 pub fn get_wsl_config(_app: AppHandle) -> Result<WslConfig, String> {
-    // let store = app
-    //     .store(SETTINGS_STORE)
-    //     .map_err(|e| format!("Failed to open settings store: {}", e))?;
+    let store = _app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("Failed to open settings store: {}", e))?;
 
-    // let enabled = store
-    //     .get(WSL_ENABLED_KEY)
-    //     .as_ref()
-    //     .and_then(|v| v.as_bool())
-    //     .unwrap_or(false);
-
-    Ok(WslConfig { enabled: false })
+    Ok(WslConfig {
+        enabled: store
+            .get(WSL_ENABLED_KEY)
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+    })
 }
 
 #[tauri::command]
@@ -159,10 +158,14 @@ pub fn spawn_local_server(
     hostname: String,
     port: u32,
     password: String,
-) -> (CommandChild, HealthCheck) {
-    let (child, exit) = cli::serve(&app, &hostname, port, &password);
+) -> Result<(CommandChild, HealthCheck), String> {
+    let (child, exit) = cli::serve(&app, &hostname, port, &password)?;
+    // Startup gating and the later final health wait both need the same readiness result.
+    // Keep this shared so either caller can observe the outcome without racing or hanging
+    // on a second await of a consumed task.
+    let (tx, rx) = tokio::sync::oneshot::channel::<Result<(), String>>();
 
-    let health_check = HealthCheck(tokio::spawn(async move {
+    tokio::spawn(async move {
         let url = format!("http://{hostname}:{port}");
         let timestamp = Instant::now();
 
@@ -187,16 +190,21 @@ pub fn spawn_local_server(
             }
         };
 
-        tokio::select! {
+        let result = tokio::select! {
             res = ready => res,
             res = terminated => res,
-        }
-    }));
+        };
 
-    (child, health_check)
+        let _ = tx.send(result);
+    });
+
+    Ok((child, HealthCheck(rx.shared())))
 }
 
-pub struct HealthCheck(pub JoinHandle<Result<(), String>>);
+#[derive(Clone)]
+pub struct HealthCheck(
+    pub futures::future::Shared<tokio::sync::oneshot::Receiver<Result<(), String>>>,
+);
 
 pub(crate) async fn check_health(url: &str, password: Option<&str>) -> bool {
     let Ok(url) = reqwest::Url::parse(url) else {

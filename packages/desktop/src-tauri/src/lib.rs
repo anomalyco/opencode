@@ -22,9 +22,7 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-use tauri::{
-    AppHandle, Listener, Manager, RunEvent, State, ipc::Channel, path::BaseDirectory,
-};
+use tauri::{AppHandle, Listener, Manager, RunEvent, State, ipc::Channel, path::BaseDirectory};
 #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_specta::Event;
@@ -89,12 +87,13 @@ struct OpenclawTestResult {
     logs: Vec<String>,
 }
 
-#[derive(Clone, Copy, serde::Serialize, specta::Type, Debug)]
+#[derive(Clone, serde::Serialize, specta::Type, Debug)]
 #[serde(tag = "phase", rename_all = "snake_case")]
 enum InitStep {
     ServerWaiting,
     SqliteWaiting,
     Done,
+    Failed { detail: String },
 }
 
 #[derive(serde::Deserialize, specta::Type)]
@@ -151,7 +150,7 @@ struct OpenclawState {
 }
 
 /// Resolves with sidecar credentials as soon as the sidecar is spawned (before health check).
-struct SidecarReady(futures::future::Shared<oneshot::Receiver<ServerReadyData>>);
+struct SidecarReady(futures::future::Shared<oneshot::Receiver<Option<ServerReadyData>>>);
 
 #[derive(Clone, Default)]
 struct InitialPathState(Arc<Mutex<Option<String>>>);
@@ -598,12 +597,12 @@ fn kill_sidecar(app: AppHandle) {
         return;
     };
 
-    let Some(server_state) = server_state
-        .child
-        .lock()
-        .expect("Failed to acquire mutex lock")
-        .take()
-    else {
+    let Ok(mut child) = server_state.child.lock() else {
+        tracing::warn!("Failed to acquire server state lock");
+        return;
+    };
+
+    let Some(server_state) = child.take() else {
         tracing::info!("Server state missing");
         return;
     };
@@ -769,7 +768,7 @@ async fn reload_sidecar(app: AppHandle) -> Result<(), String> {
         password: Some(password.clone()),
     };
 
-    let (child, health_check) = server::spawn_local_server(app.clone(), hostname, port, password);
+    let (child, health_check) = server::spawn_local_server(app.clone(), hostname, port, password)?;
     publish_bridge(&app, &data)?;
 
     {
@@ -780,12 +779,7 @@ async fn reload_sidecar(app: AppHandle) -> Result<(), String> {
         *state = Some(child);
     }
 
-    match timeout(Duration::from_secs(30), health_check.0).await {
-        Ok(Ok(Ok(()))) => Ok(()),
-        Ok(Ok(Err(err))) => Err(err),
-        Ok(Err(err)) => Err(err.to_string()),
-        Err(_) => Err("Timed out waiting for backend to restart".to_string()),
-    }
+    wait_health(health_check).await
 }
 
 #[tauri::command]
@@ -822,14 +816,23 @@ async fn test_openclaw_server(
         });
     };
     logs.push(format!("Gateway URL detected: {url}"));
-    logs.push(format!("Gateway token present: {}", config.token.as_ref().is_some_and(|x| !x.trim().is_empty())));
+    logs.push(format!(
+        "Gateway token present: {}",
+        config.token.as_ref().is_some_and(|x| !x.trim().is_empty())
+    ));
     let port = get_openclaw_port();
     let hostname = "127.0.0.1".to_string();
     let password = uuid::Uuid::new_v4().to_string();
     let http = format!("http://{hostname}:{port}");
     logs.push(format!("Allocating temporary adapter on {http}"));
-    let (child, health_check) =
-        crate::cli::serve_openclaw(&app, &hostname, port, &password, &url, config.token.as_deref());
+    let (child, health_check) = crate::cli::serve_openclaw(
+        &app,
+        &hostname,
+        port,
+        &password,
+        &url,
+        config.token.as_deref(),
+    );
     logs.push("Temporary adapter spawned".to_string());
 
     if let Some(state) = app.try_state::<OpenclawState>()
@@ -899,18 +902,18 @@ async fn await_initialization(
     state: State<'_, SidecarReady>,
     init_state: State<'_, InitState>,
     events: Channel<InitStep>,
-) -> Result<ServerReadyData, String> {
+) -> Result<Option<ServerReadyData>, String> {
     let mut rx = init_state.current.clone();
 
     tokio::spawn(async move {
-        let step = *rx.borrow();
-        let _ = events.send(step);
+        let step = rx.borrow().clone();
+        let _ = events.send(step.clone());
 
         while rx.changed().await.is_ok() {
-            let step = *rx.borrow_and_update();
-            let _ = events.send(step);
+            let step = rx.borrow_and_update().clone();
+            let _ = events.send(step.clone());
 
-            if matches!(step, InitStep::Done) {
+            if matches!(step, InitStep::Done | InitStep::Failed { .. }) {
                 break;
             }
         }
@@ -1508,6 +1511,7 @@ async fn initialize(app: AppHandle) {
     startup_mark(&app, "native", "initialize.start", None, None);
 
     let (init_tx, init_rx) = watch::channel(InitStep::ServerWaiting);
+    let (ready_tx, ready_rx) = oneshot::channel::<Option<ServerReadyData>>();
 
     setup_app(&app, init_rx);
     spawn_cli_sync_task(app.clone());
@@ -1517,37 +1521,58 @@ async fn initialize(app: AppHandle) {
     let hostname = "127.0.0.1";
     let url = format!("http://{hostname}:{port}");
     let password = uuid::Uuid::new_v4().to_string();
-
-    tracing::info!("Spawning sidecar on {url}");
-    let (child, health_check) =
-        server::spawn_local_server(app.clone(), hostname.to_string(), port, password.clone());
-    startup_mark(&app, "native", "sidecar.spawned", Some(url.clone()), None);
-
-    publish_bridge(
-        &app,
-        &ServerReadyData {
-            url: url.clone(),
-            username: Some("opencode".to_string()),
-            password: Some(password.clone()),
-        },
-    )
-    .expect("Failed to publish bridge file");
-    startup_mark(&app, "native", "bridge.published", None, None);
-
-    // Make sidecar credentials available immediately (before health check completes)
-    let (ready_tx, ready_rx) = oneshot::channel();
-    let _ = ready_tx.send(ServerReadyData {
+    let data = ServerReadyData {
         url: url.clone(),
         username: Some("opencode".to_string()),
         password: Some(password.clone()),
-    });
+    };
+
     app.manage(SidecarReady(ready_rx.shared()));
     app.manage(ServerState {
-        child: Arc::new(Mutex::new(Some(child))),
+        child: Arc::new(Mutex::new(None)),
         hostname: hostname.to_string(),
         port,
         password: Arc::new(Mutex::new(password.clone())),
     });
+
+    tracing::info!("Spawning sidecar on {url}");
+    let mut fail = None::<String>;
+    let health_check =
+        match server::spawn_local_server(app.clone(), hostname.to_string(), port, password.clone())
+        {
+            Ok((child, health_check)) => {
+                startup_mark(&app, "native", "sidecar.spawned", Some(url.clone()), None);
+
+                if let Some(state) = app.try_state::<ServerState>()
+                    && let Ok(mut handle) = state.child.lock()
+                {
+                    *handle = Some(child);
+                }
+
+                if let Err(err) = publish_bridge(&app, &data) {
+                    tracing::warn!(error = %err, "Failed to publish bridge file");
+                    startup_mark(&app, "native", "bridge.publish_failed", Some(err), None);
+                } else {
+                    startup_mark(&app, "native", "bridge.published", None, None);
+                }
+
+                let _ = ready_tx.send(Some(data));
+                Some(health_check)
+            }
+            Err(err) => {
+                tracing::error!("Failed to spawn sidecar: {err}");
+                startup_mark(
+                    &app,
+                    "native",
+                    "sidecar.spawn_failed",
+                    Some(err.clone()),
+                    None,
+                );
+                let _ = ready_tx.send(None);
+                fail = Some(format!("Failed to start local backend: {err}"));
+                None
+            }
+        };
 
     let loading_window = LoadingWindow::create(&app).expect("Failed to create loading window");
     let initial_path = app
@@ -1561,7 +1586,7 @@ async fn initialize(app: AppHandle) {
     // We only do this if the sqlite db doesn't exist, and we're expecting the sidecar to create it.
     // A separate loading window is shown for long migrations.
     let needs_migration = !sqlite_file_exists();
-    let sqlite_done = needs_migration.then(|| {
+    let sqlite_done = (needs_migration && fail.is_none()).then(|| {
         tracing::info!(
             path = %opencode_db_path().expect("failed to get db path").display(),
             "Sqlite file not found, waiting for it to be generated"
@@ -1590,8 +1615,23 @@ async fn initialize(app: AppHandle) {
     });
 
     if let Some(sqlite_done_rx) = sqlite_done {
-        let _ = sqlite_done_rx.await;
-        startup_mark(&app, "native", "sqlite.ready", None, None);
+        let result = if let Some(health_check) = health_check.clone() {
+            tokio::select! {
+                _ = sqlite_done_rx => Ok(()),
+                result = wait_health(health_check) => result,
+            }
+        } else {
+            let _ = sqlite_done_rx.await;
+            Ok(())
+        };
+
+        if let Err(err) = result {
+            tracing::error!("Sqlite startup gating failed: {err}");
+            startup_mark(&app, "native", "sqlite.failed", Some(err.clone()), None);
+            fail.get_or_insert(err);
+        } else {
+            startup_mark(&app, "native", "sqlite.ready", None, None);
+        }
     }
 
     tracing::info!("Showing main window after sqlite gating");
@@ -1613,12 +1653,16 @@ async fn initialize(app: AppHandle) {
         let retry = window.clone();
         let monitor = monitor.clone();
         tauri::async_runtime::spawn(async move {
-            for delay in [80_u64, 160, 320, 640, 1200] {
+            // Window-state restore can keep reapplying stale monitor placement for several
+            // seconds after startup on macOS. Keep anchoring the main window back to the
+            // loading window's visible monitor until those delayed restores settle, but
+            // don't steal focus back from whatever app the user switched to meanwhile.
+            for delay in [80_u64, 160, 320, 640, 1200, 2400, 4800, 9600] {
                 sleep(Duration::from_millis(delay)).await;
                 if let Some(ref monitor) = monitor {
-                    MainWindow::present_on(&retry, monitor);
+                    MainWindow::anchor_on(&retry, monitor);
                 } else {
-                    MainWindow::present(&retry);
+                    MainWindow::anchor(&retry);
                 }
             }
         });
@@ -1628,29 +1672,34 @@ async fn initialize(app: AppHandle) {
     let _ = loading_window.close();
     startup_mark(&app, "native", "loading_window.closed", None, None);
 
-    startup_mark(&app, "native", "health.waiting", None, None);
-    let res = timeout(Duration::from_secs(30), health_check.0).await;
-    match res {
-        Ok(Ok(Ok(()))) => {
-            tracing::info!("Sidecar health check OK");
-            startup_mark(&app, "native", "health.ready", None, None);
-        }
-        Ok(Ok(Err(e))) => {
-            tracing::error!("Sidecar health check failed: {e}");
-            startup_mark(&app, "native", "health.failed", Some(e), None);
-        }
-        Ok(Err(e)) => {
-            tracing::error!("Sidecar health check task failed: {e}");
-            startup_mark(&app, "native", "health.task_failed", Some(e.to_string()), None);
-        }
-        Err(_) => {
-            tracing::error!("Sidecar health check timed out");
-            startup_mark(&app, "native", "health.timed_out", None, None);
+    if health_check.is_some() {
+        startup_mark(&app, "native", "health.waiting", None, None);
+    }
+    if let Some(health_check) = health_check {
+        match wait_health(health_check).await {
+            Ok(()) => {
+                tracing::info!("Sidecar health check OK");
+                startup_mark(&app, "native", "health.ready", None, None);
+            }
+            Err(err) => {
+                tracing::error!("Sidecar health check failed: {err}");
+                startup_mark(&app, "native", "health.failed", Some(err.clone()), None);
+                fail.get_or_insert(err);
+            }
         }
     }
 
     tracing::info!("Loading task finished");
     startup_mark(&app, "native", "loading.task_done", None, None);
+
+    if let Some(err) = fail {
+        tracing::error!("Initialization failed: {err}");
+        let _ = init_tx.send(InitStep::Failed {
+            detail: err.clone(),
+        });
+        startup_mark(&app, "native", "initialize.failed", Some(err), None);
+        return;
+    }
 
     tracing::info!("Loading done, completing initialisation");
     let _ = init_tx.send(InitStep::Done);
@@ -1676,6 +1725,15 @@ fn spawn_cli_sync_task(app: AppHandle) {
             tracing::error!("Failed to sync CLI: {e}");
         }
     });
+}
+
+async fn wait_health(health: server::HealthCheck) -> Result<(), String> {
+    match timeout(Duration::from_secs(30), health.0).await {
+        Ok(Ok(Ok(()))) => Ok(()),
+        Ok(Ok(Err(err))) => Err(err),
+        Ok(Err(_)) => Err("Local backend readiness watch failed".to_string()),
+        Err(_) => Err("Timed out waiting for local backend health".to_string()),
+    }
 }
 
 fn get_sidecar_port() -> u32 {
