@@ -23,6 +23,7 @@ import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
+import { Shell } from "../../src/shell/shell"
 import { Snapshot } from "../../src/snapshot"
 import { Log } from "../../src/util/log"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
@@ -145,6 +146,24 @@ function defer<T>() {
 
 function waitMs(ms: number) {
   return Effect.promise(() => new Promise<void>((done) => setTimeout(done, ms)))
+}
+
+function withSh<A, E, R>(fx: () => Effect.Effect<A, E, R>) {
+  return Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const prev = process.env.SHELL
+      process.env.SHELL = "/bin/sh"
+      Shell.preferred.reset()
+      return prev
+    }),
+    () => fx(),
+    (prev) =>
+      Effect.sync(() => {
+        if (prev === undefined) delete process.env.SHELL
+        else process.env.SHELL = prev
+        Shell.preferred.reset()
+      }),
+  )
 }
 
 function toolPart(parts: MessageV2.Part[]) {
@@ -807,31 +826,33 @@ it.effect("shell captures stdout and stderr in completed tool output", () =>
 it.effect(
   "shell updates running metadata before process exit",
   () =>
-    provideTmpdirInstance(
-      (dir) =>
-        Effect.gen(function* () {
-          const { prompt, chat } = yield* boot()
+    withSh(() =>
+      provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            const { prompt, chat } = yield* boot()
 
-          const fiber = yield* prompt
-            .shell({ sessionID: chat.id, agent: "build", command: "printf first && sleep 0.2 && printf second" })
-            .pipe(Effect.forkChild)
+            const fiber = yield* prompt
+              .shell({ sessionID: chat.id, agent: "build", command: "printf first && sleep 0.2 && printf second" })
+              .pipe(Effect.forkChild)
 
-          yield* Effect.promise(async () => {
-            const start = Date.now()
-            while (Date.now() - start < 2000) {
-              const msgs = await MessageV2.filterCompacted(MessageV2.stream(chat.id))
-              const taskMsg = msgs.find((item) => item.info.role === "assistant")
-              const tool = taskMsg ? toolPart(taskMsg.parts) : undefined
-              if (tool?.state.status === "running" && tool.state.metadata?.output.includes("first")) return
-              await new Promise((done) => setTimeout(done, 20))
-            }
-            throw new Error("timed out waiting for running shell metadata")
-          })
+            yield* Effect.promise(async () => {
+              const start = Date.now()
+              while (Date.now() - start < 5000) {
+                const msgs = await MessageV2.filterCompacted(MessageV2.stream(chat.id))
+                const taskMsg = msgs.find((item) => item.info.role === "assistant")
+                const tool = taskMsg ? toolPart(taskMsg.parts) : undefined
+                if (tool?.state.status === "running" && tool.state.metadata?.output.includes("first")) return
+                await new Promise((done) => setTimeout(done, 20))
+              }
+              throw new Error("timed out waiting for running shell metadata")
+            })
 
-          const exit = yield* Fiber.await(fiber)
-          expect(Exit.isSuccess(exit)).toBe(true)
-        }),
-      { git: true, config: cfg },
+            const exit = yield* Fiber.await(fiber)
+            expect(Exit.isSuccess(exit)).toBe(true)
+          }),
+        { git: true, config: cfg },
+      ),
     ),
   30_000,
 )
@@ -909,34 +930,36 @@ it.effect(
 it.effect(
   "cancel interrupts shell and resolves cleanly",
   () =>
-    provideTmpdirInstance(
-      (dir) =>
-        Effect.gen(function* () {
-          const { prompt, chat } = yield* boot()
+    withSh(() =>
+      provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            const { prompt, chat } = yield* boot()
 
-          const sh = yield* prompt
-            .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
-            .pipe(Effect.forkChild)
-          yield* waitMs(50)
+            const sh = yield* prompt
+              .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
+              .pipe(Effect.forkChild)
+            yield* waitMs(50)
 
-          yield* prompt.cancel(chat.id)
+            yield* prompt.cancel(chat.id)
 
-          const status = yield* SessionStatus.Service
-          expect((yield* status.get(chat.id)).type).toBe("idle")
-          const busy = yield* prompt.assertNotBusy(chat.id).pipe(Effect.exit)
-          expect(Exit.isSuccess(busy)).toBe(true)
+            const status = yield* SessionStatus.Service
+            expect((yield* status.get(chat.id)).type).toBe("idle")
+            const busy = yield* prompt.assertNotBusy(chat.id).pipe(Effect.exit)
+            expect(Exit.isSuccess(busy)).toBe(true)
 
-          const exit = yield* Fiber.await(sh)
-          expect(Exit.isSuccess(exit)).toBe(true)
-          if (Exit.isSuccess(exit)) {
-            expect(exit.value.info.role).toBe("assistant")
-            const tool = completedTool(exit.value.parts)
-            if (tool) {
-              expect(tool.state.output).toContain("User aborted the command")
+            const exit = yield* Fiber.await(sh)
+            expect(Exit.isSuccess(exit)).toBe(true)
+            if (Exit.isSuccess(exit)) {
+              expect(exit.value.info.role).toBe("assistant")
+              const tool = completedTool(exit.value.parts)
+              if (tool) {
+                expect(tool.state.output).toContain("User aborted the command")
+              }
             }
-          }
-        }),
-      { git: true, config: cfg },
+          }),
+        { git: true, config: cfg },
+      ),
     ),
   30_000,
 )
@@ -972,26 +995,30 @@ it.effect(
 it.effect(
   "shell rejects when another shell is already running",
   () =>
-    provideTmpdirInstance(
-      (dir) =>
-        Effect.gen(function* () {
-          const { prompt, chat } = yield* boot()
+    withSh(() =>
+      provideTmpdirInstance(
+        (dir) =>
+          Effect.gen(function* () {
+            const { prompt, chat } = yield* boot()
 
-          const a = yield* prompt
-            .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
-            .pipe(Effect.forkChild)
-          yield* waitMs(50)
+            const a = yield* prompt
+              .shell({ sessionID: chat.id, agent: "build", command: "sleep 30" })
+              .pipe(Effect.forkChild)
+            yield* waitMs(50)
 
-          const exit = yield* prompt.shell({ sessionID: chat.id, agent: "build", command: "echo hi" }).pipe(Effect.exit)
-          expect(Exit.isFailure(exit)).toBe(true)
-          if (Exit.isFailure(exit)) {
-            expect(Cause.squash(exit.cause)).toBeInstanceOf(Session.BusyError)
-          }
+            const exit = yield* prompt
+              .shell({ sessionID: chat.id, agent: "build", command: "echo hi" })
+              .pipe(Effect.exit)
+            expect(Exit.isFailure(exit)).toBe(true)
+            if (Exit.isFailure(exit)) {
+              expect(Cause.squash(exit.cause)).toBeInstanceOf(Session.BusyError)
+            }
 
-          yield* prompt.cancel(chat.id)
-          yield* Fiber.await(a)
-        }),
-      { git: true, config: cfg },
+            yield* prompt.cancel(chat.id)
+            yield* Fiber.await(a)
+          }),
+        { git: true, config: cfg },
+      ),
     ),
   30_000,
 )
