@@ -76,6 +76,11 @@ jobs:
         run: |
           cd packages/desktop
           $version = $env:APP_VERSION -replace '^v', ''
+          if ($version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$') {
+            $tag = [regex]::Replace($env:APP_VERSION, '[^0-9A-Za-z.-]+', '-').Trim('-')
+            if ([string]::IsNullOrWhiteSpace($tag)) { $tag = 'dev' }
+            $version = "0.0.0-$tag.$env:GITHUB_RUN_NUMBER"
+          }
           # Update version
           $pkg = Get-Content package.json | ConvertFrom-Json
           $pkg.version = $version
