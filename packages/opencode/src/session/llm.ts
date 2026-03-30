@@ -1,6 +1,7 @@
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
-import { Effect, Layer, Record, ServiceMap } from "effect"
+import { Cause, Effect, Layer, Record, ServiceMap } from "effect"
+import * as Queue from "effect/Queue"
 import * as Stream from "effect/Stream"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, jsonSchema } from "ai"
 import { mergeDeep, pipe } from "remeda"
@@ -52,15 +53,32 @@ export namespace LLM {
     Effect.gen(function* () {
       return Service.of({
         stream(input) {
-          return Stream.unwrap(
-            Effect.promise((signal) => LLM.stream({ ...input, abort: signal })).pipe(
-              Effect.map((result) =>
-                Stream.fromAsyncIterable(result.fullStream, (err) => err).pipe(
-                  Stream.mapEffect((event) => Effect.succeed(event)),
-                ),
-              ),
+          const stream: Stream.Stream<Event, unknown> = Stream.scoped(
+            Stream.unwrap(
+              Effect.gen(function* () {
+                const ctrl = yield* Effect.acquireRelease(
+                  Effect.sync(() => new AbortController()),
+                  (ctrl) => Effect.sync(() => ctrl.abort()),
+                )
+                const queue = yield* Queue.unbounded<Event, unknown | Cause.Done>()
+
+                yield* Effect.promise(async () => {
+                  const result = await LLM.stream({ ...input, abort: ctrl.signal })
+                  for await (const event of result.fullStream) {
+                    if (!Queue.offerUnsafe(queue, event)) break
+                  }
+                  Queue.endUnsafe(queue)
+                }).pipe(
+                  Effect.catchCause((cause) => Effect.sync(() => void Queue.failCauseUnsafe(queue, cause))),
+                  Effect.onInterrupt(() => Effect.sync(() => ctrl.abort())),
+                  Effect.forkScoped,
+                )
+
+                return Stream.fromQueue(queue)
+              }),
             ),
           )
+          return stream
         },
       })
     }),
