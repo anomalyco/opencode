@@ -561,3 +561,106 @@ describe("tui.plugin.loader", () => {
     expect(data.leaked_global_to_local).toBe(false)
   })
 })
+
+test("updates installed theme when plugin metadata changes", async () => {
+  await using tmp = await tmpdir<{
+    spec: string
+    pluginPath: string
+    themePath: string
+    dest: string
+    themeName: string
+  }>({
+    init: async (dir) => {
+      const pluginPath = path.join(dir, "theme-update-plugin.ts")
+      const spec = pathToFileURL(pluginPath).href
+      const themeFile = "theme-update.json"
+      const themePath = path.join(dir, themeFile)
+      const dest = path.join(dir, ".opencode", "themes", themeFile)
+      const themeName = themeFile.replace(/\.json$/, "")
+      const configPath = path.join(dir, "tui.json")
+
+      await Bun.write(themePath, JSON.stringify({ theme: { primary: "#111111" } }, null, 2))
+      await Bun.write(
+        pluginPath,
+        `export default {
+  id: "demo.theme-update",
+  tui: async (api, options) => {
+    if (!options?.theme_path) return
+    await api.theme.install(options.theme_path)
+  },
+}
+`,
+      )
+      await Bun.write(
+        configPath,
+        JSON.stringify(
+          {
+            plugin: [[spec, { theme_path: `./${themeFile}` }]],
+          },
+          null,
+          2,
+        ),
+      )
+
+      return {
+        spec,
+        pluginPath,
+        themePath,
+        dest,
+        themeName,
+      }
+    },
+  })
+
+  process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
+  const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const install = spyOn(Config, "installDependencies").mockResolvedValue()
+
+  const api = () =>
+    createTuiPluginApi({
+      theme: {
+        has(name) {
+          return allThemes()[name] !== undefined
+        },
+      },
+    })
+
+  try {
+    await TuiPluginRuntime.init(api())
+    await TuiPluginRuntime.dispose()
+    await expect(fs.readFile(tmp.extra.dest, "utf8")).resolves.toContain("#111111")
+
+    await Bun.write(tmp.extra.themePath, JSON.stringify({ theme: { primary: "#222222" } }, null, 2))
+    await Bun.write(
+      tmp.extra.pluginPath,
+      `export default {
+  id: "demo.theme-update",
+  tui: async (api, options) => {
+    if (!options?.theme_path) return
+    await api.theme.install(options.theme_path)
+  },
+}
+// v2
+`,
+    )
+    const stamp = new Date(Date.now() + 10_000)
+    await fs.utimes(tmp.extra.pluginPath, stamp, stamp)
+    await fs.utimes(tmp.extra.themePath, stamp, stamp)
+
+    await TuiPluginRuntime.init(api())
+    const text = await fs.readFile(tmp.extra.dest, "utf8")
+    expect(text).toContain("#222222")
+    expect(text).not.toContain("#111111")
+    const list = await Filesystem.readJson<Record<string, { themes?: Record<string, { dest: string }> }>>(
+      process.env.OPENCODE_PLUGIN_META_FILE!,
+    )
+    expect(list["demo.theme-update"]?.themes?.[tmp.extra.themeName]?.dest).toBe(tmp.extra.dest)
+  } finally {
+    await TuiPluginRuntime.dispose()
+    cwd.mockRestore()
+    wait.mockRestore()
+    install.mockRestore()
+    delete process.env.OPENCODE_PLUGIN_META_FILE
+  }
+})
