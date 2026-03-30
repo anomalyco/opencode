@@ -22,6 +22,8 @@ OpenCode supports both **JSON** and **JSONC** (JSON with Comments) formats.
 }
 ```
 
+> **Note:** OpenCode works out of the box without any config file. The `opencode.json` file is **not auto-created** — you only need to create one when you want to customize OpenCode's behavior.
+
 ---
 
 ## Locations
@@ -101,6 +103,8 @@ Place your global OpenCode config in `~/.config/opencode/opencode.json`. Use glo
 For TUI-specific settings, use `~/.config/opencode/tui.json`.
 
 Global config overrides remote organizational defaults.
+
+> **Tip:** Runtime UI preferences like your theme selection (via `/theme`) are stored in `~/.local/state/opencode/kv.json` and persist across restarts.
 
 ---
 
