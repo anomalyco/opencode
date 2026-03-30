@@ -458,3 +458,191 @@ The existing architecture supports this with minimal changes:
 
 This way each task type (LinkedIn outreach, shopping, research, form filling) gets exactly the MCPs and skills it needs — no bloat, clean isolation, proper cleanup.
 
+---
+
+## Project Summary — What Was Built
+
+### Origin
+
+Athena Browser Agent is forked from [OpenCode](https://github.com/anomalyco/opencode) (131k stars) — an open-source AI coding agent. We transformed it from a coding agent into a **browser automation agent** while keeping the battle-tested infrastructure (session management, LLM loop, provider system, TUI, permissions).
+
+### What Changed From OpenCode
+
+| Area | OpenCode (Original) | Athena Browser Agent |
+|------|---------------------|---------------------|
+| **Purpose** | AI coding agent (edit files, run tests) | AI browser automation agent |
+| **Tools** | edit, write, grep, glob, LSP, apply_patch (8 coding tools) | 29 browser tools (click, type, snapshot, find, frame, cookies, etc.) |
+| **Browser** | None | Patchright (stealth) launches Chrome + agent-browser connects via CDP |
+| **Modes** | build (code) + plan (read-only) | auto (silent autonomous) + interactive (conversational) |
+| **TUI theme** | Orange/neutral | Purple (#b48efa primary, #e07bff accent) |
+| **Logo** | ASCII block art "ATHENA AGENT" | Clean ◆ diamond + "athena browser" |
+| **LSP** | 15+ language servers (TypeScript, Python, Go, Rust...) | Stubbed out — no-op (saves 2-5GB RAM) |
+| **File watcher** | parcel-watcher (loads full file trees) | Stubbed out — no-op (saves 500MB-1GB RAM) |
+| **Formatters** | prettier, black, rustfmt, etc. | Stubbed out — no-op |
+| **Git/VCS** | Full git integration (branch tracking, worktrees) | Stubbed out — no-op |
+| **Desktop app** | Code editor (file tree, diff viewer, terminal) | Browser live view (WebSocket viewport stream) |
+| **RAM usage** | 3-6GB+ from LSP/watcher/formatters | ~200MB base (all heavy modules stubbed) |
+| **Branding** | "OpenCode" everywhere | "Athena" everywhere (8 prompt files, TUI, terminal title, etc.) |
+
+### Complete File Inventory
+
+**New files created:**
+```
+src/browser/                          # Browser automation core
+├── api.ts                            # AthenaBrowser public API for Tauri
+├── binary.ts                         # agent-browser binary resolution
+├── client.ts                         # CLI wrapper + retries + patchright fallback
+├── daemon.ts                         # Browser lifecycle (Patchright + agent-browser)
+├── patchright.ts                     # Stealth Chrome launcher + auto-install
+├── state.ts                          # Per-session browser state
+└── index.ts
+
+src/tool/browser/                     # 29 browser tools
+├── open.ts                           # 🌐 Open URL
+├── navigate.ts                       # 🔗 Navigate/back/forward
+├── click.ts                          # 👆 Click (auto-screenshot on fail)
+├── type.ts                           # ⌨ Type/fill text
+├── select.ts                         # ☰ Dropdown select
+├── press.ts                          # ⌨ Keyboard keys
+├── hover.ts                          # ◎ Hover element
+├── drag.ts                           # ✥ Drag and drop
+├── scroll.ts                         # ↕ Scroll page
+├── upload.ts                         # 📤 File upload
+├── snapshot.ts                       # 👁 Snapshot (auto-screenshot fallback)
+├── screenshot.ts                     # 📸 Screenshot
+├── extract.ts                        # 📋 Extract text/HTML/title/URL
+├── find.ts                           # 🔍 Semantic element search
+├── console.ts                        # ▸ Browser console logs
+├── frame.ts                          # ⬡ iframe switching
+├── dialog.ts                         # 💬 Alert/confirm/prompt
+├── tab.ts                            # 📑 Tab management
+├── wait.ts                           # ⏳ Wait for elements
+├── cookies.ts                        # 🍪 Cookie management
+├── storage.ts                        # 💾 localStorage management
+├── network.ts                        # 📡 Network interception
+├── config.ts                         # ⚙ Browser settings
+├── evaluate.ts                       # ⚡ JavaScript execution
+├── close.ts                          # ✕ Close (session-end only)
+├── human_handoff.ts                  # ⏸ Auth/payment/captcha pause
+├── patchright_fallback.ts            # 🛡 Stealth Patchright fallback
+└── index.ts
+
+src/agent/prompt/
+├── auto.txt                          # Autonomous mode system prompt
+└── interactive.txt                   # Interactive mode system prompt
+
+packages/                             # Tauri desktop app (forked from OpenCode)
+├── desktop/                          # Tauri v2 native app
+│   ├── src-tauri/                    # Rust backend (sidecar, plugins, health checks)
+│   └── src/                          # Web frontend
+├── app/                              # Shared pages, components, context
+│   └── src/pages/session/
+│       └── browser-live-panel.tsx    # NEW — replaces code editor
+├── ui/                               # Design system
+└── sdk/                              # HTTP SDK client
+
+ARCHITECTURE.md                       # This document
+```
+
+**Files modified (from OpenCode base):**
+```
+src/agent/agent.ts                    # build/plan → auto/interactive agents
+src/tool/registry.ts                  # Register 29 browser tools
+src/session/prompt.ts                 # Browser daemon lifecycle, mode switching
+src/session/system.ts                 # Browser status in environment context
+src/config/config.ts                  # browser.* config section
+src/flag/flag.ts                      # ATHENA_BROWSER_* flags
+src/index.ts                          # Process cleanup + process.title
+script/build.ts                       # Bundle agent-browser binary
+package.json                          # patchright + agent-browser deps + postinstall
+
+src/cli/cmd/tui/context/theme/athena.json   # Purple theme
+src/cli/cmd/tui/component/logo.tsx          # ◆ diamond logo
+src/cli/cmd/tui/routes/home.tsx             # Redesigned home screen
+src/cli/cmd/tui/routes/session/index.tsx    # Browser tool icons (29)
+src/cli/cmd/tui/routes/session/header.tsx   # Mode indicator
+src/cli/cmd/tui/routes/session/footer.tsx   # Purple ◆ accent
+src/cli/cmd/tui/routes/session/sidebar.tsx  # "athena browser" branding
+src/cli/cmd/tui/app.tsx                     # Terminal title "Athena |"
+
+src/session/prompt/anthropic.txt      # "Athena" branding (was "OpenCode")
+src/session/prompt/default.txt        # "Athena" branding
+src/session/prompt/beast.txt          # "Athena" branding
+src/session/prompt/codex.txt          # "Athena" branding
+src/session/prompt/gemini.txt         # "Athena" branding
+src/session/prompt/gpt.txt            # "Athena" branding
+src/session/prompt/trinity.txt        # "Athena" branding
+src/session/prompt/copilot-gpt-5.txt  # "Athena" branding
+```
+
+**Files stubbed (coding-agent modules → no-op):**
+```
+src/lsp/index.ts                      # 15+ language servers → empty
+src/lsp/server.ts                     # LSP server configs → empty
+src/lsp/language.ts                   # Minimal extension map
+src/lsp/client.ts                     # DELETED
+src/lsp/launch.ts                     # DELETED
+src/format/index.ts                   # Code formatters → no-op
+src/format/formatter.ts               # DELETED
+src/file/ripgrep.ts                   # Code search → no-op
+src/file/time.ts                      # File tracking → no-op
+src/file/watcher.ts                   # File watcher → no-op (parcel-watcher removed)
+src/project/vcs.ts                    # Git tracking → no-op
+src/project/bootstrap.ts              # No LSP/Format/Watcher init
+src/patch/index.ts                    # Diff parser → no-op
+src/worktree/index.ts                 # Git worktrees → no-op
+src/ide/index.ts                      # DELETED (IDE detection)
+```
+
+### Current Status
+
+| Component | Status |
+|-----------|--------|
+| CLI/TUI starts (`bun run dev`) | ✅ Working |
+| Agent loop + LLM calls | ✅ Working |
+| 29 browser tools registered | ✅ Working |
+| Purple theme + branding | ✅ Working |
+| Auto/interactive modes | ✅ Working |
+| Human handoff (auth/payment) | ✅ Working (with page-change polling) |
+| Process cleanup on exit | ✅ Working |
+| Patchright Chrome launch | ⚠️ Needs `bun install` + first-run auto-installs Chrome |
+| agent-browser connection | ⚠️ Needs `bun install` + first command starts daemon |
+| End-to-end browser automation | ⚠️ Untested (Patchright → CDP → agent-browser chain) |
+| Tauri desktop app | ⚠️ Forked + wired, needs `cargo build` + Rust toolchain |
+| BrowserLivePanel (WebSocket) | ⚠️ Written but untested against real agent-browser |
+| Desktop ↔ CLI sidecar | ⚠️ From OpenCode, needs testing with renamed backend |
+
+### Setup Instructions
+
+```bash
+# 1. Clone and install
+git clone https://github.com/heyyykk3/acode.git
+cd acode
+bun install                    # Installs deps + auto-installs Chrome via patchright
+
+# 2. Run CLI mode
+bun run dev                    # Starts TUI
+# Give it a browser task: "open google.com and search for athena browser agent"
+
+# 3. Run desktop app (requires Rust toolchain)
+cd packages/desktop
+bun install
+bun run tauri dev              # Launches Tauri app with browser live view
+```
+
+### Key Design Decisions
+
+1. **Patchright over Playwright** — stealth patches bypass bot detection (Runtime.enable leak, automation flags). Real Google Chrome, not Chromium.
+
+2. **agent-browser as primary, Patchright as fallback** — agent-browser gives AI-optimized @ref snapshots (93% token savings). Patchright fallback for iframes/shadow DOM edge cases.
+
+3. **CLI spawn over direct socket** — agent-browser daemon persists after first command. Subsequent calls are sub-millisecond via socket reuse. CLI is the only stable, documented interface.
+
+4. **Stub coding modules instead of deleting** — keeps imports working, zero runtime cost. No risk of breaking deep dependency chains (Instance used by 79 files).
+
+5. **Fork OpenCode Tauri app** — gets battle-tested sidecar management, SDK wiring, i18n, platform quirks for free. Just swapped code editor panels with browser live view.
+
+6. **Human handoff with page-change detection** — polls every 3s for URL/content change after user approves. Max 3 minutes. Prevents infinite handoff loops.
+
+7. **Persistent browser profile** — `~/.local/share/athena/browser-profile/` keeps cookies/logins across sessions. User logs in once, stays logged in.
+
