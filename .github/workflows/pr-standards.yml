@@ -26,20 +26,14 @@ jobs:
               return;
             }
 
-            // Check if author is a bot or repo collaborator with write access
+            // Skip bots and trusted authors (OWNER/MEMBER/COLLABORATOR)
+            // author_association is provided by GitHub on the payload — no API call needed,
+            // so it works regardless of GITHUB_TOKEN permission scope.
             if (login === 'opencode-agent[bot]') return;
-            try {
-              const { data: perm } = await github.rest.repos.getCollaboratorPermissionLevel({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                username: login,
-              });
-              if (['admin', 'write'].includes(perm.permission)) {
-                console.log(`Skipping: ${login} is a collaborator (${perm.permission})`);
-                return;
-              }
-            } catch (e) {
-              // Not a collaborator — continue with checks
+            const trusted = ['OWNER', 'MEMBER', 'COLLABORATOR'];
+            if (trusted.includes(pr.author_association)) {
+              console.log(`Skipping: ${login} is ${pr.author_association}`);
+              return;
             }
 
             const title = pr.title;
@@ -175,20 +169,12 @@ jobs:
               return;
             }
 
-            // Check if author is a bot or repo collaborator with write access
+            // Skip bots and trusted authors (OWNER/MEMBER/COLLABORATOR)
             if (login === 'opencode-agent[bot]') return;
-            try {
-              const { data: perm } = await github.rest.repos.getCollaboratorPermissionLevel({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                username: login,
-              });
-              if (['admin', 'write'].includes(perm.permission)) {
-                console.log(`Skipping: ${login} is a collaborator (${perm.permission})`);
-                return;
-              }
-            } catch (e) {
-              // Not a collaborator — continue with checks
+            const trusted = ['OWNER', 'MEMBER', 'COLLABORATOR'];
+            if (trusted.includes(pr.author_association)) {
+              console.log(`Skipping: ${login} is ${pr.author_association}`);
+              return;
             }
 
             const body = pr.body || '';
