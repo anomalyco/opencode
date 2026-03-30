@@ -9,7 +9,7 @@ import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { tmpdir } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const live = CrossSpawnSpawner.layer.pipe(Layer.provide(NodeFileSystem.layer), Layer.provide(NodePath.layer))
+const live = CrossSpawnSpawner.defaultLayer
 const fx = testEffect(live)
 
 function js(code: string, opts?: ChildProcess.CommandOptions) {

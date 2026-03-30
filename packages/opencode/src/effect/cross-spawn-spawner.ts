@@ -1,5 +1,6 @@
 import type * as Arr from "effect/Array"
-import { NodeSink, NodeStream } from "@effect/platform-node"
+import { NodeFileSystem, NodeSink, NodeStream } from "@effect/platform-node"
+import * as NodePath from "@effect/platform-node/NodePath"
 import * as Deferred from "effect/Deferred"
 import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
@@ -335,7 +336,7 @@ export const make = Effect.gen(function* () {
       if (Predicate.isUndefined(opts?.forceKillAfter)) return f(command, proc, signal)
       return Effect.timeoutOrElse(f(command, proc, signal), {
         duration: opts.forceKillAfter,
-        onTimeout: () => f(command, proc, "SIGKILL"),
+        orElse: () => f(command, proc, "SIGKILL"),
       })
     }
 
@@ -474,3 +475,5 @@ export const layer: Layer.Layer<ChildProcessSpawner, never, FileSystem.FileSyste
   ChildProcessSpawner,
   make,
 )
+
+export const defaultLayer = layer.pipe(Layer.provide(NodeFileSystem.layer), Layer.provide(NodePath.layer))
