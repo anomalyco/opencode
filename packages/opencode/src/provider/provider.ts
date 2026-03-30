@@ -404,7 +404,7 @@ export namespace Provider {
         },
       }
     },
-    openrouter: async () => {
+    openrouter: async (input) => {
       return {
         autoload: false,
         options: {
@@ -412,6 +412,85 @@ export namespace Provider {
             "HTTP-Referer": "https://opencode.ai/",
             "X-Title": "opencode",
           },
+        },
+        async discoverModels(): Promise<Record<string, Model>> {
+          const cachePath = path.join(Global.Path.cache, "discovery-openrouter.json")
+          const stats = Filesystem.stat(cachePath)
+          const dbStats = Filesystem.stat(path.join(Global.Path.cache, "models.json"))
+
+          const isStale =
+            !stats ||
+            (dbStats && stats.mtime < dbStats.mtime) ||
+            Date.now() - stats.mtime.getTime() > 1000 * 60 * 60
+
+          if (!isStale) {
+            const cached = await Filesystem.readJson<Record<string, Model>>(cachePath).catch(() => undefined)
+            if (cached) return cached
+          }
+
+          const res = await fetch("https://openrouter.ai/api/v1/models").then((x) => x.json() as Promise<{ data: any[] }>)
+          const discovered: Record<string, Model> = {}
+          for (const m of res.data) {
+            if (input.models[m.id]) continue
+            const hasReasoning =
+              m.supported_parameters?.includes("reasoning") || m.supported_parameters?.includes("include_reasoning")
+            const hasTools = m.supported_parameters?.includes("tools")
+            const inputModalities = m.architecture?.input_modalities ?? ["text"]
+            const outputModalities = m.architecture?.output_modalities ?? ["text"]
+            const model: Model = {
+              id: ModelID.make(m.id),
+              providerID: ProviderID.openrouter,
+              name: m.name,
+              family: m.architecture?.tokenizer ?? "",
+              api: {
+                id: m.id,
+                url: "https://openrouter.ai/api/v1",
+                npm: "@openrouter/ai-sdk-provider",
+              },
+              status: "active",
+              headers: {},
+              options: {},
+              cost: {
+                input: Number(m.pricing?.prompt ?? 0) * 1000000,
+                output: (Number(m.pricing?.completion ?? 0) + Number(m.pricing?.internal_reasoning ?? 0)) * 1000000,
+                cache: {
+                  read: Number(m.pricing?.input_cache_read ?? 0) * 1000000,
+                  write: Number(m.pricing?.input_cache_write ?? 0) * 1000000,
+                },
+              },
+              limit: {
+                context: m.context_length,
+                output: m.top_provider?.max_completion_tokens ?? 0,
+              },
+              capabilities: {
+                temperature: m.supported_parameters?.includes("temperature") ?? true,
+                reasoning: hasReasoning,
+                attachment: inputModalities.includes("image") || inputModalities.includes("file"),
+                toolcall: hasTools,
+                input: {
+                  text: true,
+                  audio: inputModalities.includes("audio"),
+                  image: inputModalities.includes("image"),
+                  video: inputModalities.includes("video"),
+                  pdf: inputModalities.includes("file") || inputModalities.includes("pdf"),
+                },
+                output: {
+                  text: outputModalities.includes("text"),
+                  audio: outputModalities.includes("audio"),
+                  image: outputModalities.includes("image"),
+                  video: outputModalities.includes("video"),
+                  pdf: false,
+                },
+                interleaved: false,
+              },
+              release_date: m.created ? new Date(m.created * 1000).toISOString().split("T")[0] : m.knowledge_cutoff ?? "",
+              variants: {},
+            }
+            model.variants = mapValues(ProviderTransform.variants(model), (v) => v)
+            discovered[m.id] = model
+          }
+          await Filesystem.writeJson(cachePath, discovered).catch(() => undefined)
+          return discovered
         },
       }
     },
@@ -1179,16 +1258,19 @@ export namespace Provider {
       log.info("found", { providerID })
     }
 
-    const gitlab = ProviderID.make("gitlab")
-    if (discoveryLoaders[gitlab] && providers[gitlab]) {
+    for (const [id, discover] of Object.entries(discoveryLoaders)) {
+      const providerID = ProviderID.make(id)
+      const provider = providers[providerID]
+      if (!provider) continue
+
       await (async () => {
-        const discovered = await discoveryLoaders[gitlab]()
+        const discovered = await discover()
         for (const [modelID, model] of Object.entries(discovered)) {
-          if (!providers[gitlab].models[modelID]) {
-            providers[gitlab].models[modelID] = model
+          if (!provider.models[modelID]) {
+            provider.models[modelID] = model
           }
         }
-      })().catch((e) => log.warn("state discovery error", { id: "gitlab", error: e }))
+      })().catch((e) => log.warn("state discovery error", { id, error: e }))
     }
 
     return {
