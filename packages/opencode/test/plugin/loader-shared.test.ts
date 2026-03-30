@@ -331,6 +331,57 @@ describe("plugin.loader.shared", () => {
     }
   })
 
+  test("does not use npm package exports dot for server entry", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const mod = path.join(dir, "mods", "acme-plugin")
+        const mark = path.join(dir, "dot-server.txt")
+        await fs.mkdir(mod, { recursive: true })
+
+        await Bun.write(
+          path.join(mod, "package.json"),
+          JSON.stringify({
+            name: "acme-plugin",
+            type: "module",
+            exports: { ".": "./index.js" },
+          }),
+        )
+        await Bun.write(
+          path.join(mod, "index.js"),
+          [
+            "export default {",
+            '  id: "demo.dot.server",',
+            "  server: async () => {",
+            `    await Bun.write(${JSON.stringify(mark)}, "called")`,
+            "    return {}",
+            "  },",
+            "}",
+            "",
+          ].join("\n"),
+        )
+
+        await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ plugin: ["acme-plugin@1.0.0"] }, null, 2))
+
+        return { mod, mark }
+      },
+    })
+
+    const install = spyOn(BunProc, "install").mockResolvedValue(tmp.extra.mod)
+
+    try {
+      const errors = await errs(tmp.path)
+      const called = await Bun.file(tmp.extra.mark)
+        .text()
+        .then(() => true)
+        .catch(() => false)
+
+      expect(called).toBe(false)
+      expect(errors.some((x) => x.includes('exports["./server"]') && x.includes("package.json main"))).toBe(true)
+    } finally {
+      install.mockRestore()
+    }
+  })
+
   test("rejects npm server export that resolves outside plugin directory", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
@@ -574,6 +625,55 @@ describe("plugin.loader.shared", () => {
       source: "tuple",
       enabled: true,
     })
+  })
+
+  test("initializes server plugins in config order", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const a = path.join(dir, "a-plugin.ts")
+        const b = path.join(dir, "b-plugin.ts")
+        const marker = path.join(dir, "server-order.txt")
+        const aSpec = pathToFileURL(a).href
+        const bSpec = pathToFileURL(b).href
+
+        await Bun.write(
+          a,
+          `import fs from "fs/promises"
+
+export default {
+  id: "demo.order.a",
+  server: async () => {
+    await fs.appendFile(${JSON.stringify(marker)}, "a-start\\n")
+    await Bun.sleep(25)
+    await fs.appendFile(${JSON.stringify(marker)}, "a-end\\n")
+    return {}
+  },
+}
+`,
+        )
+        await Bun.write(
+          b,
+          `import fs from "fs/promises"
+
+export default {
+  id: "demo.order.b",
+  server: async () => {
+    await fs.appendFile(${JSON.stringify(marker)}, "b\\n")
+    return {}
+  },
+}
+`,
+        )
+
+        await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ plugin: [aSpec, bSpec] }, null, 2))
+
+        return { marker }
+      },
+    })
+
+    await load(tmp.path)
+    const lines = (await fs.readFile(tmp.extra.marker, "utf8")).trim().split("\n")
+    expect(lines).toEqual(["a-start", "a-end", "b"])
   })
 
   test("skips external plugins in pure mode", async () => {
