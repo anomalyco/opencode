@@ -6,6 +6,8 @@ import { SessionTable, MessageTable, PartTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
 import { Log } from "../util/log"
 
+type PartData = typeof PartTable.$inferSelect.data
+
 const log = Log.create({ service: "session.projector" })
 
 function foreign(err: unknown) {
@@ -136,9 +138,9 @@ export default [
   SyncEvent.project(MessageV2.Event.PartDelta, (db, data) => {
     const row = db.select().from(PartTable).where(eq(PartTable.id, data.partID)).get()
     if (!row) throw new NotFoundError({ message: `Part not found: ${data.partID}` })
-    const next = structuredClone(row.data) as Record<string, unknown>
+    const next = structuredClone(row.data) as PartData & Record<string, unknown>
     const prev = next[data.field]
     next[data.field] = (typeof prev === "string" ? prev : "") + data.delta
-    db.update(PartTable).set({ data: next }).where(eq(PartTable.id, data.partID)).run()
+    db.update(PartTable).set({ data: next as PartData }).where(eq(PartTable.id, data.partID)).run()
   }),
 ]

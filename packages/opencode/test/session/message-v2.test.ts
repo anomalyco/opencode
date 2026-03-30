@@ -816,6 +816,8 @@ describe("session.message-v2.toModelMessage", () => {
               status: "completed",
               input: { query: "status" },
               output: "done",
+              title: "",
+              metadata: {},
               time: { start: 0, end: 1 },
             },
           },
