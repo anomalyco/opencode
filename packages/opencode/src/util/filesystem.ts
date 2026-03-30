@@ -2,7 +2,7 @@ import { chmod, mkdir, readFile, writeFile } from "fs/promises"
 import { createWriteStream, existsSync, statSync } from "fs"
 import { lookup } from "mime-types"
 import { realpathSync } from "fs"
-import { dirname, join, relative, resolve as pathResolve } from "path"
+import { dirname, join, relative, resolve as pathResolve, win32 } from "path"
 import { Readable } from "stream"
 import { pipeline } from "stream/promises"
 import { Glob } from "./glob"
@@ -106,11 +106,21 @@ export namespace Filesystem {
    */
   export function normalizePath(p: string): string {
     if (process.platform !== "win32") return p
+    const resolved = win32.normalize(win32.resolve(windowsPath(p)))
     try {
-      return realpathSync.native(p)
+      return realpathSync.native(resolved)
     } catch {
-      return p
+      return resolved
     }
+  }
+
+  export function normalizePathPattern(p: string): string {
+    if (process.platform !== "win32") return p
+    if (p === "*") return p
+    const match = p.match(/^(.*)[\\/]\*$/)
+    if (!match) return normalizePath(p)
+    const dir = /^[A-Za-z]:$/.test(match[1]) ? match[1] + "\\" : match[1]
+    return join(normalizePath(dir), "*")
   }
 
   // We cannot rely on path.resolve() here because git.exe may come from Git Bash, Cygwin, or MSYS2, so we need to translate these paths at the boundary.

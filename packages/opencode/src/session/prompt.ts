@@ -1648,9 +1648,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     }
     await Session.updatePart(part)
     const shell = Shell.preferred()
-    const shellName = (
-      process.platform === "win32" ? path.win32.basename(shell, ".exe") : path.basename(shell)
-    ).toLowerCase()
+    const shellName = Shell.name(shell)
 
     const invocations: Record<string, { args: string[] }> = {
       nu: {
