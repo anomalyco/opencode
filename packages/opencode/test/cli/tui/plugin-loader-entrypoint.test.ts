@@ -75,6 +75,65 @@ test("loads npm tui plugin from package ./tui export", async () => {
   }
 })
 
+test("does not use npm package exports dot for tui entry", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const mod = path.join(dir, "mods", "acme-plugin")
+      const marker = path.join(dir, "dot-called.txt")
+      await fs.mkdir(mod, { recursive: true })
+
+      await Bun.write(
+        path.join(mod, "package.json"),
+        JSON.stringify({
+          name: "acme-plugin",
+          type: "module",
+          exports: { ".": "./index.js" },
+        }),
+      )
+      await Bun.write(
+        path.join(mod, "index.js"),
+        `export default {
+  id: "demo.dot",
+  tui: async () => {
+    await Bun.write(${JSON.stringify(marker)}, "called")
+  },
+}
+`,
+      )
+
+      return { mod, marker, spec: "acme-plugin@1.0.0" }
+    },
+  })
+
+  process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
+  const get = spyOn(TuiConfig, "get").mockResolvedValue({
+    plugin: [tmp.extra.spec],
+    plugin_records: [
+      {
+        item: tmp.extra.spec,
+        scope: "local",
+        source: path.join(tmp.path, "tui.json"),
+      },
+    ],
+  })
+  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+  const install = spyOn(BunProc, "install").mockResolvedValue(tmp.extra.mod)
+
+  try {
+    await TuiPluginRuntime.init(createTuiPluginApi())
+    await expect(fs.readFile(tmp.extra.marker, "utf8")).rejects.toThrow()
+    expect(TuiPluginRuntime.list().some((item) => item.spec === tmp.extra.spec)).toBe(false)
+  } finally {
+    await TuiPluginRuntime.dispose()
+    install.mockRestore()
+    cwd.mockRestore()
+    get.mockRestore()
+    wait.mockRestore()
+    delete process.env.OPENCODE_PLUGIN_META_FILE
+  }
+})
+
 test("rejects npm tui export that resolves outside plugin directory", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

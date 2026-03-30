@@ -85,6 +85,7 @@ export default plugin
 - A single module cannot export both `server` and `tui`.
 - `tui` signature is `(api, options, meta) => Promise<void>`.
 - If package `exports` contains `./tui`, the loader resolves that entrypoint.
+- If package `exports` exists, loader only resolves `./tui` or `./server`; it never falls back to `exports["."]`.
 - For npm package specs, TUI does not use `package.json` `main` as a fallback entry.
 - `package.json` `main` is only used for server plugin entrypoint resolution.
 - If a package supports both server and TUI, use separate files and package `exports` (`./server` and `./tui`) so each target resolves to a target-only module.

@@ -120,18 +120,32 @@ async function resolvePluginEntrypoint(spec: string, target: string, kind: Plugi
   const entry = resolvePackageEntrypoint(spec, kind, hit)
   if (entry) return entry
 
-  if (kind === "tui" && source === "npm" && packageMain(hit)) {
-    throw new TypeError(`Plugin ${spec} must define package.json exports["./tui"]`)
-  }
+  const dir = await resolveTargetDirectory(target)
 
-  if (kind === "tui" && source === "file") {
-    const dir = await resolveTargetDirectory(target)
-    if (!dir) return target
-    const index = await resolveDirectoryIndex(dir)
-    if (index) return pathToFileURL(index).href
-    if (packageMain(hit)) {
+  if (kind === "tui") {
+    if (source === "file" && dir) {
+      const index = await resolveDirectoryIndex(dir)
+      if (index) return pathToFileURL(index).href
+    }
+
+    if (source === "npm") {
+      throw new TypeError(`Plugin ${spec} must define package.json exports["./tui"]`)
+    }
+
+    if (dir) {
       throw new TypeError(`Plugin ${spec} must define package.json exports["./tui"] or include index file`)
     }
+
+    return target
+  }
+
+  if (dir && isRecord(hit.json.exports)) {
+    if (source === "file") {
+      const index = await resolveDirectoryIndex(dir)
+      if (index) return pathToFileURL(index).href
+    }
+
+    throw new TypeError(`Plugin ${spec} must define package.json exports["./server"] or package.json main`)
   }
 
   return target
