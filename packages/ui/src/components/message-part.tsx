@@ -38,6 +38,7 @@ import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { Card } from "./card"
 import { Collapsible } from "./collapsible"
+import { showUserActions } from "./message-part-actions"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
 import { ToolErrorCard } from "./tool-error-card"
@@ -936,6 +937,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   const files = createMemo(() => (props.parts?.filter((p) => p.type === "file") as FilePart[]) ?? [])
 
   const attachments = createMemo(() => files().filter(attached))
+  const actions = createMemo(() => showUserActions({ text: text(), attachments: attachments().length }))
 
   const inlineFiles = createMemo(() => files().filter(inline))
 
@@ -1033,42 +1035,46 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
               <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
             </div>
           </div>
-          <div data-slot="user-message-copy-wrapper">
-            <Show when={metaHead() || metaTail()}>
-              <span data-slot="user-message-meta-wrap">
-                <Show when={metaHead()}>
-                  <span data-slot="user-message-meta" class="text-12-regular text-text-weak cursor-default">
-                    {metaHead()}
-                  </span>
-                </Show>
-                <Show when={metaHead() && metaTail()}>
-                  <span data-slot="user-message-meta-sep" class="text-12-regular text-text-weak cursor-default">
-                    {"\u00A0\u00B7\u00A0"}
-                  </span>
-                </Show>
-                <Show when={metaTail()}>
-                  <span data-slot="user-message-meta-tail" class="text-12-regular text-text-weak cursor-default">
-                    {metaTail()}
-                  </span>
-                </Show>
-              </span>
-            </Show>
-            <Show when={props.actions?.revert}>
-              <Tooltip value={i18n.t("ui.message.revertMessage")} placement="top" gutter={4}>
-                <IconButton
-                  icon="reset"
-                  size="normal"
-                  variant="ghost"
-                  disabled={!!busy()}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    revert()
-                  }}
-                  aria-label={i18n.t("ui.message.revertMessage")}
-                />
-              </Tooltip>
-            </Show>
+        </>
+      </Show>
+      <Show when={actions()}>
+        <div data-slot="user-message-copy-wrapper">
+          <Show when={metaHead() || metaTail()}>
+            <span data-slot="user-message-meta-wrap">
+              <Show when={metaHead()}>
+                <span data-slot="user-message-meta" class="text-12-regular text-text-weak cursor-default">
+                  {metaHead()}
+                </span>
+              </Show>
+              <Show when={metaHead() && metaTail()}>
+                <span data-slot="user-message-meta-sep" class="text-12-regular text-text-weak cursor-default">
+                  {"\u00A0\u00B7\u00A0"}
+                </span>
+              </Show>
+              <Show when={metaTail()}>
+                <span data-slot="user-message-meta-tail" class="text-12-regular text-text-weak cursor-default">
+                  {metaTail()}
+                </span>
+              </Show>
+            </span>
+          </Show>
+          <Show when={props.actions?.revert}>
+            <Tooltip value={i18n.t("ui.message.revertMessage")} placement="top" gutter={4}>
+              <IconButton
+                icon="reset"
+                size="normal"
+                variant="ghost"
+                disabled={!!busy()}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  revert()
+                }}
+                aria-label={i18n.t("ui.message.revertMessage")}
+              />
+            </Tooltip>
+          </Show>
+          <Show when={text()}>
             <Tooltip
               value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
               placement="top"
@@ -1086,8 +1092,8 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
                 aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
               />
             </Tooltip>
-          </div>
-        </>
+          </Show>
+        </div>
       </Show>
     </div>
   )
