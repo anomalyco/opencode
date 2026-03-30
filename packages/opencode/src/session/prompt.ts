@@ -94,6 +94,7 @@ export namespace SessionPrompt {
       const mcp = yield* MCP.Service
       const lsp = yield* LSP.Service
       const filetime = yield* FileTime.Service
+      const registry = yield* ToolRegistry.Service
       const scope = yield* Scope.Scope
 
       const cache = yield* InstanceState.make(
@@ -427,11 +428,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             ),
         })
 
-        for (const item of yield* Effect.promise(() =>
-          ToolRegistry.tools(
-            { modelID: ModelID.make(input.model.api.id), providerID: input.model.providerID },
-            input.agent,
-          ),
+        for (const item of yield* registry.tools(
+          { modelID: ModelID.make(input.model.api.id), providerID: input.model.providerID },
+          input.agent,
         )) {
           const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
           tools[item.id] = tool({
@@ -1696,6 +1695,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         Layer.provide(MCP.defaultLayer),
         Layer.provide(LSP.defaultLayer),
         Layer.provide(FileTime.layer),
+        Layer.provide(ToolRegistry.defaultLayer),
         Layer.provide(AppFileSystem.defaultLayer),
         Layer.provide(Plugin.defaultLayer),
         Layer.provide(Session.defaultLayer),

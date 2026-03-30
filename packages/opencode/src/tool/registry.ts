@@ -51,7 +51,7 @@ export namespace ToolRegistry {
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/ToolRegistry") {}
 
-  export const layer = Layer.effect(
+  export const layer: Layer.Layer<Service, never, Config.Service | Plugin.Service> = Layer.effect(
     Service,
     Effect.gen(function* () {
       const config = yield* Config.Service
@@ -174,7 +174,7 @@ export namespace ToolRegistry {
         })
         return yield* Effect.forEach(
           filtered,
-          Effect.fnUntraced(function* (tool) {
+          Effect.fnUntraced(function* (tool: Tool.Info) {
             using _ = log.time(tool.id)
             const next = yield* Effect.promise(() => tool.init({ agent }))
             const output = {
