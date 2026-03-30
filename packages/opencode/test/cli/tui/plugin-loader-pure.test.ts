@@ -39,12 +39,15 @@ test("skips external tui plugins in pure mode", async () => {
 
   const get = spyOn(TuiConfig, "get").mockResolvedValue({
     plugin: [[tmp.extra.spec, { marker: tmp.extra.marker }]],
-    plugin_meta: {
-      [tmp.extra.spec]: {
+    plugins: [
+      {
+        item: [tmp.extra.spec, { marker: tmp.extra.marker }],
+        spec: tmp.extra.spec,
+        options: { marker: tmp.extra.marker },
         scope: "local",
         source: path.join(tmp.path, "tui.json"),
       },
-    },
+    ],
   })
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
