@@ -21,7 +21,6 @@ import { Plugin } from "../plugin"
 import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
-import { fn } from "../util/fn"
 import { ToolRegistry } from "../tool/registry"
 import { Runner } from "@/effect/runner"
 import { MCP } from "../mcp"
@@ -1706,7 +1705,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   )
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
-  export const assertNotBusy = fn(SessionID.zod, (sessionID) => runPromise((svc) => svc.assertNotBusy(sessionID)))
+  export async function assertNotBusy(sessionID: SessionID) {
+    return runPromise((svc) => svc.assertNotBusy(SessionID.zod.parse(sessionID)))
+  }
 
   export const PromptInput = z.object({
     sessionID: SessionID.zod,
@@ -1775,17 +1776,25 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   })
   export type PromptInput = z.infer<typeof PromptInput>
 
-  export const prompt = fn(PromptInput, (input) => runPromise((svc) => svc.prompt(input)))
+  export async function prompt(input: PromptInput) {
+    return runPromise((svc) => svc.prompt(PromptInput.parse(input)))
+  }
 
-  export const resolvePromptParts = fn(z.string(), (template) => runPromise((svc) => svc.resolvePromptParts(template)))
+  export async function resolvePromptParts(template: string) {
+    return runPromise((svc) => svc.resolvePromptParts(z.string().parse(template)))
+  }
 
-  export const cancel = fn(SessionID.zod, (sessionID) => runPromise((svc) => svc.cancel(sessionID)))
+  export async function cancel(sessionID: SessionID) {
+    return runPromise((svc) => svc.cancel(SessionID.zod.parse(sessionID)))
+  }
 
   export const LoopInput = z.object({
     sessionID: SessionID.zod,
   })
 
-  export const loop = fn(LoopInput, (input) => runPromise((svc) => svc.loop(input)))
+  export async function loop(input: z.infer<typeof LoopInput>) {
+    return runPromise((svc) => svc.loop(LoopInput.parse(input)))
+  }
 
   export const ShellInput = z.object({
     sessionID: SessionID.zod,
@@ -1800,7 +1809,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   })
   export type ShellInput = z.infer<typeof ShellInput>
 
-  export const shell = fn(ShellInput, (input) => runPromise((svc) => svc.shell(input)))
+  export async function shell(input: ShellInput) {
+    return runPromise((svc) => svc.shell(ShellInput.parse(input)))
+  }
 
   export const CommandInput = z.object({
     messageID: MessageID.zod.optional(),
@@ -1825,7 +1836,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   })
   export type CommandInput = z.infer<typeof CommandInput>
 
-  export const command = fn(CommandInput, (input) => runPromise((svc) => svc.command(input)))
+  export async function command(input: CommandInput) {
+    return runPromise((svc) => svc.command(CommandInput.parse(input)))
+  }
 
   async function lastModelImpl(sessionID: SessionID) {
     for await (const item of MessageV2.stream(sessionID)) {
