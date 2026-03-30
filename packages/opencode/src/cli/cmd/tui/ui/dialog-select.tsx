@@ -260,6 +260,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
               }, 1)
             }}
             placeholder={props.placeholder ?? "Search"}
+            placeholderColor={theme.textMuted}
           />
         </box>
       </box>
