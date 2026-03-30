@@ -76,7 +76,6 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
               toolcall: true,
               input: { text: true, audio: false, image: true, video: false, pdf: false },
               output: { text: true, audio: false, image: false, video: false, pdf: false },
-              interleaved: false,
             },
             cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
             limit: { context: 128000, output: 16384 },
