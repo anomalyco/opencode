@@ -13,6 +13,7 @@ const log = Log.create({ service: "instruction" })
 
 const FILES = [
   "AGENTS.md",
+  "AGENTS.txt",
   ...(Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT ? [] : ["CLAUDE.md"]),
   "CONTEXT.md", // deprecated
 ]
@@ -21,8 +22,10 @@ function globalFiles() {
   const files = []
   if (Flag.OPENCODE_CONFIG_DIR) {
     files.push(path.join(Flag.OPENCODE_CONFIG_DIR, "AGENTS.md"))
+    files.push(path.join(Flag.OPENCODE_CONFIG_DIR, "AGENTS.txt"))
   }
   files.push(path.join(Global.Path.config, "AGENTS.md"))
+  files.push(path.join(Global.Path.config, "AGENTS.txt"))
   if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT) {
     files.push(path.join(os.homedir(), ".claude", "CLAUDE.md"))
   }

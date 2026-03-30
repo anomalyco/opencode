@@ -506,6 +506,27 @@ describe("tool.read loaded instructions", () => {
       },
     })
   })
+
+  test("loads AGENTS.txt from parent directory and includes in metadata", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "subdir", "AGENTS.txt"), "Test Instructions\nDo something special.")
+        await Bun.write(path.join(dir, "subdir", "nested", "test.txt"), "test content")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: path.join(tmp.path, "subdir", "nested", "test.txt") }, ctx)
+        expect(result.output).toContain("test content")
+        expect(result.output).toContain("system-reminder")
+        expect(result.output).toContain("Test Instructions")
+        expect(result.metadata.loaded).toBeDefined()
+        expect(result.metadata.loaded).toContain(path.join(tmp.path, "subdir", "AGENTS.txt"))
+      },
+    })
+  })
 })
 
 describe("tool.read binary detection", () => {

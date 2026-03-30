@@ -49,6 +49,30 @@ describe("InstructionPrompt.resolve", () => {
     })
   })
 
+  test("returns AGENTS.txt from subdirectory when markdown file is missing", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "subdir", "AGENTS.txt"), "Subdir Instructions")
+        await Bun.write(path.join(dir, "subdir", "nested", "file.ts"), "const x = 1")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const system = await InstructionPrompt.systemPaths()
+        expect(system.has(path.join(tmp.path, "subdir", "AGENTS.txt"))).toBe(false)
+
+        const results = await InstructionPrompt.resolve(
+          [],
+          path.join(tmp.path, "subdir", "nested", "file.ts"),
+          "test-message-2b",
+        )
+        expect(results.length).toBe(1)
+        expect(results[0].filepath).toBe(path.join(tmp.path, "subdir", "AGENTS.txt"))
+      },
+    })
+  })
+
   test("doesn't reload AGENTS.md when reading it directly", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
@@ -114,6 +138,54 @@ describe("InstructionPrompt.systemPaths OPENCODE_CONFIG_DIR", () => {
     } finally {
       ;(Global.Path as { config: string }).config = originalGlobalConfig
     }
+  })
+
+  test("uses OPENCODE_CONFIG_DIR AGENTS.txt when markdown file is missing", async () => {
+    await using profileTmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "AGENTS.txt"), "Profile Instructions")
+      },
+    })
+    await using globalTmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "AGENTS.md"), "# Global Instructions")
+      },
+    })
+    await using projectTmp = await tmpdir()
+
+    process.env["OPENCODE_CONFIG_DIR"] = profileTmp.path
+    const originalGlobalConfig = Global.Path.config
+    ;(Global.Path as { config: string }).config = globalTmp.path
+
+    try {
+      await Instance.provide({
+        directory: projectTmp.path,
+        fn: async () => {
+          const paths = await InstructionPrompt.systemPaths()
+          expect(paths.has(path.join(profileTmp.path, "AGENTS.txt"))).toBe(true)
+          expect(paths.has(path.join(globalTmp.path, "AGENTS.md"))).toBe(false)
+        },
+      })
+    } finally {
+      ;(Global.Path as { config: string }).config = originalGlobalConfig
+    }
+  })
+
+  test("prefers AGENTS.md over AGENTS.txt at project root", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "AGENTS.md"), "# Root Markdown Instructions")
+        await Bun.write(path.join(dir, "AGENTS.txt"), "Root Text Instructions")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const system = await InstructionPrompt.systemPaths()
+        expect(system.has(path.join(tmp.path, "AGENTS.md"))).toBe(true)
+        expect(system.has(path.join(tmp.path, "AGENTS.txt"))).toBe(false)
+      },
+    })
   })
 
   test("falls back to global AGENTS.md when OPENCODE_CONFIG_DIR has no AGENTS.md", async () => {
