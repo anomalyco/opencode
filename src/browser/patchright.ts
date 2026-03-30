@@ -27,6 +27,53 @@ export namespace PatchrightLauncher {
   let chromium: any | undefined
 
   const DEFAULT_CDP_PORT = 9222
+  let chromeInstallChecked = false
+
+  /**
+   * Auto-install Chrome on first run if not already present.
+   * Runs `npx patchright install chrome` once.
+   */
+  async function ensureChromeInstalled(): Promise<void> {
+    if (chromeInstallChecked) return
+    chromeInstallChecked = true
+
+    // Check if Chrome is already available by trying to get executable path
+    try {
+      if (chromium?.executablePath) {
+        const exePath = chromium.executablePath("chrome")
+        const file = Bun.file(exePath)
+        if (await file.exists()) {
+          log.info("Chrome already installed", { path: exePath })
+          return
+        }
+      }
+    } catch {}
+
+    // Chrome not found — install it
+    log.info("Chrome not found, running first-time setup: installing Chrome via Patchright...")
+    try {
+      const proc = Bun.spawn(["npx", "patchright", "install", "chrome"], {
+        stdout: "pipe",
+        stderr: "pipe",
+        env: process.env as Record<string, string>,
+      })
+      const stdout = await new Response(proc.stdout).text()
+      const stderr = await new Response(proc.stderr).text()
+      const exitCode = await proc.exited
+
+      if (exitCode === 0) {
+        log.info("Chrome installed successfully", { stdout: stdout.slice(0, 200) })
+      } else {
+        log.error("Chrome install failed", { exitCode, stderr: stderr.slice(0, 500) })
+        throw new Error(`Chrome install failed: ${stderr || "unknown error"}`)
+      }
+    } catch (e) {
+      log.error("Chrome auto-install error", { error: String(e) })
+      throw new Error(
+        `Chrome is not installed and auto-install failed. Please run manually:\n  npx patchright install chrome\n\nError: ${e}`,
+      )
+    }
+  }
 
   function getProfilePath(): string {
     return path.join(Global.Path.data, "browser-profile")
@@ -50,6 +97,9 @@ export namespace PatchrightLauncher {
     // Lazy import patchright
     const pw = await import("patchright")
     chromium = pw.chromium
+
+    // Auto-install Chrome on first run if not present
+    await ensureChromeInstalled()
 
     const profilePath = options?.profile || getProfilePath()
     await fs.mkdir(profilePath, { recursive: true })
