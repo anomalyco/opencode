@@ -20,7 +20,7 @@ import {
   printParseErrorCode,
 } from "jsonc-parser"
 import { Instance, type InstanceContext } from "../project/instance"
-import { LSPServer } from "../lsp/server"
+
 import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
@@ -1038,7 +1038,7 @@ export namespace Config {
           (data) => {
             if (!data) return true
             if (typeof data === "boolean") return true
-            const serverIds = new Set(Object.values(LSPServer).map((s) => s.id))
+            const serverIds = new Set<string>() // LSP disabled in browser agent
 
             return Object.entries(data).every(([id, config]) => {
               if (config.disabled) return true
