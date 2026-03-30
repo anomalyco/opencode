@@ -11,7 +11,7 @@ import { Session } from "."
 import { Agent } from "../agent/agent"
 import { Provider } from "../provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
-import { type Tool as AITool, tool, jsonSchema, type ToolCallOptions, asSchema } from "ai"
+import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSchema } from "ai"
 import { SessionCompaction } from "./compaction"
 import { Instance } from "../project/instance"
 import { Bus } from "../bus"
@@ -321,7 +321,13 @@ export namespace SessionPrompt {
       if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
       if (
         lastAssistant?.finish &&
-        !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
+        ![
+          "tool-calls",
+          // in v6 unknown became other but other existed in v5 too and was distinctly different
+          // I think there are certain providers that used to have bad stop reasons, not rlly sure which
+          // ones if any still have this?
+          // "unknown",
+        ].includes(lastAssistant.finish) &&
         lastUser.id < lastAssistant.id
       ) {
         log.info("exiting loop", { sessionID })
@@ -588,7 +594,7 @@ export namespace SessionPrompt {
         session,
       })
 
-      const processor = SessionProcessor.create({
+      const processor = await SessionProcessor.create({
         assistantMessage: (await Session.updateMessage({
           id: MessageID.ascending(),
           parentID: lastUser.id,
@@ -692,7 +698,7 @@ export namespace SessionPrompt {
         sessionID,
         system,
         messages: [
-          ...MessageV2.toModelMessages(msgs, model),
+          ...(await MessageV2.toModelMessages(msgs, model)),
           ...(isLastStep
             ? [
                 {
@@ -775,7 +781,7 @@ export namespace SessionPrompt {
     using _ = log.time("resolveTools")
     const tools: Record<string, AITool> = {}
 
-    const context = (args: any, options: ToolCallOptions): Tool.Context => ({
+    const context = (args: any, options: ToolExecutionOptions): Tool.Context => ({
       sessionID: input.session.id,
       abort: options.abortSignal!,
       messageID: input.processor.message.id,
@@ -861,7 +867,8 @@ export namespace SessionPrompt {
       const execute = item.execute
       if (!execute) continue
 
-      const transformed = ProviderTransform.schema(input.model, asSchema(item.inputSchema).jsonSchema)
+      const schema = await asSchema(item.inputSchema).jsonSchema
+      const transformed = ProviderTransform.schema(input.model, schema)
       item.inputSchema = jsonSchema(transformed)
       // Wrap execute to add plugin hooks and format output
       item.execute = async (args, opts) => {
@@ -974,10 +981,10 @@ export namespace SessionPrompt {
           metadata: { valid: true },
         }
       },
-      toModelOutput(result) {
+      toModelOutput({ output }) {
         return {
           type: "text",
-          value: result.output,
+          value: output.output,
         }
       },
     })
@@ -1641,9 +1648,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     }
     await Session.updatePart(part)
     const shell = Shell.preferred()
-    const shellName = (
-      process.platform === "win32" ? path.win32.basename(shell, ".exe") : path.basename(shell)
-    ).toLowerCase()
+    const shellName = Shell.name(shell)
 
     const invocations: Record<string, { args: string[] }> = {
       nu: {
@@ -2010,28 +2015,28 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         (await Provider.getSmallModel(input.providerID)) ?? (await Provider.getModel(input.providerID, input.modelID))
       )
     })
-    const result = await LLM.stream({
-      agent,
-      user: firstRealUser.info as MessageV2.User,
-      system: [],
-      small: true,
-      tools: {},
-      model,
-      abort: new AbortController().signal,
-      sessionID: input.session.id,
-      retries: 2,
-      messages: [
-        {
-          role: "user",
-          content: "Generate a title for this conversation:\n",
-        },
-        ...(hasOnlySubtaskParts
-          ? [{ role: "user" as const, content: subtaskParts.map((p) => p.prompt).join("\n") }]
-          : MessageV2.toModelMessages(contextMessages, model)),
-      ],
-    })
-    const text = await result.text.catch((err) => log.error("failed to generate title", { error: err }))
-    if (text) {
+    try {
+      const result = await LLM.stream({
+        agent,
+        user: firstRealUser.info as MessageV2.User,
+        system: [],
+        small: true,
+        tools: {},
+        model,
+        abort: new AbortController().signal,
+        sessionID: input.session.id,
+        retries: 2,
+        messages: [
+          {
+            role: "user",
+            content: "Generate a title for this conversation:\n",
+          },
+          ...(hasOnlySubtaskParts
+            ? [{ role: "user" as const, content: subtaskParts.map((p) => p.prompt).join("\n") }]
+            : await MessageV2.toModelMessages(contextMessages, model)),
+        ],
+      })
+      const text = await result.text
       const cleaned = text
         .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
         .split("\n")
@@ -2044,6 +2049,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         if (NotFoundError.isInstance(err)) return
         throw err
       })
+    } catch (error) {
+      log.error("failed to generate title", { error })
     }
   }
 }

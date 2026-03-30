@@ -4,7 +4,7 @@ import { $ } from "bun"
 import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
-import solidPlugin from "@opentui/solid/bun-plugin"
+import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -63,22 +63,30 @@ console.log(`Loaded ${migrations.length} migrations`)
 const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
 const skipInstall = process.argv.includes("--skip-install")
+const plugin = createSolidTransformPlugin()
 const skipEmbedWebUi = process.argv.includes("--skip-embed-web-ui")
 
 const createEmbeddedWebUIBundle = async () => {
   console.log(`Building Web UI to embed in the binary`)
   const appDir = path.join(import.meta.dirname, "../../app")
+  const dist = path.join(appDir, "dist")
   await $`bun run --cwd ${appDir} build`
-  const allFiles = await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: path.join(appDir, "dist") }))
-  const fileMap = `
-    // Import all files as file_$i with type: "file" 
-    ${allFiles.map((filePath, i) => `import file_${i} from "${path.join(appDir, "dist", filePath)}" with { type: "file" };`).join("\n")}
-    // Export with original mappings
-    export default {
-      ${allFiles.map((filePath, i) => `"${filePath}": file_${i},`).join("\n")}
-    }
-    `.trim()
-  return fileMap
+  const files = (await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: dist })))
+    .map((file) => file.replaceAll("\\", "/"))
+    .sort()
+  const imports = files.map((file, i) => {
+    const spec = path.relative(dir, path.join(dist, file)).replaceAll("\\", "/")
+    return `import file_${i} from ${JSON.stringify(spec.startsWith(".") ? spec : `./${spec}`)} with { type: "file" };`
+  })
+  const entries = files.map((file, i) => `  ${JSON.stringify(file)}: file_${i},`)
+  return [
+    `// Import all files as file_$i with type: "file"`,
+    ...imports,
+    `// Export with original mappings`,
+    `export default {`,
+    ...entries,
+    `}`,
+  ].join("\n")
 }
 
 const embeddedFileMap = skipEmbedWebUi ? null : await createEmbeddedWebUIBundle()
@@ -200,7 +208,7 @@ for (const item of targets) {
   await Bun.build({
     conditions: ["browser"],
     tsconfig: "./tsconfig.json",
-    plugins: [solidPlugin],
+    plugins: [plugin],
     compile: {
       autoloadBunfig: false,
       autoloadDotenv: false,

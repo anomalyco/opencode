@@ -1,0 +1,119 @@
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -3155,15 +3155,6 @@
+         });
+       }
+       baseArgs.max_tokens = maxTokens + (thinkingBudget != null ? thinkingBudget : 0);
+-    } else {
+-      if (topP != null && temperature != null) {
+-        warnings.push({
+-          type: "unsupported",
+-          feature: "topP",
+-          details: `topP is not supported when temperature is set. topP is ignored.`
+-        });
+-        baseArgs.top_p = void 0;
+-      }
+     }
+     if (isKnownModel && baseArgs.max_tokens > maxOutputTokensForModel) {
+       if (maxOutputTokens != null) {
+@@ -5180,4 +5171,4 @@
+   createAnthropic,
+   forwardAnthropicContainerIdFromLastStep
+ });
+-//# sourceMappingURL=index.js.map
+\ No newline at end of file
++//# sourceMappingURL=index.js.map
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -3192,15 +3192,6 @@
+         });
+       }
+       baseArgs.max_tokens = maxTokens + (thinkingBudget != null ? thinkingBudget : 0);
+-    } else {
+-      if (topP != null && temperature != null) {
+-        warnings.push({
+-          type: "unsupported",
+-          feature: "topP",
+-          details: `topP is not supported when temperature is set. topP is ignored.`
+-        });
+-        baseArgs.top_p = void 0;
+-      }
+     }
+     if (isKnownModel && baseArgs.max_tokens > maxOutputTokensForModel) {
+       if (maxOutputTokens != null) {
+@@ -5256,4 +5247,4 @@
+   createAnthropic,
+   forwardAnthropicContainerIdFromLastStep
+ };
+-//# sourceMappingURL=index.mjs.map
+\ No newline at end of file
++//# sourceMappingURL=index.mjs.map
+--- a/dist/internal/index.js
++++ b/dist/internal/index.js
+@@ -3147,15 +3147,6 @@
+         });
+       }
+       baseArgs.max_tokens = maxTokens + (thinkingBudget != null ? thinkingBudget : 0);
+-    } else {
+-      if (topP != null && temperature != null) {
+-        warnings.push({
+-          type: "unsupported",
+-          feature: "topP",
+-          details: `topP is not supported when temperature is set. topP is ignored.`
+-        });
+-        baseArgs.top_p = void 0;
+-      }
+     }
+     if (isKnownModel && baseArgs.max_tokens > maxOutputTokensForModel) {
+       if (maxOutputTokens != null) {
+@@ -5080,4 +5071,4 @@
+   anthropicTools,
+   prepareTools
+ });
+-//# sourceMappingURL=index.js.map
+\ No newline at end of file
++//# sourceMappingURL=index.js.map
+--- a/dist/internal/index.mjs
++++ b/dist/internal/index.mjs
+@@ -3176,15 +3176,6 @@
+         });
+       }
+       baseArgs.max_tokens = maxTokens + (thinkingBudget != null ? thinkingBudget : 0);
+-    } else {
+-      if (topP != null && temperature != null) {
+-        warnings.push({
+-          type: "unsupported",
+-          feature: "topP",
+-          details: `topP is not supported when temperature is set. topP is ignored.`
+-        });
+-        baseArgs.top_p = void 0;
+-      }
+     }
+     if (isKnownModel && baseArgs.max_tokens > maxOutputTokensForModel) {
+       if (maxOutputTokens != null) {
+@@ -5148,4 +5139,4 @@
+   anthropicTools,
+   prepareTools
+ };
+-//# sourceMappingURL=index.mjs.map
+\ No newline at end of file
++//# sourceMappingURL=index.mjs.map
+--- a/src/anthropic-messages-language-model.ts
++++ b/src/anthropic-messages-language-model.ts
+@@ -534,16 +534,6 @@
+ 
+       // adjust max tokens to account for thinking:
+       baseArgs.max_tokens = maxTokens + (thinkingBudget ?? 0);
+-    } else {
+-      // Only check temperature/topP mutual exclusivity when thinking is not enabled
+-      if (topP != null && temperature != null) {
+-        warnings.push({
+-          type: 'unsupported',
+-          feature: 'topP',
+-          details: `topP is not supported when temperature is set. topP is ignored.`,
+-        });
+-        baseArgs.top_p = undefined;
+-      }
+     }
+ 
+     // limit to max output tokens for known models to enable model switching without breaking it:
