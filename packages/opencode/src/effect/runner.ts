@@ -1,4 +1,4 @@
-import { Cause, Deferred, Effect, Exit, Fiber, Match, Option, Schema, Scope, SynchronizedRef } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Option, Schema, Scope, SynchronizedRef } from "effect"
 
 export interface Runner<A, E = never> {
   readonly state: Runner.State<A, E>
@@ -109,31 +109,30 @@ export namespace Runner {
         yield* Fiber.await(shell.fiber).pipe(Effect.exit, Effect.asVoid)
       })
 
-    const join = (st: Extract<State<A, E>, { _tag: "Running" } | { _tag: "ShellThenRun" }>) =>
-      Effect.succeed([Deferred.await(st.run.done), st] as const)
-
     const ensureRunning = (work: Effect.Effect<A, E>) =>
-      SynchronizedRef.modifyEffect(ref, (st) =>
-        Match.valueTags(st, {
-          Running: join,
-          ShellThenRun: join,
-          Shell: ({ shell }) =>
-            Effect.gen(function* () {
+      SynchronizedRef.modifyEffect(ref, (st) => {
+        return Effect.gen(function* () {
+          switch (st._tag) {
+            case "Running":
+              return [Deferred.await(st.run.done), st] as const
+            case "ShellThenRun":
+              return [Deferred.await(st.run.done), st] as const
+            case "Shell": {
               const run = {
                 id: next(),
                 done: yield* Deferred.make<A, E | Cancelled>(),
                 work,
               } satisfies PendingHandle<A, E>
-              return [Deferred.await(run.done), { _tag: "ShellThenRun", shell, run } as const] as const
-            }),
-          Idle: () =>
-            Effect.gen(function* () {
+              return [Deferred.await(run.done), { _tag: "ShellThenRun", shell: st.shell, run } as const] as const
+            }
+            case "Idle": {
               const done = yield* Deferred.make<A, E | Cancelled>()
               const run = yield* startRun(work, done)
               return [Deferred.await(done), { _tag: "Running", run } as const] as const
-            }),
-        }),
-      ).pipe(
+            }
+          }
+        })
+      }).pipe(
         Effect.flatten,
         Effect.catch((e) => (e instanceof Cancelled && onInterrupt ? onInterrupt : Effect.fail(e))),
       )
