@@ -461,6 +461,7 @@ render(() => {
     const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
     if (link?.href) {
       e.preventDefault()
+      e.stopImmediatePropagation()
       platform.openLink(link.href)
     }
   }
@@ -472,9 +473,9 @@ render(() => {
   }
 
   onMount(() => {
-    document.addEventListener("click", handleClick)
+    document.addEventListener("click", handleClick, true)
     onCleanup(() => {
-      document.removeEventListener("click", handleClick)
+      document.removeEventListener("click", handleClick, true)
     })
   })
 
