@@ -216,31 +216,32 @@ export namespace Storage {
     Effect.gen(function* () {
       const fs = yield* AppFileSystem.Service
       const locks = yield* SynchronizedRef.make(new Map<string, TxReentrantLock.TxReentrantLock>())
-      const load = Effect.fn("Storage.state")(function* () {
-        const dir = path.join(Global.Path.data, "storage")
-        const marker = path.join(dir, "migration")
-        const migration = yield* fs.readFileString(marker).pipe(
-          Effect.map((x) => Number.parseInt(x, 10)),
-          Effect.catchIf(missing, () => Effect.succeed(0)),
-          Effect.orElseSucceed(() => 0),
-        )
-        for (let i = migration; i < MIGRATIONS.length; i++) {
-          log.info("running migration", { index: i })
-          const step = MIGRATIONS[i]!
-          yield* step(dir, fs).pipe(
-            Effect.catchCause((cause) =>
-              Effect.sync(() => {
-                log.error("failed to run migration", { index: i, cause })
-              }),
-            ),
+      const state = yield* Effect.cached(
+        Effect.gen(function* () {
+          const dir = path.join(Global.Path.data, "storage")
+          const marker = path.join(dir, "migration")
+          const migration = yield* fs.readFileString(marker).pipe(
+            Effect.map((x) => Number.parseInt(x, 10)),
+            Effect.catchIf(missing, () => Effect.succeed(0)),
+            Effect.orElseSucceed(() => 0),
           )
-          yield* fs.writeWithDirs(marker, String(i + 1))
-        }
-        return { dir }
-      })
-      const state = yield* Effect.cached(load())
+          for (let i = migration; i < MIGRATIONS.length; i++) {
+            log.info("running migration", { index: i })
+            const step = MIGRATIONS[i]!
+            yield* step(dir, fs).pipe(
+              Effect.catchCause((cause) =>
+                Effect.sync(() => {
+                  log.error("failed to run migration", { index: i, cause })
+                }),
+              ),
+            )
+            yield* fs.writeWithDirs(marker, String(i + 1))
+          }
+          return { dir }
+        }),
+      )
 
-      const get = Effect.fn("Storage.lock")(function* (key: string) {
+      const lock = Effect.fnUntraced(function* (key: string) {
         return yield* SynchronizedRef.modifyEffect(locks, (map) =>
           Effect.gen(function* () {
             const existing = map.get(key)
@@ -265,7 +266,7 @@ export namespace Storage {
       const resolve = Effect.fnUntraced(function* (key: string[]) {
         const dir = (yield* state).dir
         const target = file(dir, key)
-        return [target, yield* get(target)] as const
+        return [target, yield* lock(target)] as const
       })
 
       const remove: Interface["remove"] = Effect.fn("Storage.remove")(function* (key: string[]) {
