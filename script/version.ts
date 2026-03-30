@@ -6,7 +6,8 @@ import { $ } from "bun"
 const output = [`version=${Script.version}`]
 
 if (!Script.preview) {
-  await $`opencode run --command changelog`.cwd(process.cwd())
+  const sha = process.env.GITHUB_SHA ?? (await $`git rev-parse HEAD`.text()).trim()
+  await $`opencode run --command changelog -- --to ${sha}`.cwd(process.cwd())
   const file = `${process.cwd()}/UPCOMING_CHANGELOG.md`
   const body = await Bun.file(file)
     .text()
