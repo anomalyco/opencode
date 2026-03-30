@@ -393,7 +393,7 @@ export namespace Agent {
   )
 
   export const defaultLayer = layer.pipe(
-    Layer.provide(Auth.layer),
+    Layer.provide(Auth.defaultLayer),
     Layer.provide(Config.defaultLayer),
     Layer.provide(Skill.defaultLayer),
   )

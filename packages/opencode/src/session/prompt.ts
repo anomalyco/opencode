@@ -1704,7 +1704,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         Layer.provide(Permission.layer),
         Layer.provide(MCP.defaultLayer),
         Layer.provide(LSP.defaultLayer),
-        Layer.provide(FileTime.layer),
+        Layer.provide(FileTime.defaultLayer),
         Layer.provide(ToolRegistry.defaultLayer),
         Layer.provide(Truncate.layer),
         Layer.provide(AppFileSystem.defaultLayer),
