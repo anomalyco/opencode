@@ -34,6 +34,7 @@ import { createOpenAI } from "@ai-sdk/openai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/copilot"
+import { createCopilotAutoModel } from "./sdk/copilot/auto-model"
 import { createXai } from "@ai-sdk/xai"
 import { createMistral } from "@ai-sdk/mistral"
 import { createGroq } from "@ai-sdk/groq"
@@ -210,7 +211,32 @@ export namespace Provider {
     "github-copilot": async () => {
       return {
         autoload: false,
-        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
+          if (modelID === "auto") {
+            const baseURL = options?.baseURL ?? "https://api.githubcopilot.com"
+            return createCopilotAutoModel({
+              baseURL,
+              fetch: options?.fetch ?? fetch,
+              headers: () => {
+                const h: Record<string, string> = {}
+                if (options?.apiKey) h["Authorization"] = `Bearer ${options.apiKey}`
+                return h
+              },
+              createModel(resolvedModelId: string, extraHeaders?: Record<string, string>) {
+                // Rebuild the SDK with extra headers (Copilot-Session-Token) merged in
+                const sdkWithHeaders = extraHeaders
+                  ? createGitHubCopilotOpenAICompatible({
+                      ...options,
+                      headers: { ...options?.headers, ...extraHeaders },
+                    })
+                  : sdk
+                if (useLanguageModel(sdkWithHeaders)) return sdkWithHeaders.languageModel(resolvedModelId)
+                return shouldUseCopilotResponsesApi(resolvedModelId)
+                  ? sdkWithHeaders.responses(resolvedModelId)
+                  : sdkWithHeaders.chat(resolvedModelId)
+              },
+            })
+          }
           if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
           return shouldUseCopilotResponsesApi(modelID) ? sdk.responses(modelID) : sdk.chat(modelID)
         },
@@ -1578,6 +1604,7 @@ export namespace Provider {
   export function sort<T extends { id: string }>(models: T[]) {
     return sortBy(
       models,
+      [(model) => (model.id === "auto" ? 0 : 1), "asc"],
       [(model) => priority.findIndex((filter) => model.id.includes(filter)), "desc"],
       [(model) => (model.id.includes("latest") ? 0 : 1), "asc"],
       [(model) => model.id, "desc"],
