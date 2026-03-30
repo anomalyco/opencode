@@ -140,6 +140,8 @@ npm plugins can declare a version compatibility range in `package.json` using th
 - Root-worktree fallback (`worktree === "/"` uses `<directory>/.opencode`) is covered by regression tests.
 - `patchPluginConfig` applies all declared manifest targets (`server` and/or `tui`) in one call.
 - `patchPluginConfig` returns structured result unions (`ok`, `code`, fields by error kind) instead of custom thrown errors.
+- `patchPluginConfig` serializes per-target config writes with `Flock.acquire(...)`.
+- `patchPluginConfig` uses targeted `jsonc-parser` edits, so existing JSONC comments are preserved when plugin entries are added or replaced.
 - Without `--force`, an already-configured npm package name is a no-op.
 - With `--force`, replacement matches by package name. If the existing row is `[spec, options]`, those tuple options are kept.
 - Tuple targets in `oc-plugin` provide default options written into config.
@@ -164,7 +166,7 @@ Top-level API groups exposed to `tui(api, options, meta)`:
 - `api.app.version`
 - `api.command.register(cb)` / `api.command.trigger(value)`
 - `api.route.register(routes)` / `api.route.navigate(name, params?)` / `api.route.current`
-- `api.ui.Dialog`, `DialogAlert`, `DialogConfirm`, `DialogPrompt`, `DialogSelect`, `ui.toast`, `ui.dialog`
+- `api.ui.Dialog`, `DialogAlert`, `DialogConfirm`, `DialogPrompt`, `DialogSelect`, `Prompt`, `ui.toast`, `ui.dialog`
 - `api.keybind.match`, `print`, `create`
 - `api.tuiConfig`
 - `api.kv.get`, `set`, `ready`
@@ -210,6 +212,7 @@ Command behavior:
 
 - `ui.Dialog` is the base dialog wrapper.
 - `ui.DialogAlert`, `ui.DialogConfirm`, `ui.DialogPrompt`, `ui.DialogSelect` are built-in dialog components.
+- `ui.Prompt` renders the same prompt component used by the host app.
 - `ui.toast(...)` shows a toast.
 - `ui.dialog` exposes the host dialog stack:
   - `replace(render, onClose?)`
@@ -277,6 +280,7 @@ Current host slot names:
 
 - `app`
 - `home_logo`
+- `home_prompt` with props `{ workspace_id? }`
 - `home_bottom`
 - `sidebar_title` with props `{ session_id, title, share_url? }`
 - `sidebar_content` with props `{ session_id }`
@@ -289,7 +293,7 @@ Slot notes:
 - `api.slots.register(plugin)` does not return an unregister function.
 - Returned ids are `pluginId`, `pluginId:1`, `pluginId:2`, and so on.
 - Plugin-provided `id` is not allowed.
-- The current host renders `home_logo` with `replace`, `sidebar_title` and `sidebar_footer` with `single_winner`, and `app`, `home_bottom`, and `sidebar_content` with the slot library default mode.
+- The current host renders `home_logo` and `home_prompt` with `replace`, `sidebar_title` and `sidebar_footer` with `single_winner`, and `app`, `home_bottom`, and `sidebar_content` with the slot library default mode.
 - Plugins cannot define new slot names in this branch.
 
 ### Plugin control and lifecycle
