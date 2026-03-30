@@ -25,8 +25,6 @@ type MarkedApi = ReturnType<typeof useMarked>
 
 const max = 200
 const cache = new Map<string, Entry>()
-const debugKey = "opencode:debug:markdown"
-let seq = 0
 
 if (typeof window !== "undefined" && DOMPurify.isSupported) {
   DOMPurify.addHook("afterSanitizeAttributes", (node: Element) => {
@@ -69,35 +67,6 @@ function escape(text: string) {
 
 function fallback(markdown: string) {
   return escape(markdown).replace(/\r\n?/g, "\n").replace(/\n/g, "<br>")
-}
-
-function debug() {
-  if (typeof window === "undefined") return false
-  return localStorage.getItem(debugKey) === "1" || document.documentElement.dataset.debugMarkdown === "1"
-}
-
-function log(id: number, event: string, data?: unknown) {
-  if (!debug()) return
-  if (data === undefined) {
-    console.log(`[markdown:${id}] ${event}`)
-    return
-  }
-  console.log(`[markdown:${id}] ${event}`, data)
-}
-
-function count(root: Element, sel: string) {
-  return root.querySelectorAll(sel).length
-}
-
-function info(node: Node) {
-  if (!(node instanceof Element)) return node.nodeName
-  return {
-    tag: node.tagName.toLowerCase(),
-    class: node.className,
-    slot: node.getAttribute("data-slot"),
-    part: node.getAttribute("data-part"),
-    role: node.getAttribute("role"),
-  }
 }
 
 type CopyLabels = {
@@ -501,7 +470,6 @@ export function Markdown(
     chunked?: boolean
   },
 ) {
-  const id = ++seq
   const [local, others] = splitProps(props, [
     "text",
     "cacheKey",
@@ -541,12 +509,9 @@ export function Markdown(
 
       const hash = checksum(normalized)
       const key = local.cacheKey ?? hash
-      const start = performance.now()
-
       if (key && hash) {
         const cached = cache.get(key)
         if (cached && cached.hash === hash) {
-          log(id, "render cache hit", { key, hash, text: markdown.length, html: cached.html.length })
           touch(key, cached)
           usedFastParse = false
           return cached.html
@@ -562,17 +527,11 @@ export function Markdown(
 
       let safe = ""
       try {
-        log(id, chunked ? "render parse (lite)" : fast ? "render parse (fast)" : "render parse", {
-          key,
-          hash,
-          text: markdown.length,
-        })
         safe = sanitize(await parseFn(normalized))
       } catch (err) {
         console.error("markdown render failed", err)
         safe = fallback(normalized)
       }
-      log(id, "render done", { key, hash, html: safe.length, ms: Math.round(performance.now() - start) })
 
       if (chunked || fast) {
         usedFastParse = true
@@ -619,7 +578,6 @@ export function Markdown(
             const normalized = normalize(text)
             const hash = checksum(normalized)
             const key = local.cacheKey ?? hash
-            log(id, "render upgrade (full shiki)", { key, text: text.length })
             const safe = sanitize(await marked.parse(normalized))
             if (gen === parseGeneration) {
               setHtml(safe)
@@ -649,7 +607,6 @@ export function Markdown(
 
   let copySetupTimer: ReturnType<typeof setTimeout> | undefined
   let copyCleanup: (() => void) | undefined
-  let obs: MutationObserver | undefined
 
   onMount(() => {
     if (isServer) return
@@ -681,39 +638,6 @@ export function Markdown(
   createEffect(() => {
     const container = root()
     if (!container) return
-    container.dataset.markdownId = String(id)
-
-    if (obs) {
-      obs.disconnect()
-      obs = undefined
-    }
-
-    obs = new MutationObserver((list) => {
-      if (!debug()) return
-      log(id, "dom mutate", {
-        count: list.length,
-        sample: list.slice(0, 3).map((item) => ({
-          type: item.type,
-          target: info(item.target),
-          attr: item.attributeName,
-          added: item.addedNodes.length,
-          removed: item.removedNodes.length,
-        })),
-      })
-    })
-
-    obs.observe(container, {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      characterData: true,
-    })
-
-    log(id, "mount", {
-      key: local.cacheKey,
-      text: local.text.length,
-      katex: count(container, ".katex, .katex-display"),
-    })
   })
 
   createEffect(() => {
@@ -723,19 +647,12 @@ export function Markdown(
     if (isServer) return
 
     if (!content) {
-      log(id, "patch clear")
       container.innerHTML = ""
       delete container.dataset.html
       return
     }
 
-    if (container.dataset.html === content) {
-      log(id, "patch skip same html", {
-        html: content.length,
-        katex: count(container, ".katex, .katex-display"),
-      })
-      return
-    }
+    if (container.dataset.html === content) return
 
     const next = untrack(labels)
     const prevHtml = container.dataset.html ?? ""
@@ -767,12 +684,6 @@ export function Markdown(
         }
 
         if (stableCount > 0 && stableCount >= existingCount - 1) {
-          log(id, "patch incremental", {
-            stable: stableCount,
-            existing: existingCount,
-            incoming: newCount,
-          })
-
           // Remove unstable trailing nodes from container
           while (container.childNodes.length > stableCount) {
             container.removeChild(container.lastChild!)
@@ -800,14 +711,8 @@ export function Markdown(
     const temp = document.createElement("div")
     temp.innerHTML = content
     wrapCodeBlocks(temp)
-    let same = 0
-    let keep = 0
 
     if (chunked && !prevHtml) {
-      log(id, "patch replace", {
-        next: content.length,
-        nodes: temp.childNodes.length,
-      })
       container.replaceChildren(...Array.from(temp.childNodes))
       container.dataset.html = content
       if (copySetupTimer) clearTimeout(copySetupTimer)
@@ -819,49 +724,22 @@ export function Markdown(
       return
     }
 
-    log(id, "patch start", {
-      prev: prevHtml.length,
-      next: content.length,
-      katex: {
-        from: count(container, ".katex, .katex-display"),
-        to: count(temp, ".katex, .katex-display"),
-      },
-    })
-
     morphdom(container, temp, {
       childrenOnly: true,
       onBeforeElUpdated: (fromEl, toEl) => {
-        if (fromEl.isEqualNode(toEl)) {
-          same++
-          return false
-        }
-        if (math(fromEl) && math(toEl)) {
-          keep++
-          log(id, "patch keep math", {
-            from: info(fromEl),
-            to: info(toEl),
-          })
-          return false
-        }
+        if (fromEl.isEqualNode(toEl)) return false
+        if (math(fromEl) && math(toEl)) return false
         return true
       },
     })
 
     container.dataset.html = content
-    log(id, "patch done", {
-      same,
-      keep,
-      katex: count(container, ".katex, .katex-display"),
-    })
 
     if (copySetupTimer) clearTimeout(copySetupTimer)
     copySetupTimer = setTimeout(() => {
       if (copyCleanup) copyCleanup()
       copyCleanup = setupCodeCopy(container, next)
       setLabels(container, next)
-      log(id, "copy setup", {
-        buttons: count(container, '[data-slot="markdown-copy-button"]'),
-      })
     }, 150)
   })
 
@@ -873,10 +751,9 @@ export function Markdown(
     if (!container.dataset.html) return
 
     const gen = ++chunkGeneration
+    // Large file preview first mounts cheap HTML, then upgrades blocks over idle slices.
     const queue = Array.from(container.children).filter((node): node is Element => node instanceof Element)
     if (queue.length === 0) return
-
-    log(id, "chunk schedule", { blocks: queue.length, html: content.length })
 
     const setup = () => {
       if (copySetupTimer) clearTimeout(copySetupTimer)
@@ -885,9 +762,6 @@ export function Markdown(
         if (copyCleanup) copyCleanup()
         copyCleanup = setupCodeCopy(container, labels())
         setLabels(container, labels())
-        log(id, "chunk copy setup", {
-          buttons: count(container, '[data-slot="markdown-copy-button"]'),
-        })
       }, 150)
     }
 
@@ -905,10 +779,6 @@ export function Markdown(
 
       if (queue.length === 0) {
         usedFastParse = false
-        log(id, "chunk done", {
-          blocks: Array.from(container.children).length,
-          katex: count(container, ".katex, .katex-display"),
-        })
         return
       }
 
@@ -934,23 +804,17 @@ export function Markdown(
     if (!container) return
     if (isServer) return
     if (!container.dataset.html) return
-    if (labelsEqual(container, next)) {
-      log(id, "labels skip")
-      return
-    }
+    if (labelsEqual(container, next)) return
 
     if (copySetupTimer) clearTimeout(copySetupTimer)
     copySetupTimer = setTimeout(() => {
       if (copyCleanup) copyCleanup()
       copyCleanup = setupCodeCopy(container, next)
       setLabels(container, next)
-      log(id, "labels update", next)
     }, 150)
   })
 
   onCleanup(() => {
-    log(id, "cleanup")
-    obs?.disconnect()
     if (copySetupTimer) clearTimeout(copySetupTimer)
     if (copyCleanup) copyCleanup()
     if (highlightTimer) clearTimeout(highlightTimer)

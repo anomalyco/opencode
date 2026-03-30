@@ -645,6 +645,7 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
           return renderMathExpressions(html, output)
         },
         async parseLite(markdown: string): Promise<string> {
+          // Native parse keeps first paint cheap for large file previews; math/highlight upgrade later in the renderer.
           return native(markdown)
         },
         renderMath(html: string) {
@@ -666,6 +667,7 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
         return renderMathExpressions(html, output)
       },
       async parseLite(markdown: string): Promise<string> {
+        // The lite path skips KaTeX/shiki so large file previews can mount before block-by-block upgrades run.
         return liteParser.parse(normalizeDisplayMath(markdown))
       },
       renderMath(html: string) {

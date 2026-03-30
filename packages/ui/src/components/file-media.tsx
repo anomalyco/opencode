@@ -224,17 +224,18 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
 
             if (k === "pdf") {
               return (
-                <div class="bg-background-stronger px-6 py-4">
-                  <div class="overflow-hidden rounded border border-border-weak-base bg-background-base">
+                <div class="flex h-full min-h-full flex-col bg-background-stronger">
+                  {/* PDFs use the full panel height instead of the generic scroll shell used for text files. */}
+                  <div class="min-h-0 flex-1 overflow-hidden bg-background-base">
                     <iframe
-                      src={value()}
+                      src={`${value()}#zoom=page-fit`}
                       title={cfg()?.path ?? i18n.t("ui.fileMedia.kind.pdf")}
-                      class="h-[70vh] w-full min-w-0"
+                      class="size-full min-h-0 min-w-0"
                       onLoad={onLoad}
                     />
                   </div>
                   <Show when={pdfMime()}>
-                    {(mime) => <div class="pt-3 text-12-regular text-text-weak">{mime()}</div>}
+                    {(mime) => <div class="px-3 py-2 text-12-regular text-text-weak">{mime()}</div>}
                   </Show>
                 </div>
               )
