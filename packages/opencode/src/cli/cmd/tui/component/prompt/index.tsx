@@ -41,6 +41,7 @@ export type PromptProps = {
   workspaceID?: string
   visible?: boolean
   disabled?: boolean
+  showUsage?: boolean
   onSubmit?: () => void
   ref?: (ref: PromptRef) => void
   hint?: JSX.Element
@@ -153,6 +154,7 @@ export function Prompt(props: PromptProps) {
       cost: cost > 0 ? money.format(cost) : undefined,
     }
   })
+  const footer = createMemo(() => (props.showUsage === false ? undefined : usage()))
 
   const [store, setStore] = createStore<{
     prompt: PromptInfo
@@ -1193,7 +1195,7 @@ export function Prompt(props: PromptProps) {
               <Switch>
                 <Match when={store.mode === "normal"}>
                   <Switch>
-                    <Match when={usage()}>
+                    <Match when={footer()}>
                       {(item) => (
                         <text fg={theme.textMuted} wrapMode="none">
                           {[item().context, item().cost].filter(Boolean).join(" · ")}

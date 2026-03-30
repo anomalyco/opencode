@@ -1173,6 +1173,7 @@ export function Session() {
                   }
                 }}
                 disabled={permissions().length > 0 || questions().length > 0}
+                showUsage={!sidebarVisible()}
                 onSubmit={() => {
                   toBottom()
                 }}
