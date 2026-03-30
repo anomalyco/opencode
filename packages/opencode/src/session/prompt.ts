@@ -826,19 +826,18 @@ export namespace SessionPrompt {
         description: item.description,
         inputSchema: jsonSchema(schema as any),
         async execute(args, options) {
-          const ctx = context(args, options)
+          const out = { args }
           await Plugin.trigger(
             "tool.execute.before",
             {
               tool: item.id,
-              sessionID: ctx.sessionID,
-              callID: ctx.callID,
+              sessionID: input.session.id,
+              callID: options.toolCallId,
             },
-            {
-              args,
-            },
+            out,
           )
-          const result = await item.execute(args, ctx)
+          const ctx = context(out.args, options)
+          const result = await item.execute(out.args, ctx)
           const output = {
             ...result,
             attachments: result.attachments?.map((attachment) => ({
@@ -854,7 +853,7 @@ export namespace SessionPrompt {
               tool: item.id,
               sessionID: ctx.sessionID,
               callID: ctx.callID,
-              args,
+              args: out.args,
             },
             output,
           )
@@ -872,19 +871,18 @@ export namespace SessionPrompt {
       item.inputSchema = jsonSchema(transformed)
       // Wrap execute to add plugin hooks and format output
       item.execute = async (args, opts) => {
-        const ctx = context(args, opts)
+        const out = { args }
 
         await Plugin.trigger(
           "tool.execute.before",
           {
             tool: key,
-            sessionID: ctx.sessionID,
+            sessionID: input.session.id,
             callID: opts.toolCallId,
           },
-          {
-            args,
-          },
+          out,
         )
+        const ctx = context(out.args, opts)
 
         await ctx.ask({
           permission: key,
@@ -893,7 +891,7 @@ export namespace SessionPrompt {
           always: ["*"],
         })
 
-        const result = await execute(args, opts)
+        const result = await execute(out.args, opts)
 
         await Plugin.trigger(
           "tool.execute.after",
@@ -901,7 +899,7 @@ export namespace SessionPrompt {
             tool: key,
             sessionID: ctx.sessionID,
             callID: opts.toolCallId,
-            args,
+            args: out.args,
           },
           result,
         )
