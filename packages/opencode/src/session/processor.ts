@@ -5,6 +5,7 @@ import { Agent } from "@/agent/agent"
 import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "./summary"
 import { Bus } from "@/bus"
+import { BusEvent } from "@/bus/bus-event"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { Plugin } from "@/plugin"
@@ -14,10 +15,14 @@ import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission"
 import { Question } from "@/question"
-import { PartID } from "./schema"
-import type { SessionID, MessageID } from "./schema"
+import { PartID, SessionID } from "./schema"
+import type { MessageID } from "./schema"
+import z from "zod"
 
 export namespace SessionProcessor {
+  export const Event = {
+    CancelRequested: BusEvent.define("session.prompt.cancel", z.object({ sessionID: SessionID.zod })),
+  }
   const DOOM_LOOP_THRESHOLD = 3
   const log = Log.create({ service: "session.processor" })
 

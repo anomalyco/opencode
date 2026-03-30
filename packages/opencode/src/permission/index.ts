@@ -118,6 +118,7 @@ export namespace PermissionNext {
     readonly ask: (input: z.infer<typeof AskInput>) => Effect.Effect<void, Error>
     readonly reply: (input: z.infer<typeof ReplyInput>) => Effect.Effect<void>
     readonly list: () => Effect.Effect<Request[]>
+    readonly rejectSession: (sessionID: SessionID) => Effect.Effect<void>
   }
 
   interface PendingEntry {
@@ -239,7 +240,21 @@ export namespace PermissionNext {
         return Array.from(pending.values(), (item) => item.info)
       })
 
-      return Service.of({ ask, reply, list })
+      const rejectSession = Effect.fn("Permission.rejectSession")(function* (sessionID: SessionID) {
+        for (const [id, entry] of pending.entries()) {
+          if (entry.info.sessionID !== sessionID) continue
+          pending.delete(id)
+          log.info("rejecting for cancelled session", { requestID: id, sessionID })
+          Bus.publish(Event.Replied, {
+            sessionID: entry.info.sessionID,
+            requestID: entry.info.id,
+            reply: "reject",
+          })
+          yield* Deferred.fail(entry.deferred, new RejectedError())
+        }
+      })
+
+      return Service.of({ ask, reply, list, rejectSession })
     }),
   )
 
@@ -275,6 +290,10 @@ export namespace PermissionNext {
 
   export async function list() {
     return runPromiseInstance(Service.use((svc) => svc.list()))
+  }
+
+  export async function rejectSession(sessionID: SessionID) {
+    return runPromiseInstance(Service.use((svc) => svc.rejectSession(sessionID)))
   }
 
   const EDIT_TOOLS = ["edit", "write", "apply_patch", "multiedit"]
