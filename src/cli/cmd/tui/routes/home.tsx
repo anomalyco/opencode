@@ -81,14 +81,41 @@ export function Home() {
     <>
       <box flexGrow={1} alignItems="center" paddingLeft={2} paddingRight={2}>
         <box flexGrow={1} minHeight={0} />
-        <box height={4} minHeight={0} flexShrink={1} />
+        <box height={3} minHeight={0} flexShrink={1} />
+
+        {/* Logo */}
         <box flexShrink={0}>
           <TuiPluginRuntime.Slot name="home_logo" mode="replace">
             <Logo />
           </TuiPluginRuntime.Slot>
         </box>
+
         <box height={1} minHeight={0} flexShrink={1} />
-        <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0}>
+
+        {/* Tagline */}
+        <box flexShrink={0} alignItems="center">
+          <text fg={theme.textMuted} selectable={false}>
+            automate anything in the browser
+          </text>
+        </box>
+
+        <box height={1} minHeight={0} flexShrink={1} />
+
+        {/* Mode badges */}
+        <box flexShrink={0} flexDirection="row" gap={2} alignItems="center" justifyContent="center">
+          <text fg={theme.primary}>
+            <span style={{ bold: true }}>◆</span> auto
+          </text>
+          <text fg={theme.textMuted}>│</text>
+          <text fg={theme.accent}>
+            <span style={{ bold: true }}>◇</span> interactive
+          </text>
+        </box>
+
+        <box height={2} minHeight={0} flexShrink={1} />
+
+        {/* Prompt */}
+        <box width="100%" maxWidth={75} zIndex={1000} flexShrink={0}>
           <Prompt
             ref={(r) => {
               prompt = r
@@ -98,12 +125,17 @@ export function Home() {
             workspaceID={route.workspaceID}
           />
         </box>
+
         <TuiPluginRuntime.Slot name="home_bottom" />
         <box flexGrow={1} minHeight={0} />
         <Toast />
       </box>
+
+      {/* Footer */}
       <box paddingTop={1} paddingBottom={1} paddingLeft={2} paddingRight={2} flexDirection="row" flexShrink={0} gap={2}>
-        <text fg={theme.textMuted}>{directory()}</text>
+        <text fg={theme.textMuted}>
+          <span style={{ fg: theme.primary }}>◆</span> {directory()}
+        </text>
         <box gap={1} flexDirection="row" flexShrink={0}>
           <Show when={mcp()}>
             <text fg={theme.text}>
@@ -122,7 +154,9 @@ export function Home() {
         </box>
         <box flexGrow={1} />
         <box flexShrink={0}>
-          <text fg={theme.textMuted}>{Installation.VERSION}</text>
+          <text fg={theme.textMuted}>
+            <span style={{ fg: theme.primary }}>athena</span> {Installation.VERSION}
+          </text>
         </box>
       </box>
     </>

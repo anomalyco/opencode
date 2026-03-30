@@ -1,6 +1,6 @@
+// Legacy — kept for compatibility. Logo is now rendered directly in component.
 export const logo = {
-  left: ["                        ", "█▀▀█ ▀▀█▀▀ █  █ █▀▀▀ █▀▀▄ █▀▀█", "█__█ ^^█^^ █▀▀█ █___ █__█ █__█", "▀▀▀▀   ▀   ▀~~▀ ▀▀▀▀ ▀  ▀ ▀▀▀▀"],
-  right: ["                              ", "█▀▀▄ █▀▀█ █▀▀█ █   █ █▀▀▀ █▀▀▀ █▀▀█", "█__█ █__█ █  █ █ █ █ ▀▀▀█ █___ █__█", "▀▀▀▀ ▀  ▀ ▀▀▀▀  ▀ ▀  ▀▀▀▀ ▀▀▀▀ ▀  ▀"],
+  left: [],
+  right: [],
 }
-
-export const marks = "_^~"
+export const marks = ""

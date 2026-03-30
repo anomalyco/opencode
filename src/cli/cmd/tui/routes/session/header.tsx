@@ -60,7 +60,7 @@ function BrowserStatusBar(props: { messages: Accessor<any[]>; session: Accessor<
     <Show when={isBrowserAgent()}>
       <box flexDirection="row" gap={2} paddingTop={0}>
         <text fg={theme.primary} wrapMode="none">
-          <span style={{ bold: true }}>◈</span>{" "}
+          <span style={{ bold: true }}>◆</span>{" "}
           <span style={{ fg: agentMode() === "auto" ? theme.primary : theme.accent, bold: true }}>
             {agentMode() === "auto" ? "AUTO" : "INTERACTIVE"}
           </span>
