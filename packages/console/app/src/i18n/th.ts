@@ -250,7 +250,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | โมเดลเขียนโค้ดราคาประหยัดสำหรับทุกคน",
   "go.meta.description":
-    "Go คือการสมัครสมาชิกราคา $10/เดือน พร้อมขีดจำกัดการร้องขอที่กว้างขวางถึง 5 ชั่วโมงสำหรับ GLM-5, Kimi K2.5 และ MiniMax M2.5",
+    "Go เริ่มต้นที่ $5 สำหรับเดือนแรก จากนั้น $10/เดือน พร้อมขีดจำกัดคำขอ 5 ชั่วโมงที่เอื้อเฟื้อสำหรับ GLM-5, Kimi K2.5, MiniMax M2.5 และ MiniMax M2.7",
   "go.hero.title": "โมเดลเขียนโค้ดราคาประหยัดสำหรับทุกคน",
   "go.hero.body":
     "Go นำการเขียนโค้ดแบบเอเจนต์มาสู่นักเขียนโปรแกรมทั่วโลก เสนอขีดจำกัดที่กว้างขวางและการเข้าถึงโมเดลโอเพนซอร์สที่มีความสามารถสูงสุดได้อย่างน่าเชื่อถือ เพื่อให้คุณสามารถสร้างสรรค์ด้วยเอเจนต์ที่ทรงพลังโดยไม่ต้องกังวลเรื่องค่าใช้จ่ายหรือความพร้อมใช้งาน",
@@ -259,7 +259,8 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "สมัครสมาชิก Go",
   "go.cta.price": "$10/เดือน",
-  "go.pricing.body": "ใช้กับเอเจนต์ใดก็ได้ เติมเงินเครดิตหากต้องการ ยกเลิกได้ตลอดเวลา",
+  "go.cta.promo": "$5 เดือนแรก",
+  "go.pricing.body": "ใช้กับเอเจนต์ใดก็ได้ $5 ในเดือนแรก จากนั้น $10/เดือน เติมเครดิตหากจำเป็น ยกเลิกได้ตลอดเวลา",
   "go.graph.free": "ฟรี",
   "go.graph.freePill": "Big Pickle และโมเดลฟรี",
   "go.graph.go": "Go",
@@ -291,20 +292,20 @@ export const dict = {
   "go.testimonials.frank.quote": "ผมหวังว่าผมจะยังอยู่ที่ Nvidia",
   "go.problem.title": "Go แก้ปัญหาอะไร?",
   "go.problem.body":
-    "เรามุ่งเน้นที่จะนำประสบการณ์ OpenCode ไปสู่ผู้คนให้ได้มากที่สุด OpenCode Go เป็นการสมัครสมาชิกราคาประหยัด ($10/เดือน) ที่ออกแบบมาเพื่อนำการเขียนโค้ดแบบเอเจนต์มาสู่นักเขียนโปรแกรมทั่วโลก โดยมอบขีดจำกัดที่กว้างขวางและการเข้าถึงโมเดลโอเพนซอร์สที่มีความสามารถสูงสุดได้อย่างน่าเชื่อถือ",
+    "เรามุ่งมั่นที่จะนำประสบการณ์ OpenCode ไปสู่ผู้คนให้ได้มากที่สุด OpenCode Go เป็นการสมัครสมาชิกราคาประหยัด: $5 สำหรับเดือนแรก จากนั้น $10/เดือน โดยมอบขีดจำกัดที่เอื้อเฟื้อและการเข้าถึงโมเดลโอเพนซอร์สที่มีความสามารถสูงสุดอย่างเชื่อถือได้",
   "go.problem.subtitle": " ",
   "go.problem.item1": "ราคาการสมัครสมาชิกที่ต่ำ",
   "go.problem.item2": "ขีดจำกัดที่กว้างขวางและการเข้าถึงที่เชื่อถือได้",
   "go.problem.item3": "สร้างขึ้นเพื่อโปรแกรมเมอร์จำนวนมากที่สุดเท่าที่จะเป็นไปได้",
-  "go.problem.item4": "รวมถึง GLM-5, Kimi K2.5 และ MiniMax M2.5",
+  "go.problem.item4": "รวมถึง GLM-5, Kimi K2.5, MiniMax M2.5 และ MiniMax M2.7",
   "go.how.title": "Go ทำงานอย่างไร",
-  "go.how.body": "Go คือการสมัครสมาชิกราคา $10/เดือน ที่คุณสามารถใช้กับ OpenCode หรือเอเจนต์ใดก็ได้",
+  "go.how.body": "Go เริ่มต้นที่ $5 สำหรับเดือนแรก จากนั้น $10/เดือน คุณสามารถใช้กับ OpenCode หรือเอเจนต์ใดก็ได้",
   "go.how.step1.title": "สร้างบัญชี",
   "go.how.step1.beforeLink": "ทำตาม",
   "go.how.step1.link": "คำแนะนำการตั้งค่า",
   "go.how.step2.title": "สมัครสมาชิก Go",
-  "go.how.step2.link": "$10/เดือน",
-  "go.how.step2.afterLink": "ด้วยขีดจำกัดที่กว้างขวาง",
+  "go.how.step2.link": "$5 เดือนแรก",
+  "go.how.step2.afterLink": "จากนั้น $10/เดือน พร้อมขีดจำกัดที่เอื้อเฟื้อ",
   "go.how.step3.title": "เริ่มเขียนโค้ด",
   "go.how.step3.body": "ด้วยการเข้าถึงโมเดลโอเพนซอร์สที่เชื่อถือได้",
   "go.privacy.title": "ความเป็นส่วนตัวของคุณสำคัญสำหรับเรา",
@@ -318,21 +319,21 @@ export const dict = {
   "go.faq.a1":
     "Go คือการสมัครสมาชิกราคาประหยัดที่ให้คุณเข้าถึงโมเดลโอเพนซอร์สที่มีความสามารถสำหรับการเขียนโค้ดแบบเอเจนต์ได้อย่างน่าเชื่อถือ",
   "go.faq.q2": "Go รวมโมเดลอะไรบ้าง?",
-  "go.faq.a2": "Go รวมถึง GLM-5, Kimi K2.5 และ MiniMax M2.5 พร้อมขีดจำกัดที่กว้างขวางและการเข้าถึงที่เชื่อถือได้",
+  "go.faq.a2":
+    "Go รวมถึง GLM-5, Kimi K2.5, MiniMax M2.5 และ MiniMax M2.7 พร้อมขีดจำกัดที่กว้างขวางและการเข้าถึงที่เชื่อถือได้",
   "go.faq.q3": "Go เหมือนกับ Zen หรือไม่?",
   "go.faq.a3":
-    "ไม่ Zen เป็นแบบจ่ายตามการใช้งาน (pay-as-you-go) ในขณะที่ Go เป็นการสมัครสมาชิกราคา $10/เดือน พร้อมขีดจำกัดที่กว้างขวางและการเข้าถึงโมเดลโอเพนซอร์ส GLM-5, Kimi K2.5 และ MiniMax M2.5 ได้อย่างน่าเชื่อถือ",
+    "ไม่ Zen เป็นแบบจ่ายตามการใช้งาน ในขณะที่ Go เริ่มต้นที่ $5 สำหรับเดือนแรก จากนั้น $10/เดือน พร้อมขีดจำกัดที่เอื้อเฟื้อและการเข้าถึงโมเดลโอเพนซอร์ส GLM-5, Kimi K2.5, MiniMax M2.5 และ MiniMax M2.7 อย่างเชื่อถือได้",
   "go.faq.q4": "Go ราคาเท่าไหร่?",
   "go.faq.a4.p1.beforePricing": "Go ราคา",
-  "go.faq.a4.p1.pricingLink": "$10/เดือน",
-  "go.faq.a4.p1.afterPricing": "พร้อมขีดจำกัดที่กว้างขวาง",
+  "go.faq.a4.p1.pricingLink": "$5 เดือนแรก",
+  "go.faq.a4.p1.afterPricing": "จากนั้น $10/เดือน พร้อมขีดจำกัดที่เอื้อเฟื้อ",
   "go.faq.a4.p2.beforeAccount": "คุณสามารถจัดการการสมัครสมาชิกของคุณได้ใน",
   "go.faq.a4.p2.accountLink": "บัญชีของคุณ",
   "go.faq.a4.p3": "ยกเลิกได้ตลอดเวลา",
   "go.faq.q5": "แล้วเรื่องข้อมูลและความเป็นส่วนตัวล่ะ?",
   "go.faq.a5.body":
-    "แผนนี้ออกแบบมาเพื่อผู้ใช้งานระหว่างประเทศเป็นหลัก โดยมีโมเดลโฮสต์ในสหรัฐอเมริกา สหภาพยุโรป และสิงคโปร์ เพื่อการเข้าถึงทั่วโลกที่เสถียร",
-  "go.faq.a5.contactAfter": "หากคุณมีคำถามใดๆ",
+    "แผนนี้ออกแบบมาเพื่อผู้ใช้งานระหว่างประเทศเป็นหลัก โดยมีโมเดลโฮสต์ในสหรัฐอเมริกา สหภาพยุโรป และสิงคโปร์ เพื่อการเข้าถึงทั่วโลกที่เสถียร ผู้ให้บริการของเราปฏิบัติตามนโยบายไม่เก็บรักษาข้อมูลและไม่ใช้ข้อมูลของคุณสำหรับการฝึกโมเดล",
   "go.faq.a5.beforeExceptions":
     "โมเดล Go โฮสต์ในสหรัฐอเมริกา ผู้ให้บริการปฏิบัติตามนโยบายไม่เก็บรักษาข้อมูล (zero-retention policy) และไม่ใช้ข้อมูลของคุณสำหรับการฝึกโมเดล โดยมี",
   "go.faq.a5.exceptionsLink": "ข้อยกเว้นดังนี้",
@@ -345,7 +346,7 @@ export const dict = {
 
   "go.faq.q9": "ความแตกต่างระหว่างโมเดลฟรีและ Go คืออะไร?",
   "go.faq.a9":
-    "โมเดลฟรีรวมถึง Big Pickle บวกกับโมเดลโปรโมชั่นที่มีให้ในขณะนั้น ด้วยโควต้า 200 คำขอ/วัน Go รวมถึง GLM-5, Kimi K2.5 และ MiniMax M2.5 ที่มีโควต้าคำขอสูงกว่า ซึ่งบังคับใช้ผ่านช่วงเวลาหมุนเวียน (5 ชั่วโมง, รายสัปดาห์ และรายเดือน) เทียบเท่าประมาณ $12 ต่อ 5 ชั่วโมง, $30 ต่อสัปดาห์ และ $60 ต่อเดือน (จำนวนคำขอจริงจะแตกต่างกันไปตามโมเดลและการใช้งาน)",
+    "โมเดลฟรีรวมถึง Big Pickle บวกกับโมเดลโปรโมชั่นที่มีให้ในขณะนั้น ด้วยโควต้า 200 คำขอ/วัน Go รวมถึง GLM-5, Kimi K2.5, MiniMax M2.5 และ MiniMax M2.7 ที่มีโควต้าคำขอสูงกว่า ซึ่งบังคับใช้ผ่านช่วงเวลาหมุนเวียน (5 ชั่วโมง, รายสัปดาห์ และรายเดือน) เทียบเท่าประมาณ $12 ต่อ 5 ชั่วโมง, $30 ต่อสัปดาห์ และ $60 ต่อเดือน (จำนวนคำขอจริงจะแตกต่างกันไปตามโมเดลและการใช้งาน)",
 
   "zen.api.error.rateLimitExceeded": "เกินขีดจำกัดอัตราการใช้งาน กรุณาลองใหม่ในภายหลัง",
   "zen.api.error.modelNotSupported": "ไม่รองรับโมเดล {{model}}",
@@ -413,12 +414,15 @@ export const dict = {
   "black.subscribe.success.chargeNotice": "บัตรของคุณจะถูกเรียกเก็บเงินเมื่อการสมัครสมาชิกของคุณถูกเปิดใช้งาน",
 
   "workspace.nav.zen": "Zen",
+  "workspace.nav.go": "Go",
+  "workspace.nav.usage": "การใช้งาน",
   "workspace.nav.apiKeys": "API Keys",
   "workspace.nav.members": "สมาชิก",
   "workspace.nav.billing": "การเรียกเก็บเงิน",
   "workspace.nav.settings": "การตั้งค่า",
 
   "workspace.home.banner.beforeLink": "โมเดลที่เชื่อถือได้และปรับแต่งแล้วสำหรับเอเจนต์เขียนโค้ด",
+  "workspace.lite.banner.beforeLink": "โมเดลเขียนโค้ดต้นทุนต่ำสำหรับทุกคน",
   "workspace.home.billing.loading": "กำลังโหลด...",
   "workspace.home.billing.enable": "เปิดใช้งานการเรียกเก็บเงิน",
   "workspace.home.billing.currentBalance": "ยอดคงเหลือปัจจุบัน",
@@ -538,6 +542,8 @@ export const dict = {
   "workspace.billing.loading": "กำลังโหลด...",
   "workspace.billing.addAction": "เพิ่ม",
   "workspace.billing.addBalance": "เพิ่มยอดคงเหลือ",
+  "workspace.billing.alipay": "Alipay",
+  "workspace.billing.wechat": "WeChat Pay",
   "workspace.billing.linkedToStripe": "เชื่อมโยงกับ Stripe",
   "workspace.billing.manage": "จัดการ",
   "workspace.billing.enable": "เปิดใช้งานการเรียกเก็บเงิน",
@@ -620,7 +626,6 @@ export const dict = {
   "workspace.lite.time.minute": "นาที",
   "workspace.lite.time.minutes": "นาที",
   "workspace.lite.time.fewSeconds": "ไม่กี่วินาที",
-  "workspace.lite.subscription.title": "การสมัครสมาชิก Go",
   "workspace.lite.subscription.message": "คุณได้สมัครสมาชิก OpenCode Go แล้ว",
   "workspace.lite.subscription.manage": "จัดการการสมัครสมาชิก",
   "workspace.lite.subscription.rollingUsage": "การใช้งานแบบหมุนเวียน",
@@ -630,17 +635,20 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "ใช้ยอดคงเหลือของคุณหลังจากถึงขีดจำกัดการใช้งาน",
   "workspace.lite.subscription.selectProvider":
     'เลือก "OpenCode Go" เป็นผู้ให้บริการในการตั้งค่า opencode ของคุณเพื่อใช้โมเดล Go',
-  "workspace.lite.other.title": "การสมัครสมาชิก Go",
+  "workspace.lite.black.message":
+    "ขณะนี้คุณสมัครสมาชิก OpenCode Black หรืออยู่ในรายการรอ โปรดยกเลิกการสมัครก่อนหากต้องการเปลี่ยนไปใช้ Go",
   "workspace.lite.other.message":
     "สมาชิกคนอื่นใน Workspace นี้ได้สมัคร OpenCode Go แล้ว สามารถสมัครได้เพียงหนึ่งคนต่อหนึ่ง Workspace เท่านั้น",
-  "workspace.lite.promo.title": "OpenCode Go",
   "workspace.lite.promo.description":
-    "OpenCode Go เป็นการสมัครสมาชิกราคา 10 ดอลลาร์ต่อเดือน ที่ให้การเข้าถึงโมเดลโอเพนโค้ดดิงยอดนิยมได้อย่างเสถียร ด้วยขีดจำกัดการใช้งานที่ครอบคลุม",
+    "OpenCode Go เริ่มต้นที่ {{price}} จากนั้น $10/เดือน และมอบการเข้าถึงโมเดลการเขียนโค้ดแบบเปิดยอดนิยมอย่างเสถียรพร้อมขีดจำกัดการใช้งานที่ให้มาอย่างเหลือเฟือ",
+  "workspace.lite.promo.price": "$5 สำหรับเดือนแรก",
   "workspace.lite.promo.modelsTitle": "สิ่งที่รวมอยู่ด้วย",
   "workspace.lite.promo.footer":
     "แผนนี้ออกแบบมาสำหรับผู้ใช้งานต่างประเทศเป็นหลัก โดยมีโมเดลโฮสต์อยู่ในสหรัฐอเมริกา สหภาพยุโรป และสิงคโปร์ เพื่อการเข้าถึงที่เสถียรทั่วโลก ราคาและขีดจำกัดการใช้งานอาจมีการเปลี่ยนแปลงตามที่เราได้เรียนรู้จากการใช้งานในช่วงแรกและข้อเสนอแนะ",
   "workspace.lite.promo.subscribe": "สมัครสมาชิก Go",
   "workspace.lite.promo.subscribing": "กำลังเปลี่ยนเส้นทาง...",
+  "workspace.lite.promo.otherMethods": "วิธีการชำระเงินอื่นๆ",
+  "workspace.lite.promo.selectMethod": "เลือกวิธีการชำระเงิน",
 
   "download.title": "OpenCode | ดาวน์โหลด",
   "download.meta.description": "ดาวน์โหลด OpenCode สำหรับ macOS, Windows และ Linux",
@@ -685,8 +693,12 @@ export const dict = {
   "enterprise.form.name.placeholder": "Jeff Bezos",
   "enterprise.form.role.label": "ตำแหน่ง",
   "enterprise.form.role.placeholder": "ประธานกรรมการบริหาร",
+  "enterprise.form.company.label": "บริษัท",
+  "enterprise.form.company.placeholder": "Acme Inc",
   "enterprise.form.email.label": "อีเมลบริษัท",
   "enterprise.form.email.placeholder": "jeff@amazon.com",
+  "enterprise.form.phone.label": "หมายเลขโทรศัพท์",
+  "enterprise.form.phone.placeholder": "+1 234 567 8900",
   "enterprise.form.message.label": "คุณกำลังพยายามแก้ปัญหาอะไร?",
   "enterprise.form.message.placeholder": "เราต้องการความช่วยเหลือเรื่อง...",
   "enterprise.form.send": "ส่ง",

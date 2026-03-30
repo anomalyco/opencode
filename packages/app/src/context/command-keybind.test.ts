@@ -32,6 +32,25 @@ describe("command keybind helpers", () => {
     expect(matchKeybind(keybinds, new KeyboardEvent("keydown", { key: ",", ctrlKey: true, altKey: true }))).toBe(false)
   })
 
+  test("matchKeybind supports bracket keys", () => {
+    const keybinds = parseKeybind("mod+alt+[, mod+alt+]")
+    const prev = keybinds[0]
+    const next = keybinds[1]
+
+    expect(
+      matchKeybind(
+        keybinds,
+        new KeyboardEvent("keydown", { key: "[", ctrlKey: prev?.ctrl, metaKey: prev?.meta, altKey: true }),
+      ),
+    ).toBe(true)
+    expect(
+      matchKeybind(
+        keybinds,
+        new KeyboardEvent("keydown", { key: "]", ctrlKey: next?.ctrl, metaKey: next?.meta, altKey: true }),
+      ),
+    ).toBe(true)
+  })
+
   test("formatKeybind returns human readable output", () => {
     const display = formatKeybind("ctrl+alt+arrowup")
 
@@ -39,5 +58,12 @@ describe("command keybind helpers", () => {
     expect(display.includes("Ctrl") || display.includes("⌃")).toBe(true)
     expect(display.includes("Alt") || display.includes("⌥")).toBe(true)
     expect(formatKeybind("none")).toBe("")
+  })
+
+  test("formatKeybind prefers the first combo", () => {
+    const display = formatKeybind("mod+k,mod+p")
+
+    expect(display.includes("K") || display.includes("k")).toBe(true)
+    expect(display.includes("P") || display.includes("p")).toBe(false)
   })
 })

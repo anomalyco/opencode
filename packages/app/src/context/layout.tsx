@@ -13,7 +13,8 @@ import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 import { createPathHelpers } from "./file/path"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
-const DEFAULT_PANEL_WIDTH = 344
+const DEFAULT_SIDEBAR_WIDTH = 344
+const DEFAULT_FILE_TREE_WIDTH = 200
 const DEFAULT_SESSION_WIDTH = 600
 const DEFAULT_TERMINAL_HEIGHT = 280
 export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
@@ -161,11 +162,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         if (!isRecord(fileTree)) return fileTree
         if (fileTree.tab === "changes" || fileTree.tab === "all") return fileTree
 
-        const width = typeof fileTree.width === "number" ? fileTree.width : DEFAULT_PANEL_WIDTH
+        const width = typeof fileTree.width === "number" ? fileTree.width : DEFAULT_FILE_TREE_WIDTH
         return {
           ...fileTree,
           opened: true,
-          width: width === 260 ? DEFAULT_PANEL_WIDTH : width,
+          width: width === 260 ? DEFAULT_FILE_TREE_WIDTH : width,
           tab: "changes",
         }
       })()
@@ -230,7 +231,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       createStore({
         sidebar: {
           opened: false,
-          width: DEFAULT_PANEL_WIDTH,
+          width: DEFAULT_SIDEBAR_WIDTH,
           workspaces: {} as Record<string, boolean>,
           workspacesDefault: false,
         },
@@ -243,8 +244,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           panelOpened: true,
         },
         fileTree: {
-          opened: true,
-          width: DEFAULT_PANEL_WIDTH,
+          opened: false,
+          width: DEFAULT_FILE_TREE_WIDTH,
           tab: "changes" as "changes" | "all",
         },
         session: {
@@ -543,12 +544,26 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       }
     })
 
+    let sessionFrame: number | undefined
+    let sessionTimer: number | undefined
+
     onMount(() => {
-      Promise.all(
-        server.projects.list().map((project) => {
-          return globalSync.project.loadSessions(project.worktree)
-        }),
-      )
+      sessionFrame = requestAnimationFrame(() => {
+        sessionFrame = undefined
+        sessionTimer = window.setTimeout(() => {
+          sessionTimer = undefined
+          void Promise.all(
+            server.projects.list().map((project) => {
+              return globalSync.project.loadSessions(project.worktree)
+            }),
+          )
+        }, 0)
+      })
+    })
+
+    onCleanup(() => {
+      if (sessionFrame !== undefined) cancelAnimationFrame(sessionFrame)
+      if (sessionTimer !== undefined) window.clearTimeout(sessionTimer)
     })
 
     return {
@@ -628,32 +643,32 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
       fileTree: {
         opened: createMemo(() => store.fileTree?.opened ?? true),
-        width: createMemo(() => store.fileTree?.width ?? DEFAULT_PANEL_WIDTH),
+        width: createMemo(() => store.fileTree?.width ?? DEFAULT_FILE_TREE_WIDTH),
         tab: createMemo(() => store.fileTree?.tab ?? "changes"),
         setTab(tab: "changes" | "all") {
           if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width: DEFAULT_PANEL_WIDTH, tab })
+            setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab })
             return
           }
           setStore("fileTree", "tab", tab)
         },
         open() {
           if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width: DEFAULT_PANEL_WIDTH, tab: "changes" })
+            setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
             return
           }
           setStore("fileTree", "opened", true)
         },
         close() {
           if (!store.fileTree) {
-            setStore("fileTree", { opened: false, width: DEFAULT_PANEL_WIDTH, tab: "changes" })
+            setStore("fileTree", { opened: false, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
             return
           }
           setStore("fileTree", "opened", false)
         },
         toggle() {
           if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width: DEFAULT_PANEL_WIDTH, tab: "changes" })
+            setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
             return
           }
           setStore("fileTree", "opened", (x) => !x)
@@ -793,20 +808,67 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             },
           },
           review: {
-            open: createMemo(() => s().reviewOpen),
+            open: createMemo(() => s().reviewOpen ?? []),
             setOpen(open: string[]) {
+              const session = key()
+              const next = Array.from(new Set(open))
+              const current = store.sessionView[session]
+              if (!current) {
+                setStore("sessionView", session, {
+                  scroll: {},
+                  reviewOpen: next,
+                })
+                return
+              }
+
+              if (same(current.reviewOpen, next)) return
+              setStore("sessionView", session, "reviewOpen", next)
+            },
+            openPath(path: string) {
               const session = key()
               const current = store.sessionView[session]
               if (!current) {
                 setStore("sessionView", session, {
                   scroll: {},
-                  reviewOpen: open,
+                  reviewOpen: [path],
                 })
                 return
               }
 
-              if (same(current.reviewOpen, open)) return
-              setStore("sessionView", session, "reviewOpen", open)
+              if (!current.reviewOpen) {
+                setStore("sessionView", session, "reviewOpen", [path])
+                return
+              }
+
+              if (current.reviewOpen.includes(path)) return
+              setStore("sessionView", session, "reviewOpen", current.reviewOpen.length, path)
+            },
+            closePath(path: string) {
+              const session = key()
+              const current = store.sessionView[session]?.reviewOpen
+              if (!current) return
+
+              const index = current.indexOf(path)
+              if (index === -1) return
+              setStore(
+                "sessionView",
+                session,
+                "reviewOpen",
+                produce((draft) => {
+                  if (!draft) return
+                  draft.splice(index, 1)
+                }),
+              )
+            },
+            togglePath(path: string) {
+              const session = key()
+              const current = store.sessionView[session]?.reviewOpen
+              if (!current || !current.includes(path)) {
+                this.openPath(path)
+                return
+              }
+
+              this.closePath(path)
             },
           },
         }

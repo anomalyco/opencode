@@ -1,6 +1,7 @@
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
+import { ProviderID, ModelID } from "../../provider/schema"
 import { ToolRegistry } from "../../tool/registry"
 import { Worktree } from "../../worktree"
 import { Instance } from "../../project/instance"
@@ -77,7 +78,7 @@ export const ExperimentalRoutes = lazy(() =>
       ),
       async (c) => {
         const { provider, model } = c.req.valid("query")
-        const tools = await ToolRegistry.tools({ providerID: provider, modelID: model })
+        const tools = await ToolRegistry.tools({ providerID: ProviderID.make(provider), modelID: ModelID.make(model) })
         return c.json(
           tools.map((t) => ({
             id: t.id,
@@ -107,7 +108,7 @@ export const ExperimentalRoutes = lazy(() =>
           ...errors(400),
         },
       }),
-      validator("json", Worktree.create.schema),
+      validator("json", Worktree.CreateInput.optional()),
       async (c) => {
         const body = c.req.valid("json")
         const worktree = await Worktree.create(body)
@@ -154,7 +155,7 @@ export const ExperimentalRoutes = lazy(() =>
           ...errors(400),
         },
       }),
-      validator("json", Worktree.remove.schema),
+      validator("json", Worktree.RemoveInput),
       async (c) => {
         const body = c.req.valid("json")
         await Worktree.remove(body)
@@ -180,7 +181,7 @@ export const ExperimentalRoutes = lazy(() =>
           ...errors(400),
         },
       }),
-      validator("json", Worktree.reset.schema),
+      validator("json", Worktree.ResetInput),
       async (c) => {
         const body = c.req.valid("json")
         await Worktree.reset(body)

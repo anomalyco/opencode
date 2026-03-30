@@ -6,8 +6,9 @@ import { useFileComponent } from "../context/file"
 import { Binary } from "@opencode-ai/util/binary"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { createEffect, createMemo, createSignal, For, on, ParentProps, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
-import { AssistantParts, Message, Part, PART_MAPPING } from "./message-part"
+import { AssistantParts, Message, MessageDivider, PART_MAPPING, type UserActions } from "./message-part"
 import { Card } from "./card"
 import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
@@ -84,7 +85,7 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
   return fallback
 }
 
-const hidden = new Set(["todowrite", "todoread"])
+const hidden = new Set(["todowrite"])
 
 function partState(part: PartType, showReasoningSummaries: boolean) {
   if (part.type === "tool") {
@@ -141,11 +142,12 @@ export function SessionTurn(
   props: ParentProps<{
     sessionID: string
     messageID: string
+    messages?: MessageType[]
+    actions?: UserActions
     showReasoningSummaries?: boolean
     shellToolDefaultOpen?: boolean
     editToolDefaultOpen?: boolean
     active?: boolean
-    queued?: boolean
     status?: SessionStatus
     onUserInteracted?: () => void
     classes?: {
@@ -165,7 +167,7 @@ export function SessionTurn(
   const emptyDiffs: FileDiff[] = []
   const idle = { type: "idle" as const }
 
-  const allMessages = createMemo(() => list(data.store.message?.[props.sessionID], emptyMessages))
+  const allMessages = createMemo(() => props.messages ?? list(data.store.message?.[props.sessionID], emptyMessages))
 
   const messageIndex = createMemo(() => {
     const messages = allMessages() ?? emptyMessages
@@ -192,7 +194,7 @@ export function SessionTurn(
   })
 
   const pending = createMemo(() => {
-    if (typeof props.active === "boolean" && typeof props.queued === "boolean") return
+    if (typeof props.active === "boolean") return
     const messages = allMessages() ?? emptyMessages
     return messages.findLast(
       (item): item is AssistantMessage => item.role === "assistant" && typeof item.time.completed !== "number",
@@ -215,16 +217,6 @@ export function SessionTurn(
     const parent = pendingUser()
     if (!msg || !parent) return false
     return parent.id === msg.id
-  })
-
-  const queued = createMemo(() => {
-    if (typeof props.queued === "boolean") return props.queued
-    const id = message()?.id
-    if (!id) return false
-    if (!pendingUser()) return false
-    const item = pending()
-    if (!item) return false
-    return id > item.id
   })
 
   const parts = createMemo(() => {
@@ -250,14 +242,18 @@ export function SessionTurn(
       .reverse()
   })
   const edited = createMemo(() => diffs().length)
-  const [open, setOpen] = createSignal(false)
-  const [expanded, setExpanded] = createSignal<string[]>([])
+  const [state, setState] = createStore({
+    open: false,
+    expanded: [] as string[],
+  })
+  const open = () => state.open
+  const expanded = () => state.expanded
 
   createEffect(
     on(
       open,
       (value, prev) => {
-        if (!value && prev) setExpanded([])
+        if (!value && prev) setState("expanded", [])
       },
       { defer: true },
     ),
@@ -286,6 +282,11 @@ export function SessionTurn(
   )
 
   const interrupted = createMemo(() => assistantMessages().some((m) => m.error?.name === "MessageAbortedError"))
+  const divider = createMemo(() => {
+    if (compaction()) return i18n.t("ui.messagePart.compaction")
+    if (interrupted()) return i18n.t("ui.message.interrupted")
+    return ""
+  })
   const error = createMemo(
     () => assistantMessages().find((m) => m.error && m.error.name !== "MessageAbortedError")?.error,
   )
@@ -340,33 +341,30 @@ export function SessionTurn(
     if (end < start) return undefined
     return end - start
   })
-  const assistantVisible = createMemo(() =>
-    assistantMessages().reduce((count, message) => {
-      const parts = list(data.store.part?.[message.id], emptyParts)
-      return count + parts.filter((part) => partState(part, showReasoningSummaries()) === "visible").length
-    }, 0),
-  )
-  const assistantTailVisible = createMemo(() =>
-    assistantMessages()
-      .flatMap((message) => list(data.store.part?.[message.id], emptyParts))
-      .flatMap((part) => {
-        if (partState(part, showReasoningSummaries()) !== "visible") return []
-        if (part.type === "text") return ["text" as const]
-        return ["other" as const]
-      })
-      .at(-1),
-  )
-  const reasoningHeading = createMemo(() =>
-    assistantMessages()
-      .flatMap((message) => list(data.store.part?.[message.id], emptyParts))
-      .filter((part): part is PartType & { type: "reasoning"; text: string } => part.type === "reasoning")
-      .map((part) => heading(part.text))
-      .filter((text): text is string => !!text)
-      .at(-1),
-  )
+  const assistantDerived = createMemo(() => {
+    let visible = 0
+    let tail: "text" | "other" | undefined
+    let reason: string | undefined
+    const show = showReasoningSummaries()
+    for (const message of assistantMessages()) {
+      for (const part of list(data.store.part?.[message.id], emptyParts)) {
+        if (partState(part, show) === "visible") {
+          visible++
+          tail = part.type === "text" ? "text" : "other"
+        }
+        if (part.type === "reasoning" && part.text) {
+          const h = heading(part.text)
+          if (h) reason = h
+        }
+      }
+    }
+    return { visible, tail, reason }
+  })
+  const assistantVisible = createMemo(() => assistantDerived().visible)
+  const assistantTailVisible = createMemo(() => assistantDerived().tail)
+  const reasoningHeading = createMemo(() => assistantDerived().reason)
   const showThinking = createMemo(() => {
     if (!working() || !!error()) return false
-    if (queued()) return false
     if (status().type === "retry") return false
     if (showReasoningSummaries()) return assistantVisible() === 0
     return true
@@ -395,11 +393,11 @@ export function SessionTurn(
               class={props.classes?.container}
             >
               <div data-slot="session-turn-message-content" aria-live="off">
-                <Message message={message()!} parts={parts()} interrupted={interrupted()} queued={queued()} />
+                <Message message={message()!} parts={parts()} actions={props.actions} />
               </div>
-              <Show when={compaction()}>
+              <Show when={divider()}>
                 <div data-slot="session-turn-compaction">
-                  <Part part={compaction()!} message={message()!} hideDetails />
+                  <MessageDivider label={divider()} />
                 </div>
               </Show>
               <Show when={assistantMessages().length > 0}>
@@ -431,7 +429,7 @@ export function SessionTurn(
               <SessionRetry status={status()} show={active()} />
               <Show when={edited() > 0 && !working()}>
                 <div data-slot="session-turn-diffs">
-                  <Collapsible open={open()} onOpenChange={setOpen} variant="ghost">
+                  <Collapsible open={open()} onOpenChange={(value) => setState("open", value)} variant="ghost">
                     <Collapsible.Trigger>
                       <div data-component="session-turn-diffs-trigger">
                         <div data-slot="session-turn-diffs-title">
@@ -453,7 +451,9 @@ export function SessionTurn(
                             multiple
                             style={{ "--sticky-accordion-offset": "40px" }}
                             value={expanded()}
-                            onChange={(value) => setExpanded(Array.isArray(value) ? value : value ? [value] : [])}
+                            onChange={(value) =>
+                              setState("expanded", Array.isArray(value) ? value : value ? [value] : [])
+                            }
                           >
                             <For each={diffs()}>
                               {(diff) => {

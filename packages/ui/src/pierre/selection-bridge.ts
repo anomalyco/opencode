@@ -1,14 +1,17 @@
 import { type SelectedLineRange } from "@pierre/diffs"
 
+type SelectionKey = "ui.sessionReview.selection.line" | "ui.sessionReview.selection.lines"
+type SelectionVars = Record<string, string | number>
+
 type PointerMode = "none" | "text" | "numbers"
 type Side = SelectedLineRange["side"]
 type LineSpan = Pick<SelectedLineRange, "start" | "end">
 
-export function formatSelectedLineLabel(range: LineSpan) {
+export function formatSelectedLineLabel(range: LineSpan, t: (key: SelectionKey, params: SelectionVars) => string) {
   const start = Math.min(range.start, range.end)
   const end = Math.max(range.start, range.end)
-  if (start === end) return `line ${start}`
-  return `lines ${start}-${end}`
+  if (start === end) return t("ui.sessionReview.selection.line", { line: start })
+  return t("ui.sessionReview.selection.lines", { start, end })
 }
 
 export function previewSelectedLines(source: string, range: LineSpan) {
