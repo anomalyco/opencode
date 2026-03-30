@@ -186,7 +186,8 @@ export namespace LLM {
         ? undefined
         : ProviderTransform.maxOutputTokens(input.model)
 
-    const tools = await resolveTools(input)
+    const canTool = input.model.capabilities.toolcall
+    const tools = canTool ? await resolveTools(input) : {}
 
     // LiteLLM and some Anthropic proxies require the tools parameter to be present
     // when message history contains tool calls, even if no tools are being used.
@@ -203,7 +204,7 @@ export namespace LLM {
     // calls but no tools param is present. When there are no active tools (e.g.
     // during compaction), inject a stub tool to satisfy the validation requirement.
     // The stub description explicitly tells the model not to call it.
-    if (isLiteLLMProxy && Object.keys(tools).length === 0 && hasToolCalls(input.messages)) {
+    if (canTool && isLiteLLMProxy && Object.keys(tools).length === 0 && hasToolCalls(input.messages)) {
       tools["_noop"] = tool({
         description: "Do not call this tool. It exists only for API compatibility and must never be invoked.",
         inputSchema: jsonSchema({
@@ -276,9 +277,13 @@ export namespace LLM {
       topP: params.topP,
       topK: params.topK,
       providerOptions: ProviderTransform.providerOptions(input.model, params.options),
-      activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
-      tools,
-      toolChoice: input.toolChoice,
+      ...(canTool
+        ? {
+            activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
+            tools,
+          }
+        : {}),
+      ...(canTool ? { toolChoice: input.toolChoice } : {}),
       maxOutputTokens,
       abortSignal: input.abort,
       headers: {
