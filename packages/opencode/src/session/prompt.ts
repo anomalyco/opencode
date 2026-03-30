@@ -102,9 +102,8 @@ export namespace SessionPrompt {
           const runners = new Map<string, Runner<MessageV2.WithParts>>()
           yield* Effect.addFinalizer(
             Effect.fnUntraced(function* () {
-              const entries = [...runners.values()]
+              yield* Effect.forEach(runners.values(), (r) => r.cancel, { concurrency: "unbounded", discard: true })
               runners.clear()
-              yield* Effect.forEach(entries, (r) => r.cancel, { concurrency: "unbounded" })
             }),
           )
           return { runners }
