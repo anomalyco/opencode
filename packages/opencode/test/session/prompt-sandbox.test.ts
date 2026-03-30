@@ -328,6 +328,145 @@ describe("session.prompt sandbox", () => {
     })
   })
 
+  test("unsandboxed always-allow reuses generalized pattern across command variants", async () => {
+    if (process.platform !== "darwin") return
+    await using home = await tmpdir({
+      init: async (dir) => {
+        await fs.mkdir(path.join(dir, ".ssh"), { recursive: true })
+        await Bun.write(path.join(dir, ".ssh", "foo"), "foo-content\n")
+        await Bun.write(path.join(dir, ".ssh", "bar"), "bar-content\n")
+      },
+    })
+    await using tmp = await tmpdir({
+      config: {
+        experimental: {
+          sandbox: {
+            enabled: true,
+            allow_unsandboxed_retry: true,
+          },
+        },
+        permission: {
+          "bash:unsandboxed": "ask",
+        },
+        agent: {
+          build: {
+            model: "openai/gpt-5.2",
+          },
+        },
+      },
+    })
+    process.env.HOME = home.path
+    process.env.OPENCODE_TEST_HOME = home.path
+    process.env.SHELL = "/bin/zsh"
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+
+        const run1 = SessionPrompt.shell({
+          sessionID: session.id,
+          agent: "build",
+          command: '# opencode:unsandboxed read foo\ncat "$HOME/.ssh/foo"',
+        })
+        const pending1 = await waitForPending(1)
+        expect(pending1).toHaveLength(1)
+        expect(pending1[0].permission).toBe("bash:unsandboxed")
+        expect(pending1[0].patterns).toEqual(["cat *"])
+        expect(pending1[0].always).toEqual(["cat *"])
+        await Permission.reply({ requestID: pending1[0].id, reply: "always" })
+        const out1 = await run1
+        const part1 = out1.parts[0]
+        if (part1.type !== "tool") throw new Error("expected tool part")
+        if (part1.state.status !== "completed") throw new Error("expected completed part")
+        expect(part1.state.output).toContain("foo-content")
+
+        const run2 = SessionPrompt.shell({
+          sessionID: session.id,
+          agent: "build",
+          command: '# opencode:unsandboxed read bar\ncat "$HOME/.ssh/bar"',
+        })
+        await Bun.sleep(100)
+        const pending2 = await Permission.list()
+        expect(pending2).toHaveLength(0)
+        const out2 = await run2
+        const part2 = out2.parts[0]
+        if (part2.type !== "tool") throw new Error("expected tool part")
+        if (part2.state.status !== "completed") throw new Error("expected completed part")
+        expect(part2.state.output).toContain("bar-content")
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("unsandboxed always-allow covers multi-command env-prefix variant", async () => {
+    if (process.platform !== "darwin") return
+    await using home = await tmpdir({
+      init: async (dir) => {
+        await fs.mkdir(path.join(dir, ".ssh"), { recursive: true })
+        await Bun.write(path.join(dir, ".ssh", "a"), "a-content\n")
+        await Bun.write(path.join(dir, ".ssh", "b"), "b-content\n")
+      },
+    })
+    await using tmp = await tmpdir({
+      config: {
+        experimental: {
+          sandbox: {
+            enabled: true,
+            allow_unsandboxed_retry: true,
+          },
+        },
+        permission: {
+          "bash:unsandboxed": "ask",
+        },
+        agent: {
+          build: {
+            model: "openai/gpt-5.2",
+          },
+        },
+      },
+    })
+    process.env.HOME = home.path
+    process.env.OPENCODE_TEST_HOME = home.path
+    process.env.SHELL = "/bin/zsh"
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+
+        const run1 = SessionPrompt.shell({
+          sessionID: session.id,
+          agent: "build",
+          command: '# opencode:unsandboxed env read\nFOO=1 cat "$HOME/.ssh/a" && echo done',
+        })
+        const pending1 = await waitForPending(1)
+        expect(pending1).toHaveLength(1)
+        expect(pending1[0].patterns).toContain("cat *")
+        expect(pending1[0].patterns).toContain("echo *")
+        await Permission.reply({ requestID: pending1[0].id, reply: "always" })
+        await run1
+
+        const run2 = SessionPrompt.shell({
+          sessionID: session.id,
+          agent: "build",
+          command: '# opencode:unsandboxed env read\nBAR=2 cat "$HOME/.ssh/b" && echo finished',
+        })
+        await Bun.sleep(100)
+        const pending2 = await Permission.list()
+        expect(pending2).toHaveLength(0)
+        const out2 = await run2
+        const part2 = out2.parts[0]
+        if (part2.type !== "tool") throw new Error("expected tool part")
+        if (part2.state.status !== "completed") throw new Error("expected completed part")
+        expect(part2.state.output).toContain("b-content")
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+
   test("signals when explicit rejection is followed by sandboxed launch failure", async () => {
     if (process.platform !== "darwin") return
     const plan = spyOn(SandboxRuntime, "plan").mockResolvedValue({

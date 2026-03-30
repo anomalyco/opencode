@@ -49,6 +49,8 @@ import { InstanceState } from "@/effect"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 import { EffectBridge } from "@/effect"
+import { SandboxSpawn } from "@/sandbox/spawn"
+import { commandFamilies } from "@/tool/bash"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -942,16 +944,18 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         let proactive = false
         let rejected = false
         let asked = false
+        const unsandboxed = cfg.allow_unsandboxed_retry ? yield* Effect.promise(() => commandFamilies(command)) : []
         if (command !== input.command && cfg.allow_unsandboxed_retry && sandbox.active) {
           asked = true
           try {
             yield* permission.ask({
               permission: "bash:unsandboxed",
-              patterns: [command],
-              always: [command],
+              patterns: unsandboxed,
+              always: unsandboxed,
               metadata: {
                 reason: "explicit_request" satisfies SandboxSpawn.UnsandboxedReason,
                 detail: request.detail,
+                command,
               },
               sessionID: input.sessionID,
               tool: {
@@ -998,10 +1002,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           try {
             yield* permission.ask({
               permission: "bash:unsandboxed",
-              patterns: [command],
-              always: [command],
+              patterns: unsandboxed,
+              always: unsandboxed,
               metadata: {
                 reason,
+                command,
               },
               sessionID: input.sessionID,
               tool: {

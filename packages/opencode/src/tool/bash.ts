@@ -389,6 +389,33 @@ const parser = lazy(async () => {
   return { bash, ps }
 })
 
+export async function commandFamilies(cmd: string): Promise<string[]> {
+  const tree = await parser().then((p) => p.parse(cmd))
+  if (!tree) return [cmd]
+  const result = new Set<string>()
+  for (const node of tree.rootNode.descendantsOfType("command")) {
+    if (!node) continue
+    const tokens: string[] = []
+    for (let i = 0; i < node.childCount; i++) {
+      const child = node.child(i)
+      if (!child) continue
+      if (
+        child.type !== "command_name" &&
+        child.type !== "word" &&
+        child.type !== "string" &&
+        child.type !== "raw_string" &&
+        child.type !== "concatenation"
+      )
+        continue
+      tokens.push(child.text)
+    }
+    if (tokens.length && tokens[0] !== "cd") {
+      result.add(BashArity.prefix(tokens).join(" ") + " *")
+    }
+  }
+  return result.size > 0 ? Array.from(result) : [cmd]
+}
+
 // TODO: we may wanna rename this tool so it works better on other shells
 export const BashTool = Tool.define(
   "bash",
@@ -635,17 +662,21 @@ export const BashTool = Tool.define(
       let proactive = false
       let rejected = false
       let asked = false
+      const unsandboxed = yield* Effect.promise(() =>
+        input.cfg.allow_unsandboxed_retry ? commandFamilies(input.command) : Promise.resolve([]),
+      )
 
       if (input.command !== input.source && input.cfg.allow_unsandboxed_retry && launch.sandbox.active) {
         asked = true
         try {
           yield* ctx.ask({
             permission: "bash:unsandboxed",
-            patterns: [input.command],
-            always: [input.command],
+            patterns: unsandboxed,
+            always: unsandboxed,
             metadata: {
               reason: "explicit_request" satisfies SandboxSpawn.UnsandboxedReason,
               detail: input.detail,
+              command: input.command,
             },
           })
           proactive = true
@@ -685,10 +716,11 @@ export const BashTool = Tool.define(
         try {
           yield* ctx.ask({
             permission: "bash:unsandboxed",
-            patterns: [input.command],
-            always: [input.command],
+            patterns: unsandboxed,
+            always: unsandboxed,
             metadata: {
               reason,
+              command: input.command,
             },
           })
           retried = true

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { BashTool } from "../../src/tool/bash"
+import { BashTool, commandFamilies } from "../../src/tool/bash"
 import { SandboxRuntime } from "../../src/sandbox/runtime"
 import { Tool } from "../../src/tool/tool"
 import { Instance } from "../../src/project/instance"
@@ -491,6 +491,161 @@ describe("tool.bash sandbox", () => {
         setTimeout(() => abort.abort(), 50)
         const out = await run
         expect(out.output).toContain("User aborted the command")
+      },
+    })
+  })
+
+  test("commandFamilies returns generalized command-family patterns", async () => {
+    expect(await commandFamilies("cat foo.txt")).toEqual(["cat *"])
+    expect(await commandFamilies("git push origin main")).toEqual(["git push *"])
+    expect(await commandFamilies("FOO=1 npm install react")).toEqual(["npm install *"])
+    const multi = await commandFamilies("cat foo.txt\ngit status")
+    expect(multi).toContain("cat *")
+    expect(multi).toContain("git status *")
+    expect(multi).toHaveLength(2)
+  })
+
+  test("unsandboxed retry uses generalized patterns instead of raw command", async () => {
+    if (process.platform !== "darwin") return
+    await using home = await tmpdir({
+      init: async (dir) => {
+        await fs.mkdir(path.join(dir, ".ssh"), { recursive: true })
+        await Bun.write(path.join(dir, ".ssh", "secret"), "secret\n")
+      },
+    })
+    await using tmp = await tmpdir({
+      config: {
+        experimental: {
+          sandbox: {
+            enabled: true,
+            allow_unsandboxed_retry: true,
+          },
+        },
+      },
+    })
+    process.env.HOME = home.path
+    process.env.OPENCODE_TEST_HOME = home.path
+    process.env.SHELL = "/bin/zsh"
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const reqs: Array<{ permission: string; patterns: string[]; always: string[] }> = []
+        const bash = await BashTool.init()
+        await bash.execute(
+          {
+            command: 'cat "$HOME/.ssh/secret"',
+            description: "Retries with family patterns",
+          },
+          makeCtx(async (req) => {
+            reqs.push({ permission: req.permission, patterns: req.patterns, always: req.always })
+          }),
+        )
+        const unsandboxed = reqs.find((r) => r.permission === "bash:unsandboxed")
+        expect(unsandboxed).toBeDefined()
+        expect(unsandboxed!.patterns).toEqual(["cat *"])
+        expect(unsandboxed!.always).toEqual(["cat *"])
+      },
+    })
+  })
+
+  test("explicit unsandboxed request uses generalized patterns with raw command in metadata", async () => {
+    if (process.platform !== "darwin") return
+    await using home = await tmpdir({
+      init: async (dir) => {
+        await fs.mkdir(path.join(dir, ".ssh"), { recursive: true })
+        await Bun.write(path.join(dir, ".ssh", "secret"), "secret\n")
+      },
+    })
+    await using tmp = await tmpdir({
+      config: {
+        experimental: {
+          sandbox: {
+            enabled: true,
+            allow_unsandboxed_retry: true,
+          },
+        },
+      },
+    })
+    process.env.HOME = home.path
+    process.env.OPENCODE_TEST_HOME = home.path
+    process.env.SHELL = "/bin/zsh"
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const reqs: Array<{
+          permission: string
+          patterns: string[]
+          always: string[]
+          metadata: { command?: string }
+        }> = []
+        const bash = await BashTool.init()
+        await bash.execute(
+          {
+            command: '# opencode:unsandboxed needs secret access\ncat "$HOME/.ssh/secret"',
+            description: "Proactive unsandboxed with family patterns",
+          },
+          makeCtx(async (req) => {
+            reqs.push({
+              permission: req.permission,
+              patterns: req.patterns,
+              always: req.always,
+              metadata: req.metadata,
+            })
+          }),
+        )
+        const unsandboxed = reqs.find((r) => r.permission === "bash:unsandboxed")
+        expect(unsandboxed).toBeDefined()
+        expect(unsandboxed!.patterns).toEqual(["cat *"])
+        expect(unsandboxed!.always).toEqual(["cat *"])
+        expect(unsandboxed!.metadata.command).toBe('cat "$HOME/.ssh/secret"')
+      },
+    })
+  })
+
+  test("multi-command unsandboxed uses per-command family patterns", async () => {
+    if (process.platform !== "darwin") return
+    await using home = await tmpdir({
+      init: async (dir) => {
+        await fs.mkdir(path.join(dir, ".ssh"), { recursive: true })
+        await Bun.write(path.join(dir, ".ssh", "secret"), "secret\n")
+      },
+    })
+    await using tmp = await tmpdir({
+      config: {
+        experimental: {
+          sandbox: {
+            enabled: true,
+            allow_unsandboxed_retry: true,
+          },
+        },
+      },
+    })
+    process.env.HOME = home.path
+    process.env.OPENCODE_TEST_HOME = home.path
+    process.env.SHELL = "/bin/zsh"
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const reqs: Array<{ permission: string; patterns: string[]; always: string[] }> = []
+        const bash = await BashTool.init()
+        await bash.execute(
+          {
+            command: '# opencode:unsandboxed env read\nFOO=1 cat "$HOME/.ssh/secret" && echo done',
+            description: "Multi-command unsandboxed family patterns",
+          },
+          makeCtx(async (req) => {
+            reqs.push({ permission: req.permission, patterns: req.patterns, always: req.always })
+          }),
+        )
+        const unsandboxed = reqs.find((r) => r.permission === "bash:unsandboxed")
+        expect(unsandboxed).toBeDefined()
+        expect(unsandboxed!.patterns).toContain("cat *")
+        expect(unsandboxed!.patterns).toContain("echo *")
+        expect(unsandboxed!.always).toContain("cat *")
+        expect(unsandboxed!.always).toContain("echo *")
       },
     })
   })
