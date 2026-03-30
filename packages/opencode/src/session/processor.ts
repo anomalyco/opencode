@@ -147,7 +147,7 @@ export namespace SessionProcessor {
               return
 
             case "tool-input-start":
-              ctx.toolcalls[value.id] = (yield* session.updatePart({
+              ctx.toolcalls[value.id] = yield* session.updatePart({
                 id: ctx.toolcalls[value.id]?.id ?? PartID.ascending(),
                 messageID: ctx.assistantMessage.id,
                 sessionID: ctx.assistantMessage.sessionID,
@@ -155,7 +155,7 @@ export namespace SessionProcessor {
                 tool: value.toolName,
                 callID: value.id,
                 state: { status: "pending", input: {}, raw: "" },
-              })) as MessageV2.ToolPart
+              } satisfies MessageV2.ToolPart)
               return
 
             case "tool-input-delta":
@@ -167,12 +167,12 @@ export namespace SessionProcessor {
             case "tool-call": {
               const match = ctx.toolcalls[value.toolCallId]
               if (!match) return
-              ctx.toolcalls[value.toolCallId] = (yield* session.updatePart({
+              ctx.toolcalls[value.toolCallId] = yield* session.updatePart({
                 ...match,
                 tool: value.toolName,
                 state: { status: "running", input: value.input, time: { start: Date.now() } },
                 metadata: value.providerMetadata,
-              })) as MessageV2.ToolPart
+              } satisfies MessageV2.ToolPart)
 
               const parts = yield* Effect.promise(() => MessageV2.parts(ctx.assistantMessage.id))
               const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
@@ -406,7 +406,7 @@ export namespace SessionProcessor {
         })
 
         const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {
-          log.error("process", { error: e, stack: JSON.stringify((e as any)?.stack) })
+          log.error("process", { error: e, stack: e instanceof Error ? e.stack : undefined })
           const error = parse(e)
           if (MessageV2.ContextOverflowError.isInstance(error)) {
             ctx.needsCompaction = true
