@@ -139,10 +139,6 @@ export namespace BrowserDaemon {
       const binary = await BrowserBinary.resolve()
       const args = buildGlobalArgs(sessionId, instance.options)
 
-      // In CDP/Electron mode we close the agent-browser session but
-      // do NOT close the actual browser — Electron manages that.
-      // We just navigate to about:blank to "release" the tab.
-      const closeCmd = instance.cdpPort ? "open" : "close"
       const closeArgs = instance.cdpPort
         ? [binary === "npx" ? "npx" : binary, ...(binary === "npx" ? ["agent-browser"] : []), ...args, "open", "about:blank"]
         : [binary === "npx" ? "npx" : binary, ...(binary === "npx" ? ["agent-browser"] : []), ...args, "close"]
@@ -151,7 +147,13 @@ export namespace BrowserDaemon {
         stdout: "pipe",
         stderr: "pipe",
       })
+
+      // Timeout: if graceful close hangs for 5s, kill the process
+      const timer = setTimeout(() => {
+        try { proc.kill() } catch {}
+      }, 5000)
       await proc.exited
+      clearTimeout(timer)
     } catch (e) {
       log.warn("error stopping browser daemon", { sessionId, error: String(e) })
     }
@@ -159,6 +161,21 @@ export namespace BrowserDaemon {
     instances.delete(sessionId)
     // NOTE: We do NOT delete the profile directory — it persists
     // so logins/cookies carry over to the next session
+  }
+
+  /**
+   * Kill all agent-browser daemon processes by name.
+   * Used as a last resort during process exit to prevent orphaned Chrome.
+   * This is a sync-safe fire-and-forget — it spawns kill commands but doesn't await.
+   */
+  export function killAllOrphans(): void {
+    try {
+      if (process.platform === "win32") {
+        Bun.spawn(["taskkill", "/F", "/IM", "agent-browser.exe"], { stdout: "ignore", stderr: "ignore" })
+      } else {
+        Bun.spawn(["pkill", "-f", "agent-browser"], { stdout: "ignore", stderr: "ignore" })
+      }
+    } catch {}
   }
 
   export function isRunning(sessionId: string): boolean {

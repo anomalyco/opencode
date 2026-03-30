@@ -35,6 +35,7 @@ import { JsonMigration } from "./storage/json-migration"
 import { Database } from "./storage/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
+import { BrowserDaemon } from "./browser/daemon"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -46,6 +47,40 @@ process.on("uncaughtException", (e) => {
   Log.Default.error("exception", {
     e: errorMessage(e),
   })
+})
+
+// Ensure browser daemons + Chrome are killed on any exit.
+// This prevents orphaned Chrome processes when the user closes
+// the terminal, kills the Tauri app, or the process crashes.
+//
+// Two layers of cleanup:
+// 1. stopAll() — graceful: sends "close" to each agent-browser session (5s timeout)
+// 2. killAllOrphans() — forceful: pkill/taskkill any remaining agent-browser processes
+let browserCleanupDone = false
+function cleanupBrowser() {
+  if (browserCleanupDone) return
+  browserCleanupDone = true
+  BrowserDaemon.stopAll().catch(() => {})
+  // Fire-and-forget kill in case graceful stop fails or times out
+  BrowserDaemon.killAllOrphans()
+}
+process.on("SIGINT", () => {
+  cleanupBrowser()
+  process.exit(130)
+})
+process.on("SIGTERM", () => {
+  cleanupBrowser()
+  process.exit(143)
+})
+process.on("SIGHUP", () => {
+  cleanupBrowser()
+  process.exit(129)
+})
+process.on("beforeExit", () => {
+  cleanupBrowser()
+})
+process.on("exit", () => {
+  cleanupBrowser()
 })
 
 const cli = yargs(hideBin(process.argv))
