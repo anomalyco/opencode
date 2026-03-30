@@ -310,3 +310,151 @@ ATHENA_BROWSER_CDP_PORT=9222        # CDP port (default: 9222)
 - **Credentials**: Never handled by agent — `browser_human_handoff` pauses for user
 - **Permissions**: Tool-level permission system (allow/ask/deny per tool)
 - **Profile encryption**: Stored locally, not transmitted
+
+---
+
+## Per-Session MCPs & Skills
+
+### Current State
+
+MCPs (Model Context Protocol servers) and skills are currently **global** — loaded once from config, shared across all sessions. Every session sees the same MCP tools and skills.
+
+### Per-Session MCP Loading (Planned)
+
+Each session should be able to load **different MCPs** depending on the task:
+
+```
+Session A: "LinkedIn automation"
+  → MCPs: linkedin-mcp, email-mcp
+  → Skills: social-media, outreach
+
+Session B: "Shopping price comparison"
+  → MCPs: shopping-mcp, price-tracker-mcp
+  → Skills: data-extraction, comparison
+
+Session C: "General browsing"
+  → MCPs: (none, or minimal)
+  → Skills: default
+```
+
+**How it works:**
+
+```typescript
+// Create session with specific MCPs
+await Session.create({
+  mcp: {
+    // Session-specific MCPs (connect on session start)
+    "linkedin-mcp": {
+      type: "stdio",
+      command: "npx",
+      args: ["-y", "linkedin-mcp-server"],
+    },
+    // Disable a global MCP for this session
+    "some-global-mcp": { enabled: false },
+  },
+  skills: ["social-media", "outreach"],
+})
+```
+
+**Lifecycle:**
+
+```
+Session.create(config)
+  │
+  ├─ Connect session-specific MCPs
+  │    ├─ MCP tools registered for THIS session only
+  │    └─ Global MCPs filtered by session overrides
+  │
+  ├─ Load session-specific skills
+  │    ├─ Skills available in tool registry for THIS session
+  │    └─ Global skills filtered by session config
+  │
+  ├─ Session runs (agent uses session-scoped tools)
+  │
+  └─ Session.end()
+       ├─ Disconnect session-specific MCPs
+       ├─ Unload session-specific skills
+       └─ Global MCPs/skills unaffected
+```
+
+### Per-Session Skills
+
+Skills are reusable prompt+tool bundles (like slash commands). Per-session skills allow:
+
+| Feature | Global Skills | Per-Session Skills |
+|---------|--------------|-------------------|
+| Loaded from | `~/.config/athena/skills/` | Session config |
+| Available in | All sessions | Only the session that loaded them |
+| Lifecycle | App start → app end | Session start → session end |
+| Use case | Common workflows | Task-specific workflows |
+
+**Example session skill config:**
+
+```jsonc
+{
+  "skills": {
+    // Directories containing skill definitions
+    "dirs": ["./skills/linkedin", "./skills/shopping"],
+
+    // Individual skills to enable/disable
+    "enabled": ["send-connection-request", "extract-profile"],
+    "disabled": ["global-skill-not-needed"],
+  }
+}
+```
+
+**Skill definition example** (`skills/linkedin/send-request.ts`):
+
+```typescript
+export default {
+  name: "send-connection-request",
+  description: "Send a LinkedIn connection request to a profile",
+  prompt: `Navigate to the profile URL, click Connect, add a note if provided, and send.`,
+  tools: ["browser_open", "browser_click", "browser_type", "browser_snapshot"],
+}
+```
+
+### Implementation Approach
+
+The existing architecture supports this with minimal changes:
+
+1. **Session schema** — add `mcp` and `skills` fields to `Session.Info`
+2. **MCP lifecycle** — `MCP.connectForSession(sessionId, config)` / `MCP.disconnectForSession(sessionId)`
+3. **Tool filtering** — `resolveTools()` already filters by agent permissions; extend to filter by session MCP/skill scope
+4. **Skill loading** — `Skill.loadForSession(sessionId, dirs)` / `Skill.unloadForSession(sessionId)`
+
+**Key principle**: Session-scoped tools are additive to (or override) global tools. A session can:
+- Add MCPs/skills not in the global config
+- Disable global MCPs/skills for this session only
+- Override MCP config (e.g., different auth for the same server)
+
+### Config Example — Full Session Setup
+
+```jsonc
+// Via AthenaBrowser API (Tauri app)
+{
+  "sessionId": "linkedin-task-1",
+  "agent": "auto",
+  "model": "anthropic/claude-sonnet-4-6",
+  "browser": {
+    "headed": true
+  },
+  "mcp": {
+    "linkedin-tools": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@athena/linkedin-mcp"]
+    }
+  },
+  "skills": {
+    "dirs": ["./skills/linkedin"]
+  },
+  "permission": {
+    "browser_human_handoff": "allow",
+    "browser_network": "allow"
+  }
+}
+```
+
+This way each task type (LinkedIn outreach, shopping, research, form filling) gets exactly the MCPs and skills it needs — no bloat, clean isolation, proper cleanup.
+
