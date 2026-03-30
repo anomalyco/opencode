@@ -20,6 +20,7 @@ import path from "path"
 import fs from "fs/promises"
 import { pathToFileURL } from "url"
 import { Global } from "../../src/global"
+import { Installation } from "../../src/installation"
 import { ProjectID } from "../../src/project/schema"
 import { Filesystem } from "../../src/util/filesystem"
 import * as Network from "../../src/util/network"
@@ -842,6 +843,81 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
     else process.env.OPENCODE_CONFIG_DIR = prev
   }
 })
+
+it.live("writes latest plugin spec for config dependency installs", () =>
+  Effect.gen(function* () {
+    const tmp = yield* tmpdirScoped()
+    const dir = path.join(tmp, "config")
+    yield* Effect.promise(() => fs.mkdir(dir, { recursive: true }))
+
+    const local = spyOn(Installation, "isLocal").mockReturnValue(false)
+    const net = spyOn(Network, "online").mockReturnValue(false)
+    const run = spyOn(Npm, "install").mockImplementation(async (dir: string) => {
+      const mod = path.join(dir, "node_modules", "@opencode-ai", "plugin")
+      await fs.mkdir(mod, { recursive: true })
+      await Filesystem.write(
+        path.join(mod, "package.json"),
+        JSON.stringify({ name: "@opencode-ai/plugin", version: "1.3.13" }),
+      )
+    })
+
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        local.mockRestore()
+        net.mockRestore()
+        run.mockRestore()
+      }),
+    )
+
+    yield* installDeps(dir)
+
+    const json = yield* Effect.promise(() =>
+      Filesystem.readJson<{ dependencies?: Record<string, string> }>(path.join(dir, "package.json")),
+    )
+    expect(json.dependencies?.["@opencode-ai/plugin"]).toBe("latest")
+  }),
+)
+
+it.live("treats latest config plugin as current when offline", () =>
+  Effect.gen(function* () {
+    const tmp = yield* tmpdirScoped()
+    const dir = path.join(tmp, "config")
+    const mod = path.join(dir, "node_modules", "@opencode-ai", "plugin")
+    yield* Effect.promise(() => fs.mkdir(mod, { recursive: true }))
+    yield* Effect.promise(() =>
+      Promise.all([
+        Filesystem.write(
+          path.join(dir, "package.json"),
+          JSON.stringify({ dependencies: { "@opencode-ai/plugin": "latest" } }),
+        ),
+        Filesystem.write(path.join(dir, ".gitignore"), ["node_modules", "package.json"].join("\n")),
+        Filesystem.write(
+          path.join(mod, "package.json"),
+          JSON.stringify({ name: "@opencode-ai/plugin", version: "1.3.13" }),
+        ),
+      ]),
+    )
+
+    let calls = 0
+    const local = spyOn(Installation, "isLocal").mockReturnValue(false)
+    const net = spyOn(Network, "online").mockReturnValue(false)
+    const run = spyOn(Npm, "install").mockImplementation(async () => {
+      calls += 1
+    })
+
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        local.mockRestore()
+        net.mockRestore()
+        run.mockRestore()
+      }),
+    )
+
+    expect(yield* Effect.promise(() => Config.needsInstall(dir))).toBe(false)
+    yield* installDeps(dir)
+    expect(calls).toBe(0)
+  }),
+)
 
 it.live("dedupes concurrent config dependency installs for the same dir", () =>
   Effect.gen(function* () {

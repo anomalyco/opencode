@@ -13,6 +13,32 @@ export namespace Npm {
   const log = Log.create({ service: "npm" })
   const illegal = process.platform === "win32" ? new Set(["<", ">", ":", '"', "|", "?", "*"]) : undefined
 
+  function split(pkg: string) {
+    const url = /^https?:\/\//.test(pkg)
+    const git = pkg.startsWith("github:")
+    if (url || git) return { name: pkg, version: "latest", url, git }
+    const at = pkg.lastIndexOf("@")
+    return {
+      name: at > 0 ? pkg.slice(0, at) : pkg,
+      version: at > 0 ? pkg.slice(at + 1) : "latest",
+      url,
+      git,
+    }
+  }
+
+  async function meta(pkg: string) {
+    const response = await fetch(`https://registry.npmjs.org/${pkg}`).catch(() => undefined)
+    if (!response?.ok) return
+    return (await response.json()) as { "dist-tags"?: Record<string, string> }
+  }
+
+  async function tag(pkg: string, name = "latest") {
+    const data = await meta(pkg)
+    const value = data?.["dist-tags"]?.[name]
+    if (value) return value
+    log.warn("No dist-tag found, using cached", { pkg, name })
+  }
+
   export const InstallFailedError = NamedError.create(
     "NpmInstallFailedError",
     z.object({
@@ -41,27 +67,23 @@ export namespace Npm {
     return result
   }
 
-  export async function outdated(pkg: string, cachedVersion: string): Promise<boolean> {
-    const response = await fetch(`https://registry.npmjs.org/${pkg}`)
-    if (!response.ok) {
-      log.warn("Failed to resolve latest version, using cached", { pkg, cachedVersion })
-      return false
-    }
-
-    const data = (await response.json()) as { "dist-tags"?: { latest?: string } }
-    const latestVersion = data?.["dist-tags"]?.latest
+  export async function outdated(pkg: string, cachedVersion: string, name = "latest"): Promise<boolean> {
+    const latestVersion = await tag(pkg, name)
     if (!latestVersion) {
       log.warn("No latest version found, using cached", { pkg, cachedVersion })
       return false
     }
 
-    const range = /[\s^~*xX<>|=]/.test(cachedVersion)
-    if (range) return !semver.satisfies(latestVersion, cachedVersion)
+    const exact = semver.valid(cachedVersion)
+    const range = semver.validRange(cachedVersion)
+    if (!exact && !range) return false
+    if (range && !exact) return !semver.satisfies(latestVersion, range)
 
     return semver.lt(cachedVersion, latestVersion)
   }
 
   export async function add(pkg: string) {
+    const spec = split(pkg)
     const dir = directory(pkg)
     await using _ = await Flock.acquire(`npm-install:${Filesystem.resolve(dir)}`)
     log.info("installing package", {
@@ -79,7 +101,19 @@ export namespace Npm {
     if (tree) {
       const first = tree.edgesOut.values().next().value?.to
       if (first) {
-        return resolveEntryPoint(first.name, first.path)
+        if (!spec.git && !spec.url && (spec.version === "latest" || !semver.validRange(spec.version))) {
+          const version = await Filesystem.readJson<{ version?: string }>(path.join(first.path, "package.json"))
+            .then((x) => x.version)
+            .catch(() => undefined)
+          const next = await tag(spec.name, spec.version)
+          if (version && next && version !== next) {
+            log.info("dist-tag moved, reinstalling package", { pkg, version, next })
+          } else {
+            return resolveEntryPoint(first.name, first.path)
+          }
+        } else {
+          return resolveEntryPoint(first.name, first.path)
+        }
       }
     }
 
@@ -89,7 +123,7 @@ export namespace Npm {
         save: true,
         saveType: "prod",
       })
-      .catch((cause) => {
+      .catch((cause: unknown) => {
         throw new InstallFailedError(
           { pkg },
           {

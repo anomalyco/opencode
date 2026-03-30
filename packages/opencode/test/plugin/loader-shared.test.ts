@@ -253,6 +253,24 @@ describe("plugin.loader.shared", () => {
     }
   })
 
+  test("passes github plugin specs through without appending latest", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ plugin: ["github:acme/demo#main"] }, null, 2))
+        return { dir }
+      },
+    })
+
+    const add = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.path, entrypoint: tmp.path })
+
+    try {
+      await load(tmp.path)
+      expect(add.mock.calls).toContainEqual(["github:acme/demo#main"])
+    } finally {
+      add.mockRestore()
+    }
+  })
+
   test("loads npm server plugin from package ./server export", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {

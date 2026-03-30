@@ -22,7 +22,7 @@ import { Instance, type InstanceContext } from "../project/instance"
 import { LSPServer } from "../lsp/server"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
-import { existsSync } from "fs"
+import { constants, existsSync } from "fs"
 import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
 import { Event } from "../server/event"
@@ -32,6 +32,8 @@ import { isRecord } from "@/util/record"
 import { ConfigPaths } from "./paths"
 import type { ConsoleState } from "./console-state"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
+import { online } from "@/util/network"
+import { Filesystem } from "@/util/filesystem"
 import { InstanceState } from "@/effect/instance-state"
 import { Context, Duration, Effect, Exit, Fiber, Layer, Option } from "effect"
 import { Flock } from "@opencode-ai/shared/util/flock"
@@ -142,6 +144,93 @@ export namespace Config {
 
   type Package = {
     dependencies?: Record<string, string>
+  }
+
+  async function isWritable(dir: string) {
+    try {
+      await fsNode.access(dir, constants.W_OK)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  export async function needsInstall(dir: string) {
+    const writable = await isWritable(dir)
+    if (!writable) {
+      log.debug("config dir is not writable, skipping dependency install", { dir })
+      return false
+    }
+
+    const pkg = path.join(dir, "package.json")
+    const ignore = path.join(dir, ".gitignore")
+    const mod = path.join(dir, "node_modules", "@opencode-ai", "plugin", "package.json")
+    const target = Installation.isLocal() ? "*" : "latest"
+    if (!(await Filesystem.exists(ignore))) return true
+    if (!(await Filesystem.exists(pkg))) return true
+
+    const parsed = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => null)
+    const dependencies = parsed?.dependencies ?? {}
+    const depVersion = dependencies["@opencode-ai/plugin"]
+    if (depVersion !== target) return true
+    if (!(await Filesystem.exists(mod))) return true
+
+    if (target !== "latest" || !online()) return false
+
+    const ver = await Filesystem.readJson<{ version?: string }>(mod)
+      .then((x) => x.version)
+      .catch(() => undefined)
+    if (!ver) return true
+
+    const stale = await Npm.outdated("@opencode-ai/plugin", ver)
+    if (!stale) return false
+
+    log.info("cached plugin version is outdated, proceeding with install", {
+      pkg: "@opencode-ai/plugin",
+      cachedVersion: ver,
+    })
+    return true
+  }
+
+  export async function installDependencies(dir: string, input?: InstallInput) {
+    if (!(await isWritable(dir))) return
+
+    const key = process.platform === "win32" ? "config-install:win32" : `config-install:${AppFileSystem.resolve(dir)}`
+    await using _ = await Flock.acquire(key, {
+      onWait: (tick) =>
+        input?.waitTick?.({
+          dir,
+          attempt: tick.attempt,
+          delay: tick.delay,
+          waited: tick.waited,
+        }),
+    })
+
+    const need = await needsInstall(dir)
+    const pkg = path.join(dir, "package.json")
+    const ignore = path.join(dir, ".gitignore")
+    const target = Installation.isLocal() ? "*" : "latest"
+    const json = await Filesystem.readJson<Package>(pkg).catch((): Package => ({}))
+
+    if (json.dependencies?.["@opencode-ai/plugin"] !== target) {
+      await Filesystem.writeJson(pkg, {
+        ...json,
+        dependencies: {
+          ...json.dependencies,
+          "@opencode-ai/plugin": target,
+        },
+      })
+    }
+
+    if (!(await Filesystem.exists(ignore))) {
+      await Filesystem.write(
+        ignore,
+        ["node_modules", "package.json", "package-lock.json", "bun.lock", ".gitignore"].join("\n"),
+      )
+    }
+
+    if (!need) return
+    await Npm.install(dir)
   }
 
   function rel(item: string, patterns: string[]) {
@@ -734,6 +823,14 @@ export namespace Config {
       mdns: z.boolean().optional().describe("Enable mDNS service discovery"),
       mdnsDomain: z.string().optional().describe("Custom domain name for mDNS service (default: opencode.local)"),
       cors: z.array(z.string()).optional().describe("Additional domains to allow for CORS"),
+      webMode: z
+        .enum(["proxy", "direct"])
+        .optional()
+        .describe("Web UI delivery mode: proxy (default) serves frontend through server, direct loads from CDN"),
+      webUrl: z
+        .string()
+        .optional()
+        .describe("URL for the web frontend (CDN origin for direct mode, proxy target for proxy mode)"),
     })
     .strict()
     .meta({
@@ -1281,14 +1378,14 @@ export namespace Config {
         const pkg = path.join(dir, "package.json")
         const gitignore = path.join(dir, ".gitignore")
         const plugin = path.join(dir, "node_modules", "@opencode-ai", "plugin", "package.json")
-        const target = Installation.isLocal() ? "*" : Installation.VERSION
+        const target = Installation.isLocal() ? "*" : "latest"
         const json = yield* fs.readJson(pkg).pipe(
           Effect.catch(() => Effect.succeed({} satisfies Package)),
           Effect.map((x): Package => (isRecord(x) ? (x as Package) : {})),
         )
+        const need = yield* Effect.promise(() => needsInstall(dir))
         const hasDep = json.dependencies?.["@opencode-ai/plugin"] === target
         const hasIgnore = yield* fs.existsSafe(gitignore)
-        const hasPkg = yield* fs.existsSafe(plugin)
 
         if (!hasDep) {
           yield* fs.writeJson(pkg, {
@@ -1307,7 +1404,7 @@ export namespace Config {
           )
         }
 
-        if (hasDep && hasIgnore && hasPkg) return
+        if (!need) return
 
         yield* Effect.promise(() => Npm.install(dir))
       })
