@@ -73,6 +73,13 @@ import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
 const emptyUserMessages: UserMessage[] = []
 const scrollBottomThreshold = 16
 
+function list(value: unknown): FileDiff[] {
+  // Older/local session records have previously persisted malformed `summary.diffs`
+  // values. Treat anything non-array as "no diffs" so a bad record can't crash
+  // the entire session view while opening review.
+  return Array.isArray(value) ? value : []
+}
+
 type SessionHistoryWindowInput = {
   sessionID: () => string | undefined
   loaded: () => number
@@ -673,7 +680,6 @@ export default function Page() {
   }, desktopReviewOpen())
 
   const turnDiffs = createMemo(() => list(lastUserMessage()?.summary?.diffs))
-  const nogit = createMemo(() => !!sync.project && sync.project.vcs !== "git")
   const changesOptions = createMemo<ChangeMode[]>(() => {
     const list: ChangeMode[] = []
     if (sync.project?.vcs === "git") list.push("git")

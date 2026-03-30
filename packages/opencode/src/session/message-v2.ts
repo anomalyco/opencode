@@ -589,14 +589,20 @@ type Cursor = typeof Cursor.Type
 
 const decodeCursor = Schema.decodeUnknownSync(Cursor)
 
-export const cursor = {
-  encode(input: Cursor) {
-    return Buffer.from(JSON.stringify(input)).toString("base64url")
-  },
-  decode(input: string) {
-    return decodeCursor(JSON.parse(Buffer.from(input, "base64url").toString("utf8")))
-  },
-}
+  const info = (row: typeof MessageTable.$inferSelect) =>
+    (() => {
+      const value = {
+        ...row.data,
+        id: row.id,
+        sessionID: row.session_id,
+      } as MessageV2.Info
+
+      if (value.role === "user" && value.summary && !Array.isArray(value.summary.diffs)) {
+        value.summary.diffs = []
+      }
+
+      return value
+    })()
 
 const info = (row: typeof MessageTable.$inferSelect) =>
   ({
