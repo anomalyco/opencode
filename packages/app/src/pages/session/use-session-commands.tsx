@@ -27,6 +27,7 @@ import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { decode64 } from "@/utils/base64"
 import { dict as enDict } from "@/i18n/en"
+import { working as sessionWorking } from "./session-working"
 
 export type SessionCommandContext = {
   command: ReturnType<typeof useCommand>
@@ -118,6 +119,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     if (!id) return []
     return sync.data.message[id] ?? []
   }
+  const busy = () => sessionWorking(status(), messages())
   const userMessages = () => messages().filter((m) => m.role === "user") as UserMessage[]
   const visibleUserMessages = () => {
     const revert = info()?.revert?.messageID
@@ -750,7 +752,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         onSelect: async () => {
           const sessionID = params.id
           if (!sessionID) return
-          if (status().type !== "idle") {
+          if (busy()) {
             await sdk.client.session.abort({ sessionID }).catch(() => {})
           }
           const revert = info()?.revert?.messageID

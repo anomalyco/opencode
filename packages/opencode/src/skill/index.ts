@@ -7,12 +7,12 @@ import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
 import { Global } from "@opencode-ai/core/global"
 import { Permission } from "@/permission"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { Config } from "@/config/config"
-import { ConfigMarkdown } from "@/config/markdown"
-import { RuntimeFlags } from "@/effect/runtime-flags"
-import { Glob } from "@opencode-ai/core/util/glob"
-import * as Log from "@opencode-ai/core/util/log"
+import { QuickAssistant } from "@/quick-assistant"
+import { Filesystem } from "@/util/filesystem"
+import { Config } from "../config/config"
+import { ConfigMarkdown } from "../config/markdown"
+import { Glob } from "../util/glob"
+import { Log } from "../util/log"
 import { Discovery } from "./discovery"
 import CUSTOMIZE_OPENCODE_SKILL_BODY from "./prompt/customize-opencode.md" with { type: "text" }
 import { isRecord } from "@/util/record"
@@ -294,10 +294,18 @@ export const layer = Layer.effect(
       return yield* new NotFoundError({ name, available: Object.keys(s.skills).toSorted() })
     })
 
-    const all = Effect.fn("Skill.all")(function* () {
-      const s = yield* InstanceState.get(state)
-      return Object.values(s.skills)
-    })
+    const load = async () => {
+      if (QuickAssistant.active(directory)) {
+        log.info("skip quick assistant skills", { directory })
+        return
+      }
+
+      if (!Flag.OPENCODE_DISABLE_EXTERNAL_SKILLS) {
+        for (const dir of EXTERNAL_DIRS) {
+          const root = path.join(Global.Path.home, dir)
+          if (!(await Filesystem.isDir(root))) continue
+          await scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
+        }
 
     const dirs = Effect.fn("Skill.dirs")(function* () {
       return (yield* InstanceState.get(discovered)).dirs

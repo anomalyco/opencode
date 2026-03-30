@@ -64,6 +64,7 @@ import { DialogPromptEditor } from "@/components/dialog-prompt-editor"
 import { Popover } from "@opencode-ai/ui/popover"
 import { getFilename } from "@opencode-ai/util/path"
 import { merge, value } from "./prompt-input/expand"
+import { working as sessionWorking } from "@/pages/session/session-working"
 
 interface PromptInputProps {
   class?: string
@@ -470,7 +471,35 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return paths
   })
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
-  const working = createMemo(() => sync.data.session_working(params.id ?? ""))
+  const status = createMemo(
+    () =>
+      sync.data.session_status[params.id ?? ""] ?? {
+        type: "idle",
+      },
+  )
+  const messages = createMemo(() => {
+    const id = params.id
+    if (!id) return []
+    return sync.data.message[id] ?? []
+  })
+  const working = createMemo(() => sessionWorking(status(), messages()))
+  const tip = () => {
+    if (working()) {
+      return (
+        <div class="flex items-center gap-2">
+          <span>{language.t("prompt.action.stop")}</span>
+          <span class="text-icon-base text-12-medium text-[10px]!">{language.t("common.key.esc")}</span>
+        </div>
+      )
+    }
+
+    return (
+      <div class="flex items-center gap-2">
+        <span>{language.t("prompt.action.send")}</span>
+        <Icon name="enter" size="small" class="text-icon-base" />
+      </div>
+    )
+  }
   const imageAttachments = createMemo(() =>
     prompt.current().filter((part): part is ImageAttachmentPart => part.type === "image"),
   )

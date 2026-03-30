@@ -73,6 +73,7 @@ import { DialogSelectSkill } from "@/components/dialog-select-skill"
 import { DialogSelectTheme } from "@/components/dialog-select-theme"
 import { DialogSwitchProject } from "@/components/dialog-switch-project"
 import { DebugBar } from "@/components/debug-bar"
+import { QuickAssistant } from "@/components/quick-assistant"
 import { Titlebar } from "@/components/titlebar"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { ServerConnection, useServer } from "@/context/server"
@@ -4042,6 +4043,7 @@ export default function Layout(props: ParentProps) {
         </div>
         {import.meta.env.DEV && <DebugBar />}
       </div>
+      <QuickAssistant />
       <Toast.Region />
     </div>
   )

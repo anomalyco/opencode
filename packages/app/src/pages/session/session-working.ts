@@ -16,6 +16,9 @@ export function active(list: Message[] | undefined): AssistantMessage | undefine
 }
 
 export function working(status: SessionStatus | undefined, list: Message[] | undefined) {
-  if ((status ?? idle).type !== "idle") return true
+  if ((status ?? idle).type === "idle") return active(list) !== undefined
+  const last = list?.at(-1)
+  if (!last || last.role !== "assistant") return true
+  if (typeof last.time.completed !== "number") return true
   return active(list) !== undefined
 }
