@@ -213,9 +213,9 @@ export namespace Provider {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
           if (modelID === "auto") {
-            const providerModels = Object.keys(input.models).filter((id) => id !== "auto")
+            const models = Object.values(input.models).filter((m) => m.id !== "auto")
             return createCopilotAutoModel({
-              providerModels,
+              models,
               createModel(resolvedModelId: string) {
                 if (useLanguageModel(sdk)) return sdk.languageModel(resolvedModelId)
                 return shouldUseCopilotResponsesApi(resolvedModelId)

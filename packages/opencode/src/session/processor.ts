@@ -16,7 +16,7 @@ import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
-import type { Provider } from "@/provider/provider"
+import { Provider } from "@/provider/provider"
 import { Question } from "@/question"
 
 export namespace SessionProcessor {
@@ -108,7 +108,17 @@ export namespace SessionProcessor {
           switch (value.type) {
             case "start":
               yield* status.set(ctx.sessionID, { type: "busy" })
+              // Show the resolved model in the message header when using auto selection
+              if (ctx.assistantMessage.modelID === ("auto" as any) && ctx.model.id === ("auto" as any)) {
+                const language = yield* Effect.promise(() => Provider.getLanguage(ctx.model))
+                const resolved = (language as any).resolvedModelId
+                if (resolved) {
+                  ctx.assistantMessage.modelID = resolved as any
+                  yield* session.updateMessage(ctx.assistantMessage)
+                }
+              }
               return
+
 
             case "reasoning-start":
               if (value.id in ctx.reasoningMap) return

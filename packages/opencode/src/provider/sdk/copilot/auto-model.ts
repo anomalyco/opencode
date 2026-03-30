@@ -6,30 +6,33 @@ import { Log } from "@/util/log"
 
 const log = Log.create({ service: "copilot-auto" })
 
+interface ModelInfo {
+  id: string
+  name: string
+  capabilities: {
+    reasoning: boolean
+    toolcall: boolean
+  }
+  limit: {
+    context: number
+    output: number
+  }
+}
+
 interface CopilotAutoModelOptions {
-  providerModels: string[]
+  models: ModelInfo[]
   createModel: (modelId: string) => LanguageModelV3
 }
 
 /**
- * Model tiers for client-side routing.
- * Ordered from most capable (reasoning-heavy) to lightweight.
- */
-const REASONING_MODELS = ["claude-opus-4.6", "claude-opus-4.5", "claude-opus-41", "gpt-5.4", "gpt-5.2", "gpt-5.1", "gpt-5"]
-const STANDARD_MODELS = ["claude-sonnet-4.6", "claude-sonnet-4.5", "claude-sonnet-4", "gpt-5.1-codex", "gpt-5.2-codex", "gpt-5.3-codex", "gemini-3-pro-preview", "gemini-2.5-pro", "gpt-4.1"]
-const FAST_MODELS = ["gpt-5-mini", "gpt-5.4-mini", "gpt-5.1-codex-mini", "claude-haiku-4.5", "gemini-3-flash-preview"]
-
-/**
- * Simple heuristics to classify a prompt's complexity.
+ * Classify prompt complexity based on the last user message.
  */
 function classifyPrompt(promptText: string): "reasoning" | "standard" | "fast" {
   const lower = promptText.toLowerCase()
   const len = promptText.length
 
-  // Short simple prompts → fast model
   if (len < 100) return "fast"
 
-  // Reasoning indicators
   const reasoningPatterns = [
     /\b(explain|why|analyze|compare|trade.?off|architect|design|plan|debug|refactor|review|security|audit)\b/,
     /\b(complex|difficult|tricky|subtle|edge.?case|race.?condition|concurren)/,
@@ -38,43 +41,61 @@ function classifyPrompt(promptText: string): "reasoning" | "standard" | "fast" {
   ]
   if (reasoningPatterns.some((p) => p.test(lower))) return "reasoning"
 
-  // Long prompts with code → standard
   if (len > 2000) return "standard"
-
-  // Code-heavy prompts → standard
   if ((promptText.match(/```/g)?.length ?? 0) >= 2) return "standard"
   if ((promptText.match(/\n/g)?.length ?? 0) > 20) return "standard"
 
-  // Default to standard
   return "standard"
 }
 
+/**
+ * Extract only the last user message for classification.
+ */
 function extractPromptText(options: LanguageModelV3CallOptions): string {
   const parts: string[] = []
-  for (const msg of options.prompt) {
+  for (let i = options.prompt.length - 1; i >= 0; i--) {
+    const msg = options.prompt[i]
     if (msg.role === "user") {
       for (const part of msg.content) {
         if (part.type === "text") {
           parts.push(part.text)
         }
       }
+      break
     }
   }
   return parts.join("\n")
 }
 
 /**
- * CopilotAutoLanguageModel implements LanguageModelV3 and automatically
- * selects the best available model for each request using client-side
- * heuristics based on prompt complexity.
+ * Classify a model into a tier based on its metadata.
  *
- * The Copilot server-side routing API (/models/session) is restricted to
- * first-party clients (VS Code). This implementation provides equivalent
- * functionality using local classification:
- *
- * - Reasoning-heavy prompts → most capable model (Opus, GPT-5.4, etc.)
- * - Standard coding tasks → balanced model (Sonnet, Codex, GPT-4.1, etc.)
- * - Simple/short prompts → fast model (Mini, Haiku, Flash, etc.)
+ * - "reasoning": has reasoning capability and large output limits (>16K)
+ * - "fast": small output limit (<8K) or name contains mini/haiku/flash/nano
+ * - "standard": everything else
+ */
+function classifyModel(model: ModelInfo): "reasoning" | "standard" | "fast" {
+  const lower = model.id.toLowerCase()
+
+  if (/mini|haiku|flash|nano/.test(lower)) return "fast"
+
+  if (model.capabilities.reasoning && model.limit.output > 16384) return "reasoning"
+
+  return "standard"
+}
+
+/**
+ * Sort models within a tier by capability (larger context/output first).
+ */
+function sortByCapability(a: ModelInfo, b: ModelInfo): number {
+  if (b.limit.output !== a.limit.output) return b.limit.output - a.limit.output
+  return b.limit.context - a.limit.context
+}
+
+/**
+ * CopilotAutoLanguageModel selects the best available model for each
+ * request using the model metadata from the provider (capabilities,
+ * context limits, output limits) — no hardcoded model lists.
  */
 export class CopilotAutoLanguageModel implements LanguageModelV3 {
   readonly specificationVersion = "v3"
@@ -82,53 +103,73 @@ export class CopilotAutoLanguageModel implements LanguageModelV3 {
   readonly provider = "github-copilot.auto"
   readonly supportsStructuredOutputs = false
 
+  private _lastResolvedModelId: string | null = null
   private readonly options: CopilotAutoModelOptions
+  private readonly tiers: {
+    reasoning: ModelInfo[]
+    standard: ModelInfo[]
+    fast: ModelInfo[]
+  }
+
+  get resolvedModelId(): string | null {
+    return this._lastResolvedModelId
+  }
 
   constructor(options: CopilotAutoModelOptions) {
     this.options = options
+
+    const reasoning: ModelInfo[] = []
+    const standard: ModelInfo[] = []
+    const fast: ModelInfo[] = []
+
+    for (const model of options.models) {
+      const tier = classifyModel(model)
+      switch (tier) {
+        case "reasoning": reasoning.push(model); break
+        case "standard": standard.push(model); break
+        case "fast": fast.push(model); break
+      }
+    }
+
+    this.tiers = {
+      reasoning: reasoning.sort(sortByCapability),
+      standard: standard.sort(sortByCapability),
+      fast: fast.sort(sortByCapability),
+    }
+
+    log.info("auto model tiers", {
+      reasoning: this.tiers.reasoning.map((m) => m.id),
+      standard: this.tiers.standard.map((m) => m.id),
+      fast: this.tiers.fast.map((m) => m.id),
+    })
   }
 
   get supportedUrls() {
     return {}
   }
 
-  private findBestAvailable(tier: string[]): string | undefined {
-    for (const model of tier) {
-      if (this.options.providerModels.some((m) => m.includes(model))) {
-        return this.options.providerModels.find((m) => m.includes(model))
+  private pickFromTier(classification: "reasoning" | "standard" | "fast"): string {
+    const order: Array<"reasoning" | "standard" | "fast"> =
+      classification === "reasoning" ? ["reasoning", "standard", "fast"] :
+      classification === "fast" ? ["fast", "standard", "reasoning"] :
+      ["standard", "reasoning", "fast"]
+
+    for (const tier of order) {
+      if (this.tiers[tier].length > 0) {
+        return this.tiers[tier][0].id
       }
     }
-    return undefined
+
+    // Ultimate fallback
+    return this.options.models[0].id
   }
 
   private resolveModel(callOptions: LanguageModelV3CallOptions): LanguageModelV3 {
     const promptText = extractPromptText(callOptions)
     const classification = classifyPrompt(promptText)
+    const selectedModelId = this.pickFromTier(classification)
 
-    let selectedModelId: string | undefined
-    switch (classification) {
-      case "reasoning":
-        selectedModelId = this.findBestAvailable(REASONING_MODELS)
-          ?? this.findBestAvailable(STANDARD_MODELS)
-          ?? this.findBestAvailable(FAST_MODELS)
-        break
-      case "standard":
-        selectedModelId = this.findBestAvailable(STANDARD_MODELS)
-          ?? this.findBestAvailable(REASONING_MODELS)
-          ?? this.findBestAvailable(FAST_MODELS)
-        break
-      case "fast":
-        selectedModelId = this.findBestAvailable(FAST_MODELS)
-          ?? this.findBestAvailable(STANDARD_MODELS)
-          ?? this.findBestAvailable(REASONING_MODELS)
-        break
-    }
-
-    if (!selectedModelId) {
-      // Ultimate fallback: first available model
-      selectedModelId = this.options.providerModels[0]
-    }
-
+    this._lastResolvedModelId = selectedModelId
     log.info("auto model selected", {
       classification,
       modelId: selectedModelId,
