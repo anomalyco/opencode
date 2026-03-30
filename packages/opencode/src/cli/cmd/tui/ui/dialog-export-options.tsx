@@ -103,6 +103,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
           ref={(val: TextareaRenderable) => (textarea = val)}
           initialValue={props.defaultFilename}
           placeholder="Enter filename"
+          placeholderColor={theme.textMuted}
           textColor={theme.text}
           focusedTextColor={theme.text}
           cursorColor={theme.text}

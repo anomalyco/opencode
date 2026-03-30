@@ -199,11 +199,19 @@ export namespace LLM {
       input.model.providerID.toLowerCase().includes("litellm") ||
       input.model.api.id.toLowerCase().includes("litellm")
 
+    // LiteLLM/Bedrock rejects requests where the message history contains tool
+    // calls but no tools param is present. When there are no active tools (e.g.
+    // during compaction), inject a stub tool to satisfy the validation requirement.
+    // The stub description explicitly tells the model not to call it.
     if (isLiteLLMProxy && Object.keys(tools).length === 0 && hasToolCalls(input.messages)) {
       tools["_noop"] = tool({
-        description:
-          "Placeholder for LiteLLM/Anthropic proxy compatibility - required when message history contains tool calls but no active tools are needed",
-        inputSchema: jsonSchema({ type: "object", properties: {} }),
+        description: "Do not call this tool. It exists only for API compatibility and must never be invoked.",
+        inputSchema: jsonSchema({
+          type: "object",
+          properties: {
+            reason: { type: "string", description: "Unused" },
+          },
+        }),
         execute: async () => ({ output: "", title: "", metadata: {} }),
       })
     }
