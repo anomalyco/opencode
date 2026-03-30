@@ -356,6 +356,90 @@
         ]
       }
     },
+    "/log": {
+      "post": {
+        "operationId": "app.log",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Write log",
+        "description": "Write a log entry to the server logs with specified level and metadata.",
+        "responses": {
+          "200": {
+            "description": "Log entry written successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "service": {
+                    "description": "Service name for the log entry",
+                    "type": "string"
+                  },
+                  "level": {
+                    "description": "Log level",
+                    "type": "string",
+                    "enum": ["debug", "info", "error", "warn"]
+                  },
+                  "message": {
+                    "description": "Log message",
+                    "type": "string"
+                  },
+                  "extra": {
+                    "description": "Additional metadata for the log entry",
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  }
+                },
+                "required": ["service", "level", "message"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.app.log({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/project": {
       "get": {
         "operationId": "project.list",
@@ -6762,90 +6846,6 @@
         ]
       }
     },
-    "/log": {
-      "post": {
-        "operationId": "app.log",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "directory",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "workspace",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "summary": "Write log",
-        "description": "Write a log entry to the server logs with specified level and metadata.",
-        "responses": {
-          "200": {
-            "description": "Log entry written successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "boolean"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
-                }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "service": {
-                    "description": "Service name for the log entry",
-                    "type": "string"
-                  },
-                  "level": {
-                    "description": "Log level",
-                    "type": "string",
-                    "enum": ["debug", "info", "error", "warn"]
-                  },
-                  "message": {
-                    "description": "Log message",
-                    "type": "string"
-                  },
-                  "extra": {
-                    "description": "Additional metadata for the log entry",
-                    "type": "object",
-                    "propertyNames": {
-                      "type": "string"
-                    },
-                    "additionalProperties": {}
-                  }
-                },
-                "required": ["service", "level", "message"]
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.app.log({\n  ...\n})"
-          }
-        ]
-      }
-    },
     "/agent": {
       "get": {
         "operationId": "app.agents",
@@ -10961,15 +10961,34 @@
               }
             }
           },
-          "plugin": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
           "snapshot": {
             "description": "Enable or disable snapshot tracking. When false, filesystem snapshots are not recorded and undoing or reverting will not undo/redo file changes. Defaults to true.",
             "type": "boolean"
+          },
+          "plugin": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {}
+                    }
+                  ]
+                }
+              ]
+            }
           },
           "share": {
             "description": "Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing",

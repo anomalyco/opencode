@@ -9,11 +9,13 @@ import { ProjectTable } from "../project/project.sql"
 import type { ProjectID } from "../project/schema"
 import { Log } from "../util/log"
 import { Slug } from "@opencode-ai/util/slug"
+import { errorMessage } from "../util/error"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
-import { Effect, FileSystem, Layer, Path, Scope, ServiceMap, Stream } from "effect"
+import { Effect, Layer, Path, Scope, ServiceMap, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import { NodeFileSystem, NodePath } from "@effect/platform-node"
+import { NodePath } from "@effect/platform-node"
+import { AppFileSystem } from "@/filesystem"
 import { makeRuntime } from "@/effect/run-service"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 
@@ -167,14 +169,15 @@ export namespace Worktree {
   export const layer: Layer.Layer<
     Service,
     never,
-    FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
+    AppFileSystem.Service | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Project.Service
   > = Layer.effect(
     Service,
     Effect.gen(function* () {
       const scope = yield* Scope.Scope
-      const fsys = yield* FileSystem.FileSystem
+      const fs = yield* AppFileSystem.Service
       const pathSvc = yield* Path.Path
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+      const project = yield* Project.Service
 
       const git = Effect.fnUntraced(
         function* (args: string[], opts?: { cwd?: string }) {
@@ -201,7 +204,7 @@ export namespace Worktree {
           const branch = `opencode/${name}`
           const directory = pathSvc.join(root, name)
 
-          if (yield* fsys.exists(directory).pipe(Effect.orDie)) continue
+          if (yield* fs.exists(directory).pipe(Effect.orDie)) continue
 
           const ref = `refs/heads/${branch}`
           const branchCheck = yield* git(["show-ref", "--verify", "--quiet", ref], { cwd: Instance.worktree })
@@ -218,7 +221,7 @@ export namespace Worktree {
         }
 
         const root = pathSvc.join(Global.Path.data, "worktree", Instance.project.id)
-        yield* fsys.makeDirectory(root, { recursive: true }).pipe(Effect.orDie)
+        yield* fs.makeDirectory(root, { recursive: true }).pipe(Effect.orDie)
 
         const base = name ? slugify(name) : ""
         return yield* candidate(root, base || undefined)
@@ -232,7 +235,7 @@ export namespace Worktree {
           throw new CreateFailedError({ message: created.stderr || created.text || "Failed to create git worktree" })
         }
 
-        yield* Effect.promise(() => Project.addSandbox(Instance.project.id, info.directory).catch(() => undefined))
+        yield* project.addSandbox(Instance.project.id, info.directory).pipe(Effect.catch(() => Effect.void))
       })
 
       const boot = Effect.fnUntraced(function* (info: Info, startCommand?: string) {
@@ -258,7 +261,7 @@ export namespace Worktree {
           })
             .then(() => true)
             .catch((error) => {
-              const message = error instanceof Error ? error.message : String(error)
+              const message = errorMessage(error)
               log.error("worktree bootstrap failed", { directory: info.directory, message })
               GlobalBus.emit("event", {
                 directory: info.directory,
@@ -297,7 +300,7 @@ export namespace Worktree {
 
       const canonical = Effect.fnUntraced(function* (input: string) {
         const abs = pathSvc.resolve(input)
-        const real = yield* fsys.realPath(abs).pipe(Effect.catch(() => Effect.succeed(abs)))
+        const real = yield* fs.realPath(abs).pipe(Effect.catch(() => Effect.succeed(abs)))
         const normalized = pathSvc.normalize(real)
         return process.platform === "win32" ? normalized.toLowerCase() : normalized
       })
@@ -334,7 +337,7 @@ export namespace Worktree {
       })
 
       function stopFsmonitor(target: string) {
-        return fsys.exists(target).pipe(
+        return fs.exists(target).pipe(
           Effect.orDie,
           Effect.flatMap((exists) => (exists ? git(["fsmonitor--daemon", "stop"], { cwd: target }) : Effect.void)),
         )
@@ -342,9 +345,12 @@ export namespace Worktree {
 
       function cleanDirectory(target: string) {
         return Effect.promise(() =>
-          import("fs/promises").then((fsp) =>
-            fsp.rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }),
-          ),
+          import("fs/promises")
+            .then((fsp) => fsp.rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
+            .catch((error) => {
+              const message = errorMessage(error)
+              throw new RemoveFailedError({ message: message || "Failed to remove git worktree directory" })
+            }),
         )
       }
 
@@ -364,7 +370,7 @@ export namespace Worktree {
         const entry = yield* locateWorktree(entries, directory)
 
         if (!entry?.path) {
-          const directoryExists = yield* fsys.exists(directory).pipe(Effect.orDie)
+          const directoryExists = yield* fs.exists(directory).pipe(Effect.orDie)
           if (directoryExists) {
             yield* stopFsmonitor(directory)
             yield* cleanDirectory(directory)
@@ -464,7 +470,7 @@ export namespace Worktree {
               const target = yield* canonical(pathSvc.resolve(root, entry))
               if (target === base) return
               if (!target.startsWith(`${base}${pathSvc.sep}`)) return
-              yield* fsys.remove(target, { recursive: true }).pipe(Effect.ignore)
+              yield* fs.remove(target, { recursive: true }).pipe(Effect.ignore)
             }),
           { concurrency: "unbounded" },
         )
@@ -603,8 +609,9 @@ export namespace Worktree {
   )
 
   const defaultLayer = layer.pipe(
-    Layer.provide(CrossSpawnSpawner.layer),
-    Layer.provide(NodeFileSystem.layer),
+    Layer.provide(CrossSpawnSpawner.defaultLayer),
+    Layer.provide(Project.defaultLayer),
+    Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(NodePath.layer),
   )
   const { runPromise } = makeRuntime(Service, defaultLayer)
