@@ -41,7 +41,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { Duration, Effect, Layer, Option, ServiceMap } from "effect"
 import { Flock } from "@/util/flock"
-import { isPathPluginSpec, parsePluginSpecifier } from "@/plugin/shared"
+import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "@/plugin/shared"
 
 export namespace Config {
   const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
@@ -373,8 +373,10 @@ export namespace Config {
       return pathToFileURL(path.resolve(base, spec)).href
     })()
 
-    if (Array.isArray(plugin)) return [file, plugin[1]]
-    return file
+    const resolved = await resolvePathPluginTarget(file).catch(() => file)
+
+    if (Array.isArray(plugin)) return [resolved, plugin[1]]
+    return resolved
   }
 
   /**

@@ -1852,6 +1852,20 @@ describe("resolvePluginSpec", () => {
     const hit = await Config.resolvePluginSpec("./plugin", file)
     expect(Config.pluginSpecifier(hit)).toBe(pathToFileURL(path.join(tmp.path, "plugin")).href)
   })
+
+  test("resolves plugin directories without package.json to index.ts", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const plugin = path.join(dir, "plugin")
+        await fs.mkdir(plugin, { recursive: true })
+        await Filesystem.write(path.join(plugin, "index.ts"), "export default {}")
+      },
+    })
+
+    const file = path.join(tmp.path, "opencode.json")
+    const hit = await Config.resolvePluginSpec("./plugin", file)
+    expect(Config.pluginSpecifier(hit)).toBe(pathToFileURL(path.join(tmp.path, "plugin", "index.ts")).href)
+  })
 })
 
 describe("deduplicatePlugins", () => {

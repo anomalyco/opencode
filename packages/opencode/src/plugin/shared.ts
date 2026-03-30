@@ -37,6 +37,8 @@ export type PluginEntry = {
   entry: string
 }
 
+const INDEX_FILES = ["index.ts", "index.tsx", "index.js", "index.mjs", "index.cjs"]
+
 export function pluginSource(spec: string): PluginSource {
   if (isPathPluginSpec(spec)) return "file"
   return "npm"
@@ -89,28 +91,27 @@ function resolvePackageEntrypoint(spec: string, kind: PluginKind, pkg: PluginPac
   return resolvePackagePath(spec, main, kind, pkg)
 }
 
-function targetFile(target: string) {
+function targetPath(target: string) {
   if (target.startsWith("file://")) return fileURLToPath(target)
   if (path.isAbsolute(target) || /^[A-Za-z]:[\\/]/.test(target)) return target
-  if (target.startsWith(".")) return path.resolve(target)
 }
 
-function sameTarget(left: string, right: string) {
-  const a = targetFile(left)
-  const b = targetFile(right)
-  if (!a || !b) return left === right
-  return Filesystem.resolve(a) === Filesystem.resolve(b)
+async function resolveDirectoryIndex(dir: string) {
+  for (const name of INDEX_FILES) {
+    const file = path.join(dir, name)
+    if (await Filesystem.exists(file)) return file
+  }
 }
 
-function usesMainTarget(target: string, pkg: PluginPackage) {
-  const main = packageMain(pkg)
-  if (!main) return false
-  const file = targetFile(target)
-  if (!file) return false
-  return Filesystem.resolve(file) === Filesystem.resolve(resolveExportPath(main, pkg.dir))
+async function resolveTargetDirectory(target: string) {
+  const file = targetPath(target)
+  if (!file) return
+  const stat = await Filesystem.stat(file)
+  if (!stat?.isDirectory()) return
+  return file
 }
 
-export async function resolvePluginEntrypoint(spec: string, target: string, kind: PluginKind, pkg?: PluginPackage) {
+async function resolvePluginEntrypoint(spec: string, target: string, kind: PluginKind, pkg?: PluginPackage) {
   const source = pluginSource(spec)
   const hit =
     pkg ?? (source === "npm" ? await readPluginPackage(target) : await readPluginPackage(target).catch(() => undefined))
@@ -119,12 +120,18 @@ export async function resolvePluginEntrypoint(spec: string, target: string, kind
   const entry = resolvePackageEntrypoint(spec, kind, hit)
   if (entry) return entry
 
-  if (
-    kind === "tui" &&
-    packageMain(hit) &&
-    (source === "npm" || (usesMainTarget(target, hit) && !sameTarget(spec, target)))
-  ) {
+  if (kind === "tui" && source === "npm" && packageMain(hit)) {
     throw new TypeError(`Plugin ${spec} must define package.json exports["./tui"]`)
+  }
+
+  if (kind === "tui" && source === "file") {
+    const dir = await resolveTargetDirectory(target)
+    if (!dir) return target
+    const index = await resolveDirectoryIndex(dir)
+    if (index) return pathToFileURL(index).href
+    if (packageMain(hit)) {
+      throw new TypeError(`Plugin ${spec} must define package.json exports["./tui"] or include index file`)
+    }
   }
 
   return target
@@ -143,12 +150,14 @@ export async function resolvePathPluginTarget(spec: string) {
     return pathToFileURL(file).href
   }
 
-  const pkg = await Filesystem.readJson<Record<string, unknown>>(path.join(file, "package.json")).catch(() => undefined)
-  if (!pkg) throw new Error(`Plugin directory ${file} is missing package.json`)
-  if (typeof pkg.main !== "string" || !pkg.main.trim()) {
-    throw new Error(`Plugin directory ${file} must define package.json main`)
+  if (await Filesystem.exists(path.join(file, "package.json"))) {
+    return pathToFileURL(file).href
   }
-  return pathToFileURL(path.resolve(file, pkg.main)).href
+
+  const index = await resolveDirectoryIndex(file)
+  if (index) return pathToFileURL(index).href
+
+  throw new Error(`Plugin directory ${file} is missing package.json or index file`)
 }
 
 export async function checkPluginCompatibility(target: string, opencodeVersion: string, pkg?: PluginPackage) {
