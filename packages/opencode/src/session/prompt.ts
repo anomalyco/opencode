@@ -1935,9 +1935,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               providerID: taskModel.providerID,
               modelID: taskModel.modelID,
             },
-            // TODO: how can we make task tool accept a more complex input?
             prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
           },
+          // Preserve file parts (images, PDFs) so multimodal subagents can
+          // receive visual content passed via input.parts.
+          ...(input.parts?.filter((p) => p.type === "file") ?? []),
         ]
       : [...templateParts, ...(input.parts ?? [])]
 
