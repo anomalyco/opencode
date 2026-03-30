@@ -31,6 +31,7 @@ import { ulid } from "ulid"
 import { spawn } from "child_process"
 import { Command } from "../command"
 import { pathToFileURL, fileURLToPath } from "url"
+import { Config } from "../config/config"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/util/error"
@@ -48,6 +49,8 @@ import { Process } from "@/util/process"
 import { Cause, Effect, Exit, Layer, Option, Scope, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
+import { Database, and, eq, sql } from "@/storage/db"
+import { PartTable } from "./session.sql"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -87,6 +90,7 @@ export namespace SessionPrompt {
       const processor = yield* SessionProcessor.Service
       const compaction = yield* SessionCompaction.Service
       const plugin = yield* Plugin.Service
+      const config = yield* Config.Service
       const commands = yield* Command.Service
       const permission = yield* Permission.Service
       const fsys = yield* AppFileSystem.Service
@@ -1482,10 +1486,50 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
                 yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
+                const cfg = yield* config.get()
+                const used = lastFinished
+                  ? lastFinished.tokens.total ||
+                    lastFinished.tokens.input +
+                      lastFinished.tokens.output +
+                      lastFinished.tokens.cache.read +
+                      lastFinished.tokens.cache.write
+                  : 0
+                const reserved = cfg.compaction?.reserved ?? Math.min(20_000, ProviderTransform.maxOutputTokens(model))
+                const trigger = model.limit.input
+                  ? model.limit.input - reserved
+                  : model.limit.context - ProviderTransform.maxOutputTokens(model)
+                const cap = Math.max(0, trigger)
+                const ratio = model.limit.context > 0 ? Math.max(0, Math.min(1, cap / model.limit.context)) : 0
+                const compactions =
+                  Database.use(
+                    (db) =>
+                      db
+                        .select({ count: sql<number>`count(*)` })
+                        .from(PartTable)
+                        .where(
+                          and(
+                            eq(PartTable.session_id, sessionID),
+                            sql`json_extract(${PartTable.data}, '$.type') = 'compaction'`,
+                          ),
+                        )
+                        .get()?.count,
+                  ) ?? 0
+                const max = agent.steps ?? "unbounded"
+                const budget = {
+                  max_context_tokens: model.limit.context,
+                  used_tokens: used,
+                  remaining_context_tokens: Math.max(0, cap - used),
+                  compaction_threshold: Number(ratio.toFixed(4)),
+                  compaction_triggers_at: cap,
+                  compactions_total: compactions,
+                  current_step: step,
+                  max_steps: max,
+                } as const
+
                 const [skills, env, instructions, modelMsgs] = yield* Effect.promise(() =>
                   Promise.all([
                     SystemPrompt.skills(agent),
-                    SystemPrompt.environment(model),
+                    SystemPrompt.environment(model, { budget }),
                     InstructionPrompt.system(),
                     MessageV2.toModelMessages(msgs, model),
                   ]),
@@ -1712,6 +1756,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         Layer.provide(Session.defaultLayer),
         Layer.provide(Agent.defaultLayer),
         Layer.provide(Bus.layer),
+        Layer.provide(Config.defaultLayer),
       ),
     ),
   )

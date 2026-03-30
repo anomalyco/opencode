@@ -16,6 +16,17 @@ import { Permission } from "@/permission"
 import { Skill } from "@/skill"
 
 export namespace SystemPrompt {
+  type Budget = {
+    max_context_tokens: number
+    used_tokens: number
+    remaining_context_tokens: number
+    compaction_threshold: number
+    compaction_triggers_at: number
+    compactions_total: number
+    current_step: number
+    max_steps: number | "unbounded"
+  }
+
   export function provider(model: Provider.Model) {
     if (model.api.id.includes("gpt-4") || model.api.id.includes("o1") || model.api.id.includes("o3"))
       return [PROMPT_BEAST]
@@ -31,31 +42,50 @@ export namespace SystemPrompt {
     return [PROMPT_DEFAULT]
   }
 
-  export async function environment(model: Provider.Model) {
+  export async function environment(model: Provider.Model, input?: { budget?: Budget }) {
     const project = Instance.project
-    return [
-      [
-        `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
-        `Here is some useful information about the environment you are running in:`,
-        `<env>`,
-        `  Working directory: ${Instance.directory}`,
-        `  Workspace root folder: ${Instance.worktree}`,
-        `  Is directory a git repo: ${project.vcs === "git" ? "yes" : "no"}`,
-        `  Platform: ${process.platform}`,
-        `  Today's date: ${new Date().toDateString()}`,
-        `</env>`,
-        `<directories>`,
-        `  ${
-          project.vcs === "git" && false
-            ? await Ripgrep.tree({
-                cwd: Instance.directory,
-                limit: 50,
-              })
-            : ""
-        }`,
-        `</directories>`,
-      ].join("\n"),
+    const budget = input?.budget
+    const lines = [
+      `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
+      `Here is some useful information about the environment you are running in:`,
+      `<env>`,
+      `  Working directory: ${Instance.directory}`,
+      `  Workspace root folder: ${Instance.worktree}`,
+      `  Is directory a git repo: ${project.vcs === "git" ? "yes" : "no"}`,
+      `  Platform: ${process.platform}`,
+      `  Today's date: ${new Date().toDateString()}`,
+      `</env>`,
     ]
+
+    if (budget) {
+      lines.push(
+        `<context-budget>`,
+        `  max_context_tokens: ${budget.max_context_tokens}`,
+        `  used_tokens: ${budget.used_tokens}`,
+        `  remaining_context_tokens: ${budget.remaining_context_tokens}`,
+        `  compaction_threshold: ${budget.compaction_threshold}`,
+        `  compaction_triggers_at: ${budget.compaction_triggers_at}`,
+        `  compactions_total: ${budget.compactions_total}`,
+        `  current_step: ${budget.current_step}`,
+        `  max_steps: ${budget.max_steps}`,
+        `</context-budget>`,
+      )
+    }
+
+    lines.push(
+      `<directories>`,
+      `  ${
+        project.vcs === "git" && false
+          ? await Ripgrep.tree({
+              cwd: Instance.directory,
+              limit: 50,
+            })
+          : ""
+      }`,
+      `</directories>`,
+    )
+
+    return [lines.join("\n")]
   }
 
   export async function skills(agent: Agent.Info) {
