@@ -95,16 +95,9 @@ export const QuestionTool = Tool.define("question", {
     ].join("\n")
   },
   async execute(params, ctx) {
-    const normalizedQuestions = normalizeQuestionsInput((params as { questions: unknown }).questions)
-    if (!Array.isArray(normalizedQuestions)) {
-      throw new Error(
-        "The question tool requires `questions` to normalize into an array of question objects before execution.",
-      )
-    }
-
     const answers = await Question.ask({
       sessionID: ctx.sessionID,
-      questions: normalizedQuestions,
+      questions: params.questions,
       tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
     })
 
@@ -113,10 +106,10 @@ export const QuestionTool = Tool.define("question", {
       return answer.join(", ")
     }
 
-    const formatted = normalizedQuestions.map((q, i) => `"${q.question}"="${format(answers[i])}"`).join(", ")
+    const formatted = params.questions.map((q, i) => `"${q.question}"="${format(answers[i])}"`).join(", ")
 
     return {
-      title: `Asked ${normalizedQuestions.length} question${normalizedQuestions.length > 1 ? "s" : ""}`,
+      title: `Asked ${params.questions.length} question${params.questions.length > 1 ? "s" : ""}`,
       output: `User has answered your questions: ${formatted}. You can now continue with the user's answers in mind.`,
       metadata: {
         answers,

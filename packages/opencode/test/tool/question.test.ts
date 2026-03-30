@@ -145,15 +145,15 @@ describe("tool.question", () => {
     )
   })
 
-  test("should normalize the exact multiline recovery prompt into a single question", () => {
-    const normalized = normalizeQuestionsInput(`このディレクトリの全ファイルを、書類、画像、動画、音声、開発、その他 のいずれかに分類して整理してください。
-最後に未分類ファイルがあればその他にいれてください。`)
+  test("should normalize a multiline free-form question into a single question", () => {
+    const normalized = normalizeQuestionsInput(`次の作業を進める前に確認したいです。
+どの言語で実装したいですか？`)
 
     expect(normalized).toEqual([
       {
         question:
-          "このディレクトリの全ファイルを、書類、画像、動画、音声、開発、その他 のいずれかに分類して整理してください。\n最後に未分類ファイルがあればその他にいれてください。",
-        header: "このディレクトリの全ファイルを、書類、画像、動画、音声...",
+          "次の作業を進める前に確認したいです。\nどの言語で実装したいですか？",
+        header: "次の作業を進める前に確認したいです。",
         options: [],
       },
     ])
