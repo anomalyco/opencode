@@ -304,6 +304,7 @@ const env = SessionPrompt.layer.pipe(
 )
 
 const it = testEffect(env)
+const unix = process.platform !== "win32" ? it.effect : it.effect.skip
 
 // Config that registers a custom "test" provider with a "test-model" model
 // so Provider.getModel("test", "test-model") succeeds inside the loop.
@@ -878,7 +879,7 @@ it.effect(
   30_000,
 )
 
-it.effect("shell captures stdout and stderr in completed tool output", () =>
+unix("shell captures stdout and stderr in completed tool output", () =>
   provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
@@ -903,7 +904,7 @@ it.effect("shell captures stdout and stderr in completed tool output", () =>
   ),
 )
 
-it.effect(
+unix(
   "shell updates running metadata before process exit",
   () =>
     withSh(() =>
@@ -937,7 +938,7 @@ it.effect(
   30_000,
 )
 
-it.effect(
+unix(
   "loop waits while shell runs and starts after shell exits",
   () =>
     provideTmpdirInstance(
@@ -971,7 +972,7 @@ it.effect(
   30_000,
 )
 
-it.effect(
+unix(
   "shell completion resumes queued loop callers",
   () =>
     provideTmpdirInstance(
@@ -1007,7 +1008,7 @@ it.effect(
   30_000,
 )
 
-it.effect(
+unix(
   "cancel interrupts shell and resolves cleanly",
   () =>
     withSh(() =>
@@ -1044,7 +1045,7 @@ it.effect(
   30_000,
 )
 
-it.effect(
+unix(
   "cancel persists aborted shell result when shell ignores TERM",
   () =>
     withSh(() =>
@@ -1076,7 +1077,7 @@ it.effect(
   30_000,
 )
 
-it.effect(
+unix(
   "cancel interrupts loop queued behind shell",
   () =>
     provideTmpdirInstance(
@@ -1104,7 +1105,7 @@ it.effect(
   30_000,
 )
 
-it.effect(
+unix(
   "shell rejects when another shell is already running",
   () =>
     withSh(() =>
