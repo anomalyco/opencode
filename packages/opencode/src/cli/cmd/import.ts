@@ -2,6 +2,7 @@ import type { Argv } from "yargs"
 import type { Session as SDKSession, Message, Part } from "@opencode-ai/sdk/v2"
 import { Session } from "../../session"
 import { MessageV2 } from "../../session/message-v2"
+import { Todo } from "../../session/todo"
 import { cmd } from "./cmd"
 import { bootstrap } from "../bootstrap"
 import { Database } from "../../storage/db"
@@ -92,6 +93,7 @@ export const ImportCommand = cmd({
               info: Message
               parts: Part[]
             }>
+            todos?: Todo.Info[]
           }
         | undefined
 
@@ -198,6 +200,11 @@ export const ImportCommand = cmd({
               .run(),
           )
         }
+      }
+
+      if (exportData.todos && exportData.todos.length > 0) {
+        const todos = exportData.todos.map((t) => Todo.Info.parse(t))
+        Todo.update({ sessionID: info.id, todos })
       }
 
       process.stdout.write(`Imported session: ${exportData.info.id}`)
