@@ -37,6 +37,9 @@ import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { BrowserDaemon } from "./browser/daemon"
 
+// Set process title so system monitor shows "athena" not "bun" or "opencode"
+process.title = "athena"
+
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
     e: errorMessage(e),
