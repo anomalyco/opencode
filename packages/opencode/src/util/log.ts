@@ -8,6 +8,23 @@ import { Glob } from "./glob"
 export namespace Log {
   export const Level = z.enum(["DEBUG", "INFO", "WARN", "ERROR"]).meta({ ref: "LogLevel", description: "Log level" })
   export type Level = z.infer<typeof Level>
+  export const Entry = z
+    .object({
+      id: z.string(),
+      time: z.number(),
+      level: Level,
+      service: z.string(),
+      message: z.string(),
+      extra: z.record(z.string(), z.any()).optional(),
+    })
+    .meta({ ref: "LogEntry", description: "Structured server log entry" })
+  export type Entry = z.infer<typeof Entry>
+  export interface Filter {
+    limit?: number
+    service?: string
+    level?: Level
+    sessionID?: string
+  }
 
   const levelPriority: Record<Level, number> = {
     DEBUG: 0,
@@ -39,6 +56,9 @@ export namespace Log {
   }
 
   const loggers = new Map<string, Logger>()
+  const subscribers = new Set<(entry: Entry) => void>()
+  const recent: Entry[] = []
+  const RECENT_LIMIT = 400
 
   export const Default = create({ service: "default" })
 
@@ -49,12 +69,18 @@ export namespace Log {
   }
 
   let logpath = ""
+  let sequence = 0
   export function file() {
     return logpath
   }
   let write = (msg: any) => {
     process.stderr.write(msg)
     return msg.length
+  }
+
+  function nextID(time: number) {
+    sequence += 1
+    return `${time}-${sequence}`
   }
 
   export async function init(options: Options) {
@@ -96,6 +122,60 @@ export namespace Log {
       : result
   }
 
+  function stringify(value: unknown) {
+    if (value instanceof Error) return formatError(value)
+    if (typeof value === "string") return value
+    if (value === undefined) return ""
+    if (typeof value === "object") {
+      try {
+        return JSON.stringify(value)
+      } catch {
+        return String(value)
+      }
+    }
+    return String(value)
+  }
+
+  function normalizeExtra(value: Record<string, any>) {
+    const entries = Object.entries(value).filter(([_, item]) => item !== undefined && item !== null)
+    if (!entries.length) return
+    return Object.fromEntries(entries)
+  }
+
+  function publish(entry: Entry) {
+    recent.push(entry)
+    if (recent.length > RECENT_LIMIT) {
+      recent.splice(0, recent.length - RECENT_LIMIT)
+    }
+
+    for (const subscriber of subscribers) {
+      try {
+        subscriber(entry)
+      } catch {}
+    }
+  }
+
+  function formatPrefix(extra?: Record<string, any>) {
+    return Object.entries(extra ?? {})
+      .map(([key, value]) => `${key}=${stringify(value)}`)
+      .join(" ")
+  }
+
+  function formatLine(entry: Entry, diff: number) {
+    const prefix = formatPrefix({
+      service: entry.service,
+      ...entry.extra,
+    })
+    return [
+      new Date(entry.time).toISOString().split(".")[0],
+      "+" + diff + "ms",
+      prefix,
+      entry.message,
+    ]
+      .filter(Boolean)
+      .join(" ") + "\n"
+  }
+
   let last = Date.now()
   export function create(tags?: Record<string, any>) {
     tags = tags || {}
@@ -108,43 +188,56 @@ export namespace Log {
       }
     }
 
-    function build(message: any, extra?: Record<string, any>) {
-      const prefix = Object.entries({
-        ...tags,
-        ...extra,
-      })
-        .filter(([_, value]) => value !== undefined && value !== null)
-        .map(([key, value]) => {
-          const prefix = `${key}=`
-          if (value instanceof Error) return prefix + formatError(value)
-          if (typeof value === "object") return prefix + JSON.stringify(value)
-          return prefix + value
-        })
-        .join(" ")
+    function buildEntry(level: Level, message: any, extra?: Record<string, any>) {
       const next = new Date()
       const diff = next.getTime() - last
       last = next.getTime()
-      return [next.toISOString().split(".")[0], "+" + diff + "ms", prefix, message].filter(Boolean).join(" ") + "\n"
+      const combined = normalizeExtra({
+        ...tags,
+        ...extra,
+      })
+      const resolvedService =
+        typeof combined?.service === "string" ? combined.service : typeof tags?.service === "string" ? tags.service : "default"
+      const metadata = combined
+        ? Object.fromEntries(Object.entries(combined).filter(([key]) => key !== "service"))
+        : undefined
+      return {
+        entry: {
+          id: nextID(next.getTime()),
+          time: next.getTime(),
+          level,
+          service: resolvedService,
+          message: stringify(message),
+          ...(metadata && Object.keys(metadata).length ? { extra: metadata } : {}),
+        } satisfies Entry,
+        diff,
+      }
+    }
+
+    function record(level: Level, message: any, extra?: Record<string, any>) {
+      const built = buildEntry(level, message, extra)
+      publish(built.entry)
+      write(level.padEnd(5, " ") + " " + formatLine(built.entry, built.diff))
     }
     const result: Logger = {
       debug(message?: any, extra?: Record<string, any>) {
         if (shouldLog("DEBUG")) {
-          write("DEBUG " + build(message, extra))
+          record("DEBUG", message, extra)
         }
       },
       info(message?: any, extra?: Record<string, any>) {
         if (shouldLog("INFO")) {
-          write("INFO  " + build(message, extra))
+          record("INFO", message, extra)
         }
       },
       error(message?: any, extra?: Record<string, any>) {
         if (shouldLog("ERROR")) {
-          write("ERROR " + build(message, extra))
+          record("ERROR", message, extra)
         }
       },
       warn(message?: any, extra?: Record<string, any>) {
         if (shouldLog("WARN")) {
-          write("WARN  " + build(message, extra))
+          record("WARN", message, extra)
         }
       },
       tag(key: string, value: string) {
@@ -178,5 +271,28 @@ export namespace Log {
     }
 
     return result
+  }
+
+  export function matches(entry: Entry, input?: Omit<Filter, "limit">) {
+    if (input?.service && entry.service !== input.service) return false
+    if (input?.level && entry.level !== input.level) return false
+    if (input?.sessionID) {
+      const value = entry.extra?.sessionID
+      if (typeof value !== "string" || value !== input.sessionID) return false
+    }
+    return true
+  }
+
+  export function list(input?: Filter) {
+    const limit = Math.max(1, Math.min(500, Math.trunc(input?.limit ?? 200)))
+    const filtered = recent.filter((entry) => matches(entry, input))
+    return filtered.slice(Math.max(0, filtered.length - limit))
+  }
+
+  export function subscribe(fn: (entry: Entry) => void) {
+    subscribers.add(fn)
+    return () => {
+      subscribers.delete(fn)
+    }
   }
 }

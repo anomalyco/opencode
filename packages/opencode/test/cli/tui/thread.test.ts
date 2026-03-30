@@ -3,6 +3,7 @@ import fs from "fs/promises"
 import path from "path"
 import { tmpdir } from "../../fixture/fixture"
 import * as App from "../../../src/cli/cmd/tui/app"
+import * as Remote from "../../../src/cli/cmd/remote"
 import { Rpc } from "../../../src/util/rpc"
 import { UI } from "../../../src/cli/ui"
 import * as Timeout from "../../../src/util/timeout"
@@ -15,6 +16,7 @@ const stop = new Error("stop")
 const seen = {
   tui: [] as string[],
   inst: [] as string[],
+  remote: [] as unknown[],
 }
 
 function setup() {
@@ -25,6 +27,10 @@ function setup() {
   // https://github.com/oven-sh/bun/issues/7823 and #12823.
   spyOn(App, "tui").mockImplementation(async (input) => {
     if (input.directory) seen.tui.push(input.directory)
+    throw stop
+  })
+  spyOn(Remote, "runRemote").mockImplementation(async (input) => {
+    seen.remote.push(input)
     throw stop
   })
   spyOn(Rpc, "client").mockImplementation(() => ({
@@ -54,7 +60,7 @@ describe("tui thread", () => {
     mock.restore()
   })
 
-  async function call(project?: string) {
+  async function call(project?: string, extra: Record<string, unknown> = {}) {
     const { TuiThreadCommand } = await import("../../../src/cli/cmd/tui/thread")
     const args: Parameters<NonNullable<typeof TuiThreadCommand.handler>>[0] = {
       _: [],
@@ -72,6 +78,14 @@ describe("tui thread", () => {
       "mdns-domain": "opencode.local",
       mdnsDomain: "opencode.local",
       cors: [],
+      remote: false,
+      remoteTailnet: false,
+      remoteHost: undefined,
+      remotePort: 0,
+      "remote-tailnet": false,
+      "remote-host": undefined,
+      "remote-port": 0,
+      ...extra,
     }
     return TuiThreadCommand.handler(args)
   }
@@ -87,6 +101,7 @@ describe("tui thread", () => {
     const type = process.platform === "win32" ? "junction" : "dir"
     seen.tui.length = 0
     seen.inst.length = 0
+    seen.remote.length = 0
     await fs.symlink(tmp.path, link, type)
 
     Object.defineProperty(process.stdin, "isTTY", {
@@ -107,6 +122,7 @@ describe("tui thread", () => {
       await expect(call(project)).rejects.toBe(stop)
       expect(seen.inst[0]).toBe(tmp.path)
       expect(seen.tui[0]).toBe(tmp.path)
+      expect(seen.remote).toHaveLength(0)
     } finally {
       process.chdir(cwd)
       if (pwd === undefined) delete process.env.PWD
@@ -124,5 +140,68 @@ describe("tui thread", () => {
 
   test("uses the real cwd after resolving a relative project from PWD", async () => {
     await check(".")
+  })
+
+  test("routes --remote through the standalone remote entrypoint", async () => {
+    setup()
+    await using tmp = await tmpdir({ git: true })
+    const cwd = process.cwd()
+    const tty = Object.getOwnPropertyDescriptor(process.stdin, "isTTY")
+    seen.tui.length = 0
+    seen.inst.length = 0
+    seen.remote.length = 0
+
+    Object.defineProperty(process.stdin, "isTTY", {
+      configurable: true,
+      value: true,
+    })
+
+    try {
+      process.chdir(tmp.path)
+      await expect(call(undefined, { remote: true, session: "sess_123" })).rejects.toBe(stop)
+      expect(seen.tui).toHaveLength(0)
+      expect(seen.remote).toHaveLength(1)
+      expect(seen.remote[0]).toEqual(
+        expect.objectContaining({
+          tailnet: false,
+          session: "sess_123",
+        }),
+      )
+    } finally {
+      process.chdir(cwd)
+      if (tty) Object.defineProperty(process.stdin, "isTTY", tty)
+      else delete (process.stdin as { isTTY?: boolean }).isTTY
+    }
+  })
+
+  test("routes --remote-tailnet through the standalone remote entrypoint", async () => {
+    setup()
+    await using tmp = await tmpdir({ git: true })
+    const cwd = process.cwd()
+    const tty = Object.getOwnPropertyDescriptor(process.stdin, "isTTY")
+    seen.tui.length = 0
+    seen.inst.length = 0
+    seen.remote.length = 0
+
+    Object.defineProperty(process.stdin, "isTTY", {
+      configurable: true,
+      value: true,
+    })
+
+    try {
+      process.chdir(tmp.path)
+      await expect(call(undefined, { "remote-tailnet": true })).rejects.toBe(stop)
+      expect(seen.tui).toHaveLength(0)
+      expect(seen.remote).toHaveLength(1)
+      expect(seen.remote[0]).toEqual(
+        expect.objectContaining({
+          tailnet: true,
+        }),
+      )
+    } finally {
+      process.chdir(cwd)
+      if (tty) Object.defineProperty(process.stdin, "isTTY", tty)
+      else delete (process.stdin as { isTTY?: boolean }).isTTY
+    }
   })
 })

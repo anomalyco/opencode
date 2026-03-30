@@ -12,7 +12,9 @@ import type { Event } from "@opencode-ai/sdk/v2"
 import { Flag } from "@/flag/flag"
 import { setTimeout as sleep } from "node:timers/promises"
 import { writeHeapSnapshot } from "node:v8"
-import { WorkspaceID } from "@/control-plane/schema"
+import { RemoteAuth } from "@/server/remote-auth"
+import { RemoteAccess } from "@/server/remote-access"
+import { buildOrigins, buildRemoteURL, createServerPassword, preferredRemoteURL, renderQRCodeText } from "@/server/remote-pairing"
 
 await Log.init({
   print: process.argv.includes("--print-logs"),
@@ -41,9 +43,22 @@ GlobalBus.on("event", (event) => {
 })
 
 let server: Awaited<ReturnType<typeof Server.listen>> | undefined
+let remoteServer: Awaited<ReturnType<typeof Server.listen>> | undefined
+let remotePassword: string | undefined
+let remoteHostname = "127.0.0.1"
+let remoteMode: RemoteAccess.Mode = "lan"
+let remoteTunnel: RemoteAccess.Tunnel | undefined
 
 const eventStream = {
   abort: undefined as AbortController | undefined,
+}
+
+async function stopRemote() {
+  await remoteTunnel?.stop().catch(() => {})
+  remoteTunnel = undefined
+  if (remoteServer) await remoteServer.stop(true)
+  remoteServer = undefined
+  remotePassword = undefined
 }
 
 const startEventStream = (input: { directory: string; workspaceID?: string }) => {
@@ -154,10 +169,78 @@ export const rpc = {
   async setWorkspace(input: { workspaceID?: string }) {
     startEventStream({ directory: process.cwd(), workspaceID: input.workspaceID })
   },
+  async remoteStart(input: {
+    directory: string
+    sessionID: string
+    ttlSeconds?: number
+    mode?: RemoteAccess.Mode
+  }) {
+    const mode = RemoteAccess.normalize(input.mode)
+    if (remoteServer && remoteMode !== mode) {
+      await stopRemote()
+    }
+
+    if (!remoteServer) {
+      remoteMode = mode
+      remoteHostname = RemoteAccess.resolveHost(mode)
+      remotePassword = process.env.OPENCODE_SERVER_PASSWORD ? undefined : createServerPassword()
+      remoteServer = await Server.listen({
+        hostname: remoteHostname,
+        port: 0,
+        mdns: false,
+        cors: [],
+        passwordOverride: remotePassword,
+        usernameOverride: process.env.OPENCODE_SERVER_USERNAME ?? "opencode",
+        remoteMode: mode,
+        remotePair: {
+          directory: input.directory,
+          sessionID: input.sessionID,
+          ttlSeconds: input.ttlSeconds,
+        },
+      })
+    }
+
+    const port = remoteServer.port
+    if (!port) throw new Error("Remote server started without a port")
+
+    if (mode === "tailnet" && !remoteTunnel) {
+      try {
+        remoteTunnel = await RemoteAccess.start({ hostname: remoteHostname, port })
+      } catch (error) {
+        await stopRemote()
+        throw error
+      }
+    }
+
+    const pairing = RemoteAuth.create({
+      directory: input.directory,
+      sessionID: input.sessionID,
+      ttlSeconds: input.ttlSeconds,
+    })
+    const accessURLs = remoteTunnel ? [remoteTunnel.url] : buildOrigins(remoteHostname, port, false, undefined)
+    const pairingURLs = accessURLs.map((origin) => buildRemoteURL(origin, pairing))
+    const qr = await renderQRCodeText(preferredRemoteURL(pairingURLs))
+
+    return {
+      directory: input.directory,
+      sessionID: input.sessionID,
+      expiresAt: pairing.expiresAt,
+      generatedPassword: remotePassword,
+      accessURLs,
+      pairingURLs,
+      qr,
+      mode,
+      bind: new URL(RemoteAccess.origin({ hostname: remoteHostname, port })).host,
+    }
+  },
+  async remoteStop() {
+    await stopRemote()
+  },
   async shutdown() {
     Log.Default.info("worker shutting down")
     if (eventStream.abort) eventStream.abort.abort()
     await Instance.disposeAll()
+    await stopRemote()
     if (server) await server.stop(true)
   },
 }

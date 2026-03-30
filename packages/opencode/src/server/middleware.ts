@@ -16,6 +16,8 @@ export function errorHandler(log: Log.Logger): ErrorHandler {
       if (err instanceof NotFoundError) status = 404
       else if (err instanceof Provider.ModelNotFoundError) status = 400
       else if (err.name === "ProviderAuthValidationFailed") status = 400
+      else if (err.name === "RemoteAuthInvalidTokenError") status = 401
+      else if (err.name === "RemoteAuthScopeError") status = 403
       else if (err.name.startsWith("Worktree")) status = 400
       else status = 500
       return c.json(err.toObject(), { status })

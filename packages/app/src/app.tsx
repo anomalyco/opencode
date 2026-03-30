@@ -48,6 +48,7 @@ import { useCheckServerHealth } from "./utils/server-health"
 
 const HomeRoute = lazy(() => import("@/pages/home"))
 const loadSession = () => import("@/pages/session")
+const MobileRemote = lazy(() => import("@/pages/mobile-remote"))
 const Session = lazy(loadSession)
 const Loading = () => <div class="size-full" />
 
@@ -299,6 +300,7 @@ export function AppInterface(props: {
                 <Route path="/" component={HomeRoute} />
                 <Route path="/:dir" component={DirectoryLayout}>
                   <Route path="/" component={SessionIndexRoute} />
+                  <Route path="/remote/:id?" component={MobileRemote} />
                   <Route path="/session/:id?" component={SessionRoute} />
                 </Route>
               </Dynamic>

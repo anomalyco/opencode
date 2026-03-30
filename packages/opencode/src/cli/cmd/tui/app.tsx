@@ -45,11 +45,13 @@ import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
 import { DialogConfirm } from "./ui/dialog-confirm"
+import { DialogRemotePairing } from "./ui/dialog-remote-pairing"
 import { ToastProvider, useToast } from "./ui/toast"
 import { ExitProvider, useExit } from "./context/exit"
 import { Session as SessionApi } from "@/session"
 import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
+import { RemoteProvider, useRemote, type RemoteContextValue } from "./context/remote"
 import { Provider } from "@/provider/provider"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
@@ -168,6 +170,7 @@ export function tui(input: {
   fetch?: typeof fetch
   headers?: RequestInit["headers"]
   events?: EventSource
+  remote?: RemoteContextValue
 }) {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
@@ -217,15 +220,17 @@ export function tui(input: {
                               <KeybindProvider>
                                 <PromptStashProvider>
                                   <DialogProvider>
-                                    <CommandProvider>
-                                      <FrecencyProvider>
-                                        <PromptHistoryProvider>
-                                          <PromptRefProvider>
-                                            <App onSnapshot={input.onSnapshot} />
-                                          </PromptRefProvider>
-                                        </PromptHistoryProvider>
-                                      </FrecencyProvider>
-                                    </CommandProvider>
+                                    <RemoteProvider remote={input.remote}>
+                                      <CommandProvider>
+                                        <FrecencyProvider>
+                                          <PromptHistoryProvider>
+                                            <PromptRefProvider>
+                                              <App onSnapshot={input.onSnapshot} />
+                                            </PromptRefProvider>
+                                          </PromptHistoryProvider>
+                                        </FrecencyProvider>
+                                      </CommandProvider>
+                                    </RemoteProvider>
                                   </DialogProvider>
                                 </PromptStashProvider>
                               </KeybindProvider>
@@ -258,6 +263,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const keybind = useKeybind()
   const sdk = useSDK()
   const toast = useToast()
+  const remote = useRemote()
   const themeState = useTheme()
   const { theme, mode, setMode, locked, lock, unlock } = themeState
   const sync = useSync()
@@ -439,6 +445,30 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   )
 
   const connected = useConnected()
+  const openRemotePairing = async (sessionID: string, mode: "lan" | "tailnet" = "lan") => {
+    dialog.clear()
+    try {
+      const initial = await remote.pair({ sessionID, mode })
+      dialog.replace(
+        () => (
+          <DialogRemotePairing
+            initial={initial}
+            onRefresh={() => remote.pair({ sessionID, mode })}
+            onStop={() => remote.stop()}
+          />
+        ),
+        () => dialog.setSize("medium"),
+      )
+      dialog.setSize("xlarge")
+    } catch (error) {
+      dialog.setSize("medium")
+      toast.show({
+        message: error instanceof Error ? error.message : String(error),
+        variant: "error",
+      })
+    }
+  }
+
   command.register(() => [
     {
       title: "Switch session",
@@ -492,6 +522,33 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
           workspaceID,
         })
         dialog.clear()
+      },
+    },
+    {
+      title: "Mobile remote pairing",
+      value: "remote.pair",
+      category: "Session",
+      suggested: route.data.type === "session",
+      enabled: remote.available && route.data.type === "session",
+      slash: {
+        name: "remote",
+      },
+      onSelect: () => {
+        if (route.data.type !== "session") return
+        void openRemotePairing(route.data.sessionID)
+      },
+    },
+    {
+      title: "Tailnet remote pairing",
+      value: "remote.pair.tailnet",
+      category: "Session",
+      enabled: remote.available && route.data.type === "session",
+      slash: {
+        name: "remote-tailnet",
+      },
+      onSelect: () => {
+        if (route.data.type !== "session") return
+        void openRemotePairing(route.data.sessionID, "tailnet")
       },
     },
     {

@@ -5,6 +5,7 @@ import { type rpc } from "./worker"
 import path from "path"
 import { fileURLToPath } from "url"
 import { UI } from "@/cli/ui"
+import { runRemote } from "@/cli/cmd/remote"
 import { Log } from "@/util/log"
 import { errorMessage } from "@/util/error"
 import { withTimeout } from "@/util/timeout"
@@ -16,6 +17,8 @@ import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { TuiConfig } from "@/config/tui"
 import { Instance } from "@/project/instance"
 import { writeHeapSnapshot } from "v8"
+import { DEFAULT_REMOTE_TITLE, DEFAULT_REMOTE_TTL_SECONDS } from "@/server/remote-pairing"
+import type { RemoteContextValue } from "./context/remote"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -46,6 +49,23 @@ function createEventSource(client: RpcClient): EventSource {
     on: (handler) => client.on<Event>("event", handler),
     setWorkspace: (workspaceID) => {
       void client.call("setWorkspace", { workspaceID })
+    },
+  }
+}
+
+function createRemoteControl(client: RpcClient): RemoteContextValue {
+  return {
+    available: true,
+    async pair(input) {
+      return await client.call("remoteStart", {
+        directory: process.cwd(),
+        sessionID: input.sessionID,
+        ttlSeconds: input.ttlSeconds,
+        mode: input.mode,
+      })
+    },
+    async stop() {
+      await client.call("remoteStop", undefined)
     },
   }
 }
@@ -99,6 +119,25 @@ export const TuiThreadCommand = cmd({
       .option("agent", {
         type: "string",
         describe: "agent to use",
+      })
+      .option("remote", {
+        type: "boolean",
+        describe: "start the standalone mobile remote instead of the TUI",
+        default: false,
+      })
+      .option("remote-tailnet", {
+        type: "boolean",
+        describe: "start the standalone mobile remote over Tailscale instead of the TUI",
+        default: false,
+      })
+      .option("remote-host", {
+        type: "string",
+        describe: "bind host for --remote (private LAN IP by default, or loopback only in tailnet mode)",
+      })
+      .option("remote-port", {
+        type: "number",
+        describe: "TCP port for --remote",
+        default: 0,
       }),
   handler: async (args) => {
     // Keep ENABLE_PROCESSED_INPUT cleared even if other code flips it.
@@ -129,6 +168,25 @@ export const TuiThreadCommand = cmd({
         return
       }
       const cwd = Filesystem.resolve(process.cwd())
+
+      if (args.remote && args["remote-tailnet"]) {
+        UI.error("choose only one of --remote or --remote-tailnet")
+        process.exitCode = 1
+        return
+      }
+
+      if (args.remote || args["remote-tailnet"]) {
+        await runRemote({
+          port: args["remote-port"],
+          hostname: args["remote-host"],
+          tailnet: args["remote-tailnet"],
+          session: args.session,
+          title: DEFAULT_REMOTE_TITLE,
+          ttl: DEFAULT_REMOTE_TTL_SECONDS,
+          open: false,
+        })
+        return
+      }
 
       const worker = new Worker(file, {
         env: Object.fromEntries(
@@ -212,6 +270,7 @@ export const TuiThreadCommand = cmd({
           directory: cwd,
           fetch: transport.fetch,
           events: transport.events,
+          remote: createRemoteControl(client),
           args: {
             continue: args.continue,
             sessionID: args.session,
