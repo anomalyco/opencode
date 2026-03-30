@@ -80,6 +80,7 @@ import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
+import { getDirectChildSessions, getSiblingSessions, shouldRenderSessionPrompt } from "./navigation"
 
 addDefaultParsers(parsers.parsers)
 
@@ -121,20 +122,16 @@ export function Session() {
   const { theme } = useTheme()
   const promptRef = usePromptRef()
   const session = createMemo(() => sync.session.get(route.sessionID))
-  const children = createMemo(() => {
-    const parentID = session()?.parentID ?? session()?.id
-    return sync.data.session
-      .filter((x) => x.parentID === parentID || x.id === parentID)
-      .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-  })
+  const directChildren = createMemo(() => getDirectChildSessions(sync.data.session, session()?.id))
+  const siblingSessions = createMemo(() => getSiblingSessions(sync.data.session, session()))
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
   const permissions = createMemo(() => {
     if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.permission[x.id] ?? [])
+    return directChildren().flatMap((x) => sync.data.permission[x.id] ?? [])
   })
   const questions = createMemo(() => {
     if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.question[x.id] ?? [])
+    return directChildren().flatMap((x) => sync.data.question[x.id] ?? [])
   })
 
   const pending = createMemo(() => {
@@ -320,8 +317,7 @@ export function Session() {
   const local = useLocal()
 
   function moveFirstChild() {
-    if (children().length === 1) return
-    const next = children().find((x) => !!x.parentID)
+    const next = directChildren()[0]
     if (next) {
       navigate({
         type: "session",
@@ -331,9 +327,8 @@ export function Session() {
   }
 
   function moveChild(direction: number) {
-    if (children().length === 1) return
-
-    const sessions = children().filter((x) => !!x.parentID)
+    const sessions = siblingSessions()
+    if (sessions.length <= 1) return
     let next = sessions.findIndex((x) => x.id === session()?.id) - direction
 
     if (next >= sessions.length) next = 0
@@ -967,6 +962,19 @@ export function Session() {
     },
   ])
 
+  createEffect(() => {
+    if (
+      shouldRenderSessionPrompt({
+        session: session(),
+        permissionCount: permissions().length,
+        questionCount: questions().length,
+      })
+    ) {
+      return
+    }
+    promptRef.set(undefined)
+  })
+
   const revertInfo = createMemo(() => session()?.revert)
   const revertMessageID = createMemo(() => revertInfo()?.messageID)
 
@@ -1162,22 +1170,28 @@ export function Session() {
               <Show when={session()?.parentID}>
                 <SubagentFooter />
               </Show>
-              <Prompt
-                visible={!session()?.parentID && permissions().length === 0 && questions().length === 0}
-                ref={(r) => {
-                  prompt = r
-                  promptRef.set(r)
-                  // Apply initial prompt when prompt component mounts (e.g., from fork)
-                  if (route.initialPrompt) {
-                    r.set(route.initialPrompt)
-                  }
-                }}
-                disabled={permissions().length > 0 || questions().length > 0}
-                onSubmit={() => {
-                  toBottom()
-                }}
-                sessionID={route.sessionID}
-              />
+              <Show
+                when={shouldRenderSessionPrompt({
+                  session: session(),
+                  permissionCount: permissions().length,
+                  questionCount: questions().length,
+                })}
+              >
+                <Prompt
+                  ref={(r) => {
+                    prompt = r
+                    promptRef.set(r)
+                    if (route.initialPrompt) {
+                      r.set(route.initialPrompt)
+                    }
+                  }}
+                  disabled={permissions().length > 0 || questions().length > 0}
+                  onSubmit={() => {
+                    toBottom()
+                  }}
+                  sessionID={route.sessionID}
+                />
+              </Show>
             </box>
           </Show>
           <Toast />
