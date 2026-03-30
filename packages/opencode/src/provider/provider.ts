@@ -208,32 +208,19 @@ export namespace Provider {
         options: {},
       }
     },
-    "github-copilot": async () => {
+    "github-copilot": async (input) => {
       return {
         autoload: false,
-        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
           if (modelID === "auto") {
-            const baseURL = options?.baseURL ?? "https://api.githubcopilot.com"
+            const providerModels = Object.keys(input.models).filter((id) => id !== "auto")
             return createCopilotAutoModel({
-              baseURL,
-              fetch: options?.fetch ?? fetch,
-              headers: () => {
-                const h: Record<string, string> = {}
-                if (options?.apiKey) h["Authorization"] = `Bearer ${options.apiKey}`
-                return h
-              },
-              createModel(resolvedModelId: string, extraHeaders?: Record<string, string>) {
-                // Rebuild the SDK with extra headers (Copilot-Session-Token) merged in
-                const sdkWithHeaders = extraHeaders
-                  ? createGitHubCopilotOpenAICompatible({
-                      ...options,
-                      headers: { ...options?.headers, ...extraHeaders },
-                    })
-                  : sdk
-                if (useLanguageModel(sdkWithHeaders)) return sdkWithHeaders.languageModel(resolvedModelId)
+              providerModels,
+              createModel(resolvedModelId: string) {
+                if (useLanguageModel(sdk)) return sdk.languageModel(resolvedModelId)
                 return shouldUseCopilotResponsesApi(resolvedModelId)
-                  ? sdkWithHeaders.responses(resolvedModelId)
-                  : sdkWithHeaders.chat(resolvedModelId)
+                  ? sdk.responses(resolvedModelId)
+                  : sdk.chat(resolvedModelId)
               },
             })
           }
