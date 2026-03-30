@@ -17,7 +17,6 @@ import { useLanguage } from "@/context/language"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { decode64 } from "@/utils/base64"
-import { fileOpenStart, fileOpenTrace } from "@/utils/file-open-debug"
 import { getRelativeTime } from "@/utils/time"
 
 type EntryType = "command" | "file" | "session"
@@ -362,17 +361,13 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
 
   const open = (path: string) => {
     const value = file.tab(path)
-    fileOpenStart(path, "palette select", { tab: value })
     tabs().open(value)
-    fileOpenTrace(path, "tab opened")
     if (!view().reviewPanel.opened()) view().reviewPanel.open()
     layout.fileTree.setTab("all")
     props.onOpenFile?.(path)
     tabs().setActive(value)
-    fileOpenTrace(path, "tab active")
 
     requestAnimationFrame(() => {
-      fileOpenTrace(path, "load scheduled")
       void file.load(path)
     })
   }

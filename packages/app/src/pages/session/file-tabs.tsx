@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, Match, on, onCleanup, Switch } from "solid-js"
+import { createEffect, createMemo, Match, on, onCleanup, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -17,7 +17,6 @@ import { usePrompt } from "@/context/prompt"
 import { getSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
-import { fileOpenEnd, fileOpenTrace } from "@/utils/file-open-debug"
 
 function FileCommentMenu(props: {
   moreLabel: string
@@ -192,18 +191,13 @@ export function FileTabContent(props: { tab: string }) {
   }
 
   const path = createMemo(() => file.pathFromTab(props.tab))
-  createEffect(() => {
-    const p = path()
-    if (!p) return
-    fileOpenTrace(p, "file tab mount", { tab: props.tab })
-  })
-
   const state = createMemo(() => {
     const p = path()
     if (!p) return
     return file.get(p)
   })
   const md = createMemo(() => /\.(md|markdown|mdx)$/i.test(path() ?? ""))
+  const pdf = createMemo(() => /\.pdf$/i.test(path() ?? ""))
   const contents = createMemo(() => state()?.content?.content ?? "")
   const selectedLines = createMemo<SelectedLineRange | null>(() => {
     const p = path()
@@ -400,7 +394,7 @@ export function FileTabContent(props: { tab: string }) {
   })
 
   const renderFile = (source: string) => (
-    <div class="relative overflow-hidden pb-40">
+    <div class={`relative flex flex-col overflow-hidden ${pdf() ? "h-full" : "min-h-full"}`}>
       <Dynamic
         component={fileComponent}
         mode="text"
@@ -414,8 +408,6 @@ export function FileTabContent(props: { tab: string }) {
         selectedLines={md() ? null : activeSelection()}
         commentedLines={md() ? [] : commentedLines()}
         onRendered={() => {
-          const p = path()
-          if (p) fileOpenEnd(p, "viewer rendered", { markdown: md(), chars: source.length })
           queueRestore()
         }}
         annotations={md() ? [] : commentsUi.annotations()}
@@ -444,15 +436,29 @@ export function FileTabContent(props: { tab: string }) {
 
   return (
     <Tabs.Content value={props.tab} class="mt-3 relative h-full">
-      <ScrollView class="h-full" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll as any}>
-        <Switch>
-          <Match when={state()?.loaded}>{renderFile(contents())}</Match>
-          <Match when={state()?.loading}>
-            <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
-          </Match>
-          <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
-        </Switch>
-      </ScrollView>
+      <Show
+        when={pdf() && state()?.loaded}
+        fallback={
+          <ScrollView
+            class="h-full"
+            viewportRef={(el: HTMLDivElement) => {
+              scroll = el
+              restoreScroll()
+            }}
+            onScroll={handleScroll as any}
+          >
+            <Switch>
+              <Match when={state()?.loaded}>{renderFile(contents())}</Match>
+              <Match when={state()?.loading}>
+                <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
+              </Match>
+              <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
+            </Switch>
+          </ScrollView>
+        }
+      >
+        {renderFile(contents())}
+      </Show>
     </Tabs.Content>
   )
 }
