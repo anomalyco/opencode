@@ -654,7 +654,16 @@ export namespace File {
             kind === "file" ? result.files : kind === "directory" ? result.dirs : [...result.files, ...result.dirs]
 
           const searchLimit = kind === "directory" && !preferHidden ? limit * 20 : limit
-          const sorted = fuzzysort.go(query, items, { limit: searchLimit }).map((item) => item.target)
+          const sorted = fuzzysort
+            .go(
+              query.replace(/[\\/]+/g, "/"),
+              items.map((item) => ({ item, path: item.replace(/[\\/]+/g, "/") })),
+              {
+                key: "path",
+                limit: searchLimit,
+              },
+            )
+            .map((item) => item.obj.item)
           const output = kind === "directory" ? sortHiddenLast(sorted, preferHidden).slice(0, limit) : sorted
 
           log.info("search", { query, kind, results: output.length })

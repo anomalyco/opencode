@@ -139,6 +139,44 @@ function createScrollSync(input: { tab: () => string; view: ReturnType<typeof us
     if (el.scrollLeft !== pos.x) el.scrollLeft = pos.x
   }
 
+  const reveal = (range: SelectedLineRange) => {
+    const el = scroll
+    if (!el) return false
+
+    const host = el.querySelector("diffs-container")
+    if (!(host instanceof HTMLElement)) return false
+
+    const root = host.shadowRoot
+    if (!root) return false
+
+    const first =
+      range.start <= range.end
+        ? { line: range.start, side: range.side }
+        : { line: range.end, side: range.endSide ?? range.side }
+    const rows = Array.from(
+      root.querySelectorAll(`[data-line="${first.line}"], [data-alt-line="${first.line}"]`),
+    ).filter((item): item is HTMLElement => item instanceof HTMLElement)
+    const line =
+      rows.find((item) => {
+        if (!first.side) return false
+        const type = item.dataset.lineType
+        if (type === "change-deletion") return first.side === "deletions"
+        if (type === "change-addition" || type === "change-additions") return first.side === "additions"
+        const code = item.closest("[data-code]")
+        if (!(code instanceof HTMLElement)) return first.side === "additions"
+        return code.hasAttribute("data-deletions") ? first.side === "deletions" : first.side === "additions"
+      }) ?? rows[0]
+    if (!(line instanceof HTMLElement)) return false
+
+    sync()
+
+    const top = line.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop
+    const y = Math.max(0, top - Math.max(24, Math.floor(el.clientHeight / 3)))
+    if (Math.abs(el.scrollTop - y) > 1) el.scrollTo({ top: y, behavior: "auto" })
+    save({ x: code[0]?.scrollLeft ?? el.scrollLeft, y })
+    return true
+  }
+
   const queueRestore = () => {
     if (restoreFrame !== undefined) return
 
@@ -174,6 +212,7 @@ function createScrollSync(input: { tab: () => string; view: ReturnType<typeof us
   return {
     handleScroll,
     queueRestore,
+    reveal,
     setViewport,
   }
 }
@@ -290,6 +329,12 @@ export function FileTabContent(props: { tab: string }) {
     selected: null as SelectedLineRange | null,
   })
 
+  const sameRange = (a: SelectedLineRange | null | undefined, b: SelectedLineRange | null | undefined) => {
+    if (!a && !b) return true
+    if (!a || !b) return false
+    return a.start === b.start && a.end === b.end && a.side === b.side && a.endSide === b.endSide
+  }
+
   const syncSelected = (range: SelectedLineRange | null) => {
     const p = path()
     if (!p) return
@@ -364,10 +409,18 @@ export function FileTabContent(props: { tab: string }) {
       path,
       () => {
         commentsUi.note.reset()
+        setNote("selected", null)
       },
       { defer: true },
     ),
   )
+
+  createEffect(() => {
+    const range = selectedLines()
+    if (!note.selected) return
+    if (sameRange(note.selected, range)) return
+    setNote("selected", null)
+  })
 
   createEffect(() => {
     const focus = comments.focus()
@@ -394,6 +447,7 @@ export function FileTabContent(props: { tab: string }) {
     ready: false,
     active: false,
   }
+  let reveal = ""
 
   createEffect(() => {
     const loaded = !!state()?.loaded
@@ -403,6 +457,31 @@ export function FileTabContent(props: { tab: string }) {
     prev = { loaded, ready, active }
     if (!restore) return
     scrollSync.queueRestore()
+  })
+
+  createEffect(() => {
+    const range = selectedLines()
+    const active = activeFileTab() === props.tab
+    const loaded = !!state()?.loaded
+    const p = path()
+    if (!range || !active || !loaded || !p) {
+      if (!range) reveal = ""
+      return
+    }
+
+    const key = `${p}:${range.start}:${range.end}:${range.side ?? ""}:${range.endSide ?? ""}`
+    if (key === reveal) return
+
+    const run = (count: number) => {
+      if (count > 30) return
+      if (scrollSync.reveal(range)) {
+        reveal = key
+        return
+      }
+      requestAnimationFrame(() => run(count + 1))
+    }
+
+    requestAnimationFrame(() => run(0))
   })
 
   const renderFile = (source: string) => (

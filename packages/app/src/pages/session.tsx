@@ -1,5 +1,6 @@
 import type { Project, UserMessage } from "@opencode-ai/sdk/v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { FileRefProvider, type MessageFileRef } from "@opencode-ai/ui/context/file-ref"
 import { useMutation } from "@tanstack/solid-query"
 import {
   batch,
@@ -27,7 +28,9 @@ import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@opencode-ai/ui/toast"
 import { checksum } from "@opencode-ai/util/encode"
+import { getFilename } from "@opencode-ai/util/path"
 import { useSearchParams } from "@solidjs/router"
+import { DialogSelectFileRef } from "@/components/dialog-select-file-ref"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
 import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
@@ -963,6 +966,95 @@ export default function Page() {
     setActive: tabs().setActive,
     loadFile: file.load,
   })
+  const roots = createMemo(() => {
+    const out = [sdk.directory]
+    const project = sync.project
+    if (!project) return out
+    for (const dir of [project.worktree, ...(project.sandboxes ?? [])]) {
+      if (!out.includes(dir)) out.push(dir)
+    }
+    return out
+  })
+
+  const openSessionFile = (path: string, ref?: MessageFileRef) => {
+    const next = file.normalize(path).replace(/\\/g, "/")
+    const tab = file.tab(next)
+    if (ref?.line) {
+      file.setSelectedLines(next, { start: ref.line, end: ref.end ?? ref.line })
+    } else {
+      file.setSelectedLines(next, null)
+    }
+    tabs().open(tab)
+    file.load(next, { force: true })
+    if (!view().reviewPanel.opened()) view().reviewPanel.open()
+    layout.fileTree.setTab("all")
+    tabs().setActive(tab)
+  }
+
+  const within = (root: string, file: string) => {
+    const a = root.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
+    const b = file.replace(/\\/g, "/").toLowerCase()
+    return b === a || b.startsWith(a + "/")
+  }
+
+  const findFiles = (query: string, directory: string) =>
+    sdk.client.find.files({ query, directory, dirs: "false", limit: 50 }).then(
+      (x) => (x.data ?? []).map((item) => `${directory.replace(/\\/g, "/")}/${item.replace(/\\/g, "/")}`),
+      () => [],
+    )
+
+  const matchFileRef = async (input: string) => {
+    const raw = input.trim()
+    if (!raw) return []
+
+    const full = raw.replace(/\\/g, "/").replace(/^\.\//, "")
+    if (/^[A-Za-z]:\//.test(full) || full.startsWith("/") || full.startsWith("//")) {
+      return [full]
+    }
+
+    const root = roots().find((item) => within(item, full))
+    const exact = root
+      ? full.slice(root.replace(/\\/g, "/").replace(/\/+$/, "").length).replace(/^\//, "")
+      : file.normalize(full).replace(/\\/g, "/")
+    if (root) {
+      return [`${root.replace(/\\/g, "/")}/${exact}`]
+    }
+
+    const name = full.split("/").filter(Boolean).at(-1) ?? full
+    const [a, b] = await Promise.all([
+      Promise.all(roots().map((directory) => findFiles(full, directory))).then((all) => all.flat()),
+      name !== full
+        ? Promise.all(roots().map((directory) => findFiles(name, directory))).then((all) => all.flat())
+        : Promise.resolve([]),
+    ])
+    const list = [...new Set([...a, ...b])]
+    const norm = (item: string) => item.replace(/\\/g, "/")
+    const hit = full.includes("/")
+      ? list.filter((item) => norm(item) === exact || norm(item).endsWith(`/${exact}`))
+      : list.filter((item) => getFilename(item).toLowerCase() === name.toLowerCase())
+
+    return hit
+  }
+
+  const openFileRef = async (ref: MessageFileRef) => {
+    const hit = await matchFileRef(ref.path)
+
+    if (!hit?.length) {
+      showToast({
+        variant: "error",
+        title: language.t("toast.file.loadFailed.title"),
+        description: ref.path,
+      })
+      return
+    }
+
+    if (hit.length === 1) {
+      openSessionFile(hit[0], ref)
+      return
+    }
+
+    dialog.show(() => <DialogSelectFileRef paths={hit} onSelect={(path: string) => openSessionFile(path, ref)} />)
+  }
 
   const changesOptions = ["session", "turn"] as const
   const changesOptionsList = [...changesOptions]
@@ -1745,46 +1837,48 @@ export default function Page() {
             <Switch>
               <Match when={params.id}>
                 <Show when={messagesReady()}>
-                  <MessageTimeline
-                    mobileChanges={mobileChanges()}
-                    mobileFallback={reviewContent({
-                      diffStyle: "unified",
-                      classes: {
-                        root: "pb-8",
-                        header: "px-4",
-                        container: "px-4",
-                      },
-                      loadingClass: "px-4 py-4 text-text-weak",
-                      emptyClass: "h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6",
-                    })}
-                    actions={actions}
-                    scroll={ui.scroll}
-                    onResumeScroll={resumeScroll}
-                    setScrollRef={setScrollRef}
-                    onScheduleScrollState={scheduleScrollState}
-                    onAutoScrollHandleScroll={autoScroll.handleScroll}
-                    onMarkScrollGesture={markScrollGesture}
-                    hasScrollGesture={hasScrollGesture}
-                    onUserScroll={markUserScroll}
-                    onTurnBackfillScroll={historyWindow.onScrollerScroll}
-                    onAutoScrollInteraction={autoScroll.handleInteraction}
-                    centered={centered()}
-                    setContentRef={(el) => {
-                      content = el
-                      autoScroll.contentRef(el)
+                  <FileRefProvider value={{ open: openFileRef, match: matchFileRef }}>
+                    <MessageTimeline
+                      mobileChanges={mobileChanges()}
+                      mobileFallback={reviewContent({
+                        diffStyle: "unified",
+                        classes: {
+                          root: "pb-8",
+                          header: "px-4",
+                          container: "px-4",
+                        },
+                        loadingClass: "px-4 py-4 text-text-weak",
+                        emptyClass: "h-full pb-64 -mt-4 flex flex-col items-center justify-center text-center gap-6",
+                      })}
+                      actions={actions}
+                      scroll={ui.scroll}
+                      onResumeScroll={resumeScroll}
+                      setScrollRef={setScrollRef}
+                      onScheduleScrollState={scheduleScrollState}
+                      onAutoScrollHandleScroll={autoScroll.handleScroll}
+                      onMarkScrollGesture={markScrollGesture}
+                      hasScrollGesture={hasScrollGesture}
+                      onUserScroll={markUserScroll}
+                      onTurnBackfillScroll={historyWindow.onScrollerScroll}
+                      onAutoScrollInteraction={autoScroll.handleInteraction}
+                      centered={centered()}
+                      setContentRef={(el) => {
+                        content = el
+                        autoScroll.contentRef(el)
 
-                      const root = scroller
-                      if (root) scheduleScrollState(root)
-                    }}
-                    turnStart={historyWindow.turnStart()}
-                    historyMore={historyMore()}
-                    historyLoading={historyLoading()}
-                    onLoadEarlier={() => {
-                      void historyWindow.loadAndReveal()
-                    }}
-                    renderedUserMessages={historyWindow.renderedUserMessages()}
-                    anchor={anchor}
-                  />
+                        const root = scroller
+                        if (root) scheduleScrollState(root)
+                      }}
+                      turnStart={historyWindow.turnStart()}
+                      historyMore={historyMore()}
+                      historyLoading={historyLoading()}
+                      onLoadEarlier={() => {
+                        void historyWindow.loadAndReveal()
+                      }}
+                      renderedUserMessages={historyWindow.renderedUserMessages()}
+                      anchor={anchor}
+                    />
+                  </FileRefProvider>
                 </Show>
               </Match>
               <Match when={true}>

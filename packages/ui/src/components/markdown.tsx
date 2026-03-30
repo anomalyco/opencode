@@ -1,10 +1,12 @@
 import { useMarked } from "../context/marked"
+import { useFileRef } from "../context/file-ref"
 import { useI18n } from "../context/i18n"
 import DOMPurify from "dompurify"
 import morphdom from "morphdom"
 import { checksum } from "@opencode-ai/util/encode"
 import { ComponentProps, createEffect, createResource, createSignal, onCleanup, splitProps } from "solid-js"
 import { isServer } from "solid-js/web"
+import { collectFileRefs, decorateFileRefs, readFileRef } from "./markdown-file-ref"
 import { stream } from "./markdown-stream"
 
 type Entry = {
@@ -14,7 +16,6 @@ type Entry = {
 
 const max = 200
 const cache = new Map<string, Entry>()
-
 if (typeof window !== "undefined" && DOMPurify.isSupported) {
   DOMPurify.addHook("afterSanitizeAttributes", (node: Element) => {
     if (!(node instanceof HTMLAnchorElement)) return
@@ -181,7 +182,11 @@ function decorate(root: HTMLDivElement, labels: CopyLabels) {
   markCodeLinks(root)
 }
 
-function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
+function setupCodeCopy(
+  root: HTMLDivElement,
+  getLabels: () => CopyLabels,
+  open?: (href: NonNullable<ReturnType<typeof readFileRef>>) => void | Promise<void>,
+) {
   const timeouts = new Map<HTMLButtonElement, ReturnType<typeof setTimeout>>()
 
   const updateLabel = (button: HTMLButtonElement) => {
@@ -193,6 +198,13 @@ function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
   const handleClick = async (event: MouseEvent) => {
     const target = event.target
     if (!(target instanceof Element)) return
+
+    const href = readFileRef(target)
+    if (href) {
+      event.preventDefault()
+      await open?.(href)
+      return
+    }
 
     const button = target.closest('[data-slot="markdown-copy-button"]')
     if (!(button instanceof HTMLButtonElement)) return
@@ -247,6 +259,7 @@ export function Markdown(
 ) {
   const [local, others] = splitProps(props, ["text", "cacheKey", "streaming", "class", "classList"])
   const marked = useMarked()
+  const fileRef = useFileRef()
   const i18n = useI18n()
   const [root, setRoot] = createSignal<HTMLDivElement>()
   const [html] = createResource(
@@ -286,6 +299,7 @@ export function Markdown(
   )
 
   let copyCleanup: (() => void) | undefined
+  let run = 0
 
   createEffect(() => {
     const container = root()
@@ -306,28 +320,64 @@ export function Markdown(
     temp.innerHTML = content
     decorate(temp, labels)
 
-    morphdom(container, temp, {
-      childrenOnly: true,
-      onBeforeElUpdated: (fromEl, toEl) => {
-        if (
-          fromEl instanceof HTMLButtonElement &&
-          toEl instanceof HTMLButtonElement &&
-          fromEl.getAttribute("data-slot") === "markdown-copy-button" &&
-          toEl.getAttribute("data-slot") === "markdown-copy-button" &&
-          fromEl.getAttribute("data-copied") === "true"
-        ) {
-          setCopyState(toEl, labels, true)
-        }
-        if (fromEl.isEqualNode(toEl)) return false
-        return true
-      },
-    })
+    const apply = () => {
+      morphdom(container, temp, {
+        childrenOnly: true,
+        onBeforeElUpdated: (fromEl, toEl) => {
+          if (
+            fromEl instanceof HTMLButtonElement &&
+            toEl instanceof HTMLButtonElement &&
+            fromEl.getAttribute("data-slot") === "markdown-copy-button" &&
+            toEl.getAttribute("data-slot") === "markdown-copy-button" &&
+            fromEl.getAttribute("data-copied") === "true"
+          ) {
+            setCopyState(toEl, labels, true)
+          }
+          if (fromEl.isEqualNode(toEl)) return false
+          return true
+        },
+      })
 
-    if (!copyCleanup)
-      copyCleanup = setupCodeCopy(container, () => ({
-        copy: i18n.t("ui.message.copy"),
-        copied: i18n.t("ui.message.copied"),
-      }))
+      if (!copyCleanup) {
+        copyCleanup = setupCodeCopy(
+          container,
+          () => ({
+            copy: i18n.t("ui.message.copy"),
+            copied: i18n.t("ui.message.copied"),
+          }),
+          fileRef?.open,
+        )
+      }
+    }
+
+    const id = ++run
+    void (async () => {
+      const all = collectFileRefs(temp)
+      if (!all.length) {
+        if (id === run) apply()
+        return
+      }
+
+      const rel = [...new Set(all.filter((ref) => !ref.absolute).map((ref) => ref.path))]
+      if (!rel.length) {
+        decorateFileRefs(temp)
+        if (id === run) apply()
+        return
+      }
+
+      const keep = new Set(all.filter((ref) => ref.absolute).map((ref) => ref.path))
+      const hits = await Promise.all(
+        rel.map((path) => (fileRef?.match?.(path) ?? Promise.resolve([])).then((hit) => [path, hit] as const)),
+      )
+      for (const [path, hit] of hits) {
+        if (hit.length > 0) keep.add(path)
+      }
+
+      if (id !== run) return
+
+      decorateFileRefs(temp, (ref) => ref.absolute || keep.has(ref.path))
+      apply()
+    })()
   })
 
   onCleanup(() => {

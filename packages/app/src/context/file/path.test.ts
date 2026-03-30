@@ -6,10 +6,12 @@ describe("file path helpers", () => {
     const path = createPathHelpers(() => "/repo")
     expect(path.normalize("file:///repo/src/app.ts?x=1#h")).toBe("src/app.ts")
     expect(path.normalize("/repo/src/app.ts")).toBe("src/app.ts")
+    expect(path.normalize("/other/place/app.ts")).toBe("other/place/app.ts")
     expect(path.normalize("./src/app.ts")).toBe("src/app.ts")
     expect(path.normalizeDir("src/components///")).toBe("src/components")
     expect(path.tab("src/app.ts")).toBe("file://src/app.ts")
     expect(path.pathFromTab("file://src/app.ts")).toBe("src/app.ts")
+    expect(path.pathFromTab("file:///other/place/app.ts")).toBe("other/place/app.ts")
     expect(path.pathFromTab("other://src/app.ts")).toBeUndefined()
   })
 
@@ -19,6 +21,8 @@ describe("file path helpers", () => {
     expect(path.normalize("C:/repo/src/app.ts")).toBe("src/app.ts")
     expect(path.normalize("file://C:/repo/src/app.ts")).toBe("src/app.ts")
     expect(path.normalize("c:\\repo\\src\\app.ts")).toBe("src\\app.ts")
+    expect(path.normalize("D:\\other\\app.ts")).toBe("D:\\other\\app.ts")
+    expect(path.normalize("file:///D:/other/app.ts")).toBe("D:/other/app.ts")
   })
 
   test("keeps query/hash stripping behavior stable", () => {
