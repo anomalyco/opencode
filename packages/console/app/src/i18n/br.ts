@@ -338,8 +338,7 @@ export const dict = {
   "go.faq.a4.p3": "Cancele a qualquer momento.",
   "go.faq.q5": "E sobre dados e privacidade?",
   "go.faq.a5.body":
-    "O plano é projetado principalmente para usuários internacionais, com modelos hospedados nos EUA, UE e Singapura para acesso global estável.",
-  "go.faq.a5.contactAfter": "se você tiver alguma dúvida.",
+    "O plano é projetado principalmente para usuários internacionais, com modelos hospedados nos EUA, UE e Singapura para acesso global estável. Nossos provedores seguem uma política de retenção zero e não usam seus dados para treinamento de modelos.",
   "go.faq.a5.beforeExceptions":
     "Os modelos Go são hospedados nos EUA. Os provedores seguem uma política de retenção zero e não usam seus dados para treinamento de modelos, com as",
   "go.faq.a5.exceptionsLink": "seguintes exceções",

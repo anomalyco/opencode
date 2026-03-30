@@ -339,8 +339,7 @@ export const dict = {
   "go.faq.a4.p3": "yönetebilirsiniz. İstediğiniz zaman iptal edin.",
   "go.faq.q5": "Veri ve gizlilik ne olacak?",
   "go.faq.a5.body":
-    "Bu plan öncelikle uluslararası kullanıcılar için tasarlanmış olup, istikrarlı küresel erişim için modeller ABD, AB ve Singapur'da barındırılmaktadır.",
-  "go.faq.a5.contactAfter": "herhangi bir sorunuz varsa.",
+    "Bu plan öncelikle uluslararası kullanıcılar için tasarlanmış olup, istikrarlı küresel erişim için modeller ABD, AB ve Singapur'da barındırılmaktadır. Sağlayıcılarımız sıfır saklama politikası izler ve verilerinizi model eğitimi için kullanmaz.",
   "go.faq.a5.beforeExceptions":
     "Go modelleri ABD'de barındırılmaktadır. Sağlayıcılar sıfır saklama politikası izler ve verilerinizi model eğitimi için kullanmaz; şu",
   "go.faq.a5.exceptionsLink": "aşağıdaki istisnalar",
