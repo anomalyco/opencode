@@ -1,6 +1,10 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
+import { BunProc } from "../src/bun"
+import { PackageRegistry } from "../src/bun/registry"
+import { Global } from "../src/global"
+import { Process } from "../src/util/process"
 
 describe("BunProc registry configuration", () => {
   test("should not contain hardcoded registry parameters", async () => {
@@ -48,6 +52,51 @@ describe("BunProc registry configuration", () => {
       // Verify no registry argument is added
       expect(installFunction).not.toContain('"--registry"')
       expect(installFunction).not.toContain('args.push("--registry')
+    }
+  })
+})
+
+describe("BunProc install pinning", () => {
+  test("uses pinned cache without touching registry", async () => {
+    const pkg = `pin-test-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+    const ver = "1.2.3"
+    const mod = path.join(Global.Path.cache, "node_modules", pkg)
+    const data = path.join(Global.Path.cache, "package.json")
+
+    await fs.mkdir(mod, { recursive: true })
+    await Bun.write(path.join(mod, "package.json"), JSON.stringify({ name: pkg, version: ver }, null, 2))
+
+    const src = await fs.readFile(data, "utf8").catch(() => "")
+    const json = src ? ((JSON.parse(src) as { dependencies?: Record<string, string> }) ?? {}) : {}
+    const deps = json.dependencies ?? {}
+    deps[pkg] = ver
+    await Bun.write(data, JSON.stringify({ ...json, dependencies: deps }, null, 2))
+
+    const stale = spyOn(PackageRegistry, "isOutdated").mockImplementation(async () => {
+      throw new Error("unexpected registry check")
+    })
+    const run = spyOn(Process, "run").mockImplementation(async () => {
+      throw new Error("unexpected process.run")
+    })
+
+    try {
+      const out = await BunProc.install(pkg, ver)
+      expect(out).toBe(mod)
+      expect(stale).not.toHaveBeenCalled()
+      expect(run).not.toHaveBeenCalled()
+    } finally {
+      stale.mockRestore()
+      run.mockRestore()
+
+      await fs.rm(mod, { recursive: true, force: true })
+      const end = await fs
+        .readFile(data, "utf8")
+        .then((item) => JSON.parse(item) as { dependencies?: Record<string, string> })
+        .catch(() => undefined)
+      if (end?.dependencies) {
+        delete end.dependencies[pkg]
+        await Bun.write(data, JSON.stringify(end, null, 2))
+      }
     }
   })
 })
