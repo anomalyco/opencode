@@ -37,3 +37,6 @@ export { BrowserEvaluateTool } from "./evaluate"
 
 // Human handoff (auth/payment/captcha)
 export { BrowserHumanHandoffTool } from "./human_handoff"
+
+// Playwright fallback (iframes, shadow DOM, edge cases)
+export { PlaywrightFallbackTool } from "./playwright_fallback"

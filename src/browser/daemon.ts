@@ -2,6 +2,7 @@ import { BrowserBinary } from "./binary"
 import { Log } from "@/util/log"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
+import { PlaywrightLauncher } from "./playwright"
 import path from "path"
 import fs from "fs/promises"
 
@@ -14,11 +15,6 @@ export interface BrowserDaemonOptions {
   viewport?: { width: number; height: number }
   userAgent?: string
   idleTimeoutMs?: number
-  /**
-   * CDP port to connect to an already-running Chrome instance.
-   * When set, agent-browser uses --cdp instead of launching its own Chrome.
-   * Optional — by default agent-browser launches its own Chrome for Testing.
-   */
   cdpPort?: number
 }
 
@@ -26,22 +22,21 @@ interface DaemonInstance {
   session: string
   options: BrowserDaemonOptions
   profilePath: string
-  cdpPort?: number
+  cdpPort: number
   startedAt: number
 }
 
 /**
- * Manages the agent-browser daemon lifecycle.
+ * Manages the browser automation lifecycle.
  *
- * Primary mode: agent-browser launches its own Chrome for Testing in
- * headed mode. The Tauri app (Athena Agent UI) is separate — it controls
- * the automation while the user watches Chrome do its thing.
+ * Architecture:
+ * 1. Playwright launches Chrome (headed, persistent profile, CDP enabled)
+ * 2. agent-browser connects to that Chrome via --cdp <port>
+ * 3. agent-browser is the primary tool interface (AI-optimized @ref snapshots)
+ * 4. Playwright is the fallback for edge cases (iframes, complex selectors)
  *
- * Optional CDP mode: connect to an already-running Chrome via
- * --cdp <port> if the user wants to attach to their own browser.
- *
- * In both modes, a persistent profile is used so logins/cookies survive
- * across sessions.
+ * Chrome lifecycle is owned by Playwright. agent-browser is just a client.
+ * On session end, Playwright closes Chrome cleanly.
  */
 export namespace BrowserDaemon {
   const instances = new Map<string, DaemonInstance>()
@@ -51,43 +46,36 @@ export namespace BrowserDaemon {
     return path.join(Global.Path.data, "browser-profile")
   }
 
-  /** Resolve CDP port from options → flag → env → undefined */
-  function resolveCdpPort(options: BrowserDaemonOptions): number | undefined {
-    if (options.cdpPort) return options.cdpPort
-    if (Flag.ATHENA_BROWSER_CDP_PORT) return Flag.ATHENA_BROWSER_CDP_PORT
-    return undefined
-  }
-
   export async function start(sessionId: string, options: BrowserDaemonOptions = {}): Promise<void> {
     if (instances.has(sessionId)) {
       log.info("daemon already running for session", { sessionId })
       return
     }
 
-    // Ensure persistent profile directory exists
     const profilePath = options.profile || getProfilePath()
     await fs.mkdir(profilePath, { recursive: true })
 
-    const cdpPort = resolveCdpPort(options)
+    const headed = options.headed ?? Flag.ATHENA_BROWSER_HEADED
 
-    const optionsWithProfile: BrowserDaemonOptions = {
+    // Step 1: Launch Chrome via Playwright (if not already running)
+    const { cdpPort } = await PlaywrightLauncher.launch({
+      headed,
+      profile: profilePath,
+      viewport: options.viewport,
+    })
+
+    log.info("Chrome launched via Playwright", { sessionId, cdpPort, headed })
+
+    // Step 2: Connect agent-browser to that Chrome via CDP
+    const optionsWithCdp: BrowserDaemonOptions = {
       ...options,
       profile: profilePath,
       cdpPort,
     }
 
     const binary = await BrowserBinary.resolve()
-    const args = buildGlobalArgs(sessionId, optionsWithProfile)
+    const args = buildGlobalArgs(sessionId, optionsWithCdp)
 
-    const mode = cdpPort ? `CDP:${cdpPort} (Electron)` : "standalone"
-    log.info("starting browser daemon", {
-      sessionId,
-      mode,
-      headed: options.headed ?? true,
-      profile: profilePath,
-    })
-
-    // Set environment for the daemon
     const env: Record<string, string> = {
       ...process.env as Record<string, string>,
     }
@@ -96,9 +84,7 @@ export namespace BrowserDaemon {
       env["AGENT_BROWSER_IDLE_TIMEOUT_MS"] = String(options.idleTimeoutMs)
     }
 
-    // Start the daemon by opening a blank page
-    // In CDP mode this connects to the existing Electron Chromium
-    // In standalone mode this launches a new Chrome instance
+    // Ping agent-browser to connect to the Playwright-launched Chrome
     const cmdArgs = binary === "npx"
       ? ["npx", "agent-browser", ...args, "open", "about:blank"]
       : [binary, ...args, "open", "about:blank"]
@@ -114,15 +100,15 @@ export namespace BrowserDaemon {
     const exitCode = await proc.exited
 
     if (exitCode !== 0) {
-      log.error("failed to start browser daemon", { exitCode, stderr, mode })
-      throw new Error(`Failed to start browser daemon (${mode}): ${stderr || "unknown error"}`)
+      log.error("agent-browser failed to connect to Chrome", { exitCode, stderr })
+      throw new Error(`agent-browser failed to connect to Chrome (CDP:${cdpPort}): ${stderr || "unknown error"}`)
     }
 
-    log.info("browser daemon started", { sessionId, mode, stdout: stdout.slice(0, 200) })
+    log.info("agent-browser connected to Playwright Chrome", { sessionId, cdpPort })
 
     instances.set(sessionId, {
       session: sessionId,
-      options: optionsWithProfile,
+      options: optionsWithCdp,
       profilePath,
       cdpPort,
       startedAt: Date.now(),
@@ -133,49 +119,31 @@ export namespace BrowserDaemon {
     const instance = instances.get(sessionId)
     if (!instance) return
 
-    log.info("stopping browser daemon", { sessionId })
+    log.info("stopping browser session", { sessionId })
 
+    // Navigate agent-browser to blank to release its session
     try {
       const binary = await BrowserBinary.resolve()
       const args = buildGlobalArgs(sessionId, instance.options)
+      const cmdArgs = binary === "npx"
+        ? ["npx", "agent-browser", ...args, "open", "about:blank"]
+        : [binary, ...args, "open", "about:blank"]
 
-      const closeArgs = instance.cdpPort
-        ? [binary === "npx" ? "npx" : binary, ...(binary === "npx" ? ["agent-browser"] : []), ...args, "open", "about:blank"]
-        : [binary === "npx" ? "npx" : binary, ...(binary === "npx" ? ["agent-browser"] : []), ...args, "close"]
-
-      const proc = Bun.spawn(closeArgs, {
-        stdout: "pipe",
-        stderr: "pipe",
-      })
-
-      // Timeout: if graceful close hangs for 5s, kill the process
-      const timer = setTimeout(() => {
-        try { proc.kill() } catch {}
-      }, 5000)
+      const proc = Bun.spawn(cmdArgs, { stdout: "pipe", stderr: "pipe" })
+      const timer = setTimeout(() => { try { proc.kill() } catch {} }, 5000)
       await proc.exited
       clearTimeout(timer)
     } catch (e) {
-      log.warn("error stopping browser daemon", { sessionId, error: String(e) })
+      log.warn("error releasing agent-browser session", { sessionId, error: String(e) })
     }
 
     instances.delete(sessionId)
-    // NOTE: We do NOT delete the profile directory — it persists
-    // so logins/cookies carry over to the next session
-  }
 
-  /**
-   * Kill all agent-browser daemon processes by name.
-   * Used as a last resort during process exit to prevent orphaned Chrome.
-   * This is a sync-safe fire-and-forget — it spawns kill commands but doesn't await.
-   */
-  export function killAllOrphans(): void {
-    try {
-      if (process.platform === "win32") {
-        Bun.spawn(["taskkill", "/F", "/IM", "agent-browser.exe"], { stdout: "ignore", stderr: "ignore" })
-      } else {
-        Bun.spawn(["pkill", "-f", "agent-browser"], { stdout: "ignore", stderr: "ignore" })
-      }
-    } catch {}
+    // If no more sessions, close Chrome via Playwright
+    if (instances.size === 0) {
+      await PlaywrightLauncher.close()
+      log.info("Chrome closed (no more sessions)")
+    }
   }
 
   export function isRunning(sessionId: string): boolean {
@@ -186,37 +154,43 @@ export namespace BrowserDaemon {
     return instances.get(sessionId)
   }
 
-  export function isElectronMode(sessionId: string): boolean {
-    return instances.get(sessionId)?.cdpPort !== undefined
+  export function getCdpPort(sessionId: string): number | undefined {
+    return instances.get(sessionId)?.cdpPort
   }
 
   export async function stopAll(): Promise<void> {
     const sessions = Array.from(instances.keys())
     await Promise.all(sessions.map((id) => stop(id)))
+    // Force close Chrome even if individual stops failed
+    await PlaywrightLauncher.close()
+  }
+
+  /**
+   * Kill all orphaned processes. Used during process exit as last resort.
+   */
+  export function killAllOrphans(): void {
+    PlaywrightLauncher.forceKill()
+    try {
+      if (process.platform === "win32") {
+        Bun.spawn(["taskkill", "/F", "/IM", "agent-browser.exe"], { stdout: "ignore", stderr: "ignore" })
+      } else {
+        Bun.spawn(["pkill", "-f", "agent-browser"], { stdout: "ignore", stderr: "ignore" })
+      }
+    } catch {}
   }
 
   export function buildGlobalArgs(sessionId: string, options: BrowserDaemonOptions): string[] {
     const args: string[] = []
 
-    // Session name for isolation between concurrent sessions
     args.push("--session", `athena-${sessionId.slice(0, 8)}`)
 
-    // CDP mode: connect to existing Chromium (Electron) instead of launching Chrome
+    // Always connect via CDP to the Playwright-launched Chrome
     if (options.cdpPort) {
       args.push("--cdp", String(options.cdpPort))
-    } else {
-      // Standalone mode: launch own Chrome
-      // Headed mode (default: true for user visibility)
-      const headed = options.headed ?? Flag.ATHENA_BROWSER_HEADED
-      if (headed) {
-        args.push("--headed")
-      }
     }
 
-    // JSON output for machine-readable responses
     args.push("--json")
 
-    // Persistent profile — keeps cookies, logins, localStorage across sessions
     if (options.profile) {
       args.push("--profile", options.profile)
     }

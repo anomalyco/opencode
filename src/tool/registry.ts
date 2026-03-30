@@ -61,6 +61,8 @@ import {
   BrowserEvaluateTool,
   // Human handoff
   BrowserHumanHandoffTool,
+  // Playwright fallback
+  PlaywrightFallbackTool,
 } from "./browser"
 import { Glob } from "../util/glob"
 import { pathToFileURL } from "url"
@@ -202,6 +204,8 @@ export namespace ToolRegistry {
           BrowserEvaluateTool,
           // Browser — human handoff
           BrowserHumanHandoffTool,
+          // Browser — Playwright fallback (iframes, edge cases)
+          PlaywrightFallbackTool,
           ...custom,
         ]
       })

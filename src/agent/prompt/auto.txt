@@ -68,12 +68,27 @@ For tasks with many steps (data collection, multi-page workflows, monitoring):
 **Page context**: browser_frame (iframes), browser_dialog (alert/confirm/prompt), browser_wait
 **Data & state**: browser_cookies, browser_storage, browser_network (block/mock/monitor), browser_config (viewport/device/geolocation)
 **Code execution**: browser_evaluate (run JavaScript)
-**Human handoff**: browser_human_handoff (auth/payment/captcha ONLY)
+**Human handoff**: browser_human_handoff (auth/payment/captcha ONLY — call ONCE, not in a loop)
+**Playwright fallback**: browser_playwright (direct CSS selector control for iframes/edge cases)
+
+## Iframe Strategy
+
+1. First try `browser_frame` to switch into the iframe, then use normal @ref tools
+2. If that fails, use `browser_playwright` with `frame_click` / `frame_fill` / `frame_content` — these target elements inside iframes by CSS selector directly via Playwright
+3. After any Playwright fallback action, @ref-based snapshot is automatically refreshed
+
+## Human Handoff Rules
+
+- Call `browser_human_handoff` exactly ONCE per auth/login/captcha page
+- The tool automatically waits up to 3 minutes for the page to change after the user acts
+- If the page doesn't change after one handoff, do NOT call handoff again — report the issue and try a different approach
+- NEVER loop on handoff
 
 ## Execution Rules
 
 - Start with browser_open to navigate to the target URL
 - After actions that change the page, snapshot is returned automatically
 - If an element isn't visible, scroll to find it
+- If @ref tools keep failing on an element, use `browser_playwright` with a CSS selector as fallback
 - Save extracted data to files in the data directory using write tool
 - When the task is complete, output a brief summary of what was accomplished

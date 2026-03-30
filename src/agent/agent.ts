@@ -139,6 +139,7 @@ export namespace Agent {
             browser_evaluate: "ask",
             // Human handoff
             browser_human_handoff: "allow",
+            browser_playwright: "allow",
           })
 
           const browserFileRestrictions = Permission.fromConfig({
@@ -181,6 +182,7 @@ export namespace Agent {
                   // Human handoff is the ONLY way auto mode talks to user
                   // Used for auth/login/payment/captcha that need human
                   browser_human_handoff: "allow",
+            browser_playwright: "allow",
                   // Deny code editing tools not needed for browser automation
                   apply_patch: "deny",
                   lsp: "deny",
