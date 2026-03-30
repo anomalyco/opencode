@@ -1,5 +1,6 @@
 import { BrowserBinary } from "./binary"
 import { BrowserDaemon, type BrowserDaemonOptions } from "./daemon"
+import { PatchrightLauncher } from "./patchright"
 import { Log } from "@/util/log"
 
 const log = Log.create({ service: "browser.client" })
@@ -77,6 +78,65 @@ export namespace BrowserClient {
     }
 
     return { output: stdout, exitCode: 0 }
+  }
+
+  /**
+   * Execute agent-browser command with automatic Patchright fallback.
+   * If agent-browser fails and the command maps to a Patchright operation,
+   * retry using Patchright's stealth API directly.
+   */
+  export async function execWithFallback(
+    sessionId: string,
+    command: string[],
+    options?: { timeout?: number; abort?: AbortSignal },
+  ): Promise<BrowserExecResult> {
+    const result = await exec(sessionId, command, options)
+    if (result.exitCode === 0) return result
+
+    // Try Patchright fallback for common commands
+    if (!PatchrightLauncher.isRunning()) return result
+
+    const cmd = command[0]
+    log.info("agent-browser failed, trying Patchright fallback", { cmd, error: result.error?.slice(0, 200) })
+
+    try {
+      switch (cmd) {
+        case "open":
+        case "goto":
+        case "navigate":
+          if (command[1]) {
+            await PatchrightLauncher.goto(command[1])
+            return { output: `Navigated to ${command[1]} (via Patchright fallback)`, exitCode: 0 }
+          }
+          break
+        case "eval":
+          if (command[1]) {
+            const evalResult = await PatchrightLauncher.evaluate(command[1])
+            return { output: JSON.stringify(evalResult), exitCode: 0 }
+          }
+          break
+        case "get":
+          if (command[1] === "title") {
+            const title = await PatchrightLauncher.title()
+            return { output: title, exitCode: 0 }
+          }
+          if (command[1] === "url") {
+            const url = PatchrightLauncher.url()
+            return { output: url, exitCode: 0 }
+          }
+          break
+        case "screenshot":
+          if (command[1]) {
+            await PatchrightLauncher.screenshot(command[1])
+            return { output: `Screenshot saved (via Patchright fallback)`, exitCode: 0 }
+          }
+          break
+      }
+    } catch (e) {
+      log.warn("Patchright fallback also failed", { cmd, error: String(e) })
+    }
+
+    return result
   }
 
   // --- Navigation ---

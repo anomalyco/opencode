@@ -1648,8 +1648,8 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         <Match when={props.part.tool === "browser_close"}>
           <BrowserInline icon="✕" pending="Closing browser..." label="close" {...toolprops} />
         </Match>
-        <Match when={props.part.tool === "browser_playwright"}>
-          <BrowserInline icon="🎭" pending="Playwright fallback..." label={(toolprops.input as any).action} {...toolprops} />
+        <Match when={props.part.tool === "browser_patchright"}>
+          <BrowserInline icon="🛡" pending="Patchright stealth..." label={(toolprops.input as any).action} {...toolprops} />
         </Match>
         <Match when={true}>
           <GenericTool {...toolprops} />

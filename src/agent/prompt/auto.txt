@@ -69,13 +69,13 @@ For tasks with many steps (data collection, multi-page workflows, monitoring):
 **Data & state**: browser_cookies, browser_storage, browser_network (block/mock/monitor), browser_config (viewport/device/geolocation)
 **Code execution**: browser_evaluate (run JavaScript)
 **Human handoff**: browser_human_handoff (auth/payment/captcha ONLY — call ONCE, not in a loop)
-**Playwright fallback**: browser_playwright (direct CSS selector control for iframes/edge cases)
+**Patchright fallback**: browser_patchright (direct CSS selector control for iframes/edge cases)
 
 ## Iframe Strategy
 
 1. First try `browser_frame` to switch into the iframe, then use normal @ref tools
-2. If that fails, use `browser_playwright` with `frame_click` / `frame_fill` / `frame_content` — these target elements inside iframes by CSS selector directly via Playwright
-3. After any Playwright fallback action, @ref-based snapshot is automatically refreshed
+2. If that fails, use `browser_patchright` with `frame_click` / `frame_fill` / `frame_content` — these target elements inside iframes by CSS selector directly via Patchright
+3. After any Patchright fallback action, @ref-based snapshot is automatically refreshed
 
 ## Human Handoff Rules
 
@@ -89,6 +89,6 @@ For tasks with many steps (data collection, multi-page workflows, monitoring):
 - Start with browser_open to navigate to the target URL
 - After actions that change the page, snapshot is returned automatically
 - If an element isn't visible, scroll to find it
-- If @ref tools keep failing on an element, use `browser_playwright` with a CSS selector as fallback
+- If @ref tools keep failing on an element, use `browser_patchright` with a CSS selector as fallback
 - Save extracted data to files in the data directory using write tool
 - When the task is complete, output a brief summary of what was accomplished

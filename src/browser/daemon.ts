@@ -2,7 +2,7 @@ import { BrowserBinary } from "./binary"
 import { Log } from "@/util/log"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
-import { PlaywrightLauncher } from "./playwright"
+import { PatchrightLauncher } from "./patchright"
 import path from "path"
 import fs from "fs/promises"
 
@@ -30,10 +30,10 @@ interface DaemonInstance {
  * Manages the browser automation lifecycle.
  *
  * Architecture:
- * 1. Playwright launches Chrome (headed, persistent profile, CDP enabled)
+ * 1. Patchright launches Chrome (headed, stealth, persistent profile, CDP enabled)
  * 2. agent-browser connects to that Chrome via --cdp <port>
  * 3. agent-browser is the primary tool interface (AI-optimized @ref snapshots)
- * 4. Playwright is the fallback for edge cases (iframes, complex selectors)
+ * 4. Patchright is the fallback for edge cases (iframes, shadow DOM, stealth)
  *
  * Chrome lifecycle is owned by Playwright. agent-browser is just a client.
  * On session end, Playwright closes Chrome cleanly.
@@ -58,13 +58,13 @@ export namespace BrowserDaemon {
     const headed = options.headed ?? Flag.ATHENA_BROWSER_HEADED
 
     // Step 1: Launch Chrome via Playwright (if not already running)
-    const { cdpPort } = await PlaywrightLauncher.launch({
+    const { cdpPort } = await PatchrightLauncher.launch({
       headed,
       profile: profilePath,
       viewport: options.viewport,
     })
 
-    log.info("Chrome launched via Playwright", { sessionId, cdpPort, headed })
+    log.info("Chrome launched via Patchright (stealth)", { sessionId, cdpPort, headed })
 
     // Step 2: Connect agent-browser to that Chrome via CDP
     const optionsWithCdp: BrowserDaemonOptions = {
@@ -84,7 +84,7 @@ export namespace BrowserDaemon {
       env["AGENT_BROWSER_IDLE_TIMEOUT_MS"] = String(options.idleTimeoutMs)
     }
 
-    // Ping agent-browser to connect to the Playwright-launched Chrome
+    // Ping agent-browser to connect to the Patchright-launched Chrome
     const cmdArgs = binary === "npx"
       ? ["npx", "agent-browser", ...args, "open", "about:blank"]
       : [binary, ...args, "open", "about:blank"]
@@ -141,7 +141,7 @@ export namespace BrowserDaemon {
 
     // If no more sessions, close Chrome via Playwright
     if (instances.size === 0) {
-      await PlaywrightLauncher.close()
+      await PatchrightLauncher.close()
       log.info("Chrome closed (no more sessions)")
     }
   }
@@ -162,14 +162,14 @@ export namespace BrowserDaemon {
     const sessions = Array.from(instances.keys())
     await Promise.all(sessions.map((id) => stop(id)))
     // Force close Chrome even if individual stops failed
-    await PlaywrightLauncher.close()
+    await PatchrightLauncher.close()
   }
 
   /**
    * Kill all orphaned processes. Used during process exit as last resort.
    */
   export function killAllOrphans(): void {
-    PlaywrightLauncher.forceKill()
+    PatchrightLauncher.forceKill()
     try {
       if (process.platform === "win32") {
         Bun.spawn(["taskkill", "/F", "/IM", "agent-browser.exe"], { stdout: "ignore", stderr: "ignore" })
@@ -184,7 +184,7 @@ export namespace BrowserDaemon {
 
     args.push("--session", `athena-${sessionId.slice(0, 8)}`)
 
-    // Always connect via CDP to the Playwright-launched Chrome
+    // Always connect via CDP to the Patchright-launched Chrome
     if (options.cdpPort) {
       args.push("--cdp", String(options.cdpPort))
     }
