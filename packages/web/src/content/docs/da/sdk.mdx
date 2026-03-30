@@ -1,15 +1,15 @@
 ---
 title: SDK
-description: Typesikker JS-klient for åpen kodeserver.
+description: Typesikker JS-klient for åben kodeserver.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-Åpenkoden JS/TS SDK gir en typesikker klient for samhandling med serveren.
-Brug den til at bygge integrasjoner og kontrollere opencode programmatisk.
+Åbenkoden JS/TS SDK giver en typesikker klient til samspil med serveren.
+Brug den til at bygge integrationer og kontrollere opencode programmatisk.
 
-[Finn ut mer](/docs/server) om hvordan serveren fungerer. For eksempler, tjek ut [prosjektene](/docs/ecosystem#projects) bygget av fellesskapet.
+[Læs mere](/docs/server) om hvordan serveren fungerer. For eksempler, tjek ud [projekterne](/docs/ecosystem#projects) bygget af fællesskabet.
 
 ---
 
@@ -25,7 +25,7 @@ npm install @opencode-ai/sdk
 
 ## Opret klient
 
-Opret en forekomst av opencode:
+Opret en forekomst af opencode:
 
 ```javascript
 import { createOpencode } from "@opencode-ai/sdk"
@@ -41,15 +41,15 @@ Dette starter både en server og en klient
 | ---------- | ------------- | -------------------------------- | ----------- |
 | `hostname` | `string`      | Server vertsnavn                 | `127.0.0.1` |
 | `port`     | `number`      | Serverport                       | `4096`      |
-| `signal`   | `AbortSignal` | Avbryt signal for kansellering   | `undefined` |
+| `signal`   | `AbortSignal` | Abortsignal til annullering   | `undefined` |
 | `timeout`  | `number`      | Tidsavbrudd i ms for serverstart | `5000`      |
-| `config`   | `Config`      | Konfigurasjonsobjekt             | `{}`        |
+| `config`   | `Config`      | Konfigurationsobjekt             | `{}`        |
 
 ---
 
 ## Konfig
 
-Du kan sende et konfigurasjonsobjekt for at tilpasse virkemåten. Forekomsten henter fortsatt din `opencode.json`, men du kan overstyre eller tilføje til konfigurasjon inline:
+Du kan sende et konfigurationsobjekt for at tilpasse virkemåden. Forekomsten henter stadig din `opencode.json`, men du kan overstyre eller tilføje til konfiguration inline:
 
 ```javascript
 import { createOpencode } from "@opencode-ai/sdk"
@@ -69,7 +69,7 @@ opencode.server.close()
 
 ## Kun klient
 
-Hvis du allerede har en kjørende forekomst av opencode, kan du oprete en klientforekomst for at koble til den:
+Hvis du allerede har en kørende forekomst af opencode, kan du oprette en klientforekomst for at koble til den:
 
 ```javascript
 import { createOpencodeClient } from "@opencode-ai/sdk"
@@ -81,10 +81,10 @@ const client = createOpencodeClient({
 
 #### Indstillinger
 
-| Alternativ      | Skriv inn  | Beskrivelse                        | Standard                |
+| Alternativ      | Skriv      | Beskrivelse                        | Standard                |
 | --------------- | ---------- | ---------------------------------- | ----------------------- |
-| `baseUrl`       | `string`   | URL av serveren                    | `http://localhost:4096` |
-| `fetch`         | `function` | Egendefinert hentingimplementering | `globalThis.fetch`      |
+| `baseUrl`       | `string`   | URL'en til serveren                | `http://localhost:4096` |
+| `fetch`         | `function` | Egendefineret fetch-implementering | `globalThis.fetch`      |
 | `parseAs`       | `string`   | Svarparsingmetode                  | `auto`                  |
 | `responseStyle` | `string`   | Returstil: `data` eller `fields`   | `fields`                |
 | `throwOnError`  | `boolean`  | Kast feil i stedet for retur       | `false`                 |
@@ -105,7 +105,7 @@ Alle typer er generert fra serverens OpenAPI-spesifikasjon og tilgængelig i <a 
 
 ## Fejl
 
-SDK kan gi feil som du kan fange opp og håndtere:
+SDK kan give fejl som du kan fange og håndtere:
 
 ```typescript
 try {
@@ -216,7 +216,7 @@ console.log(health.data.version)
 
 | Metode         | Beskrivelse                     | Svar                                        |
 | -------------- | ------------------------------- | ------------------------------------------- |
-| `app.log()`    | Skriv en loggoppføring          | `boolean`                                   |
+| `app.log()`    | Skriv en logpost          | `boolean`                                   |
 | `app.agents()` | Liste alle tilgængelige agenter | <a href={typesUrl}><code>Agent[]</code></a> |
 
 ---
@@ -243,8 +243,8 @@ const agents = await client.app.agents()
 
 | Metode              | Beskrivelse                | Svar                                           |
 | ------------------- | -------------------------- | ---------------------------------------------- |
-| `project.list()`    | Liste over alle prosjekter | <a href={typesUrl}><code>Prosjekt[]</code></a> |
-| `project.current()` | Få nåværende prosjekt      | <a href={typesUrl}><code>Prosjekt</code></a>   |
+| `project.list()`    | Liste over alle projekter | <a href={typesUrl}><code>Projekt[]</code></a> |
+| `project.current()` | Få nuværende projekt      | <a href={typesUrl}><code>Projekt</code></a>   |
 
 ---
 
@@ -281,7 +281,7 @@ const pathInfo = await client.path.get()
 
 | Metode               | Beskrivelse                            | Svar                                                                                                  |
 | -------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `config.get()`       | Få konfigurasjonsinformasjon           | <a href={typesUrl}><code>Config</code></a>                                                            |
+| `config.get()`       | Få konfigurationsinformation           | <a href={typesUrl}><code>Config</code></a>                                                            |
 | `config.providers()` | Liste leverandører og standardmodeller | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
 
 ---
@@ -304,20 +304,20 @@ const { providers, default: defaults } = await client.config.providers()
 | `session.get({ path })`                                    | Få session                        | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                             |
 | `session.children({ path })`                               | Liste over barnesessioner         | Returnerer <a href={typesUrl}><code>Session[]</code></a>                                                                                                                                                                           |
 | `session.create({ body })`                                 | Opret session                     | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                             |
-| `session.delete({ path })`                                 | Slett session                     | Returnerer `boolean`                                                                                                                                                                                                               |
-| `session.update({ path, body })`                           | Opdater sessionegenskaper         | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                             |
-| `session.init({ path, body })`                             | Analyser appen og lag `AGENTS.md` | Returnerer `boolean`                                                                                                                                                                                                               |
-| `session.abort({ path })`                                  | Avbryt en løpesession             | Returnerer `boolean`                                                                                                                                                                                                               |
+| `session.delete({ path })`                                 | Slet session                     | Returnerer `boolean`                                                                                                                                                                                                               |
+| `session.update({ path, body })`                           | Opdater sessionegenskaber        | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                             |
+| `session.init({ path, body })`                             | Analyser appen og lav `AGENTS.md` | Returnerer `boolean`                                                                                                                                                                                                               |
+| `session.abort({ path })`                                  | Afbryd en løbesession             | Returnerer `boolean`                                                                                                                                                                                                               |
 | `session.share({ path })`                                  | Del sessionen                     | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                             |
-| `session.unshare({ path })`                                | Slutt at dele sessionen           | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                             |
-| `session.summarize({ path, body })`                        | Oppsummer sessionen               | Returnerer `boolean`                                                                                                                                                                                                               |
-| `session.messages({ path })`                               | Liste meldinger i en session      | Returnerer `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                                                                                                         |
-| `session.message({ path })`                                | Få meldingsdetaljer               | Returnerer `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                                                                                           |
+| `session.unshare({ path })`                                | Stop med at dele sessionen        | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                             |
+| `session.summarize({ path, body })`                        | Opsummer sessionen               | Returnerer `boolean`                                                                                                                                                                                                               |
+| `session.messages({ path })`                               | Liste meddelelser i en session    | Returnerer `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                                                                                                         |
+| `session.message({ path })`                                | Få meddelelsesdetaljer            | Returnerer `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                                                                                           |
 | `session.prompt({ path, body })`                           | Send melding                      | `body.noReply: true` returnerer UserMessage (kun kontekst). Standard returnerer <a href={typesUrl}><code>AssistantMessage</code></a> med AI svar. Understøtter `body.outputFormat` for [struktureret output](#struktureret-output) |
 | `session.command({ path, body })`                          | Send kommando til session         | Returnerer `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                                                                                  |
-| `session.shell({ path, body })`                            | Kjør en shell-kommando            | Returnerer <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                                                                                                    |
-| `session.revert({ path, body })`                           | Tilbakestill en melding           | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                             |
-| `session.unrevert({ path })`                               | Gjenopret nulstillete meldinger   | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                             |
+| `session.shell({ path, body })`                            | Kør en shell-kommando             | Returnerer <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                                                                                                    |
+| `session.revert({ path, body })`                           | Gendan en besked                  | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                             |
+| `session.unrevert({ path })`                               | Gendan nulstillede beskeder       | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                             |
 | `postSessionByIdPermissionsByPermissionId({ path, body })` | Svar på en tillatelsesforespørsel | Returnerer `boolean`                                                                                                                                                                                                               |
 
 ---
@@ -357,17 +357,17 @@ await client.session.prompt({
 
 | Metode                    | Beskrivelse                        | Svar                                                                                       |
 | ------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------ |
-| `find.text({ query })`    | Søk etter tekst i filer            | En rekke matchobjekter med `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
-| `find.files({ query })`   | Finn filer og kataloger etter navn | `string[]` (baner)                                                                         |
-| `find.symbols({ query })` | Finn arbeidsområdesymboler         | <a href={typesUrl}><code>Symbol[]</code></a>                                               |
-| `file.read({ query })`    | Les en fil                         | `{ type: "raw" \| "patch", content: string }`                                              |
+| `find.text({ query })`    | Søg efter tekst i filer            | En række matchobjekter med `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
+| `find.files({ query })`   | Find filer og kataloger efter navn | `string[]` (baner)                                                                         |
+| `find.symbols({ query })` | Find arbejdsområdesymboler         | <a href={typesUrl}><code>Symbol[]</code></a>                                               |
+| `file.read({ query })`    | Læs en fil                         | `{ type: "raw" | "patch", content: string }`                                              |
 | `file.status({ query? })` | Få status for sporede filer        | <a href={typesUrl}><code>Fil[]</code></a>                                                  |
 
-`find.files` støtter nogle få valgfrie søkefelt:
+`find.files` understøtter nogle få valgfrie søgefelter:
 
 - `type`: `"file"` eller `"directory"`
-- `directory`: overstyr prosjektroten for søket
-- `limit`: maksimalt antall resultater (1–200)
+- `directory`: overstyr projektroden for søget
+- `limit`: maksimalt antal resultater (1–200)
 
 ---
 
@@ -398,11 +398,11 @@ const content = await client.file.read({
 
 | Metode                         | Beskrivelse                  | Svar      |
 | ------------------------------ | ---------------------------- | --------- |
-| `tui.appendPrompt({ body })`   | Legg til tekst i ledeteksten | `boolean` |
-| `tui.openHelp()`               | Åpne hjelpedialogen          | `boolean` |
-| `tui.openSessions()`           | Åpne sessionvelgeren         | `boolean` |
-| `tui.openThemes()`             | Åpne temavelgeren            | `boolean` |
-| `tui.openModels()`             | Åpne modellvelgeren          | `boolean` |
+| `tui.appendPrompt({ body })`   | Tilføj tekst i prompten       | `boolean` |
+| `tui.openHelp()`               | Åbn hjælpedialogen          | `boolean` |
+| `tui.openSessions()`           | Åbn sessionvælgeren         | `boolean` |
+| `tui.openThemes()`             | Åbn temavælgeren            | `boolean` |
+| `tui.openModels()`             | Åbn modelvælgeren           | `boolean` |
 | `tui.submitPrompt()`           | Send inn nuværende ledetekst | `boolean` |
 | `tui.clearPrompt()`            | Fjern ledeteksten            | `boolean` |
 | `tui.executeCommand({ body })` | Utfør en kommando            | `boolean` |

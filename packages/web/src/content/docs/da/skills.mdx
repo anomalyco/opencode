@@ -1,33 +1,33 @@
 ---
 title: "Agentfærdigheder"
-description: "Definer gjenbrugbar atferd via SKILL.md-definisjoner"
+description: "Definer genbrugbar adfærd via SKILL.md-definitioner"
 ---
 
-Agentferdigheter lar OpenCode oppdage gjenbrugbare instruksjoner fra repo- eller hjemmekatalogen din.
-Ferdigheter lastes inn på forespørsel via det opprinnelige `skill`-verktøyet – agenter ser tilgængelige ferdigheter og kan laste inn hele innholdet når det er nødvendig.
+Agentfærdigheder lader OpenCode opdage genbrugelige instruktioner fra repo- eller hjemmekatalogen din.
+Færdigheder indlæses på forespørgsel via det oprindelige `skill`-værktøj – agenter ser tilgængelige færdigheder og kan indlæse hele indholdet, når det er nødvendigt.
 
 ---
 
 ## Placer filer
 
-Opret én mappe per ferdighetsnavn og tilføj inn en `SKILL.md` i den.
-OpenCode søker etter disse stedene:
+Opret én mappe per færdighedsnavn og tilføj en `SKILL.md` i den.
+OpenCode søger efter disse steder:
 
-- Prosjektkonfigurasjon: `.opencode/skills/<name>/SKILL.md`
-- Global konfigurasjon: `~/.config/opencode/skills/<name>/SKILL.md`
-- Prosjekt Claude-kompatibel: `.claude/skills/<name>/SKILL.md`
+- Projektkonfiguration: `.opencode/skills/<name>/SKILL.md`
+- Global konfiguration: `~/.config/opencode/skills/<name>/SKILL.md`
+- Projekt Claude-kompatibel: `.claude/skills/<name>/SKILL.md`
 - Global Claude-kompatibel: `~/.claude/skills/<name>/SKILL.md`
-- Prosjektagent-kompatibel: `.agents/skills/<name>/SKILL.md`
+- Projektagent-kompatibel: `.agents/skills/<name>/SKILL.md`
 - Global agent-kompatibel: `~/.agents/skills/<name>/SKILL.md`
 
 ---
 
 ## Forstå opdagelsen
 
-For prosjektlokale stier går OpenCode opp fra din nåværende arbejdskatalog til den når git-arbeidstreet.
+For projektlokale stier går OpenCode op fra din nuværende arbejdskatalog, indtil den når git-arbejdstree.
 Den laster alle matchende `skills/*/SKILL.md` i `.opencode/` og alle matchende `.claude/skills/*/SKILL.md` eller `.agents/skills/*/SKILL.md` underveis.
 
-Globale definisjoner lastes også inn fra `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` og `~/.agents/skills/*/SKILL.md`.
+Globale definitioner indlæses også fra `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` og `~/.agents/skills/*/SKILL.md`.
 
 ---
 
@@ -67,13 +67,13 @@ Ekvivalent regulært uttrykk:
 ## Følg længdereglerne
 
 `description` må bestå av 1-1024 tegn.
-Hold det spesifikt nok til at agenten kan velge riktig.
+Hold det specifikt nok til at agenten kan vælge rigtigt.
 
 ---
 
 ## Brug et eksempel
 
-Lag `.opencode/skills/git-release/SKILL.md` slik:
+Lav `.opencode/skills/git-release/SKILL.md` sådan:
 
 ```markdown
 ---
@@ -102,8 +102,8 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ## Genkend værktøjsbeskrivelsen
 
-OpenCode viser tilgængelige ferdigheter i `skill` verktøybeskrivelsen.
-Hver oppføring inneholder ferdighetsnavnet og beskrivelsen:
+OpenCode viser tilgængelige færdigheder i `skill` værktøjsbeskrivelsen.
+Hver post indeholder færdighedsnavnet og beskrivelsen:
 
 ```xml
 <available_skills>
@@ -114,7 +114,7 @@ Hver oppføring inneholder ferdighetsnavnet og beskrivelsen:
 </available_skills>
 ```
 
-Agenten laster inn en ferdighet ved at kalle verktøyet:
+Agenten indlæser en færdighed ved at kalde værktøjet:
 
 ```
 skill({ name: "git-release" })
@@ -124,7 +124,7 @@ skill({ name: "git-release" })
 
 ## Konfigurer tilladelser
 
-Kontroller hvilke ferdigheter agenter har tilgang til ved at bruge mønsterbaserte tillatelser i `opencode.json`:
+Kontroller hvilke færdigheder agenter har adgang til ved at bruge mønsterbaserede tilladelser i `opencode.json`:
 
 ```json
 {
@@ -139,10 +139,10 @@ Kontroller hvilke ferdigheter agenter har tilgang til ved at bruge mønsterbaser
 }
 ```
 
-| Tillatelse | Atferd                                     |
+| Tilladelse | Adfærd                                     |
 | ---------- | ------------------------------------------ |
-| `allow`    | Ferdigheter lastes umiddelbart             |
-| `deny`     | Ferdighet skjult for agent, tilgang avvist |
+| `allow`    | Færdigheder indlæses straks             |
+| `deny`     | Færdighed skjult for agenten, adgang afvist |
 | `ask`      | Bruger bedt om godkjenning før lasting     |
 
 Mønstre støtter jokertegn: `internal-*` samsvarer med `internal-docs`, `internal-tools` osv.
@@ -151,9 +151,9 @@ Mønstre støtter jokertegn: `internal-*` samsvarer med `internal-docs`, `intern
 
 ## Tilsidesættelse pr. agent
 
-Gi spesifikke agenter andre tillatelser enn de globale standardinnstillingene.
+Giv specifikke agenter andre tilladelser end de globale standardindstillinger.
 
-**For egendefinerte agenter** (i agent frontmatter):
+**For egendefinerede agenter** (i agent frontmatter):
 
 ```yaml
 ---
@@ -163,7 +163,7 @@ permission:
 ---
 ```
 
-**For innebygde agenter** (i `opencode.json`):
+**For indbyggede agenter** (i `opencode.json`):
 
 ```json
 {
@@ -183,9 +183,9 @@ permission:
 
 ## Deaktiver færdighedsværktøjet
 
-Deaktiver ferdigheter fullstendig for agenter som ikke bør bruge dem:
+Deaktiver færdigheder fuldstændigt for agenter, som ikke bør bruge dem:
 
-**For egendefinerte agenter**:
+**For egendefinerede agenter**:
 
 ```yaml
 ---
@@ -194,7 +194,7 @@ tools:
 ---
 ```
 
-**For innebygde agenter**:
+**For indbyggede agenter**:
 
 ```json
 {
@@ -208,15 +208,15 @@ tools:
 }
 ```
 
-Når den er deaktivert, blir `<available_skills>`-delen utelatt helt.
+Når den er deaktiveret, bliver `<available_skills>`-delen udeladt helt.
 
 ---
 
 ## Fejlfind indlæsning
 
-Hvis en ferdighet ikke vises:
+Hvis en færdighed ikke vises:
 
 1. Kontroller at `SKILL.md` er stavet med store bokstaver
 2. Tjek at frontmatter inkluderer `name` og `description`
-3. Sørg for at ferdighetsnavnene er unike på alle steder
-4. Tjek tillatelser – ferdigheter med `deny` er skjult for agenter
+3. Sørg for at færdighedsnavnene er unikke på alle steder
+4. Tjek tilladelser – færdigheder med `deny` er skjult for agenter

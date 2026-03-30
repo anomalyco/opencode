@@ -3,15 +3,15 @@ title: Værktøjer
 description: Administrer de værktøjer, en LLM kan bruge.
 ---
 
-Verktøy lar LLM utføre handlinger i kodebasen din. OpenCode kommer med et sett med innebygde verktøy, men du kan utvide det med [egendefinerte verktøy](/docs/custom-tools) eller [MCP servere](/docs/mcp-servers).
+Værktøjer lader LLM udføre handlinger i din kodebase. OpenCode leveres med et sæt indbyggede værktøjer, men du kan udvide det med [egendefinerede værktøjer](/docs/custom-tools) eller [MCP-servere](/docs/mcp-servers).
 
-Som standard er alle verktøy **aktivert** og trenger ikke tillatelse for at kjøre. Du kan kontrollere verktøyets oppførsel gjennom [tillatelser](/docs/permissions).
+Som standard er alle værktøjer **aktiveret** og har ikke brug for tilladelse for at køre. Du kan kontrollere værktøjets opførsel gennem [tilladelser](/docs/permissions).
 
 ---
 
 ## Konfiguration
 
-Brug feltet `permission` for at kontrollere verktøyets oppførsel. Du kan tillate, avslå eller kreve godkjenning for hvert verktøy.
+Brug feltet `permission` for at kontrollere værktøjets opførsel. Du kan tillade, afvise eller kræve godkendelse for hvert værktøj.
 
 ```json title="opencode.json"
 {
@@ -24,7 +24,7 @@ Brug feltet `permission` for at kontrollere verktøyets oppførsel. Du kan tilla
 }
 ```
 
-Du kan også bruge jokertegn for at kontrollere flere verktøy samtidig. For eksempel, for at kreve godkjenning for alle verktøy fra en MCP-server:
+Du kan også bruge jokertegn for at kontrollere flere værktøjer samtidig. For eksempel, for at kræve godkendelse for alle værktøjer fra en MCP-server:
 
 ```json title="opencode.json"
 {
@@ -35,19 +35,19 @@ Du kan også bruge jokertegn for at kontrollere flere verktøy samtidig. For eks
 }
 ```
 
-[Finn ut mer](/docs/permissions) om konfigurering av tillatelser.
+[Læs mere](/docs/permissions) om konfigurering af tilladelser.
 
 ---
 
 ## Indbyggede
 
-Her er alle de innebygde verktøyene som er tilgængelige i OpenCode.
+Her er alle de indbyggede værktøjer, der er tilgængelige i OpenCode.
 
 ---
 
 ### bash
 
-Utfør shellkommandoer i prosjektmiljøet ditt.
+Udfør shell-kommandoer i dit projektmiljø.
 
 ```json title="opencode.json" {4}
 {
@@ -58,7 +58,7 @@ Utfør shellkommandoer i prosjektmiljøet ditt.
 }
 ```
 
-Dette verktøyet lar LLM kjøre terminalkommandoer som `npm install`, `git status` eller en hvilken som helst annen shell-kommando.
+Dette værktøj lader LLM køre terminalkommandoer som `npm install`, `git status` eller en hvilken som helst anden shell-kommando.
 
 ---
 
@@ -75,7 +75,7 @@ Endre eksisterende filer ved at bruge eksakte strengerstatninger.
 }
 ```
 
-Dette verktøyet utfører nøyaktige redigeringer av filer ved at erstatte eksakte teksttreff. Det er den primære måten LLM endrer kode på.
+Dette værktøj udfører nøjagtige redigeringer af filer ved at erstatte nøjagtige tekstmatch. Det er den primære måde, LLM ændrer kode på.
 
 ---
 
@@ -92,17 +92,17 @@ Opret nye filer eller overskriv eksisterende.
 }
 ```
 
-Brug denne for at la LLM lage nye filer. Den vil overskrive eksisterende filer hvis de allerede eksisterer.
+Brug dette for at lade LLM oprette nye filer. Den vil overskrive eksisterende filer, hvis de allerede eksisterer.
 
 :::note
-`write`-verktøyet kontrolleres av tillatelsen `edit`, som dekker alle filendringer (`edit`, `write`, `patch`, `multiedit`).
+`write`-værktøjet kontrolleres af tilladelsen `edit`, som dækker alle filændringer (`edit`, `write`, `patch`, `multiedit`).
 :::
 
 ---
 
 ### read
 
-Les filinnholdet fra kodebasen din.
+Læs filindholdet fra din kodebase.
 
 ```json title="opencode.json" {4}
 {
@@ -113,13 +113,13 @@ Les filinnholdet fra kodebasen din.
 }
 ```
 
-Dette verktøyet leser filer og returnerer innholdet. Den støtter lesing av spesifikke linjeområder for store filer.
+Dette værktøj læser filer og returnerer indholdet. Det understøtter læsning af specifikke linjeområder for store filer.
 
 ---
 
 ### grep
 
-Søk i filinnhold ved hjelp av regulære uttrykk.
+Søg i filindhold ved hjælp af regulære udtryk.
 
 ```json title="opencode.json" {4}
 {
@@ -130,13 +130,13 @@ Søk i filinnhold ved hjelp av regulære uttrykk.
 }
 ```
 
-Rask innholdssøk på tvers av kodebasen din. Støtter full regex-syntaks og filmønsterfiltrering.
+Hurtig indholdssøgning på tværs af din kodebase. Understøtter fuld regex-syntaks og filmønsterfiltrering.
 
 ---
 
 ### glob
 
-Finn filer etter mønstermatching.
+Find filer ved hjælp af mønstermatchning.
 
 ```json title="opencode.json" {4}
 {
@@ -147,13 +147,13 @@ Finn filer etter mønstermatching.
 }
 ```
 
-Søk etter filer ved at bruge glob-mønstre som `**/*.js` eller `src/**/*.ts`. Returnerer samsvarende filbaner sortert etter endringstid.
+Søg efter filer ved at bruge glob-mønstre som `**/*.js` eller `src/**/*.ts`. Returnerer matchende filstier sorteret efter ændringstid.
 
 ---
 
 ### list
 
-List filer og kataloger i en gitt bane.
+List filer og mapper i en given sti.
 
 ```json title="opencode.json" {4}
 {
@@ -164,16 +164,16 @@ List filer og kataloger i en gitt bane.
 }
 ```
 
-Dette verktøyet viser kataloginnhold. Den aksepterer glob-mønstre for at filtrere resultater.
+Dette værktøj viser katalogindhold. Det accepterer glob-mønstre for at filtrere resultater.
 
 ---
 
 ### lsp (experimental)
 
-Samhandle med dine konfigurerte LSP-servere for at få kodeintelligensfunksjoner som definisjoner, referanser, sveveinformasjon og anropshierarki.
+Interagér med dine konfigurerede LSP-servere for at få kodeintelligensfunktioner som definitioner, referencer, hover-information og call hierarchy.
 
 :::note
-Dette verktøyet er bare tilgængelig når `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (eller `OPENCODE_EXPERIMENTAL=true`).
+Dette værktøj er kun tilgængeligt når `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (eller `OPENCODE_EXPERIMENTAL=true`).
 :::
 
 ```json title="opencode.json" {4}
@@ -185,9 +185,9 @@ Dette verktøyet er bare tilgængelig når `OPENCODE_EXPERIMENTAL_LSP_TOOL=true`
 }
 ```
 
-Støttede operasjoner inkluderer `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls` og `outgoingCalls`.
+Støttede operationer inkluderer `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls` og `outgoingCalls`.
 
-For at konfigurere hvilke LSP-servere som er tilgængelige for prosjektet ditt, se [LSP-servere](/docs/lsp).
+For at konfigurere, hvilke LSP-servere der er tilgængelige for dit projekt, se [LSP-servere](/docs/lsp).
 
 ---
 
@@ -204,10 +204,10 @@ Brug patcher på filer.
 }
 ```
 
-Dette verktøyet bruger opdateringsfiler til kodebasen din. Nyttig for at påføre diff og lapper fra forskjellige kilder.
+Dette værktøj bruger opdateringsfiler til din kodebase. Nyttig til at anvende diffs og lapper fra forskellige kilder.
 
 :::note
-`patch`-verktøyet kontrolleres av tillatelsen `edit`, som dekker alle filendringer (`edit`, `write`, `patch`, `multiedit`).
+`patch`-værktøjet kontrolleres af tilladelsen `edit`, som dækker alle filændringer (`edit`, `write`, `patch`, `multiedit`).
 :::
 
 ---
@@ -240,17 +240,17 @@ Administrer to-doslister under kodingssessioner.
 }
 ```
 
-Opreter og opdaterer oppgavelister for at spore fremdrift under komplekse operasjoner. LLM bruger dette til at organisere flertrinnsoppgaver.
+Opretter og opdaterer opgavelister for at spore fremdrift under komplekse operationer. LLM bruger dette til at organisere flertrinsopgaver.
 
 :::note
-Dette verktøyet er deaktivert for subagenter som standard, men du kan aktivere det manuelt. [Finn ut mer](/docs/agents/#permissions)
+Dette værktøj er deaktiveret for subagenter som standard, men du kan aktivere det manuelt. [Læs mere](/docs/agents/#permissions)
 :::
 
 ---
 
 ### webfetch
 
-Hent nettinnhold.
+Hent netindhold.
 
 ```json title="opencode.json" {4}
 {
@@ -261,18 +261,18 @@ Hent nettinnhold.
 }
 ```
 
-Lar LLM hente og lese nettsider. Nyttig for at slå opp dokumentasjon eller forske på nettressurser.
+Lader LLM hente og læse websider. Nyttig for at slå op dokumentation eller forske i netressourcer.
 
 ---
 
 ### websearch
 
-Søk på nettet for informasjon.
+Søg på nettet efter information.
 
 :::note
-Dette verktøyet er bare tilgængelig når du bruger OpenCode-leverandøren eller når miljøvariabelen `OPENCODE_ENABLE_EXA` er satt til en sannverdi (f.eks. `true` eller `1`).
+Dette værktøj er kun tilgængeligt, når du bruger OpenCode-leverandøren, eller når miljøvariablen `OPENCODE_ENABLE_EXA` er sat til sand (`true` eller `1`).
 
-Slik aktiverer du når du starter OpenCode:
+Sådan aktiverer du det, når du starter OpenCode:
 
 ```bash
 OPENCODE_ENABLE_EXA=1 opencode
@@ -289,19 +289,19 @@ OPENCODE_ENABLE_EXA=1 opencode
 }
 ```
 
-Utfører nettsøk med Exa AI for at finne relevant informasjon på nettet. Nyttig for at undersøke emner, finne aktuelle hendelser eller samle informasjon utover treningsdataavbruddet.
+Udfører netsøgninger med Exa AI for at finde relevant information på nettet. Nyttigt til at undersøge emner, finde aktuelle begivenheder eller samle information ud over træningsdataafbrydelsen.
 
-Ingen API-nøgle kreves — verktøyet kobles direkte til Exa AIs vertsbaserte MCP-tjeneste uten autentisering.
+Ingen API-nøgle kræves — værktøjet kobles direkte til Exa AIs værtsbaserede MCP-tjeneste uden autentisering.
 
 :::tip
-Brug `websearch` når du trenger at finne informasjon (oppdagelse), og `webfetch` når du trenger at hente innhold fra en bestemt URL (henting).
+Brug `websearch`, når du har brug for at finde information (opdagelse), og `webfetch`, når du har brug for at hente indhold fra en bestemt URL.
 :::
 
 ---
 
 ### question
 
-Still brugeren spørsmål under utførelse.
+Still brugeren spørgsmål under udførelsen.
 
 ```json title="opencode.json" {4}
 {
@@ -312,42 +312,42 @@ Still brugeren spørsmål under utførelse.
 }
 ```
 
-Dette verktøyet lar LLM stille spørsmål til brugeren under en oppgave. Det er nyttig for:
+Dette værktøj lader LLM stille spørgsmål til brugeren under en opgave. Det er nyttigt til:
 
-- Samle brugerpreferanser eller krav
-- Avklarende tvetydige instruksjoner
-- Få beslutninger om gjennomføringsvalg
-- Tilbyr valg om hvilken retning du skal ta
+- Indsamle brugerpræferencer eller krav
+- Afklare tvetydige instruktioner
+- Tage beslutninger om gennemførelsesvalg
+- Tilbyde valg om, hvilken retning du skal tage
 
-Hvert spørsmål inkluderer en overskrift, spørsmålsteksten og en liste over alternativer. Brugere kan velge fra de angitte alternativene eller skrive inn et brugerdefineret svar. Når det er flere spørsmål, kan brugerne navigere mellom dem før de sender inn alle svarene.
+Hvert spørgsmål inkluderer en overskrift, spørgsmålsteksten og en liste over alternativer. Brugere kan vælge fra de angivne alternativer eller skrive ind et brugerdefineret svar. Når det er flere spørgsmål, kan brugerne navigere mellem dem, før de sender alle svarene.
 
 ---
 
 ## Brugerdefinerede værktøjer
 
-Egendefinerte verktøy lar deg definere dine egne funksjoner som LLM kan kalle. Disse er definert i konfigurasjonsfilen din og kan kjøre vilkårlig kode.
+Egendefinerede værktøjer lader dig definere dine egne funktioner, som LLM kan kalde. Disse er defineret i din konfigurationsfil og kan køre vilkårlig kode.
 
-[Finn ut mer](/docs/custom-tools) om at lage tilpassede verktøy.
+[Læs mere](/docs/custom-tools) om at lave tilpassede værktøjer.
 
 ---
 
 ## MCP-servere
 
-MCP (Model Context Protocol) servere lar deg integrere eksterne verktøy og tjenester. Dette inkluderer databasetilgang, API-integrasjoner og tredjepartstjenester.
+MCP (Model Context Protocol) servere lader dig integrere eksterne værktøjer og tjenester. Dette inkluderer databaseadgang, API-integrationer og tredjepartstjenester.
 
-[Les mer](/docs/mcp-servers) om konfigurering av MCP-servere.
+[Læs mere](/docs/mcp-servers) om konfigurering af MCP-servere.
 
 ---
 
 ## Interne
 
-Internt bruger verktøy som `grep`, `glob` og `list` [ripgrep](https://github.com/BurntSushi/ripgrep) under panseret. Som standard respekterer ripgrep `.gitignore`-mønstre, noe som betyr at filer og kataloger som er oppført i `.gitignore` vil bli ekskludert fra søk og lister.
+Internt bruger værktøjer som `grep`, `glob` og `list` [ripgrep](https://github.com/BurntSushi/ripgrep) under panseret. Som standard respekterer ripgrep `.gitignore`-mønstre, hvilket betyder, at filer og mapper, der er opført i `.gitignore`, bliver ekskluderet fra søgninger og lister.
 
 ---
 
 ### Ignoreringsmønstre
 
-For at inkludere filer som normalt vil bli ignorert, lag en `.ignore`-fil i prosjektroten. Denne filen kan eksplisitt tillate visse stier.
+For at inkludere filer, der normalt bliver ignoreret, opret en `.ignore`-fil i projektroden. Denne fil kan eksplicit tillade visse stier.
 
 ```text title=".ignore"
 !node_modules/
@@ -355,4 +355,4 @@ For at inkludere filer som normalt vil bli ignorert, lag en `.ignore`-fil i pros
 !build/
 ```
 
-For eksempel lar denne `.ignore` filen ripgrep søke i `node_modules/`, `dist/` og `build/` kataloger selv om de er oppført i `.gitignore`.
+For eksempel lader denne `.ignore` fil ripgrep søge i `node_modules/`, `dist/` og `build/` kataloger, selv om de er opført i `.gitignore`.
