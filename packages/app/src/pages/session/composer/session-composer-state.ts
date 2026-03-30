@@ -9,6 +9,7 @@ import { usePermission } from "@/context/permission"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { sessionPermissionRequest, sessionQuestionRequest } from "./session-request-tree"
+import { working as sessionWorking } from "../session-working"
 
 export const todoState = (input: {
   count: number
@@ -57,7 +58,22 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
     () => todos().length > 0 && todos().every((todo) => todo.status === "completed" || todo.status === "cancelled"),
   )
 
-  const live = createMemo(() => sync.data.session_working(params.id ?? "") || blocked())
+  const status = createMemo(() => {
+    const id = params.id
+    if (!id) return idle
+    return sync.data.session_status[id] ?? idle
+  })
+
+  const messages = createMemo(() => {
+    const id = params.id
+    if (!id) return []
+    return sync.data.message[id] ?? []
+  })
+  const busy = createMemo(() => sessionWorking(status(), messages()))
+  const live = createMemo(() => {
+    if (test.on && test.live !== undefined) return test.live
+    return busy() || blocked()
+  })
 
   const [store, setStore] = createStore({
     responding: undefined as string | undefined,
