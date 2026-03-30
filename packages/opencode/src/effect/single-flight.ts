@@ -29,7 +29,7 @@ export namespace SingleFlight {
       return self
     })
 
-  export const join = <A, E>(self: SingleFlight<A, E>): Effect.Effect<A, E | Cancelled> => Deferred.await(self.done)
+  export const await = <A, E>(self: SingleFlight<A, E>): Effect.Effect<A, E | Cancelled> => Deferred.await(self.done)
 
   export const start = <A, E>(self: SingleFlight<A, E>, scope: Scope.Scope): Effect.Effect<void> =>
     Effect.uninterruptible(

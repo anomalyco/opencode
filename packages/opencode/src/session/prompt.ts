@@ -1545,8 +1545,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         return flight
       })
 
-      const joinFlight = (flight: SingleFlight<MessageV2.WithParts, unknown>, sessionID: SessionID) =>
-        SingleFlight.join(flight).pipe(
+      const awaitFlight = (flight: SingleFlight<MessageV2.WithParts, unknown>, sessionID: SessionID) =>
+        SingleFlight.await(flight).pipe(
           Effect.catch((e) => (e instanceof Cancelled ? lastAssistant(sessionID) : Effect.fail(e))),
         )
 
@@ -1555,14 +1555,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       )(function* (input: z.infer<typeof LoopInput>) {
         const s = yield* InstanceState.get(cache)
         const existing = s.loops.get(input.sessionID)
-        if (existing) return yield* joinFlight(existing, input.sessionID)
+        if (existing) return yield* awaitFlight(existing, input.sessionID)
 
         const flight = yield* makeFlight(s, input.sessionID)
         // If a shell is running, don't start yet — shell cleanup will start it
         if (!s.shells.has(input.sessionID)) {
           yield* SingleFlight.start(flight, scope)
         }
-        return yield* joinFlight(flight, input.sessionID)
+        return yield* awaitFlight(flight, input.sessionID)
       })
 
       const shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts, unknown> = Effect.fn(
