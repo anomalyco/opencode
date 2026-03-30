@@ -10416,7 +10416,7 @@
                 "$ref": "#/components/schemas/PermissionActionConfig"
               },
               "webfetch": {
-                "$ref": "#/components/schemas/PermissionActionConfig"
+                "$ref": "#/components/schemas/PermissionRuleConfig"
               },
               "websearch": {
                 "$ref": "#/components/schemas/PermissionActionConfig"

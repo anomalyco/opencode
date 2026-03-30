@@ -536,7 +536,7 @@ export namespace Config {
           external_directory: PermissionRule.optional(),
           todowrite: PermissionAction.optional(),
           question: PermissionAction.optional(),
-          webfetch: PermissionAction.optional(),
+          webfetch: PermissionRule.optional(),
           websearch: PermissionAction.optional(),
           codesearch: PermissionAction.optional(),
           lsp: PermissionRule.optional(),
