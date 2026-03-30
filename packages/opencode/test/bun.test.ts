@@ -99,4 +99,39 @@ describe("BunProc install pinning", () => {
       }
     }
   })
+
+  test("passes --ignore-scripts when requested", async () => {
+    const pkg = `ignore-test-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+    const ver = "4.5.6"
+    const mod = path.join(Global.Path.cache, "node_modules", pkg)
+    const data = path.join(Global.Path.cache, "package.json")
+
+    const run = spyOn(Process, "run").mockImplementation(async () => ({
+      code: 0,
+      stdout: Buffer.alloc(0),
+      stderr: Buffer.alloc(0),
+    }))
+
+    try {
+      await fs.rm(mod, { recursive: true, force: true })
+      await BunProc.install(pkg, ver, { ignoreScripts: true })
+
+      expect(run).toHaveBeenCalled()
+      const call = run.mock.calls[0]?.[0]
+      expect(call).toContain("--ignore-scripts")
+      expect(call).toContain(`${pkg}@${ver}`)
+    } finally {
+      run.mockRestore()
+      await fs.rm(mod, { recursive: true, force: true })
+
+      const end = await fs
+        .readFile(data, "utf8")
+        .then((item) => JSON.parse(item) as { dependencies?: Record<string, string> })
+        .catch(() => undefined)
+      if (end?.dependencies) {
+        delete end.dependencies[pkg]
+        await Bun.write(data, JSON.stringify(end, null, 2))
+      }
+    }
+  })
 })

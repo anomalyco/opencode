@@ -189,7 +189,7 @@ export async function checkPluginCompatibility(target: string, opencodeVersion: 
 
 export async function resolvePluginTarget(spec: string, parsed = parsePluginSpecifier(spec)) {
   if (isPathPluginSpec(spec)) return resolvePathPluginTarget(spec)
-  return BunProc.install(parsed.pkg, parsed.version)
+  return BunProc.install(parsed.pkg, parsed.version, { ignoreScripts: true })
 }
 
 export async function readPluginPackage(target: string): Promise<PluginPackage> {
