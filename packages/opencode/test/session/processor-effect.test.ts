@@ -10,7 +10,6 @@ import { Bus } from "../../src/bus"
 import { Config } from "../../src/config/config"
 import { Permission } from "../../src/permission"
 import { Plugin } from "../../src/plugin"
-import { Instance } from "../../src/project/instance"
 import type { Provider } from "../../src/provider/provider"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Session } from "../../src/session"
@@ -662,7 +661,6 @@ it.effect("session.processor effect tests mark pending tools as aborted on clean
     (dir) =>
       Effect.gen(function* () {
         const ready = defer<void>()
-        const seen = defer<void>()
         const test = yield* TestLLM
         const processors = yield* SessionProcessor.Service
         const session = yield* Session.Service

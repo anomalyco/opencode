@@ -1,8 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { expect } from "bun:test"
-import { Cause, Deferred, Effect, Exit, Fiber, Layer, ServiceMap } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer, ServiceMap } from "effect"
 import * as Stream from "effect/Stream"
-import path from "path"
 import type { Agent } from "../../src/agent/agent"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { Bus } from "../../src/bus"
@@ -659,6 +658,7 @@ it.effect("concurrent loop callers get same result", () =>
 
         expect(a.info.id).toBe(b.info.id)
         expect(a.info.role).toBe("assistant")
+        yield* prompt.assertNotBusy(chat.id)
       }),
     { git: true },
   ),
@@ -798,6 +798,7 @@ it.effect("shell captures stdout and stderr in completed tool output", () =>
         expect(tool.state.output).toContain("err")
         expect(tool.state.metadata.output).toContain("out")
         expect(tool.state.metadata.output).toContain("err")
+        yield* prompt.assertNotBusy(chat.id)
       }),
     { git: true, config: cfg },
   ),
@@ -920,6 +921,11 @@ it.effect(
 
           yield* prompt.cancel(chat.id)
 
+          const status = yield* SessionStatus.Service
+          expect((yield* status.get(chat.id)).type).toBe("idle")
+          const busy = yield* prompt.assertNotBusy(chat.id).pipe(Effect.exit)
+          expect(Exit.isSuccess(busy)).toBe(true)
+
           const exit = yield* Fiber.await(sh)
           expect(Exit.isSuccess(exit)).toBe(true)
           if (Exit.isSuccess(exit)) {
@@ -929,11 +935,6 @@ it.effect(
               expect(tool.state.output).toContain("User aborted the command")
             }
           }
-
-          const status = yield* SessionStatus.Service
-          expect((yield* status.get(chat.id)).type).toBe("idle")
-          const busy = yield* prompt.assertNotBusy(chat.id).pipe(Effect.exit)
-          expect(Exit.isSuccess(busy)).toBe(true)
         }),
       { git: true, config: cfg },
     ),
