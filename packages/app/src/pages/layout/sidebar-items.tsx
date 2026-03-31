@@ -29,7 +29,8 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string }): J
       return (store.session ?? []).some((session) => {
         if (session.time.archived !== undefined) return false
         const status = store.session_status[session.id]
-        if (status?.type !== "idle") return true
+        if(!status) return false
+        if (status.type !== "idle") return true
         return (store.message[session.id] ?? []).some(
           (message) =>
             message.role === "assistant" &&
