@@ -150,11 +150,6 @@ export namespace SessionProcessor {
               if (ctx.assistantMessage.summary) {
                 throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
               }
-              log.info("processor.tool-input-start", {
-                toolCallId: value.id,
-                tool: value.toolName,
-                ts: Date.now(),
-              })
               ctx.toolcalls[value.id] = yield* session.updatePart({
                 id: ctx.toolcalls[value.id]?.id ?? PartID.ascending(),
                 messageID: ctx.assistantMessage.id,
@@ -164,10 +159,6 @@ export namespace SessionProcessor {
                 callID: value.id,
                 state: { status: "pending", input: {}, raw: "" },
               } satisfies MessageV2.ToolPart)
-              log.info("processor.tool-input-start.done", {
-                toolCallId: value.id,
-                ts: Date.now(),
-              })
               return
 
             case "tool-input-delta":
@@ -180,13 +171,6 @@ export namespace SessionProcessor {
               if (ctx.assistantMessage.summary) {
                 throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
               }
-              log.info("processor.tool-call", {
-                toolCallId: value.toolCallId,
-                tool: value.toolName,
-                hasMatch: !!ctx.toolcalls[value.toolCallId],
-                matchStatus: ctx.toolcalls[value.toolCallId]?.state.status,
-                ts: Date.now(),
-              })
               const match = ctx.toolcalls[value.toolCallId]
               if (!match) return
 
@@ -195,13 +179,6 @@ export namespace SessionProcessor {
               const current = parts.find((p) => p.type === "tool" && p.callID === value.toolCallId)
               const existing =
                 current?.type === "tool" && current.state.status === "running" ? current.state : undefined
-              log.info("processor.tool-call.existing", {
-                toolCallId: value.toolCallId,
-                hasExisting: !!existing,
-                existingTitle: existing?.title,
-                existingMetadata: !!existing?.metadata,
-                ts: Date.now(),
-              })
 
               ctx.toolcalls[value.toolCallId] = yield* session.updatePart({
                 ...match,
@@ -216,12 +193,6 @@ export namespace SessionProcessor {
                 },
                 metadata: value.providerMetadata,
               } satisfies MessageV2.ToolPart)
-              log.info("processor.tool-call.done", {
-                toolCallId: value.toolCallId,
-                newStatus: ctx.toolcalls[value.toolCallId]?.state.status,
-                hasMetadata: !!(ctx.toolcalls[value.toolCallId]?.state as any)?.metadata,
-                ts: Date.now(),
-              })
               const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
 
               if (
@@ -251,14 +222,6 @@ export namespace SessionProcessor {
 
             case "tool-result": {
               const match = ctx.toolcalls[value.toolCallId]
-              log.info("processor.tool-result", {
-                toolCallId: value.toolCallId,
-                hasMatch: !!match,
-                matchStatus: match?.state.status,
-                hasMetadata: !!value.output.metadata,
-                hasSessionId: !!value.output.metadata?.sessionId,
-                ts: Date.now(),
-              })
               if (!match || match.state.status !== "running") return
               yield* session.updatePart({
                 ...match,

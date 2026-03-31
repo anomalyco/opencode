@@ -65,16 +65,6 @@ export namespace LLM {
                 yield* Effect.promise(async () => {
                   const result = await LLM.stream({ ...input, abort: ctrl.signal })
                   for await (const event of result.fullStream) {
-                    // Diagnostic: log tool events as they're queued
-                    if (event.type === "tool-call" || event.type === "tool-input-start") {
-                      const id = event.type === "tool-call" ? event.toolCallId : event.id
-                      log.info("llm.queue.push", {
-                        type: event.type,
-                        toolCallId: id,
-                        tool: event.toolName,
-                        ts: Date.now(),
-                      })
-                    }
                     if (!Queue.offerUnsafe(queue, event)) break
                   }
                   Queue.endUnsafe(queue)
