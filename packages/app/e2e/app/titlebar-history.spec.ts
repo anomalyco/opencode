@@ -1,6 +1,6 @@
 import { test, expect } from "../fixtures"
 import { defocus, openSidebar, withSession } from "../actions"
-import { promptSelector } from "../selectors"
+import { projectRowSelector, promptSelector } from "../selectors"
 import { modKey } from "../utils"
 
 test("titlebar back/forward navigates between sessions", async ({ page, slug, sdk, gotoSession }) => {
@@ -13,12 +13,17 @@ test("titlebar back/forward navigates between sessions", async ({ page, slug, sd
       await gotoSession(one.id)
 
       await openSidebar(page)
+      
+      // New sidebar: expand project to see sessions
+      const projectRow = page.locator(projectRowSelector(slug)).first()
+      await expect(projectRow).toBeVisible()
+      await projectRow.click() // Expand project
 
       const link = page.locator(`[data-session-id="${two.id}"] a`).first()
       await expect(link).toBeVisible()
       await link.click()
 
-      await expect(page).toHaveURL(new RegExp(`/${slug}/session/${two.id}(?:\\?|#|$)`))
+      await expect(page).toHaveURL(new RegExp(`/${slug}/session/${two.id}(?:[/?#]|$)`))
       await expect(page.locator(promptSelector)).toBeVisible()
 
       const back = page.getByRole("button", { name: "Back" })
@@ -28,14 +33,14 @@ test("titlebar back/forward navigates between sessions", async ({ page, slug, sd
       await expect(back).toBeEnabled()
       await back.click()
 
-      await expect(page).toHaveURL(new RegExp(`/${slug}/session/${one.id}(?:\\?|#|$)`))
+      await expect(page).toHaveURL(new RegExp(`/${slug}/session/${one.id}(?:[/?#]|$)`))
       await expect(page.locator(promptSelector)).toBeVisible()
 
       await expect(forward).toBeVisible()
       await expect(forward).toBeEnabled()
       await forward.click()
 
-      await expect(page).toHaveURL(new RegExp(`/${slug}/session/${two.id}(?:\\?|#|$)`))
+      await expect(page).toHaveURL(new RegExp(`/${slug}/session/${two.id}(?:[/?#]|$)`))
       await expect(page.locator(promptSelector)).toBeVisible()
     })
   })
@@ -52,12 +57,17 @@ test("titlebar forward is cleared after branching history from sidebar", async (
         await gotoSession(a.id)
 
         await openSidebar(page)
+        
+        // New sidebar: expand project to see sessions
+        const projectRow = page.locator(projectRowSelector(slug)).first()
+        await expect(projectRow).toBeVisible()
+        await projectRow.click() // Expand project
 
         const second = page.locator(`[data-session-id="${b.id}"] a`).first()
         await expect(second).toBeVisible()
         await second.click()
 
-        await expect(page).toHaveURL(new RegExp(`/${slug}/session/${b.id}(?:\\?|#|$)`))
+        await expect(page).toHaveURL(new RegExp(`/${slug}/session/${b.id}(?:[/?#]|$)`))
         await expect(page.locator(promptSelector)).toBeVisible()
 
         const back = page.getByRole("button", { name: "Back" })
@@ -67,7 +77,7 @@ test("titlebar forward is cleared after branching history from sidebar", async (
         await expect(back).toBeEnabled()
         await back.click()
 
-        await expect(page).toHaveURL(new RegExp(`/${slug}/session/${a.id}(?:\\?|#|$)`))
+        await expect(page).toHaveURL(new RegExp(`/${slug}/session/${a.id}(?:[/?#]|$)`))
         await expect(page.locator(promptSelector)).toBeVisible()
 
         await openSidebar(page)
@@ -76,7 +86,7 @@ test("titlebar forward is cleared after branching history from sidebar", async (
         await expect(third).toBeVisible()
         await third.click()
 
-        await expect(page).toHaveURL(new RegExp(`/${slug}/session/${c.id}(?:\\?|#|$)`))
+        await expect(page).toHaveURL(new RegExp(`/${slug}/session/${c.id}(?:[/?#]|$)`))
         await expect(page.locator(promptSelector)).toBeVisible()
 
         await expect(forward).toBeVisible()
@@ -96,24 +106,29 @@ test("keyboard shortcuts navigate titlebar history", async ({ page, slug, sdk, g
       await gotoSession(one.id)
 
       await openSidebar(page)
+      
+      // New sidebar: expand project to see sessions
+      const projectRow = page.locator(projectRowSelector(slug)).first()
+      await expect(projectRow).toBeVisible()
+      await projectRow.click() // Expand project
 
       const link = page.locator(`[data-session-id="${two.id}"] a`).first()
       await expect(link).toBeVisible()
       await link.click()
 
-      await expect(page).toHaveURL(new RegExp(`/${slug}/session/${two.id}(?:\\?|#|$)`))
+      await expect(page).toHaveURL(new RegExp(`/${slug}/session/${two.id}(?:[/?#]|$)`))
       await expect(page.locator(promptSelector)).toBeVisible()
 
       await defocus(page)
       await page.keyboard.press(`${modKey}+[`)
 
-      await expect(page).toHaveURL(new RegExp(`/${slug}/session/${one.id}(?:\\?|#|$)`))
+      await expect(page).toHaveURL(new RegExp(`/${slug}/session/${one.id}(?:[/?#]|$)`))
       await expect(page.locator(promptSelector)).toBeVisible()
 
       await defocus(page)
       await page.keyboard.press(`${modKey}+]`)
 
-      await expect(page).toHaveURL(new RegExp(`/${slug}/session/${two.id}(?:\\?|#|$)`))
+      await expect(page).toHaveURL(new RegExp(`/${slug}/session/${two.id}(?:[/?#]|$)`))
       await expect(page.locator(promptSelector)).toBeVisible()
     })
   })

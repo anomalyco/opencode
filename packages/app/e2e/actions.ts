@@ -9,7 +9,7 @@ import { createSdk, modKey, resolveDirectory, serverUrl } from "./utils"
 import {
   dropdownMenuTriggerSelector,
   dropdownMenuContentSelector,
-  projectSwitchSelector,
+  projectRowSelector,
   projectMenuTriggerSelector,
   projectCloseMenuSelector,
   projectWorkspacesToggleSelector,
@@ -931,40 +931,23 @@ export async function openStatusPopover(page: Page) {
   return { rightSection, popoverBody }
 }
 
+// New sidebar uses context menus instead of popover menus for projects
+// This function opens the context menu by right-clicking on the project row
 export async function openProjectMenu(page: Page, projectSlug: string) {
   await openSidebar(page)
-  const item = page.locator(projectSwitchSelector(projectSlug)).first()
-  await expect(item).toBeVisible()
-  await item.hover()
-
-  const trigger = page.locator(projectMenuTriggerSelector(projectSlug)).first()
-  await expect(trigger).toHaveCount(1)
-  await expect(trigger).toBeVisible()
+  
+  // Use the new project row selector
+  const projectRow = page.locator(projectRowSelector(projectSlug)).first()
+  await expect(projectRow).toBeVisible()
+  
+  // Right-click to open context menu
+  await projectRow.click({ button: 'right' })
 
   const menu = page
     .locator(dropdownMenuContentSelector)
     .filter({ has: page.locator(projectCloseMenuSelector(projectSlug)) })
     .first()
   const close = menu.locator(projectCloseMenuSelector(projectSlug)).first()
-
-  const clicked = await trigger
-    .click({ force: true, timeout: 1500 })
-    .then(() => true)
-    .catch(() => false)
-
-  if (clicked) {
-    const opened = await menu
-      .waitFor({ state: "visible", timeout: 1500 })
-      .then(() => true)
-      .catch(() => false)
-    if (opened) {
-      await expect(close).toBeVisible()
-      return menu
-    }
-  }
-
-  await trigger.focus()
-  await page.keyboard.press("Enter")
 
   const opened = await menu
     .waitFor({ state: "visible", timeout: 1500 })
@@ -974,6 +957,21 @@ export async function openProjectMenu(page: Page, projectSlug: string) {
   if (opened) {
     await expect(close).toBeVisible()
     return menu
+  }
+
+  // Fallback: try clicking on the row and looking for a menu trigger button
+  // Some implementations might have a visible menu button
+  const menuTrigger = page.locator(projectMenuTriggerSelector(projectSlug)).first()
+  if (await menuTrigger.isVisible().catch(() => false)) {
+    await menuTrigger.click()
+    const opened = await menu
+      .waitFor({ state: "visible", timeout: 1500 })
+      .then(() => true)
+      .catch(() => false)
+    if (opened) {
+      await expect(close).toBeVisible()
+      return menu
+    }
   }
 
   throw new Error(`Failed to open project menu: ${projectSlug}`)
