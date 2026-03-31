@@ -1,7 +1,16 @@
 import { RGBA } from "@opentui/core"
 
 export namespace Terminal {
+  const RESET =
+    "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1005l\x1b[?1006l\x1b[?1015l\x1b[?1016l\x1b[?2004l\x1b[?25h"
+
   export type Colors = Awaited<ReturnType<typeof colors>>
+
+  export function restore() {
+    if (!process.stdout.isTTY) return
+    process.stdout.write(RESET)
+  }
+
   /**
    * Query terminal colors including background, foreground, and palette (0-15).
    * Uses OSC escape sequences to retrieve actual terminal color values.

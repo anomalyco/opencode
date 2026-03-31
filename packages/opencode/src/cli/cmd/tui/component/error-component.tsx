@@ -4,6 +4,7 @@ import { Clipboard } from "@tui/util/clipboard"
 import { createSignal } from "solid-js"
 import { Installation } from "@/installation"
 import { win32FlushInputBuffer } from "../win32"
+import { Terminal } from "../util/terminal"
 
 export function ErrorComponent(props: {
   error: Error
@@ -18,7 +19,9 @@ export function ErrorComponent(props: {
   const handleExit = async () => {
     await props.onBeforeExit?.()
     renderer.setTerminalTitle("")
+    Terminal.restore()
     renderer.destroy()
+    Terminal.restore()
     win32FlushInputBuffer()
     await props.onExit()
   }
