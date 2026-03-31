@@ -27,6 +27,8 @@ export namespace ProviderError {
     /too large for model with \d+ maximum context length/i, // Mistral
     /model_context_window_exceeded/i, // z.ai non-standard finish_reason surfaced as error text
   ]
+  const CLAUDE_CODE_CREDENTIAL_PATTERN =
+    /This credential is only authorized for use with Claude Code and cannot be used for other API requests\./i
 
   function isOpenAiErrorRetryable(e: APICallError) {
     const status = e.statusCode
@@ -44,6 +46,13 @@ export namespace ProviderError {
     // - Cerebras: often returns "400 (no body)" / "413 (no body)"
     // - Mistral: often returns "400 (no body)" / "413 (no body)"
     return /^4(00|13)\s*(status code)?\s*\(no body\)/i.test(message)
+  }
+
+  function isClaudeCodeCredential(providerID: ProviderID, message: string, responseBody?: string) {
+    if (providerID !== "anthropic") return false
+    if (CLAUDE_CODE_CREDENTIAL_PATTERN.test(message)) return true
+    if (!responseBody) return false
+    return CLAUDE_CODE_CREDENTIAL_PATTERN.test(responseBody)
   }
 
   function message(providerID: ProviderID, e: APICallError) {
@@ -67,9 +76,22 @@ export namespace ProviderError {
         // try to extract common error message fields
         const errMsg = body.message || body.error || body.error?.message
         if (errMsg && typeof errMsg === "string") {
+          if (isClaudeCodeCredential(providerID, errMsg, e.responseBody)) {
+            return [
+              "This Anthropic credential is restricted to Claude Code and cannot be used with OpenCode.",
+              "Use a standard Anthropic API key instead, then run `opencode auth login anthropic` to update your credentials.",
+            ].join(" ")
+          }
           return `${msg}: ${errMsg}`
         }
       } catch {}
+
+      if (isClaudeCodeCredential(providerID, msg, e.responseBody)) {
+        return [
+          "This Anthropic credential is restricted to Claude Code and cannot be used with OpenCode.",
+          "Use a standard Anthropic API key instead, then run `opencode auth login anthropic` to update your credentials.",
+        ].join(" ")
+      }
 
       // If responseBody is HTML (e.g. from a gateway or proxy error page),
       // provide a human-readable message instead of dumping raw markup
