@@ -6,7 +6,6 @@ import { createMemo, createResource, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
-import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import { useLanguage } from "@/context/language"
 
@@ -14,7 +13,6 @@ export function DialogCreateProject(props: { onSelect: (path: string) => void })
   const dialog = useDialog()
   const sdk = useGlobalSDK()
   const sync = useGlobalSync()
-  const platform = usePlatform()
   const server = useServer()
   const language = useLanguage()
 
@@ -34,23 +32,15 @@ export function DialogCreateProject(props: { onSelect: (path: string) => void })
 
   const [store, setStore] = createStore({
     name: "",
-    location: "",
     creating: false,
     error: "",
   })
 
-  const location = createMemo(() => store.location || home())
-
   const fullPath = createMemo(() => {
     const name = store.name.trim()
     if (!name) return ""
-    return `${location().replace(/\/+$/, "")}/${name}`
+    return `${home().replace(/\/+$/, "")}/${name}`
   })
-
-  async function browseLocation() {
-    const result = await platform.openDirectoryPickerDialog?.({ multiple: false })
-    if (result && !Array.isArray(result)) setStore("location", result)
-  }
 
   async function handleCreate(e: SubmitEvent) {
     e.preventDefault()
@@ -85,32 +75,6 @@ export function DialogCreateProject(props: { onSelect: (path: string) => void })
           value={store.name}
           onChange={(v: string) => setStore("name", v)}
         />
-
-        <div class="flex flex-col gap-1.5">
-          <label class="text-12-medium text-text-weak">{language.t("dialog.project.create.location")}</label>
-          <div class="flex gap-2 items-start">
-            <div class="flex-1">
-              <TextField
-                type="text"
-                placeholder={home()}
-                value={store.location}
-                onChange={(v: string) => setStore("location", v)}
-              />
-            </div>
-            <Show when={platform.openDirectoryPickerDialog && server.isLocal()}>
-              <Button type="button" variant="ghost" size="normal" onClick={browseLocation} class="shrink-0 mt-0.5">
-                {language.t("dialog.project.create.browse")}
-              </Button>
-            </Show>
-          </div>
-        </div>
-
-        <Show when={fullPath()}>
-          <div class="flex flex-col gap-1">
-            <span class="text-12-medium text-text-weak">{language.t("dialog.project.create.path.preview")}</span>
-            <span class="text-12-regular text-text-base font-mono break-all">{fullPath()}</span>
-          </div>
-        </Show>
 
         <Show when={store.error}>
           <p class="text-12-regular text-text-danger">{store.error}</p>
