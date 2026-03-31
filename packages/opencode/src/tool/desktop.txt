@@ -1,4 +1,4 @@
-Native desktop automation tool that enables controlling the computer outside the terminal. Supports taking screenshots, moving the mouse, clicking, and typing text. This replicates Anthropic's Computer Use tool functionality.
+Native desktop automation tool that enables controlling the computer outside the terminal. Supports taking screenshots, moving the mouse, clicking, typing text, and clicking keyboard shortcuts. This replicates Anthropic's Computer Use tool functionality.
 
 ## Actions
 
@@ -13,6 +13,9 @@ Perform mouse clicks (left, right, or middle button) at the current cursor posit
 
 ### type
 Type text character by character as if entered from a physical keyboard. Supports all alphanumeric characters and common symbols.
+
+### key_click
+Click a keyboard key or shortcut, including modifier combinations like Cmd+Space or Ctrl+C.
 
 ## Usage Examples
 
@@ -34,6 +37,16 @@ Left click at current position:
 Type text:
 ```
 {"action": "type", "text": "Hello, World!"}
+```
+
+Click a modifier key:
+```
+{"action": "key_click", "key": "cmd"}
+```
+
+Trigger a keyboard shortcut:
+```
+{"action": "key_click", "key": "space", "modifiers": ["cmd"]}
 ```
 
 Combined workflow - click a text field and type:

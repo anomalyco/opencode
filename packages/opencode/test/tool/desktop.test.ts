@@ -1,9 +1,42 @@
-import { describe, expect, test } from "bun:test"
+import { beforeEach, describe, expect, mock, test } from "bun:test"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import { pathToFileURL } from "url"
-import { resolveNutJsImportSpecifier } from "../../src/tool/desktop"
+import { DesktopTool, resolveNutJsImportSpecifier } from "../../src/tool/desktop"
+import { SessionID, MessageID } from "../../src/session/schema"
+
+const calls: unknown[][] = []
+
+mock.module("@nut-tree-fork/nut-js", () => ({
+  keyboard: {
+    type: async (...input: unknown[]) => {
+      calls.push(input)
+    },
+  },
+  Key: {
+    LeftSuper: "LeftSuper",
+    LeftControl: "LeftControl",
+    LeftAlt: "LeftAlt",
+    LeftShift: "LeftShift",
+    Space: "Space",
+  },
+}))
+
+const ctx = {
+  sessionID: SessionID.make("ses_test"),
+  messageID: MessageID.make(""),
+  callID: "",
+  agent: "build",
+  abort: AbortSignal.any([]),
+  messages: [],
+  metadata: () => {},
+  ask: async () => {},
+}
+
+beforeEach(() => {
+  calls.length = 0
+})
 
 describe("resolveNutJsImportSpecifier", () => {
   test("uses a real on-disk helper when running from Bun's compiled filesystem", async () => {
@@ -27,5 +60,23 @@ describe("resolveNutJsImportSpecifier", () => {
     expect(resolveNutJsImportSpecifier("file:///tmp/opencode/src/tool/desktop.ts", "/usr/local/bin/bun")).toBe(
       "@nut-tree-fork/nut-js",
     )
+  })
+})
+
+describe("DesktopTool", () => {
+  test("clicks a modifier key", async () => {
+    const desktop = await DesktopTool.init()
+    const result = await desktop.execute({ action: "key_click", key: "cmd" }, ctx)
+
+    expect(calls).toEqual([["LeftSuper"]])
+    expect(result.output).toContain("cmd")
+  })
+
+  test("clicks a shortcut with modifiers", async () => {
+    const desktop = await DesktopTool.init()
+    const result = await desktop.execute({ action: "key_click", key: "space", modifiers: ["cmd"] }, ctx)
+
+    expect(calls).toEqual([["LeftSuper", "Space"]])
+    expect(result.output).toContain("cmd+space")
   })
 })

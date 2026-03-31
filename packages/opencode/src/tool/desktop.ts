@@ -8,6 +8,30 @@ import { pathToFileURL } from "url"
 
 const log = Log.create({ service: "desktop-tool" })
 
+const modifier = z.enum(["cmd", "command", "super", "ctrl", "control", "alt", "option", "meta", "shift"])
+
+const alias = {
+  cmd: "LeftSuper",
+  command: "LeftSuper",
+  super: "LeftSuper",
+  ctrl: "LeftControl",
+  control: "LeftControl",
+  alt: "LeftAlt",
+  option: "LeftAlt",
+  meta: "LeftAlt",
+  shift: "LeftShift",
+  space: "Space",
+  enter: "Enter",
+  return: "Enter",
+  esc: "Escape",
+  escape: "Escape",
+  tab: "Tab",
+  up: "Up",
+  down: "Down",
+  left: "Left",
+  right: "Right",
+} as const
+
 let nutCache: any = undefined
 let nutFailed = false
 let nutError: Error | undefined = undefined
@@ -24,7 +48,9 @@ async function loadNutJs() {
   if (nutCache) return nutCache
   if (nutFailed) {
     const details = nutError ? `: ${nutError.message}` : "."
-    throw new Error(`Desktop automation library not available${details} Please ensure @nut-tree-fork/nut-js is installed.`)
+    throw new Error(
+      `Desktop automation library not available${details} Please ensure @nut-tree-fork/nut-js is installed.`,
+    )
   }
   try {
     nutCache = await import(resolveNutJsImportSpecifier())
@@ -32,14 +58,27 @@ async function loadNutJs() {
   } catch (error) {
     nutFailed = true
     nutError = error instanceof Error ? error : new Error(String(error))
-    log.warn("@nut-tree-fork/nut-js not available, desktop tool disabled", { 
+    log.warn("@nut-tree-fork/nut-js not available, desktop tool disabled", {
       error: nutError.message,
       code: (error as any)?.code,
       platform: process.platform,
-      arch: process.arch 
+      arch: process.arch,
     })
-    throw new Error(`Desktop automation library not available: ${nutError.message}. Please ensure @nut-tree-fork/nut-js is installed.`)
+    throw new Error(
+      `Desktop automation library not available: ${nutError.message}. Please ensure @nut-tree-fork/nut-js is installed.`,
+    )
   }
+}
+
+function key(nut: any, input: string) {
+  const name = input.trim().toLowerCase()
+  if (!name) throw new Error("key_click action requires key parameter")
+
+  const value = alias[name as keyof typeof alias]
+  if (value) return nut.Key[value]
+  if (name.length === 1) return name
+
+  throw new Error(`Unsupported key: ${input}`)
 }
 
 export const DesktopTool = Tool.define("desktop", async () => {
@@ -47,7 +86,7 @@ export const DesktopTool = Tool.define("desktop", async () => {
     description: DESCRIPTION,
     parameters: z.object({
       action: z
-        .enum(["screenshot", "mouse_move", "mouse_click", "type"])
+        .enum(["screenshot", "mouse_move", "mouse_click", "type", "key_click"])
         .describe("The desktop automation action to perform"),
       region: z
         .object({
@@ -70,6 +109,8 @@ export const DesktopTool = Tool.define("desktop", async () => {
         .describe("Optional coordinates to move to before clicking"),
       doubleClick: z.boolean().optional().describe("Perform double-click instead of single click"),
       text: z.string().optional().describe("Text to type"),
+      key: z.string().optional().describe("Key to click or press"),
+      modifiers: z.array(modifier).optional().describe("Modifier keys to hold while clicking the key"),
     }),
     async execute(params, ctx) {
       const nut = await loadNutJs()
@@ -183,6 +224,26 @@ export const DesktopTool = Tool.define("desktop", async () => {
             output: `Typed: "${params.text}"`,
             metadata: {
               length: params.text.length,
+            } as any,
+          }
+        }
+
+        case "key_click": {
+          if (!params.key) {
+            throw new Error("key_click action requires key parameter")
+          }
+
+          const chord = [...(params.modifiers ?? []), params.key]
+          log.info("Clicking key", { key: params.key, modifiers: params.modifiers ?? [] })
+
+          await nut.keyboard.type(...chord.map((item) => key(nut, item)))
+
+          return {
+            title: `Clicked ${chord.join("+")}`,
+            output: `Clicked key combination ${chord.join("+")}`,
+            metadata: {
+              key: params.key,
+              modifiers: params.modifiers ?? [],
             } as any,
           }
         }
