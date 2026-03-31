@@ -2,7 +2,6 @@ import type { Message, Session, TextPart, UserMessage } from "@opencode-ai/sdk/v
 import { Avatar } from "@opencode-ai/ui/avatar"
 import { HoverCard } from "@opencode-ai/ui/hover-card"
 import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
 import { MessageNav } from "@opencode-ai/ui/message-nav"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
@@ -18,6 +17,7 @@ import { usePermission } from "@/context/permission"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
 import { hasProjectPermissions } from "./helpers"
+import { SessionMenu } from "./sidebar-session-menu"
 
 const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
@@ -351,29 +351,12 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
           </Show>
         </div>
 
-        <div
-          class="shrink-0 overflow-hidden transition-[width,opacity]"
-          classList={{
-            "w-6 opacity-100 pointer-events-auto": !!props.mobile,
-            "w-0 opacity-0 pointer-events-none": !props.mobile,
-            "group-hover/session:w-6 group-hover/session:opacity-100 group-hover/session:pointer-events-auto": true,
-            "group-focus-within/session:w-6 group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto": true,
-          }}
-        >
-          <Tooltip value={language.t("common.archive")} placement="top">
-            <IconButton
-              icon="archive"
-              variant="ghost"
-              class="size-6 rounded-md"
-              aria-label={language.t("common.archive")}
-              onClick={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-                void props.archiveSession(props.session)
-              }}
-            />
-          </Tooltip>
-        </div>
+        <SessionMenu
+          mobile={props.mobile}
+          sidebarHovering={props.sidebarHovering}
+          session={props.session}
+          archive={props.archiveSession}
+        />
       </div>
     </div>
   )
