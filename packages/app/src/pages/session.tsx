@@ -1951,6 +1951,7 @@ export default function Page() {
             state={composer}
             ready={!store.deferRender && messagesReady()}
             centered={centered()}
+            reverting={reverting()}
             inputRef={(el) => {
               inputRef = el
             }}

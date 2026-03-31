@@ -18,6 +18,7 @@ export function SessionComposerRegion(props: {
   state: SessionComposerState
   ready: boolean
   centered: boolean
+  reverting: boolean
   inputRef: (el: HTMLDivElement) => void
   newSessionWorktree: string
   onNewSessionWorktreeReset: () => void
@@ -237,6 +238,7 @@ export function SessionComposerRegion(props: {
               </Show>
               <PromptInput
                 ref={props.inputRef}
+                reverting={props.reverting}
                 newSessionWorktree={props.newSessionWorktree}
                 onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
                 edit={props.followup?.edit}

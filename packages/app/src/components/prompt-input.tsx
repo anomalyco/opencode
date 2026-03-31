@@ -25,6 +25,7 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
+import { Spinner } from "@opencode-ai/ui/spinner"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ModelSelectorPopover } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
@@ -60,6 +61,7 @@ import { ImagePreview } from "@opencode-ai/ui/image-preview"
 interface PromptInputProps {
   class?: string
   ref?: (el: HTMLDivElement) => void
+  reverting: boolean
   newSessionWorktree?: string
   onNewSessionWorktreeReset?: () => void
   edit?: { id: string; prompt: Prompt; context: FollowupDraft["context"] }
@@ -245,6 +247,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   )
   const working = createMemo(() => status()?.type !== "idle")
   const tip = () => {
+    if (props.reverting) return "Reverting..."
+
     if (working()) {
       return (
         <div class="flex items-center gap-2">
@@ -1244,6 +1248,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault()
       if (event.repeat) return
+      if (props.reverting) return
       if (
         working() &&
         prompt
@@ -1278,7 +1283,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         t={(key) => language.t(key as Parameters<typeof language.t>[0])}
       />
       <DockShellForm
-        onSubmit={handleSubmit}
+        onSubmit={(event) => {
+          if (props.reverting) {
+            event.preventDefault()
+            return
+          }
+          handleSubmit(event)
+        }}
         classList={{
           "group/prompt-input": true,
           "focus-within:shadow-xs-border": true,
@@ -1395,18 +1406,35 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             />
 
             <div class="flex items-center gap-1 pointer-events-auto">
-              <Tooltip placement="top" inactive={!prompt.dirty() && !working()} value={tip()}>
-                <IconButton
-                  data-action="prompt-submit"
-                  type="submit"
-                  disabled={store.mode !== "normal" || (!prompt.dirty() && !working() && commentCount() === 0)}
-                  tabIndex={store.mode === "normal" ? undefined : -1}
-                  icon={working() ? "stop" : "arrow-up"}
-                  variant="primary"
-                  class="size-8"
-                  style={buttons()}
-                  aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
-                />
+              <Tooltip placement="top" inactive={!props.reverting && !prompt.dirty() && !working()} value={tip()}>
+                <Show
+                  when={props.reverting}
+                  fallback={
+                    <IconButton
+                      data-action="prompt-submit"
+                      type="submit"
+                      disabled={store.mode !== "normal" || (!prompt.dirty() && !working() && commentCount() === 0)}
+                      tabIndex={store.mode === "normal" ? undefined : -1}
+                      icon={working() ? "stop" : "arrow-up"}
+                      variant="primary"
+                      class="size-8"
+                      style={buttons()}
+                      aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
+                    />
+                  }
+                >
+                  <Button
+                    data-action="prompt-submit"
+                    type="button"
+                    variant="primary"
+                    class="size-8 p-0"
+                    disabled
+                    style={buttons()}
+                    aria-label="Reverting..."
+                  >
+                    <Spinner class="size-3.5" />
+                  </Button>
+                </Show>
               </Tooltip>
             </div>
           </div>
