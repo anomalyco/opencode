@@ -37,6 +37,7 @@ import { BrowserTool } from "./browser"
 import { SwarmTool } from "./swarm"
 import { EnterWorktreeTool, ExitWorktreeTool } from "./worktree"
 import { BriefTool } from "./brief"
+import { SnipTool } from "./snip"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -138,6 +139,7 @@ export namespace ToolRegistry {
           BrowserTool,
           SwarmTool,
           BriefTool,
+          SnipTool,
           EnterWorktreeTool,
           ExitWorktreeTool,
           SkillTool,
