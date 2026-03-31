@@ -62,8 +62,8 @@
       "light": "macText"
     },
     "textMuted": {
-      "dark": "macSubtext1",
-      "light": "macSubtext1"
+      "dark": "macOverlay2",
+      "light": "macOverlay2"
     },
     "background": {
       "dark": "macBase",
