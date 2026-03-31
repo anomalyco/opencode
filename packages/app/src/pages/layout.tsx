@@ -52,6 +52,7 @@ import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { navStart } from "@/utils/perf"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogEditProject } from "@/components/dialog-edit-project"
+import { DialogClientConfig } from "@/components/dialog-client-config"
 import { DialogCreateProject } from "@/components/dialog-create-project"
 import { DialogAddProject } from "@/components/dialog-add-project"
 import { DialogRegisterWorkspace } from "@/components/dialog-register-workspace"
@@ -1179,6 +1180,8 @@ export default function Layout(props: ParentProps) {
   }
 
   const showEditProjectDialog = (project: LocalProject) => dialog.show(() => <DialogEditProject project={project} />)
+  const showClientConfigDialog = (project: LocalProject) =>
+    dialog.show(() => <DialogClientConfig directory={project.worktree} />)
 
   async function chooseProject() {
     if (!canChooseProject()) return
@@ -1664,6 +1667,7 @@ export default function Layout(props: ParentProps) {
     openSidebar: () => layout.sidebar.open(),
     closeProject,
     showEditProjectDialog,
+    showClientConfigDialog,
     toggleProjectWorkspaces,
     workspacesEnabled: (project) => project.vcs === "git" && layout.sidebar.workspaces(project.worktree)(),
     workspaceIds,
