@@ -28,6 +28,7 @@ const api: ElectronAPI = {
   storeKeys: (name) => ipcRenderer.invoke("store-keys", name),
   storeLength: (name) => ipcRenderer.invoke("store-length", name),
 
+  getWindowCount: () => ipcRenderer.invoke("get-window-count"),
   onSqliteMigrationProgress: (cb) => {
     const handler = (_: unknown, progress: SqliteMigrationProgress) => cb(progress)
     ipcRenderer.on("sqlite-migration-progress", handler)
@@ -57,10 +58,12 @@ const api: ElectronAPI = {
   relaunch: () => ipcRenderer.send("relaunch"),
   getZoomFactor: () => ipcRenderer.invoke("get-zoom-factor"),
   setZoomFactor: (factor) => ipcRenderer.invoke("set-zoom-factor", factor),
+  setTitlebar: (theme) => ipcRenderer.invoke("set-titlebar", theme),
   loadingWindowComplete: () => ipcRenderer.send("loading-window-complete"),
   runUpdater: (alertOnFail) => ipcRenderer.invoke("run-updater", alertOnFail),
   checkUpdate: () => ipcRenderer.invoke("check-update"),
   installUpdate: () => ipcRenderer.invoke("install-update"),
+  setBackgroundColor: (color: string) => ipcRenderer.invoke("set-background-color", color),
 }
 
 contextBridge.exposeInMainWorld("api", api)

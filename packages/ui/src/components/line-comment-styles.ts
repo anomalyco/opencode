@@ -15,6 +15,7 @@ export const lineCommentStyles = `
   right: auto;
   display: flex;
   width: 100%;
+  min-width: 0;
   align-items: flex-start;
 }
 
@@ -64,6 +65,7 @@ export const lineCommentStyles = `
   z-index: var(--line-comment-popover-z, 40);
   min-width: 200px;
   max-width: none;
+  box-sizing: border-box;
   border-radius: 8px;
   background: var(--surface-raised-stronger-non-alpha);
   box-shadow: var(--shadow-xxs-border);
@@ -75,9 +77,10 @@ export const lineCommentStyles = `
   top: auto;
   right: auto;
   margin-left: 8px;
-  flex: 0 1 600px;
-  width: min(100%, 600px);
-  max-width: min(100%, 600px);
+  flex: 1 1 0%;
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
 }
 
 [data-component="line-comment"][data-inline] [data-slot="line-comment-popover"][data-inline-body] {
@@ -96,23 +99,27 @@ export const lineCommentStyles = `
 }
 
 [data-component="line-comment"][data-inline][data-variant="editor"] [data-slot="line-comment-popover"] {
-  flex-basis: 600px;
+  width: 100%;
 }
 
 [data-component="line-comment"] [data-slot="line-comment-content"] {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  width: 100%;
+  min-width: 0;
 }
 
 [data-component="line-comment"] [data-slot="line-comment-head"] {
   display: flex;
   align-items: flex-start;
   gap: 8px;
+  min-width: 0;
 }
 
 [data-component="line-comment"] [data-slot="line-comment-text"] {
   flex: 1;
+  min-width: 0;
   font-family: var(--font-family-sans);
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-regular);
@@ -120,6 +127,7 @@ export const lineCommentStyles = `
   letter-spacing: var(--letter-spacing-normal);
   color: var(--text-strong);
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 [data-component="line-comment"] [data-slot="line-comment-tools"] {
@@ -127,6 +135,7 @@ export const lineCommentStyles = `
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  min-width: 0;
 }
 
 [data-component="line-comment"] [data-slot="line-comment-label"],
@@ -137,17 +146,22 @@ export const lineCommentStyles = `
   line-height: var(--line-height-large);
   letter-spacing: var(--letter-spacing-normal);
   color: var(--text-weak);
-  white-space: nowrap;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 [data-component="line-comment"] [data-slot="line-comment-editor"] {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  width: 100%;
+  min-width: 0;
 }
 
 [data-component="line-comment"] [data-slot="line-comment-textarea"] {
   width: 100%;
+  box-sizing: border-box;
   resize: vertical;
   padding: 8px;
   border-radius: var(--radius-md);
@@ -167,11 +181,14 @@ export const lineCommentStyles = `
 [data-component="line-comment"] [data-slot="line-comment-actions"] {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   padding-left: 8px;
+  min-width: 0;
 }
 
 [data-component="line-comment"] [data-slot="line-comment-editor-label"] {
+  flex: 1 1 220px;
   margin-right: auto;
 }
 

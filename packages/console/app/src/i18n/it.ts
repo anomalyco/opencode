@@ -251,7 +251,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | Modelli di coding a basso costo per tutti",
   "go.meta.description":
-    "Go è un abbonamento da $10/mese con generosi limiti di richieste di 5 ore per GLM-5, Kimi K2.5 e MiniMax M2.5.",
+    "Go inizia a $5 per il primo mese, poi $10/mese, con generosi limiti di richiesta di 5 ore per GLM-5, Kimi K2.5, MiniMax M2.5 e MiniMax M2.7.",
   "go.hero.title": "Modelli di coding a basso costo per tutti",
   "go.hero.body":
     "Go porta il coding agentico ai programmatori di tutto il mondo. Offrendo limiti generosi e un accesso affidabile ai modelli open source più capaci, in modo da poter costruire con agenti potenti senza preoccuparsi dei costi o della disponibilità.",
@@ -260,7 +260,9 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Abbonati a Go",
   "go.cta.price": "$10/mese",
-  "go.pricing.body": "Usa con qualsiasi agente. Ricarica credito se necessario. Annulla in qualsiasi momento.",
+  "go.cta.promo": "$5 il primo mese",
+  "go.pricing.body":
+    "Usalo con qualsiasi agente. $5 il primo mese, poi $10/mese. Ricarica il credito se necessario. Annulla in qualsiasi momento.",
   "go.graph.free": "Gratis",
   "go.graph.freePill": "Big Pickle e modelli gratuiti",
   "go.graph.go": "Go",
@@ -292,20 +294,20 @@ export const dict = {
   "go.testimonials.frank.quote": "Vorrei essere ancora a Nvidia.",
   "go.problem.title": "Quale problema risolve Go?",
   "go.problem.body":
-    "Ci concentriamo nel portare l'esperienza OpenCode a quante più persone possibile. OpenCode Go è un abbonamento a basso costo ($10/mese) progettato per portare il coding agentico ai programmatori di tutto il mondo. Fornisce limiti generosi e accesso affidabile ai modelli open source più capaci.",
+    "Ci concentriamo nel portare l'esperienza OpenCode a quante più persone possibile. OpenCode Go è un abbonamento a basso costo: $5 il primo mese, poi $10/mese. Offre limiti generosi e accesso affidabile ai modelli open source più capaci.",
   "go.problem.subtitle": " ",
   "go.problem.item1": "Prezzo di abbonamento a basso costo",
   "go.problem.item2": "Limiti generosi e accesso affidabile",
   "go.problem.item3": "Costruito per il maggior numero possibile di programmatori",
-  "go.problem.item4": "Include GLM-5, Kimi K2.5 e MiniMax M2.5",
+  "go.problem.item4": "Include GLM-5, Kimi K2.5, MiniMax M2.5 e MiniMax M2.7",
   "go.how.title": "Come funziona Go",
-  "go.how.body": "Go è un abbonamento da $10/mese che puoi usare con OpenCode o qualsiasi agente.",
+  "go.how.body": "Go inizia a $5 per il primo mese, poi $10/mese. Puoi usarlo con OpenCode o qualsiasi agente.",
   "go.how.step1.title": "Crea un account",
   "go.how.step1.beforeLink": "segui le",
   "go.how.step1.link": "istruzioni di configurazione",
   "go.how.step2.title": "Abbonati a Go",
-  "go.how.step2.link": "$10/mese",
-  "go.how.step2.afterLink": "con limiti generosi",
+  "go.how.step2.link": "$5 il primo mese",
+  "go.how.step2.afterLink": "poi $10/mese con limiti generosi",
   "go.how.step3.title": "Inizia a programmare",
   "go.how.step3.body": "con accesso affidabile ai modelli open source",
   "go.privacy.title": "La tua privacy è importante per noi",
@@ -319,21 +321,20 @@ export const dict = {
   "go.faq.a1":
     "Go è un abbonamento a basso costo che ti dà un accesso affidabile a modelli open source capaci per il coding agentico.",
   "go.faq.q2": "Quali modelli include Go?",
-  "go.faq.a2": "Go include GLM-5, Kimi K2.5 e MiniMax M2.5, con limiti generosi e accesso affidabile.",
+  "go.faq.a2": "Go include GLM-5, Kimi K2.5, MiniMax M2.5 e MiniMax M2.7, con limiti generosi e accesso affidabile.",
   "go.faq.q3": "Go è lo stesso di Zen?",
   "go.faq.a3":
-    "No. Zen è a consumo, mentre Go è un abbonamento da $10/mese con limiti generosi e accesso affidabile ai modelli open source GLM-5, Kimi K2.5 e MiniMax M2.5.",
+    "No. Zen è a consumo, mentre Go inizia a $5 per il primo mese, poi $10/mese, con limiti generosi e accesso affidabile ai modelli open source GLM-5, Kimi K2.5, MiniMax M2.5 e MiniMax M2.7.",
   "go.faq.q4": "Quanto costa Go?",
   "go.faq.a4.p1.beforePricing": "Go costa",
-  "go.faq.a4.p1.pricingLink": "$10/mese",
-  "go.faq.a4.p1.afterPricing": "con limiti generosi.",
+  "go.faq.a4.p1.pricingLink": "$5 il primo mese",
+  "go.faq.a4.p1.afterPricing": "poi $10/mese con limiti generosi.",
   "go.faq.a4.p2.beforeAccount": "Puoi gestire il tuo abbonamento nel tuo",
   "go.faq.a4.p2.accountLink": "account",
   "go.faq.a4.p3": "Annulla in qualsiasi momento.",
   "go.faq.q5": "E per quanto riguarda dati e privacy?",
   "go.faq.a5.body":
-    "Il piano è progettato principalmente per gli utenti internazionali, con modelli ospitati negli Stati Uniti, UE e Singapore per un accesso globale stabile.",
-  "go.faq.a5.contactAfter": "se hai domande.",
+    "Il piano è progettato principalmente per gli utenti internazionali, con modelli ospitati negli Stati Uniti, UE e Singapore per un accesso globale stabile. I nostri provider seguono una policy di zero-retention e non usano i tuoi dati per l'addestramento dei modelli.",
   "go.faq.a5.beforeExceptions":
     "I modelli Go sono ospitati negli Stati Uniti. I provider seguono una policy di zero-retention e non usano i tuoi dati per l'addestramento dei modelli, con le",
   "go.faq.a5.exceptionsLink": "seguenti eccezioni",
@@ -347,7 +348,7 @@ export const dict = {
 
   "go.faq.q9": "Qual è la differenza tra i modelli gratuiti e Go?",
   "go.faq.a9":
-    "I modelli gratuiti includono Big Pickle più modelli promozionali disponibili al momento, con una quota di 200 richieste/giorno. Go include GLM-5, Kimi K2.5 e MiniMax M2.5 con quote di richiesta più elevate applicate su finestre mobili (5 ore, settimanale e mensile), approssimativamente equivalenti a $12 ogni 5 ore, $30 a settimana e $60 al mese (il conteggio effettivo delle richieste varia in base al modello e all'utilizzo).",
+    "I modelli gratuiti includono Big Pickle più modelli promozionali disponibili al momento, con una quota di 200 richieste/giorno. Go include GLM-5, Kimi K2.5, MiniMax M2.5 e MiniMax M2.7 con quote di richiesta più elevate applicate su finestre mobili (5 ore, settimanale e mensile), approssimativamente equivalenti a $12 ogni 5 ore, $30 a settimana e $60 al mese (il conteggio effettivo delle richieste varia in base al modello e all'utilizzo).",
 
   "zen.api.error.rateLimitExceeded": "Limite di richieste superato. Riprova più tardi.",
   "zen.api.error.modelNotSupported": "Modello {{model}} non supportato",
@@ -417,12 +418,15 @@ export const dict = {
   "black.subscribe.success.chargeNotice": "La tua carta verrà addebitata quando il tuo abbonamento sarà attivato",
 
   "workspace.nav.zen": "Zen",
+  "workspace.nav.go": "Go",
+  "workspace.nav.usage": "Utilizzo",
   "workspace.nav.apiKeys": "Chiavi API",
   "workspace.nav.members": "Membri",
   "workspace.nav.billing": "Fatturazione",
   "workspace.nav.settings": "Impostazioni",
 
   "workspace.home.banner.beforeLink": "Modelli ottimizzati e affidabili per agenti di coding.",
+  "workspace.lite.banner.beforeLink": "Modelli di coding a basso costo per tutti.",
   "workspace.home.billing.loading": "Caricamento...",
   "workspace.home.billing.enable": "Abilita fatturazione",
   "workspace.home.billing.currentBalance": "Saldo attuale",
@@ -542,6 +546,8 @@ export const dict = {
   "workspace.billing.loading": "Caricamento...",
   "workspace.billing.addAction": "Aggiungi",
   "workspace.billing.addBalance": "Aggiungi Saldo",
+  "workspace.billing.alipay": "Alipay",
+  "workspace.billing.wechat": "WeChat Pay",
   "workspace.billing.linkedToStripe": "Collegato a Stripe",
   "workspace.billing.manage": "Gestisci",
   "workspace.billing.enable": "Abilita Fatturazione",
@@ -624,7 +630,6 @@ export const dict = {
   "workspace.lite.time.minute": "minuto",
   "workspace.lite.time.minutes": "minuti",
   "workspace.lite.time.fewSeconds": "pochi secondi",
-  "workspace.lite.subscription.title": "Abbonamento Go",
   "workspace.lite.subscription.message": "Sei abbonato a OpenCode Go.",
   "workspace.lite.subscription.manage": "Gestisci Abbonamento",
   "workspace.lite.subscription.rollingUsage": "Utilizzo Continuativo",
@@ -634,17 +639,20 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "Usa il tuo saldo disponibile dopo aver raggiunto i limiti di utilizzo",
   "workspace.lite.subscription.selectProvider":
     'Seleziona "OpenCode Go" come provider nella tua configurazione opencode per utilizzare i modelli Go.',
-  "workspace.lite.other.title": "Abbonamento Go",
+  "workspace.lite.black.message":
+    "Attualmente sei abbonato a OpenCode Black o sei in lista d'attesa. Annulla l'iscrizione prima se desideri passare a Go.",
   "workspace.lite.other.message":
     "Un altro membro in questo workspace è già abbonato a OpenCode Go. Solo un membro per workspace può abbonarsi.",
-  "workspace.lite.promo.title": "OpenCode Go",
   "workspace.lite.promo.description":
-    "OpenCode Go è un abbonamento a $10 al mese che fornisce un accesso affidabile a popolari modelli di coding aperti con generosi limiti di utilizzo.",
+    "OpenCode Go parte da {{price}}, poi $10/mese, e offre un accesso affidabile a popolari modelli di coding aperti con generosi limiti di utilizzo.",
+  "workspace.lite.promo.price": "$5 il primo mese",
   "workspace.lite.promo.modelsTitle": "Cosa è incluso",
   "workspace.lite.promo.footer":
     "Il piano è progettato principalmente per gli utenti internazionali, con modelli ospitati in US, EU e Singapore per un accesso globale stabile. I prezzi e i limiti di utilizzo potrebbero cambiare man mano che impariamo dall'utilizzo iniziale e dal feedback.",
   "workspace.lite.promo.subscribe": "Abbonati a Go",
   "workspace.lite.promo.subscribing": "Reindirizzamento...",
+  "workspace.lite.promo.otherMethods": "Altri metodi di pagamento",
+  "workspace.lite.promo.selectMethod": "Seleziona metodo di pagamento",
 
   "download.title": "OpenCode | Download",
   "download.meta.description": "Scarica OpenCode per macOS, Windows e Linux",
@@ -689,8 +697,12 @@ export const dict = {
   "enterprise.form.name.placeholder": "Jeff Bezos",
   "enterprise.form.role.label": "Ruolo",
   "enterprise.form.role.placeholder": "Presidente Esecutivo",
+  "enterprise.form.company.label": "Azienda",
+  "enterprise.form.company.placeholder": "Acme Inc",
   "enterprise.form.email.label": "Email aziendale",
   "enterprise.form.email.placeholder": "jeff@amazon.com",
+  "enterprise.form.phone.label": "Numero di telefono",
+  "enterprise.form.phone.placeholder": "+1 234 567 8900",
   "enterprise.form.message.label": "Quale problema stai cercando di risolvere?",
   "enterprise.form.message.placeholder": "Abbiamo bisogno di aiuto con...",
   "enterprise.form.send": "Invia",

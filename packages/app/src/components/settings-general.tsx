@@ -1,26 +1,43 @@
-import { Component, Show, createMemo, createResource, type JSX } from "solid-js"
+import { Component, Show, createMemo, createResource, onMount, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
+import { TextField } from "@opencode-ai/ui/text-field"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
+import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { useSettings, monoFontFamily } from "@/context/settings"
-import { playSound, SOUND_OPTIONS } from "@/utils/sound"
+import {
+  monoDefault,
+  monoFontFamily,
+  monoInput,
+  sansDefault,
+  sansFontFamily,
+  sansInput,
+  useSettings,
+} from "@/context/settings"
+import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "./link"
+import { SettingsList } from "./settings-list"
 
 let demoSoundState = {
   cleanup: undefined as (() => void) | undefined,
   timeout: undefined as NodeJS.Timeout | undefined,
+  run: 0,
+}
+
+type ThemeOption = {
+  id: string
+  name: string
 }
 
 // To prevent audio from overlapping/playing very quickly when navigating the settings menus,
 // delay the playback by 100ms during quick selection changes and pause existing sounds.
 const stopDemoSound = () => {
+  demoSoundState.run += 1
   if (demoSoundState.cleanup) {
     demoSoundState.cleanup()
   }
@@ -28,12 +45,19 @@ const stopDemoSound = () => {
   demoSoundState.cleanup = undefined
 }
 
-const playDemoSound = (src: string | undefined) => {
+const playDemoSound = (id: string | undefined) => {
   stopDemoSound()
-  if (!src) return
+  if (!id) return
 
+  const run = ++demoSoundState.run
   demoSoundState.timeout = setTimeout(() => {
-    demoSoundState.cleanup = playSound(src)
+    void playSoundById(id).then((cleanup) => {
+      if (demoSoundState.run !== run) {
+        cleanup?.()
+        return
+      }
+      demoSoundState.cleanup = cleanup
+    })
   }, 100)
 }
 
@@ -42,6 +66,10 @@ export const SettingsGeneral: Component = () => {
   const language = useLanguage()
   const platform = usePlatform()
   const settings = useSettings()
+
+  onMount(() => {
+    void theme.loadThemes()
+  })
 
   const [store, setStore] = createStore({
     checking: false,
@@ -103,14 +131,17 @@ export const SettingsGeneral: Component = () => {
       .finally(() => setStore("checking", false))
   }
 
-  const themeOptions = createMemo(() =>
-    Object.entries(theme.themes()).map(([id, def]) => ({ id, name: def.name ?? id })),
-  )
+  const themeOptions = createMemo<ThemeOption[]>(() => theme.ids().map((id) => ({ id, name: theme.name(id) })))
 
   const colorSchemeOptions = createMemo((): { value: ColorScheme; label: string }[] => [
     { value: "system", label: language.t("theme.scheme.system") },
     { value: "light", label: language.t("theme.scheme.light") },
     { value: "dark", label: language.t("theme.scheme.dark") },
+  ])
+
+  const followupOptions = createMemo((): { value: "queue" | "steer"; label: string }[] => [
+    { value: "queue", label: language.t("settings.general.row.followup.option.queue") },
+    { value: "steer", label: language.t("settings.general.row.followup.option.steer") },
   ])
 
   const languageOptions = createMemo(() =>
@@ -120,25 +151,10 @@ export const SettingsGeneral: Component = () => {
     })),
   )
 
-  const fontOptions = [
-    { value: "ibm-plex-mono", label: "font.option.ibmPlexMono" },
-    { value: "cascadia-code", label: "font.option.cascadiaCode" },
-    { value: "fira-code", label: "font.option.firaCode" },
-    { value: "hack", label: "font.option.hack" },
-    { value: "inconsolata", label: "font.option.inconsolata" },
-    { value: "intel-one-mono", label: "font.option.intelOneMono" },
-    { value: "iosevka", label: "font.option.iosevka" },
-    { value: "jetbrains-mono", label: "font.option.jetbrainsMono" },
-    { value: "meslo-lgs", label: "font.option.mesloLgs" },
-    { value: "roboto-mono", label: "font.option.robotoMono" },
-    { value: "source-code-pro", label: "font.option.sourceCodePro" },
-    { value: "ubuntu-mono", label: "font.option.ubuntuMono" },
-    { value: "geist-mono", label: "font.option.geistMono" },
-  ] as const
-  const fontOptionsList = [...fontOptions]
-
-  const noneSound = { id: "none", label: "sound.option.none", src: undefined } as const
+  const noneSound = { id: "none", label: "sound.option.none" } as const
   const soundOptions = [noneSound, ...SOUND_OPTIONS]
+  const mono = () => monoInput(settings.appearance.font())
+  const sans = () => sansInput(settings.appearance.uiFont())
 
   const soundSelectProps = (
     enabled: () => boolean,
@@ -152,7 +168,7 @@ export const SettingsGeneral: Component = () => {
     label: (o: (typeof soundOptions)[number]) => language.t(o.label),
     onHighlight: (option: (typeof soundOptions)[number] | undefined) => {
       if (!option) return
-      playDemoSound(option.src)
+      playDemoSound(option.id === "none" ? undefined : option.id)
     },
     onSelect: (option: (typeof soundOptions)[number] | undefined) => {
       if (!option) return
@@ -163,18 +179,16 @@ export const SettingsGeneral: Component = () => {
       }
       setEnabled(true)
       set(option.id)
-      playDemoSound(option.src)
+      playDemoSound(option.id)
     },
     variant: "secondary" as const,
     size: "small" as const,
     triggerVariant: "settings" as const,
   })
 
-  const AppearanceSection = () => (
+  const GeneralSection = () => (
     <div class="flex flex-col gap-1">
-      <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.appearance")}</h3>
-
-      <div class="bg-surface-raised-base px-4 rounded-lg">
+      <SettingsList>
         <SettingsRow
           title={language.t("settings.general.row.language.title")}
           description={language.t("settings.general.row.language.description")}
@@ -192,90 +206,6 @@ export const SettingsGeneral: Component = () => {
           />
         </SettingsRow>
 
-        <SettingsRow
-          title={language.t("settings.general.row.appearance.title")}
-          description={language.t("settings.general.row.appearance.description")}
-        >
-          <Select
-            data-action="settings-color-scheme"
-            options={colorSchemeOptions()}
-            current={colorSchemeOptions().find((o) => o.value === theme.colorScheme())}
-            value={(o) => o.value}
-            label={(o) => o.label}
-            onSelect={(option) => option && theme.setColorScheme(option.value)}
-            onHighlight={(option) => {
-              if (!option) return
-              theme.previewColorScheme(option.value)
-              return () => theme.cancelPreview()
-            }}
-            variant="secondary"
-            size="small"
-            triggerVariant="settings"
-          />
-        </SettingsRow>
-
-        <SettingsRow
-          title={language.t("settings.general.row.theme.title")}
-          description={
-            <>
-              {language.t("settings.general.row.theme.description")}{" "}
-              <Link href="https://opencode.ai/docs/themes/">{language.t("common.learnMore")}</Link>
-            </>
-          }
-        >
-          <Select
-            data-action="settings-theme"
-            options={themeOptions()}
-            current={themeOptions().find((o) => o.id === theme.themeId())}
-            value={(o) => o.id}
-            label={(o) => o.name}
-            onSelect={(option) => {
-              if (!option) return
-              theme.setTheme(option.id)
-            }}
-            onHighlight={(option) => {
-              if (!option) return
-              theme.previewTheme(option.id)
-              return () => theme.cancelPreview()
-            }}
-            variant="secondary"
-            size="small"
-            triggerVariant="settings"
-          />
-        </SettingsRow>
-
-        <SettingsRow
-          title={language.t("settings.general.row.font.title")}
-          description={language.t("settings.general.row.font.description")}
-        >
-          <Select
-            data-action="settings-font"
-            options={fontOptionsList}
-            current={fontOptionsList.find((o) => o.value === settings.appearance.font())}
-            value={(o) => o.value}
-            label={(o) => language.t(o.label)}
-            onSelect={(option) => option && settings.appearance.setFont(option.value)}
-            variant="secondary"
-            size="small"
-            triggerVariant="settings"
-            triggerStyle={{ "font-family": monoFontFamily(settings.appearance.font()), "min-width": "180px" }}
-          >
-            {(option) => (
-              <span style={{ "font-family": monoFontFamily(option?.value) }}>
-                {option ? language.t(option.label) : ""}
-              </span>
-            )}
-          </Select>
-        </SettingsRow>
-      </div>
-    </div>
-  )
-
-  const FeedSection = () => (
-    <div class="flex flex-col gap-1">
-      <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.feed")}</h3>
-
-      <div class="bg-surface-raised-base px-4 rounded-lg">
         <SettingsRow
           title={language.t("settings.general.row.reasoningSummaries.title")}
           description={language.t("settings.general.row.reasoningSummaries.description")}
@@ -311,7 +241,132 @@ export const SettingsGeneral: Component = () => {
             />
           </div>
         </SettingsRow>
-      </div>
+
+        <SettingsRow
+          title={language.t("settings.general.row.followup.title")}
+          description={language.t("settings.general.row.followup.description")}
+        >
+          <Select
+            data-action="settings-followup"
+            options={followupOptions()}
+            current={followupOptions().find((o) => o.value === settings.general.followup())}
+            value={(o) => o.value}
+            label={(o) => o.label}
+            onSelect={(option) => option && settings.general.setFollowup(option.value)}
+            variant="secondary"
+            size="small"
+            triggerVariant="settings"
+            triggerStyle={{ "min-width": "180px" }}
+          />
+        </SettingsRow>
+      </SettingsList>
+    </div>
+  )
+
+  const AppearanceSection = () => (
+    <div class="flex flex-col gap-1">
+      <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.appearance")}</h3>
+
+      <SettingsList>
+        <SettingsRow
+          title={language.t("settings.general.row.colorScheme.title")}
+          description={language.t("settings.general.row.colorScheme.description")}
+        >
+          <Select
+            data-action="settings-color-scheme"
+            options={colorSchemeOptions()}
+            current={colorSchemeOptions().find((o) => o.value === theme.colorScheme())}
+            value={(o) => o.value}
+            label={(o) => o.label}
+            onSelect={(option) => option && theme.setColorScheme(option.value)}
+            onHighlight={(option) => {
+              if (!option) return
+              theme.previewColorScheme(option.value)
+              return () => theme.cancelPreview()
+            }}
+            variant="secondary"
+            size="small"
+            triggerVariant="settings"
+            triggerStyle={{ "min-width": "220px" }}
+          />
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.theme.title")}
+          description={
+            <>
+              {language.t("settings.general.row.theme.description")}{" "}
+              <Link href="https://opencode.ai/docs/themes/">{language.t("common.learnMore")}</Link>
+            </>
+          }
+        >
+          <Select
+            data-action="settings-theme"
+            options={themeOptions()}
+            current={themeOptions().find((o) => o.id === theme.themeId())}
+            value={(o) => o.id}
+            label={(o) => o.name}
+            onSelect={(option) => {
+              if (!option) return
+              theme.setTheme(option.id)
+            }}
+            onHighlight={(option) => {
+              if (!option) return
+              theme.previewTheme(option.id)
+              return () => theme.cancelPreview()
+            }}
+            variant="secondary"
+            size="small"
+            triggerVariant="settings"
+          />
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.uiFont.title")}
+          description={language.t("settings.general.row.uiFont.description")}
+        >
+          <div class="w-full sm:w-[220px]">
+            <TextField
+              data-action="settings-ui-font"
+              label={language.t("settings.general.row.uiFont.title")}
+              hideLabel
+              type="text"
+              value={sans()}
+              onChange={(value) => settings.appearance.setUIFont(value)}
+              placeholder={sansDefault}
+              spellcheck={false}
+              autocorrect="off"
+              autocomplete="off"
+              autocapitalize="off"
+              class="text-12-regular"
+              style={{ "font-family": sansFontFamily(settings.appearance.uiFont()) }}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.font.title")}
+          description={language.t("settings.general.row.font.description")}
+        >
+          <div class="w-full sm:w-[220px]">
+            <TextField
+              data-action="settings-code-font"
+              label={language.t("settings.general.row.font.title")}
+              hideLabel
+              type="text"
+              value={mono()}
+              onChange={(value) => settings.appearance.setFont(value)}
+              placeholder={monoDefault}
+              spellcheck={false}
+              autocorrect="off"
+              autocomplete="off"
+              autocapitalize="off"
+              class="text-12-regular"
+              style={{ "font-family": monoFontFamily(settings.appearance.font()) }}
+            />
+          </div>
+        </SettingsRow>
+      </SettingsList>
     </div>
   )
 
@@ -319,7 +374,7 @@ export const SettingsGeneral: Component = () => {
     <div class="flex flex-col gap-1">
       <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.notifications")}</h3>
 
-      <div class="bg-surface-raised-base px-4 rounded-lg">
+      <SettingsList>
         <SettingsRow
           title={language.t("settings.general.notifications.agent.title")}
           description={language.t("settings.general.notifications.agent.description")}
@@ -355,7 +410,7 @@ export const SettingsGeneral: Component = () => {
             />
           </div>
         </SettingsRow>
-      </div>
+      </SettingsList>
     </div>
   )
 
@@ -363,7 +418,7 @@ export const SettingsGeneral: Component = () => {
     <div class="flex flex-col gap-1">
       <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.sounds")}</h3>
 
-      <div class="bg-surface-raised-base px-4 rounded-lg">
+      <SettingsList>
         <SettingsRow
           title={language.t("settings.general.sounds.agent.title")}
           description={language.t("settings.general.sounds.agent.description")}
@@ -408,7 +463,7 @@ export const SettingsGeneral: Component = () => {
             )}
           />
         </SettingsRow>
-      </div>
+      </SettingsList>
     </div>
   )
 
@@ -416,7 +471,7 @@ export const SettingsGeneral: Component = () => {
     <div class="flex flex-col gap-1">
       <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.updates")}</h3>
 
-      <div class="bg-surface-raised-base px-4 rounded-lg">
+      <SettingsList>
         <SettingsRow
           title={language.t("settings.updates.row.startup.title")}
           description={language.t("settings.updates.row.startup.description")}
@@ -452,7 +507,7 @@ export const SettingsGeneral: Component = () => {
               : language.t("settings.updates.action.checkNow")}
           </Button>
         </SettingsRow>
-      </div>
+      </SettingsList>
     </div>
   )
 
@@ -465,9 +520,9 @@ export const SettingsGeneral: Component = () => {
       </div>
 
       <div class="flex flex-col gap-8 w-full">
-        <AppearanceSection />
+        <GeneralSection />
 
-        <FeedSection />
+        <AppearanceSection />
 
         <NotificationsSection />
 
@@ -482,7 +537,7 @@ export const SettingsGeneral: Component = () => {
               <div class="flex flex-col gap-1">
                 <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.desktop.section.wsl")}</h3>
 
-                <div class="bg-surface-raised-base px-4 rounded-lg">
+                <SettingsList>
                   <SettingsRow
                     title={language.t("settings.desktop.wsl.title")}
                     description={language.t("settings.desktop.wsl.description")}
@@ -495,7 +550,7 @@ export const SettingsGeneral: Component = () => {
                       />
                     </div>
                   </SettingsRow>
-                </div>
+                </SettingsList>
               </div>
             )
           }}
@@ -515,7 +570,7 @@ export const SettingsGeneral: Component = () => {
               <div class="flex flex-col gap-1">
                 <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.display")}</h3>
 
-                <div class="bg-surface-raised-base px-4 rounded-lg">
+                <SettingsList>
                   <SettingsRow
                     title={
                       <div class="flex items-center gap-2">
@@ -533,7 +588,7 @@ export const SettingsGeneral: Component = () => {
                       <Switch checked={value() === "wayland"} onChange={onChange} />
                     </div>
                   </SettingsRow>
-                </div>
+                </SettingsList>
               </div>
             )
           }}
@@ -551,12 +606,12 @@ interface SettingsRowProps {
 
 const SettingsRow: Component<SettingsRowProps> = (props) => {
   return (
-    <div class="flex flex-wrap items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
-      <div class="flex flex-col gap-0.5 min-w-0">
+    <div class="flex flex-wrap items-center gap-4 py-3 border-b border-border-weak-base last:border-none sm:flex-nowrap">
+      <div class="flex min-w-0 flex-1 flex-col gap-0.5">
         <span class="text-14-medium text-text-strong">{props.title}</span>
         <span class="text-12-regular text-text-weak">{props.description}</span>
       </div>
-      <div class="flex-shrink-0">{props.children}</div>
+      <div class="flex w-full justify-end sm:w-auto sm:shrink-0">{props.children}</div>
     </div>
   )
 }

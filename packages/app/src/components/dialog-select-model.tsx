@@ -10,27 +10,28 @@ import { Tag } from "@opencode-ai/ui/tag"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { DialogSelectProvider } from "./dialog-select-provider"
-import { DialogManageModels } from "./dialog-manage-models"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
 
 const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
 
+type ModelState = ReturnType<typeof useLocal>["model"]
+
 const ModelList: Component<{
   provider?: string
   class?: string
   onSelect: () => void
   action?: JSX.Element
+  model?: ModelState
 }> = (props) => {
-  const local = useLocal()
+  const model = props.model ?? useLocal().model
   const language = useLanguage()
 
   const models = createMemo(() =>
-    local.model
+    model
       .list()
-      .filter((m) => local.model.visible({ modelID: m.id, providerID: m.provider.id }))
+      .filter((m) => model.visible({ modelID: m.id, providerID: m.provider.id }))
       .filter((m) => (props.provider ? m.provider.id === props.provider : true)),
   )
 
@@ -41,7 +42,7 @@ const ModelList: Component<{
       emptyMessage={language.t("dialog.model.empty")}
       key={(x) => `${x.provider.id}:${x.id}`}
       items={models}
-      current={local.model.current()}
+      current={model.current()}
       filterKeys={["provider.name", "name", "id"]}
       sortBy={(a, b) => a.name.localeCompare(b.name)}
       groupBy={(x) => x.provider.name}
@@ -63,7 +64,7 @@ const ModelList: Component<{
         </Tooltip>
       )}
       onSelect={(x) => {
-        local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
+        model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
           recent: true,
         })
         props.onSelect()
@@ -88,6 +89,7 @@ type ModelSelectorTriggerProps = Omit<ComponentProps<typeof Kobalte.Trigger>, "a
 
 export function ModelSelectorPopover(props: {
   provider?: string
+  model?: ModelState
   children?: JSX.Element
   triggerAs?: ValidComponent
   triggerProps?: ModelSelectorTriggerProps
@@ -103,12 +105,16 @@ export function ModelSelectorPopover(props: {
 
   const handleManage = () => {
     setStore("open", false)
-    dialog.show(() => <DialogManageModels />)
+    void import("./dialog-manage-models").then((x) => {
+      dialog.show(() => <x.DialogManageModels />)
+    })
   }
 
   const handleConnectProvider = () => {
     setStore("open", false)
-    dialog.show(() => <DialogSelectProvider />)
+    void import("./dialog-select-provider").then((x) => {
+      dialog.show(() => <x.DialogSelectProvider />)
+    })
   }
   const language = useLanguage()
 
@@ -151,6 +157,7 @@ export function ModelSelectorPopover(props: {
           <Kobalte.Title class="sr-only">{language.t("dialog.model.select.title")}</Kobalte.Title>
           <ModelList
             provider={props.provider}
+            model={props.model}
             onSelect={() => setStore("open", false)}
             class="p-1"
             action={
@@ -184,30 +191,33 @@ export function ModelSelectorPopover(props: {
   )
 }
 
-export const DialogSelectModel: Component<{ provider?: string }> = (props) => {
+export const DialogSelectModel: Component<{ provider?: string; model?: ModelState }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
+
+  const provider = () => {
+    void import("./dialog-select-provider").then((x) => {
+      dialog.show(() => <x.DialogSelectProvider />)
+    })
+  }
+
+  const manage = () => {
+    void import("./dialog-manage-models").then((x) => {
+      dialog.show(() => <x.DialogManageModels />)
+    })
+  }
 
   return (
     <Dialog
       title={language.t("dialog.model.select.title")}
       action={
-        <Button
-          class="h-7 -my-1 text-14-medium"
-          icon="plus-small"
-          tabIndex={-1}
-          onClick={() => dialog.show(() => <DialogSelectProvider />)}
-        >
+        <Button class="h-7 -my-1 text-14-medium" icon="plus-small" tabIndex={-1} onClick={provider}>
           {language.t("command.provider.connect")}
         </Button>
       }
     >
-      <ModelList provider={props.provider} onSelect={() => dialog.close()} />
-      <Button
-        variant="ghost"
-        class="ml-3 mt-5 mb-6 text-text-base self-start"
-        onClick={() => dialog.show(() => <DialogManageModels />)}
-      >
+      <ModelList provider={props.provider} model={props.model} onSelect={() => dialog.close()} />
+      <Button variant="ghost" class="ml-3 mt-5 mb-6 text-text-base self-start" onClick={manage}>
         {language.t("dialog.model.manage")}
       </Button>
     </Dialog>

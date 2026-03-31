@@ -247,7 +247,7 @@ export const dict = {
 
   "go.title": "OpenCode Go | 모두를 위한 저비용 코딩 모델",
   "go.meta.description":
-    "Go는 GLM-5, Kimi K2.5, MiniMax M2.5에 대해 넉넉한 5시간 요청 한도를 제공하는 월 $10 구독입니다.",
+    "Go는 첫 달 $5, 이후 $10/월로 시작하며, GLM-5, Kimi K2.5, MiniMax M2.5, MiniMax M2.7에 대해 넉넉한 5시간 요청 한도를 제공합니다.",
   "go.hero.title": "모두를 위한 저비용 코딩 모델",
   "go.hero.body":
     "Go는 전 세계 프로그래머들에게 에이전트 코딩을 제공합니다. 가장 유능한 오픈 소스 모델에 대한 넉넉한 한도와 안정적인 액세스를 제공하므로, 비용이나 가용성 걱정 없이 강력한 에이전트로 빌드할 수 있습니다.",
@@ -256,7 +256,9 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Go 구독하기",
   "go.cta.price": "$10/월",
-  "go.pricing.body": "모든 에이전트와 함께 사용하세요. 필요 시 크레딧을 충전하세요. 언제든지 취소 가능.",
+  "go.cta.promo": "첫 달 $5",
+  "go.pricing.body":
+    "어떤 에이전트와도 사용할 수 있습니다. 첫 달 $5, 이후 $10/월. 필요하면 크레딧을 충전하세요. 언제든지 취소할 수 있습니다.",
   "go.graph.free": "무료",
   "go.graph.freePill": "Big Pickle 및 무료 모델",
   "go.graph.go": "Go",
@@ -289,20 +291,20 @@ export const dict = {
   "go.testimonials.frank.quote": "아직 Nvidia에 있었으면 좋았을 텐데요.",
   "go.problem.title": "Go는 어떤 문제를 해결하나요?",
   "go.problem.body":
-    "우리는 가능한 한 많은 사람들에게 OpenCode 경험을 제공하는 데 집중하고 있습니다. OpenCode Go는 전 세계 프로그래머들에게 에이전트 코딩을 제공하기 위해 설계된 저렴한(월 $10) 구독입니다. 가장 유능한 오픈 소스 모델에 대해 넉넉한 한도와 안정적인 액세스를 제공합니다.",
+    "우리는 가능한 많은 사람들에게 OpenCode 경험을 제공하는 데 집중하고 있습니다. OpenCode Go는 저렴한 구독 서비스로, 첫 달 $5, 이후 $10/월입니다. 넉넉한 한도와 가장 뛰어난 오픈 소스 모델에 대한 안정적인 액세스를 제공합니다.",
   "go.problem.subtitle": " ",
   "go.problem.item1": "저렴한 구독 가격",
   "go.problem.item2": "넉넉한 한도와 안정적인 액세스",
   "go.problem.item3": "가능한 한 많은 프로그래머를 위해 제작됨",
-  "go.problem.item4": "GLM-5, Kimi K2.5, MiniMax M2.5 포함",
+  "go.problem.item4": "GLM-5, Kimi K2.5, MiniMax M2.5, MiniMax M2.7 포함",
   "go.how.title": "Go 작동 방식",
-  "go.how.body": "Go는 OpenCode 또는 다른 어떤 에이전트와도 사용할 수 있는 월 $10 구독입니다.",
+  "go.how.body": "Go는 첫 달 $5, 이후 $10/월로 시작합니다. OpenCode 또는 어떤 에이전트와도 함께 사용할 수 있습니다.",
   "go.how.step1.title": "계정 생성",
   "go.how.step1.beforeLink": "",
   "go.how.step1.link": "설정 지침을 따르세요",
   "go.how.step2.title": "Go 구독",
-  "go.how.step2.link": "$10/월",
-  "go.how.step2.afterLink": "(넉넉한 한도 포함)",
+  "go.how.step2.link": "첫 달 $5",
+  "go.how.step2.afterLink": "이후 $10/월, 넉넉한 한도 포함",
   "go.how.step3.title": "코딩 시작",
   "go.how.step3.body": "오픈 소스 모델에 대한 안정적인 액세스와 함께",
   "go.privacy.title": "귀하의 프라이버시는 우리에게 중요합니다",
@@ -315,21 +317,21 @@ export const dict = {
   "go.faq.q1": "OpenCode Go란 무엇인가요?",
   "go.faq.a1": "Go는 에이전트 코딩을 위한 유능한 오픈 소스 모델에 대해 안정적인 액세스를 제공하는 저비용 구독입니다.",
   "go.faq.q2": "Go에는 어떤 모델이 포함되나요?",
-  "go.faq.a2": "Go에는 넉넉한 한도와 안정적인 액세스를 제공하는 GLM-5, Kimi K2.5, MiniMax M2.5가 포함됩니다.",
+  "go.faq.a2":
+    "Go에는 넉넉한 한도와 안정적인 액세스를 제공하는 GLM-5, Kimi K2.5, MiniMax M2.5, MiniMax M2.7가 포함됩니다.",
   "go.faq.q3": "Go는 Zen과 같은가요?",
   "go.faq.a3":
-    "아니요. Zen은 사용한 만큼 지불(pay-as-you-go)하는 방식인 반면, Go는 월 $10 구독으로 오픈 소스 모델인 GLM-5, Kimi K2.5, MiniMax M2.5에 대해 넉넉한 한도와 안정적인 액세스를 제공합니다.",
+    "아니요. Zen은 종량제인 반면, Go는 첫 달 $5, 이후 $10/월로 시작하며, GLM-5, Kimi K2.5, MiniMax M2.5, MiniMax M2.7 오픈 소스 모델에 대한 넉넉한 한도와 안정적인 액세스를 제공합니다.",
   "go.faq.q4": "Go 비용은 얼마인가요?",
   "go.faq.a4.p1.beforePricing": "Go 비용은",
-  "go.faq.a4.p1.pricingLink": "$10/월",
-  "go.faq.a4.p1.afterPricing": "이며 넉넉한 한도를 제공합니다.",
+  "go.faq.a4.p1.pricingLink": "첫 달 $5",
+  "go.faq.a4.p1.afterPricing": "이후 $10/월, 넉넉한 한도 포함.",
   "go.faq.a4.p2.beforeAccount": "구독 관리는 다음에서 가능합니다:",
   "go.faq.a4.p2.accountLink": "계정",
   "go.faq.a4.p3": "언제든지 취소할 수 있습니다.",
   "go.faq.q5": "데이터와 프라이버시는 어떤가요?",
   "go.faq.a5.body":
-    "이 플랜은 주로 글로벌 사용자를 위해 설계되었으며, 안정적인 글로벌 액세스를 위해 미국, EU, 싱가포르에 모델이 호스팅되어 있습니다.",
-  "go.faq.a5.contactAfter": "질문이 있으시면 언제든지 문의해 주세요.",
+    "이 플랜은 주로 글로벌 사용자를 위해 설계되었으며, 안정적인 글로벌 액세스를 위해 미국, EU, 싱가포르에 모델이 호스팅되어 있습니다. 당사의 제공자들은 데이터 보존 금지 정책을 따르며 모델 학습에 데이터를 사용하지 않습니다.",
   "go.faq.a5.beforeExceptions":
     "Go 모델은 미국에서 호스팅됩니다. 제공자들은 데이터 보존 금지 정책을 따르며 모델 학습에 데이터를 사용하지 않습니다. 단,",
   "go.faq.a5.exceptionsLink": "다음 예외",
@@ -342,7 +344,7 @@ export const dict = {
 
   "go.faq.q9": "무료 모델과 Go의 차이점은 무엇인가요?",
   "go.faq.a9":
-    "무료 모델에는 Big Pickle과 당시 사용 가능한 프로모션 모델이 포함되며, 하루 200회 요청 할당량이 적용됩니다. Go는 GLM-5, Kimi K2.5, MiniMax M2.5를 포함하며, 롤링 윈도우(5시간, 주간, 월간)에 걸쳐 더 높은 요청 할당량을 적용합니다. 이는 대략 5시간당 $12, 주당 $30, 월 $60에 해당합니다(실제 요청 수는 모델 및 사용량에 따라 다름).",
+    "무료 모델에는 Big Pickle과 당시 사용 가능한 프로모션 모델이 포함되며, 하루 200회 요청 할당량이 적용됩니다. Go는 GLM-5, Kimi K2.5, MiniMax M2.5, MiniMax M2.7를 포함하며, 롤링 윈도우(5시간, 주간, 월간)에 걸쳐 더 높은 요청 할당량을 적용합니다. 이는 대략 5시간당 $12, 주당 $30, 월 $60에 해당합니다(실제 요청 수는 모델 및 사용량에 따라 다름).",
 
   "zen.api.error.rateLimitExceeded": "속도 제한을 초과했습니다. 나중에 다시 시도해 주세요.",
   "zen.api.error.modelNotSupported": "{{model}} 모델은 지원되지 않습니다",
@@ -410,12 +412,15 @@ export const dict = {
   "black.subscribe.success.chargeNotice": "구독이 활성화되면 카드에 청구됩니다",
 
   "workspace.nav.zen": "Zen",
+  "workspace.nav.go": "Go",
+  "workspace.nav.usage": "사용량",
   "workspace.nav.apiKeys": "API 키",
   "workspace.nav.members": "멤버",
   "workspace.nav.billing": "결제",
   "workspace.nav.settings": "설정",
 
   "workspace.home.banner.beforeLink": "코딩 에이전트를 위한 신뢰할 수 있고 최적화된 모델.",
+  "workspace.lite.banner.beforeLink": "모두를 위한 저비용 코딩 모델.",
   "workspace.home.billing.loading": "로드 중...",
   "workspace.home.billing.enable": "결제 활성화",
   "workspace.home.billing.currentBalance": "현재 잔액",
@@ -535,6 +540,8 @@ export const dict = {
   "workspace.billing.loading": "로드 중...",
   "workspace.billing.addAction": "추가",
   "workspace.billing.addBalance": "잔액 추가",
+  "workspace.billing.alipay": "Alipay",
+  "workspace.billing.wechat": "WeChat Pay",
   "workspace.billing.linkedToStripe": "Stripe에 연결됨",
   "workspace.billing.manage": "관리",
   "workspace.billing.enable": "결제 활성화",
@@ -616,7 +623,6 @@ export const dict = {
   "workspace.lite.time.minute": "분",
   "workspace.lite.time.minutes": "분",
   "workspace.lite.time.fewSeconds": "몇 초",
-  "workspace.lite.subscription.title": "Go 구독",
   "workspace.lite.subscription.message": "현재 OpenCode Go를 구독 중입니다.",
   "workspace.lite.subscription.manage": "구독 관리",
   "workspace.lite.subscription.rollingUsage": "롤링 사용량",
@@ -626,17 +632,20 @@ export const dict = {
   "workspace.lite.subscription.useBalance": "사용 한도 도달 후에는 보유 잔액 사용",
   "workspace.lite.subscription.selectProvider":
     'Go 모델을 사용하려면 opencode 설정에서 "OpenCode Go"를 공급자로 선택하세요.',
-  "workspace.lite.other.title": "Go 구독",
+  "workspace.lite.black.message":
+    "현재 OpenCode Black을 구독 중이거나 대기 명단에 등록되어 있습니다. Go로 전환하려면 먼저 구독을 취소해 주세요.",
   "workspace.lite.other.message":
     "이 워크스페이스의 다른 멤버가 이미 OpenCode Go를 구독 중입니다. 워크스페이스당 한 명의 멤버만 구독할 수 있습니다.",
-  "workspace.lite.promo.title": "OpenCode Go",
   "workspace.lite.promo.description":
-    "OpenCode Go는 넉넉한 사용 한도와 함께 인기 있는 오픈 코딩 모델에 대한 안정적인 액세스를 제공하는 월 $10의 구독입니다.",
+    "OpenCode Go는 {{price}}부터 시작하며, 이후 $10/월로 넉넉한 사용량 한도와 함께 인기 있는 오픈 코딩 모델에 대한 안정적인 액세스를 제공합니다.",
+  "workspace.lite.promo.price": "첫 달 $5",
   "workspace.lite.promo.modelsTitle": "포함 내역",
   "workspace.lite.promo.footer":
     "이 플랜은 주로 글로벌 사용자를 위해 설계되었으며, 안정적인 글로벌 액세스를 위해 미국, EU 및 싱가포르에 모델이 호스팅되어 있습니다. 가격 및 사용 한도는 초기 사용을 통해 학습하고 피드백을 수집함에 따라 변경될 수 있습니다.",
   "workspace.lite.promo.subscribe": "Go 구독하기",
   "workspace.lite.promo.subscribing": "리디렉션 중...",
+  "workspace.lite.promo.otherMethods": "기타 결제 수단",
+  "workspace.lite.promo.selectMethod": "결제 수단 선택",
 
   "download.title": "OpenCode | 다운로드",
   "download.meta.description": "macOS, Windows, Linux용 OpenCode 다운로드",
@@ -681,8 +690,12 @@ export const dict = {
   "enterprise.form.name.placeholder": "홍길동",
   "enterprise.form.role.label": "직책",
   "enterprise.form.role.placeholder": "CTO / 개발 팀장",
+  "enterprise.form.company.label": "회사",
+  "enterprise.form.company.placeholder": "Acme Inc",
   "enterprise.form.email.label": "회사 이메일",
   "enterprise.form.email.placeholder": "name@company.com",
+  "enterprise.form.phone.label": "전화번호",
+  "enterprise.form.phone.placeholder": "+1 234 567 8900",
   "enterprise.form.message.label": "어떤 문제를 해결하고 싶으신가요?",
   "enterprise.form.message.placeholder": "도움이 필요한 부분은...",
   "enterprise.form.send": "전송",
