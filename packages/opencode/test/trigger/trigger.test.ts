@@ -25,6 +25,7 @@ describe("trigger service", () => {
         expect(list[0]).toMatchObject({
           id: item.id,
           schedule: { interval: 20 },
+          enabled: true,
           runs: 0,
         })
 
@@ -39,6 +40,55 @@ describe("trigger service", () => {
     await Instance.provide({
       directory: b.path,
       fn: async () => {
+        expect(await Trigger.list()).toEqual([])
+      },
+    })
+  })
+
+  test("disabled trigger does not fire until re-enabled", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const item = await Trigger.create({ interval: 20 })
+
+        expect((await Trigger.get(item.id)).enabled).toBe(true)
+
+        const off = await Trigger.disable(item.id)
+        expect(off.enabled).toBe(false)
+
+        await Bun.sleep(80)
+
+        const idle = await Trigger.get(item.id)
+        expect(idle.enabled).toBe(false)
+        expect(idle.runs).toBe(0)
+
+        const on = await Trigger.enable(item.id)
+        expect(on.enabled).toBe(true)
+
+        await Bun.sleep(80)
+
+        const next = await Trigger.get(item.id)
+        expect(next.enabled).toBe(true)
+        expect(next.runs).toBeGreaterThan(0)
+      },
+    })
+  })
+
+  test("deleted trigger no longer lists or fires", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const item = await Trigger.create({ interval: 20 })
+        await Trigger.remove(item.id)
+
+        expect(await Trigger.list()).toEqual([])
+
+        await Bun.sleep(80)
+
         expect(await Trigger.list()).toEqual([])
       },
     })
