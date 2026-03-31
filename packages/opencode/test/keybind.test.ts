@@ -168,6 +168,12 @@ describe("Keybind.match", () => {
     expect(Keybind.match(a, b)).toBe(true)
   })
 
+  test("should match ctrl+/ with ctrl+_ terminal form", () => {
+    const a = Keybind.parse("ctrl+/")[0]
+    const b: Keybind.Info = { ctrl: true, meta: false, shift: false, leader: false, name: "_" }
+    expect(Keybind.match(a, b)).toBe(true)
+  })
+
   test("should not match when only super differs", () => {
     const a: Keybind.Info = { ctrl: true, meta: true, shift: true, super: true, leader: false, name: "a" }
     const b: Keybind.Info = { ctrl: true, meta: true, shift: true, super: false, leader: false, name: "a" }

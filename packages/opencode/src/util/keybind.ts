@@ -10,10 +10,19 @@ export namespace Keybind {
     leader: boolean // our custom field
   }
 
+  function normalize(info: Info) {
+    return {
+      ...info,
+      super: info.super ?? false,
+      // Many terminals report Ctrl+/ as Ctrl+_ (\x1F), so treat them as the same binding.
+      name: info.ctrl && info.name === "_" ? "/" : info.name,
+    }
+  }
+
   export function match(a: Info | undefined, b: Info): boolean {
     if (!a) return false
-    const normalizedA = { ...a, super: a.super ?? false }
-    const normalizedB = { ...b, super: b.super ?? false }
+    const normalizedA = normalize(a)
+    const normalizedB = normalize(b)
     return isDeepEqual(normalizedA, normalizedB)
   }
 
