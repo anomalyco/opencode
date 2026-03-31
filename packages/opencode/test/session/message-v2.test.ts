@@ -154,7 +154,7 @@ describe("session.message-v2.toModelMessage", () => {
     expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([])
   })
 
-test("keeps synthetic user text but drops synthetic assistant text", () => {
+test("keeps synthetic user text but drops synthetic assistant text", async () => {
     const messageID = "m-user"
 
     const input: MessageV2.WithParts[] = [
