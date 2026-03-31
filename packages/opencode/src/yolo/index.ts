@@ -20,7 +20,7 @@ export namespace Yolo {
   }
 
   export async function init() {
-    const config = await Config.global()
+    const config = await Config.getGlobal()
     if (config.yolo === true) {
       enabled = true
       log.warn("YOLO mode enabled via config")
