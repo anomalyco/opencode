@@ -44,8 +44,10 @@ describe("MemoryStore", () => {
     expect(results[0].topic).toBe("t1")
   })
 
-  test("getByTopic returns latest memory for topic", () => {
+  test("getByTopic returns latest memory for topic", async () => {
     MemoryStore.save({ projectPath, type: "general", topic: "shared", content: "first" })
+    // Ensure different timestamp
+    await new Promise(r => setTimeout(r, 10))
     MemoryStore.save({ projectPath, type: "general", topic: "shared", content: "second" })
 
     const result = MemoryStore.getByTopic("shared", projectPath)
