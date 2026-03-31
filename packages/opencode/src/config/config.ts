@@ -1,6 +1,6 @@
 import { Log } from "../util/log"
 import path from "path"
-import { pathToFileURL } from "url"
+import { fileURLToPath, pathToFileURL } from "url"
 import os from "os"
 import z from "zod"
 import { ModelsDev } from "../provider/models"
@@ -23,7 +23,7 @@ import { LSPServer } from "../lsp/server"
 import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
-import { constants, existsSync } from "fs"
+import { constants, existsSync, readFileSync } from "fs"
 import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
 import { Event } from "../server/event"
@@ -393,13 +393,40 @@ export namespace Config {
    * Since plugins are added in low-to-high priority order,
    * we reverse, deduplicate (keeping first occurrence), then restore order.
    */
+  function findPackageJsonName(filePath: string): string | undefined {
+    let dir = path.dirname(filePath)
+    const root = path.parse(dir).root
+
+    for (let i = 0; i < 5 && dir !== root; i++) {
+      const pkgPath = path.join(dir, "package.json")
+      if (existsSync(pkgPath)) {
+        try {
+          const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"))
+          if (pkg.name && typeof pkg.name === "string") {
+            return pkg.name
+          }
+        } catch {}
+      }
+      dir = path.dirname(dir)
+    }
+    return undefined
+  }
+
+  function getPluginIdentity(spec: string): string {
+    if (spec.startsWith("file://")) {
+      const filePath = fileURLToPath(spec)
+      return findPackageJsonName(filePath) ?? spec
+    }
+    return parsePluginSpecifier(spec).pkg
+  }
+
   export function deduplicatePlugins(plugins: PluginSpec[]): PluginSpec[] {
     const seenNames = new Set<string>()
     const uniqueSpecifiers: PluginSpec[] = []
 
     for (const specifier of plugins.toReversed()) {
       const spec = pluginSpecifier(specifier)
-      const name = spec.startsWith("file://") ? spec : parsePluginSpecifier(spec).pkg
+      const name = getPluginIdentity(spec)
       if (!seenNames.has(name)) {
         seenNames.add(name)
         uniqueSpecifiers.push(specifier)
