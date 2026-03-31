@@ -88,6 +88,7 @@ export default plugin
 - If package `exports` exists, loader only resolves `./tui` or `./server`; it never falls back to `exports["."]`.
 - For npm package specs, TUI does not use `package.json` `main` as a fallback entry.
 - `package.json` `main` is only used for server plugin entrypoint resolution.
+- If a configured plugin has no target-specific entrypoint, it is skipped with a warning (not a load failure).
 - If a package supports both server and TUI, use separate files and package `exports` (`./server` and `./tui`) so each target resolves to a target-only module.
 - File/path plugins must export a non-empty `id`.
 - npm plugins may omit `id`; package `name` is used.
