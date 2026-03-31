@@ -9,6 +9,7 @@ const disableDefault = process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
 process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = "1"
 
 const { Plugin } = await import("../../src/plugin/index")
+const { PluginLoader } = await import("../../src/plugin/loader")
 const { Instance } = await import("../../src/project/instance")
 const { Npm } = await import("../../src/npm")
 const { Bus } = await import("../../src/bus")
@@ -831,6 +832,108 @@ export default {
       } else {
         process.env.OPENCODE_PURE = pure
       }
+    }
+  })
+
+  test("retries failed file plugins once after wait and keeps order", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const a = path.join(dir, "a")
+        const b = path.join(dir, "b")
+        const aSpec = pathToFileURL(a).href
+        const bSpec = pathToFileURL(b).href
+        await fs.mkdir(a, { recursive: true })
+        await fs.mkdir(b, { recursive: true })
+        return { a, b, aSpec, bSpec }
+      },
+    })
+
+    let wait = 0
+    const calls: Array<[string, boolean]> = []
+
+    const loaded = await PluginLoader.loadExternal({
+      rows: [tmp.extra.aSpec, tmp.extra.bSpec].map((item) => ({ item, plan: PluginLoader.plan(item) })),
+      kind: "tui",
+      wait: async () => {
+        wait += 1
+        await Bun.write(path.join(tmp.extra.a, "index.ts"), "export default {}\n")
+        await Bun.write(path.join(tmp.extra.b, "index.ts"), "export default {}\n")
+      },
+      report: {
+        start(row, retry) {
+          calls.push([row.plan.spec, retry])
+        },
+      },
+    })
+
+    expect(wait).toBe(1)
+    expect(calls).toEqual([
+      [tmp.extra.aSpec, false],
+      [tmp.extra.bSpec, false],
+      [tmp.extra.aSpec, true],
+      [tmp.extra.bSpec, true],
+    ])
+    expect(loaded.map((item) => item.spec)).toEqual([tmp.extra.aSpec, tmp.extra.bSpec])
+  })
+
+  test("retries file plugins when finish returns undefined", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const file = path.join(dir, "plugin.ts")
+        const spec = pathToFileURL(file).href
+        await Bun.write(file, "export default {}\n")
+        return { spec }
+      },
+    })
+
+    let wait = 0
+    let count = 0
+
+    const loaded = await PluginLoader.loadExternal({
+      rows: [{ item: tmp.extra.spec, plan: PluginLoader.plan(tmp.extra.spec) }],
+      kind: "tui",
+      wait: async () => {
+        wait += 1
+      },
+      finish: async (load, _item, retry) => {
+        count += 1
+        if (!retry) return
+        return {
+          retry,
+          spec: load.spec,
+        }
+      },
+    })
+
+    expect(wait).toBe(1)
+    expect(count).toBe(2)
+    expect(loaded).toEqual([{ retry: true, spec: tmp.extra.spec }])
+  })
+
+  test("does not wait or retry npm plugin failures", async () => {
+    const install = spyOn(BunProc, "install").mockRejectedValue(new Error("boom"))
+    let wait = 0
+    const errors: Array<[string, boolean]> = []
+
+    try {
+      const loaded = await PluginLoader.loadExternal({
+        rows: [{ item: "acme-plugin@1.0.0", plan: PluginLoader.plan("acme-plugin@1.0.0") }],
+        kind: "tui",
+        wait: async () => {
+          wait += 1
+        },
+        report: {
+          error(_row, retry, stage) {
+            errors.push([stage, retry])
+          },
+        },
+      })
+
+      expect(loaded).toEqual([])
+      expect(wait).toBe(0)
+      expect(errors).toEqual([["install", false]])
+    } finally {
+      install.mockRestore()
     }
   })
 })

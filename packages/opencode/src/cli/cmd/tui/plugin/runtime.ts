@@ -18,7 +18,7 @@ import { Log } from "@/util/log"
 import { errorData, errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
 import { Instance } from "@/project/instance"
-import { pluginSource, readPluginId, readV1Plugin, resolvePluginId, type PluginSource } from "@/plugin/shared"
+import { readPluginId, readV1Plugin, resolvePluginId, type PluginSource } from "@/plugin/shared"
 import { PluginLoader } from "@/plugin/loader"
 import { PluginMeta } from "@/plugin/meta"
 import { installPlugin as installModulePlugin, patchPluginConfig, readPluginManifest } from "@/plugin/install"
@@ -224,88 +224,6 @@ function createThemeInstaller(
         error,
       })
     })
-  }
-}
-
-async function loadExternalPlugin(cfg: TuiConfig.PluginRecord, retry = false): Promise<PluginLoad | undefined> {
-  const plan = PluginLoader.plan(cfg.item)
-  if (plan.deprecated) return
-
-  log.info("loading tui plugin", { path: plan.spec, retry })
-  const resolved = await PluginLoader.resolve(plan, "tui")
-  if (!resolved.ok) {
-    if (resolved.stage === "missing") {
-      warn("tui plugin has no entrypoint", {
-        path: plan.spec,
-        retry,
-        message: resolved.message,
-      })
-      return
-    }
-
-    if (resolved.stage === "install") {
-      fail("failed to resolve tui plugin", { path: plan.spec, retry, error: resolved.error })
-      return
-    }
-    if (resolved.stage === "compatibility") {
-      fail("tui plugin incompatible", { path: plan.spec, retry, error: resolved.error })
-      return
-    }
-    fail("failed to resolve tui plugin entry", { path: plan.spec, retry, error: resolved.error })
-    return
-  }
-
-  const loaded = await PluginLoader.load(resolved.value)
-  if (!loaded.ok) {
-    fail("failed to load tui plugin", {
-      path: plan.spec,
-      target: resolved.value.entry,
-      retry,
-      error: loaded.error,
-    })
-    return
-  }
-
-  const mod = await Promise.resolve()
-    .then(() => {
-      return readV1Plugin(loaded.value.mod as Record<string, unknown>, plan.spec, "tui") as TuiPluginModule
-    })
-    .catch((error) => {
-      fail("failed to load tui plugin", {
-        path: plan.spec,
-        target: loaded.value.entry,
-        retry,
-        error,
-      })
-      return
-    })
-  if (!mod) return
-
-  const id = await resolvePluginId(
-    loaded.value.source,
-    plan.spec,
-    loaded.value.target,
-    readPluginId(mod.id, plan.spec),
-    loaded.value.pkg,
-  ).catch((error) => {
-    fail("failed to load tui plugin", { path: plan.spec, target: loaded.value.target, retry, error })
-    return
-  })
-  if (!id) return
-
-  return {
-    options: plan.options,
-    spec: plan.spec,
-    target: loaded.value.target,
-    retry,
-    source: loaded.value.source,
-    id,
-    module: mod,
-    theme_meta: {
-      scope: cfg.scope,
-      source: cfg.source,
-    },
-    theme_root: loaded.value.pkg?.dir ?? resolveRoot(loaded.value.target),
   }
 }
 
@@ -638,27 +556,80 @@ function applyInitialPluginEnabledState(state: RuntimeState, config: TuiConfig.I
 }
 
 async function resolveExternalPlugins(list: TuiConfig.PluginRecord[], wait: () => Promise<void>) {
-  const loaded = await Promise.all(list.map((item) => loadExternalPlugin(item)))
-  const ready: PluginLoad[] = []
-  let deps: Promise<void> | undefined
-
-  for (let i = 0; i < list.length; i++) {
-    let entry = loaded[i]
-    if (!entry) {
-      const item = list[i]
-      if (!item) continue
-      if (pluginSource(Config.pluginSpecifier(item.item)) !== "file") continue
-      deps ??= wait().catch((error) => {
+  return PluginLoader.loadExternal({
+    rows: list.map((item) => ({ item, plan: PluginLoader.plan(item.item) })),
+    kind: "tui",
+    wait: async () => {
+      await wait().catch((error) => {
         log.warn("failed waiting for tui plugin dependencies", { error })
       })
-      await deps
-      entry = await loadExternalPlugin(item, true)
-    }
-    if (!entry) continue
-    ready.push(entry)
-  }
+    },
+    finish: async (loaded, cfg, retry) => {
+      const mod = await Promise.resolve()
+        .then(() => readV1Plugin(loaded.mod as Record<string, unknown>, loaded.spec, "tui") as TuiPluginModule)
+        .catch((error) => {
+          fail("failed to load tui plugin", {
+            path: loaded.spec,
+            target: loaded.entry,
+            retry,
+            error,
+          })
+          return
+        })
+      if (!mod) return
 
-  return ready
+      const id = await resolvePluginId(
+        loaded.source,
+        loaded.spec,
+        loaded.target,
+        readPluginId(mod.id, loaded.spec),
+        loaded.pkg,
+      ).catch((error) => {
+        fail("failed to load tui plugin", { path: loaded.spec, target: loaded.target, retry, error })
+        return
+      })
+      if (!id) return
+
+      return {
+        options: loaded.options,
+        spec: loaded.spec,
+        target: loaded.target,
+        retry,
+        source: loaded.source,
+        id,
+        module: mod,
+        theme_meta: {
+          scope: cfg.scope,
+          source: cfg.source,
+        },
+        theme_root: loaded.pkg?.dir ?? resolveRoot(loaded.target),
+      }
+    },
+    report: {
+      start(row, retry) {
+        log.info("loading tui plugin", { path: row.plan.spec, retry })
+      },
+      missing(row, retry, message) {
+        warn("tui plugin has no entrypoint", { path: row.plan.spec, retry, message })
+      },
+      error(row, retry, stage, error, resolved) {
+        const spec = row.plan.spec
+        if (stage === "install") {
+          fail("failed to resolve tui plugin", { path: spec, retry, error })
+          return
+        }
+        if (stage === "compatibility") {
+          fail("tui plugin incompatible", { path: spec, retry, error })
+          return
+        }
+        if (stage === "entry") {
+          fail("failed to resolve tui plugin entry", { path: spec, retry, error })
+          return
+        }
+        fail("failed to load tui plugin", { path: spec, target: resolved?.entry, retry, error })
+      },
+    },
+  })
 }
 
 async function addExternalPluginEntries(state: RuntimeState, ready: PluginLoad[]) {
