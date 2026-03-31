@@ -1416,12 +1416,21 @@ export namespace Provider {
           const sdk = await resolveSDK(model, s)
 
           try {
+            const mergedOptions = { ...provider.options, ...model.options }
             const language = s.modelLoaders[model.providerID]
-              ? await s.modelLoaders[model.providerID](sdk, model.api.id, {
-                  ...provider.options,
-                  ...model.options,
-                })
-              : sdk.languageModel(model.api.id)
+              ? await s.modelLoaders[model.providerID](sdk, model.api.id, mergedOptions)
+              : (() => {
+                  // For custom providers using @ai-sdk/azure, apply azure-specific logic
+                  if (model.api.npm === "@ai-sdk/azure") {
+                    if (useLanguageModel(sdk)) return sdk.languageModel(model.api.id)
+                    if (mergedOptions["useCompletionUrls"]) {
+                      return sdk.chat(model.api.id)
+                    } else {
+                      return sdk.responses(model.api.id)
+                    }
+                  }
+                  return sdk.languageModel(model.api.id)
+                })()
             s.models.set(key, language)
             return language
           } catch (e) {
