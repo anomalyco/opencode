@@ -275,19 +275,19 @@
 html[data-platform="desktop"][data-os="windows"] [data-component="toast"] {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+}
 
-  &[data-variant="default"],
-  &[data-variant="loading"] {
-    --toast-bg: var(--surface-raised-stronger-non-alpha);
-  }
+html[data-platform="desktop"][data-os="windows"] [data-component="toast"][data-variant="default"],
+html[data-platform="desktop"][data-os="windows"] [data-component="toast"][data-variant="loading"] {
+  --toast-bg: var(--surface-raised-stronger-non-alpha);
+}
 
-  &[data-variant="success"] {
-    --toast-bg: color-mix(in oklch, var(--surface-raised-stronger-non-alpha) 84%, var(--surface-success-strong));
-  }
+html[data-platform="desktop"][data-os="windows"] [data-component="toast"][data-variant="success"] {
+  --toast-bg: color-mix(in oklch, var(--surface-raised-stronger-non-alpha) 84%, var(--surface-success-strong));
+}
 
-  &[data-variant="error"] {
-    --toast-bg: color-mix(in oklch, var(--surface-raised-stronger-non-alpha) 82%, var(--surface-warning-strong));
-  }
+html[data-platform="desktop"][data-os="windows"] [data-component="toast"][data-variant="error"] {
+  --toast-bg: color-mix(in oklch, var(--surface-raised-stronger-non-alpha) 82%, var(--surface-warning-strong));
 }
 
 @keyframes toastPopIn {

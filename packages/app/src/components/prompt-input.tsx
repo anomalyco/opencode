@@ -349,6 +349,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const kw = (...keys: DictKey[]) => (language.locale() === "en" ? undefined : keys.map((k) => enDict[k]).join(" "))
   const platform = usePlatform()
   const server = useServer()
+  const win = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
   const { params, tabs, view } = useSessionLayout()
   const openclaw = createMemo(() => server.current?.integration === "openclaw")
   let editorRef!: HTMLDivElement
@@ -534,7 +535,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const buttons = createMemo(() => motion(buttonsSpring()))
   const shell = createMemo(() => motion(1 - buttonsSpring()))
   const control = createMemo(() => ({ height: "28px", ...buttons() }))
-
+  const glass = createMemo(() => ({
+    "background-color": win() ? "var(--surface-raised-stronger-non-alpha)" : "rgb(12 12 14 / 0.34)",
+    "backdrop-filter": win() ? "none" : "blur(40px) saturate(150%)",
+    "-webkit-backdrop-filter": win() ? "none" : "blur(40px) saturate(150%)",
+  }))
   const commentCount = createMemo(() => {
     if (store.mode === "shell") return 0
     return prompt.context.items().filter((item) => !!item.comment?.trim()).length
@@ -1820,6 +1825,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           class="prompt-pick capitalize max-w-[160px]"
                           valueClass="truncate"
                           triggerStyle={control()}
+                          contentStyle={glass()}
                           variant="ghost"
                         />
                       </TooltipKeybind>
@@ -1862,6 +1868,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           keybind={command.keybind("model.choose")}
                         >
                           <ModelSelectorPopover
+                            style={glass()}
                             triggerAs={Button}
                             triggerProps={{
                               variant: "ghost",
@@ -1899,6 +1906,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           class="prompt-pick prompt-variant capitalize max-w-[160px]"
                           valueClass="truncate"
                           triggerStyle={control()}
+                          contentStyle={glass()}
                           variant="ghost"
                         />
                       </TooltipKeybind>

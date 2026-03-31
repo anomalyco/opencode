@@ -10,7 +10,6 @@ import { Tag } from "@opencode-ai/ui/tag"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { usePlatform } from "@/context/platform"
 import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogManageModels } from "./dialog-manage-models"
 import { ModelTooltip } from "./model-tooltip"
@@ -94,12 +93,12 @@ type Dismiss = "escape" | "outside" | "select" | "manage" | "provider"
 export function ModelSelectorPopover(props: {
   provider?: string
   model?: ModelState
+  style?: JSX.CSSProperties
   children?: JSX.Element
   triggerAs?: ValidComponent
   triggerProps?: ModelSelectorTriggerProps
   onClose?: (cause: "escape" | "select") => void
 }) {
-  const platform = usePlatform()
   const [store, setStore] = createStore<{
     open: boolean
     dismiss: Dismiss | null
@@ -108,7 +107,6 @@ export function ModelSelectorPopover(props: {
     dismiss: null,
   })
   const dialog = useDialog()
-  const win = () => platform.platform === "desktop" && platform.os === "windows"
 
   const close = (dismiss: Dismiss) => {
     setStore("dismiss", dismiss)
@@ -146,12 +144,10 @@ export function ModelSelectorPopover(props: {
       </Kobalte.Trigger>
       <Kobalte.Portal>
         <Kobalte.Content
-          class="w-72 h-80 flex flex-col p-2 rounded-xl border shadow-[var(--shadow-lg-border-base)] z-50 outline-none overflow-hidden"
+          class="w-72 h-80 flex flex-col p-2 rounded-xl border bg-[color:rgb(12_12_14_/_0.34)] shadow-[var(--shadow-lg-border-base)] z-50 outline-none overflow-hidden backdrop-blur-[40px] saturate-[1.5] [-webkit-backdrop-filter:blur(40px)_saturate(1.5)]"
           style={{
             border: "1px solid rgb(255 255 255 / 0.04)",
-            "background-color": win() ? "var(--surface-raised-stronger-non-alpha)" : "rgb(12 12 14 / 0.34)",
-            "backdrop-filter": win() ? "none" : "blur(40px) saturate(150%)",
-            "-webkit-backdrop-filter": win() ? "none" : "blur(40px) saturate(150%)",
+            ...(props.style ?? {}),
           }}
           onEscapeKeyDown={(event) => {
             close("escape")
