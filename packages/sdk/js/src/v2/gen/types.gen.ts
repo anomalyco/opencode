@@ -77,6 +77,8 @@ export type Event =
   | EventTuiSessionSelect2
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
+  | EventMcpResourceUpdated
+  | EventMcpResourceListChanged
   | EventCommandExecuted
   | EventProjectUpdated
   | EventSessionStatus
@@ -1468,6 +1470,21 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "mcp.resource.updated"
+        properties: {
+          server: string
+          uri: string
+        }
+      }
+    | {
+        id: string
+        type: "mcp.resource.list.changed"
+        properties: {
+          server: string
+        }
+      }
+    | {
+        id: string
         type: "command.executed"
         properties: {
           name: string
@@ -1833,6 +1850,8 @@ export type McpLocalConfig = {
   }
   enabled?: boolean
   timeout?: number
+  subscriptions?: Array<string>
+  autoprompt?: boolean
 }
 
 export type McpOAuthConfig = {
@@ -1861,6 +1880,8 @@ export type McpRemoteConfig = {
    */
   oauth?: McpOAuthConfig | false
   timeout?: number
+  subscriptions?: Array<string>
+  autoprompt?: boolean
 }
 
 /**
@@ -6895,6 +6916,23 @@ export type EventMcpBrowserOpenFailed = {
   properties: {
     mcpName: string
     url: string
+  }
+}
+
+export type EventMcpResourceUpdated = {
+  id: string
+  type: "mcp.resource.updated"
+  properties: {
+    server: string
+    uri: string
+  }
+}
+
+export type EventMcpResourceListChanged = {
+  id: string
+  type: "mcp.resource.list.changed"
+  properties: {
+    server: string
   }
 }
 

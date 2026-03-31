@@ -10,6 +10,8 @@ import {
   ListResourceTemplatesRequestSchema,
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
+  SubscribeRequestSchema,
+  UnsubscribeRequestSchema,
   type ServerCapabilities,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js"
@@ -40,6 +42,8 @@ interface LifecycleServerState {
   roots?: Array<{ uri: string; name?: string }>
   requests: string[]
   aborted: number
+  subscribed: string[]
+  unsubscribed: string[]
 }
 
 function lifecycleServer(input?: { capabilities?: ServerCapabilities; instructions?: string; requestRoots?: boolean }) {
@@ -53,6 +57,8 @@ function lifecycleServer(input?: { capabilities?: ServerCapabilities; instructio
         resourceTemplates: [],
         requests: [],
         aborted: 0,
+        subscribed: [],
+        unsubscribed: [],
       }
 
       const makeProtocol = async () => {
@@ -98,6 +104,16 @@ function lifecycleServer(input?: { capabilities?: ServerCapabilities; instructio
             if (state.requestDelay) await Bun.sleep(state.requestDelay)
             return { contents: [{ uri: request.params.uri, text: "resource result" }] }
           })
+          if (capabilities.resources.subscribe) {
+            protocol.setRequestHandler(SubscribeRequestSchema, (request) => {
+              state.subscribed.push(request.params.uri)
+              return Promise.resolve({})
+            })
+            protocol.setRequestHandler(UnsubscribeRequestSchema, (request) => {
+              state.unsubscribed.push(request.params.uri)
+              return Promise.resolve({})
+            })
+          }
         }
 
         protocol.oninitialized = () => {
@@ -543,17 +559,52 @@ it.instance("remote timeout aborts both real HTTP transport attempts", () =>
   }),
 )
 
+it.instance("exposes subscribe, unsubscribe, and subscriptions for resource updates", () =>
+  Effect.gen(function* () {
+    const server = yield* lifecycleServer({ capabilities: { resources: { subscribe: true } } })
+    const mcp = yield* MCP.Service
+    yield* mcp.add("sub-server", remote(server.url))
+
+    expect(yield* mcp.subscribe("sub-server", "file:///notes.md")).toBe(true)
+    expect(yield* mcp.subscriptions()).toEqual({ "sub-server": ["file:///notes.md"] })
+    expect(yield* mcp.unsubscribe("sub-server", "file:///notes.md")).toBe(true)
+    expect(yield* mcp.subscriptions()).toEqual({})
+
+    expect(server.state.subscribed).toEqual(["file:///notes.md"])
+    expect(server.state.unsubscribed).toEqual(["file:///notes.md"])
+  }),
+)
+
+it.instance("subscribes configured resources after connecting", () =>
+  Effect.gen(function* () {
+    const server = yield* lifecycleServer({ capabilities: { resources: { subscribe: true } } })
+    const mcp = yield* MCP.Service
+    yield* mcp.add("configured-sub-server", { ...remote(server.url), subscriptions: ["file:///configured.md"] })
+
+    expect(yield* mcp.subscriptions()).toEqual({ "configured-sub-server": ["file:///configured.md"] })
+    expect(server.state.subscribed).toEqual(["file:///configured.md"])
+  }),
+)
+
 it.live("McpOAuthCallback.cancelPending rejects the pending callback", () =>
   Effect.acquireUseRelease(
     Effect.sync(() => McpOAuthCallback.waitForCallback("abc123hexstate", "my-mcp-server")),
     (callback) =>
       Effect.gen(function* () {
         McpOAuthCallback.cancelPending("my-mcp-server")
+        let resolved = false
+        callback.then(
+          () => {
+            resolved = true
+          },
+          () => {},
+        )
         const exit = yield* Effect.tryPromise({
           try: () => callback,
           catch: (error) => (error instanceof Error ? error : new Error(String(error))),
         }).pipe(Effect.exit)
         expect(Exit.isFailure(exit)).toBe(true)
+        expect(resolved).toBe(false)
       }),
     () => Effect.promise(() => McpOAuthCallback.stop()).pipe(Effect.ignore),
   ),
