@@ -516,3 +516,80 @@ describe("session.agent-resolution", () => {
     })
   }, 30000)
 })
+
+describe("session.title generation", () => {
+  test("strips variant from title generation to avoid effort parameter leakage", async () => {
+    let titleRequestCaptured = false
+    let titleRequestHasEffort = false
+    const server = Bun.serve({
+      port: 0,
+      fetch(req) {
+        const url = new URL(req.url)
+        if (!url.pathname.endsWith("/chat/completions")) {
+          return new Response("not found", { status: 404 })
+        }
+        const body = JSON.parse(await req.text())
+        const isTitleRequest = body.messages?.some((m: any) => m.content?.includes("Generate a title"))
+        if (isTitleRequest) {
+          titleRequestCaptured = true
+          titleRequestHasEffort = !!body.output_config?.effort || !!body.reasoning_effort
+        }
+        return new Response(chat("Test session title"), {
+          status: 200,
+          headers: { "Content-Type": "text/event-stream" },
+        })
+      },
+    })
+
+    try {
+      await using tmp = await tmpdir({
+        git: true,
+        init: async (dir) => {
+          await Bun.write(
+            path.join(dir, "opencode.json"),
+            JSON.stringify({
+              $schema: "https://opencode.ai/config.json",
+              enabled_providers: ["alibaba"],
+              provider: {
+                alibaba: {
+                  options: {
+                    apiKey: "test-key",
+                    baseURL: `${server.url.origin}/v1`,
+                  },
+                },
+              },
+              agent: {
+                build: {
+                  model: "alibaba/qwen-plus",
+                  variant: "max",
+                },
+              },
+            }),
+          )
+        },
+      })
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const session = await Session.create({})
+          const result = await SessionPrompt.prompt({
+            sessionID: session.id,
+            agent: "build",
+            variant: "max",
+            parts: [{ type: "text", text: "Hello, help me with something" }],
+          })
+
+          expect(result.info.role).toBe("assistant")
+          await new Promise((r) => setTimeout(r, 500))
+          expect(titleRequestCaptured).toBe(true)
+          expect(titleRequestHasEffort).toBe(false)
+          const updated = await Session.get(session.id)
+          expect(updated.title).toBe("Test session title")
+        },
+      })
+    } finally {
+      server.stop(true)
+    }
+  })
+})
