@@ -10,6 +10,12 @@
   overflow: clip;
 }
 
+html[data-platform="desktop"][data-os="windows"] [data-dock-surface="shell"] {
+  background-color: var(--surface-raised-stronger-non-alpha);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 [data-dock-surface="tray"] {
   background-color: var(--background-base);
   border: 1px solid var(--border-weak-base);

@@ -118,6 +118,17 @@
   }
 }
 
+html[data-platform="desktop"][data-os="windows"] [data-component="context-menu-content"],
+html[data-platform="desktop"][data-os="windows"] [data-component="context-menu-sub-content"] {
+  background-color: var(--surface-raised-stronger-non-alpha);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+
+  [data-slot="context-menu-arrow"] {
+    fill: var(--surface-raised-stronger-non-alpha);
+  }
+}
+
 @keyframes contextMenuContentShow {
   from {
     opacity: 0;

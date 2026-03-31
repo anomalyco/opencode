@@ -1,6 +1,7 @@
 import { Component, For, Match, Show, Switch } from "solid-js"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
+import { usePlatform } from "@/context/platform"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 
 export type AtOption =
@@ -34,6 +35,9 @@ type PromptPopoverProps = {
 }
 
 export const PromptPopover: Component<PromptPopoverProps> = (props) => {
+  const platform = usePlatform()
+  const win = () => platform.platform === "desktop" && platform.os === "windows"
+
   return (
     <Show when={props.popover}>
       <div
@@ -42,8 +46,12 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
         }}
         class="absolute inset-x-0 -top-2 -translate-y-full origin-bottom-left max-h-80 min-h-10
                  overflow-auto no-scrollbar flex flex-col p-2 rounded-[12px]
-                 border border-white/10 bg-[color:rgb(12_12_14_/_0.34)] shadow-[var(--shadow-lg-border-base)]
-                 backdrop-blur-[40px] saturate-[1.5] [-webkit-backdrop-filter:blur(40px)_saturate(1.5)]"
+                 border border-white/10 shadow-[var(--shadow-lg-border-base)]"
+        style={{
+          "background-color": win() ? "var(--surface-raised-stronger-non-alpha)" : "rgb(12 12 14 / 0.34)",
+          "backdrop-filter": win() ? "none" : "blur(40px) saturate(150%)",
+          "-webkit-backdrop-filter": win() ? "none" : "blur(40px) saturate(150%)",
+        }}
         onMouseDown={(e) => e.preventDefault()}
       >
         <Switch>

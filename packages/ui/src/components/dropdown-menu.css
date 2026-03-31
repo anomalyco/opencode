@@ -114,6 +114,17 @@
   }
 }
 
+html[data-platform="desktop"][data-os="windows"] [data-component="dropdown-menu-content"],
+html[data-platform="desktop"][data-os="windows"] [data-component="dropdown-menu-sub-content"] {
+  background-color: var(--surface-raised-stronger-non-alpha);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+
+  [data-slot="dropdown-menu-arrow"] {
+    fill: var(--surface-raised-stronger-non-alpha);
+  }
+}
+
 @keyframes dropdown-menu-open {
   from {
     opacity: 0;

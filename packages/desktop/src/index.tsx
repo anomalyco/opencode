@@ -69,6 +69,14 @@ void profile("entry.module")
 
 document.documentElement.dataset.platform = "desktop"
 
+const os = (() => {
+  const type = ostype()
+  if (type === "macos" || type === "windows" || type === "linux") return type
+  return undefined
+})()
+
+if (os) document.documentElement.dataset.os = os
+
 let update: Update | null = null
 const [busy, setBusy] = createSignal(false)
 const [openclawTick, setOpenclawTick] = createSignal(0)
@@ -281,12 +289,6 @@ const listenForDeepLinks = async () => {
 }
 
 const createPlatform = (): Platform => {
-  const os = (() => {
-    const type = ostype()
-    if (type === "macos" || type === "windows" || type === "linux") return type
-    return undefined
-  })()
-
   const wslHome = async () => {
     if (os !== "windows" || !window.__OPENCODE__?.wsl) return undefined
     return commands.wslPath("~", "windows").catch(() => undefined)

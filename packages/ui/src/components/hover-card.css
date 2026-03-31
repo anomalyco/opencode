@@ -39,6 +39,12 @@
   }
 }
 
+html[data-platform="desktop"][data-os="windows"] [data-component="hover-card-content"] {
+  background-color: var(--surface-raised-stronger-non-alpha);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 @keyframes hover-card-open {
   from {
     opacity: 0;
