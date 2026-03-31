@@ -7040,44 +7040,6 @@
   },
   "components": {
     "schemas": {
-      "Event.installation.updated": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "installation.updated"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "version": {
-                "type": "string"
-              }
-            },
-            "required": ["version"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.installation.update-available": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "installation.update-available"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "version": {
-                "type": "string"
-              }
-            },
-            "required": ["version"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
       "Project": {
         "type": "object",
         "properties": {
@@ -7150,6 +7112,44 @@
           },
           "properties": {
             "$ref": "#/components/schemas/Project"
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.installation.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "installation.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": ["version"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.installation.update-available": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "installation.update-available"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": ["version"]
           }
         },
         "required": ["type", "properties"]
@@ -9734,13 +9734,13 @@
       "Event": {
         "anyOf": [
           {
+            "$ref": "#/components/schemas/Event.project.updated"
+          },
+          {
             "$ref": "#/components/schemas/Event.installation.updated"
           },
           {
             "$ref": "#/components/schemas/Event.installation.update-available"
-          },
-          {
-            "$ref": "#/components/schemas/Event.project.updated"
           },
           {
             "$ref": "#/components/schemas/Event.server.instance.disposed"

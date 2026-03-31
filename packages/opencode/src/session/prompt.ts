@@ -149,6 +149,7 @@ export namespace SessionPrompt {
       })
 
       const resolvePromptParts = Effect.fn("SessionPrompt.resolvePromptParts")(function* (template: string) {
+        const ctx = yield* InstanceState.context
         const parts: PromptInput["parts"] = [{ type: "text", text: template }]
         const files = ConfigMarkdown.files(template)
         const seen = new Set<string>()
@@ -160,7 +161,7 @@ export namespace SessionPrompt {
             seen.add(name)
             const filepath = name.startsWith("~/")
               ? path.join(os.homedir(), name.slice(2))
-              : path.resolve(Instance.worktree, name)
+              : path.resolve(ctx.worktree, name)
 
             const info = yield* fsys.stat(filepath).pipe(Effect.option)
             if (Option.isNone(info)) {
@@ -554,6 +555,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         msgs: MessageV2.WithParts[]
       }) {
         const { task, model, lastUser, sessionID, session, msgs } = input
+        const ctx = yield* InstanceState.context
         const taskTool = yield* Effect.promise(() => TaskTool.init())
         const taskModel = task.model ? yield* getModel(task.model.providerID, task.model.modelID, sessionID) : model
         const assistantMessage: MessageV2.Assistant = yield* sessions.updateMessage({
@@ -564,7 +566,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           mode: task.agent,
           agent: task.agent,
           variant: lastUser.variant,
-          path: { cwd: Instance.directory, root: Instance.worktree },
+          path: { cwd: ctx.directory, root: ctx.worktree },
           cost: 0,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           modelID: taskModel.id,
@@ -735,6 +737,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       })
 
       const shellImpl = Effect.fn("SessionPrompt.shellImpl")(function* (input: ShellInput, signal: AbortSignal) {
+        const ctx = yield* InstanceState.context
         const session = yield* sessions.get(input.sessionID)
         if (session.revert) {
           yield* Effect.promise(() => SessionRevert.cleanup(session))
@@ -774,7 +777,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           mode: input.agent,
           agent: input.agent,
           cost: 0,
-          path: { cwd: Instance.directory, root: Instance.worktree },
+          path: { cwd: ctx.directory, root: ctx.worktree },
           time: { created: Date.now() },
           role: "assistant",
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -833,7 +836,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         }
 
         const args = (invocations[shellName] ?? invocations[""]).args
-        const cwd = Instance.directory
+        const cwd = ctx.directory
         const shellEnv = yield* plugin.trigger(
           "shell.env",
           { cwd, sessionID: input.sessionID, callID: part.callID },
@@ -972,8 +975,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         }
 
         const model = input.model ?? ag.model ?? (yield* lastModel(input.sessionID))
+        const same = ag.model && model.providerID === ag.model.providerID && model.modelID === ag.model.modelID
         const full =
-          !input.variant && ag.variant
+          !input.variant && ag.variant && same
             ? yield* provider
                 .getModel(model.providerID, model.modelID)
                 .pipe(Effect.catch(() => Effect.succeed(undefined)))
@@ -993,7 +997,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           variant,
         }
 
-        yield* Effect.addFinalizer(() => Effect.sync(() => InstructionPrompt.clear(info.id)))
+        yield* Effect.addFinalizer(() => InstanceState.withALS(() => InstructionPrompt.clear(info.id)))
 
         type Draft<T> = T extends MessageV2.Part ? Omit<T, "id"> & { id?: string } : never
         const assign = (part: Draft<MessageV2.Part>): MessageV2.Part => ({
@@ -1347,6 +1351,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
       const runLoop: (sessionID: SessionID) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.run")(
         function* (sessionID: SessionID) {
+          const ctx = yield* InstanceState.context
           let structured: unknown | undefined
           let step = 0
           const session = yield* sessions.get(sessionID)
@@ -1438,7 +1443,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               mode: agent.name,
               agent: agent.name,
               variant: lastUser.variant,
-              path: { cwd: Instance.directory, root: Instance.worktree },
+              path: { cwd: ctx.directory, root: ctx.worktree },
               cost: 0,
               tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
               modelID: model.id,
@@ -1555,7 +1560,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               }),
               Effect.fnUntraced(function* (exit) {
                 if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) yield* handle.abort()
-                InstructionPrompt.clear(handle.message.id)
+                yield* InstanceState.withALS(() => InstructionPrompt.clear(handle.message.id))
               }),
             )
             if (outcome === "break") break
