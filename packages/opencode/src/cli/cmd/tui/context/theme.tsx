@@ -894,9 +894,36 @@ function getSyntaxRules(theme: Theme) {
       },
     },
     {
-      scope: ["variable.builtin", "type.builtin", "function.builtin", "module.builtin", "constant.builtin"],
+      scope: ["type.builtin"],
       style: {
-        foreground: theme.error,
+        foreground: theme.syntaxType,
+        bold: true,
+      },
+    },
+    {
+      scope: ["variable.builtin"],
+      style: {
+        foreground: theme.syntaxVariable,
+        italic: true,
+      },
+    },
+    {
+      scope: ["function.builtin"],
+      style: {
+        foreground: theme.syntaxFunction,
+      },
+    },
+    {
+      scope: ["module.builtin"],
+      style: {
+        foreground: theme.syntaxType,
+        italic: true,
+      },
+    },
+    {
+      scope: ["constant.builtin"],
+      style: {
+        foreground: theme.syntaxNumber,
       },
     },
     {
