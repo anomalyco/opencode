@@ -177,6 +177,29 @@ export namespace SessionPrompt {
           }),
           { concurrency: "unbounded", discard: true },
         )
+
+        // Check if template is a slash command and expand it
+        const slashMatch = template.trim().match(/^\/([a-zA-Z0-9_-]+)(?:\s+(.*))?$/)
+        if (slashMatch) {
+          const commandName = slashMatch[1]
+          const arguments = slashMatch[2] ?? ""
+          const command = yield* commands.get(commandName)
+          if (command) {
+            // Replace the text part with the expanded command template
+            let expandedTemplate = typeof command.template === "string" ? command.template : yield* Effect.promise(() => command.template)
+            // Substitute arguments into the template
+            if (arguments.trim()) {
+              expandedTemplate = expandedTemplate.replace(/\$ARGUMENTS/g, arguments)
+              // Also substitute numbered arguments if present
+              const numberedArgs = arguments.split(/\s+/)
+              for (let i = 0; i < numberedArgs.length; i++) {
+                expandedTemplate = expandedTemplate.replace(new RegExp(`\\$${i + 1}`, "g"), numberedArgs[i])
+              }
+            }
+            parts[0] = { type: "text", text: expandedTemplate }
+          }
+        }
+
         return parts
       })
 
