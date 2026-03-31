@@ -159,7 +159,7 @@ const ProjectRow = (props: {
             data-action="project-menu"
             data-project={base64Encode(props.project.worktree)}
           >
-            <Icon name="more" size="small" class="text-icon-weak" />
+            <Icon name="menu" size="small" class="text-icon-weak rotate-90" />
           </ContextMenu.Trigger>
         </div>
         
