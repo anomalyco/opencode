@@ -9,11 +9,17 @@ import { useLayout } from "@/context/layout"
 import {
   audioExtensions,
   blobUrlFromBase64,
+  excelExtensions,
+  formatJsonPreview,
   getExtension,
   htmlExtensions,
+  isExcelMimeType,
+  isJsonMimeType,
+  jsonExtensions,
   normalizeMimeType,
   pdfExtensions,
 } from "./preview-tab-helper"
+import { ExcelPreview } from "./excel-preview"
 
 export function SessionPreviewTab(props: {
   path: () => string | undefined
@@ -72,11 +78,36 @@ export function SessionPreviewTab(props: {
     return pdfExtensions.has(getExtension(path))
   })
 
+  const isJson = createMemo(() => {
+    const path = props.path()
+    const value = content()
+    if (value?.type !== "text" || value.encoding === "base64") return false
+    if (isJsonMimeType(value?.mimeType)) return true
+    if (!path) return false
+    return jsonExtensions.has(getExtension(path))
+  })
+
+  const isExcel = createMemo(() => {
+    const path = props.path()
+    const value = content()
+    if (value?.encoding !== "base64") return false
+    if (isExcelMimeType(value?.mimeType)) return true
+    if (!path) return false
+    return excelExtensions.has(getExtension(path))
+  })
+
   const htmlSrc = createMemo(() => {
     if (!isHtml()) return
     const value = content()
     if (value?.type !== "text") return
     return value.content
+  })
+
+  const jsonSrc = createMemo(() => {
+    if (!isJson()) return
+    const value = content()
+    if (value?.type !== "text") return
+    return formatJsonPreview(value.content)
   })
 
   const svgPreviewUrl = createMemo(() => {
@@ -195,6 +226,14 @@ export function SessionPreviewTab(props: {
       setTimeout(() => URL.revokeObjectURL(url), 1000)
       return
     }
+    const json = jsonSrc()
+    if (json) {
+      const blob = new Blob([json], { type: "application/json;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      window.open(url, "_blank", "noopener,noreferrer")
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      return
+    }
     const img = imageDataUrl()
     if (img) {
       window.open(img, "_blank", "noopener,noreferrer")
@@ -209,7 +248,7 @@ export function SessionPreviewTab(props: {
   }
 
   const canOpenInNewTab = createMemo(
-    () => !!htmlSrc() || !!imageDataUrl() || !!svgPreviewUrl() || !!pdfObjectUrl(),
+    () => !!htmlSrc() || !!jsonSrc() || !!imageDataUrl() || !!svgPreviewUrl() || !!pdfObjectUrl(),
   )
 
   return (
@@ -250,6 +289,24 @@ export function SessionPreviewTab(props: {
                   class="w-full h-full min-h-96 rounded-lg border border-border-weak-base bg-white"
                   onLoad={() => requestAnimationFrame(restoreScroll)}
                 />
+              </div>
+            )}
+          </Match>
+          <Match when={jsonSrc()}>
+            {(src) => (
+              <div class="px-6 pb-6">
+                <pre class="overflow-auto rounded-lg border border-border-weak-base bg-surface-base p-4 font-mono text-[13px] leading-6 text-text-strong">
+                  {src()}
+                </pre>
+              </div>
+            )}
+          </Match>
+          <Match when={isExcel() && content()?.content}>
+            {(src) => (
+              <div class="h-full px-6 pb-6">
+                <div class="h-full min-h-[80vh] rounded-lg border border-border-weak-base bg-background">
+                  <ExcelPreview content={src()} filename={filename()} />
+                </div>
               </div>
             )}
           </Match>

@@ -1,1 +1,27 @@
 @import "@opencode-ai/ui/styles/tailwind";
+
+.excel-preview table {
+  border-collapse: collapse;
+  width: max-content;
+  min-width: 100%;
+  font-size: 13px;
+  font-family: var(--font-mono, monospace);
+  color: var(--color-text-base);
+}
+
+.excel-preview td,
+.excel-preview th {
+  border: 1px solid var(--color-border-weak-base);
+  padding: 4px 8px;
+  white-space: nowrap;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.excel-preview th {
+  background: var(--color-background-strong);
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+}

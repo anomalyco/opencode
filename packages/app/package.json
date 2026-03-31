@@ -67,6 +67,7 @@
     "solid-list": "catalog:",
     "tailwindcss": "catalog:",
     "virtua": "catalog:",
+    "xlsx": "0.18.5",
     "zod": "catalog:"
   }
 }

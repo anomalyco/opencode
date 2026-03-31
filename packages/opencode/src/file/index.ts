@@ -204,7 +204,7 @@ export namespace File {
     "x3f",
   ])
 
-  const previewableBinaryExtensions = new Set(["pdf", "mp3", "wav", "ogg", "m4a", "aac", "flac", "opus"])
+  const previewableBinaryExtensions = new Set(["pdf", "mp3", "wav", "ogg", "m4a", "aac", "flac", "opus", "xls", "xlsx"])
 
   function isImageByExtension(filepath: string): boolean {
     const ext = path.extname(filepath).toLowerCase().slice(1)
@@ -250,6 +250,8 @@ export namespace File {
       aac: "audio/aac",
       flac: "audio/flac",
       opus: "audio/opus",
+      xls: "application/vnd.ms-excel",
+      xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     }
     return mimeTypes[ext] || "application/octet-stream"
   }

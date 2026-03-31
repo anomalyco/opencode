@@ -1,6 +1,8 @@
 export const htmlExtensions = new Set(["html", "htm"])
 export const audioExtensions = new Set(["mp3", "wav", "ogg", "m4a", "aac", "flac", "opus"])
 export const pdfExtensions = new Set(["pdf"])
+export const jsonExtensions = new Set(["json"])
+export const excelExtensions = new Set(["xls", "xlsx"])
 
 export const PRINT_MESSAGE = "opencode:preview-print"
 export const PRINT_DONE_MESSAGE = "opencode:preview-print-done"
@@ -19,6 +21,32 @@ export function normalizeMimeType(type: string | undefined): string | undefined 
   if (mime === "audio/x-aac") return "audio/aac"
   if (mime === "audio/x-m4a") return "audio/mp4"
   return mime
+}
+
+export function isJsonMimeType(type: string | undefined): boolean {
+  const mime = normalizeMimeType(type)
+  if (!mime) return false
+  if (mime === "application/json") return true
+  return mime.endsWith("+json")
+}
+
+export function formatJsonPreview(input: string): string | undefined {
+  const value = input.trim()
+  if (!value) return
+  try {
+    return JSON.stringify(JSON.parse(value), null, 2)
+  } catch {
+    return
+  }
+}
+
+export function isExcelMimeType(type: string | undefined): boolean {
+  const mime = normalizeMimeType(type)
+  if (!mime) return false
+  return (
+    mime === "application/vnd.ms-excel" ||
+    mime === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  )
 }
 
 export function printable(input: string): string {

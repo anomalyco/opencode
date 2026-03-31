@@ -99,6 +99,8 @@ describe("isPreviewablePath", () => {
     expect(isPreviewablePath("assets/chart.PNG")).toBe(true)
     expect(isPreviewablePath("audio/voice.m4a")).toBe(true)
     expect(isPreviewablePath("docs/report.pdf")).toBe(true)
+    expect(isPreviewablePath("data/config.JSON")).toBe(true)
+    expect(isPreviewablePath("finance/report.xlsx")).toBe(true)
   })
 
   test("ignores non-previewable paths", () => {
