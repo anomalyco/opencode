@@ -1,0 +1,50 @@
+Native desktop automation tool that enables controlling the computer outside the terminal. Supports taking screenshots, moving the mouse, clicking, and typing text. This replicates Anthropic's Computer Use tool functionality.
+
+## Actions
+
+### screenshot
+Capture the entire screen or a specific region and return it as an image. Useful for seeing the current state of the desktop or specific applications.
+
+### mouse_move
+Move the mouse cursor to specific screen coordinates (x, y). Coordinates are in pixels from the top-left corner of the screen.
+
+### mouse_click
+Perform mouse clicks (left, right, or middle button) at the current cursor position or at specified coordinates.
+
+### type
+Type text character by character as if entered from a physical keyboard. Supports all alphanumeric characters and common symbols.
+
+## Usage Examples
+
+Take a screenshot:
+```
+{"action": "screenshot"}
+```
+
+Move mouse to coordinates (500, 300):
+```
+{"action": "mouse_move", "x": 500, "y": 300}
+```
+
+Left click at current position:
+```
+{"action": "mouse_click", "button": "left"}
+```
+
+Type text:
+```
+{"action": "type", "text": "Hello, World!"}
+```
+
+Combined workflow - click a text field and type:
+```
+{"action": "mouse_move", "x": 400, "y": 200}
+{"action": "mouse_click", "button": "left"}
+{"action": "type", "text": "user@example.com"}
+```
+
+## Notes
+- Coordinates are absolute screen positions in pixels
+- The screen origin (0, 0) is at the top-left corner
+- On multi-monitor setups, coordinates may extend beyond primary display dimensions
+- Screenshots are returned as base64-encoded image attachments
