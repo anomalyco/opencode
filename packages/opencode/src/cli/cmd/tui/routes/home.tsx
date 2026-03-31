@@ -60,7 +60,7 @@ export function Home() {
           </TuiPluginRuntime.Slot>
         </box>
         <box height={1} minHeight={0} flexShrink={1} />
-        <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0}>
+        <box width="100%" zIndex={1000} paddingTop={1} flexShrink={0}>
           <TuiPluginRuntime.Slot name="home_prompt" mode="replace" workspace_id={route.workspaceID}>
             <Prompt
               ref={(r) => {
@@ -69,6 +69,7 @@ export function Home() {
               }}
               workspaceID={route.workspaceID}
               placeholders={placeholder}
+              maxInputWidth={75}
             />
           </TuiPluginRuntime.Slot>
         </box>
