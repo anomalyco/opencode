@@ -18,7 +18,6 @@ export const ServeCommand = cmd({
     const server = Server.listen(opts)
     console.log(`opencode server listening on http://${server.hostname}:${server.port}`)
 
-    await new Promise(() => {})
-    await server.stop()
+    await Server.attach(server)
   },
 })

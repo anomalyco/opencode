@@ -75,7 +75,6 @@ export const WebCommand = cmd({
       open(displayUrl).catch(() => {})
     }
 
-    await new Promise(() => {})
-    await server.stop()
+    await Server.attach(server)
   },
 })

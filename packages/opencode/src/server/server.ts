@@ -36,10 +36,45 @@ export namespace Server {
 
   export const Default = lazy(() => ControlPlaneRoutes())
 
-  export const ControlPlaneRoutes = (opts?: { cors?: string[] }): Hono => {
+  export const ControlPlaneRoutes = (opts?: {
+    cors?: string[]
+    onShutdown?: () => Promise<void>
+  }): Hono => {
     const app = new Hono()
     return app
       .onError(errorHandler(log))
+      .post(
+        "/shutdown",
+        describeRoute({
+          summary: "Shutdown the server",
+          description: "Shutdown OpenCode server, releasing all resources.",
+          operationId: "app.shutdown",
+          responses: {
+            200: {
+              description: "Server shutdown",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          if (opts?.onShutdown) {
+            setTimeout(() => {
+              opts
+                .onShutdown?.()
+                .catch((err: unknown) => {
+                  console.log("exiting with code 1")
+                  console.error(err)
+                  process.exit(1)
+                })
+            }, 2000)
+          }
+          return c.json(!!opts?.onShutdown)
+        },
+      )
       .use((c, next) => {
         // Allow CORS preflight requests to succeed without auth.
         // Browser clients sending Authorization headers will preflight with OPTIONS.
@@ -261,6 +296,24 @@ export namespace Server {
     return result
   }
 
+  /**
+   * Attach to the server: resolve or reject on server stop
+   */
+  export async function attach(server: Bun.Server<unknown>): Promise<void> {
+    const { promise, resolve, reject } = Promise.withResolvers<void>()
+    const original = server.stop.bind(server)
+    server.stop = async (closeActiveConnections?: boolean) => {
+      try {
+        await original(closeActiveConnections)
+        resolve()
+      } catch (err: unknown) {
+        reject(err)
+      }
+    }
+
+    return promise
+  }
+
   /** @deprecated do not use this dumb shit */
   export let url: URL
 
@@ -272,7 +325,15 @@ export namespace Server {
     cors?: string[]
   }) {
     url = new URL(`http://${opts.hostname}:${opts.port}`)
-    const app = ControlPlaneRoutes({ cors: opts.cors })
+    const { promise, resolve } = Promise.withResolvers<Bun.Server<unknown>>()
+    const app = ControlPlaneRoutes({
+      cors: opts.cors,
+      onShutdown: async () => {
+        console.log("shutting down server")
+        const server = await promise
+        await server.stop(true)
+      },
+    })
     const args = {
       hostname: opts.hostname,
       idleTimeout: 0,
@@ -288,6 +349,7 @@ export namespace Server {
     }
     const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
+    resolve(server);
 
     const shouldPublishMDNS =
       opts.mdns &&
