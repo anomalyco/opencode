@@ -1,7 +1,18 @@
 import { describe, expect, test } from "bun:test"
 import { Personality } from "../../src/personality"
 
-const EXPECTED_BUILTINS = ["default", "concise", "technical", "creative", "teacher", "formal", "casual", "minimal", "friendly", "reviewer"]
+const EXPECTED_BUILTINS = [
+  "default",
+  "concise",
+  "technical",
+  "creative",
+  "teacher",
+  "formal",
+  "casual",
+  "minimal",
+  "friendly",
+  "reviewer",
+]
 
 describe("Personality built-in presets", () => {
   test("all 10 built-in presets exist", () => {

@@ -11101,6 +11101,48 @@
               "$ref": "#/components/schemas/AgentConfig"
             }
           },
+          "personality": {
+            "description": "Personality configuration, see https://opencode.ai/docs/personality",
+            "type": "object",
+            "properties": {
+              "active": {
+                "description": "Name of the currently active personality",
+                "type": "string"
+              },
+              "custom": {
+                "description": "Custom personality definitions — string shorthand or full object",
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "description": {
+                          "type": "string"
+                        },
+                        "system_prompt": {
+                          "type": "string"
+                        },
+                        "tone": {
+                          "type": "string"
+                        },
+                        "style": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["system_prompt"]
+                    }
+                  ]
+                }
+              }
+            }
+          },
           "provider": {
             "description": "Custom provider configurations and model overrides",
             "type": "object",

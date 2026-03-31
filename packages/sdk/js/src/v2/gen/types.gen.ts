@@ -1523,6 +1523,28 @@ export type Config = {
     [key: string]: AgentConfig | undefined
   }
   /**
+   * Personality configuration, see https://opencode.ai/docs/personality
+   */
+  personality?: {
+    /**
+     * Name of the currently active personality
+     */
+    active?: string
+    /**
+     * Custom personality definitions — string shorthand or full object
+     */
+    custom?: {
+      [key: string]:
+        | string
+        | {
+            description?: string
+            system_prompt: string
+            tone?: string
+            style?: string
+          }
+    }
+  }
+  /**
    * Custom provider configurations and model overrides
    */
   provider?: {

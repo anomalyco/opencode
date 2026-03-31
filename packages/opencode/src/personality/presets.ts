@@ -33,8 +33,7 @@ export const BUILTIN_PRESETS: Record<string, Personality.Info> = {
   },
   minimal: {
     description: "Extremely terse, code-focused",
-    system_prompt:
-      "Output code. Skip explanations unless asked. No preamble. No summaries. Just the solution.",
+    system_prompt: "Output code. Skip explanations unless asked. No preamble. No summaries. Just the solution.",
   },
   reviewer: {
     description: "Critical, thorough code reviewer",

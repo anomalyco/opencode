@@ -975,12 +975,18 @@ export namespace Config {
         .object({
           active: z.string().optional().describe("Name of the currently active personality"),
           custom: z
-            .record(z.string(), z.union([z.string(), z.object({
-              description: z.string().optional(),
-              system_prompt: z.string(),
-              tone: z.string().optional(),
-              style: z.string().optional(),
-            })]))
+            .record(
+              z.string(),
+              z.union([
+                z.string(),
+                z.object({
+                  description: z.string().optional(),
+                  system_prompt: z.string(),
+                  tone: z.string().optional(),
+                  style: z.string().optional(),
+                }),
+              ]),
+            )
             .optional()
             .describe("Custom personality definitions — string shorthand or full object"),
         })
