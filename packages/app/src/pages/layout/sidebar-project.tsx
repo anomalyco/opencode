@@ -155,7 +155,7 @@ const ProjectRow = (props: {
           
           {/* Menu trigger button for tests and accessibility */}
           <ContextMenu.Trigger 
-            class="shrink-0 p-1 rounded hover:bg-surface-base-hover opacity-0 group-hover:opacity-100 focus:opacity-100"
+            class="shrink-0 p-1 rounded hover:bg-surface-base-hover"
             data-action="project-menu"
             data-project={base64Encode(props.project.worktree)}
           >
