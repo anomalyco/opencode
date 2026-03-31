@@ -1,0 +1,181 @@
+name: Desktop Build
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Create GitHub release"
+        type: boolean
+        default: false
+
+concurrency:
+  group: desktop-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ATHENA_VERSION: ${{ github.ref_name }}
+
+jobs:
+  # ─── Build CLI sidecar binaries ───────────────────────────────────
+  build-cli:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rust-target: x86_64-unknown-linux-gnu
+            bun-target: linux-x64
+          - os: ubuntu-latest
+            rust-target: aarch64-unknown-linux-gnu
+            bun-target: linux-arm64
+          - os: macos-latest
+            rust-target: aarch64-apple-darwin
+            bun-target: darwin-arm64
+          - os: macos-13
+            rust-target: x86_64-apple-darwin
+            bun-target: darwin-x64
+          - os: windows-latest
+            rust-target: x86_64-pc-windows-msvc
+            bun-target: windows-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.11"
+
+      - run: bun install
+
+      - name: Build CLI binary
+        run: bun run build --single --baseline
+        env:
+          ATHENA_VERSION: ${{ env.ATHENA_VERSION }}
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-${{ matrix.rust-target }}
+          path: dist/athena-agent-*/bin/athena*
+          retention-days: 1
+
+  # ─── Build desktop app per platform ───────────────────────────────
+  build-desktop:
+    needs: build-cli
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rust-target: x86_64-unknown-linux-gnu
+            bundle: "deb rpm"
+          - os: macos-latest
+            rust-target: aarch64-apple-darwin
+            bundle: "dmg"
+          - os: macos-13
+            rust-target: x86_64-apple-darwin
+            bundle: "dmg"
+          - os: windows-latest
+            rust-target: x86_64-pc-windows-msvc
+            bundle: "nsis"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.11"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-target }}
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev
+
+      - run: bun install
+
+      - name: Download CLI sidecar
+        uses: actions/download-artifact@v4
+        with:
+          name: cli-${{ matrix.rust-target }}
+          path: /tmp/cli-binary
+
+      - name: Copy sidecar to Tauri folder
+        shell: bash
+        run: |
+          mkdir -p packages/desktop/src-tauri/sidecars
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cp /tmp/cli-binary/*/bin/athena.exe "packages/desktop/src-tauri/sidecars/athena-cli-${{ matrix.rust-target }}.exe"
+          else
+            cp /tmp/cli-binary/*/bin/athena "packages/desktop/src-tauri/sidecars/athena-cli-${{ matrix.rust-target }}"
+            chmod +x "packages/desktop/src-tauri/sidecars/athena-cli-${{ matrix.rust-target }}"
+          fi
+
+      - name: Build frontend
+        working-directory: packages/desktop
+        run: bun run build
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          WINDOWS_SIGNING_CERT_BASE64: ${{ secrets.WINDOWS_SIGNING_CERT_BASE64 }}
+          WINDOWS_SIGNING_CERT_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERT_PASSWORD }}
+        with:
+          projectPath: packages/desktop
+          tauriScript: bunx tauri
+          args: --target ${{ matrix.rust-target }} --bundles ${{ matrix.bundle }}
+
+      - name: Upload desktop artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.rust-target }}
+          path: |
+            packages/desktop/src-tauri/target/${{ matrix.rust-target }}/release/bundle/**/*.deb
+            packages/desktop/src-tauri/target/${{ matrix.rust-target }}/release/bundle/**/*.rpm
+            packages/desktop/src-tauri/target/${{ matrix.rust-target }}/release/bundle/**/*.dmg
+            packages/desktop/src-tauri/target/${{ matrix.rust-target }}/release/bundle/**/*.exe
+            packages/desktop/src-tauri/target/${{ matrix.rust-target }}/release/bundle/**/*.sig
+          retention-days: 7
+
+  # ─── Create GitHub release ────────────────────────────────────────
+  release:
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.release
+    needs: build-desktop
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: desktop-*
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: artifacts/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
