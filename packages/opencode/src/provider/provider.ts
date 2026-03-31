@@ -915,11 +915,35 @@ export namespace Provider {
             }
           : undefined,
       },
-      limit: {
-        context: model.limit.context,
-        input: model.limit.input,
-        output: model.limit.output,
-      },
+      limit: iife(() => {
+        // models.dev has incorrect context/output limits for GitHub Copilot Claude models.
+        // Override with the correct values from Anthropic's official documentation.
+        // See: https://platform.claude.com/docs/en/about-claude/models/overview
+        if (provider.id === "github-copilot" && model.id.includes("claude")) {
+          const COPILOT_CLAUDE_LIMITS: Record<string, { context: number; output: number }> = {
+            "claude-opus-4.6":   { context: 1_000_000, output: 128_000 },
+            "claude-sonnet-4.6": { context: 1_000_000, output:  64_000 },
+            "claude-haiku-4.5":  { context:   200_000, output:  64_000 },
+            "claude-opus-4.5":   { context:   200_000, output:  32_000 },
+            "claude-sonnet-4.5": { context:   200_000, output:  64_000 },
+            "claude-sonnet-4":   { context:   200_000, output:  16_000 },
+            "claude-opus-41":    { context:   200_000, output:  32_000 },
+          }
+          const override = COPILOT_CLAUDE_LIMITS[model.id]
+          if (override) {
+            return {
+              context: override.context,
+              input: model.limit.input,
+              output: override.output,
+            }
+          }
+        }
+        return {
+          context: model.limit.context,
+          input: model.limit.input,
+          output: model.limit.output,
+        }
+      }),
       capabilities: {
         temperature: model.temperature,
         reasoning: model.reasoning,

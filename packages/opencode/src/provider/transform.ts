@@ -464,8 +464,17 @@ export namespace ProviderTransform {
           return {}
         }
         if (model.id.includes("claude")) {
+          if (isAnthropicAdaptive) {
+            return {
+              low:    { thinking_budget: 1024 },
+              medium: { thinking_budget: 8000 },
+              high:   { thinking_budget: 16000 },
+              max:    { thinking_budget: 31999 },
+            }
+          }
           return {
-            thinking: { thinking_budget: 4000 },
+            high: { thinking_budget: 8000 },
+            max:  { thinking_budget: 16000 },
           }
         }
         const copilotEfforts = iife(() => {
