@@ -73,6 +73,7 @@ function fromRow(row: PlanRow): Plan {
     workers: row.workers,
     sharedContracts: row.shared_contracts ?? undefined,
     conventions: row.conventions ?? undefined,
+    feedback: row.feedback ?? undefined,
     integrationBranch: row.integration_branch ?? undefined,
     publishMode: row.publish_mode ?? undefined,
     approvalMode: row.approval_mode ?? undefined,
@@ -100,6 +101,7 @@ function toRow(plan: Plan) {
     workers: plan.workers,
     shared_contracts: plan.sharedContracts ?? null,
     conventions: plan.conventions ?? null,
+    feedback: plan.feedback ?? null,
     integration_branch: plan.integrationBranch ?? null,
     publish_mode: plan.publishMode ?? null,
     approval_mode: plan.approvalMode ?? null,
@@ -184,6 +186,7 @@ export namespace PlanStore {
       workers: PlanSchema.shape.workers.optional(),
       sharedContracts: PlanSchema.shape.sharedContracts.nullable().optional(),
       conventions: PlanSchema.shape.conventions.nullable().optional(),
+      feedback: z.string().nullable().optional(),
       integrationBranch: z.string().optional(),
       publishMode: PublishModeSchema.optional(),
       approvalMode: ApprovalModeSchema.optional(),
@@ -232,6 +235,9 @@ export namespace PlanStore {
       }
       if (input.conventions !== undefined) {
         updates.conventions = input.conventions ?? null
+      }
+      if (input.feedback !== undefined) {
+        updates.feedback = input.feedback ?? null
       }
 
       return Database.use((db) => {
@@ -286,6 +292,7 @@ export namespace PlanStore {
       error: PlanSchema.shape.workers.element.shape.error.optional(),
       resolutionMode: PlanSchema.shape.workers.element.shape.resolutionMode.optional(),
       diffStat: PlanSchema.shape.workers.element.shape.diffStat.optional(),
+      lastCheckpoint: PlanSchema.shape.workers.element.shape.lastCheckpoint.optional(),
     }),
     async (input): Promise<Plan> => {
       const plan = await get(input.id)
@@ -310,6 +317,7 @@ export namespace PlanStore {
         ...(input.error !== undefined && { error: input.error }),
         ...(input.resolutionMode !== undefined && { resolutionMode: input.resolutionMode }),
         ...(input.diffStat !== undefined && { diffStat: input.diffStat }),
+        ...(input.lastCheckpoint !== undefined && { lastCheckpoint: input.lastCheckpoint }),
       }
 
       const updatedWorkers = [...plan.workers]

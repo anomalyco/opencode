@@ -1,4 +1,6 @@
 import { Log } from "@/util/log"
+import { Database, eq, desc } from "../storage/db"
+import { ParallelMetricsTable } from "./metrics.sql"
 import type { PlanID, SubtaskID } from "./schema"
 
 export namespace Metrics {
@@ -31,6 +33,7 @@ export namespace Metrics {
       sum: number
     }
     planCosts: Map<string, PlanCost>
+    planStart: Map<string, number>
   }
 
   function emptyCostEntry(): CostEntry {
@@ -66,6 +69,7 @@ export namespace Metrics {
       sum: 0,
     },
     planCosts: new Map(),
+    planStart: new Map(),
   }
 
   export function recordSpawnAttempt(): void {
@@ -147,10 +151,6 @@ export namespace Metrics {
     }
   }
 
-  /**
-   * Estimate tokens for a plan before execution.
-   * Returns a rough estimate based on subtask count and typical token usage.
-   */
   export function estimatePlanCost(input: {
     subtaskCount: number
     avgWorkerInputTokens?: number
@@ -214,5 +214,114 @@ export namespace Metrics {
     state.workerStartupDuration.count = 0
     state.workerStartupDuration.sum = 0
     state.planCosts.clear()
+    state.planStart.clear()
+  }
+
+  export interface PersistedMetrics {
+    planID: PlanID
+    spawnAttempts: number
+    spawnSuccess: number
+    spawnFailure: number
+    timeoutCount: number
+    planOutcome: "done" | "partial_success" | "failed" | null
+    totalInputTokens: number
+    totalOutputTokens: number
+    orchestratorCalls: number
+    workerCount: number
+    mergeCalls: number
+    totalDurationMs: number
+    timeCreated: number
+    timeUpdated: number
+  }
+
+  export function markPlanStart(planID: PlanID): void {
+    state.planStart.set(String(planID), Date.now())
+  }
+
+  export function persistPlanMetrics(planID: PlanID, outcome: "done" | "partial_success" | "failed"): void {
+    const cost = state.planCosts.get(String(planID))
+    const started = state.planStart.get(String(planID))
+    const durationMs = started ? Date.now() - started : 0
+    Database.use((db) => {
+      db
+        .insert(ParallelMetricsTable)
+        .values({
+          plan_id: planID,
+          spawn_attempts: state.spawnAttempts,
+          spawn_success: state.spawnSuccess,
+          spawn_failure: state.spawnFailure,
+          timeout_count: state.timeoutCount,
+          plan_outcome: outcome,
+          total_input_tokens: cost?.totalInputTokens ?? 0,
+          total_output_tokens: cost?.totalOutputTokens ?? 0,
+          orchestrator_calls: cost?.orchestrator.calls ?? 0,
+          worker_count: cost?.workers.size ?? 0,
+          merge_calls: cost?.merge.calls ?? 0,
+          total_duration_ms: durationMs,
+        })
+        .onConflictDoUpdate({
+          target: ParallelMetricsTable.plan_id,
+          set: {
+            spawn_attempts: state.spawnAttempts,
+            spawn_success: state.spawnSuccess,
+            spawn_failure: state.spawnFailure,
+            timeout_count: state.timeoutCount,
+            plan_outcome: outcome,
+            total_input_tokens: cost?.totalInputTokens ?? 0,
+            total_output_tokens: cost?.totalOutputTokens ?? 0,
+            orchestrator_calls: cost?.orchestrator.calls ?? 0,
+            worker_count: cost?.workers.size ?? 0,
+            merge_calls: cost?.merge.calls ?? 0,
+            total_duration_ms: durationMs,
+          },
+        })
+        .run()
+    })
+    log.info("persisted plan metrics", { planID, outcome })
+  }
+
+  export function loadHistoricalMetrics(planID: PlanID): PersistedMetrics | undefined {
+    const row = Database.use((db) =>
+      db.select().from(ParallelMetricsTable).where(eq(ParallelMetricsTable.plan_id, planID)).get(),
+    )
+    if (!row) return undefined
+    return {
+      planID: row.plan_id,
+      spawnAttempts: row.spawn_attempts,
+      spawnSuccess: row.spawn_success,
+      spawnFailure: row.spawn_failure,
+      timeoutCount: row.timeout_count,
+      planOutcome: row.plan_outcome,
+      totalInputTokens: row.total_input_tokens,
+      totalOutputTokens: row.total_output_tokens,
+      orchestratorCalls: row.orchestrator_calls,
+      workerCount: row.worker_count,
+      mergeCalls: row.merge_calls,
+      totalDurationMs: row.total_duration_ms,
+      timeCreated: row.time_created,
+      timeUpdated: row.time_updated,
+    }
+  }
+
+  export function getHistoricalMetrics(limit = 50): PersistedMetrics[] {
+    const rows = Database.use((db) =>
+      db.select().from(ParallelMetricsTable).orderBy(desc(ParallelMetricsTable.time_created)).limit(limit).all(),
+    )
+    return rows.map((row) => ({
+      planID: row.plan_id,
+      spawnAttempts: row.spawn_attempts,
+      spawnSuccess: row.spawn_success,
+      spawnFailure: row.spawn_failure,
+      timeoutCount: row.timeout_count,
+      planOutcome: row.plan_outcome,
+      totalInputTokens: row.total_input_tokens,
+      totalOutputTokens: row.total_output_tokens,
+      orchestratorCalls: row.orchestrator_calls,
+      workerCount: row.worker_count,
+      mergeCalls: row.merge_calls,
+      totalDurationMs: row.total_duration_ms,
+      timeCreated: row.time_created,
+      timeUpdated: row.time_updated,
+    }))
   }
 }

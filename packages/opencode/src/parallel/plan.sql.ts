@@ -38,6 +38,7 @@ export const PlanTable = sqliteTable(
     workers: text({ mode: "json" }).notNull().$type<WorkerState[]>(),
     shared_contracts: text({ mode: "json" }).$type<SharedContract[] | null>(),
     conventions: text({ mode: "json" }).$type<ProjectConventions | null>(),
+    feedback: text(),
     integration_branch: text(),
     publish_mode: text().$type<PublishMode>(),
     approval_mode: text().$type<ApprovalMode>(),

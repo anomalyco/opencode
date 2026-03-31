@@ -9,14 +9,17 @@ import { Log } from "@/util/log"
 import { GlobalBus } from "@/bus/global"
 import { Bus } from "@/bus"
 import { SessionStatus } from "../session/status"
+import { SharedContext } from "./shared-context"
 import { git } from "../util/git"
 import { SessionID } from "@/session/schema"
-import type { Plan, PlanID, SubtaskID, Subtask, WorkerState, SharedContract, ProjectConventions } from "./schema"
+import { SubtaskID } from "./schema"
+import type { Plan, PlanID, Subtask, SubtaskKind, WorkerState, SharedContract, ProjectConventions } from "./schema"
 import { ParallelEvent } from "./events"
 import { Metrics } from "./metrics"
-import { buildWaves } from "./scheduler"
+import { buildWaves, rebuildWaves } from "./scheduler"
 import { selectExecutionMode } from "./strategy"
 import { outputText } from "./util"
+import { FileLock } from "./filelock"
 
 export namespace WorkerManager {
   const log = Log.create({ service: "worker" })
@@ -44,12 +47,30 @@ export namespace WorkerManager {
     return new Promise<void>((resolve) => setTimeout(resolve, ms))
   }
 
-  function stallLimit(kind: Subtask["kind"] | undefined, timeoutMs: number, phase: "initial" | "stalled") {
-    const structural = kind === "structural"
-    if (phase === "initial") {
-      return Math.min(timeoutMs / 2, structural ? 75_000 : 180_000)
+  function complexity(subtask: Subtask): number {
+    const fileCount = subtask.fileScope.length
+    const hasDeps = subtask.dependencies.length > 0
+    const isSemantic = subtask.kind !== "structural"
+    let score = fileCount
+    if (hasDeps) score += 2
+    if (isSemantic) score *= 1.5
+    return score
+  }
+
+  function stallLimit(input: {
+    kind?: SubtaskKind
+    phase: "initial" | "stalled"
+    fileCount?: number
+    timeoutMs: number
+  }): { progressMs: number; stallMs: number } {
+    const structural = input.kind === "structural"
+    const count = input.fileCount ?? 1
+    const scale = Math.max(0.5, Math.min(2.0, count / 5))
+    const strict = input.phase === "stalled" ? 0.6 : 1.0
+    return {
+      progressMs: Math.min(input.timeoutMs / 2, (structural ? 75_000 : 180_000) * scale * strict),
+      stallMs: Math.min(input.timeoutMs / 3, (structural ? 45_000 : 120_000) * scale * strict),
     }
-    return Math.min(timeoutMs / 3, structural ? 45_000 : 120_000)
   }
 
   export function detectStalledProgress(input: {
@@ -59,18 +80,29 @@ export namespace WorkerManager {
     baseline: Progress
     current?: Progress
     timeoutMs: number
+    fileCount?: number
   }) {
     if (input.current === undefined) return
+    const limits = stallLimit({
+      kind: input.kind,
+      phase: "initial",
+      fileCount: input.fileCount,
+      timeoutMs: input.timeoutMs,
+    })
     if (input.current.fingerprint === input.baseline.fingerprint) {
-      const limit = stallLimit(input.kind, input.timeoutMs, "initial")
-      if (input.elapsedMs < limit) return
-      const seconds = Math.round(limit / 1000)
+      if (input.elapsedMs < limits.progressMs) return
+      const seconds = Math.round(limits.progressMs / 1000)
       return `Worker made no meaningful filesystem changes after ${seconds}s; retrying with a stricter execution prompt`
     }
 
-    const limit = stallLimit(input.kind, input.timeoutMs, "stalled")
-    if (input.changedMs < limit) return
-    const seconds = Math.round(limit / 1000)
+    const stalledLimits = stallLimit({
+      kind: input.kind,
+      phase: "stalled",
+      fileCount: input.fileCount,
+      timeoutMs: input.timeoutMs,
+    })
+    if (input.changedMs < stalledLimits.stallMs) return
+    const seconds = Math.round(stalledLimits.stallMs / 1000)
     return `Worker filesystem changes stopped progressing for ${seconds}s; retrying with a stricter execution prompt`
   }
 
@@ -241,17 +273,23 @@ export namespace WorkerManager {
     abort: AbortSignal
     timeoutMs: number
     retry?: Retry
+    sharedContext?: string
   }): Promise<{ type: "done" } | Retry> {
     const baseline =
       input.mode === "worktree" ? ((await progress(input.dir)) ?? parseProgress("", "")) : parseProgress("", "")
     const started = Date.now()
     let advanced = started
+    let lastCheckpoint = started
     let latest = baseline
+    let lastTokenActivity = Date.now()
     let failed: unknown = undefined
     let finished = false
 
     // Collect dependency outputs before entering worker context
     const dependencyOutputs = await collectDependencyOutputs(input.subtask, input.plan.subtasks, input.plan.workers)
+
+    let promptTokens = 0
+    let completionTokens = 0
 
     const task = run({
       dir: input.dir,
@@ -259,6 +297,7 @@ export namespace WorkerManager {
       project: input.project,
       fn: async () => {
         const promptText = buildWorkerPrompt(input.plan.task, input.subtask, input.plan.subtasks, {
+          sharedContext: input.sharedContext,
           sharedContracts: input.plan.sharedContracts,
           conventions: input.plan.conventions,
           retry: input.retry,
@@ -267,7 +306,7 @@ export namespace WorkerManager {
         })
         const model = input.subtask.model ?? input.plan.workerModel
         const { SessionPrompt } = await import("../session/prompt")
-        await SessionPrompt.prompt({
+        const res: any = await SessionPrompt.prompt({
           sessionID: input.sessionID,
           model,
           parts: [
@@ -277,6 +316,10 @@ export namespace WorkerManager {
             },
           ],
         })
+        if (res?.info?.tokens) {
+          promptTokens = res.info.tokens.input ?? 0
+          completionTokens = res.info.tokens.output ?? 0
+        }
       },
     })
       .catch((err) => {
@@ -285,6 +328,16 @@ export namespace WorkerManager {
       .finally(() => {
         finished = true
       })
+
+    const activityHandler = Instance.bind((ev: { directory?: string; payload: any }) => {
+      const p = ev.payload
+      if (!p) return
+      const sid = p.properties?.sessionID ?? p.properties?.part?.sessionID
+      if (sid === input.sessionID && (p.type === "message.part.delta" || p.type === "message.part.updated")) {
+        lastTokenActivity = Date.now()
+      }
+    })
+    GlobalBus.on("event", activityHandler)
 
     while (!finished) {
       await sleep(STALL_POLL_MS)
@@ -320,11 +373,12 @@ export namespace WorkerManager {
       }
 
       const current = input.mode === "worktree" ? await progress(input.dir) : undefined
+      const active = Date.now() - lastTokenActivity < STALL_POLL_MS * 3
+
       if (current && changed(latest, current)) {
         latest = current
         advanced = Date.now()
 
-        // Emit progress event for TUI visibility
         Bus.publish(ParallelEvent.WorkerProgress, {
           planID: input.plan.id,
           subtaskID: input.subtask.id,
@@ -333,7 +387,65 @@ export namespace WorkerManager {
           deletions: current.deletions,
           elapsedMs: Date.now() - started,
         })
+
+        if (input.mode === "task-agent") {
+          const statusText = await git(["status", "--porcelain"], { cwd: input.dir })
+          if (statusText.exitCode === 0) {
+            const changedFiles = outputText(statusText.stdout)
+              .split("\n")
+              .filter(Boolean)
+              .map((l) => l.slice(3))
+            const wid = String(input.subtask.id)
+            for (const file of changedFiles) {
+              if (!FileLock.acquire(file, wid)) {
+                const existing = FileLock.owner(file)
+                Bus.publish(ParallelEvent.ConflictPredicted, {
+                  planID: input.plan.id,
+                  subtaskA: SubtaskID.make(existing ?? "unknown"),
+                  subtaskB: input.subtask.id,
+                  overlappingFiles: [file],
+                })
+              }
+            }
+          }
+        }
+      } else if (active) {
+        advanced = Date.now()
+        Bus.publish(ParallelEvent.WorkerProgress, {
+          planID: input.plan.id,
+          subtaskID: input.subtask.id,
+          files: latest.files,
+          additions: latest.additions,
+          deletions: latest.deletions,
+          elapsedMs: Date.now() - started,
+        })
       }
+
+      if (input.mode === "worktree" && changed(latest, baseline)) {
+        const cfg = await Config.get()
+        const interval = cfg.parallel?.checkpoint_interval_ms ?? 5 * 60 * 1000
+        if (Date.now() - lastCheckpoint >= interval) {
+          try {
+            const cwd = input.dir
+            await git(["add", "-A"], { cwd })
+            await git(["commit", "-m", `[parallel-checkpoint] ${input.subtask.title} progress`, "--allow-empty"], { cwd })
+            lastCheckpoint = Date.now()
+            log.info("worker checkpoint committed", {
+              planID: input.plan.id,
+              subtaskID: input.subtask.id,
+              elapsedMs: Date.now() - started,
+            })
+          } catch (err) {
+            log.warn("checkpoint commit failed", {
+              planID: input.plan.id,
+              subtaskID: input.subtask.id,
+              error: String(err),
+            })
+          }
+        }
+      }
+
+      if (active) continue
 
       const reason = detectStalledProgress({
         kind: input.subtask.kind,
@@ -342,6 +454,7 @@ export namespace WorkerManager {
         baseline,
         current,
         timeoutMs: input.timeoutMs,
+        fileCount: input.subtask.fileScope.length,
       })
       if (!reason) continue
 
@@ -367,9 +480,29 @@ export namespace WorkerManager {
       return retry
     }
 
+    GlobalBus.off("event", activityHandler)
+
     await task
 
     if (failed) throw failed
+
+    Metrics.recordTokenUsage({
+      planID: input.plan.id,
+      role: "worker",
+      subtaskID: input.subtask.id,
+      inputTokens: promptTokens,
+      outputTokens: completionTokens,
+    })
+    const cost = Metrics.getPlanCost(input.plan.id)
+    if (cost) {
+      Bus.publish(ParallelEvent.PlanCostUpdate, {
+        planID: input.plan.id,
+        totalInputTokens: cost.totalInputTokens,
+        totalOutputTokens: cost.totalOutputTokens,
+        workerCount: cost.workerCount,
+      })
+    }
+
     return { type: "done" }
   }
 
@@ -445,13 +578,32 @@ export namespace WorkerManager {
     plan: Plan,
     subtask: Subtask,
     abort: AbortSignal,
-  ): Promise<{ subtaskID: SubtaskID; sessionID: string }> {
+    sharedContext?: string,
+  ): Promise<{ subtaskID: SubtaskID; sessionID: string; worktreeDir?: string; branch?: string }> {
     if (abort.aborted) throw new Error("Aborted")
+
+    const shared = sharedContext ?? SharedContext.build({
+      task: plan.task,
+      subtasks: plan.subtasks,
+      sharedContracts: plan.sharedContracts ?? undefined,
+      conventions: plan.conventions ?? undefined,
+    })
 
     Metrics.recordSpawnAttempt()
     const spawnStart = Date.now()
     const cfg = await Config.get()
-    const timeoutMs = cfg.parallel?.worker_timeout_ms ?? 30 * 60 * 1000
+    const baseTimeoutMs = cfg.parallel?.worker_timeout_ms ?? 30 * 60 * 1000
+    const score = complexity(subtask)
+    const timeoutMultiplier = Math.max(0.5, Math.min(2.0, score / 5))
+    const timeoutMs = Math.round(baseTimeoutMs * timeoutMultiplier)
+    log.info("worker timeout computed", {
+      planID: plan.id,
+      subtaskID: subtask.id,
+      baseTimeoutMs,
+      score,
+      multiplier: timeoutMultiplier,
+      adaptiveTimeoutMs: timeoutMs,
+    })
     const project = Project.get(plan.projectID) ?? (await Project.fromDirectory(Instance.directory)).project
     const mode = selectExecutionMode(plan, project)
 
@@ -461,73 +613,78 @@ export namespace WorkerManager {
       Metrics.recordSpawnSuccess()
       Metrics.recordWorkerStartup(duration)
 
-      let retry: Retry | undefined = undefined
-      let session = await createWorkerSession({
-        plan,
-        subtask,
-        project,
-        dir,
-        mode,
-      })
-
-      await updateWorker(plan.id, subtask.id, {
-        status: "running",
-        sessionID: session.id,
-        worktreeName: undefined,
-        worktreeDir: undefined,
-        branch: undefined,
-        error: "",
-      })
-
-      for (const attempt of Array.from({ length: STALL_RETRY_LIMIT + 1 }, (_, i) => i)) {
-        const result = await promptWorker({
+      try {
+        let retry: Retry | undefined = undefined
+        let session = await createWorkerSession({
           plan,
           subtask,
           project,
           dir,
           mode,
-          sessionID: session.id,
-          abort,
-          timeoutMs,
-          retry,
         })
-        if (result.type === "done") {
-          return { subtaskID: subtask.id, sessionID: session.id }
-        }
-        if (attempt >= STALL_RETRY_LIMIT) {
-          throw new Error(result.reason)
-        }
 
-        retry = result
-        await updateWorker(plan.id, subtask.id, {
-          status: "failed",
-          sessionID: session.id,
-          error: result.reason,
-        })
-        await updateWorker(plan.id, subtask.id, {
-          status: "pending",
-          error: "",
-        })
-        await updateWorker(plan.id, subtask.id, {
-          status: "spawning",
-          error: "",
-        })
-        session = await createWorkerSession({
-          plan,
-          subtask,
-          project,
-          dir,
-          mode,
-          retry,
-        })
         await updateWorker(plan.id, subtask.id, {
           status: "running",
           sessionID: session.id,
+          worktreeName: undefined,
+          worktreeDir: undefined,
+          branch: undefined,
           error: "",
         })
-      }
 
-      throw new Error("Worker retry loop exited unexpectedly")
+        for (const attempt of Array.from({ length: STALL_RETRY_LIMIT + 1 }, (_, i) => i)) {
+          const result = await promptWorker({
+            plan,
+            subtask,
+            project,
+            dir,
+            mode,
+            sessionID: session.id,
+            abort,
+            timeoutMs,
+            retry,
+            sharedContext: shared,
+          })
+          if (result.type === "done") {
+            return { subtaskID: subtask.id, sessionID: session.id }
+          }
+          if (attempt >= STALL_RETRY_LIMIT) {
+            throw new Error(result.reason)
+          }
+
+          retry = result
+          await updateWorker(plan.id, subtask.id, {
+            status: "failed",
+            sessionID: session.id,
+            error: result.reason,
+          })
+          await updateWorker(plan.id, subtask.id, {
+            status: "pending",
+            error: "",
+          })
+          await updateWorker(plan.id, subtask.id, {
+            status: "spawning",
+            error: "",
+          })
+          session = await createWorkerSession({
+            plan,
+            subtask,
+            project,
+            dir,
+            mode,
+            retry,
+          })
+          await updateWorker(plan.id, subtask.id, {
+            status: "running",
+            sessionID: session.id,
+            error: "",
+          })
+        }
+
+        throw new Error("Worker retry loop exited unexpectedly")
+      } finally {
+        FileLock.releaseAll(String(subtask.id))
+      }
     }
 
     const info = await Worktree.makeWorktreeInfo(`parallel-${plan.id.slice(0, 12)}-${subtask.id.slice(0, 20)}`)
@@ -581,9 +738,10 @@ export namespace WorkerManager {
           abort,
           timeoutMs,
           retry,
+          sharedContext: shared,
         })
         if (result.type === "done") {
-          return { subtaskID: subtask.id, sessionID: session.id }
+          return { subtaskID: subtask.id, sessionID: session.id, worktreeDir: info.directory, branch: info.branch }
         }
         if (attempt >= STALL_RETRY_LIMIT) {
           throw new Error(result.reason)
@@ -659,7 +817,7 @@ export namespace WorkerManager {
     }
 
     // Build wave schedule when scheduler is active
-    const waveAnalysis = schedulerMode === "auto" ? buildWaves(plan.subtasks) : undefined
+    let waveAnalysis = schedulerMode === "auto" ? buildWaves(plan.subtasks) : undefined
     if (waveAnalysis && waveAnalysis.overlaps.length > 0) {
       log.info("using wave scheduling", {
         planID: plan.id,
@@ -668,6 +826,8 @@ export namespace WorkerManager {
         serial: waveAnalysis.serialCount,
       })
     }
+
+    const mods = new Map<SubtaskID, string[]>()
 
     // Build dependency graph
     const subtaskMap = new Map<SubtaskID, Subtask>()
@@ -756,6 +916,13 @@ export namespace WorkerManager {
       waves: waveAnalysis?.waves.length,
     })
 
+    const shared = SharedContext.build({
+      task: plan.task,
+      subtasks: plan.subtasks,
+      sharedContracts: plan.sharedContracts ?? undefined,
+      conventions: plan.conventions ?? undefined,
+    })
+
     // Preserve terminal state so paused plans can resume from completed waves.
     const initialWorkers = plan.workers.map((w) =>
       ["done", "merged", "failed", "conflict"].includes(w.status) ? w : { ...w, status: "pending" as const },
@@ -783,7 +950,7 @@ export namespace WorkerManager {
       for (const attempt of Array.from({ length: RETRY_LIMIT }, (_, i) => i + 1)) {
         if (abort.aborted) throw new Error("Aborted")
         try {
-          return await spawnOne(plan, st, abort)
+          return await spawnOne(plan, st, abort, shared)
         } catch (err) {
           last = err instanceof Error ? err.message : "Spawn failed"
           if (attempt >= RETRY_LIMIT || !retryable(last)) break
@@ -814,10 +981,38 @@ export namespace WorkerManager {
         await updateWorker(plan.id, st.id, { status: "spawning" })
 
         const spawnPromise = spawn(plan, st, abort)
-          .then(({ subtaskID }) => {
-            completed.add(subtaskID)
-            running.delete(subtaskID)
-            return { subtaskID, status: "fulfilled" as const }
+          .then(async (result) => {
+            completed.add(result.subtaskID)
+            running.delete(result.subtaskID)
+
+            try {
+              if (result.worktreeDir) {
+                const diffResult = await git(["diff", "--name-only", "HEAD"], { cwd: result.worktreeDir })
+                const files = outputText(diffResult.stdout).split("\n").filter(Boolean)
+                mods.set(result.subtaskID, files)
+              }
+            } catch {}
+
+            if (schedulerMode === "auto" && waveAnalysis) {
+              try {
+                const rebuilt = rebuildWaves(plan.subtasks, completed, mods)
+                waveIndex.clear()
+                for (const wave of rebuilt) {
+                  for (const id of wave.subtasks) {
+                    waveIndex.set(id, wave.index)
+                  }
+                }
+                waveAnalysis = {
+                  waves: rebuilt,
+                  overlaps: [],
+                  totalSubtasks: plan.subtasks.length,
+                  parallelizableCount: rebuilt.filter(w => w.type === "parallel").reduce((s, w) => s + w.subtasks.length, 0),
+                  serialCount: rebuilt.filter(w => w.type === "serial").reduce((s, w) => s + w.subtasks.length, 0),
+                }
+              } catch {}
+            }
+
+            return { subtaskID: result.subtaskID, status: "fulfilled" as const }
           })
           .catch((err) => {
             const error = err instanceof Error ? err.message : "Spawn failed"
@@ -827,7 +1022,6 @@ export namespace WorkerManager {
             return { subtaskID: st.id, status: "rejected" as const, error }
           })
           .finally(async () => {
-            // Try to spawn more workers after this one completes/fails
             await spawnNextBatch()
           })
 
@@ -1196,16 +1390,6 @@ export namespace WorkerManager {
     throw new Error(stderr || stdout || "Failed to commit worker snapshot")
   }
 
-  function formatConventions(conv: ProjectConventions): string {
-    const parts: string[] = []
-    if (conv.serialization) parts.push(`- **Serialization**: ${conv.serialization}`)
-    if (conv.auth) parts.push(`- **Auth**: ${conv.auth}`)
-    if (conv.timestamps) parts.push(`- **Timestamps**: ${conv.timestamps}`)
-    if (conv.naming) parts.push(`- **Naming**: ${conv.naming}`)
-    if (conv.other?.length) parts.push(...conv.other.map((o) => `- ${o}`))
-    return parts.join("\n")
-  }
-
   async function collectDependencyOutputs(
     subtask: Subtask,
     allSubtasks: Subtask[],
@@ -1253,10 +1437,11 @@ export namespace WorkerManager {
   }
 
   function buildWorkerPrompt(
-    globalTask: string,
+    task: string,
     subtask: Subtask,
-    allSubtasks: Subtask[],
-    options?: {
+    subtasks: Subtask[],
+    opts?: {
+      sharedContext?: string
       sharedContracts?: SharedContract[]
       conventions?: ProjectConventions
       retry?: Retry
@@ -1264,86 +1449,23 @@ export namespace WorkerManager {
       mode?: "task-agent" | "worktree"
     },
   ): string {
-    const depInfo =
-      subtask.dependencies.length > 0
-        ? `\n## Dependencies\nThis subtask depends on the following subtasks (they have already completed):\n${subtask.dependencies
-            .map((depID) => {
-              const dep = allSubtasks.find((st) => st.id === depID)
-              return dep ? `- ${dep.title}` : `- ${depID}`
-            })
-            .join("\n")}${options?.dependencyOutputs ?? ""}`
-        : ""
+    const shared = opts?.sharedContext ?? SharedContext.build({
+      task,
+      subtasks,
+      sharedContracts: opts?.sharedContracts,
+      conventions: opts?.conventions,
+    })
 
-    const constraintInfo = subtask.constraints?.length
-      ? `\n## CONSTRAINTS (you MUST follow these)\n${subtask.constraints.map((c) => `- **${c}**`).join("\n")}`
-      : ""
-
-    const conventionInfo = (() => {
-      const conv = options?.conventions
-      if (!conv) return ""
-      const formatted = formatConventions(conv)
-      return formatted ? `\n## Project Conventions (ALL workers must follow)\n${formatted}` : ""
-    })()
-
-    const kindInfo =
-      subtask.kind === "structural"
-        ? `\n## Execution Mode\nThis is a structural refactor. Treat it as a direct transformation task, not a code-understanding task.
-
-- Start with targeted discovery only: use file listing and search commands to find affected paths/identifiers.
-- Prefer bulk rename, move, and replace operations over reading many files into context.
-- Only open full file contents when a command result shows ambiguity or a file needs manual repair.
-- Keep reasoning proportional. If the work is a package/import/path rename, execute it directly and verify the result.`
-        : ""
-
-    const retryInfo = options?.retry
-      ? `\n## Retry Directive\nThe previous attempt stalled: ${options.retry.reason}
-
-- This retry must produce a concrete filesystem change quickly.
-- Start with direct search/replace or file operations before any broad exploration.
-- Do not reread large parts of the codebase unless a specific file is ambiguous.
-- If a targeted command can complete the task, use it immediately.`
-      : ""
-
-    const contractInfo = (() => {
-      const contracts = (options?.sharedContracts ?? []).filter(
-        (sc) => sc.producers.includes(subtask.id) || sc.consumers.includes(subtask.id),
-      )
-      if (contracts.length === 0) return ""
-      return `\n## Shared Contracts (you MUST conform to these exact types)\n${contracts
-        .map((sc) => {
-          const prod = sc.producers.includes(subtask.id)
-          const cons = sc.consumers.includes(subtask.id)
-          const role = prod && cons ? "PRODUCER + CONSUMER — implement and depend on this" : ""
-          if (role) return `### ${sc.name} [${role}]\n${sc.description}\n\`\`\`\n${sc.types}\n\`\`\``
-          if (prod) return `### ${sc.name} [PRODUCER — implement this]\n${sc.description}\n\`\`\`\n${sc.types}\n\`\`\``
-          return `### ${sc.name} [CONSUMER — depend on this]\n${sc.description}\n\`\`\`\n${sc.types}\n\`\`\``
-        })
-        .join("\n\n")}`
-    })()
-    const mergeInfo =
-      options?.mode === "task-agent"
-        ? `You are one of several agents working in parallel in the same workspace.\n- Your changes are NOT merged from a separate branch, so stay tightly within your file scope.\n- Do not commit or create branches. Edit the files directly and stop when the scoped change is complete.`
-        : `You are one of several agents working in parallel on different parts of this task.\n- Your changes will be merged with other agents' work automatically.\n- Commit your changes when you're done.`
-
-    return `# Parallel Task Execution
-
-## Global Context
-${globalTask}
-${conventionInfo}
-## Your Specific Subtask
-**${subtask.title}**
-
-${subtask.description}${kindInfo}${retryInfo}${constraintInfo}${contractInfo}${depInfo}
-
-## File Scope
-You should primarily modify these files:
-${subtask.fileScope.map((f) => `- ${f}`).join("\n")}
-
-## Important
-- ${mergeInfo}
-- Stay within your file scope to minimize merge conflicts.
-- If shared contracts are defined above, your types MUST match them exactly.
-- Do NOT modify files outside your scope unless absolutely necessary.`
+    return SharedContext.workerDirective({
+      sharedContext: shared,
+      subtaskTitle: subtask.title,
+      subtaskDescription: subtask.description,
+      fileScope: subtask.fileScope,
+      constraints: subtask.constraints,
+      dependencyOutputs: opts?.dependencyOutputs,
+      retryDirective: opts?.retry ? `Previous attempt failed: ${opts.retry.reason}. Try a different approach.` : undefined,
+      mode: opts?.mode ?? "worktree",
+    })
   }
 
   async function updateWorker(

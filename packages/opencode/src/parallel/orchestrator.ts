@@ -14,6 +14,7 @@ import { Instance } from "@/project/instance"
 import { Project } from "@/project/project"
 import { Log } from "@/util/log"
 import { fn } from "@/util/fn"
+import { MergePipeline } from "./merge"
 import type { Plan, PlanID, ModelRef, SubtaskID } from "./schema"
 import { Plan as PlanSchema, PlanID as PlanIDSchema, SubtaskID as SubtaskIDSchema } from "./schema"
 import { git } from "@/util/git"
@@ -288,10 +289,49 @@ export namespace Orchestrator {
     await PlanStore.update({ id: planID, workers })
   }
 
+  function buildFeedback(plan: Plan): string {
+    const parts: string[] = []
+
+    const failed = plan.workers.filter(w => w.status === "failed" || w.status === "conflict")
+    if (failed.length > 0) {
+      parts.push("## Failed Workers")
+      for (const w of failed) {
+        const st = plan.subtasks.find(s => s.id === w.subtaskID)
+        parts.push(`- "${st?.title ?? w.subtaskID}": ${w.error ?? "unknown error"}`)
+      }
+    }
+
+    const timed = plan.workers.filter(w => w.error?.toLowerCase().includes("timeout"))
+    if (timed.length > 0) {
+      parts.push("## Timeout Issues")
+      for (const w of timed) {
+        const st = plan.subtasks.find(s => s.id === w.subtaskID)
+        parts.push(`- "${st?.title ?? w.subtaskID}" exceeded timeout. Consider splitting into smaller subtasks.`)
+      }
+    }
+
+    const conflicts = plan.workers.filter(w => w.resolutionMode === "failed" || w.status === "conflict")
+    if (conflicts.length > 0) {
+      parts.push("## Merge Conflicts")
+      for (const w of conflicts) {
+        const st = plan.subtasks.find(s => s.id === w.subtaskID)
+        parts.push(`- "${st?.title ?? w.subtaskID}" had unresolvable merge conflicts. File scopes may overlap too much.`)
+      }
+    }
+
+    if (plan.error) {
+      parts.push(`## Plan Error\n- Code: ${plan.error.code}\n- Stage: ${plan.error.stage}\n- Message: ${plan.error.message}`)
+    }
+
+    return parts.join("\n\n")
+  }
+
   async function fail(planID: PlanID, err: unknown) {
     const data = detail(err)
-    await PlanStore.update({ id: planID, status: "failed", error: data }).catch(async () => {
-      await PlanStore.update({ id: planID, error: data }).catch(() => {})
+    const plan = await PlanStore.get(planID).catch(() => undefined)
+    const fb = plan ? buildFeedback(plan) : undefined
+    await PlanStore.update({ id: planID, status: "failed", error: data, feedback: fb ?? null }).catch(async () => {
+      await PlanStore.update({ id: planID, error: data, feedback: fb ?? null }).catch(() => {})
       await PlanStore.transition({ id: planID, status: "failed" }).catch(() => {})
     })
     if (data.code === "recovery_required") return
@@ -672,6 +712,7 @@ export namespace Orchestrator {
         model: models.orchestratorModel,
         codebaseContext: formattedContext,
         profile: kind,
+        planID: plan.id,
       })
 
       await checkSubtaskLimit(subtasks.length)
@@ -730,6 +771,7 @@ export namespace Orchestrator {
 
   export async function execute(planID: PlanID, abort: AbortSignal): Promise<void> {
     log.info("executing plan", { planID })
+    Metrics.markPlanStart(planID)
     const first = await PlanStore.get(planID)
     const mode = selectExecutionMode(first, Project.get(first.projectID))
 
@@ -848,6 +890,23 @@ export namespace Orchestrator {
 
     await PlanStore.transition({ id: planID, status: "integrated" })
 
+    const verification = await MergePipeline.verify(planID)
+    if (!verification.passed && !verification.skipped) {
+      log.warn("post-integration verification failed", {
+        planID,
+        output: verification.output?.slice(0, 2000),
+      })
+      await PlanStore.update({
+        id: planID,
+        error: {
+          code: "verification_failed",
+          stage: "integrated",
+          message: `Post-merge verification failed: ${verification.output?.slice(0, 500) ?? "unknown error"}`,
+          at: Date.now(),
+        },
+      })
+    }
+
     // Publish phase - mode-dependent
     const cfg = await Config.get()
     const plan = await PlanStore.get(planID)
@@ -905,6 +964,7 @@ export namespace Orchestrator {
 
     await PlanStore.transition({ id: planID, status: finalStatus })
     Metrics.recordPlanOutcome(finalStatus)
+    Metrics.persistPlanMetrics(planID, finalStatus)
 
     if (finalStatus === "failed" && result.unresolved === 0 && finalPlan.error?.code !== "recovery_required") {
       await Recovery.cleanupWorktrees(finalPlan)
@@ -937,6 +997,7 @@ export namespace Orchestrator {
       .catch(async (error) => {
         log.error("plan execution failed", { planID, error })
         Metrics.recordPlanOutcome("failed")
+        Metrics.persistPlanMetrics(planID, "failed")
         await fail(planID, error)
       })
       .finally(() => {
@@ -965,6 +1026,8 @@ export namespace Orchestrator {
       throw new Error("Can only retry failed plans")
     }
 
+    Metrics.persistPlanMetrics(planID, "failed")
+
     await PlanStore.transition({ id: planID, status: "draft" })
 
     // Preserve existing model overrides from current subtasks
@@ -980,14 +1043,17 @@ export namespace Orchestrator {
     const codebaseContext = await Decomposition.gatherCodebaseContext(Instance.directory, mode)
     const formattedContext = Decomposition.formatCodebaseContext(codebaseContext)
 
+    const feedback = buildFeedback(plan)
+
     const { subtasks, sharedContracts, conventions } = await Decomposition.decompose({
       task: plan.task,
       model: plan.orchestratorModel,
       codebaseContext: formattedContext,
       profile: mode,
+      feedback,
+      planID,
     })
 
-    // Restore model overrides where titles match
     const restoredSubtasks = subtasks.map((st) => {
       const override = modelOverrides.get(st.title)
       return override ? { ...st, model: override } : st
@@ -998,6 +1064,7 @@ export namespace Orchestrator {
       subtasks: restoredSubtasks,
       sharedContracts: sharedContracts ?? null,
       conventions: conventions ?? null,
+      feedback,
       workers: restoredSubtasks.map((st) => ({
         subtaskID: st.id,
         status: "pending" as const,

@@ -200,6 +200,77 @@ export function buildWaves(subtasks: Subtask[]): ConflictAnalysis {
   }
 }
 
+export function rebuildWaves(
+  subtasks: Subtask[],
+  done: Set<SubtaskID>,
+  mods: Map<SubtaskID, string[]>,
+): Wave[] {
+  const remaining = subtasks.filter(s => !done.has(s.id))
+  if (remaining.length === 0) return []
+
+  const graph = new Map<SubtaskID, Set<SubtaskID>>()
+  for (const st of remaining) graph.set(st.id, new Set())
+
+  for (let i = 0; i < remaining.length; i++) {
+    for (let j = i + 1; j < remaining.length; j++) {
+      const a = remaining[i]
+      const b = remaining[j]
+      if (scopesOverlap(fileSet(a, mods), fileSet(b, mods))) {
+        graph.get(a.id)!.add(b.id)
+        graph.get(b.id)!.add(a.id)
+      }
+    }
+  }
+
+  const assigned = new Set<SubtaskID>()
+  const waves: Wave[] = []
+
+  while (assigned.size < remaining.length) {
+    const candidates = remaining.filter(st => {
+      if (assigned.has(st.id)) return false
+      return st.dependencies.every(dep => done.has(dep) || assigned.has(dep))
+    })
+    if (candidates.length === 0) break
+
+    const parallel: SubtaskID[] = []
+    const serial: SubtaskID[] = []
+
+    for (const st of candidates) {
+      const hasOverlap = candidates.some(o => st.id !== o.id && (graph.get(st.id)?.has(o.id) ?? false))
+      if (hasOverlap) serial.push(st.id)
+      else parallel.push(st.id)
+    }
+
+    if (parallel.length > 0) {
+      waves.push({ index: waves.length, type: "parallel", subtasks: parallel })
+      for (const id of parallel) assigned.add(id)
+    }
+
+    for (const id of serial) {
+      if (assigned.has(id)) continue
+      waves.push({ index: waves.length, type: "serial", subtasks: [id] })
+      assigned.add(id)
+    }
+  }
+
+  return waves
+}
+
+function fileSet(st: Subtask, mods: Map<SubtaskID, string[]>): string[] {
+  const actual = mods.get(st.id)
+  if (actual && actual.length > 0) return actual
+  return st.fileScope
+}
+
+function scopesOverlap(a: string[], b: string[]): boolean {
+  for (const fa of a) {
+    for (const fb of b) {
+      if (pathsOverlap(fa, fb)) return true
+    }
+  }
+  return false
+}
+
 /**
  * Check if a plan can be safely executed in parallel based on scheduler mode.
  */

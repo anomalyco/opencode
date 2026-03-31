@@ -3,8 +3,11 @@ import { generateObject } from "ai"
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
 import { Glob } from "@/util/glob"
-import { SubtaskID } from "./schema"
+import { SubtaskID, type PlanID } from "./schema"
 import type { Subtask, ModelRef, SharedContract, ProjectConventions, SubtaskKind } from "./schema"
+import { Metrics } from "./metrics"
+import { Bus } from "@/bus"
+import { ParallelEvent } from "./events"
 import path from "path"
 
 export namespace Decomposition {
@@ -517,6 +520,8 @@ Output format: a JSON object with "subtasks" array, optional "sharedContracts" a
     codebaseContext?: string
     profile: Profile
     overlapFeedback?: string
+    feedback?: string
+    planID?: PlanID
   }) {
     const fullModel = await Provider.getModel(input.model.providerID, input.model.modelID)
     const language = await Provider.getLanguage(fullModel)
@@ -530,6 +535,10 @@ Output format: a JSON object with "subtasks" array, optional "sharedContracts" a
       userContent += `\n\n## FILE SCOPE OVERLAP FEEDBACK (from previous attempt)\nYour previous decomposition had overlapping file scopes which will cause merge conflicts. Fix these overlaps by adjusting the fileScope arrays so each subtask touches a disjoint set of files:\n${input.overlapFeedback}`
     }
 
+    if (input.feedback) {
+      userContent += `\n\n## EXECUTION FEEDBACK (from previous failed attempt)\nThe previous execution of this plan failed. Learn from these failures and adjust your decomposition:\n${input.feedback}`
+    }
+
     const result = await generateObject({
       model: language,
       system: SYSTEM_PROMPT,
@@ -541,6 +550,24 @@ Output format: a JSON object with "subtasks" array, optional "sharedContracts" a
       ],
       schema: OutputSchema,
     })
+
+    if (input.planID) {
+      Metrics.recordTokenUsage({
+        planID: input.planID,
+        role: "orchestrator",
+        inputTokens: result.usage?.inputTokens ?? 0,
+        outputTokens: result.usage?.outputTokens ?? 0,
+      })
+      const cost = Metrics.getPlanCost(input.planID)
+      if (cost) {
+        Bus.publish(ParallelEvent.PlanCostUpdate, {
+          planID: input.planID,
+          totalInputTokens: cost.totalInputTokens,
+          totalOutputTokens: cost.totalOutputTokens,
+          workerCount: cost.workerCount,
+        })
+      }
+    }
 
     const depError = validateDependencies(result.object.subtasks)
     if (depError) {
@@ -556,6 +583,8 @@ Output format: a JSON object with "subtasks" array, optional "sharedContracts" a
     model: ModelRef
     codebaseContext?: string
     profile?: Profile
+    feedback?: string
+    planID?: PlanID
   }): Promise<DecomposeResult> {
     log.info("decomposing task", { task: input.task.slice(0, 100) })
 
@@ -566,6 +595,8 @@ Output format: a JSON object with "subtasks" array, optional "sharedContracts" a
       model: input.model,
       codebaseContext: input.codebaseContext,
       profile: mode,
+      feedback: input.feedback,
+      planID: input.planID,
     })
 
     // Retry loop: if overlaps are detected, re-prompt with feedback
@@ -595,6 +626,7 @@ Output format: a JSON object with "subtasks" array, optional "sharedContracts" a
         codebaseContext: input.codebaseContext,
         profile: mode,
         overlapFeedback: feedback,
+        planID: input.planID,
       })
     }
 

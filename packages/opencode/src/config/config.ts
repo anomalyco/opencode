@@ -1295,6 +1295,18 @@ export namespace Config {
             .describe(
               "Artifact dependency analyzer mode: 'off' skips analysis, 'warn' reports only, 'auto' adds missing dependency edges, 'strict' fails if implicit deps found (default: auto)",
             ),
+          verify_command: z
+            .string()
+            .optional()
+            .describe(
+              "Command to run after merging all parallel worker branches to verify the result (e.g., 'bun typecheck && bun lint')",
+            ),
+          checkpoint_interval_ms: z
+            .number()
+            .int()
+            .min(30000)
+            .optional()
+            .describe("Interval in milliseconds for auto-committing worker progress during execution (default: 300000 = 5 minutes). Only applies in worktree mode."),
         })
         .optional()
         .describe("Parallel agent orchestration configuration"),

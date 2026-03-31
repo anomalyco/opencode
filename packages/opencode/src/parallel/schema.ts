@@ -136,6 +136,7 @@ export const WorkerState = z.object({
       files: z.number(),
     })
     .optional(),
+  lastCheckpoint: z.number().optional(),
 })
 export type WorkerState = z.infer<typeof WorkerState>
 
@@ -152,6 +153,7 @@ export const Plan = z.object({
   workers: z.array(WorkerState),
   sharedContracts: z.array(SharedContract).optional(),
   conventions: ProjectConventions.optional(),
+  feedback: z.string().optional(),
   integrationBranch: z.string().optional(),
   publishMode: PublishMode.optional(),
   approvalMode: ApprovalMode.optional(),

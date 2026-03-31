@@ -9,8 +9,10 @@ import { ParallelEvent } from "./events"
 import { Log } from "@/util/log"
 import { Worktree } from "../worktree"
 import { Provider } from "@/provider/provider"
+import { Config } from "@/config/config"
 import type { PlanID, ModelRef, SubtaskID } from "./schema"
 import { outputText } from "./util"
+import { Metrics } from "./metrics"
 
 export type FileScopeViolation = {
   subtaskID: SubtaskID
@@ -29,6 +31,13 @@ export type WorkerMergeResult = {
 export type MergePipelineResult = {
   success: boolean
   workers: WorkerMergeResult[]
+}
+
+export type VerificationResult = {
+  passed: boolean
+  skipped?: boolean
+  output?: string
+  command?: string
 }
 
 export namespace MergePipeline {
@@ -79,6 +88,89 @@ export namespace MergePipeline {
     }
 
     return violations
+  }
+
+  export async function verify(planID: PlanID): Promise<VerificationResult> {
+    const cfg = await Config.get()
+    const command = cfg.parallel?.verify_command
+    if (!command) return { passed: true, skipped: true }
+
+    const cwd = Instance.worktree
+    const proc = Bun.spawn(["sh", "-c", command], {
+      cwd,
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const exitCode = await proc.exited
+    const stderr = await new Response(proc.stderr).text()
+    const stdout = await new Response(proc.stdout).text()
+
+    if (exitCode === 0) {
+      log.info("post-merge verification passed", { planID, command })
+      return { passed: true, output: stdout }
+    }
+
+    log.warn("post-merge verification failed", { planID, command, exitCode, stderr })
+    return { passed: false, output: stderr || stdout, command }
+  }
+
+  async function attemptAIFix(planID: PlanID, verification: VerificationResult): Promise<boolean> {
+    const plan = await PlanStore.get(planID)
+    const fullModel = await Provider.getModel(plan.orchestratorModel.providerID, plan.orchestratorModel.modelID)
+    const language = await Provider.getLanguage(fullModel)
+
+    const cwd = Instance.worktree
+    const diffResult = await git(["diff", "--name-only", "HEAD~1"], { cwd })
+    const changedFiles = outputText(diffResult.stdout).split("\n").filter(Boolean)
+
+    const fileContents = await Promise.all(
+      changedFiles.slice(0, 10).map(async (file) => {
+        try {
+          const content = await Bun.file(path.join(cwd, file)).text()
+          return { file, content: content.slice(0, 3000) }
+        } catch {
+          return { file, content: "[unreadable]" }
+        }
+      }),
+    )
+
+    const result = await generateObject({
+      model: language,
+      system:
+        "You are a code fixer. Given verification errors and file contents, produce a shell script that fixes the errors. Only use sed, awk, or echo commands. The script runs from the project root.",
+      messages: [
+        {
+          role: "user",
+          content: `## Verification command: ${verification.command}\n## Error output:\n${verification.output?.slice(0, 3000)}\n## Changed files:\n${JSON.stringify(fileContents)}\n\nProduce a shell script to fix these errors.`,
+        },
+      ],
+      schema: z.object({
+        script: z.string().describe("Shell script to fix the errors"),
+        explanation: z.string(),
+      }),
+    })
+
+    const proc = Bun.spawn(["sh", "-c", result.object.script], {
+      cwd,
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const fixExit = await proc.exited
+
+    if (fixExit !== 0) {
+      log.error("AI fix script failed", { planID, exitCode: fixExit })
+      return false
+    }
+
+    const recheck = await verify(planID)
+    if (recheck.passed) {
+      await git(["add", "-A"], { cwd })
+      await git(["commit", "-m", "fix: auto-fix post-merge verification errors"], { cwd })
+      log.info("AI fix succeeded", { planID })
+      return true
+    }
+
+    return false
   }
 
   export async function run(planID: PlanID): Promise<MergePipelineResult> {
@@ -164,6 +256,21 @@ export namespace MergePipeline {
           status: "merged",
           resolutionMode: result.mode,
         })
+      }
+    }
+
+    if (allSuccess) {
+      const verification = await verify(planID)
+      if (!verification.passed && !verification.skipped) {
+        log.warn("post-merge verification failed, attempting AI fix", {
+          planID,
+          output: verification.output?.slice(0, 2000),
+        })
+        const fixResult = await attemptAIFix(planID, verification)
+        if (!fixResult) {
+          allSuccess = false
+          log.error("post-merge AI fix failed", { planID })
+        }
       }
     }
 
@@ -281,6 +388,7 @@ export namespace MergePipeline {
         globalTask: plan.task,
         subtaskDescription: subtask?.description ?? "",
         model: plan.orchestratorModel,
+        planID,
       })
       if (hasConflictMarker(resolution)) {
         log.error("ai resolution still contains conflict markers", { planID, branch, file })
@@ -311,6 +419,7 @@ export namespace MergePipeline {
     globalTask: string
     subtaskDescription: string
     model: ModelRef
+    planID: PlanID
   }): Promise<string> {
     const fullModel = await Provider.getModel(input.model.providerID, input.model.modelID)
     const language = await Provider.getLanguage(fullModel)
@@ -329,6 +438,22 @@ export namespace MergePipeline {
         explanation: z.string(),
       }),
     })
+
+    Metrics.recordTokenUsage({
+      planID: input.planID,
+      role: "merge",
+      inputTokens: result.usage?.inputTokens ?? 0,
+      outputTokens: result.usage?.outputTokens ?? 0,
+    })
+    const cost = Metrics.getPlanCost(input.planID)
+    if (cost) {
+      Bus.publish(ParallelEvent.PlanCostUpdate, {
+        planID: input.planID,
+        totalInputTokens: cost.totalInputTokens,
+        totalOutputTokens: cost.totalOutputTokens,
+        workerCount: cost.workerCount,
+      })
+    }
 
     return result.object.resolvedContent
   }

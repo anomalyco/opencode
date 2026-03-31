@@ -385,7 +385,13 @@ export namespace Recovery {
       if (worker.worktreeDir && fs.existsSync(worker.worktreeDir)) {
         const hasCommits = await worktreeHasCommits(worker.worktreeDir)
         if (hasCommits) {
-          // Worker finished but status wasn't saved — recover it
+          const hasCheckpoint = await worktreeHasCheckpoint(worker.worktreeDir)
+          if (hasCheckpoint) {
+            log.info("worker has checkpoint commits, preserving progress", {
+              planID,
+              subtaskID: worker.subtaskID,
+            })
+          }
           const diffStat = await collectDiffStat(worker.worktreeDir)
           await PlanStore.updateWorker({
             id: planID,
@@ -401,7 +407,6 @@ export namespace Recovery {
             nextStep: "Worker marked as done, will be included in merge",
           })
         } else {
-          // Worktree exists but no commits — worker didn't finish
           await PlanStore.updateWorker({
             id: planID,
             subtaskID: worker.subtaskID,
@@ -621,6 +626,18 @@ export namespace Recovery {
       const status = await git(["status", "--porcelain"], { cwd: worktreeDir })
       const statusOutput = new TextDecoder().decode(status.stdout).trim()
       return statusOutput.length > 0
+    } catch {
+      return false
+    }
+  }
+
+  async function worktreeHasCheckpoint(worktreeDir: string): Promise<boolean> {
+    try {
+      const result = await git(["log", "--oneline", "--grep=parallel-checkpoint", "-1", "HEAD"], {
+        cwd: worktreeDir,
+      })
+      const output = new TextDecoder().decode(result.stdout).trim()
+      return output.length > 0
     } catch {
       return false
     }
