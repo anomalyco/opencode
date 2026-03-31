@@ -3,12 +3,24 @@ import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
+import { SessionPrompt } from "@/session/prompt"
+import { SessionStatus } from "@/session/status"
+import { SessionID } from "@/session/schema"
 import { Cause, Duration, Effect, Layer, Schedule, ServiceMap } from "effect"
 import z from "zod"
 import { Log } from "../util/log"
 
 export namespace Trigger {
   const log = Log.create({ service: "trigger" })
+
+  const Action = z.discriminatedUnion("type", [
+    z.object({
+      type: z.literal("command"),
+      sessionID: SessionID.zod,
+      command: z.string(),
+      arguments: z.string().optional(),
+    }),
+  ])
 
   export const Info = z
     .object({
@@ -17,6 +29,7 @@ export namespace Trigger {
         type: z.literal("interval"),
         interval: z.number().int().positive(),
       }),
+      action: Action.optional(),
       runs: z.number().int().nonnegative(),
       time: z.object({
         created: z.number().int().nonnegative(),
@@ -31,6 +44,7 @@ export namespace Trigger {
 
   export const CreateInput = z.object({
     interval: z.number().int().min(10).max(86_400_000),
+    action: Action.optional(),
   })
   export type CreateInput = z.infer<typeof CreateInput>
 
@@ -87,6 +101,26 @@ export namespace Trigger {
                     runs: next.runs,
                     at,
                   })
+                  const action = item.action
+                  if (!action) return
+                  const st = yield* Effect.promise(() => SessionStatus.get(action.sessionID))
+                  if (st.type !== "idle") return
+                  yield* Effect.promise(() =>
+                    SessionPrompt.command({
+                      sessionID: action.sessionID,
+                      command: action.command,
+                      arguments: action.arguments ?? "",
+                    }),
+                  ).pipe(
+                    Effect.catchCause((cause) =>
+                      Effect.sync(() =>
+                        log.error("trigger action failed", {
+                          triggerID: item.id,
+                          cause: Cause.pretty(cause),
+                        }),
+                      ),
+                    ),
+                  )
                 }),
               { discard: true },
             )
@@ -109,6 +143,7 @@ export namespace Trigger {
                 type: "interval" as const,
                 interval: input.interval,
               },
+              action: input.action,
               runs: 0,
               time: {
                 created: now,
