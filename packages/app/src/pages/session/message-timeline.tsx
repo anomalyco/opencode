@@ -33,7 +33,7 @@ import {
   itemStyle,
   pickPin,
   restorePinnedTop,
-  restoreScroll,
+  virtualizeTop,
   virtualize,
 } from "@/pages/session/message-timeline-utils"
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
@@ -303,12 +303,41 @@ export function MessageTimeline(props: {
 
         const root = props.scrollRef()
         if (!root) return
+        const follow = !props.userScrolled()
 
         const state = captureScroll({
           scrollTop: root.scrollTop,
           scrollHeight: root.scrollHeight,
           clientHeight: root.clientHeight,
         })
+
+        if (follow) {
+          if (restoreA !== undefined) cancelAnimationFrame(restoreA)
+          if (restoreB !== undefined) cancelAnimationFrame(restoreB)
+
+          restoreA = requestAnimationFrame(() => {
+            restoreA = undefined
+            restoreB = requestAnimationFrame(() => {
+              restoreB = undefined
+
+              const nextRoot = props.scrollRef()
+              if (!nextRoot) return
+
+              // When the user is following the latest turn, a virtualization
+              // flip must stay pinned to the bottom. Restoring the previous
+              // top/pin here can resurrect a transient `scrollTop = 0` from
+              // the old DOM and jump the whole session back to the start.
+              nextRoot.scrollTop = virtualizeTop({
+                ...state,
+                follow,
+                scrollHeight: nextRoot.scrollHeight,
+                clientHeight: nextRoot.clientHeight,
+              })
+              props.onScheduleScrollState(nextRoot)
+            })
+          })
+          return
+        }
         const pin = state.bottom
           ? undefined
           : (() => {
@@ -357,8 +386,9 @@ export function MessageTimeline(props: {
               }
             }
 
-            const top = restoreScroll({
+            const top = virtualizeTop({
               ...state,
+              follow,
               scrollHeight: nextRoot.scrollHeight,
               clientHeight: nextRoot.clientHeight,
             })

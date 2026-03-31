@@ -73,6 +73,21 @@ export function restorePinnedTop(input: {
   return Math.max(0, Math.min(next, max))
 }
 
+export function virtualizeTop(input: {
+  follow: boolean
+  top: number
+  gap: number
+  bottom: boolean
+  scrollHeight: number
+  clientHeight: number
+}) {
+  // During a non-virtual <-> virtual flip the old scroll container can briefly
+  // report a stale top (including `0`). If the timeline is following the latest
+  // turn, restore against the new bottom instead of reusing that stale top.
+  if (input.follow) return Math.max(0, input.scrollHeight - input.clientHeight)
+  return restoreScroll(input)
+}
+
 export function itemStyle(centered: boolean): JSX.CSSProperties {
   if (!centered) return {}
   return {
