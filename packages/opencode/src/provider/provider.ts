@@ -193,6 +193,8 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+          // Fallback to languageModel if responses is not available (e.g., @ai-sdk/openai-compatible)
+          if (sdk.responses === undefined) return sdk.languageModel(modelID)
           return sdk.responses(modelID)
         },
         options: {},
@@ -229,10 +231,9 @@ export namespace Provider {
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
           if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
           if (options?.["useCompletionUrls"]) {
-            return sdk.chat(modelID)
-          } else {
-            return sdk.responses(modelID)
+            return sdk.chat ? sdk.chat(modelID) : sdk.languageModel(modelID)
           }
+          return sdk.responses ? sdk.responses(modelID) : sdk.languageModel(modelID)
         },
         options: {},
         vars(_options) {
@@ -249,10 +250,9 @@ export namespace Provider {
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
           if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
           if (options?.["useCompletionUrls"]) {
-            return sdk.chat(modelID)
-          } else {
-            return sdk.responses(modelID)
+            return sdk.chat ? sdk.chat(modelID) : sdk.languageModel(modelID)
           }
+          return sdk.responses ? sdk.responses(modelID) : sdk.languageModel(modelID)
         },
         options: {
           baseURL: resourceName ? `https://${resourceName}.cognitiveservices.azure.com/openai` : undefined,
@@ -1304,11 +1304,13 @@ export namespace Provider {
           const existing = s.sdk.get(key)
           if (existing) return existing
 
-          const customFetch = options["fetch"]
-          const chunkTimeout = options["chunkTimeout"]
-          delete options["chunkTimeout"]
+          // Create a copy to avoid mutating provider.options
+          const sdkOptions = { ...options }
+          const customFetch = sdkOptions["fetch"]
+          const chunkTimeout = sdkOptions["chunkTimeout"]
+          delete sdkOptions["chunkTimeout"]
 
-          options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
+          sdkOptions["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
             const fetchFn = customFetch ?? fetch
             const opts = init ?? {}
             const chunkAbortCtl =
@@ -1356,7 +1358,7 @@ export namespace Provider {
             })
             const loaded = bundledFn({
               name: model.providerID,
-              ...options,
+              ...sdkOptions,
             })
             s.sdk.set(key, loaded)
             return loaded as SDK
@@ -1375,7 +1377,7 @@ export namespace Provider {
           const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
           const loaded = fn({
             name: model.providerID,
-            ...options,
+            ...sdkOptions,
           })
           s.sdk.set(key, loaded)
           return loaded as SDK
