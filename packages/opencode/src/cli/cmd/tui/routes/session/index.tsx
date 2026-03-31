@@ -1326,16 +1326,20 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
 
   const [now, setNow] = createSignal(Date.now())
   createEffect(() => {
-    if (final()) return
+    if (final() || props.message.time.completed) return
     const id = setInterval(() => setNow(Date.now()), 1000)
     onCleanup(() => clearInterval(id))
   })
 
-  const elapsed = createMemo(() => {
+  const parentTime = createMemo(() => {
     const user = messages().find((x) => x.role === "user" && x.id === props.message.parentID)
-    if (!user || !user.time) return 0
+    return user?.time?.created ?? 0
+  })
+
+  const elapsed = createMemo(() => {
+    if (!parentTime()) return 0
     const end = props.message.time.completed ?? now()
-    return end - user.time.created
+    return end - parentTime()
   })
 
   const duration = createMemo(() => {
@@ -1346,11 +1350,18 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const durationText = createMemo(() => {
     const ms = duration()
     if (!ms) return ""
-    const total = Math.floor(ms / 1000)
-    if (total < 60) return `${total}s`
-    const m = Math.floor(total / 60)
-    const s = total % 60
-    return `${m}m ${s}s`
+    const s = Math.floor(ms / 1000)
+    if (s === 0) return ""
+    if (s < 60) return `${s}s`
+    const m = Math.floor(s / 60)
+    const sec = s % 60
+    if (m < 60) return sec > 0 ? `${m}m ${sec}s` : `${m}m`
+    const h = Math.floor(m / 60)
+    const min = m % 60
+    if (h < 24) return min > 0 ? `${h}h ${min}m` : `${h}h`
+    const d = Math.floor(h / 24)
+    const hr = h % 24
+    return hr > 0 ? `${d}d ${hr}h` : `${d}d`
   })
 
   const keybind = useKeybind()
