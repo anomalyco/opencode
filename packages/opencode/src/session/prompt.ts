@@ -215,7 +215,7 @@ export namespace SessionPrompt {
             : await MessageV2.toModelMessages(context, mdl)
           const result = await LLM.stream({
             agent: ag,
-            user: firstInfo,
+            user: { ...firstInfo, variant: undefined },
             system: [],
             small: true,
             tools: {},
