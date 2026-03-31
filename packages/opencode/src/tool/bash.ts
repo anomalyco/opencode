@@ -19,6 +19,8 @@ import { Plugin } from "@/plugin"
 import { Effect, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
+import { getSandboxProvider, type SandboxProvider } from "../sandbox/provider"
+import { Config } from "../config/config"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
@@ -243,7 +245,16 @@ const ask = Effect.fn("BashTool.ask")(function* (ctx: Tool.Context, scan: Scan) 
   })
 })
 
-function cmd(shell: string, name: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
+function cmd(shell: string, name: string, command: string, cwd: string, env: NodeJS.ProcessEnv, provider?: SandboxProvider, options?: any) {
+  if (provider) {
+    const wrapped = provider.wrap(shell, command, { cwd, env, ...options })
+    return ChildProcess.make(wrapped.executable, wrapped.args, {
+      cwd,
+      env: wrapped.env || env,
+      stdin: "ignore",
+      detached: process.platform !== "win32",
+    })
+  }
   if (process.platform === "win32" && PS.has(name)) {
     return ChildProcess.make(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], {
       cwd,
@@ -394,7 +405,29 @@ export const BashTool = Tool.define(
 
       const code: number | null = yield* Effect.scoped(
         Effect.gen(function* () {
-          const handle = yield* spawner.spawn(cmd(input.shell, input.name, input.command, input.cwd, input.env))
+          
+          const config = yield* Effect.promise(() => Config.get())
+          const sandboxConfig = config.bash_sandbox || {}
+          const enabled = sandboxConfig.enabled === true || sandboxConfig.enabled === "auto"
+          const providerName = sandboxConfig.provider || "srt"
+          const envWhitelist = sandboxConfig.env_whitelist
+          const networkDomains = sandboxConfig.domains
+          const denyWorkspacePatterns = sandboxConfig.deny_workspace_patterns
+          const denyBinaries = sandboxConfig.deny_binaries
+
+          let provider: SandboxProvider | undefined
+          if (enabled) {
+            if (process.platform === "win32") {
+              throw new Error(`Sandboxing is strictly required by configuration, but is not supported on Windows natively. Please disable 'bash_sandbox' in your config or run on macOS/Linux.`)
+            }
+            provider = getSandboxProvider(providerName)
+            if (!provider || !provider.isAvailable()) {
+              throw new Error(`Sandboxing is strictly required by configuration, but the '${providerName}' provider is unavailable.`)
+            }
+          }
+
+          const handle = yield* spawner.spawn(cmd(input.shell, input.name, input.command, input.cwd, input.env, provider, { envWhitelist, networkDomains, denyWorkspacePatterns, denyBinaries }))
+
 
           yield* Effect.forkScoped(
             Stream.runForEach(Stream.decodeText(handle.all), (chunk) => {

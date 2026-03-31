@@ -1032,6 +1032,17 @@ export namespace Config {
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
         })
         .optional(),
+      bash_sandbox: z
+        .object({
+          enabled: z.union([z.boolean(), z.literal("auto")]).optional().describe("Enable or enforce bash sandbox containerization"),
+          provider: z.literal("srt").optional().describe("The sandbox runtime provider to use (default: srt)"),
+          domains: z.array(z.string()).optional().describe("Whitelisted domains for the sandbox proxy. Empty array airgaps the container"),
+          env_whitelist: z.array(z.string()).optional().describe("Whitelist of environment variables passed to the sandboxed shell"),
+          deny_workspace_patterns: z.array(z.string()).optional().describe("Glob patterns to explicitly deny read/write access to in the workspace"),
+          deny_binaries: z.array(z.string()).optional().describe("Absolute or generic executable names to blocklist from the sandbox"),
+        })
+        .optional()
+        .describe("Configuration for executing bash commands within a natively secured sandbox container."),
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),
