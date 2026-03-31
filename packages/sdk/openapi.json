@@ -8177,16 +8177,16 @@
                 "type": "boolean"
               },
               "staged": {
-                "type": "integer"
+                "type": "number"
               },
               "unstaged": {
-                "type": "integer"
+                "type": "number"
               },
               "untracked": {
-                "type": "integer"
+                "type": "number"
               },
               "conflicted": {
-                "type": "integer"
+                "type": "number"
               }
             }
           }
@@ -8218,6 +8218,47 @@
           "type": {
             "type": "string",
             "const": "workspace.failed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.worktree.ready": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "worktree.ready"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "branch": {
+                "type": "string"
+              }
+            },
+            "required": ["name", "branch"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.worktree.failed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "worktree.failed"
           },
           "properties": {
             "type": "object",
@@ -8340,47 +8381,6 @@
               }
             },
             "required": ["id"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.worktree.ready": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "worktree.ready"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string"
-              },
-              "branch": {
-                "type": "string"
-              }
-            },
-            "required": ["name", "branch"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.worktree.failed": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "worktree.failed"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "message": {
-                "type": "string"
-              }
-            },
-            "required": ["message"]
           }
         },
         "required": ["type", "properties"]
@@ -9845,6 +9845,12 @@
             "$ref": "#/components/schemas/Event.workspace.failed"
           },
           {
+            "$ref": "#/components/schemas/Event.worktree.ready"
+          },
+          {
+            "$ref": "#/components/schemas/Event.worktree.failed"
+          },
+          {
             "$ref": "#/components/schemas/Event.pty.created"
           },
           {
@@ -9855,12 +9861,6 @@
           },
           {
             "$ref": "#/components/schemas/Event.pty.deleted"
-          },
-          {
-            "$ref": "#/components/schemas/Event.worktree.ready"
-          },
-          {
-            "$ref": "#/components/schemas/Event.worktree.failed"
           },
           {
             "$ref": "#/components/schemas/Event.message.updated"
@@ -12520,16 +12520,16 @@
             "type": "boolean"
           },
           "staged": {
-            "type": "integer"
+            "type": "number"
           },
           "unstaged": {
-            "type": "integer"
+            "type": "number"
           },
           "untracked": {
-            "type": "integer"
+            "type": "number"
           },
           "conflicted": {
-            "type": "integer"
+            "type": "number"
           }
         }
       },
