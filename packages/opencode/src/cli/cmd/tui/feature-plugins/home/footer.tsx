@@ -7,14 +7,38 @@ const id = "internal:home-footer"
 function Directory(props: { api: TuiPluginApi }) {
   const theme = () => props.api.theme.current
   const dir = createMemo(() => {
-    const dir = props.api.state.path.directory || process.cwd()
-    const out = dir.replace(Global.Path.home, "~")
-    const branch = props.api.state.vcs?.branch
-    if (branch) return out + ":" + branch
-    return out
+    const raw = props.api.state.path.directory || process.cwd()
+    return raw.replace(Global.Path.home, "~")
   })
+  const vcs = createMemo(() => props.api.state.vcs)
 
-  return <text fg={theme().textMuted}>{dir()}</text>
+  return (
+    <text fg={theme().textMuted}>
+      {dir()}
+      <Show when={vcs()?.branch}>
+        :
+        <span
+          style={{
+            fg: vcs()!.conflicted ? theme().error : vcs()!.dirty ? theme().warning : theme().success,
+          }}
+        >
+          {vcs()!.branch}
+        </span>
+        <Show when={vcs()!.staged > 0}>
+          <span style={{ fg: theme().warning }}> +{vcs()!.staged}</span>
+        </Show>
+        <Show when={vcs()!.unstaged > 0}>
+          <span style={{ fg: theme().warning }}> !{vcs()!.unstaged}</span>
+        </Show>
+        <Show when={vcs()!.untracked > 0}>
+          <span style={{ fg: theme().info }}> ?{vcs()!.untracked}</span>
+        </Show>
+        <Show when={vcs()!.conflicted > 0}>
+          <span style={{ fg: theme().error }}> ~{vcs()!.conflicted}</span>
+        </Show>
+      </Show>
+    </text>
+  )
 }
 
 function Mcp(props: { api: TuiPluginApi }) {

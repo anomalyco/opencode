@@ -237,7 +237,16 @@ export type TuiState = {
     worktree: string
     directory: string
   }
-  readonly vcs: { branch?: string } | undefined
+  readonly vcs:
+    | {
+        branch?: string
+        dirty: boolean
+        staged: number
+        unstaged: number
+        untracked: number
+        conflicted: number
+      }
+    | undefined
   readonly workspace: {
     list: () => ReadonlyArray<Workspace>
     get: (workspaceID: string) => Workspace | undefined

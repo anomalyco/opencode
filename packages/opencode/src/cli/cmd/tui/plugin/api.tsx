@@ -1,5 +1,6 @@
-import type { ParsedKey } from "@opentui/core"
 import type { TuiDialogSelectOption, TuiPluginApi, TuiRouteDefinition } from "@opencode-ai/plugin/tui"
+import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
+import type { ParsedKey } from "@opentui/core"
 import type { useCommandDialog } from "@tui/component/dialog-command"
 import type { useKeybind } from "@tui/context/keybind"
 import type { useRoute } from "@tui/context/route"
@@ -8,16 +9,15 @@ import type { useSync } from "@tui/context/sync"
 import type { useTheme } from "@tui/context/theme"
 import { Dialog as DialogUI, type useDialog } from "@tui/ui/dialog"
 import type { TuiConfig } from "@/config/tui"
-import { createPluginKeybind } from "../context/plugin-keybinds"
+import { Installation } from "@/installation"
 import type { useKV } from "../context/kv"
+import { createPluginKeybind } from "../context/plugin-keybinds"
 import { DialogAlert } from "../ui/dialog-alert"
 import { DialogConfirm } from "../ui/dialog-confirm"
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { DialogSelect, type DialogSelectOption as SelectOption } from "../ui/dialog-select"
 import { Prompt } from "../component/prompt"
 import type { useToast } from "../ui/toast"
-import { Installation } from "@/installation"
-import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
 
 type RouteEntry = {
   key: symbol
@@ -146,6 +146,11 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
       if (!sync.data.vcs) return
       return {
         branch: sync.data.vcs.branch,
+        dirty: sync.data.vcs.dirty ?? false,
+        staged: sync.data.vcs.staged ?? 0,
+        unstaged: sync.data.vcs.unstaged ?? 0,
+        untracked: sync.data.vcs.untracked ?? 0,
+        conflicted: sync.data.vcs.conflicted ?? 0,
       }
     },
     workspace: {
