@@ -4,7 +4,7 @@ RUN apk add --no-cache git nodejs build-base python3
 
 WORKDIR /app
 COPY . .
-RUN git init && git add -A && git commit -m "docker build" --allow-empty
+RUN git init && git add -A && git -c user.name=build -c user.email=build commit -m "build" --allow-empty
 RUN bun install --frozen-lockfile
 RUN cd packages/opencode && bun run build --single --skip-embed-web-ui
 
