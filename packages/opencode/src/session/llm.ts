@@ -134,12 +134,18 @@ export namespace LLM {
           sessionID: input.sessionID,
           providerOptions: provider.options,
         })
-    const options: Record<string, any> = pipe(
-      base,
-      mergeDeep(input.model.options),
-      mergeDeep(input.agent.options),
-      mergeDeep(variant),
-    )
+    const options: Record<string, any> = input.small
+      ? pipe(
+          input.model.options ?? {},
+          mergeDeep(input.agent.options),
+          mergeDeep(base),
+        )
+      : pipe(
+          base,
+          mergeDeep(input.model.options),
+          mergeDeep(input.agent.options),
+          mergeDeep(variant),
+        )
     if (isOpenaiOauth) {
       options.instructions = system.join("\n")
     }
