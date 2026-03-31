@@ -8177,16 +8177,16 @@
                 "type": "boolean"
               },
               "staged": {
-                "type": "number"
+                "type": "integer"
               },
               "unstaged": {
-                "type": "number"
+                "type": "integer"
               },
               "untracked": {
-                "type": "number"
+                "type": "integer"
               },
               "conflicted": {
-                "type": "number"
+                "type": "integer"
               }
             }
           }
@@ -12520,16 +12520,16 @@
             "type": "boolean"
           },
           "staged": {
-            "type": "number"
+            "type": "integer"
           },
           "unstaged": {
-            "type": "number"
+            "type": "integer"
           },
           "untracked": {
-            "type": "number"
+            "type": "integer"
           },
           "conflicted": {
-            "type": "number"
+            "type": "integer"
           }
         }
       },
