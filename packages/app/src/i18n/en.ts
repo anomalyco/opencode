@@ -735,6 +735,9 @@ export const dict = {
   "settings.general.row.uiFont.description": "Customise the font used throughout the interface",
   "settings.general.row.followup.title": "Follow-up behavior",
   "settings.general.row.followup.description": "Choose whether follow-up prompts steer immediately or wait in a queue",
+  "settings.general.row.preview.title": "Show rich preview",
+  "settings.general.row.preview.description":
+    "Render a rich preview from the repository README in the new session view when available",
   "settings.general.row.followup.option.queue": "Queue",
   "settings.general.row.followup.option.steer": "Steer",
   "settings.general.row.reasoningSummaries.title": "Show reasoning summaries",

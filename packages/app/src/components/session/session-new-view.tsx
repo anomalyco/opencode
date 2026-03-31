@@ -3,9 +3,11 @@ import { DateTime } from "luxon"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
 import { useLanguage } from "@/context/language"
+import { useSettings } from "@/context/settings"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Mark } from "@opencode-ai/ui/logo"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { SessionNewRichPreview } from "./session-new-rich-preview"
 
 const MAIN_WORKTREE = "main"
 const CREATE_WORKTREE = "create"
@@ -19,6 +21,7 @@ export function NewSessionView(props: NewSessionViewProps) {
   const sync = useSync()
   const sdk = useSDK()
   const language = useLanguage()
+  const settings = useSettings()
 
   const sandboxes = createMemo(() => sync.project?.sandboxes ?? [])
   const options = createMemo(() => [MAIN_WORKTREE, ...sandboxes(), CREATE_WORKTREE])
@@ -28,6 +31,7 @@ export function NewSessionView(props: NewSessionViewProps) {
     return MAIN_WORKTREE
   })
   const projectRoot = createMemo(() => sync.project?.worktree ?? sdk.directory)
+  const rich = createMemo(() => settings.general.preview())
   const isWorktree = createMemo(() => {
     const project = sync.project
     if (!project) return false
@@ -45,6 +49,10 @@ export function NewSessionView(props: NewSessionViewProps) {
     if (value === CREATE_WORKTREE) return language.t("session.new.worktree.create")
 
     return getFilename(value)
+  }
+
+  if (rich()) {
+    return <SessionNewRichPreview root={projectRoot} fallback={language.t("session.new.title")} />
   }
 
   return (

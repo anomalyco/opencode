@@ -23,6 +23,7 @@ export interface Settings {
     autoSave: boolean
     releaseNotes: boolean
     followup: "queue" | "steer"
+    preview: boolean
     showReasoningSummaries: boolean
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
@@ -89,6 +90,7 @@ const defaultSettings: Settings = {
     autoSave: true,
     releaseNotes: true,
     followup: "steer",
+    preview: false,
     showReasoningSummaries: false,
     shellToolPartsExpanded: false,
     editToolPartsExpanded: false,
@@ -153,6 +155,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         followup: withFallback(() => store.general?.followup, defaultSettings.general.followup),
         setFollowup(value: "queue" | "steer") {
           setStore("general", "followup", value)
+        },
+        preview: withFallback(() => store.general?.preview, defaultSettings.general.preview),
+        setPreview(value: boolean) {
+          setStore("general", "preview", value)
         },
         showReasoningSummaries: withFallback(
           () => store.general?.showReasoningSummaries,
