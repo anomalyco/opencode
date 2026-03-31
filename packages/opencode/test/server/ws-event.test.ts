@@ -11,8 +11,8 @@ import { encodeFrame, decodeFrame } from "../../src/util/frame"
 // ---------------------------------------------------------------------------
 // 1. Binary frame encode / decode round-trip
 // ---------------------------------------------------------------------------
-// COB-37 design spec wire protocol (now correctly implemented):
-//   [1] version=0x01 | [1] flags=0x00 | [2] type_len LE | [type_len] UTF-8 type | [rest] JSON props
+// COB-37 design spec wire protocol (upgraded to msgpack):
+//   [1] version=0x01 | [1] flags=0x01 (bit0=msgpack) | [2] type_len LE | [type_len] UTF-8 type | [rest] msgpack props
 // ---------------------------------------------------------------------------
 
 const encoder = new TextEncoder()
@@ -75,8 +75,8 @@ describe("ws-event binary frame encode/decode", () => {
     const frame = encodeEvent(event)
     // byte[0] MUST be version=0x01 per COB-37 §3
     expect(frame[0]).toBe(0x01)
-    // byte[1] MUST be flags=0x00
-    expect(frame[1]).toBe(0x00)
+    // byte[1] MUST be flags=0x01 (msgpack encoding)
+    expect(frame[1]).toBe(0x01)
   })
 })
 
