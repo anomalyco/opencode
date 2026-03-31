@@ -6,7 +6,7 @@ import { Filesystem } from "../util/filesystem"
 import { NamedError } from "@opencode-ai/util/error"
 import { Lock } from "../util/lock"
 import { PackageRegistry } from "./registry"
-import { proxied } from "@/util/proxied"
+import { online, proxied } from "@/util/network"
 import { Process } from "../util/process"
 
 export namespace BunProc {
@@ -50,7 +50,7 @@ export namespace BunProc {
     }),
   )
 
-  export async function install(pkg: string, version = "latest") {
+  export async function install(pkg: string, version = "latest", opts?: { ignoreScripts?: boolean }) {
     // Use lock to ensure only one install at a time
     using _ = await Lock.write("bun-install")
 
@@ -68,12 +68,13 @@ export namespace BunProc {
 
     if (!modExists || !cachedVersion) {
       // continue to install
-    } else if (version !== "latest" && cachedVersion === version) {
-      return mod
     } else if (version === "latest") {
-      const isOutdated = await PackageRegistry.isOutdated(pkg, cachedVersion, Global.Path.cache)
-      if (!isOutdated) return mod
+      if (!online()) return mod
+      const stale = await PackageRegistry.isOutdated(pkg, cachedVersion, Global.Path.cache)
+      if (!stale) return mod
       log.info("Cached version is outdated, proceeding with install", { pkg, cachedVersion })
+    } else if (cachedVersion === version) {
+      return mod
     }
 
     // Build command arguments
@@ -81,6 +82,7 @@ export namespace BunProc {
       "add",
       "--force",
       "--exact",
+      ...(opts?.ignoreScripts ? ["--ignore-scripts"] : []),
       // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
       ...(proxied() || process.env.CI ? ["--no-cache"] : []),
       "--cwd",

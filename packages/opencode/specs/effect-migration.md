@@ -210,10 +210,82 @@ Fully migrated (single namespace, InstanceState where needed, flattened facade):
 - [x] `Vcs` — `project/vcs.ts`
 - [x] `Worktree` — `worktree/index.ts`
 
-Still open and likely worth migrating:
+- [x] `Session` — `session/index.ts`
+- [x] `SessionProcessor` — `session/processor.ts`
+- [x] `SessionPrompt` — `session/prompt.ts`
+- [x] `SessionCompaction` — `session/compaction.ts`
+- [x] `Provider` — `provider/provider.ts`
 
-- [ ] `Session`
-- [ ] `SessionProcessor`
-- [ ] `SessionPrompt`
-- [ ] `SessionCompaction`
-- [ ] `Provider`
+Still open:
+
+- [ ] `SessionSummary` — `session/summary.ts`
+- [ ] `SessionTodo` — `session/todo.ts`
+- [ ] `SessionRevert` — `session/revert.ts`
+- [ ] `Instruction` — `session/instruction.ts`
+- [ ] `ShareNext` — `share/share-next.ts`
+- [ ] `SyncEvent` — `sync/index.ts`
+- [ ] `Storage` — `storage/storage.ts`
+- [ ] `Workspace` — `control-plane/workspace.ts`
+
+## Tool interface → Effect
+
+Once individual tools are effectified, change `Tool.Info` (`tool/tool.ts`) so `init` and `execute` return `Effect` instead of `Promise`. This lets tool implementations compose natively with the Effect pipeline rather than being wrapped in `Effect.promise()` at the call site. Requires:
+
+1. Migrate each tool to return Effects
+2. Update `Tool.define()` factory to work with Effects
+3. Update `SessionPrompt` to `yield*` tool results instead of `await`ing
+
+Individual tools, ordered by value:
+
+- [ ] `apply_patch.ts` — HIGH: multi-step orchestration, error accumulation, Bus events
+- [ ] `read.ts` — HIGH: streaming I/O, readline, binary detection → FileSystem + Stream
+- [ ] `edit.ts` — HIGH: multi-step diff/format/publish pipeline, FileWatcher lock
+- [ ] `grep.ts` — MEDIUM: spawns ripgrep → ChildProcessSpawner, timeout handling
+- [ ] `write.ts` — MEDIUM: permission checks, diagnostics polling, Bus events
+- [ ] `codesearch.ts` — MEDIUM: HTTP + SSE + manual timeout → HttpClient + Effect.timeout
+- [ ] `webfetch.ts` — MEDIUM: fetch with UA retry, size limits → HttpClient
+- [ ] `websearch.ts` — MEDIUM: MCP over HTTP → HttpClient
+- [ ] `batch.ts` — MEDIUM: parallel execution, per-call error recovery → Effect.all
+- [ ] `task.ts` — MEDIUM: task state management
+- [ ] `glob.ts` — LOW: simple async generator
+- [ ] `lsp.ts` — LOW: dispatch switch over LSP operations
+- [ ] `skill.ts` — LOW: skill tool adapter
+- [ ] `plan.ts` — LOW: plan file operations
+
+## Effect service adoption in already-migrated code
+
+Some services are effectified but still use raw `Filesystem.*` or `Process.spawn` instead of the Effect equivalents. These are low-hanging fruit — the layers already exist, they just need the dependency swap.
+
+### `Filesystem.*` → `AppFileSystem.Service` (yield in layer)
+
+- [ ] `file/index.ts` — 11 calls (the File service itself)
+- [ ] `config/config.ts` — 7 calls
+- [ ] `auth/index.ts` — 3 calls
+- [ ] `skill/index.ts` — 3 calls
+- [ ] `file/time.ts` — 1 call
+
+### `Process.spawn` → `ChildProcessSpawner` (yield in layer)
+
+- [ ] `format/index.ts` — 1 call
+
+## Filesystem consolidation
+
+`util/filesystem.ts` (raw fs wrapper) is used by **64 files**. The effectified `AppFileSystem` service (`filesystem/index.ts`) exists but only has **8 consumers**. As services and tools are effectified, they should switch from `Filesystem.*` to yielding `AppFileSystem.Service` — this happens naturally during each migration, not as a separate effort.
+
+Similarly, **28 files** still import raw `fs` or `fs/promises` directly. These should migrate to `AppFileSystem` or `Filesystem.*` as they're touched.
+
+Current raw fs users that will convert during tool migration:
+
+- `tool/read.ts` — fs.createReadStream, readline
+- `tool/apply_patch.ts` — fs/promises
+- `tool/bash.ts` — fs/promises
+- `file/ripgrep.ts` — fs/promises
+- `storage/storage.ts` — fs/promises
+- `patch/index.ts` — fs, fs/promises
+
+## Primitives & utilities
+
+- [ ] `util/lock.ts` — reader-writer lock → Effect Semaphore/Permit
+- [ ] `util/flock.ts` — file-based distributed lock with heartbeat → Effect.repeat + addFinalizer
+- [ ] `util/process.ts` — child process spawn wrapper → return Effect instead of Promise
+- [ ] `util/lazy.ts` — replace uses in Effect code with Effect.cached; keep for sync-only code
