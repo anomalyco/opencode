@@ -171,6 +171,7 @@ type PromptSubmitInput = {
   commentCount: Accessor<number>
   autoAccept: Accessor<boolean>
   mode: Accessor<"normal" | "shell">
+  reverting?: Accessor<boolean>
   working: Accessor<boolean>
   editor: () => HTMLDivElement | undefined
   queueScroll: () => void
@@ -283,6 +284,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
   const handleSubmit = async (event: Event) => {
     event.preventDefault()
+    if (input.reverting?.()) return
 
     const currentPrompt = prompt.current()
     const text = currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")

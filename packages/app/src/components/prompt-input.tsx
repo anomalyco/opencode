@@ -1084,6 +1084,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     commentCount,
     autoAccept: () => accepting(),
     mode: () => store.mode,
+    reverting: () => props.reverting,
     working,
     editor: () => editorRef,
     queueScroll,
