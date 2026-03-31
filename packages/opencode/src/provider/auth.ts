@@ -230,7 +230,7 @@ export namespace ProviderAuth {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Auth.layer))
+  export const defaultLayer = layer.pipe(Layer.provide(Auth.defaultLayer))
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
