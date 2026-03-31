@@ -20,6 +20,7 @@ type Kind = "server" | "tui"
 
 export type Target = {
   kind: Kind
+  opts?: Record<string, unknown>
 }
 
 export type InstallDeps = {
@@ -117,10 +118,22 @@ function exportValue(value: unknown): string | undefined {
   }
 }
 
-function hasExportTarget(pkg: Record<string, unknown>, kind: Kind) {
+function exportOptions(value: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(value)) return
+  const config = value.config
+  if (!isRecord(config)) return
+  return config
+}
+
+function exportTarget(pkg: Record<string, unknown>, kind: Kind) {
   const exports = pkg.exports
-  if (!isRecord(exports)) return false
-  return Boolean(exportValue(exports[`./${kind}`]))
+  if (!isRecord(exports)) return
+  const value = exports[`./${kind}`]
+  const entry = exportValue(value)
+  if (!entry) return
+  return {
+    opts: exportOptions(value),
+  }
 }
 
 function hasMainTarget(pkg: Record<string, unknown>) {
@@ -131,11 +144,16 @@ function hasMainTarget(pkg: Record<string, unknown>) {
 
 function packageTargets(pkg: Record<string, unknown>) {
   const targets: Target[] = []
-  if (hasExportTarget(pkg, "server") || hasMainTarget(pkg)) {
+  const server = exportTarget(pkg, "server")
+  if (server) {
+    targets.push({ kind: "server", opts: server.opts })
+  } else if (hasMainTarget(pkg)) {
     targets.push({ kind: "server" })
   }
-  if (hasExportTarget(pkg, "tui")) {
-    targets.push({ kind: "tui" })
+
+  const tui = exportTarget(pkg, "tui")
+  if (tui) {
+    targets.push({ kind: "tui", opts: tui.opts })
   }
   return targets
 }
@@ -345,7 +363,8 @@ async function patchOne(dir: string, target: Target, spec: string, force: boolea
   }
 
   const list = pluginList(data)
-  const out = patchPluginList(text, list, spec, spec, force)
+  const item = target.opts ? ([spec, target.opts] as const) : spec
+  const out = patchPluginList(text, list, spec, item, force)
   if (out.mode === "noop") {
     return {
       ok: true,

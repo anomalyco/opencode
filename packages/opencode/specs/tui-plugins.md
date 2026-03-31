@@ -113,8 +113,14 @@ Example:
   "type": "module",
   "main": "./dist/server.js",
   "exports": {
-    "./server": "./dist/server.js",
-    "./tui": "./dist/tui.js"
+    "./server": {
+      "import": "./dist/server.js",
+      "config": { "custom": true }
+    },
+    "./tui": {
+      "import": "./dist/tui.js",
+      "config": { "compact": true }
+    }
   },
   "engines": {
     "opencode": "^1.0.0"
@@ -152,6 +158,7 @@ npm plugins can declare a version compatibility range in `package.json` using th
 - `patchPluginConfig` serializes per-target config writes with `Flock.acquire(...)`.
 - `patchPluginConfig` uses targeted `jsonc-parser` edits, so existing JSONC comments are preserved when plugin entries are added or replaced.
 - npm plugin package installs are executed with `--ignore-scripts`, so package `install` / `postinstall` lifecycle scripts are not run.
+- `exports["./server"].config` and `exports["./tui"].config` can provide default plugin options written on first install.
 - Without `--force`, an already-configured npm package name is a no-op.
 - With `--force`, replacement matches by package name. If the existing row is `[spec, options]`, those tuple options are kept.
 - Explicit npm specs with a version suffix (for example `pkg@1.2.3`) are pinned. Runtime install requests that exact version and does not run stale/latest checks for newer registry versions.

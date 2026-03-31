@@ -55,13 +55,34 @@ function ctxRoot(dir: string): PlugCtx {
   }
 }
 
-async function plugin(dir: string, kinds?: Array<"server" | "tui">) {
+async function plugin(
+  dir: string,
+  kinds?: Array<"server" | "tui">,
+  opts?: {
+    server?: Record<string, unknown>
+    tui?: Record<string, unknown>
+  },
+) {
   const p = path.join(dir, "plugin")
   const server = kinds?.includes("server") ?? false
   const tui = kinds?.includes("tui") ?? false
-  const exports: Record<string, string> = {}
-  if (server) exports["./server"] = "./server.js"
-  if (tui) exports["./tui"] = "./tui.js"
+  const exports: Record<string, unknown> = {}
+  if (server) {
+    exports["./server"] = opts?.server
+      ? {
+          import: "./server.js",
+          config: opts.server,
+        }
+      : "./server.js"
+  }
+  if (tui) {
+    exports["./tui"] = opts?.tui
+      ? {
+          import: "./tui.js",
+          config: opts.tui,
+        }
+      : "./tui.js"
+  }
   await fs.mkdir(p, { recursive: true })
   await Bun.write(
     path.join(p, "package.json"),
@@ -103,6 +124,28 @@ describe("plugin.install.task", () => {
     const tui = await read(path.join(tmp.path, ".opencode", "tui.jsonc"))
     expect(server.plugin).toEqual(["acme@1.2.3"])
     expect(tui.plugin).toEqual(["acme@1.2.3"])
+  })
+
+  test("writes default options from exports config metadata", async () => {
+    await using tmp = await tmpdir()
+    const target = await plugin(tmp.path, ["server", "tui"], {
+      server: { custom: true, other: false },
+      tui: { compact: true },
+    })
+    const run = createPlugTask(
+      {
+        mod: "acme@1.2.3",
+      },
+      deps(path.join(tmp.path, "global"), target),
+    )
+
+    const ok = await run(ctx(tmp.path))
+    expect(ok).toBe(true)
+
+    const server = await read(path.join(tmp.path, ".opencode", "opencode.jsonc"))
+    const tui = await read(path.join(tmp.path, ".opencode", "tui.jsonc"))
+    expect(server.plugin).toEqual([["acme@1.2.3", { custom: true, other: false }]])
+    expect(tui.plugin).toEqual([["acme@1.2.3", { compact: true }]])
   })
 
   test("preserves JSONC comments when adding plugins to server and tui config", async () => {

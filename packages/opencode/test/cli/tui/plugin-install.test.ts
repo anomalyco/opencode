@@ -22,7 +22,10 @@ test("installs plugin without loading it", async () => {
             name: "demo-install-plugin",
             type: "module",
             exports: {
-              "./tui": "./install-plugin.ts",
+              "./tui": {
+                import: "./install-plugin.ts",
+                config: { marker },
+              },
             },
           },
           null,
@@ -34,8 +37,9 @@ test("installs plugin without loading it", async () => {
         file,
         `export default {
   id: "demo.install",
-  tui: async () => {
-    await Bun.write(${JSON.stringify(marker)}, "loaded")
+  tui: async (_api, options) => {
+    if (!options?.marker) return
+    await Bun.write(options.marker, "loaded")
   },
 }
 `,

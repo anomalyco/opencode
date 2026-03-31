@@ -859,8 +859,9 @@ async function installPluginBySpec(
   const tui = manifest.targets.find((item) => item.kind === "tui")
   if (tui) {
     const file = patch.items.find((item) => item.kind === "tui")?.file
+    const item = tui.opts ? ([spec, tui.opts] as Config.PluginSpec) : spec
     state.pending.set(spec, {
-      item: spec,
+      item,
       scope: global ? "global" : "local",
       source: (file ?? dir.config) || path.join(patch.dir, "tui.json"),
     })
