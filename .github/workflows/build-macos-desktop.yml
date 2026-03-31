@@ -78,8 +78,9 @@ jobs:
           cd packages/desktop
           VERSION="${APP_VERSION#v}"
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
-            TAG=$(printf '%s' "${APP_VERSION}" | tr -cs '0-9A-Za-z.-' '-' | sed 's/^-*//; s/-*$//')
-            VERSION="0.0.0-${TAG:-dev}.${GITHUB_RUN_NUMBER}"
+            BASE=$(jq -r '.version' ../opencode/package.json)
+            TAG=$(printf '%s' "${APP_VERSION}" | tr '[:upper:]' '[:lower:]' | tr -cs '0-9a-z-' '-' | sed 's/^-*//; s/-*$//')
+            VERSION="${BASE}-${TAG:-dev}.${GITHUB_RUN_NUMBER}"
           fi
           # Update version
           jq --arg version "$VERSION" '.version = $version' package.json > package.json.tmp
@@ -166,8 +167,9 @@ jobs:
           cd packages/desktop
           VERSION="${APP_VERSION#v}"
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
-            TAG=$(printf '%s' "${APP_VERSION}" | tr -cs '0-9A-Za-z.-' '-' | sed 's/^-*//; s/-*$//')
-            VERSION="0.0.0-${TAG:-dev}.${GITHUB_RUN_NUMBER}"
+            BASE=$(jq -r '.version' ../opencode/package.json)
+            TAG=$(printf '%s' "${APP_VERSION}" | tr '[:upper:]' '[:lower:]' | tr -cs '0-9a-z-' '-' | sed 's/^-*//; s/-*$//')
+            VERSION="${BASE}-${TAG:-dev}.${GITHUB_RUN_NUMBER}"
           fi
           # Update version
           jq --arg version "$VERSION" '.version = $version' package.json > package.json.tmp
