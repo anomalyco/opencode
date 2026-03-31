@@ -250,7 +250,11 @@ export const InstanceRoutes = (app?: Hono) =>
     )
     .all("/*", async (c) => {
       const embeddedWebUI = await embeddedUIPromise
-      const path = c.req.path
+      const { basePath } = await import("../server/server").then((m) => m.Server)
+      const rawPath = c.req.path
+      const path = basePath !== "/" && rawPath.startsWith(basePath)
+        ? rawPath.slice(basePath.length) || "/"
+        : rawPath
 
       if (embeddedWebUI) {
         const match = embeddedWebUI[path.replace(/^\//, "")] ?? embeddedWebUI["index.html"] ?? null
@@ -260,7 +264,6 @@ export const InstanceRoutes = (app?: Hono) =>
           c.header("Content-Type", file.type)
           if (file.type.startsWith("text/html")) {
             c.header("Content-Security-Policy", DEFAULT_CSP)
-            const { basePath } = await import("../server/server").then((m) => m.Server)
             if (basePath !== "/") {
               const html = await file.text()
               const rewritten = html
@@ -288,7 +291,6 @@ export const InstanceRoutes = (app?: Hono) =>
             /<script\b(?![^>]*\bsrc\s*=)[^>]*\bid=(['"])oc-theme-preload-script\1[^>]*>([\s\S]*?)<\/script>/i,
           )
           const hash = scriptMatch ? createHash("sha256").update(scriptMatch[2]).digest("base64") : ""
-          const { basePath } = await import("../server/server").then((m) => m.Server)
           if (basePath !== "/") {
             html = html
               .replace(/(href|src)="\//g, `$1="`)
