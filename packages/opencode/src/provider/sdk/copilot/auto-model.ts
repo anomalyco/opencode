@@ -59,13 +59,26 @@ function classifyModel(model: ModelInfo): Tier {
   return "standard"
 }
 
-function sortByCapability(a: ModelInfo, b: ModelInfo): number {
-  // Prefer non-codex models (more widely available across Copilot tiers)
-  const aCodex = a.id.includes("codex") ? 1 : 0
-  const bCodex = b.id.includes("codex") ? 1 : 0
-  if (aCodex !== bCodex) return aCodex - bCodex
-  if (b.limit.output !== a.limit.output) return b.limit.output - a.limit.output
-  return b.limit.context - a.limit.context
+// Preferred model families for each tier, checked in order.
+// Uses the same priority as opencode's default sort, with opus preferred for reasoning.
+const REASONING_PREFERENCE = ["claude-opus-4", "gpt-5.4", "gpt-5.3", "gpt-5.2", "gpt-5.1", "gpt-5", "claude-sonnet-4"]
+const STANDARD_PREFERENCE = ["claude-sonnet-4", "gpt-4.1", "gpt-4o"]
+const FAST_PREFERENCE = ["gpt-5-mini", "gpt-5.4-mini", "claude-haiku", "gemini-3-flash", "gemini-2.5-flash"]
+
+function sortByPreference(models: ModelInfo[], preference: string[]): ModelInfo[] {
+  return [...models].sort((a, b) => {
+    const aIdx = preference.findIndex((p) => a.id.includes(p))
+    const bIdx = preference.findIndex((p) => b.id.includes(p))
+    const aRank = aIdx === -1 ? preference.length : aIdx
+    const bRank = bIdx === -1 ? preference.length : bIdx
+    if (aRank !== bRank) return aRank - bRank
+    // Prefer non-codex models (more widely available)
+    const aCodex = a.id.includes("codex") ? 1 : 0
+    const bCodex = b.id.includes("codex") ? 1 : 0
+    if (aCodex !== bCodex) return aCodex - bCodex
+    if (b.limit.output !== a.limit.output) return b.limit.output - a.limit.output
+    return b.limit.context - a.limit.context
+  })
 }
 
 /**
@@ -111,9 +124,9 @@ export class CopilotAutoLanguageModel implements LanguageModelV3 {
     }
 
     this.tiers = {
-      reasoning: reasoning.sort(sortByCapability),
-      standard: standard.sort(sortByCapability),
-      fast: fast.sort(sortByCapability),
+      reasoning: sortByPreference(reasoning, REASONING_PREFERENCE),
+      standard: sortByPreference(standard, STANDARD_PREFERENCE),
+      fast: sortByPreference(fast, FAST_PREFERENCE),
     }
 
     const miniId = fast.find((m) => m.id.includes("gpt-5-mini"))?.id
