@@ -17,6 +17,8 @@ import { Flag } from "@/flag/flag"
 import { Permission } from "@/permission"
 import { Auth } from "@/auth"
 import { Installation } from "@/installation"
+import { Bus } from "@/bus"
+import { TuiEvent } from "@/cli/cmd/tui/event"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -300,7 +302,7 @@ export namespace LLM {
       activeTools: (() => {
         const allTools = Object.keys(tools).filter((x) => x !== "invalid")
         const toolLimit = input.model.limit.tools
-        if (!toolLimit || allTools.length <= toolLimit) return allTools
+        if (toolLimit == null || allTools.length <= toolLimit) return allTools
         // Prioritize built-in tools over MCP tools when capping
         const builtin = allTools.filter((k) => !k.includes("/") && !k.startsWith("mcp_"))
         const mcp = allTools.filter((k) => k.includes("/") || k.startsWith("mcp_"))
@@ -310,6 +312,12 @@ export namespace LLM {
           limit: toolLimit,
           capped: capped.length,
         })
+        void Bus.publish(TuiEvent.ToastShow, {
+          title: "Tool limit applied",
+          message: `${input.model.providerID}/${input.model.id} allows ${toolLimit} tools per turn. ${allTools.length - toolLimit} tool(s) were hidden.`,
+          variant: "warning",
+          duration: 5000,
+        }).catch((err) => l.debug("failed to show tool cap toast", { error: err }))
         return capped
       })(),
       tools,
