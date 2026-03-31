@@ -870,3 +870,188 @@ it.effect("session.processor effect tests mark interruptions aborted without man
     { git: true },
   )
 })
+
+// Regression: the Anthropic AI SDK adapter fires tool execute() before yielding
+// the tool-call stream event. ctx.metadata({sessionId}) writes to the DB while
+// the part is still pending. The processor's tool-call handler then overwrites
+// with a fresh running state that has no metadata — clobbering sessionId.
+// The TUI reads state.metadata.sessionId for click navigation, so subagent
+// sessions become unclickable while running.
+
+it.effect("tool-call handler clobbers metadata written to DB during pending state without side-channel", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const test = yield* TestLLM
+        const processors = yield* SessionProcessor.Service
+        const session = yield* Session.Service
+
+        const gate = defer<void>()
+        yield* test.push(
+          stream(start(), toolInputStart("task-1", "task")).pipe(
+            Stream.concat(
+              Stream.fromEffect(
+                Effect.promise<LLM.Event>(() =>
+                  gate.promise.then(() => toolCall("task-1", "task", { description: "test" })),
+                ),
+              ),
+            ),
+            Stream.concat(stream(finishStep(), finish())),
+          ),
+        )
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "hi")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = model(100)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const input = {
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies MessageV2.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "hi" }],
+          tools: {},
+        } satisfies LLM.StreamInput
+
+        // Start processing — blocks after tool-input-start (part is pending)
+        const fiber = yield* handle.process(input).pipe(Effect.forkChild)
+        yield* Effect.yieldNow
+        yield* Effect.promise(() => new Promise<void>((r) => setTimeout(r, 100)))
+
+        // Verify part is pending in DB
+        const pending = handle.partFromToolCall("task-1")
+        expect(pending).toBeDefined()
+        expect(pending?.state.status).toBe("pending")
+
+        // Simulate ctx.metadata() writing to DB while part is still pending.
+        // This is what happens with the Anthropic adapter.
+        yield* session.updatePart({
+          ...pending!,
+          state: {
+            status: "running",
+            input: {},
+            time: { start: Date.now() },
+            title: "test task",
+            metadata: { sessionId: "child-session" },
+          },
+        })
+
+        // Confirm the DB has the metadata
+        const dbBefore = yield* Effect.promise(() => MessageV2.parts(msg.id))
+        const before = dbBefore.find((p): p is MessageV2.ToolPart => p.type === "tool" && p.callID === "task-1")
+        expect(before?.state.status).toBe("running")
+        if (before?.state.status === "running") {
+          expect(before.state.metadata?.sessionId).toBe("child-session")
+        }
+
+        // Release gate — tool-call handler reads from ctx.toolcalls (stale pending
+        // copy without metadata) and overwrites DB with fresh running state.
+        gate.resolve()
+        yield* Fiber.join(fiber)
+
+        // The processor's in-memory copy has no metadata — the DB write is lost.
+        const part = handle.partFromToolCall("task-1")
+        expect(part).toBeDefined()
+        if (!part) return
+        expect(part.state.status).toBe("running")
+        if (part.state.status !== "running") return
+        // Without the side-channel fix, metadata is clobbered:
+        expect(part.state.metadata?.sessionId).toBeUndefined()
+      }),
+    { git: true },
+  ),
+)
+
+it.effect("tool-call handler preserves metadata via setToolMetadata side-channel", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const test = yield* TestLLM
+        const processors = yield* SessionProcessor.Service
+        const session = yield* Session.Service
+
+        const gate = defer<void>()
+        yield* test.push(
+          stream(start(), toolInputStart("task-1", "task")).pipe(
+            Stream.concat(
+              Stream.fromEffect(
+                Effect.promise<LLM.Event>(() =>
+                  gate.promise.then(() => toolCall("task-1", "task", { description: "test" })),
+                ),
+              ),
+            ),
+            Stream.concat(stream(finishStep(), finish())),
+          ),
+        )
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "hi")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = model(100)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const input = {
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies MessageV2.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "hi" }],
+          tools: {},
+        } satisfies LLM.StreamInput
+
+        // Start processing — blocks after tool-input-start (part is pending)
+        const fiber = yield* handle.process(input).pipe(Effect.forkChild)
+        yield* Effect.yieldNow
+        yield* Effect.promise(() => new Promise<void>((r) => setTimeout(r, 100)))
+
+        expect(handle.partFromToolCall("task-1")?.state.status).toBe("pending")
+
+        // Simulate the fix path: ctx.metadata() buffers in the side-channel
+        // so tool-call handler can merge it into the running state.
+        handle.setToolMetadata("task-1", {
+          title: "test task",
+          metadata: { sessionId: "child-session" },
+        })
+
+        // Release gate — tool-call merges from side-channel
+        gate.resolve()
+        yield* Fiber.join(fiber)
+
+        // Metadata survives the pending→running transition
+        const part = handle.partFromToolCall("task-1")
+        expect(part).toBeDefined()
+        if (!part) return
+        expect(part.state.status).toBe("running")
+        if (part.state.status !== "running") return
+        expect(part.state.title).toBe("test task")
+        expect(part.state.metadata?.sessionId).toBe("child-session")
+      }),
+    { git: true },
+  ),
+)

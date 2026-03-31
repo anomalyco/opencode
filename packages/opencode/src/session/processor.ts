@@ -30,6 +30,7 @@ export namespace SessionProcessor {
   export interface Handle {
     readonly message: MessageV2.Assistant
     readonly partFromToolCall: (toolCallID: string) => MessageV2.ToolPart | undefined
+    readonly setToolMetadata: (toolCallID: string, val: { title?: string; metadata?: Record<string, any> }) => void
     readonly abort: () => Effect.Effect<void>
     readonly process: (streamInput: LLM.StreamInput) => Effect.Effect<Result>
   }
@@ -46,6 +47,7 @@ export namespace SessionProcessor {
 
   interface ProcessorContext extends Input {
     toolcalls: Record<string, MessageV2.ToolPart>
+    toolMetadata: Record<string, { title?: string; metadata?: Record<string, any> }>
     shouldBreak: boolean
     snapshot: string | undefined
     blocked: boolean
@@ -89,6 +91,7 @@ export namespace SessionProcessor {
           sessionID: input.sessionID,
           model: input.model,
           toolcalls: {},
+          toolMetadata: {},
           shouldBreak: false,
           snapshot: undefined,
           blocked: false,
@@ -173,10 +176,18 @@ export namespace SessionProcessor {
               }
               const match = ctx.toolcalls[value.toolCallId]
               if (!match) return
+              const pending = ctx.toolMetadata[value.toolCallId]
+              delete ctx.toolMetadata[value.toolCallId]
               ctx.toolcalls[value.toolCallId] = yield* session.updatePart({
                 ...match,
                 tool: value.toolName,
-                state: { status: "running", input: value.input, time: { start: Date.now() } },
+                state: {
+                  status: "running",
+                  input: value.input,
+                  time: { start: Date.now() },
+                  title: pending?.title,
+                  metadata: pending?.metadata,
+                },
                 metadata: value.providerMetadata,
               } satisfies MessageV2.ToolPart)
 
@@ -224,6 +235,7 @@ export namespace SessionProcessor {
                 },
               })
               delete ctx.toolcalls[value.toolCallId]
+              delete ctx.toolMetadata[value.toolCallId]
               return
             }
 
@@ -243,6 +255,7 @@ export namespace SessionProcessor {
                 ctx.blocked = ctx.shouldBreak
               }
               delete ctx.toolcalls[value.toolCallId]
+              delete ctx.toolMetadata[value.toolCallId]
               return
             }
 
@@ -493,6 +506,9 @@ export namespace SessionProcessor {
           },
           partFromToolCall(toolCallID: string) {
             return ctx.toolcalls[toolCallID]
+          },
+          setToolMetadata(toolCallID: string, val: { title?: string; metadata?: Record<string, any> }) {
+            ctx.toolMetadata[toolCallID] = val
           },
           abort,
           process,
