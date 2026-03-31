@@ -48,6 +48,261 @@ const FILES = new Set([
 const FLAGS = new Set(["-destination", "-literalpath", "-path"])
 const SWITCHES = new Set(["-confirm", "-debug", "-force", "-nonewline", "-recurse", "-verbose", "-whatif"])
 
+// Commands that are inherently safe to auto-approve (read-only, no side effects)
+const SAFE_COMMANDS = new Set([
+  "ls",
+  "dir",
+  "find",
+  "locate",
+  "which",
+  "where",
+  "type",
+  "file",
+  "stat",
+  "wc",
+  "head",
+  "tail",
+  "less",
+  "more",
+  "strings",
+  "grep",
+  "egrep",
+  "fgrep",
+  "zgrep",
+  "awk",
+  "sed",
+  "cut",
+  "sort",
+  "uniq",
+  "tr",
+  "tee",
+  "diff",
+  "cmp",
+  "comm",
+  "tree",
+  "du",
+  "df",
+  "free",
+  "top",
+  "ps",
+  "uptime",
+  "whoami",
+  "id",
+  "uname",
+  "date",
+  "time",
+  "echo",
+  "printf",
+  "jq",
+  "yq",
+  "xmllint",
+  "md5sum",
+  "sha1sum",
+  "sha256sum",
+  "shasum",
+  "base64",
+  "xxd",
+  "hexdump",
+  "od",
+  "man",
+  "info",
+  "help",
+  "true",
+  "false",
+  "test",
+  "seq",
+  "shuf",
+  "paste",
+  "join",
+  "xargs",
+  "env",
+  "printenv",
+  "set",
+  "pwd",
+  "dirs",
+  "popd",
+  "readlink",
+  "realpath",
+  "basename",
+  "dirname",
+  "lsblk",
+  "lscpu",
+  "lsmem",
+  "lsusb",
+  "lspci",
+  "ip",
+  "ifconfig",
+  "netstat",
+  "ss",
+  "route",
+  "cat",
+  "bat",
+  "rg",
+  "fd",
+  "exa",
+  "eza",
+  "ping",
+  "dig",
+  "nslookup",
+  "host",
+  // PowerShell read-only equivalents
+  "get-childitem",
+  "get-content",
+  "select-string",
+  "get-location",
+  "get-process",
+  "get-service",
+  "get-eventlog",
+  "measure-object",
+  "format-list",
+  "format-table",
+  "out-null",
+  "write-host",
+  "write-output",
+])
+
+// Commands that are never safe to auto-approve
+const DANGEROUS_COMMANDS = new Set([
+  "rm",
+  "del",
+  "remove-item",
+  "rmdir",
+  "dd",
+  "mkfs",
+  "fdisk",
+  "parted",
+  "shutdown",
+  "reboot",
+  "halt",
+  "poweroff",
+  "kill",
+  "killall",
+  "pkill",
+  "chmod",
+  "chown",
+  "chgrp",
+  "format",
+  "diskpart",
+])
+
+// Patterns that make any command unsafe regardless of the command name
+const DANGEROUS_PATTERNS = [
+  /\|\s*(sh|bash|zsh|fish|pwsh|powershell|cmd)\b/,
+  /--no-preserve-root/,
+  /-rf\s+\/\s*$/,
+  />\s*\/dev\/sd/,
+  />\s*\/dev\/hd/,
+]
+
+/**
+ * Classify whether a bash command is safe to auto-approve.
+ * Uses the tree-sitter parsed AST for accurate command identification.
+ * Returns true only if all commands in the input are read-only and
+ * contain no dangerous patterns.
+ */
+function classify(root: Node, ps: boolean): boolean {
+  const cmds = commands(root)
+  if (cmds.length === 0) return true
+
+  for (const node of cmds) {
+    const command = parts(node)
+    const tokens = command.map((item) => item.text)
+    const cmd = ps ? tokens[0]?.toLowerCase() : tokens[0]
+    if (!cmd) continue
+
+    const sourceText = source(node)
+
+    // Check dangerous patterns first — these override everything
+    for (const pattern of DANGEROUS_PATTERNS) {
+      if (pattern.test(sourceText)) return false
+    }
+
+    // Explicitly dangerous commands are never auto-approved
+    if (DANGEROUS_COMMANDS.has(ps ? cmd.toLowerCase() : cmd)) return false
+
+    // Command must be in the safe whitelist
+    if (!SAFE_COMMANDS.has(ps ? cmd.toLowerCase() : cmd)) return false
+
+    // Context-aware subcommand checks
+    if (cmd === "git" && tokens.length > 1) {
+      const sub = tokens[1]
+      if (
+        ![
+          "status",
+          "log",
+          "diff",
+          "show",
+          "branch",
+          "tag",
+          "remote",
+          "stash",
+          "reflog",
+          "describe",
+          "shortlog",
+          "blame",
+          "ls-files",
+          "ls-tree",
+          "cat-file",
+          "rev-parse",
+          "rev-list",
+          "merge-base",
+          "name-rev",
+          "for-each-ref",
+        ].includes(sub)
+      )
+        return false
+    }
+
+    if (["npm", "pnpm", "yarn", "bun"].includes(cmd) && tokens.length > 1) {
+      if (
+        ![
+          "list",
+          "ls",
+          "info",
+          "view",
+          "search",
+          "explain",
+          "fund",
+          "outdated",
+          "version",
+          "--version",
+          "--help",
+          "run",
+          "exec",
+        ].includes(tokens[1])
+      )
+        return false
+    }
+
+    if (cmd === "go" && tokens.length > 1) {
+      if (!["version", "env", "list", "doc", "help"].includes(tokens[1])) return false
+    }
+
+    if (cmd === "cargo" && tokens.length > 1) {
+      if (
+        ![
+          "version",
+          "help",
+          "search",
+          "doc",
+          "metadata",
+          "tree",
+          "verify-project",
+          "read-manifest",
+          "generate-lockfile",
+          "pkgid",
+        ].includes(tokens[1])
+      )
+        return false
+    }
+
+    // curl/wget are safe only if output is not piped to a shell
+    if (["curl", "wget"].includes(cmd) && /\|\s*(sh|bash|zsh)/.test(sourceText)) return false
+  }
+
+  return true
+}
+
 type Part = {
   type: string
   text: string
@@ -262,7 +517,13 @@ async function parse(command: string, ps: boolean) {
   return tree.rootNode
 }
 
-async function ask(ctx: Tool.Context, scan: Scan) {
+async function ask(ctx: Tool.Context, scan: Scan, root: Node, ps: boolean) {
+  // Auto-approve commands classified as safe (read-only, no dangerous patterns)
+  if (classify(root, ps)) {
+    log.info("auto-approved safe command", { command: source(root) })
+    return
+  }
+
   if (scan.dirs.size > 0) {
     const globs = Array.from(scan.dirs).map((dir) => {
       if (process.platform === "win32") return Filesystem.normalizePathPattern(path.join(dir, "*"))
@@ -481,7 +742,7 @@ export const BashTool = Tool.define("bash", async () => {
       const root = await parse(params.command, ps)
       const scan = await collect(root, cwd, ps, shell)
       if (!Instance.containsPath(cwd)) scan.dirs.add(cwd)
-      await ask(ctx, scan)
+      await ask(ctx, scan, root, ps)
 
       return run(
         {
