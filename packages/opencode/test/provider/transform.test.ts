@@ -1792,6 +1792,58 @@ describe("ProviderTransform.message - cache control on gateway", () => {
       },
     })
   })
+
+  test("google-vertex-anthropic applies cache control", () => {
+    const model = createModel({
+      providerID: "google-vertex-anthropic",
+      api: {
+        id: "google-vertex-anthropic",
+        url: "https://us-central1-aiplatform.googleapis.com",
+        npm: "@ai-sdk/google-vertex/anthropic",
+      },
+      id: "claude-sonnet-4@20250514",
+    })
+    const msgs = [
+      {
+        role: "system",
+        content: "You are a helpful assistant",
+      },
+      {
+        role: "user",
+        content: "Hello",
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {}) as any[]
+
+    expect(result[0].providerOptions).toEqual({
+      anthropic: {
+        cacheControl: {
+          type: "ephemeral",
+        },
+      },
+      openrouter: {
+        cacheControl: {
+          type: "ephemeral",
+        },
+      },
+      bedrock: {
+        cachePoint: {
+          type: "default",
+        },
+      },
+      openaiCompatible: {
+        cache_control: {
+          type: "ephemeral",
+        },
+      },
+      copilot: {
+        copilot_cache_control: {
+          type: "ephemeral",
+        },
+      },
+    })
+  })
 })
 
 describe("ProviderTransform.variants", () => {

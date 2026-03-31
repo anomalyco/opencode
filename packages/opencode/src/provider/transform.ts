@@ -280,6 +280,7 @@ export namespace ProviderTransform {
     msgs = normalizeMessages(msgs, model, options)
     if (
       (model.providerID === "anthropic" ||
+        model.providerID === "google-vertex-anthropic" ||
         model.api.id.includes("anthropic") ||
         model.api.id.includes("claude") ||
         model.id.includes("anthropic") ||
