@@ -14,10 +14,10 @@ import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 import { NotFoundError } from "@/storage/db"
-import { ProviderTransform } from "@/provider/transform"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Effect, Layer, ServiceMap } from "effect"
 import { makeRuntime } from "@/effect/run-service"
+import { isOverflow as overflow } from "./overflow"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -31,7 +31,6 @@ export namespace SessionCompaction {
     ),
   }
 
-  const COMPACTION_BUFFER = 20_000
   export const PRUNE_MINIMUM = 20_000
   export const PRUNE_PROTECT = 40_000
   const PRUNE_PROTECTED_TOOLS = ["skill"]
@@ -46,7 +45,6 @@ export namespace SessionCompaction {
       parentID: MessageID
       messages: MessageV2.WithParts[]
       sessionID: SessionID
-      abort: AbortSignal
       auto: boolean
       overflow?: boolean
     }) => Effect.Effect<"continue" | "stop">
@@ -64,7 +62,7 @@ export namespace SessionCompaction {
   export const layer: Layer.Layer<
     Service,
     never,
-    Bus.Service | Config.Service | Session.Service | Agent.Service | Plugin.Service
+    Bus.Service | Config.Service | Session.Service | Agent.Service | Plugin.Service | SessionProcessor.Service
   > = Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -73,26 +71,13 @@ export namespace SessionCompaction {
       const session = yield* Session.Service
       const agents = yield* Agent.Service
       const plugin = yield* Plugin.Service
+      const processors = yield* SessionProcessor.Service
 
       const isOverflow = Effect.fn("SessionCompaction.isOverflow")(function* (input: {
         tokens: MessageV2.Assistant["tokens"]
         model: Provider.Model
       }) {
-        const cfg = yield* config.get()
-        if (cfg.compaction?.auto === false) return false
-        const context = input.model.limit.context
-        if (context === 0) return false
-
-        const count =
-          input.tokens.total ||
-          input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
-
-        const reserved =
-          cfg.compaction?.reserved ?? Math.min(COMPACTION_BUFFER, ProviderTransform.maxOutputTokens(input.model))
-        const usable = input.model.limit.input
-          ? input.model.limit.input - reserved
-          : context - ProviderTransform.maxOutputTokens(input.model)
-        return count >= usable
+        return overflow({ cfg: yield* config.get(), tokens: input.tokens, model: input.model })
       })
 
       // goes backwards through parts until there are PRUNE_PROTECT tokens worth of tool
@@ -149,20 +134,28 @@ export namespace SessionCompaction {
         parentID: MessageID
         messages: MessageV2.WithParts[]
         sessionID: SessionID
-        abort: AbortSignal
         auto: boolean
         overflow?: boolean
       }) {
-        const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
+        const parent = input.messages.findLast((m) => m.info.id === input.parentID)
+        if (!parent || parent.info.role !== "user") {
+          throw new Error(`Compaction parent must be a user message: ${input.parentID}`)
+        }
+        const userMessage = parent.info
 
         let messages = input.messages
-        let replay: MessageV2.WithParts | undefined
+        let replay:
+          | {
+              info: MessageV2.User
+              parts: MessageV2.Part[]
+            }
+          | undefined
         if (input.overflow) {
           const idx = input.messages.findIndex((m) => m.info.id === input.parentID)
           for (let i = idx - 1; i >= 0; i--) {
             const msg = input.messages[i]
             if (msg.info.role === "user" && !msg.parts.some((p) => p.type === "compaction")) {
-              replay = msg
+              replay = { info: msg.info, parts: msg.parts }
               messages = input.messages.slice(0, i)
               break
             }
@@ -181,38 +174,6 @@ export namespace SessionCompaction {
             ? Provider.getModel(agent.model.providerID, agent.model.modelID)
             : Provider.getModel(userMessage.model.providerID, userMessage.model.modelID),
         )
-        const msg = (yield* session.updateMessage({
-          id: MessageID.ascending(),
-          role: "assistant",
-          parentID: input.parentID,
-          sessionID: input.sessionID,
-          mode: "compaction",
-          agent: "compaction",
-          variant: userMessage.variant,
-          summary: true,
-          path: {
-            cwd: Instance.directory,
-            root: Instance.worktree,
-          },
-          cost: 0,
-          tokens: {
-            output: 0,
-            input: 0,
-            reasoning: 0,
-            cache: { read: 0, write: 0 },
-          },
-          modelID: model.id,
-          providerID: model.providerID,
-          time: {
-            created: Date.now(),
-          },
-        })) as MessageV2.Assistant
-        const processor = SessionProcessor.create({
-          assistantMessage: msg,
-          sessionID: input.sessionID,
-          model,
-          abort: input.abort,
-        })
         // Allow plugins to inject context or replace compaction prompt.
         const compacting = yield* plugin.trigger(
           "experimental.session.compacting",
@@ -222,6 +183,7 @@ export namespace SessionCompaction {
         const defaultPrompt = `Provide a detailed prompt for continuing our conversation above.
 Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next.
 The summary that you construct will be used so that another agent can read it and continue the work.
+Do not call any tools. Respond only with the summary text.
 
 When constructing the summary, try to stick to this template:
 ---
@@ -251,11 +213,42 @@ When constructing the summary, try to stick to this template:
         const msgs = structuredClone(messages)
         yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
         const modelMessages = yield* Effect.promise(() => MessageV2.toModelMessages(msgs, model, { stripMedia: true }))
-        const result = yield* Effect.promise(() =>
-          processor.process({
+        const msg: MessageV2.Assistant = {
+          id: MessageID.ascending(),
+          role: "assistant",
+          parentID: input.parentID,
+          sessionID: input.sessionID,
+          mode: "compaction",
+          agent: "compaction",
+          variant: userMessage.variant,
+          summary: true,
+          path: {
+            cwd: Instance.directory,
+            root: Instance.worktree,
+          },
+          cost: 0,
+          tokens: {
+            output: 0,
+            input: 0,
+            reasoning: 0,
+            cache: { read: 0, write: 0 },
+          },
+          modelID: model.id,
+          providerID: model.providerID,
+          time: {
+            created: Date.now(),
+          },
+        }
+        yield* session.updateMessage(msg)
+        const processor = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: input.sessionID,
+          model,
+        })
+        const result = yield* processor
+          .process({
             user: userMessage,
             agent,
-            abort: input.abort,
             sessionID: input.sessionID,
             tools: {},
             system: [],
@@ -267,8 +260,8 @@ When constructing the summary, try to stick to this template:
               },
             ],
             model,
-          }),
-        )
+          })
+          .pipe(Effect.onInterrupt(() => processor.abort()))
 
         if (result === "compact") {
           processor.message.error = new MessageV2.ContextOverflowError({
@@ -283,7 +276,7 @@ When constructing the summary, try to stick to this template:
 
         if (result === "continue" && input.auto) {
           if (replay) {
-            const original = replay.info as MessageV2.User
+            const original = replay.info
             const replayMsg = yield* session.updateMessage({
               id: MessageID.ascending(),
               role: "user",
@@ -383,6 +376,7 @@ When constructing the summary, try to stick to this template:
     Effect.sync(() =>
       layer.pipe(
         Layer.provide(Session.defaultLayer),
+        Layer.provide(SessionProcessor.defaultLayer),
         Layer.provide(Agent.defaultLayer),
         Layer.provide(Plugin.defaultLayer),
         Layer.provide(Bus.layer),
@@ -401,16 +395,16 @@ When constructing the summary, try to stick to this template:
     return runPromise((svc) => svc.prune(input))
   }
 
-  export async function process(input: {
-    parentID: MessageID
-    messages: MessageV2.WithParts[]
-    sessionID: SessionID
-    abort: AbortSignal
-    auto: boolean
-    overflow?: boolean
-  }) {
-    return runPromise((svc) => svc.process(input))
-  }
+  export const process = fn(
+    z.object({
+      parentID: MessageID.zod,
+      messages: z.custom<MessageV2.WithParts[]>(),
+      sessionID: SessionID.zod,
+      auto: z.boolean(),
+      overflow: z.boolean().optional(),
+    }),
+    (input) => runPromise((svc) => svc.process(input)),
+  )
 
   export const create = fn(
     z.object({

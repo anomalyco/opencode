@@ -84,17 +84,27 @@ export default plugin
 - TUI shape is `default export { id?, tui }`; including `server` is rejected.
 - A single module cannot export both `server` and `tui`.
 - `tui` signature is `(api, options, meta) => Promise<void>`.
-- If package `exports` contains `./tui`, the loader resolves that entrypoint. Otherwise it uses the resolved package target.
+- If package `exports` contains `./tui`, the loader resolves that entrypoint.
+- If package `exports` exists, loader only resolves `./tui` or `./server`; it never falls back to `exports["."]`.
+- For npm package specs, TUI does not use `package.json` `main` as a fallback entry.
+- `package.json` `main` is only used for server plugin entrypoint resolution.
+- If a configured plugin has no target-specific entrypoint, it is skipped with a warning (not a load failure).
 - If a package supports both server and TUI, use separate files and package `exports` (`./server` and `./tui`) so each target resolves to a target-only module.
 - File/path plugins must export a non-empty `id`.
 - npm plugins may omit `id`; package `name` is used.
 - Runtime identity is the resolved plugin id. Later plugins with the same id are rejected, including collisions with internal plugin ids.
-- If a path spec points at a directory, that directory must have `package.json` with `main`.
+- If a path spec points at a directory, server loading can use `package.json` `main`.
+- TUI path loading never uses `package.json` `main`.
+- Legacy compatibility: path specs like `./plugin` can resolve to `./plugin/index.ts` (or `index.js`) when `package.json` is missing.
+- The `./plugin -> ./plugin/index.*` fallback applies to both server and TUI v1 loading.
 - There is no directory auto-discovery for TUI plugins; they must be listed in `tui.json`.
 
 ## Package manifest and install
 
-Package manifest is read from `package.json` field `oc-plugin`.
+Install target detection is inferred from `package.json` entrypoints:
+
+- `server` target when `exports["./server"]` exists or `main` is set.
+- `tui` target when `exports["./tui"]` exists.
 
 Example:
 
@@ -102,14 +112,20 @@ Example:
 {
   "name": "@acme/opencode-plugin",
   "type": "module",
-  "main": "./dist/index.js",
+  "main": "./dist/server.js",
+  "exports": {
+    "./server": {
+      "import": "./dist/server.js",
+      "config": { "custom": true }
+    },
+    "./tui": {
+      "import": "./dist/tui.js",
+      "config": { "compact": true }
+    }
+  },
   "engines": {
     "opencode": "^1.0.0"
-  },
-  "oc-plugin": [
-    ["server", { "custom": true }],
-    ["tui", { "compact": true }]
-  ]
+  }
 }
 ```
 
@@ -138,10 +154,16 @@ npm plugins can declare a version compatibility range in `package.json` using th
 - Local installs resolve target dir inside `patchPluginConfig`.
 - For local scope, path is `<worktree>/.opencode` only when VCS is git and `worktree !== "/"`; otherwise `<directory>/.opencode`.
 - Root-worktree fallback (`worktree === "/"` uses `<directory>/.opencode`) is covered by regression tests.
-- `patchPluginConfig` applies all declared manifest targets (`server` and/or `tui`) in one call.
+- `patchPluginConfig` applies all detected targets (`server` and/or `tui`) in one call.
 - `patchPluginConfig` returns structured result unions (`ok`, `code`, fields by error kind) instead of custom thrown errors.
+- `patchPluginConfig` serializes per-target config writes with `Flock.acquire(...)`.
+- `patchPluginConfig` uses targeted `jsonc-parser` edits, so existing JSONC comments are preserved when plugin entries are added or replaced.
+- npm plugin package installs are executed with `--ignore-scripts`, so package `install` / `postinstall` lifecycle scripts are not run.
+- `exports["./server"].config` and `exports["./tui"].config` can provide default plugin options written on first install.
 - Without `--force`, an already-configured npm package name is a no-op.
 - With `--force`, replacement matches by package name. If the existing row is `[spec, options]`, those tuple options are kept.
+- Explicit npm specs with a version suffix (for example `pkg@1.2.3`) are pinned. Runtime install requests that exact version and does not run stale/latest checks for newer registry versions.
+- Bare npm specs (`pkg`) are treated as `latest` and can refresh when the cached version is stale.
 - Tuple targets in `oc-plugin` provide default options written into config.
 - A package can target `server`, `tui`, or both.
 - If a package targets both, each target must still resolve to a separate target-only module. Do not export `{ server, tui }` from one module.
@@ -164,7 +186,7 @@ Top-level API groups exposed to `tui(api, options, meta)`:
 - `api.app.version`
 - `api.command.register(cb)` / `api.command.trigger(value)`
 - `api.route.register(routes)` / `api.route.navigate(name, params?)` / `api.route.current`
-- `api.ui.Dialog`, `DialogAlert`, `DialogConfirm`, `DialogPrompt`, `DialogSelect`, `ui.toast`, `ui.dialog`
+- `api.ui.Dialog`, `DialogAlert`, `DialogConfirm`, `DialogPrompt`, `DialogSelect`, `Prompt`, `ui.toast`, `ui.dialog`
 - `api.keybind.match`, `print`, `create`
 - `api.tuiConfig`
 - `api.kv.get`, `set`, `ready`
@@ -210,6 +232,7 @@ Command behavior:
 
 - `ui.Dialog` is the base dialog wrapper.
 - `ui.DialogAlert`, `ui.DialogConfirm`, `ui.DialogPrompt`, `ui.DialogSelect` are built-in dialog components.
+- `ui.Prompt` renders the same prompt component used by the host app.
 - `ui.toast(...)` shows a toast.
 - `ui.dialog` exposes the host dialog stack:
   - `replace(render, onClose?)`
@@ -266,7 +289,9 @@ Theme install behavior:
 
 - Relative theme paths are resolved from the plugin root.
 - Theme name is the JSON basename.
-- Install is skipped if that theme name already exists.
+- First install writes only when the destination file is missing.
+- If the theme name already exists, install is skipped unless plugin metadata state is `updated`.
+- On `updated`, host only rewrites themes previously tracked for that plugin and only when source `mtime`/`size` changed.
 - Local plugins persist installed themes under the local `.opencode/themes` area near the plugin config source.
 - Global plugins persist installed themes under the global `themes` dir.
 - Invalid or unreadable theme files are ignored.
@@ -277,6 +302,7 @@ Current host slot names:
 
 - `app`
 - `home_logo`
+- `home_prompt` with props `{ workspace_id? }`
 - `home_bottom`
 - `sidebar_title` with props `{ session_id, title, share_url? }`
 - `sidebar_content` with props `{ session_id }`
@@ -289,7 +315,7 @@ Slot notes:
 - `api.slots.register(plugin)` does not return an unregister function.
 - Returned ids are `pluginId`, `pluginId:1`, `pluginId:2`, and so on.
 - Plugin-provided `id` is not allowed.
-- The current host renders `home_logo` with `replace`, `sidebar_title` and `sidebar_footer` with `single_winner`, and `app`, `home_bottom`, and `sidebar_content` with the slot library default mode.
+- The current host renders `home_logo` and `home_prompt` with `replace`, `sidebar_title` and `sidebar_footer` with `single_winner`, and `app`, `home_bottom`, and `sidebar_content` with the slot library default mode.
 - Plugins cannot define new slot names in this branch.
 
 ### Plugin control and lifecycle
@@ -305,7 +331,6 @@ Slot notes:
 - `api.plugins.install(spec, { global? })` runs install -> manifest read -> config patch using the same helper flow as CLI install.
 - `api.plugins.install(...)` returns either `{ ok: false, message, missing? }` or `{ ok: true, dir, tui }`.
 - `api.plugins.install(...)` does not load plugins into the current session. Call `api.plugins.add(spec)` to load after install.
-- For packages that declare a tuple `tui` target in `oc-plugin`, `api.plugins.install(...)` stages those tuple options so a following `api.plugins.add(spec)` uses them.
 - If activation fails, the plugin can remain `enabled=true` and `active=false`.
 - `api.lifecycle.signal` is aborted before cleanup runs.
 - `api.lifecycle.onDispose(fn)` registers cleanup and returns an unregister function.
