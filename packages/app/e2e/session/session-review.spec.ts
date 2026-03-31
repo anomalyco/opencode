@@ -57,6 +57,18 @@ async function patch(sdk: ReturnType<typeof createSdk>, sessionID: string, patch
   await waitSessionIdle(sdk, sessionID, 120_000)
 }
 
+async function ready(sdk: ReturnType<typeof createSdk>, sessionID: string, total: number) {
+  await expect
+    .poll(
+      async () => {
+        const info = await sdk.session.get({ sessionID }).then((res) => res.data)
+        return info?.summary?.files ?? 0
+      },
+      { timeout: 60_000 },
+    )
+    .toBeGreaterThanOrEqual(total)
+}
+
 async function show(page: Parameters<typeof test>[0]["page"]) {
   const btn = page.getByRole("button", { name: "Toggle review" }).first()
   await expect(btn).toBeVisible()
@@ -247,16 +259,7 @@ test("review applies inline comment clicks without horizontal overflow", async (
 
     await withSession(sdk, `e2e review comment ${tag}`, async (session) => {
       await patch(sdk, session.id, seed([{ file, mark: tag }]))
-
-      await expect
-        .poll(
-          async () => {
-            const diff = await sdk.session.diff({ sessionID: session.id }).then((res) => res.data ?? [])
-            return diff.length
-          },
-          { timeout: 60_000 },
-        )
-        .toBe(1)
+      await ready(sdk, session.id, 1)
 
       await project.gotoSession(session.id)
       await show(page)
@@ -296,16 +299,7 @@ test("review file comments submit on click without clipping actions", async ({ p
 
     await withSession(sdk, `e2e review file comment ${tag}`, async (session) => {
       await patch(sdk, session.id, seed([{ file, mark: tag }]))
-
-      await expect
-        .poll(
-          async () => {
-            const diff = await sdk.session.diff({ sessionID: session.id }).then((res) => res.data ?? [])
-            return diff.length
-          },
-          { timeout: 60_000 },
-        )
-        .toBe(1)
+      await ready(sdk, session.id, 1)
 
       await project.gotoSession(session.id)
       await show(page)
