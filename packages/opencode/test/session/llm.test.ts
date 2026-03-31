@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test"
 import path from "path"
 import { tool, type ModelMessage } from "ai"
+import { Cause, Exit, Stream } from "effect"
 import z from "zod"
+import { makeRuntime } from "../../src/effect/run-service"
 import { LLM } from "../../src/session/llm"
 import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
@@ -109,7 +111,11 @@ type Capture = {
 
 const state = {
   server: null as ReturnType<typeof Bun.serve> | null,
-  queue: [] as Array<{ path: string; response: Response; resolve: (value: Capture) => void }>,
+  queue: [] as Array<{
+    path: string
+    response: Response | ((req: Request, capture: Capture) => Response)
+    resolve: (value: Capture) => void
+  }>,
 }
 
 function deferred<T>() {
@@ -124,6 +130,58 @@ function waitRequest(pathname: string, response: Response) {
   const pending = deferred<Capture>()
   state.queue.push({ path: pathname, response, resolve: pending.resolve })
   return pending.promise
+}
+
+function timeout(ms: number) {
+  return new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms)
+  })
+}
+
+function waitStreamingRequest(pathname: string) {
+  const request = deferred<Capture>()
+  const requestAborted = deferred<void>()
+  const responseCanceled = deferred<void>()
+  const encoder = new TextEncoder()
+
+  state.queue.push({
+    path: pathname,
+    resolve: request.resolve,
+    response(req: Request) {
+      req.signal.addEventListener("abort", () => requestAborted.resolve(), { once: true })
+
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(
+              encoder.encode(
+                [
+                  `data: ${JSON.stringify({
+                    id: "chatcmpl-abort",
+                    object: "chat.completion.chunk",
+                    choices: [{ delta: { role: "assistant" } }],
+                  })}`,
+                ].join("\n\n") + "\n\n",
+              ),
+            )
+          },
+          cancel() {
+            responseCanceled.resolve()
+          },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "text/event-stream" },
+        },
+      )
+    },
+  })
+
+  return {
+    request: request.promise,
+    requestAborted: requestAborted.promise,
+    responseCanceled: responseCanceled.promise,
+  }
 }
 
 beforeAll(() => {
@@ -143,7 +201,9 @@ beforeAll(() => {
         return new Response("not found", { status: 404 })
       }
 
-      return next.response
+      return typeof next.response === "function"
+        ? next.response(req, { url, headers: req.headers, body })
+        : next.response
     },
   })
 })
@@ -321,6 +381,162 @@ describe("session.llm.stream", () => {
 
         const reasoning = (body.reasoningEffort as string | undefined) ?? (body.reasoning_effort as string | undefined)
         expect(reasoning).toBe("high")
+      },
+    })
+  })
+
+  test("raw stream abort signal cancels provider response body promptly", async () => {
+    const server = state.server
+    if (!server) throw new Error("Server not initialized")
+
+    const providerID = "alibaba"
+    const modelID = "qwen-plus"
+    const fixture = await loadFixture(providerID, modelID)
+    const model = fixture.model
+    const pending = waitStreamingRequest("/chat/completions")
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: [providerID],
+            provider: {
+              [providerID]: {
+                options: {
+                  apiKey: "test-key",
+                  baseURL: `${server.url.origin}/v1`,
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await Provider.getModel(ProviderID.make(providerID), ModelID.make(model.id))
+        const sessionID = SessionID.make("session-test-raw-abort")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+        const user = {
+          id: MessageID.make("user-raw-abort"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderID.make(providerID), modelID: resolved.id },
+        } satisfies MessageV2.User
+
+        const ctrl = new AbortController()
+        const result = await LLM.stream({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          abort: ctrl.signal,
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+
+        const iter = result.fullStream[Symbol.asyncIterator]()
+        await pending.request
+        await iter.next()
+        ctrl.abort()
+
+        await Promise.race([pending.responseCanceled, timeout(500)])
+        await Promise.race([pending.requestAborted, timeout(500)]).catch(() => undefined)
+        await iter.return?.()
+      },
+    })
+  })
+
+  test("service stream cancellation cancels provider response body promptly", async () => {
+    const server = state.server
+    if (!server) throw new Error("Server not initialized")
+
+    const providerID = "alibaba"
+    const modelID = "qwen-plus"
+    const fixture = await loadFixture(providerID, modelID)
+    const model = fixture.model
+    const pending = waitStreamingRequest("/chat/completions")
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: [providerID],
+            provider: {
+              [providerID]: {
+                options: {
+                  apiKey: "test-key",
+                  baseURL: `${server.url.origin}/v1`,
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await Provider.getModel(ProviderID.make(providerID), ModelID.make(model.id))
+        const sessionID = SessionID.make("session-test-service-abort")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+        const user = {
+          id: MessageID.make("user-service-abort"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderID.make(providerID), modelID: resolved.id },
+        } satisfies MessageV2.User
+
+        const ctrl = new AbortController()
+        const { runPromiseExit } = makeRuntime(LLM.Service, LLM.defaultLayer)
+        const run = runPromiseExit(
+          (svc) =>
+            svc
+              .stream({
+                user,
+                sessionID,
+                model: resolved,
+                agent,
+                system: ["You are a helpful assistant."],
+                messages: [{ role: "user", content: "Hello" }],
+                tools: {},
+              })
+              .pipe(Stream.runDrain),
+          { signal: ctrl.signal },
+        )
+
+        await pending.request
+        ctrl.abort()
+
+        await Promise.race([pending.responseCanceled, timeout(500)])
+        const exit = await run
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit)) {
+          expect(Cause.hasInterrupts(exit.cause)).toBe(true)
+        }
+        await Promise.race([pending.requestAborted, timeout(500)]).catch(() => undefined)
       },
     })
   })
