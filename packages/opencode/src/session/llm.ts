@@ -297,7 +297,21 @@ export namespace LLM {
       topP: params.topP,
       topK: params.topK,
       providerOptions: ProviderTransform.providerOptions(input.model, params.options),
-      activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
+      activeTools: (() => {
+        const allTools = Object.keys(tools).filter((x) => x !== "invalid")
+        const toolLimit = input.model.limit.tools
+        if (!toolLimit || allTools.length <= toolLimit) return allTools
+        // Prioritize built-in tools over MCP tools when capping
+        const builtin = allTools.filter((k) => !k.includes("/") && !k.startsWith("mcp_"))
+        const mcp = allTools.filter((k) => k.includes("/") || k.startsWith("mcp_"))
+        const capped = [...builtin, ...mcp].slice(0, toolLimit)
+        l.warn("capping active tools", {
+          total: allTools.length,
+          limit: toolLimit,
+          capped: capped.length,
+        })
+        return capped
+      })(),
       tools,
       toolChoice: input.toolChoice,
       maxOutputTokens,

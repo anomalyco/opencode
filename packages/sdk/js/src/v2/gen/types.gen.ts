@@ -1711,6 +1711,7 @@ export type Model = {
     context: number
     input?: number
     output: number
+    tools?: number
   }
   status: "alpha" | "beta" | "deprecated" | "active"
   options: {

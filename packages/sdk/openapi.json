@@ -11594,6 +11594,9 @@
               },
               "output": {
                 "type": "number"
+              },
+              "tools": {
+                "type": "number"
               }
             },
             "required": ["context", "output"]
