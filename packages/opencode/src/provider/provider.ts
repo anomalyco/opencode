@@ -961,6 +961,78 @@ export namespace Provider {
     }
   }
 
+  /**
+   * Convert a config provider to database provider format
+   * Used for plugin providers registered via config() hook
+   */
+  export function fromConfigProvider(provider: z.infer<typeof Config.Provider>, providerID: ProviderID): Info {
+    return {
+      id: providerID,
+      source: "config",
+      name: provider.name ?? providerID,
+      env: provider.env ?? [],
+      options: provider.options ?? {},
+      models: mapValues(provider.models ?? {}, (model, modelID) => {
+        const existingModel = model as any
+        const parsedModel: Model = {
+          id: ModelID.make(model.id ?? modelID),
+          providerID,
+          api: {
+            id: model.id ?? modelID,
+            npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible",
+            url: model.provider?.api ?? provider.api ?? "",
+          },
+          name: model.name ?? modelID,
+          status: model.status ?? "active",
+          capabilities: {
+            temperature: model.temperature ?? false,
+            reasoning: model.reasoning ?? false,
+            attachment: model.attachment ?? false,
+            toolcall: model.tool_call ?? true,
+            input: {
+              text: model.modalities?.input?.includes("text") ?? true,
+              audio: model.modalities?.input?.includes("audio") ?? false,
+              image: model.modalities?.input?.includes("image") ?? false,
+              video: model.modalities?.input?.includes("video") ?? false,
+              pdf: model.modalities?.input?.includes("pdf") ?? false,
+            },
+            output: {
+              text: model.modalities?.output?.includes("text") ?? true,
+              audio: model.modalities?.output?.includes("audio") ?? false,
+              image: model.modalities?.output?.includes("image") ?? false,
+              video: model.modalities?.output?.includes("video") ?? false,
+              pdf: model.modalities?.output?.includes("pdf") ?? false,
+            },
+            interleaved: model.interleaved ?? false,
+          },
+          cost: {
+            input: model?.cost?.input ?? 0,
+            output: model?.cost?.output ?? 0,
+            cache: {
+              read: model?.cost?.cache_read ?? 0,
+              write: model?.cost?.cache_write ?? 0,
+            },
+          },
+          limit: {
+            context: model.limit?.context ?? 0,
+            output: model.limit?.output ?? 0,
+          },
+          options: model.options ?? {},
+          headers: model.headers ?? {},
+          family: model.family ?? "",
+          release_date: model.release_date ?? "",
+          variants: {},
+        }
+        const merged = mergeDeep(ProviderTransform.variants(parsedModel), model.variants ?? {})
+        parsedModel.variants = mapValues(
+          pickBy(merged, (v) => !v.disabled),
+          (v) => omit(v, ["disabled"]),
+        )
+        return parsedModel
+      }),
+    }
+  }
+
   const layer: Layer.Layer<Service, never, Config.Service | Auth.Service> = Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -1100,6 +1172,22 @@ export namespace Provider {
               parsed.models[modelID] = parsedModel
             }
             database[providerID] = parsed
+          }
+
+          // Check for plugin providers that were registered via config() hook
+          // This ensures plugin providers exist in database even if not in opencode.json
+          const loadedPlugins = yield* Effect.promise(() => Plugin.list())
+          for (const plugin of loadedPlugins) {
+            if (!plugin.auth) continue
+            const providerID = ProviderID.make(plugin.auth.provider)
+
+            // Check if plugin registered provider via config() hook
+            const configProvider = cfg.provider?.[providerID]
+            if (configProvider && !database[providerID]) {
+              // Add plugin provider to database so mergeProvider can find it
+              database[providerID] = fromConfigProvider(configProvider, providerID)
+              log.debug("Added plugin provider to database", { providerID })
+            }
           }
 
           // load env
