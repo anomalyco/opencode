@@ -1199,4 +1199,26 @@ describe("session.getUsage", () => {
       expect(result.tokens.total).toBe(1500)
     },
   )
+
+  test("extracts cache write tokens from vertex metadata key", () => {
+    const model = createModel({ context: 100_000, output: 32_000, npm: "@ai-sdk/google-vertex/anthropic" })
+    const result = Session.getUsage({
+      model,
+      usage: {
+        inputTokens: 1000,
+        outputTokens: 500,
+        totalTokens: 1500,
+        cachedInputTokens: 200,
+      },
+      metadata: {
+        vertex: {
+          cacheCreationInputTokens: 300,
+        },
+      },
+    })
+
+    expect(result.tokens.input).toBe(500)
+    expect(result.tokens.cache.read).toBe(200)
+    expect(result.tokens.cache.write).toBe(300)
+  })
 })

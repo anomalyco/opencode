@@ -53,32 +53,22 @@ export namespace LLM {
     Effect.gen(function* () {
       return Service.of({
         stream(input) {
-          const stream: Stream.Stream<Event, unknown> = Stream.scoped(
+          return Stream.scoped(
             Stream.unwrap(
               Effect.gen(function* () {
                 const ctrl = yield* Effect.acquireRelease(
                   Effect.sync(() => new AbortController()),
                   (ctrl) => Effect.sync(() => ctrl.abort()),
                 )
-                const queue = yield* Queue.unbounded<Event, unknown | Cause.Done>()
 
-                yield* Effect.promise(async () => {
-                  const result = await LLM.stream({ ...input, abort: ctrl.signal })
-                  for await (const event of result.fullStream) {
-                    if (!Queue.offerUnsafe(queue, event)) break
-                  }
-                  Queue.endUnsafe(queue)
-                }).pipe(
-                  Effect.catchCause((cause) => Effect.sync(() => void Queue.failCauseUnsafe(queue, cause))),
-                  Effect.onInterrupt(() => Effect.sync(() => ctrl.abort())),
-                  Effect.forkScoped,
+                const result = yield* Effect.promise(() => LLM.stream({ ...input, abort: ctrl.signal }))
+
+                return Stream.fromAsyncIterable(result.fullStream, (e) =>
+                  e instanceof Error ? e : new Error(String(e)),
                 )
-
-                return Stream.fromQueue(queue)
               }),
             ),
           )
-          return stream
         },
       })
     }),

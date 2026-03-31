@@ -21,8 +21,9 @@ jayair
 kitlangton
 kommander
 -opencode2026
+-opencodeengineer bot that spams issues
 r44vc0rp
 rekram1-node
+-robinmordasiewicz
 -spider-yamet clawdbot/llm psychosis, spam pinging the team
 thdxr
--OpenCodeEngineer bot that spams issues
