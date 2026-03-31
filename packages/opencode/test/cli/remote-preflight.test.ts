@@ -66,7 +66,7 @@ describe("remote preflight", () => {
     expect(tui).toHaveBeenCalledTimes(1)
   })
 
-  test("attach fails clearly when the remote directory does not match", async () => {
+  test("attach fails clearly when the remote directory does not match", () => {
     stopExit()
     mockAttach()
     const err = spyOn(UI, "error").mockImplementation(() => {})
@@ -87,7 +87,7 @@ describe("remote preflight", () => {
       }),
     )
 
-    await expect(
+    return expect(
       AttachCommand.handler({
         _: [],
         $0: "opencode",
@@ -104,7 +104,90 @@ describe("remote preflight", () => {
     expect(tui).not.toHaveBeenCalled()
   })
 
-  test("run --attach fails before creating a session when the remote is unreachable", async () => {
+  test("attach fails before starting tui when the remote session is missing", () => {
+    stopExit()
+    mockAttach()
+    const err = spyOn(UI, "error").mockImplementation(() => {})
+    const get = mock(async () => {
+      throw new Error("not found")
+    })
+    const tui = spyOn(App, "tui").mockResolvedValue()
+    spyOn(SDK, "createOpencodeClient").mockReturnValue(
+      client({
+        path: {
+          get: mock(async () => ({
+            data: {
+              home: "/home/me",
+              state: "/state",
+              config: "/config",
+              worktree: "/srv/app",
+              directory: "/srv/app",
+            },
+          })),
+        },
+        session: { get },
+      }),
+    )
+
+    return expect(
+      AttachCommand.handler({
+        _: [],
+        $0: "opencode",
+        url: "http://remote.test",
+        dir: "/srv/app",
+        continue: false,
+        session: "missing",
+        fork: false,
+        password: undefined,
+      }),
+    ).rejects.toBe(exit)
+
+    expect(get).toHaveBeenCalledWith({ sessionID: "missing" }, { throwOnError: true })
+    expect(err).toHaveBeenCalledWith(expect.stringContaining('Remote session "missing"'))
+    expect(tui).not.toHaveBeenCalled()
+  })
+
+  test("attach validates the remote session target before starting tui", async () => {
+    mockAttach()
+    const get = mock(async () => ({
+      data: {
+        id: "sess_123",
+      },
+    }))
+    const tui = spyOn(App, "tui").mockResolvedValue()
+    spyOn(SDK, "createOpencodeClient").mockReturnValue(
+      client({
+        path: {
+          get: mock(async () => ({
+            data: {
+              home: "/home/me",
+              state: "/state",
+              config: "/config",
+              worktree: "/srv/app",
+              directory: "/srv/app",
+            },
+          })),
+        },
+        session: { get },
+      }),
+    )
+
+    await AttachCommand.handler({
+      _: [],
+      $0: "opencode",
+      url: "http://remote.test",
+      dir: "/srv/app",
+      continue: false,
+      session: "sess_123",
+      fork: false,
+      password: undefined,
+    })
+
+    expect(get).toHaveBeenCalledWith({ sessionID: "sess_123" }, { throwOnError: true })
+    expect(tui).toHaveBeenCalledTimes(1)
+  })
+
+  test("run --attach fails before creating a session when the remote is unreachable", () => {
     stopExit()
     const err = spyOn(UI, "error").mockImplementation(() => {})
     const create = mock(async () => {
@@ -130,7 +213,7 @@ describe("remote preflight", () => {
     })
 
     try {
-      await expect(
+      return expect(
         RunCommand.handler({
           _: [],
           $0: "opencode",
@@ -160,5 +243,143 @@ describe("remote preflight", () => {
 
     expect(err).toHaveBeenCalled()
     expect(create).not.toHaveBeenCalled()
+  })
+
+  test("run --attach fails before creating a session when the remote continue target is missing", () => {
+    stopExit()
+    const err = spyOn(UI, "error").mockImplementation(() => {})
+    const create = mock(async () => {
+      throw new Error("session.create should not run")
+    })
+    const list = mock(async () => ({
+      data: [],
+    }))
+    spyOn(SDK, "createOpencodeClient").mockReturnValue(
+      client({
+        path: {
+          get: mock(async () => ({
+            data: {
+              home: "/home/me",
+              state: "/state",
+              config: "/config",
+              worktree: "/srv/app",
+              directory: "/srv/app",
+            },
+          })),
+        },
+        session: {
+          list,
+          create,
+        },
+      }),
+    )
+
+    const tty = Object.getOwnPropertyDescriptor(process.stdin, "isTTY")
+    Object.defineProperty(process.stdin, "isTTY", {
+      configurable: true,
+      value: true,
+    })
+
+    try {
+      return expect(
+        RunCommand.handler({
+          _: [],
+          $0: "opencode",
+          message: ["hi"],
+          command: undefined,
+          continue: true,
+          session: undefined,
+          fork: false,
+          share: false,
+          model: undefined,
+          agent: undefined,
+          format: "default",
+          file: undefined,
+          title: undefined,
+          attach: "http://remote.test",
+          password: undefined,
+          dir: "/srv/app",
+          port: undefined,
+          variant: undefined,
+          thinking: false,
+        }),
+      ).rejects.toBe(exit)
+    } finally {
+      if (tty) Object.defineProperty(process.stdin, "isTTY", tty)
+      else delete (process.stdin as { isTTY?: boolean }).isTTY
+    }
+
+    expect(list).toHaveBeenCalledWith({ roots: true }, { throwOnError: true })
+    expect(err).toHaveBeenCalledWith(expect.stringContaining("No remote session found to continue"))
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  test("run --attach fails before forking when the remote fork base is missing", () => {
+    stopExit()
+    const err = spyOn(UI, "error").mockImplementation(() => {})
+    const get = mock(async () => {
+      throw new Error("not found")
+    })
+    const fork = mock(async () => {
+      throw new Error("session.fork should not run")
+    })
+    spyOn(SDK, "createOpencodeClient").mockReturnValue(
+      client({
+        path: {
+          get: mock(async () => ({
+            data: {
+              home: "/home/me",
+              state: "/state",
+              config: "/config",
+              worktree: "/srv/app",
+              directory: "/srv/app",
+            },
+          })),
+        },
+        session: {
+          get,
+          fork,
+        },
+      }),
+    )
+
+    const tty = Object.getOwnPropertyDescriptor(process.stdin, "isTTY")
+    Object.defineProperty(process.stdin, "isTTY", {
+      configurable: true,
+      value: true,
+    })
+
+    try {
+      return expect(
+        RunCommand.handler({
+          _: [],
+          $0: "opencode",
+          message: ["hi"],
+          command: undefined,
+          continue: false,
+          session: "missing",
+          fork: true,
+          share: false,
+          model: undefined,
+          agent: undefined,
+          format: "default",
+          file: undefined,
+          title: undefined,
+          attach: "http://remote.test",
+          password: undefined,
+          dir: "/srv/app",
+          port: undefined,
+          variant: undefined,
+          thinking: false,
+        }),
+      ).rejects.toBe(exit)
+    } finally {
+      if (tty) Object.defineProperty(process.stdin, "isTTY", tty)
+      else delete (process.stdin as { isTTY?: boolean }).isTTY
+    }
+
+    expect(get).toHaveBeenCalledWith({ sessionID: "missing" }, { throwOnError: true })
+    expect(err).toHaveBeenCalledWith(expect.stringContaining('Remote fork base session "missing"'))
+    expect(fork).not.toHaveBeenCalled()
   })
 })

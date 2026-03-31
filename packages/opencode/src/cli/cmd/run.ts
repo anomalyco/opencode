@@ -27,7 +27,7 @@ import { SkillTool } from "../../tool/skill"
 import { BashTool } from "../../tool/bash"
 import { TodoWriteTool } from "../../tool/todo"
 import { Locale } from "../../util/locale"
-import { preflightRemote } from "./remote"
+import { preflightRemote, resolveRemoteTarget } from "./remote"
 
 type ToolProps<T extends Tool.Info> = {
   input: Tool.InferParameters<T>
@@ -379,8 +379,9 @@ export const RunCommand = cmd({
       return message.slice(0, 50) + (message.length > 50 ? "..." : "")
     }
 
-    async function session(sdk: OpencodeClient) {
-      const baseID = args.continue ? (await sdk.session.list()).data?.find((s) => !s.parentID)?.id : args.session
+    async function session(sdk: OpencodeClient, target?: { baseID?: string }) {
+      const baseID =
+        target?.baseID ?? (args.continue ? (await sdk.session.list()).data?.find((s) => !s.parentID)?.id : args.session)
 
       if (baseID && args.fork) {
         const forked = await sdk.session.fork({ sessionID: baseID })
@@ -409,7 +410,7 @@ export const RunCommand = cmd({
       }
     }
 
-    async function execute(sdk: OpencodeClient) {
+    async function execute(sdk: OpencodeClient, target?: { baseID?: string }) {
       function tool(part: ToolPart) {
         try {
           if (part.tool === "bash") return bash(props<typeof BashTool>(part))
@@ -620,7 +621,7 @@ export const RunCommand = cmd({
         return args.agent
       })()
 
-      const sessionID = await session(sdk)
+      const sessionID = await session(sdk, target)
       if (!sessionID) {
         UI.error("Session not found")
         process.exit(1)
@@ -669,7 +670,17 @@ export const RunCommand = cmd({
         UI.error(error instanceof Error ? error.message : String(error))
         process.exit(1)
       })
-      return await execute(sdk)
+      const target = await resolveRemoteTarget({
+        sdk,
+        directory,
+        continue: args.continue,
+        sessionID: args.session,
+        fork: args.fork,
+      }).catch((error) => {
+        UI.error(error instanceof Error ? error.message : String(error))
+        process.exit(1)
+      })
+      return await execute(sdk, target)
     }
 
     await bootstrap(process.cwd(), async () => {
