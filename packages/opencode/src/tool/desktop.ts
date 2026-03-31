@@ -8,12 +8,29 @@ import fs from "fs/promises"
 
 const log = Log.create({ service: "desktop-tool" })
 
+let nutCache: any = undefined
+let nutFailed = false
+let nutError: Error | undefined = undefined
+
 async function loadNutJs() {
+  if (nutCache) return nutCache
+  if (nutFailed) {
+    const details = nutError ? `: ${nutError.message}` : "."
+    throw new Error(`Desktop automation library not available${details} Please ensure @nut-tree-fork/nut-js is installed.`)
+  }
   try {
-    return await import("@nut-tree-fork/nut-js")
+    nutCache = await import("@nut-tree-fork/nut-js")
+    return nutCache
   } catch (error) {
-    log.error("Failed to load @nut-tree-fork/nut-js", { error })
-    throw new Error("Desktop automation library not available. Please ensure @nut-tree-fork/nut-js is installed.")
+    nutFailed = true
+    nutError = error instanceof Error ? error : new Error(String(error))
+    log.warn("@nut-tree-fork/nut-js not available, desktop tool disabled", { 
+      error: nutError.message,
+      code: (error as any)?.code,
+      platform: process.platform,
+      arch: process.arch 
+    })
+    throw new Error(`Desktop automation library not available: ${nutError.message}. Please ensure @nut-tree-fork/nut-js is installed.`)
   }
 }
 
@@ -24,8 +41,6 @@ async function tempFile() {
 }
 
 export const DesktopTool = Tool.define("desktop", async () => {
-  await loadNutJs()
-
   return {
     description: DESCRIPTION,
     parameters: z.object({
