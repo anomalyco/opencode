@@ -46,12 +46,12 @@ export namespace ToolRegistry {
     readonly tools: (
       model: { providerID: ProviderID; modelID: ModelID },
       agent?: Agent.Info,
-    ) => Effect.Effect<(Awaited<ReturnType<Tool.Info["init"]>> & { id: string })[]>
+    ) => Effect.Effect<(Tool.Def & { id: string })[]>
   }
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/ToolRegistry") {}
 
-  export const layer = Layer.effect(
+  export const layer: Layer.Layer<Service, never, Config.Service | Plugin.Service> = Layer.effect(
     Service,
     Effect.gen(function* () {
       const config = yield* Config.Service
@@ -174,7 +174,7 @@ export namespace ToolRegistry {
         })
         return yield* Effect.forEach(
           filtered,
-          Effect.fnUntraced(function* (tool) {
+          Effect.fnUntraced(function* (tool: Tool.Info) {
             using _ = log.time(tool.id)
             const next = yield* Effect.promise(() => tool.init({ agent }))
             const output = {
@@ -184,10 +184,11 @@ export namespace ToolRegistry {
             yield* plugin.trigger("tool.definition", { toolID: tool.id }, output)
             return {
               id: tool.id,
-              ...next,
               description: output.description,
               parameters: output.parameters,
-            } as Awaited<ReturnType<Tool.Info["init"]>> & { id: string }
+              execute: next.execute,
+              formatValidationError: next.formatValidationError,
+            }
           }),
           { concurrency: "unbounded" },
         )
@@ -217,7 +218,7 @@ export namespace ToolRegistry {
       modelID: ModelID
     },
     agent?: Agent.Info,
-  ): Promise<(Awaited<ReturnType<Tool.Info["init"]>> & { id: string })[]> {
+  ): Promise<(Tool.Def & { id: string })[]> {
     return runPromise((svc) => svc.tools(model, agent))
   }
 }
