@@ -11,6 +11,7 @@ import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { Permission } from "@/permission"
+import { CallTrace } from "@/session/call-trace"
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
@@ -46,6 +47,15 @@ export const TaskTool = Tool.define("task", async (ctx) => {
     parameters,
     async execute(params: z.infer<typeof parameters>, ctx) {
       const config = await Config.get()
+      const omoTraceID = await CallTrace.start({
+        type: "omo",
+        source: "OMO",
+        name: params.subagent_type,
+        component: "task.execute",
+        messageID: ctx.messageID,
+        agentName: params.subagent_type,
+        description: params.description,
+      })
 
       // Skip permission check when user explicitly invoked via @ or command subtask
       if (!ctx.extra?.bypassAgentCheck) {
@@ -152,6 +162,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         text,
         "</task_result>",
       ].join("\n")
+
+      await CallTrace.end(omoTraceID, {
+        status: "completed",
+        metadata: { sessionID: session.id },
+      })
 
       return {
         title: params.description,

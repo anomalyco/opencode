@@ -18,12 +18,31 @@ import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
 import type { Provider } from "@/provider/provider"
 import { Question } from "@/question"
+import { CallTrace } from "./call-trace"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
   const log = Log.create({ service: "session.processor" })
 
   export type Result = "compact" | "stop" | "continue"
+
+  function truncate(s: string | undefined, max: number): string | undefined {
+    if (!s) return undefined
+    if (s.length <= max) return s
+    return s.slice(0, max - 1) + "…"
+  }
+
+  function summarizeInput(obj: unknown): string | undefined {
+    if (!obj) return undefined
+    const s = typeof obj === "string" ? obj : JSON.stringify(obj)
+    return truncate(s, 80)
+  }
+
+  function summarizeOutput(obj: unknown): string | undefined {
+    if (!obj) return undefined
+    const s = typeof obj === "string" ? obj : JSON.stringify(obj)
+    return truncate(s, 120)
+  }
 
   export type Event = LLM.Event
 
@@ -46,6 +65,7 @@ export namespace SessionProcessor {
 
   interface ProcessorContext extends Input {
     toolcalls: Record<string, MessageV2.ToolPart>
+    callIdToTraceID: Record<string, string>
     shouldBreak: boolean
     snapshot: string | undefined
     blocked: boolean
@@ -89,6 +109,7 @@ export namespace SessionProcessor {
           sessionID: input.sessionID,
           model: input.model,
           toolcalls: {},
+          callIdToTraceID: {},
           shouldBreak: false,
           snapshot: undefined,
           blocked: false,
@@ -180,6 +201,21 @@ export namespace SessionProcessor {
                 metadata: value.providerMetadata,
               } satisfies MessageV2.ToolPart)
 
+              const toolTraceID = yield* Effect.promise(() =>
+                CallTrace.start({
+                  type: "tool",
+                  source: "OC",
+                  name: value.toolName,
+                  component: `tool.${value.toolName}`,
+                  messageID: ctx.assistantMessage.id,
+                  toolName: value.toolName,
+                  input: value.input,
+                  metadata: { callId: value.toolCallId },
+                  inputSummary: summarizeInput(value.input),
+                }),
+              )
+              ctx.callIdToTraceID[value.toolCallId] = toolTraceID
+
               const parts = yield* Effect.promise(() => MessageV2.parts(ctx.assistantMessage.id))
               const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
 
@@ -211,6 +247,21 @@ export namespace SessionProcessor {
             case "tool-result": {
               const match = ctx.toolcalls[value.toolCallId]
               if (!match || match.state.status !== "running") return
+
+              const toolTraceID = ctx.callIdToTraceID[value.toolCallId]
+              if (toolTraceID) {
+                const outputStr =
+                  typeof value.output.output === "string" ? value.output.output : JSON.stringify(value.output.output)
+                yield* Effect.promise(() =>
+                  CallTrace.end(toolTraceID, {
+                    status: "completed",
+                    output: outputStr,
+                    outputSummary: summarizeOutput(outputStr),
+                  }),
+                )
+                delete ctx.callIdToTraceID[value.toolCallId]
+              }
+
               yield* session.updatePart({
                 ...match,
                 state: {
@@ -230,6 +281,20 @@ export namespace SessionProcessor {
             case "tool-error": {
               const match = ctx.toolcalls[value.toolCallId]
               if (!match || match.state.status !== "running") return
+
+              const toolTraceID = ctx.callIdToTraceID[value.toolCallId]
+              if (toolTraceID) {
+                const errorMsg = value.error instanceof Error ? value.error.message : String(value.error)
+                yield* Effect.promise(() =>
+                  CallTrace.end(toolTraceID, {
+                    status: "error",
+                    metadata: { error: errorMsg },
+                    outputSummary: summarizeOutput(errorMsg),
+                  }),
+                )
+                delete ctx.callIdToTraceID[value.toolCallId]
+              }
+
               yield* session.updatePart({
                 ...match,
                 state: {
@@ -269,6 +334,19 @@ export namespace SessionProcessor {
               ctx.assistantMessage.finish = value.finishReason
               ctx.assistantMessage.cost += usage.cost
               ctx.assistantMessage.tokens = usage.tokens
+
+              const llmTrace = CallTrace.findByMessageID(ctx.assistantMessage.id, "llm")
+              if (llmTrace) {
+                yield* Effect.promise(() =>
+                  CallTrace.end(llmTrace.id, {
+                    status: "completed",
+                    tokens: usage.tokens,
+                    cost: usage.cost,
+                    outputSummary: summarizeOutput(ctx.currentText?.text),
+                  }),
+                )
+              }
+
               yield* session.updatePart({
                 id: PartID.ascending(),
                 reason: value.finishReason,
@@ -450,6 +528,21 @@ export namespace SessionProcessor {
               ctx.currentText = undefined
               ctx.reasoningMap = {}
               const stream = llm.stream(streamInput)
+
+              const toolNames = Object.keys(streamInput.tools)
+              yield* Effect.promise(() =>
+                CallTrace.start({
+                  type: "llm",
+                  source: "LLM",
+                  name: `${streamInput.model.providerID}/${streamInput.model.id}`,
+                  component: "llm.stream",
+                  messageID: ctx.assistantMessage.id,
+                  providerID: streamInput.model.providerID,
+                  modelID: streamInput.model.id,
+                  metadata: { agent: streamInput.agent.name, small: streamInput.small },
+                  inputSummary: `agent=${streamInput.agent.name}, ${streamInput.messages.length} msgs, tools=[${toolNames.join(",")}]`,
+                }),
+              )
 
               yield* stream.pipe(
                 Stream.tap((event) => handleEvent(event)),
