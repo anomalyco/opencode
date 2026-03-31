@@ -331,6 +331,117 @@ describe("plugin.loader.shared", () => {
     }
   })
 
+  test("loads npm server plugin from package server export without leading dot", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const mod = path.join(dir, "mods", "acme-plugin")
+        const dist = path.join(mod, "dist")
+        const mark = path.join(dir, "server-called.txt")
+        await fs.mkdir(dist, { recursive: true })
+
+        await Bun.write(
+          path.join(mod, "package.json"),
+          JSON.stringify(
+            {
+              name: "acme-plugin",
+              type: "module",
+              exports: {
+                ".": "./index.js",
+                "./server": "dist/server.js",
+              },
+            },
+            null,
+            2,
+          ),
+        )
+        await Bun.write(path.join(mod, "index.js"), 'import "./main-throws.js"\nexport default {}\n')
+        await Bun.write(path.join(mod, "main-throws.js"), 'throw new Error("main loaded")\n')
+        await Bun.write(
+          path.join(dist, "server.js"),
+          [
+            "export default {",
+            "  server: async () => {",
+            `    await Bun.write(${JSON.stringify(mark)}, "called")`,
+            "    return {}",
+            "  },",
+            "}",
+            "",
+          ].join("\n"),
+        )
+
+        await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ plugin: ["acme-plugin@1.0.0"] }, null, 2))
+
+        return {
+          mod,
+          mark,
+        }
+      },
+    })
+
+    const install = spyOn(BunProc, "install").mockResolvedValue(tmp.extra.mod)
+
+    try {
+      const errors = await errs(tmp.path)
+      expect(errors).toHaveLength(0)
+      expect(await Bun.file(tmp.extra.mark).text()).toBe("called")
+    } finally {
+      install.mockRestore()
+    }
+  })
+
+  test("loads npm server plugin from package main without leading dot", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const mod = path.join(dir, "mods", "acme-plugin")
+        const dist = path.join(mod, "dist")
+        const mark = path.join(dir, "main-called.txt")
+        await fs.mkdir(dist, { recursive: true })
+
+        await Bun.write(
+          path.join(mod, "package.json"),
+          JSON.stringify(
+            {
+              name: "acme-plugin",
+              type: "module",
+              main: "dist/index.js",
+            },
+            null,
+            2,
+          ),
+        )
+        await Bun.write(
+          path.join(dist, "index.js"),
+          [
+            "export default {",
+            "  server: async () => {",
+            `    await Bun.write(${JSON.stringify(mark)}, "called")`,
+            "    return {}",
+            "  },",
+            "}",
+            "",
+          ].join("\n"),
+        )
+
+        await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ plugin: ["acme-plugin@1.0.0"] }, null, 2))
+
+        return {
+          mod,
+          mark,
+        }
+      },
+    })
+
+    const install = spyOn(BunProc, "install").mockResolvedValue(tmp.extra.mod)
+
+    try {
+      const errors = await errs(tmp.path)
+      expect(errors).toHaveLength(0)
+      expect(await Bun.file(tmp.extra.mark).text()).toBe("called")
+    } finally {
+      install.mockRestore()
+    }
+  })
+
   test("does not use npm package exports dot for server entry", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
