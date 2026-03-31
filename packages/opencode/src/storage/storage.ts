@@ -6,7 +6,7 @@ import z from "zod"
 import { git } from "@/util/git"
 import { AppFileSystem } from "@/filesystem"
 import { makeRuntime } from "@/effect/run-service"
-import { Effect, Layer, ServiceMap, SynchronizedRef, TxReentrantLock } from "effect"
+import { Effect, Exit, Layer, Option, RcMap, Schema, ServiceMap, TxReentrantLock } from "effect"
 
 export namespace Storage {
   const log = Log.create({ service: "storage" })
@@ -22,42 +22,37 @@ export namespace Storage {
 
   export type Error = AppFileSystem.Error | InstanceType<typeof NotFoundError>
 
-  const RootFile = z
-    .object({
-      path: z
-        .object({
-          root: z.string().optional(),
-        })
-        .optional(),
-    })
-    .passthrough()
+  const RootFile = Schema.Struct({
+    path: Schema.optional(
+      Schema.Struct({
+        root: Schema.optional(Schema.String),
+      }),
+    ),
+  })
 
-  const SessionFile = z
-    .object({
-      id: z.string(),
-    })
-    .passthrough()
+  const SessionFile = Schema.Struct({
+    id: Schema.String,
+  })
 
-  const MessageFile = z
-    .object({
-      id: z.string(),
-    })
-    .passthrough()
+  const MessageFile = Schema.Struct({
+    id: Schema.String,
+  })
 
-  const DiffFile = z
-    .object({
-      additions: z.number(),
-      deletions: z.number(),
-    })
-    .passthrough()
+  const DiffFile = Schema.Struct({
+    additions: Schema.Number,
+    deletions: Schema.Number,
+  })
 
-  const SummaryFile = z
-    .object({
-      id: z.string(),
-      projectID: z.string(),
-      summary: z.object({ diffs: z.array(DiffFile) }),
-    })
-    .passthrough()
+  const SummaryFile = Schema.Struct({
+    id: Schema.String,
+    projectID: Schema.String,
+    summary: Schema.Struct({ diffs: Schema.Array(DiffFile) }),
+  })
+
+  const decodeRoot = Schema.decodeUnknownOption(RootFile)
+  const decodeSession = Schema.decodeUnknownOption(SessionFile)
+  const decodeMessage = Schema.decodeUnknownOption(MessageFile)
+  const decodeSummary = Schema.decodeUnknownOption(SummaryFile)
 
   export interface Interface {
     readonly remove: (key: string[]) => Effect.Effect<void, AppFileSystem.Error>
@@ -82,6 +77,11 @@ export namespace Storage {
     return false
   }
 
+  function parseMigration(text: string) {
+    const value = Number.parseInt(text, 10)
+    return Number.isNaN(value) ? 0 : value
+  }
+
   const MIGRATIONS: Migration[] = [
     Effect.fn("Storage.migration.1")(function* (dir: string, fs: AppFileSystem.Interface) {
       const project = path.resolve(dir, "../project")
@@ -102,8 +102,8 @@ export namespace Storage {
             cwd: full,
             absolute: true,
           })) {
-            const json = RootFile.parse(yield* fs.readJson(msgFile))
-            const root = json.path?.root
+            const json = decodeRoot(yield* fs.readJson(msgFile), { onExcessProperty: "preserve" })
+            const root = Option.isSome(json) ? json.value.path?.root : undefined
             if (!root) continue
             worktree = root
             break
@@ -148,27 +148,31 @@ export namespace Storage {
           })) {
             const dest = path.join(dir, "session", projectID, path.basename(sessionFile))
             log.info("copying", { sessionFile, dest })
-            const session = SessionFile.parse(yield* fs.readJson(sessionFile))
+            const session = yield* fs.readJson(sessionFile)
+            const info = decodeSession(session, { onExcessProperty: "preserve" })
             yield* fs.writeWithDirs(dest, JSON.stringify(session, null, 2))
-            log.info(`migrating messages for session ${session.id}`)
-            for (const msgFile of yield* fs.glob(`storage/session/message/${session.id}/*.json`, {
+            if (Option.isNone(info)) continue
+            log.info(`migrating messages for session ${info.value.id}`)
+            for (const msgFile of yield* fs.glob(`storage/session/message/${info.value.id}/*.json`, {
               cwd: full,
               absolute: true,
             })) {
-              const next = path.join(dir, "message", session.id, path.basename(msgFile))
+              const next = path.join(dir, "message", info.value.id, path.basename(msgFile))
               log.info("copying", {
                 msgFile,
                 dest: next,
               })
-              const message = MessageFile.parse(yield* fs.readJson(msgFile))
+              const message = yield* fs.readJson(msgFile)
+              const item = decodeMessage(message, { onExcessProperty: "preserve" })
               yield* fs.writeWithDirs(next, JSON.stringify(message, null, 2))
+              if (Option.isNone(item)) continue
 
-              log.info(`migrating parts for message ${message.id}`)
-              for (const partFile of yield* fs.glob(`storage/session/part/${session.id}/${message.id}/*.json`, {
+              log.info(`migrating parts for message ${item.value.id}`)
+              for (const partFile of yield* fs.glob(`storage/session/part/${info.value.id}/${item.value.id}/*.json`, {
                 cwd: full,
                 absolute: true,
               })) {
-                const out = path.join(dir, "part", message.id, path.basename(partFile))
+                const out = path.join(dir, "part", item.value.id, path.basename(partFile))
                 const part = yield* fs.readJson(partFile)
                 log.info("copying", {
                   partFile,
@@ -186,18 +190,19 @@ export namespace Storage {
         cwd: dir,
         absolute: true,
       })) {
-        const session = SummaryFile.safeParse(yield* fs.readJson(item))
-        if (!session.success) continue
-        const diffs = session.data.summary.diffs
+        const raw = yield* fs.readJson(item)
+        const session = decodeSummary(raw, { onExcessProperty: "preserve" })
+        if (Option.isNone(session)) continue
+        const diffs = session.value.summary.diffs
         yield* fs.writeWithDirs(
-          path.join(dir, "session_diff", session.data.id + ".json"),
+          path.join(dir, "session_diff", session.value.id + ".json"),
           JSON.stringify(diffs, null, 2),
         )
         yield* fs.writeWithDirs(
-          path.join(dir, "session", session.data.projectID, session.data.id + ".json"),
+          path.join(dir, "session", session.value.projectID, session.value.id + ".json"),
           JSON.stringify(
             {
-              ...session.data,
+              ...(raw as Record<string, unknown>),
               summary: {
                 additions: diffs.reduce((sum, x) => sum + x.additions, 0),
                 deletions: diffs.reduce((sum, x) => sum + x.deletions, 0),
@@ -215,43 +220,32 @@ export namespace Storage {
     Service,
     Effect.gen(function* () {
       const fs = yield* AppFileSystem.Service
-      const locks = yield* SynchronizedRef.make(new Map<string, TxReentrantLock.TxReentrantLock>())
+      const locks = yield* RcMap.make({
+        lookup: () => TxReentrantLock.make(),
+        idleTimeToLive: 0,
+      })
       const state = yield* Effect.cached(
         Effect.gen(function* () {
           const dir = path.join(Global.Path.data, "storage")
           const marker = path.join(dir, "migration")
           const migration = yield* fs.readFileString(marker).pipe(
-            Effect.map((x) => Number.parseInt(x, 10)),
+            Effect.map(parseMigration),
             Effect.catchIf(missing, () => Effect.succeed(0)),
             Effect.orElseSucceed(() => 0),
           )
           for (let i = migration; i < MIGRATIONS.length; i++) {
             log.info("running migration", { index: i })
             const step = MIGRATIONS[i]!
-            yield* step(dir, fs).pipe(
-              Effect.catchCause((cause) =>
-                Effect.sync(() => {
-                  log.error("failed to run migration", { index: i, cause })
-                }),
-              ),
-            )
+            const exit = yield* Effect.exit(step(dir, fs))
+            if (Exit.isFailure(exit)) {
+              log.error("failed to run migration", { index: i, cause: exit.cause })
+              break
+            }
             yield* fs.writeWithDirs(marker, String(i + 1))
           }
           return { dir }
         }),
       )
-
-      const lock = Effect.fnUntraced(function* (key: string) {
-        return yield* SynchronizedRef.modifyEffect(locks, (map) =>
-          Effect.gen(function* () {
-            const existing = map.get(key)
-            if (existing) return [existing, map]
-            const next = yield* TxReentrantLock.make()
-            map.set(key, next)
-            return [next, map]
-          }),
-        )
-      })
 
       const fail = (target: string): Effect.Effect<never, InstanceType<typeof NotFoundError>> =>
         Effect.fail(new NotFoundError({ message: `Resource not found: ${target}` }))
@@ -263,43 +257,50 @@ export namespace Storage {
         yield* fs.writeWithDirs(target, JSON.stringify(content, null, 2))
       })
 
-      const resolve = Effect.fnUntraced(function* (key: string[]) {
-        const dir = (yield* state).dir
-        const target = file(dir, key)
-        return [target, yield* lock(target)] as const
-      })
+      const withResolved = <A, E>(
+        key: string[],
+        fn: (target: string, rw: TxReentrantLock.TxReentrantLock) => Effect.Effect<A, E>,
+      ): Effect.Effect<A, E | AppFileSystem.Error> =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const target = file((yield* state).dir, key)
+            return yield* fn(target, yield* RcMap.get(locks, target))
+          }),
+        )
 
       const remove: Interface["remove"] = Effect.fn("Storage.remove")(function* (key: string[]) {
-        const [target, rw] = yield* resolve(key)
-        yield* TxReentrantLock.withWriteLock(rw, fs.remove(target).pipe(Effect.catchIf(missing, () => Effect.void)))
+        yield* withResolved(key, (target, rw) =>
+          TxReentrantLock.withWriteLock(rw, fs.remove(target).pipe(Effect.catchIf(missing, () => Effect.void))),
+        )
       })
 
       const read: Interface["read"] = <T>(key: string[]) =>
         Effect.gen(function* () {
-          const [target, rw] = yield* resolve(key)
-          const value = yield* TxReentrantLock.withReadLock(rw, wrap(target, fs.readJson(target)))
+          const value = yield* withResolved(key, (target, rw) =>
+            TxReentrantLock.withReadLock(rw, wrap(target, fs.readJson(target))),
+          )
           return value as T
         })
 
       const update: Interface["update"] = <T>(key: string[], fn: (draft: T) => void) =>
         Effect.gen(function* () {
-          const [target, rw] = yield* resolve(key)
-          const value = yield* TxReentrantLock.withWriteLock(
-            rw,
-            Effect.gen(function* () {
-              const content = yield* wrap(target, fs.readJson(target))
-              fn(content as T)
-              yield* writeJson(target, content)
-              return content
-            }),
+          const value = yield* withResolved(key, (target, rw) =>
+            TxReentrantLock.withWriteLock(
+              rw,
+              Effect.gen(function* () {
+                const content = yield* wrap(target, fs.readJson(target))
+                fn(content as T)
+                yield* writeJson(target, content)
+                return content
+              }),
+            ),
           )
           return value as T
         })
 
       const write: Interface["write"] = (key: string[], content: unknown) =>
         Effect.gen(function* () {
-          const [target, rw] = yield* resolve(key)
-          yield* TxReentrantLock.withWriteLock(rw, writeJson(target, content))
+          yield* withResolved(key, (target, rw) => TxReentrantLock.withWriteLock(rw, writeJson(target, content)))
         })
 
       const list: Interface["list"] = Effect.fn("Storage.list")(function* (prefix: string[]) {
