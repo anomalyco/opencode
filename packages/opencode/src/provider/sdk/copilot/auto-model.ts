@@ -52,17 +52,28 @@ function extractPromptText(options: LanguageModelV3CallOptions): string {
   return parts.join("\n")
 }
 
+/**
+ * Classify models by credit tier on GitHub Copilot:
+ * - Premium (3x credits): Opus, GPT-5.x flagship, Gemini Pro
+ * - Standard (1x credits): Sonnet, GPT-4.1, GPT-4o, Grok
+ * - Fast (0.25x credits): Mini, Haiku, Flash, Nano
+ */
 function classifyModel(model: ModelInfo): Tier {
-  const lower = model.id.toLowerCase()
-  if (/mini|haiku|flash|nano/.test(lower)) return "fast"
-  if (model.capabilities.reasoning && model.limit.output > 16384) return "reasoning"
+  const id = model.id.toLowerCase()
+  // Fast: cheap models (use word boundary to avoid matching "gemini")
+  if (/[-.]mini|haiku|flash|nano/.test(id)) return "fast"
+  // Reasoning: premium models (3x credits)
+  if (/opus/.test(id)) return "reasoning"
+  if (/^gpt-5(\.\d+)?$/.test(id)) return "reasoning"  // gpt-5, gpt-5.1, gpt-5.2, gpt-5.4
+  if (/^gpt-5\.\d+-codex(-max)?$/.test(id)) return "reasoning"  // gpt-5.1-codex, gpt-5.2-codex, gpt-5.1-codex-max
+  if (/gemini.*(pro|2\.5)/.test(id)) return "reasoning"
+  // Standard: everything else (1x credits)
   return "standard"
 }
 
 // Preferred model families for each tier, checked in order.
-// Uses the same priority as opencode's default sort, with opus preferred for reasoning.
-const REASONING_PREFERENCE = ["claude-opus-4", "gpt-5.4", "gpt-5.3", "gpt-5.2", "gpt-5.1", "gpt-5", "claude-sonnet-4"]
-const STANDARD_PREFERENCE = ["claude-sonnet-4", "gpt-4.1", "gpt-4o"]
+const REASONING_PREFERENCE = ["claude-opus-4", "gpt-5.4", "gpt-5.3", "gpt-5.2", "gpt-5.1", "gpt-5", "gemini-3-pro", "gemini-2.5-pro"]
+const STANDARD_PREFERENCE = ["claude-sonnet-4.6", "claude-sonnet-4.5", "claude-sonnet-4", "gpt-4.1", "gpt-4o", "grok"]
 const FAST_PREFERENCE = ["gpt-5-mini", "gpt-5.4-mini", "claude-haiku", "gemini-3-flash", "gemini-2.5-flash"]
 
 function sortByPreference(models: ModelInfo[], preference: string[]): ModelInfo[] {
