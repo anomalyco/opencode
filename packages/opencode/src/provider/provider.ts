@@ -967,8 +967,8 @@ export namespace Provider {
       const config = yield* Config.Service
       const auth = yield* Auth.Service
 
-      const cache = yield* InstanceState.make<State>(
-        () => Effect.gen(function* () {
+      const cache = yield* InstanceState.make<State>(() =>
+        Effect.gen(function* () {
           using _ = log.time("state")
           const cfg = yield* config.get()
           const modelsDev = yield* Effect.promise(() => ModelsDev.get())
@@ -1193,8 +1193,7 @@ export namespace Provider {
                 (providerID === ProviderID.openrouter && modelID === "openai/gpt-5-chat")
               )
                 delete provider.models[modelID]
-              if (model.status === "alpha" && !Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS)
-                delete provider.models[modelID]
+              if (model.status === "alpha" && !Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) delete provider.models[modelID]
               if (model.status === "deprecated") delete provider.models[modelID]
               if (
                 (configProvider?.blacklist && configProvider.blacklist.includes(modelID)) ||
@@ -1321,8 +1320,7 @@ export namespace Provider {
             if (options["timeout"] !== undefined && options["timeout"] !== null && options["timeout"] !== false)
               signals.push(AbortSignal.timeout(options["timeout"]))
 
-            const combined =
-              signals.length === 0 ? null : signals.length === 1 ? signals[0] : AbortSignal.any(signals)
+            const combined = signals.length === 0 ? null : signals.length === 1 ? signals[0] : AbortSignal.any(signals)
             if (combined) opts.signal = combined
 
             // Strip openai itemId metadata following what codex does
@@ -1543,7 +1541,10 @@ export namespace Provider {
     }),
   )
 
-  const { runPromise } = makeRuntime(Service, layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(Auth.defaultLayer)))
+  const { runPromise } = makeRuntime(
+    Service,
+    layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(Auth.defaultLayer)),
+  )
 
   export async function list() {
     return runPromise((svc) => svc.list())
