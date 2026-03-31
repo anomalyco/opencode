@@ -88,6 +88,7 @@ export default plugin
 - If package `exports` exists, loader only resolves `./tui` or `./server`; it never falls back to `exports["."]`.
 - For npm package specs, TUI does not use `package.json` `main` as a fallback entry.
 - `package.json` `main` is only used for server plugin entrypoint resolution.
+- If a configured plugin has no target-specific entrypoint, it is skipped with a warning (not a load failure).
 - If a package supports both server and TUI, use separate files and package `exports` (`./server` and `./tui`) so each target resolves to a target-only module.
 - File/path plugins must export a non-empty `id`.
 - npm plugins may omit `id`; package `name` is used.
@@ -100,7 +101,10 @@ export default plugin
 
 ## Package manifest and install
 
-Package manifest is read from `package.json` field `oc-plugin`.
+Install target detection is inferred from `package.json` entrypoints:
+
+- `server` target when `exports["./server"]` exists or `main` is set.
+- `tui` target when `exports["./tui"]` exists.
 
 Example:
 
@@ -108,14 +112,20 @@ Example:
 {
   "name": "@acme/opencode-plugin",
   "type": "module",
-  "main": "./dist/index.js",
+  "main": "./dist/server.js",
+  "exports": {
+    "./server": {
+      "import": "./dist/server.js",
+      "config": { "custom": true }
+    },
+    "./tui": {
+      "import": "./dist/tui.js",
+      "config": { "compact": true }
+    }
+  },
   "engines": {
     "opencode": "^1.0.0"
-  },
-  "oc-plugin": [
-    ["server", { "custom": true }],
-    ["tui", { "compact": true }]
-  ]
+  }
 }
 ```
 
@@ -144,11 +154,12 @@ npm plugins can declare a version compatibility range in `package.json` using th
 - Local installs resolve target dir inside `patchPluginConfig`.
 - For local scope, path is `<worktree>/.opencode` only when VCS is git and `worktree !== "/"`; otherwise `<directory>/.opencode`.
 - Root-worktree fallback (`worktree === "/"` uses `<directory>/.opencode`) is covered by regression tests.
-- `patchPluginConfig` applies all declared manifest targets (`server` and/or `tui`) in one call.
+- `patchPluginConfig` applies all detected targets (`server` and/or `tui`) in one call.
 - `patchPluginConfig` returns structured result unions (`ok`, `code`, fields by error kind) instead of custom thrown errors.
 - `patchPluginConfig` serializes per-target config writes with `Flock.acquire(...)`.
 - `patchPluginConfig` uses targeted `jsonc-parser` edits, so existing JSONC comments are preserved when plugin entries are added or replaced.
 - npm plugin package installs are executed with `--ignore-scripts`, so package `install` / `postinstall` lifecycle scripts are not run.
+- `exports["./server"].config` and `exports["./tui"].config` can provide default plugin options written on first install.
 - Without `--force`, an already-configured npm package name is a no-op.
 - With `--force`, replacement matches by package name. If the existing row is `[spec, options]`, those tuple options are kept.
 - Explicit npm specs with a version suffix (for example `pkg@1.2.3`) are pinned. Runtime install requests that exact version and does not run stale/latest checks for newer registry versions.
@@ -320,7 +331,6 @@ Slot notes:
 - `api.plugins.install(spec, { global? })` runs install -> manifest read -> config patch using the same helper flow as CLI install.
 - `api.plugins.install(...)` returns either `{ ok: false, message, missing? }` or `{ ok: true, dir, tui }`.
 - `api.plugins.install(...)` does not load plugins into the current session. Call `api.plugins.add(spec)` to load after install.
-- For packages that declare a tuple `tui` target in `oc-plugin`, `api.plugins.install(...)` stages those tuple options so a following `api.plugins.add(spec)` uses them.
 - If activation fails, the plugin can remain `enabled=true` and `active=false`.
 - `api.lifecycle.signal` is aborted before cleanup runs.
 - `api.lifecycle.onDispose(fn)` registers cleanup and returns an unregister function.
