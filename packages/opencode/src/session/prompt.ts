@@ -399,23 +399,42 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck },
           agent: input.agent.name,
           messages: input.messages,
-          metadata: (val) =>
-            Effect.runPromise(
-              Effect.gen(function* () {
-                const match = input.processor.partFromToolCall(options.toolCallId)
-                if (!match || match.state.status !== "running") return
-                yield* sessions.updatePart({
-                  ...match,
-                  state: {
-                    title: val.title,
-                    metadata: val.metadata,
-                    status: "running",
-                    input: args,
-                    time: { start: Date.now() },
-                  },
-                })
+          metadata: (val) => {
+            const match = input.processor.partFromToolCall(options.toolCallId)
+            log.info("resolveTools.metadata", {
+              toolCallId: options.toolCallId,
+              hasMatch: !!match,
+              matchStatus: match?.state.status,
+              hasSessionId: !!val.metadata?.sessionId,
+              ts: Date.now(),
+            })
+            // Allow metadata updates for pending/running parts; skip completed/error
+            if (!match || match.state.status === "completed" || match.state.status === "error") {
+              log.info("resolveTools.metadata.skip", {
+                toolCallId: options.toolCallId,
+                reason: !match ? "no-match" : "terminal-status",
+                ts: Date.now(),
+              })
+              return Promise.resolve()
+            }
+            return Effect.runPromise(
+              sessions.updatePart({
+                ...match,
+                state: {
+                  title: val.title,
+                  metadata: val.metadata,
+                  status: "running",
+                  input: args,
+                  time: { start: Date.now() },
+                },
               }),
-            ),
+            ).then(() => {
+              log.info("resolveTools.metadata.done", {
+                toolCallId: options.toolCallId,
+                ts: Date.now(),
+              })
+            })
+          },
           ask: (req) =>
             Effect.runPromise(
               permission.ask({
@@ -617,6 +636,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               extra: { bypassAgentCheck: true },
               messages: msgs,
               metadata(val: { title?: string; metadata?: Record<string, any> }) {
+                log.info("handleSubtask.metadata", {
+                  callID: part.callID,
+                  partStatus: part.state.status,
+                  hasSessionId: !!val.metadata?.sessionId,
+                  ts: Date.now(),
+                })
                 return Effect.runPromise(
                   Effect.gen(function* () {
                     part = yield* sessions.updatePart({
@@ -624,6 +649,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                       type: "tool",
                       state: { ...part.state, ...val },
                     } satisfies MessageV2.ToolPart)
+                    log.info("handleSubtask.metadata.done", {
+                      callID: part.callID,
+                      ts: Date.now(),
+                    })
                   }),
                 )
               },

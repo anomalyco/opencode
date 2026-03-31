@@ -11,6 +11,9 @@ import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { Permission } from "@/permission"
+import { Log } from "@/util/log"
+
+const log = Log.create({ service: "tool.task" })
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
@@ -110,12 +113,21 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         providerID: msg.info.providerID,
       }
 
+      log.info("task.metadata.call", {
+        callID: ctx.callID,
+        sessionId: session.id,
+        ts: Date.now(),
+      })
       ctx.metadata({
         title: params.description,
         metadata: {
           sessionId: session.id,
           model,
         },
+      })
+      log.info("task.metadata.call.returned", {
+        callID: ctx.callID,
+        ts: Date.now(),
       })
 
       const messageID = MessageID.ascending()
