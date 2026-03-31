@@ -17,6 +17,7 @@ import { NotFoundError } from "@/storage/db"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Effect, Layer, ServiceMap } from "effect"
 import { makeRuntime } from "@/effect/run-service"
+import { InstanceState } from "@/effect/instance-state"
 import { isOverflow as overflow } from "./overflow"
 
 export namespace SessionCompaction {
@@ -213,6 +214,7 @@ When constructing the summary, try to stick to this template:
         const msgs = structuredClone(messages)
         yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
         const modelMessages = yield* Effect.promise(() => MessageV2.toModelMessages(msgs, model, { stripMedia: true }))
+        const ctx = yield* InstanceState.context
         const msg: MessageV2.Assistant = {
           id: MessageID.ascending(),
           role: "assistant",
@@ -223,8 +225,8 @@ When constructing the summary, try to stick to this template:
           variant: userMessage.variant,
           summary: true,
           path: {
-            cwd: Instance.directory,
-            root: Instance.worktree,
+            cwd: ctx.directory,
+            root: ctx.worktree,
           },
           cost: 0,
           tokens: {

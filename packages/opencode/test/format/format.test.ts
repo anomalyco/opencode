@@ -10,7 +10,7 @@ import * as Formatter from "../../src/format/formatter"
 const it = testEffect(Layer.mergeAll(Format.defaultLayer, CrossSpawnSpawner.defaultLayer, NodeFileSystem.layer))
 
 describe("Format", () => {
-  it.effect("status() returns built-in formatters when no config overrides", () =>
+  it.live("status() returns built-in formatters when no config overrides", () =>
     provideTmpdirInstance(() =>
       Format.Service.use((fmt) =>
         Effect.gen(function* () {
@@ -32,7 +32,7 @@ describe("Format", () => {
     ),
   )
 
-  it.effect("status() returns empty list when formatter is disabled", () =>
+  it.live("status() returns empty list when formatter is disabled", () =>
     provideTmpdirInstance(
       () =>
         Format.Service.use((fmt) =>
@@ -44,7 +44,7 @@ describe("Format", () => {
     ),
   )
 
-  it.effect("status() excludes formatters marked as disabled in config", () =>
+  it.live("status() excludes formatters marked as disabled in config", () =>
     provideTmpdirInstance(
       () =>
         Format.Service.use((fmt) =>
@@ -64,11 +64,11 @@ describe("Format", () => {
     ),
   )
 
-  it.effect("service initializes without error", () =>
+  it.live("service initializes without error", () =>
     provideTmpdirInstance(() => Format.Service.use(() => Effect.void)),
   )
 
-  it.effect("status() initializes formatter state per directory", () =>
+  it.live("status() initializes formatter state per directory", () =>
     Effect.gen(function* () {
       const a = yield* provideTmpdirInstance(() => Format.Service.use((fmt) => fmt.status()), {
         config: { formatter: false },
@@ -80,7 +80,7 @@ describe("Format", () => {
     }),
   )
 
-  it.effect("runs enabled checks for matching formatters in parallel", () =>
+  it.live("runs enabled checks for matching formatters in parallel", () =>
     provideTmpdirInstance((path) =>
       Effect.gen(function* () {
         const file = `${path}/test.parallel`
@@ -144,7 +144,7 @@ describe("Format", () => {
     ),
   )
 
-  it.effect("runs matching formatters sequentially for the same file", () =>
+  it.live("runs matching formatters sequentially for the same file", () =>
     provideTmpdirInstance(
       (path) =>
         Effect.gen(function* () {
