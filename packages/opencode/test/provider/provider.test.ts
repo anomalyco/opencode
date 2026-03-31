@@ -2282,3 +2282,45 @@ test("cloudflare-ai-gateway forwards config metadata options", async () => {
     },
   })
 })
+
+test("custom provider using @ai-sdk/azure respects useCompletionUrls option", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            foundary: {
+              npm: "@ai-sdk/azure",
+              options: {
+                baseURL: "https://custom-domain/openai",
+                apiKey: "test-key",
+                apiVersion: "2025-04-01-preview",
+                useDeploymentBasedUrls: true,
+                useCompletionUrls: true,
+              },
+              models: {
+                "gpt-5.4": {
+                  name: "GPT-5.4",
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers[ProviderID.make("foundary")]).toBeDefined()
+      expect(providers[ProviderID.make("foundary")].options.useCompletionUrls).toBe(true)
+      const model = await Provider.getModel(ProviderID.make("foundary"), ModelID.make("gpt-5.4"))
+      expect(model).toBeDefined()
+      // Verify the model has the correct npm package
+      expect(model.api.npm).toBe("@ai-sdk/azure")
+    },
+  })
+})
