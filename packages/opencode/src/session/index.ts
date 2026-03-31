@@ -257,6 +257,9 @@ export namespace Session {
     const cacheReadInputTokens = safe(input.usage.cachedInputTokens ?? 0)
     const cacheWriteInputTokens = safe(
       (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
+        // google-vertex-anthropic returns metadata under "vertex" key
+        // (AnthropicMessagesLanguageModel custom provider key from 'vertex.anthropic.messages')
+        input.metadata?.["vertex"]?.["cacheCreationInputTokens"] ??
         // @ts-expect-error
         input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
         // @ts-expect-error
