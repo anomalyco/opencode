@@ -34,6 +34,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { DesktopTool } from "./desktop"
 import { BrowserTool } from "./browser"
+import { SwarmTool } from "./swarm"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -133,6 +134,7 @@ export namespace ToolRegistry {
           CodeSearchTool,
           DesktopTool,
           BrowserTool,
+          SwarmTool,
           SkillTool,
           ApplyPatchTool,
           ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
