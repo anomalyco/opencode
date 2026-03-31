@@ -45,9 +45,9 @@ export function pluginSource(spec: string): PluginSource {
 }
 
 function resolveExportPath(raw: string, dir: string) {
-  if (raw.startsWith("./") || raw.startsWith("../")) return path.resolve(dir, raw)
   if (raw.startsWith("file://")) return fileURLToPath(raw)
-  return raw
+  if (path.isAbsolute(raw)) return raw
+  return path.resolve(dir, raw)
 }
 
 function extractExportValue(value: unknown): string | undefined {
@@ -93,7 +93,7 @@ function resolvePackageEntrypoint(spec: string, kind: PluginKind, pkg: PluginPac
 
 function targetPath(target: string) {
   if (target.startsWith("file://")) return fileURLToPath(target)
-  if (path.isAbsolute(target) || /^[A-Za-z]:[\\/]/.test(target)) return target
+  if (path.isAbsolute(target)) return target
 }
 
 async function resolveDirectoryIndex(dir: string) {
