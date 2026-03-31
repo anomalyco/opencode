@@ -5,6 +5,7 @@ import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { TuiConfig } from "@/config/tui"
 import { Instance } from "@/project/instance"
 import { existsSync } from "fs"
+import { preflightRemote } from "../remote"
 
 export const AttachCommand = cmd({
   command: "attach <url>",
@@ -66,6 +67,14 @@ export const AttachCommand = cmd({
         const auth = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`
         return { Authorization: auth }
       })()
+      await preflightRemote({
+        url: args.url,
+        directory,
+        headers,
+      }).catch((error) => {
+        UI.error(error instanceof Error ? error.message : String(error))
+        process.exit(1)
+      })
       const config = await Instance.provide({
         directory: directory && existsSync(directory) ? directory : process.cwd(),
         fn: () => TuiConfig.get(),
