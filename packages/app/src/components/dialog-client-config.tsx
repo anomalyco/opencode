@@ -56,9 +56,7 @@ const EMPTY_CONFIG: ClientConfig = {
   reglesSpecifiques: "",
 }
 
-function configPath(directory: string) {
-  return `${directory.replace(/\/+$/, "")}/client_config.json`
-}
+const CONFIG_FILENAME = "client_config.json"
 
 export function DialogClientConfig(props: { directory: string; onDone?: () => void }) {
   const dialog = useDialog()
@@ -66,7 +64,10 @@ export function DialogClientConfig(props: { directory: string; onDone?: () => vo
 
   const [existing] = createResource(async () => {
     try {
-      const res = await sdk.client.file.read({ path: configPath(props.directory) })
+      const res = await sdk.client.file.read({
+        path: CONFIG_FILENAME,
+        directory: props.directory,
+      })
       if (res.data && res.data.type === "text" && res.data.content) {
         return JSON.parse(res.data.content) as ClientConfig
       }
@@ -124,7 +125,8 @@ export function DialogClientConfig(props: { directory: string; onDone?: () => vo
 
     try {
       const url = new URL("/file/upload", sdk.url)
-      url.searchParams.set("path", configPath(props.directory))
+      url.searchParams.set("path", CONFIG_FILENAME)
+      url.searchParams.set("directory", props.directory)
       const res = await fetch(url.toString(), { method: "POST", body: blob })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
     } catch (err: unknown) {
