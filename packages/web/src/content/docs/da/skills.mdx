@@ -25,7 +25,7 @@ OpenCode søger efter disse steder:
 ## Forstå opdagelsen
 
 For projektlokale stier går OpenCode op fra din nuværende arbejdskatalog, indtil den når git-arbejdstree.
-Den laster alle matchende `skills/*/SKILL.md` i `.opencode/` og alle matchende `.claude/skills/*/SKILL.md` eller `.agents/skills/*/SKILL.md` underveis.
+Den indlæser alle matchende `skills/*/SKILL.md` i `.opencode/` og alle matchende `.claude/skills/*/SKILL.md` eller `.agents/skills/*/SKILL.md` undervejs.
 
 Globale definitioner indlæses også fra `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` og `~/.agents/skills/*/SKILL.md`.
 
@@ -34,7 +34,7 @@ Globale definitioner indlæses også fra `~/.config/opencode/skills/*/SKILL.md`,
 ## Skriv frontmatter
 
 Hver `SKILL.md` må starte med YAML frontmatter.
-Bare disse feltene gjenkjennes:
+Kun disse felter genkendes:
 
 - `name` (påkrevd)
 - `description` (påkrevd)
@@ -42,7 +42,7 @@ Bare disse feltene gjenkjennes:
 - `compatibility` (valgfritt)
 - `metadata` (valgfritt, streng-til-streng kart)
 
-Ukjente frontmatter-felter ignoreres.
+Ukendte frontmatter-felter ignoreres.
 
 ---
 
@@ -54,7 +54,7 @@ Ukjente frontmatter-felter ignoreres.
 - Vær alfanumerisk med små bokstaver med skilletegn med enkelt bindestrek
 - Ikke begynne eller slutte med `-`
 - Ikke inneholde påfølgende `--`
-- Match katalognavnet som inneholder `SKILL.md`
+- Match katalognavnet, som indeholder `SKILL.md`
 
 Ekvivalent regulært uttrykk:
 
@@ -139,11 +139,11 @@ Kontroller hvilke færdigheder agenter har adgang til ved at bruge mønsterbaser
 }
 ```
 
-| Tilladelse | Adfærd                                     |
-| ---------- | ------------------------------------------ |
-| `allow`    | Færdigheder indlæses straks             |
+| Tilladelse | Adfærd                                      |
+| ---------- | ------------------------------------------  |
+| `allow`    | Færdigheder indlæses straks                 |
 | `deny`     | Færdighed skjult for agenten, adgang afvist |
-| `ask`      | Bruger bedt om godkjenning før lasting     |
+| `ask`      | Bruger bedt om godkjenning før lasting      |
 
 Mønstre støtter jokertegn: `internal-*` samsvarer med `internal-docs`, `internal-tools` osv.
 
