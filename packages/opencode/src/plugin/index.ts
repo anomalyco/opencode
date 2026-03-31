@@ -103,7 +103,7 @@ export namespace Plugin {
       const bus = yield* Bus.Service
       const config = yield* Config.Service
 
-      const cache = yield* InstanceState.make<State>(
+      const state = yield* InstanceState.make<State>(
         Effect.fn("Plugin.state")(function* (ctx) {
           const hooks: Hooks[] = []
 
@@ -271,7 +271,7 @@ export namespace Plugin {
         Output = Parameters<Required<Hooks>[Name]>[1],
       >(name: Name, input: Input, output: Output) {
         if (!name) return output
-        const state = yield* InstanceState.get(cache)
+        const state = yield* InstanceState.get(state)
         for (const hook of state.hooks) {
           const fn = hook[name] as any
           if (!fn) continue
@@ -281,12 +281,12 @@ export namespace Plugin {
       })
 
       const list = Effect.fn("Plugin.list")(function* () {
-        const state = yield* InstanceState.get(cache)
+        const state = yield* InstanceState.get(state)
         return state.hooks
       })
 
       const init = Effect.fn("Plugin.init")(function* () {
-        yield* InstanceState.get(cache)
+        yield* InstanceState.get(state)
       })
 
       return Service.of({ trigger, list, init })

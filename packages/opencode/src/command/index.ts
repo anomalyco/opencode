@@ -161,15 +161,15 @@ export namespace Command {
         }
       })
 
-      const cache = yield* InstanceState.make<State>((ctx) => init(ctx))
+      const state = yield* InstanceState.make<State>((ctx) => init(ctx))
 
       const get = Effect.fn("Command.get")(function* (name: string) {
-        const state = yield* InstanceState.get(cache)
+        const state = yield* InstanceState.get(state)
         return state.commands[name]
       })
 
       const list = Effect.fn("Command.list")(function* () {
-        const state = yield* InstanceState.get(cache)
+        const state = yield* InstanceState.get(state)
         return Object.values(state.commands)
       })
 

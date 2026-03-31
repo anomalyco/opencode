@@ -57,7 +57,7 @@ export namespace ToolRegistry {
       const config = yield* Config.Service
       const plugin = yield* Plugin.Service
 
-      const cache = yield* InstanceState.make<State>(
+      const state = yield* InstanceState.make<State>(
         Effect.fn("ToolRegistry.state")(function* (ctx) {
           const custom: Tool.Info[] = []
 
@@ -139,7 +139,7 @@ export namespace ToolRegistry {
       })
 
       const register = Effect.fn("ToolRegistry.register")(function* (tool: Tool.Info) {
-        const state = yield* InstanceState.get(cache)
+        const state = yield* InstanceState.get(state)
         const idx = state.custom.findIndex((t) => t.id === tool.id)
         if (idx >= 0) {
           state.custom.splice(idx, 1, tool)
@@ -149,7 +149,7 @@ export namespace ToolRegistry {
       })
 
       const ids = Effect.fn("ToolRegistry.ids")(function* () {
-        const state = yield* InstanceState.get(cache)
+        const state = yield* InstanceState.get(state)
         const tools = yield* all(state.custom)
         return tools.map((t) => t.id)
       })
@@ -158,7 +158,7 @@ export namespace ToolRegistry {
         model: { providerID: ProviderID; modelID: ModelID },
         agent?: Agent.Info,
       ) {
-        const state = yield* InstanceState.get(cache)
+        const state = yield* InstanceState.get(state)
         const allTools = yield* all(state.custom)
         const filtered = allTools.filter((tool) => {
           if (tool.id === "codesearch" || tool.id === "websearch") {
