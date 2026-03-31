@@ -273,7 +273,7 @@ jobs:
             echo "Updated existing issue #$issue"
           else
             # Ensure label exists
-            gh label create "$SYNC_ISSUE_LABEL" --description "Automated upstream sync status" --color "d93f0b" 2>/dev/null || true
+            gh label create "$SYNC_ISSUE_LABEL" --description "Automated upstream sync status" --color "d93f0b" --force || true
             gh issue create --title "$title" --body "$body" --label "$SYNC_ISSUE_LABEL"
             echo "Created new sync issue"
           fi
