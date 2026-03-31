@@ -19,8 +19,7 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { ModelID, ProviderID } from "../../src/provider/schema"
-import type { Provider } from "../../src/provider/provider"
-import * as ProviderModule from "../../src/provider/provider"
+import { Provider as ProviderSvc, type Provider } from "../../src/provider/provider"
 import * as SessionProcessorModule from "../../src/session/processor"
 import { Snapshot } from "../../src/snapshot"
 
@@ -162,10 +161,32 @@ function layer(result: "continue" | "compact") {
   )
 }
 
+const providerLayer = Layer.succeed(
+  ProviderSvc.Service,
+  ProviderSvc.Service.of({
+    list: Effect.fn("TestProvider.list")(() => Effect.promise(() => ProviderSvc.list())),
+    getProvider: Effect.fn("TestProvider.getProvider")((providerID) =>
+      Effect.promise(() => ProviderSvc.getProvider(providerID)),
+    ),
+    getModel: Effect.fn("TestProvider.getModel")((providerID, modelID) =>
+      Effect.promise(() => ProviderSvc.getModel(providerID, modelID)),
+    ),
+    getLanguage: Effect.fn("TestProvider.getLanguage")((model) => Effect.promise(() => ProviderSvc.getLanguage(model))),
+    closest: Effect.fn("TestProvider.closest")((providerID, query) =>
+      Effect.promise(() => ProviderSvc.closest(providerID, query)),
+    ),
+    getSmallModel: Effect.fn("TestProvider.getSmallModel")((providerID) =>
+      Effect.promise(() => ProviderSvc.getSmallModel(providerID)),
+    ),
+    defaultModel: Effect.fn("TestProvider.defaultModel")(() => Effect.promise(() => ProviderSvc.defaultModel())),
+  }),
+)
+
 function runtime(result: "continue" | "compact", plugin = Plugin.defaultLayer) {
   const bus = Bus.layer
   return ManagedRuntime.make(
     Layer.mergeAll(SessionCompaction.layer, bus).pipe(
+      Layer.provide(providerLayer),
       Layer.provide(Session.defaultLayer),
       Layer.provide(layer(result)),
       Layer.provide(Agent.defaultLayer),
@@ -204,6 +225,7 @@ function liveRuntime(layer: Layer.Layer<LLM.Service>) {
   const processor = SessionProcessorModule.SessionProcessor.layer
   return ManagedRuntime.make(
     Layer.mergeAll(SessionCompaction.layer.pipe(Layer.provide(processor)), processor, bus, status).pipe(
+      Layer.provide(providerLayer),
       Layer.provide(Session.defaultLayer),
       Layer.provide(Snapshot.defaultLayer),
       Layer.provide(layer),
@@ -544,7 +566,7 @@ describe("session.compaction.process", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        spyOn(ProviderModule.Provider, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
+        spyOn(ProviderSvc, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
 
         const session = await Session.create({})
         const msg = await user(session.id, "hello")
@@ -596,7 +618,7 @@ describe("session.compaction.process", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        spyOn(ProviderModule.Provider, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
+        spyOn(ProviderSvc, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
 
         const session = await Session.create({})
         const msg = await user(session.id, "hello")
@@ -636,7 +658,7 @@ describe("session.compaction.process", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        spyOn(ProviderModule.Provider, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
+        spyOn(ProviderSvc, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
 
         const session = await Session.create({})
         const msg = await user(session.id, "hello")
@@ -678,7 +700,7 @@ describe("session.compaction.process", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        spyOn(ProviderModule.Provider, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
+        spyOn(ProviderSvc, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
 
         const session = await Session.create({})
         await user(session.id, "root")
@@ -728,7 +750,7 @@ describe("session.compaction.process", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        spyOn(ProviderModule.Provider, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
+        spyOn(ProviderSvc, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
 
         const session = await Session.create({})
         await user(session.id, "earlier")
@@ -790,7 +812,7 @@ describe("session.compaction.process", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        spyOn(ProviderModule.Provider, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
+        spyOn(ProviderSvc, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
 
         const session = await Session.create({})
         const msg = await user(session.id, "hello")
@@ -866,7 +888,7 @@ describe("session.compaction.process", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        spyOn(ProviderModule.Provider, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
+        spyOn(ProviderSvc, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
 
         const session = await Session.create({})
         const msg = await user(session.id, "hello")
@@ -970,7 +992,7 @@ describe("session.compaction.process", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        spyOn(ProviderModule.Provider, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
+        spyOn(ProviderSvc, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
 
         const session = await Session.create({})
         const msg = await user(session.id, "hello")
