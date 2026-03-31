@@ -64,9 +64,7 @@ describe("Format", () => {
     ),
   )
 
-  it.live("service initializes without error", () =>
-    provideTmpdirInstance(() => Format.Service.use(() => Effect.void)),
-  )
+  it.live("service initializes without error", () => provideTmpdirInstance(() => Format.Service.use(() => Effect.void)))
 
   it.live("status() initializes formatter state per directory", () =>
     Effect.gen(function* () {

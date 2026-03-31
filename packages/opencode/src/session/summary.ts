@@ -123,8 +123,7 @@ export namespace SessionSummary {
         yield* bus.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: diffs })
 
         const messages = all.filter(
-          (m) =>
-            m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
+          (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
         )
         const target = messages.find((m) => m.info.id === input.messageID)
         if (!target || target.info.role !== "user") return
@@ -133,13 +132,10 @@ export namespace SessionSummary {
         yield* sessions.updateMessage(target.info)
       })
 
-      const diff = Effect.fn("SessionSummary.diff")(function* (input: {
-        sessionID: SessionID
-        messageID?: MessageID
-      }) {
-        const diffs = yield* storage.read<Snapshot.FileDiff[]>(["session_diff", input.sessionID]).pipe(
-          Effect.catch(() => Effect.succeed([] as Snapshot.FileDiff[])),
-        )
+      const diff = Effect.fn("SessionSummary.diff")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
+        const diffs = yield* storage
+          .read<Snapshot.FileDiff[]>(["session_diff", input.sessionID])
+          .pipe(Effect.catch(() => Effect.succeed([] as Snapshot.FileDiff[])))
         const next = diffs.map((item) => {
           const file = unquoteGitPath(item.file)
           if (file === item.file) return item

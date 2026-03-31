@@ -59,7 +59,14 @@ function tool(sessionID: string, messageID: string) {
     type: "tool" as const,
     tool: "bash",
     callID: "call-1",
-    state: { status: "completed" as const, input: {}, output: "done", title: "", metadata: {}, time: { start: 0, end: 1 } },
+    state: {
+      status: "completed" as const,
+      input: {},
+      output: "done",
+      title: "",
+      metadata: {},
+      time: { start: 0, end: 1 },
+    },
   })
 }
 
