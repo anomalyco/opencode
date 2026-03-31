@@ -5,10 +5,31 @@ export namespace Rpc {
 
   export function listen(rpc: Definition) {
     onmessage = async (evt) => {
-      const parsed = JSON.parse(evt.data)
-      if (parsed.type === "rpc.request") {
-        const result = await rpc[parsed.method](parsed.input)
-        postMessage(JSON.stringify({ type: "rpc.result", result, id: parsed.id }))
+      try {
+        const parsed = JSON.parse(evt.data)
+        if (parsed.type === "rpc.request") {
+          const method = rpc[parsed.method]
+          if (!method) {
+            postMessage(
+              JSON.stringify({
+                type: "rpc.error",
+                id: parsed.id,
+                error: `Unknown method: ${parsed.method}`,
+              }),
+            )
+            return
+          }
+          const result = await method(parsed.input)
+          postMessage(JSON.stringify({ type: "rpc.result", result, id: parsed.id }))
+        }
+      } catch (e) {
+        // Send error response for JSON parse errors or method execution failures
+        postMessage(
+          JSON.stringify({
+            type: "rpc.error",
+            error: e instanceof Error ? e.message : String(e),
+          }),
+        )
       }
     }
   }

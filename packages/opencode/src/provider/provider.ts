@@ -1372,7 +1372,14 @@ export namespace Provider {
 
           const mod = await import(installedPath)
 
-          const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
+          const createKey = Object.keys(mod).find((key) => key.startsWith("create"))
+          if (!createKey) {
+            throw new InitError(
+              { providerID: model.providerID },
+              { cause: new Error(`No create function found in module ${installedPath}`) },
+            )
+          }
+          const fn = mod[createKey]
           const loaded = fn({
             name: model.providerID,
             ...options,

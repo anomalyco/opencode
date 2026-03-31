@@ -49,6 +49,9 @@ if (version !== CACHE_VERSION) {
         }),
       ),
     )
-  } catch (e) {}
+  } catch (e) {
+    // Log cache cleanup failure but continue - non-critical operation
+    console.warn("Failed to clean cache directory:", e)
+  }
   await Filesystem.write(path.join(Global.Path.cache, "version"), CACHE_VERSION)
 }
