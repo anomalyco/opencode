@@ -12,7 +12,7 @@ FROM alpine:3.21 AS dev
 
 RUN apk add --no-cache git ca-certificates libstdc++ libgcc
 
-COPY --from=build /app/packages/opencode/dist/opencode-linux-x64-baseline /usr/local/bin/opencode
+COPY --from=build /app/packages/opencode/dist/opencode-linux-x64/bin/opencode /usr/local/bin/opencode
 
 RUN adduser -D -u 1000 -h /home/jovyan jovyan
 ENV HOME=/home/jovyan
