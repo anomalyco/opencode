@@ -32,6 +32,7 @@ import { pathToFileURL } from "url"
 import { Effect, Layer, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
+import { SwarmTool } from "./swarm"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -129,6 +130,7 @@ export namespace ToolRegistry {
           TodoWriteTool,
           WebSearchTool,
           CodeSearchTool,
+          SwarmTool,
           SkillTool,
           ApplyPatchTool,
           ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),

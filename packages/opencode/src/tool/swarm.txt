@@ -1,0 +1,35 @@
+Spawn multiple sub-agents in parallel using Bun's native workers for concurrent task execution. Each sub-agent runs independently in a separate worker thread, enabling parallel processing across multiple files, directories, or tasks.
+
+Use this tool when you need to:
+- Execute multiple independent tasks simultaneously for faster completion
+- Process multiple files or directories in parallel
+- Run independent sub-agents that don't share state or have sequential dependencies
+- Perform parallel research across different areas of a codebase
+
+IMPORTANT: Tasks should be independent with no shared state or sequential dependencies. The sub-agents run in complete isolation and cannot communicate with each other.
+
+Parameters:
+- tasks: Array of task definitions, each with:
+  - description: Short 3-5 word description of the task
+  - prompt: Full task instructions for the sub-agent
+  - subagent_type: Type of specialized agent to use (e.g., "explore", "general")
+
+Example usage:
+```json
+{
+  "tasks": [
+    {
+      "description": "Find auth patterns",
+      "prompt": "Search the codebase for authentication middleware implementations in src/api/",
+      "subagent_type": "explore"
+    },
+    {
+      "description": "Find error patterns", 
+      "prompt": "Search for error handling patterns and custom Error classes",
+      "subagent_type": "explore"
+    }
+  ]
+}
+```
+
+Results are returned as an array with each sub-agent's output, indexed by task order.

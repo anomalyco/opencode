@@ -1074,6 +1074,13 @@ export namespace Config {
             .positive()
             .optional()
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
+          swarm_concurrency: z
+            .number()
+            .int()
+            .positive()
+            .max(10)
+            .optional()
+            .describe("Maximum number of concurrent sub-agents to spawn in a single swarm call"),
         })
         .optional(),
     })
