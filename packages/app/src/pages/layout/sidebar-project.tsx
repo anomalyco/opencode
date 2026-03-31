@@ -121,6 +121,7 @@ const ProjectRow = (props: {
         <ContextMenu.Trigger
           as="button"
           type="button"
+          data-project={base64Encode(props.project.worktree)}
           classList={{
             "flex items-center gap-2 px-4 py-2 w-full text-left transition-colors": true,
             "hover:bg-surface-base-hover": true,
