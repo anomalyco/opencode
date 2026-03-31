@@ -14,6 +14,9 @@ interface MockClientState {
   listToolsError: string
   listPromptsShouldFail: boolean
   listResourcesShouldFail: boolean
+  supportsSubscriptions: boolean
+  subscribeCalls: string[]
+  unsubscribeCalls: string[]
   prompts: Array<{ name: string; description?: string }>
   resources: Array<{ name: string; uri: string; description?: string }>
   closed: boolean
@@ -42,6 +45,9 @@ function getOrCreateClientState(name?: string): MockClientState {
       listToolsError: "listTools failed",
       listPromptsShouldFail: false,
       listResourcesShouldFail: false,
+      supportsSubscriptions: false,
+      subscribeCalls: [],
+      unsubscribeCalls: [],
       prompts: [],
       resources: [],
       closed: false,
@@ -133,6 +139,11 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
       this._state?.notificationHandlers.set(schema, handler)
     }
 
+    getServerCapabilities() {
+      if (!this._state?.supportsSubscriptions) return {}
+      return { resources: { subscribe: true } }
+    }
+
     async listTools() {
       if (this._state) this._state.listToolsCalls++
       if (this._state?.listToolsShouldFail) {
@@ -159,6 +170,14 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
         throw new Error("listResources failed")
       }
       return { resources: this._state?.resources ?? [] }
+    }
+
+    async subscribeResource(input: { uri: string }) {
+      this._state?.subscribeCalls.push(input.uri)
+    }
+
+    async unsubscribeResource(input: { uri: string }) {
+      this._state?.unsubscribeCalls.push(input.uri)
     }
 
     async close() {
@@ -595,6 +614,45 @@ test(
 )
 
 test(
+  "service exposes subscribe, unsubscribe, and subscriptions for resource updates",
+  withInstance(
+    {
+      "sub-server": {
+        type: "local",
+        command: ["echo", "test"],
+      },
+    },
+    (mcp) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "sub-server"
+        const serverState = getOrCreateClientState("sub-server")
+        serverState.supportsSubscriptions = true
+
+        expect(typeof mcp.subscribe).toBe("function")
+        expect(typeof mcp.unsubscribe).toBe("function")
+        expect(typeof mcp.subscriptions).toBe("function")
+
+        yield* mcp.add("sub-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        const subscribe = mcp.subscribe
+        const unsubscribe = mcp.unsubscribe
+        const subscriptions = mcp.subscriptions
+
+        expect(yield* subscribe("sub-server", "file:///notes.md")).toBe(true)
+        expect(yield* subscriptions()).toEqual({ "sub-server": ["file:///notes.md"] })
+        expect(yield* unsubscribe("sub-server", "file:///notes.md")).toBe(true)
+        expect(yield* subscriptions()).toEqual({})
+
+        expect(serverState.subscribeCalls).toEqual(["file:///notes.md"])
+        expect(serverState.unsubscribeCalls).toEqual(["file:///notes.md"])
+      }),
+  ),
+)
+
+test(
   "prompts() skips disconnected servers",
   withInstance(
     {
@@ -659,10 +717,10 @@ test(
 test(
   "tools() returns empty when no MCP servers are configured",
   withInstance({}, (mcp) =>
-    Effect.gen(function* () {
-      const tools = yield* mcp.tools()
-      expect(Object.keys(tools).length).toBe(0)
-    }),
+    mcp.tools().pipe(
+      Effect.tap((tools) => Effect.sync(() => expect(Object.keys(tools).length).toBe(0))),
+      Effect.asVoid,
+    ),
   ),
 )
 
@@ -720,13 +778,15 @@ test("McpOAuthCallback.cancelPending is keyed by mcpName but pendingAuths uses o
 
   // The callback should still be pending because cancelPending looked up
   // "my-mcp-server" in a map keyed by "abc123hexstate"
+  let resolved = false
   let rejected = false
-  callbackPromise.then(() => {}).catch(() => (rejected = true))
+  callbackPromise.then(() => (resolved = true)).catch(() => (rejected = true))
 
   // Give it a tick
   await new Promise((r) => setTimeout(r, 50))
 
   // cancelPending("my-mcp-server") should have rejected the pending callback
+  expect(resolved).toBe(false)
   expect(rejected).toBe(true)
 
   await McpOAuthCallback.stop()

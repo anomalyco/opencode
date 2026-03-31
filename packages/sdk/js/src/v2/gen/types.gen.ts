@@ -30,6 +30,8 @@ export type Event =
   | EventTuiSessionSelect
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
+  | EventMcpResourceUpdated
+  | EventMcpResourceListChanged
   | EventCommandExecuted
   | EventProjectUpdated
   | EventVcsBranchUpdated
@@ -803,6 +805,8 @@ export type GlobalEvent = {
     | EventTuiSessionSelect
     | EventMcpToolsChanged
     | EventMcpBrowserOpenFailed
+    | EventMcpResourceUpdated
+    | EventMcpResourceListChanged
     | EventCommandExecuted
     | EventProjectUpdated
     | EventVcsBranchUpdated
@@ -2507,6 +2511,23 @@ export type EventMcpBrowserOpenFailed = {
   properties: {
     mcpName: string
     url: string
+  }
+}
+
+export type EventMcpResourceUpdated = {
+  id: string
+  type: "mcp.resource.updated"
+  properties: {
+    server: string
+    uri: string
+  }
+}
+
+export type EventMcpResourceListChanged = {
+  id: string
+  type: "mcp.resource.list.changed"
+  properties: {
+    server: string
   }
 }
 

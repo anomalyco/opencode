@@ -7,6 +7,8 @@ import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
 import {
   CallToolResultSchema,
   ToolSchema,
+  ResourceListChangedNotificationSchema,
+  ResourceUpdatedNotificationSchema,
   type Tool as MCPToolDef,
   ToolListChangedNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js"
@@ -69,6 +71,21 @@ export const BrowserOpenFailed = BusEvent.define(
   Schema.Struct({
     mcpName: Schema.String,
     url: Schema.String,
+  }),
+)
+
+export const ResourceUpdated = BusEvent.define(
+  "mcp.resource.updated",
+  Schema.Struct({
+    server: Schema.String,
+    uri: Schema.String,
+  }),
+)
+
+export const ResourceListChanged = BusEvent.define(
+  "mcp.resource.list.changed",
+  Schema.Struct({
+    server: Schema.String,
   }),
 )
 
@@ -226,6 +243,10 @@ function fetchFromClient<T extends { name: string }>(
   )
 }
 
+function supportsSubscriptions(client: MCPClient) {
+  return client.getServerCapabilities()?.resources?.subscribe === true
+}
+
 interface CreateResult {
   mcpClient?: MCPClient
   status: Status
@@ -244,6 +265,7 @@ interface State {
   status: Record<string, Status>
   clients: Record<string, MCPClient>
   defs: Record<string, MCPToolDef[]>
+  subscriptions: Map<string, Set<string>>
 }
 
 export interface Interface {
@@ -264,6 +286,9 @@ export interface Interface {
     clientName: string,
     resourceUri: string,
   ) => Effect.Effect<Awaited<ReturnType<MCPClient["readResource"]>> | undefined>
+  readonly subscribe: (clientName: string, uri: string) => Effect.Effect<boolean>
+  readonly unsubscribe: (clientName: string, uri: string) => Effect.Effect<boolean>
+  readonly subscriptions: () => Effect.Effect<Record<string, string[]>>
   readonly startAuth: (mcpName: string) => Effect.Effect<{ authorizationUrl: string; oauthState: string }>
   readonly authenticate: (mcpName: string) => Effect.Effect<Status>
   readonly finishAuth: (mcpName: string, authorizationCode: string) => Effect.Effect<Status>
@@ -519,6 +544,19 @@ export const layer = Layer.effect(
         s.defs[name] = listed
         await bridge.promise(bus.publish(ToolsChanged, { server: name }).pipe(Effect.ignore))
       })
+      client.setNotificationHandler(ResourceUpdatedNotificationSchema, async (msg) => {
+        log.info("resource updated notification received", {
+          server: name,
+          uri: msg.params.uri,
+        })
+        if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
+        await bridge.promise(bus.publish(ResourceUpdated, { server: name, uri: msg.params.uri }).pipe(Effect.ignore))
+      })
+      client.setNotificationHandler(ResourceListChangedNotificationSchema, async () => {
+        log.info("resource list changed notification received", { server: name })
+        if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
+        await bridge.promise(bus.publish(ResourceListChanged, { server: name }).pipe(Effect.ignore))
+      })
     }
 
     const state = yield* InstanceState.make<State>(
@@ -530,6 +568,7 @@ export const layer = Layer.effect(
           status: {},
           clients: {},
           defs: {},
+          subscriptions: new Map(),
         }
 
         yield* Effect.forEach(
@@ -754,10 +793,91 @@ export const layer = Layer.effect(
       })
     })
 
+    const subscribe = Effect.fn("MCP.subscribe")(function* (clientName: string, uri: string) {
+      const s = yield* InstanceState.get(state)
+      const client = s.clients[clientName]
+      if (!client) {
+        log.warn("client not found for subscription", { clientName })
+        return false
+      }
+
+      if (!supportsSubscriptions(client)) {
+        log.debug("server does not support resource subscriptions", { clientName })
+        return false
+      }
+
+      if (s.subscriptions.get(clientName)?.has(uri)) return true
+
+      return yield* Effect.tryPromise({
+        try: () => client.subscribeResource({ uri }),
+        catch: (e) => {
+          log.error("failed to subscribe to resource", {
+            clientName,
+            uri,
+            error: e instanceof Error ? e.message : String(e),
+          })
+          return e
+        },
+      }).pipe(
+        Effect.map(() => {
+          if (!s.subscriptions.has(clientName)) s.subscriptions.set(clientName, new Set())
+          s.subscriptions.get(clientName)?.add(uri)
+          log.info("subscribed to resource", { clientName, uri })
+          return true
+        }),
+        Effect.orElseSucceed(() => false),
+      )
+    })
+
+    const unsubscribe = Effect.fn("MCP.unsubscribe")(function* (clientName: string, uri: string) {
+      const s = yield* InstanceState.get(state)
+      const client = s.clients[clientName]
+      s.subscriptions.get(clientName)?.delete(uri)
+
+      if (!client) {
+        log.warn("client not found for unsubscription", { clientName })
+        return false
+      }
+
+      if (!supportsSubscriptions(client)) return true
+
+      return yield* Effect.tryPromise({
+        try: () => client.unsubscribeResource({ uri }),
+        catch: (e) => {
+          log.error("failed to unsubscribe from resource", {
+            clientName,
+            uri,
+            error: e instanceof Error ? e.message : String(e),
+          })
+          return e
+        },
+      }).pipe(
+        Effect.map(() => {
+          log.info("unsubscribed from resource", { clientName, uri })
+          return true
+        }),
+        Effect.orElseSucceed(() => false),
+      )
+    })
+
+    const subscriptionsList = Effect.fn("MCP.subscriptions")(function* () {
+      const s = yield* InstanceState.get(state)
+      return Object.fromEntries(
+        [...s.subscriptions].filter(([, uris]) => uris.size > 0).map(([server, uris]) => [server, [...uris]]),
+      )
+    })
+
     const readResource = Effect.fn("MCP.readResource")(function* (clientName: string, resourceUri: string) {
-      return yield* withClient(clientName, (client) => client.readResource({ uri: resourceUri }), "readResource", {
-        resourceUri,
-      })
+      const result = yield* withClient(
+        clientName,
+        (client) => client.readResource({ uri: resourceUri }),
+        "readResource",
+        {
+          resourceUri,
+        },
+      )
+      if (result) yield* subscribe(clientName, resourceUri)
+      return result
     })
 
     const getMcpConfig = Effect.fnUntraced(function* (mcpName: string) {
@@ -943,6 +1063,9 @@ export const layer = Layer.effect(
       disconnect,
       getPrompt,
       readResource,
+      subscribe,
+      unsubscribe,
+      subscriptions: subscriptionsList,
       startAuth,
       authenticate,
       finishAuth,

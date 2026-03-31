@@ -882,6 +882,60 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     return render({ params: route.data.data })
   })
 
+  sdk.event.on("event", (evt) => {
+    if (evt.payload.type === "mcp.resource.updated") {
+      toast.show({
+        title: "Resource Updated",
+        message: `${evt.payload.properties.uri} (${evt.payload.properties.server})`,
+        variant: "info",
+        duration: 5000,
+      })
+
+      // If autoprompt is enabled for this server, trigger AI with updated resource info
+      const mcp = sync.data.config.mcp?.[evt.payload.properties.server]
+      if (mcp && typeof mcp === "object" && "autoprompt" in mcp && mcp.autoprompt) {
+        const prompt = {
+          system: `An MCP resource has been updated. Resource URI: "${evt.payload.properties.uri}" from server "${evt.payload.properties.server}". Read the resource to review the latest content and take appropriate action.`,
+          parts: [
+            {
+              type: "text" as const,
+              text: `Resource updated: ${evt.payload.properties.uri} (${evt.payload.properties.server})`,
+            },
+          ],
+        }
+        if (route.data.type === "session") {
+          const status = sync.data.session_status?.[route.data.sessionID]
+          if (!status || status.type === "idle") {
+            sdk.client.session
+              .promptAsync({ sessionID: route.data.sessionID, ...prompt })
+              .catch((e) => console.error("failed to trigger AI for resource update", e))
+          }
+          return
+        }
+        sdk.client.session
+          .create({})
+          .then((res) => {
+            const id = res.data?.id
+            if (!id) return
+            route.navigate({ type: "session", sessionID: id })
+            sdk.client.session
+              .promptAsync({ sessionID: id, ...prompt })
+              .catch((e) => console.error("failed to trigger AI for resource update", e))
+          })
+          .catch((e) => console.error("failed to create session for resource update", e))
+      }
+      return
+    }
+
+    if (evt.payload.type === "mcp.resource.list.changed") {
+      toast.show({
+        title: "MCP Resources Changed",
+        message: `Server "${evt.payload.properties.server}" resource list updated`,
+        variant: "info",
+        duration: 3000,
+      })
+    }
+  })
   return (
     <box
       width={dimensions().width}

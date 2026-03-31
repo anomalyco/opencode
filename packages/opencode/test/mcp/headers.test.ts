@@ -52,6 +52,10 @@ const { WithInstance } = await import("../../src/project/with-instance")
 const { tmpdir } = await import("../fixture/fixture")
 const service = MCP.Service as unknown as Effect.Effect<MCPNS.Interface, never, never>
 
+function targetCalls() {
+  return transportCalls.filter((call) => call.url === "https://example.com/mcp")
+}
+
 test("headers are passed to transports when oauth is enabled (default)", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
@@ -95,9 +99,10 @@ test("headers are passed to transports when oauth is enabled (default)", async (
       )
 
       // Both transports should have been created with headers
-      expect(transportCalls.length).toBeGreaterThanOrEqual(1)
+      const calls = targetCalls()
+      expect(calls.length).toBeGreaterThanOrEqual(1)
 
-      for (const call of transportCalls) {
+      for (const call of calls) {
         expect(call.options.requestInit).toBeDefined()
         expect(call.options.requestInit?.headers).toEqual({
           Authorization: "Bearer test-token",
@@ -134,9 +139,10 @@ test("headers are passed to transports when oauth is explicitly disabled", async
         }),
       )
 
-      expect(transportCalls.length).toBeGreaterThanOrEqual(1)
+      const calls = targetCalls()
+      expect(calls.length).toBeGreaterThanOrEqual(1)
 
-      for (const call of transportCalls) {
+      for (const call of calls) {
         expect(call.options.requestInit).toBeDefined()
         expect(call.options.requestInit?.headers).toEqual({
           Authorization: "Bearer test-token",
@@ -168,9 +174,10 @@ test("no requestInit when headers are not provided", async () => {
         }),
       )
 
-      expect(transportCalls.length).toBeGreaterThanOrEqual(1)
+      const calls = targetCalls()
+      expect(calls.length).toBeGreaterThanOrEqual(1)
 
-      for (const call of transportCalls) {
+      for (const call of calls) {
         // No headers means requestInit should be undefined
         expect(call.options.requestInit).toBeUndefined()
       }

@@ -16,6 +16,12 @@ export const Local = Schema.Struct({
   timeout: Schema.optional(PositiveInt).annotate({
     description: "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.",
   }),
+  subscriptions: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+    description: "Resource URIs to automatically subscribe to for update notifications",
+  }),
+  autoprompt: Schema.optional(Schema.Boolean).annotate({
+    description: "Automatically prompt the AI when a subscribed resource is updated. Defaults to false.",
+  }),
 })
   .annotate({ identifier: "McpLocalConfig" })
   .pipe(withStatics((s) => ({ zod: zod(s) })))
@@ -51,6 +57,12 @@ export const Remote = Schema.Struct({
   }),
   timeout: Schema.optional(PositiveInt).annotate({
     description: "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.",
+  }),
+  subscriptions: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+    description: "Resource URIs to automatically subscribe to for update notifications",
+  }),
+  autoprompt: Schema.optional(Schema.Boolean).annotate({
+    description: "Automatically prompt the AI when a subscribed resource is updated. Defaults to false.",
   }),
 })
   .annotate({ identifier: "McpRemoteConfig" })
