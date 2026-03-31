@@ -31,7 +31,7 @@ export const SidebarContent = (props: {
   onOpenSettings: () => void
   helpLabel: Accessor<string>
   onOpenHelp: () => void
-  renderPanel: () => JSX.Element
+  renderPanel?: () => JSX.Element
 }): JSX.Element => {
   const placement = () => (props.mobile ? "bottom" : "right")
 
