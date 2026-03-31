@@ -4,6 +4,7 @@ import { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
 import { Config } from "@/config/config"
 import { MemoryExtractor } from "@/memory/extractor"
+import { MemoryFile } from "@/memory/memory-file"
 import { Permission } from "@/permission"
 import { Plugin } from "@/plugin"
 import { Snapshot } from "@/snapshot"
@@ -423,6 +424,16 @@ export namespace SessionProcessor {
           }
           ctx.assistantMessage.time.completed = Date.now()
           yield* session.updateMessage(ctx.assistantMessage)
+
+          // Update MEMORY.md from extracted memories (best-effort)
+          try {
+            const cfg = yield* config.get()
+            if (cfg.memory?.enabled !== false && cfg.memory?.auto_extract !== false) {
+              yield* Effect.promise(() => MemoryFile.updateMemoryFile(Instance.directory))
+            }
+          } catch {
+            // Memory file update is best-effort
+          }
         })
 
         const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {
