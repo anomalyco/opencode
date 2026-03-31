@@ -154,6 +154,21 @@ export namespace SessionCompaction {
           const idx = input.messages.findIndex((m) => m.info.id === input.parentID)
           for (let i = idx - 1; i >= 0; i--) {
             const msg = input.messages[i]
+            // Prefer splitting on finished assistant turns so the summary
+            // covers all tool interactions (e.g. question-tool responses)
+            // that happened after the last user message.  The parent user
+            // message is replayed so the main loop can continue.
+            if (msg.info.role === "assistant" && msg.info.finish && !msg.info.summary) {
+              const pid = msg.info.parentID
+              const parent = input.messages.find(
+                (m) => m.info.role === "user" && m.info.id === pid,
+              )
+              if (parent && parent.info.role === "user" && !parent.parts.some((p) => p.type === "compaction")) {
+                replay = { info: parent.info, parts: parent.parts }
+                messages = input.messages.slice(0, i + 1)
+                break
+              }
+            }
             if (msg.info.role === "user" && !msg.parts.some((p) => p.type === "compaction")) {
               replay = { info: msg.info, parts: msg.parts }
               messages = input.messages.slice(0, i)

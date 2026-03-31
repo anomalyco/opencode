@@ -723,6 +723,108 @@ describe("session.compaction.process", () => {
     })
   })
 
+  test("splits on assistant turn boundary to preserve tool interactions", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        spyOn(ProviderModule.Provider, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
+
+        const session = await Session.create({})
+        // Simulate a session where the user sends one message and the
+        // model runs several turns (e.g. via question-tool interactions)
+        // before overflow.  The summary should include completed assistant
+        // turns so that their tool interactions are preserved.
+        const first = await user(session.id, "initial request")
+        await assistant(session.id, first.id, tmp.path)
+        await assistant(session.id, first.id, tmp.path)
+        // Compaction trigger — no user messages between the assistant
+        // turns and here.
+        const trigger = await user(session.id, "trigger")
+
+        const rt = runtime("continue")
+        try {
+          const msgs = await Session.messages({ sessionID: session.id })
+          const result = await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: trigger.id,
+                messages: msgs,
+                sessionID: session.id,
+                auto: true,
+                overflow: true,
+              }),
+            ),
+          )
+
+          const all = await Session.messages({ sessionID: session.id })
+          const last = all.at(-1)
+
+          expect(result).toBe("continue")
+          expect(last?.info.role).toBe("user")
+          // The replay should be "initial request" (the parent of the
+          // assistant turn used as the split boundary).
+          if (last?.parts[0]?.type === "text") {
+            expect(last.parts[0].text).toContain("initial request")
+          }
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("prefers assistant boundary over earlier user message", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        spyOn(ProviderModule.Provider, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
+
+        const session = await Session.create({})
+        // user → assistant → user → assistant(tool interactions) → overflow
+        // The summary should include the second assistant's tool work,
+        // not discard it by splitting at the second user message.
+        const first = await user(session.id, "root")
+        await assistant(session.id, first.id, tmp.path)
+        const second = await user(session.id, "follow-up")
+        await assistant(session.id, second.id, tmp.path)
+        await assistant(session.id, second.id, tmp.path)
+        const trigger = await user(session.id, "trigger")
+
+        const rt = runtime("continue")
+        try {
+          const msgs = await Session.messages({ sessionID: session.id })
+          const result = await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: trigger.id,
+                messages: msgs,
+                sessionID: session.id,
+                auto: true,
+                overflow: true,
+              }),
+            ),
+          )
+
+          const all = await Session.messages({ sessionID: session.id })
+          const last = all.at(-1)
+
+          expect(result).toBe("continue")
+          expect(last?.info.role).toBe("user")
+          // Should replay "follow-up" (parent of the last completed
+          // assistant turn), preserving assistant tool interactions in
+          // the summary.
+          if (last?.parts[0]?.type === "text") {
+            expect(last.parts[0].text).toContain("follow-up")
+          }
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
   test("falls back to overflow guidance when no replayable turn exists", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
