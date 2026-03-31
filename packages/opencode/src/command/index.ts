@@ -10,6 +10,7 @@ import { Skill } from "../skill"
 import { Log } from "../util/log"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
+import PROMPT_PERSONALITY from "./template/personality.txt"
 
 export namespace Command {
   const log = Log.create({ service: "command" })
@@ -63,6 +64,7 @@ export namespace Command {
   export const Default = {
     INIT: "init",
     REVIEW: "review",
+    PERSONALITY: "personality",
   } as const
 
   export interface Interface {
@@ -101,6 +103,15 @@ export namespace Command {
           },
           subtask: true,
           hints: hints(PROMPT_REVIEW),
+        }
+        commands[Default.PERSONALITY] = {
+          name: Default.PERSONALITY,
+          description: "set or list personalities [name|none|show]",
+          source: "command",
+          get template() {
+            return PROMPT_PERSONALITY
+          },
+          hints: hints(PROMPT_PERSONALITY),
         }
 
         for (const [name, command] of Object.entries(cfg.command ?? {})) {
