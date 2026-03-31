@@ -37,6 +37,7 @@ const LIMIT = 100
 
 export const ListTool = Tool.define("list", {
   description: DESCRIPTION,
+  isReadOnly: true,
   parameters: z.object({
     path: z.string().describe("The absolute path to the directory to list (must be absolute, not relative)").optional(),
     ignore: z.array(z.string()).describe("List of glob patterns to ignore").optional(),

@@ -36,6 +36,7 @@ function convertToLineEnding(text: string, ending: "\n" | "\r\n"): string {
 
 export const EditTool = Tool.define("edit", {
   description: DESCRIPTION,
+  isDestructive: true,
   parameters: z.object({
     filePath: z.string().describe("The absolute path to the file to modify"),
     oldString: z.string().describe("The text to replace"),

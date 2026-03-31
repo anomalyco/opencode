@@ -35,6 +35,7 @@ interface McpCodeResponse {
 
 export const CodeSearchTool = Tool.define("codesearch", {
   description: DESCRIPTION,
+  isReadOnly: true,
   parameters: z.object({
     query: z
       .string()

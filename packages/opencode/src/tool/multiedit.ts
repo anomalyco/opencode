@@ -7,6 +7,7 @@ import { Instance } from "../project/instance"
 
 export const MultiEditTool = Tool.define("multiedit", {
   description: DESCRIPTION,
+  isDestructive: true,
   parameters: z.object({
     filePath: z.string().describe("The absolute path to the file to modify"),
     edits: z

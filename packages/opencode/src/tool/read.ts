@@ -20,6 +20,7 @@ const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
 
 export const ReadTool = Tool.define("read", {
   description: DESCRIPTION,
+  isReadOnly: true,
   parameters: z.object({
     filePath: z.string().describe("The absolute path to the file or directory to read"),
     offset: z.coerce.number().describe("The line number to start reading from (1-indexed)").optional(),

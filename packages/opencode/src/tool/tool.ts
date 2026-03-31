@@ -28,6 +28,10 @@ export namespace Tool {
   export interface Def<Parameters extends z.ZodType = z.ZodType, M extends Metadata = Metadata> {
     description: string
     parameters: Parameters
+    /** Whether this tool only reads data (never modifies state). Used for permission auto-approval. */
+    isReadOnly?: boolean
+    /** Whether this tool can destruct or irreversibly modify state. Used for elevated permission prompts. */
+    isDestructive?: boolean
     execute(
       args: z.infer<Parameters>,
       ctx: Context,

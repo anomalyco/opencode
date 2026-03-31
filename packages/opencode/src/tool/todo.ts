@@ -5,6 +5,7 @@ import { Todo } from "../session/todo"
 
 export const TodoWriteTool = Tool.define("todowrite", {
   description: DESCRIPTION_WRITE,
+  isReadOnly: false,
   parameters: z.object({
     todos: z.array(z.object(Todo.Info.shape)).describe("The updated todo list"),
   }),

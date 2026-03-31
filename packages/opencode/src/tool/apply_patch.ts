@@ -21,6 +21,7 @@ const PatchParams = z.object({
 
 export const ApplyPatchTool = Tool.define("apply_patch", {
   description: DESCRIPTION,
+  isDestructive: true,
   parameters: PatchParams,
   async execute(params, ctx) {
     if (!params.patchText) {

@@ -14,6 +14,7 @@ const MAX_LINE_LENGTH = 2000
 
 export const GrepTool = Tool.define("grep", {
   description: DESCRIPTION,
+  isReadOnly: true,
   parameters: z.object({
     pattern: z.string().describe("The regex pattern to search for in file contents"),
     path: z.string().optional().describe("The directory to search in. Defaults to the current working directory."),
