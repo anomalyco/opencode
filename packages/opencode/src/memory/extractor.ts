@@ -95,6 +95,20 @@ export namespace MemoryExtractor {
           content: `Config file ${basename} was modified in this project`,
         })
       }
+
+      // error-solution: fix after bash error (detected on tool call, not just result)
+      if (state.lastBashError) {
+        const topic = `fix:${filePath}`
+        if (!state.detectedTopics.has(topic)) {
+          state.detectedTopics.add(topic)
+          saveMemory({
+            type: "error-solution",
+            topic,
+            content: `Error with command "${state.lastBashError.command}" was fixed by editing ${filePath}. Error: ${state.lastBashError.error.slice(0, 200)}`,
+          })
+        }
+        state.lastBashError = undefined
+      }
     }
 
     state.lastToolCalls.push({ tool, input })

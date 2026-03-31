@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { Database } from "../../src/storage/db"
-import { nanoid } from "nanoid"
+import { randomUUID } from "crypto"
 import { MemoryStore } from "../../src/memory/store"
 import { MemoryFile } from "../../src/memory/memory-file"
 import path from "path"
@@ -88,7 +88,7 @@ describe("MemoryFile", () => {
   let tmpDir: string
 
   beforeEach(async () => {
-    tmpDir = path.join(import.meta.dirname, ".tmp-memory-test-" + nanoid(6))
+    tmpDir = path.join(import.meta.dirname, ".tmp-memory-test-" + randomUUID().slice(0, 8))
     await fs.mkdir(tmpDir, { recursive: true })
   })
 
