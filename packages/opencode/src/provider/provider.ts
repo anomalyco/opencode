@@ -460,7 +460,9 @@ export namespace Provider {
           project,
           location,
           fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
-            const auth = new GoogleAuth()
+            const auth = new GoogleAuth({
+              scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+            })
             const client = await auth.getApplicationDefault()
             const token = await client.credential.getAccessToken()
 
