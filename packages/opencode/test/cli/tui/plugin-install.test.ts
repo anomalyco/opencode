@@ -21,8 +21,9 @@ test("installs plugin without loading it", async () => {
           {
             name: "demo-install-plugin",
             type: "module",
-            main: "./install-plugin.ts",
-            "oc-plugin": [["tui", { marker }]],
+            exports: {
+              "./tui": "./install-plugin.ts",
+            },
           },
           null,
           2,
@@ -33,9 +34,8 @@ test("installs plugin without loading it", async () => {
         file,
         `export default {
   id: "demo.install",
-  tui: async (_api, options) => {
-    if (!options?.marker) return
-    await Bun.write(options.marker, "loaded")
+  tui: async () => {
+    await Bun.write(${JSON.stringify(marker)}, "loaded")
   },
 }
 `,
@@ -46,7 +46,7 @@ test("installs plugin without loading it", async () => {
   })
 
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
-  let cfg: Awaited<ReturnType<typeof TuiConfig.get>> = {
+  const cfg: Awaited<ReturnType<typeof TuiConfig.get>> = {
     plugin: [],
     plugin_records: undefined,
   }
@@ -66,17 +66,6 @@ test("installs plugin without loading it", async () => {
 
   try {
     await TuiPluginRuntime.init(api)
-    cfg = {
-      plugin: [[tmp.extra.spec, { marker: tmp.extra.marker }]],
-      plugin_records: [
-        {
-          item: [tmp.extra.spec, { marker: tmp.extra.marker }],
-          scope: "local",
-          source: path.join(tmp.path, "tui.json"),
-        },
-      ],
-    }
-
     const out = await TuiPluginRuntime.installPlugin(tmp.extra.spec)
     expect(out).toMatchObject({
       ok: true,

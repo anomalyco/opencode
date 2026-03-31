@@ -11,6 +11,7 @@ import { ConfigPaths } from "@/config/paths"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
 import { Flock } from "@/util/flock"
+import { isRecord } from "@/util/record"
 
 import { parsePluginSpecifier, readPluginPackage, resolvePluginTarget } from "./shared"
 
@@ -19,7 +20,6 @@ type Kind = "server" | "tui"
 
 export type Target = {
   kind: Kind
-  opts?: Record<string, unknown>
 }
 
 export type InstallDeps = {
@@ -101,28 +101,43 @@ function pluginList(data: unknown) {
   return item.plugin
 }
 
-function parseTarget(item: unknown): Target | undefined {
-  if (item === "server" || item === "tui") return { kind: item }
-  if (!Array.isArray(item)) return
-  if (item[0] !== "server" && item[0] !== "tui") return
-  if (item.length < 2) return { kind: item[0] }
-  const opt = item[1]
-  if (!opt || typeof opt !== "object" || Array.isArray(opt)) return { kind: item[0] }
-  return {
-    kind: item[0],
-    opts: opt,
+function exportValue(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    const next = value.trim()
+    if (next) return next
+    return
+  }
+  if (!isRecord(value)) return
+  for (const key of ["import", "default"]) {
+    const next = value[key]
+    if (typeof next !== "string") continue
+    const hit = next.trim()
+    if (!hit) continue
+    return hit
   }
 }
 
-function parseTargets(raw: unknown) {
-  if (!Array.isArray(raw)) return []
-  const map = new Map<Kind, Target>()
-  for (const item of raw) {
-    const hit = parseTarget(item)
-    if (!hit) continue
-    map.set(hit.kind, hit)
+function hasExportTarget(pkg: Record<string, unknown>, kind: Kind) {
+  const exports = pkg.exports
+  if (!isRecord(exports)) return false
+  return Boolean(exportValue(exports[`./${kind}`]))
+}
+
+function hasMainTarget(pkg: Record<string, unknown>) {
+  const main = pkg.main
+  if (typeof main !== "string") return false
+  return Boolean(main.trim())
+}
+
+function packageTargets(pkg: Record<string, unknown>) {
+  const targets: Target[] = []
+  if (hasExportTarget(pkg, "server") || hasMainTarget(pkg)) {
+    targets.push({ kind: "server" })
   }
-  return [...map.values()]
+  if (hasExportTarget(pkg, "tui")) {
+    targets.push({ kind: "tui" })
+  }
+  return targets
 }
 
 function patch(text: string, path: Array<string | number>, value: unknown, insert = false) {
@@ -260,7 +275,7 @@ export async function readPluginManifest(target: string): Promise<ManifestResult
     }
   }
 
-  const targets = parseTargets(pkg.item.json["oc-plugin"])
+  const targets = packageTargets(pkg.item.json)
   if (!targets.length) {
     return {
       ok: false,
@@ -330,8 +345,7 @@ async function patchOne(dir: string, target: Target, spec: string, force: boolea
   }
 
   const list = pluginList(data)
-  const item = target.opts ? [spec, target.opts] : spec
-  const out = patchPluginList(text, list, spec, item, force)
+  const out = patchPluginList(text, list, spec, spec, force)
   if (out.mode === "noop") {
     return {
       ok: true,

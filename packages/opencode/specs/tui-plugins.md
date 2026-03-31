@@ -100,7 +100,10 @@ export default plugin
 
 ## Package manifest and install
 
-Package manifest is read from `package.json` field `oc-plugin`.
+Install target detection is inferred from `package.json` entrypoints:
+
+- `server` target when `exports["./server"]` exists or `main` is set.
+- `tui` target when `exports["./tui"]` exists.
 
 Example:
 
@@ -108,14 +111,14 @@ Example:
 {
   "name": "@acme/opencode-plugin",
   "type": "module",
-  "main": "./dist/index.js",
+  "main": "./dist/server.js",
+  "exports": {
+    "./server": "./dist/server.js",
+    "./tui": "./dist/tui.js"
+  },
   "engines": {
     "opencode": "^1.0.0"
-  },
-  "oc-plugin": [
-    ["server", { "custom": true }],
-    ["tui", { "compact": true }]
-  ]
+  }
 }
 ```
 
@@ -144,7 +147,7 @@ npm plugins can declare a version compatibility range in `package.json` using th
 - Local installs resolve target dir inside `patchPluginConfig`.
 - For local scope, path is `<worktree>/.opencode` only when VCS is git and `worktree !== "/"`; otherwise `<directory>/.opencode`.
 - Root-worktree fallback (`worktree === "/"` uses `<directory>/.opencode`) is covered by regression tests.
-- `patchPluginConfig` applies all declared manifest targets (`server` and/or `tui`) in one call.
+- `patchPluginConfig` applies all detected targets (`server` and/or `tui`) in one call.
 - `patchPluginConfig` returns structured result unions (`ok`, `code`, fields by error kind) instead of custom thrown errors.
 - `patchPluginConfig` serializes per-target config writes with `Flock.acquire(...)`.
 - `patchPluginConfig` uses targeted `jsonc-parser` edits, so existing JSONC comments are preserved when plugin entries are added or replaced.
@@ -320,7 +323,6 @@ Slot notes:
 - `api.plugins.install(spec, { global? })` runs install -> manifest read -> config patch using the same helper flow as CLI install.
 - `api.plugins.install(...)` returns either `{ ok: false, message, missing? }` or `{ ok: true, dir, tui }`.
 - `api.plugins.install(...)` does not load plugins into the current session. Call `api.plugins.add(spec)` to load after install.
-- For packages that declare a tuple `tui` target in `oc-plugin`, `api.plugins.install(...)` stages those tuple options so a following `api.plugins.add(spec)` uses them.
 - If activation fails, the plugin can remain `enabled=true` and `active=false`.
 - `api.lifecycle.signal` is aborted before cleanup runs.
 - `api.lifecycle.onDispose(fn)` registers cleanup and returns an unregister function.
