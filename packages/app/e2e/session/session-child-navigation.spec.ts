@@ -21,7 +21,7 @@ test("task tool child-session link does not trigger stale show errors", async ({
       await gotoSession(session.id)
 
       const link = page
-        .locator("a.subagent-link")
+        .locator(".subagent-link")
         .filter({ hasText: /open child session/i })
         .first()
       await expect(link).toBeVisible({ timeout: 30_000 })
