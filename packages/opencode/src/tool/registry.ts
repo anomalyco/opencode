@@ -33,6 +33,7 @@ import { Effect, Layer, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { DesktopTool } from "./desktop"
+import { BrowserTool } from "./browser"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -131,6 +132,7 @@ export namespace ToolRegistry {
           WebSearchTool,
           CodeSearchTool,
           DesktopTool,
+          BrowserTool,
           SkillTool,
           ApplyPatchTool,
           ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),

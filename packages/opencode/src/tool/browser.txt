@@ -1,0 +1,16 @@
+- Automates browser interactions using Playwright headless Chromium
+- Supports three actions: navigate (load URLs), execute (run JavaScript), read (extract DOM content)
+- Navigates to web pages and waits for specified load state (load, domcontentloaded, networkidle)
+- Executes JavaScript in page context and returns results as JSON or string
+- Reads full page HTML or extracts text from specific elements via CSS selectors
+- Use this tool when you need to interact with dynamic web content, SPAs, or pages requiring JavaScript execution
+- Use instead of webfetch when you need to execute JavaScript or interact with page elements
+
+Usage notes:
+  - URL must be fully-formed with http:// or https://
+  - Navigate action requires url parameter
+  - Execute action requires script parameter containing JavaScript code
+  - Read action can target specific elements with selector or read full page without it
+  - Timeout defaults to 30 seconds, maximum 120 seconds
+  - Browser runs headless with 1280x720 viewport
+  - Always requests permission before accessing URLs
