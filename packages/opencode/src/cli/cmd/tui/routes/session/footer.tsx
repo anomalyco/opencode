@@ -5,14 +5,18 @@ import { useDirectory } from "../../context/directory"
 import { useConnected } from "../../component/dialog-model"
 import { createStore } from "solid-js/store"
 import { useRoute } from "../../context/route"
+import { useLocal } from "../../context/local"
 
 export function Footer() {
   const { theme } = useTheme()
   const sync = useSync()
   const route = useRoute()
+  const local = useLocal()
   const mcp = createMemo(() => Object.values(sync.data.mcp).filter((x) => x.status === "connected").length)
   const mcpError = createMemo(() => Object.values(sync.data.mcp).some((x) => x.status === "failed"))
   const lsp = createMemo(() => Object.keys(sync.data.lsp))
+  const model = createMemo(() => local.model.parsed())
+  const variant = createMemo(() => local.model.variant.current())
   const permissions = createMemo(() => {
     if (route.data.type !== "session") return []
     return sync.data.permission[route.data.sessionID] ?? []
@@ -60,6 +64,13 @@ export function Footer() {
             </text>
           </Match>
           <Match when={connected()}>
+            <text fg={theme.text}>
+              <span style={{ fg: theme.textMuted }}>Model</span> {model().model}
+              <span style={{ fg: theme.textMuted }}> · {model().provider}</span>
+              <Show when={variant()}>
+                {(item) => <span style={{ fg: theme.warning }}> · {item()}</span>}
+              </Show>
+            </text>
             <Show when={permissions().length > 0}>
               <text fg={theme.warning}>
                 <span style={{ fg: theme.warning }}>△</span> {permissions().length} Permission
