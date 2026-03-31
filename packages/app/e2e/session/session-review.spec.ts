@@ -1,4 +1,4 @@
-import { waitSessionIdle, withSession } from "../actions"
+import { withSession } from "../actions"
 import { test, expect } from "../fixtures"
 import { createSdk } from "../utils"
 
@@ -41,7 +41,7 @@ function edit(file: string, prev: string, next: string) {
 }
 
 async function patch(sdk: ReturnType<typeof createSdk>, sessionID: string, patchText: string) {
-  await sdk.session.promptAsync({
+  await sdk.session.prompt({
     sessionID,
     agent: "build",
     system: [
@@ -53,8 +53,6 @@ async function patch(sdk: ReturnType<typeof createSdk>, sessionID: string, patch
     ].join("\n"),
     parts: [{ type: "text", text: "Apply the provided patch exactly once." }],
   })
-
-  await waitSessionIdle(sdk, sessionID, 120_000)
 }
 
 async function ready(sdk: ReturnType<typeof createSdk>, sessionID: string, total: number) {
@@ -64,7 +62,7 @@ async function ready(sdk: ReturnType<typeof createSdk>, sessionID: string, total
         const info = await sdk.session.get({ sessionID }).then((res) => res.data)
         return info?.summary?.files ?? 0
       },
-      { timeout: 60_000 },
+      { timeout: 120_000 },
     )
     .toBeGreaterThanOrEqual(total)
 }
