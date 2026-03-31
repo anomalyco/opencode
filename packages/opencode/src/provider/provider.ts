@@ -916,7 +916,27 @@ export namespace Provider {
           : undefined,
       },
       limit: {
-        context: model.limit.context,
+        context: iife(() => {
+          // Override stale context window data from models.dev for GitHub Copilot Claude models.
+          // Anthropic official context windows: https://docs.anthropic.com/en/docs/about-claude/models
+          if (m.api.npm === "@ai-sdk/github-copilot") {
+            const contextOverrides: Record<string, number> = {
+              "claude-opus-4.6": 1_000_000,
+              "claude-opus-4-6": 1_000_000,
+              "claude-sonnet-4.6": 1_000_000,
+              "claude-sonnet-4-6": 1_000_000,
+              "claude-opus-4.5": 200_000,
+              "claude-opus-4-5": 200_000,
+              "claude-sonnet-4.5": 200_000,
+              "claude-sonnet-4-5": 200_000,
+              "claude-haiku-4.5": 200_000,
+              "claude-haiku-4-5": 200_000,
+            }
+            const override = Object.entries(contextOverrides).find(([k]) => model.id.includes(k))
+            if (override) return override[1]
+          }
+          return model.limit.context
+        }),
         input: model.limit.input,
         output: model.limit.output,
       },
