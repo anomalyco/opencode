@@ -935,7 +935,9 @@ export namespace ProviderTransform {
     }
 
     const key = sdkKey(model.api.npm) ?? model.providerID
-    return { [key]: options }
+    // @ai-sdk/azure delegates to OpenAIChatLanguageModel which expects "openai" key
+    const azureKey = model.api.npm === "@ai-sdk/azure" ? "openai" : key
+    return { [azureKey]: options }
   }
 
   export function maxOutputTokens(model: Provider.Model): number {
