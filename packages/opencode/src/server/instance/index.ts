@@ -188,6 +188,15 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono =>
       }),
       async (c) => {
         const commands = await AppRuntime.runPromise(Command.Service.use((svc) => svc.list()))
+        if (c.req.query("compact") === "true") {
+          return c.json(
+            commands.map((cmd) => {
+              const entry = { ...cmd } as Record<string, unknown>
+              delete entry.content
+              return entry
+            }),
+          )
+        }
         return c.json(commands)
       },
     )
@@ -210,7 +219,18 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono =>
       }),
       async (c) => {
         const modes = await AppRuntime.runPromise(Agent.Service.use((svc) => svc.list()))
-        return c.json(modes)
+        const fields = c.req.query("fields")
+        if (!fields) return c.json(modes)
+        const allowed = new Set(fields.split(","))
+        return c.json(
+          modes.map((item) => {
+            const filtered: Record<string, unknown> = {}
+            for (const key of Object.keys(item)) {
+              if (allowed.has(key)) filtered[key] = item[key as keyof typeof item]
+            }
+            return filtered
+          }),
+        )
       },
     )
     .get(
@@ -237,6 +257,9 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket): Hono =>
             return yield* skill.all()
           }),
         )
+        if (c.req.query("compact") === "true") {
+          return c.json(skills.map(({ content, ...rest }) => rest))
+        }
         return c.json(skills)
       },
     )

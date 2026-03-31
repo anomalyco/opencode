@@ -1,6 +1,7 @@
 import type { Argv, InferredOptionTypes } from "yargs"
 import { Config } from "../config/config"
 import { AppRuntime } from "@/effect/app-runtime"
+import { Flag } from "../flag/flag"
 
 const options = {
   port: {
@@ -29,6 +30,15 @@ const options = {
     describe: "additional domains to allow for CORS",
     default: [] as string[],
   },
+  "web-mode": {
+    type: "string" as const,
+    describe: "web UI delivery mode: proxy (default) serves frontend through server, direct loads from CDN",
+    choices: ["proxy", "direct"] as const,
+  },
+  "web-url": {
+    type: "string" as const,
+    describe: "URL for the web frontend (CDN origin for direct mode, proxy target for proxy mode)",
+  },
 }
 
 export type NetworkOptions = InferredOptionTypes<typeof options>
@@ -43,7 +53,8 @@ export async function resolveNetworkOptions(args: NetworkOptions) {
   const hostnameExplicitlySet = process.argv.includes("--hostname")
   const mdnsExplicitlySet = process.argv.includes("--mdns")
   const mdnsDomainExplicitlySet = process.argv.includes("--mdns-domain")
-  const corsExplicitlySet = process.argv.includes("--cors")
+  const webModeExplicitlySet = process.argv.includes("--web-mode")
+  const webUrlExplicitlySet = process.argv.includes("--web-url")
 
   const mdns = mdnsExplicitlySet ? args.mdns : (config?.server?.mdns ?? args.mdns)
   const mdnsDomain = mdnsDomainExplicitlySet ? args["mdns-domain"] : (config?.server?.mdnsDomain ?? args["mdns-domain"])
@@ -57,5 +68,10 @@ export async function resolveNetworkOptions(args: NetworkOptions) {
   const argsCors = Array.isArray(args.cors) ? args.cors : args.cors ? [args.cors] : []
   const cors = [...configCors, ...argsCors]
 
-  return { hostname, port, mdns, mdnsDomain, cors }
+  const webMode = webModeExplicitlySet ? args["web-mode"] : (config?.server?.webMode ?? "proxy")
+  const webUrl = webUrlExplicitlySet
+    ? args["web-url"]
+    : (Flag.OPENCODE_WEB_URL ?? config?.server?.webUrl ?? "https://app.opencode.ai")
+
+  return { hostname, port, mdns, mdnsDomain, cors, webMode, webUrl }
 }

@@ -1,10 +1,35 @@
-import { marked } from "marked"
-import markedKatex from "marked-katex-extension"
-import markedShiki from "marked-shiki"
-import katex from "katex"
-import { bundledLanguages, type BundledLanguage } from "shiki"
+import type { BundledLanguage } from "shiki"
 import { createSimpleContext } from "./helper"
 import { getSharedHighlighter, registerCustomTheme, ThemeRegistrationResolved } from "@pierre/diffs"
+
+type MarkedDeps = {
+  marked: typeof import("marked").marked
+  markedKatex: typeof import("marked-katex-extension").default
+  markedShiki: typeof import("marked-shiki").default
+  katex: typeof import("katex").default
+  bundledLanguages: typeof import("shiki").bundledLanguages
+}
+
+export function createMarkedDepsLoader<T>(load: () => Promise<T>) {
+  let deps: Promise<T> | undefined
+  return () => {
+    deps ??= load()
+    return deps
+  }
+}
+
+const loadMarkedDeps = createMarkedDepsLoader<MarkedDeps>(async () => {
+  const [{ marked }, { default: markedKatex }, { default: markedShiki }, { default: katex }, shiki] = await Promise.all(
+    [import("marked"), import("marked-katex-extension"), import("marked-shiki"), import("katex"), import("shiki")],
+  )
+  return {
+    marked,
+    markedKatex,
+    markedShiki,
+    katex,
+    bundledLanguages: shiki.bundledLanguages,
+  }
+})
 
 registerCustomTheme("OpenCode", () => {
   return Promise.resolve({
@@ -376,7 +401,7 @@ registerCustomTheme("OpenCode", () => {
   } as unknown as ThemeRegistrationResolved)
 })
 
-function renderMathInText(text: string): string {
+function renderMathInText(text: string, katex: MarkedDeps["katex"]): string {
   let result = text
 
   // Display math: $$...$$
@@ -408,7 +433,7 @@ function renderMathInText(text: string): string {
   return result
 }
 
-function renderMathExpressions(html: string): string {
+function renderMathExpressions(html: string, katex: MarkedDeps["katex"]): string {
   // Split on code/pre/kbd tags to avoid processing their contents
   const codeBlockPattern = /(<(?:pre|code|kbd)[^>]*>[\s\S]*?<\/(?:pre|code|kbd)>)/gi
   const parts = html.split(codeBlockPattern)
@@ -418,16 +443,17 @@ function renderMathExpressions(html: string): string {
       // Odd indices are the captured code blocks - leave them alone
       if (i % 2 === 1) return part
       // Process math only in non-code parts
-      return renderMathInText(part)
+      return renderMathInText(part, katex)
     })
     .join("")
 }
 
-async function highlightCodeBlocks(html: string): Promise<string> {
+async function highlightCodeBlocks(html: string, getDeps = loadMarkedDeps): Promise<string> {
   const codeBlockRegex = /<pre><code(?:\s+class="language-([^"]*)")?>([\s\S]*?)<\/code><\/pre>/g
   const matches = [...html.matchAll(codeBlockRegex)]
   if (matches.length === 0) return html
 
+  const { bundledLanguages } = await getDeps()
   const highlighter = await getSharedHighlighter({
     themes: ["OpenCode"],
     langs: [],
@@ -468,52 +494,73 @@ export type NativeMarkdownParser = (markdown: string) => Promise<string>
 export const { use: useMarked, provider: MarkedProvider } = createSimpleContext({
   name: "Marked",
   init: (props: { nativeParser?: NativeMarkdownParser }) => {
-    const jsParser = marked.use(
-      {
-        renderer: {
-          link({ href, title, text }) {
-            const titleAttr = title ? ` title="${title}"` : ""
-            return `<a href="${href}"${titleAttr} class="external-link" target="_blank" rel="noopener noreferrer">${text}</a>`
+    let parser:
+      | Promise<{
+          parse(markdown: string): Promise<string>
+        }>
+      | undefined
+
+    const jsParser = () => {
+      parser ??= loadMarkedDeps().then((deps) => {
+        const instance = deps.marked.use(
+          {
+            renderer: {
+              link({ href, title, text }) {
+                const titleAttr = title ? ` title="${title}"` : ""
+                return `<a href="${href}"${titleAttr} class="external-link" target="_blank" rel="noopener noreferrer">${text}</a>`
+              },
+            },
           },
-        },
-      },
-      markedKatex({
-        throwOnError: false,
-        nonStandard: true,
-      }),
-      markedShiki({
-        async highlight(code, lang) {
-          const highlighter = await getSharedHighlighter({
-            themes: ["OpenCode"],
-            langs: [],
-            preferredHighlighter: "shiki-wasm",
-          })
-          if (!(lang in bundledLanguages)) {
-            lang = "text"
-          }
-          if (!highlighter.getLoadedLanguages().includes(lang)) {
-            await highlighter.loadLanguage(lang as BundledLanguage)
-          }
-          return highlighter.codeToHtml(code, {
-            lang: lang || "text",
-            theme: "OpenCode",
-            tabindex: false,
-          })
-        },
-      }),
-    )
+          deps.markedKatex({
+            throwOnError: false,
+            nonStandard: true,
+          }),
+          deps.markedShiki({
+            async highlight(code, lang) {
+              const highlighter = await getSharedHighlighter({
+                themes: ["OpenCode"],
+                langs: [],
+                preferredHighlighter: "shiki-wasm",
+              })
+              if (!(lang in deps.bundledLanguages)) {
+                lang = "text"
+              }
+              if (!highlighter.getLoadedLanguages().includes(lang)) {
+                await highlighter.loadLanguage(lang as BundledLanguage)
+              }
+              return highlighter.codeToHtml(code, {
+                lang: lang || "text",
+                theme: "OpenCode",
+                tabindex: false,
+              })
+            },
+          }),
+        )
+        return {
+          parse(markdown: string) {
+            return instance.parse(markdown) as Promise<string>
+          },
+        }
+      })
+      return parser
+    }
 
     if (props.nativeParser) {
       const nativeParser = props.nativeParser
       return {
         async parse(markdown: string): Promise<string> {
           const html = await nativeParser(markdown)
-          const withMath = renderMathExpressions(html)
+          const { katex } = await loadMarkedDeps()
+          const withMath = renderMathExpressions(html, katex)
           return highlightCodeBlocks(withMath)
         },
       }
     }
 
-    return jsParser
+    return {
+      async parse(markdown: string): Promise<string> {
+        return (await jsParser()).parse(markdown)
+      },
+    }
   },
 })

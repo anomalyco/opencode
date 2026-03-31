@@ -39,6 +39,8 @@ function setup() {
     hostname: "127.0.0.1",
     mdnsDomain: "opencode.local",
     cors: [],
+    webMode: undefined,
+    webUrl: undefined,
   })
   spyOn(Win32, "win32DisableProcessedInput").mockImplementation(() => {})
   spyOn(Win32, "win32InstallCtrlCGuard").mockReturnValue(undefined)
@@ -72,6 +74,10 @@ describe("tui thread", () => {
       "mdns-domain": "opencode.local",
       mdnsDomain: "opencode.local",
       cors: [],
+      "web-mode": undefined,
+      "web-url": undefined,
+      webMode: undefined,
+      webUrl: undefined,
     }
     return TuiThreadCommand.handler(args)
   }

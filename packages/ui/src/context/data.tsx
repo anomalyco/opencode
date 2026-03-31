@@ -37,6 +37,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     directory: string
     onNavigateToSession?: NavigateToSessionFn
     onSessionHref?: SessionHrefFn
+    onSpeakText?: (text: string) => void
   }) => {
     return {
       get store() {
@@ -47,6 +48,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       },
       navigateToSession: props.onNavigateToSession,
       sessionHref: props.onSessionHref,
+      speakText: props.onSpeakText,
     }
   },
 })

@@ -47,7 +47,9 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     type Queued = { directory: string; payload: Event }
     const FLUSH_FRAME_MS = 16
     const STREAM_YIELD_MS = 8
-    const RECONNECT_DELAY_MS = 250
+    const RECONNECT_INITIAL_MS = 1_000
+    const RECONNECT_MAX_MS = 30_000
+    let reconnects = 0
 
     let queue: Queued[] = []
     let buffer: Queued[] = []
@@ -102,6 +104,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     }
 
     let streamErrorLogged = false
+    let reconnecting = false
     const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
     const aborted = (error: unknown) => abortError.safeParse(error).success
 
@@ -130,6 +133,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       run = (async () => {
         while (!abort.signal.aborted && started) {
           attempt = new AbortController()
+          reconnecting = false
           lastEventAt = Date.now()
           const onAbort = () => {
             attempt?.abort()
@@ -154,6 +158,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
             for await (const event of events.stream) {
               resetHeartbeat()
               streamErrorLogged = false
+              reconnects = 0
               const directory = event.directory ?? "global"
               if (event.payload.type === "sync") {
                 continue
@@ -184,7 +189,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
           } catch (error) {
             if (!aborted(error) && !streamErrorLogged) {
               streamErrorLogged = true
-              console.error("[global-sdk] event stream failed", {
+              console.error("[global-sdk] event stream error", {
                 url: currentServer.http.url,
                 fetch: eventFetch ? "platform" : "webview",
                 error,
@@ -197,7 +202,10 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
           }
 
           if (abort.signal.aborted || !started) return
-          await wait(RECONNECT_DELAY_MS)
+          const delay = Math.min(RECONNECT_INITIAL_MS * 2 ** reconnects, RECONNECT_MAX_MS)
+          reconnects++
+          reconnecting = true
+          await wait(delay)
         }
       })().finally(() => {
         run = undefined
@@ -208,6 +216,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
 
     const stop = () => {
       started = false
+      reconnecting = false
       attempt?.abort()
       clearHeartbeat()
     }
@@ -241,6 +250,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
         listen: emitter.listen.bind(emitter),
         start,
       },
+      isReconnecting: () => reconnecting,
       createClient(opts: Omit<Parameters<typeof createSdkForServer>[0], "server" | "fetch">) {
         const s = server.current
         if (!s) throw new Error(language.t("error.globalSDK.serverNotAvailable"))

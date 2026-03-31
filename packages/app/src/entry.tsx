@@ -52,6 +52,16 @@ const setStorage = (key: string, value: string | null) => {
 const readDefaultServerUrl = () => getStorage(DEFAULT_SERVER_URL_KEY)
 const writeDefaultServerUrl = (url: string | null) => setStorage(DEFAULT_SERVER_URL_KEY, url)
 
+const normalizeServerUrl = (raw: string) => {
+  try {
+    const url = new URL(raw.trim())
+    if (url.protocol !== "http:" && url.protocol !== "https:") return
+    return url.origin
+  } catch {
+    return
+  }
+}
+
 const notify: Platform["notify"] = async (title, description, href) => {
   if (!("Notification" in window)) return
 
@@ -98,6 +108,11 @@ if (!(root instanceof HTMLElement) && import.meta.env.DEV) {
 }
 
 const getCurrentUrl = () => {
+  const param = new URL(location.href).searchParams.get("server")
+  if (param) {
+    const normalized = normalizeServerUrl(param)
+    if (normalized) return normalized
+  }
   if (location.hostname.includes("opencode.ai")) return "http://localhost:4096"
   if (import.meta.env.DEV)
     return `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
@@ -105,6 +120,14 @@ const getCurrentUrl = () => {
 }
 
 const getDefaultUrl = () => {
+  const param = new URL(location.href).searchParams.get("server")
+  if (param) {
+    const normalized = normalizeServerUrl(param)
+    if (normalized) {
+      writeDefaultServerUrl(normalized)
+      return normalized
+    }
+  }
   const lsDefault = readDefaultServerUrl()
   if (lsDefault) return lsDefault
   return getCurrentUrl()

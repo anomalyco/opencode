@@ -37,12 +37,26 @@ export const WebCommand = cmd({
       UI.println(UI.Style.TEXT_WARNING_BOLD + "!  " + "OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
     }
     const opts = await resolveNetworkOptions(args)
+    
+    // Handle direct-load mode: add CDN origin to CORS
+    if (opts.webMode === "direct") {
+      const cdnOrigin = new URL(opts.webUrl!).origin
+      opts.cors.push(cdnOrigin)
+    }
+    
     const server = await Server.listen(opts)
     UI.empty()
     UI.println(UI.logo("  "))
     UI.empty()
-
-    if (opts.hostname === "0.0.0.0") {
+    
+    // Handle direct-load mode display
+    if (opts.webMode === "direct") {
+      const serverUrl = `http://localhost:${server.port}`
+      const launchUrl = `${opts.webUrl}?server=${encodeURIComponent(serverUrl)}`
+      UI.println(UI.Style.TEXT_INFO_BOLD + "  CDN frontend:    ", UI.Style.TEXT_NORMAL, launchUrl)
+      UI.println(UI.Style.TEXT_INFO_BOLD + "  API server:      ", UI.Style.TEXT_NORMAL, serverUrl)
+      open(launchUrl).catch(() => {})
+    } else if (opts.hostname === "0.0.0.0") {
       // Show localhost for local access
       const localhostUrl = `http://localhost:${server.port}`
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Local access:      ", UI.Style.TEXT_NORMAL, localhostUrl)

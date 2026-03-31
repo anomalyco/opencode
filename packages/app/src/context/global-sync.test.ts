@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { getDirectoryBootstrapPlan, getDirectorySeed } from "./global-sync/bootstrap"
 import { canDisposeDirectory, pickDirectoriesToEvict } from "./global-sync/eviction"
 import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global-sync/session-load"
 
@@ -118,5 +119,93 @@ describe("canDisposeDirectory", () => {
         loadingSessions: false,
       }),
     ).toBe(true)
+  })
+})
+
+describe("getDirectoryBootstrapPlan", () => {
+  test("skips duplicated global requests when child store is already seeded", () => {
+    const plan = getDirectoryBootstrapPlan({
+      skipHeavy: false,
+      hasProvider: true,
+      hasConfig: true,
+      hasPath: true,
+    })
+
+    expect(plan.blocking).toEqual(["project", "agent"])
+    expect(plan.deferred).toEqual([
+      "session_status",
+      "sessions",
+      "command",
+      "mcp",
+      "lsp",
+      "vcs",
+      "permission",
+      "question",
+    ])
+  })
+
+  test("requests provider, config, and path when child store is empty", () => {
+    const plan = getDirectoryBootstrapPlan({
+      skipHeavy: false,
+      hasProvider: false,
+      hasConfig: false,
+      hasPath: false,
+    })
+
+    expect(plan.blocking).toEqual(["project", "provider", "agent", "config"])
+    expect(plan.deferred).toEqual([
+      "session_status",
+      "sessions",
+      "path",
+      "command",
+      "mcp",
+      "lsp",
+      "vcs",
+      "permission",
+      "question",
+    ])
+  })
+
+  test("keeps agent loading even when other global data is already seeded", () => {
+    const plan = getDirectoryBootstrapPlan({
+      skipHeavy: false,
+      hasProvider: true,
+      hasConfig: true,
+      hasPath: true,
+    })
+
+    expect(plan.blocking).toContain("agent")
+  })
+})
+
+describe("getDirectorySeed", () => {
+  test("reuses global path, config, and provider for the matching directory", () => {
+    const seed = getDirectorySeed({
+      directory: "dir",
+      global: {
+        path: { directory: "dir", value: "path" },
+        config: { value: "config" },
+        provider: { value: "provider" },
+      },
+    })
+
+    expect(seed).toEqual({
+      path: { directory: "dir", value: "path" },
+      config: { value: "config" },
+      provider: { value: "provider" },
+    })
+  })
+
+  test("does not seed unrelated directories", () => {
+    const seed = getDirectorySeed({
+      directory: "other",
+      global: {
+        path: { directory: "dir", value: "path" },
+        config: { value: "config" },
+        provider: { value: "provider" },
+      },
+    })
+
+    expect(seed).toEqual({})
   })
 })

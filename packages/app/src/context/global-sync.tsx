@@ -15,7 +15,7 @@ import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
 import type { InitError } from "../pages/error"
 import { useGlobalSDK } from "./global-sdk"
-import { bootstrapDirectory, bootstrapGlobal, clearProviderRev } from "./global-sync/bootstrap"
+import { bootstrapDirectory, bootstrapGlobal, clearProviderRev, getDirectorySeed } from "./global-sync/bootstrap"
 import { createChildStoreManager } from "./global-sync/child-store"
 import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./global-sync/event-reducer"
 import { createRefreshQueue } from "./global-sync/queue"
@@ -51,6 +51,7 @@ function createGlobalSync() {
   const booting = new Map<string, Promise<void>>()
   const sessionLoads = new Map<string, Promise<void>>()
   const sessionMeta = new Map<string, { limit: number }>()
+  const lastBootstrapAt = new Map<string, number>()
 
   const [projectCache, setProjectCache, projectInit] = persisted(
     Persist.global("globalSync.project", ["globalSync.project.v1"]),
@@ -159,6 +160,7 @@ function createGlobalSync() {
     onDispose: (directory) => {
       queue.clear(directory)
       sessionMeta.delete(directory)
+      lastBootstrapAt.delete(directory)
       sdkCache.delete(directory)
       clearProviderRev(directory)
       clearSessionPrefetchDirectory(directory)
@@ -229,11 +231,13 @@ function createGlobalSync() {
       .catch((err) => {
         console.error("Failed to load sessions", err)
         const project = getFilename(directory)
-        showToast({
-          variant: "error",
-          title: language.t("toast.session.listFailed.title", { project }),
-          description: formatServerError(err, language.t),
-        })
+        if (!globalSDK.isReconnecting()) {
+          showToast({
+            variant: "error",
+            title: language.t("toast.session.listFailed.title", { project }),
+            description: formatServerError(err, language.t),
+          })
+        }
       })
 
     sessionLoads.set(directory, promise)
@@ -254,6 +258,17 @@ function createGlobalSync() {
       const child = children.ensureChild(directory)
       const cache = children.vcsCache.get(directory)
       if (!cache) return
+      const seed = getDirectorySeed({
+        directory,
+        global: {
+          path: globalStore.path,
+          config: globalStore.config,
+          provider: globalStore.provider,
+        },
+      })
+      if (seed.path !== undefined) child[1]("path", seed.path)
+      if (seed.config !== undefined) child[1]("config", seed.config)
+      if (seed.provider !== undefined) child[1]("provider", seed.provider)
       const sdk = sdkFor(directory)
       await bootstrapDirectory({
         directory,
@@ -269,7 +284,10 @@ function createGlobalSync() {
         vcsCache: cache,
         loadSessions,
         translate: language.t,
+        skipHeavy: Date.now() - (lastBootstrapAt.get(directory) ?? 0) < 60_000,
+        isReconnecting: globalSDK.isReconnecting,
       })
+      lastBootstrapAt.set(directory, Date.now())
     })()
 
     booting.set(directory, promise)
@@ -281,6 +299,7 @@ function createGlobalSync() {
   }
 
   const unsub = globalSDK.event.listen((e) => {
+    lastEventSeen = Date.now()
     const directory = e.name
     const event = e.details
     const recent = bootingRoot || Date.now() - bootedAt < 1500
@@ -297,8 +316,12 @@ function createGlobalSync() {
       })
       if (event.type === "server.connected" || event.type === "global.disposed") {
         if (recent) return
+        const stale = 10_000
+        const now = Date.now()
         for (const directory of Object.keys(children.children)) {
-          queue.push(directory)
+          if (now - (lastBootstrapAt.get(directory) ?? 0) >= stale) {
+            queue.push(directory)
+          }
         }
       }
       return
@@ -336,6 +359,22 @@ function createGlobalSync() {
       children.disposeDirectory(directory)
     }
   })
+
+  // Catch up on missed data when the tab becomes visible again
+  const VISIBILITY_STALE_MS = 5_000
+  let lastEventSeen = Date.now()
+  if (typeof document !== "undefined") {
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return
+      if (Date.now() - lastEventSeen < VISIBILITY_STALE_MS) return
+      for (const directory of Object.keys(children.children)) {
+        queue.push(directory)
+      }
+      queue.refresh()
+    }
+    document.addEventListener("visibilitychange", onVisible)
+    onCleanup(() => document.removeEventListener("visibilitychange", onVisible))
+  }
 
   async function bootstrap() {
     bootingRoot = true

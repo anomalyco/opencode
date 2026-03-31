@@ -1498,6 +1498,18 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
                 aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
               />
             </Tooltip>
+            <Show when={data.speakText}>
+              <Tooltip value="Read aloud" placement="top" gutter={4}>
+                <IconButton
+                  icon="speech-bubble"
+                  size="normal"
+                  variant="ghost"
+                  onMouseDown={(e: MouseEvent) => e.preventDefault()}
+                  onClick={() => data.speakText?.(part().text ?? "")}
+                  aria-label="Read aloud"
+                />
+              </Tooltip>
+            </Show>
             <Show when={meta()}>
               <span data-slot="text-part-meta" class="text-12-regular text-text-weak cursor-default">
                 {meta()}

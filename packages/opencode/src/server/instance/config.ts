@@ -32,7 +32,12 @@ export const ConfigRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        return c.json(await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.get())))
+        const config = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.get()))
+        if (c.req.query("compact") === "true") {
+          const { agent, command, ...rest } = config as Record<string, unknown>
+          return c.json(rest)
+        }
+        return c.json(config)
       },
     )
     .patch(

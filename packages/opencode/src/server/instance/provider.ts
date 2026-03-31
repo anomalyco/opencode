@@ -67,8 +67,9 @@ export const ProviderRoutes = lazy(() =>
             }
           }),
         )
+        const compact = c.req.query("compact") === "true"
         return c.json({
-          all: result.all,
+          all: compact ? result.all.map(({ models, ...rest }) => ({ ...rest, models: [] })) : result.all,
           default: result.default,
           connected: result.connected,
         })

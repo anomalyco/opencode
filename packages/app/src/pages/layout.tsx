@@ -13,7 +13,7 @@ import {
   type Accessor,
 } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { useNavigate, useParams } from "@solidjs/router"
+import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { useLayout, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { Persist, persisted } from "@/utils/persist"
@@ -61,6 +61,7 @@ import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis, getDraggableId } from "@/utils/solid-dnd"
 import { DebugBar } from "@/components/debug-bar"
+import { shouldShowDebugBar } from "@/utils/debug-bar"
 import { Titlebar } from "@/components/titlebar"
 import { useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
@@ -120,6 +121,7 @@ export default function Layout(props: ParentProps) {
   const notification = useNotification()
   const permission = usePermission()
   const navigate = useNavigate()
+  const location = useLocation()
   setNavigate(navigate)
   const providers = useProviders()
   const dialog = useDialog()
@@ -2051,7 +2053,9 @@ export default function Layout(props: ParentProps) {
     const clearNotifications = () =>
       workspaces()
         .filter((directory) => notification.project.unseenCount(directory) > 0)
-        .forEach((directory) => notification.project.markViewed(directory))
+        .forEach((directory) => {
+          notification.project.markViewed(directory)
+        })
     const workspacesEnabled = createMemo(() => {
       const item = project()
       if (!item) return false
@@ -2411,7 +2415,9 @@ export default function Layout(props: ParentProps) {
             />
 
             <div class="xl:hidden">
-              <div
+              <button
+                type="button"
+                aria-label={language.t("common.dismiss")}
                 classList={{
                   "fixed inset-x-0 top-10 bottom-0 z-40 transition-opacity duration-200": true,
                   "opacity-100 pointer-events-auto": layout.mobileSidebar.opened(),
@@ -2429,7 +2435,6 @@ export default function Layout(props: ParentProps) {
                   "translate-x-0": layout.mobileSidebar.opened(),
                   "-translate-x-full": !layout.mobileSidebar.opened(),
                 }}
-                onClick={(e) => e.stopPropagation()}
               >
                 {sidebarContent(true)}
               </nav>
@@ -2458,7 +2463,7 @@ export default function Layout(props: ParentProps) {
               </main>
             </div>
 
-            <div
+            <aside
               classList={{
                 "hidden xl:flex absolute inset-y-0 left-16 z-30": true,
                 "opacity-100 translate-x-0 pointer-events-auto": state.peeked && !layout.sidebar.opened(),
@@ -2480,7 +2485,7 @@ export default function Layout(props: ParentProps) {
               <Show when={peekProject()}>
                 <SidebarPanel project={peekProject} merged={false} />
               </Show>
-            </div>
+            </aside>
 
             <div
               classList={{
@@ -2497,7 +2502,18 @@ export default function Layout(props: ParentProps) {
             </div>
           </div>
         </div>
-        {import.meta.env.DEV && <DebugBar />}
+        {shouldShowDebugBar({
+          dev: import.meta.env.DEV,
+          search: location.search,
+          read: () => {
+            if (typeof localStorage === "undefined") return null
+            return localStorage.getItem("opencode.debugbar")
+          },
+          write: (value) => {
+            if (typeof localStorage === "undefined") return
+            localStorage.setItem("opencode.debugbar", value)
+          },
+        }) && <DebugBar />}
       </div>
       <Toast.Region />
     </div>

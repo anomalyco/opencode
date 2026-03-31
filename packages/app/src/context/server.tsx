@@ -3,6 +3,7 @@ import { type Accessor, batch, createEffect, createMemo, onCleanup } from "solid
 import { createStore } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 import { useCheckServerHealth } from "@/utils/server-health"
+import { startVisiblePoll } from "./server-poll"
 
 type StoredProject = { worktree: string; expanded: boolean }
 type StoredServer = string | ServerConnection.HttpBase | ServerConnection.Http
@@ -159,11 +160,15 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           })
       }
 
-      run()
-      const interval = setInterval(run, HEALTH_POLL_INTERVAL_MS)
+      const stop = startVisiblePoll({
+        doc: typeof document === "undefined" ? undefined : document,
+        interval: HEALTH_POLL_INTERVAL_MS,
+        run,
+      })
+
       return () => {
         alive = false
-        clearInterval(interval)
+        stop()
       }
     }
 

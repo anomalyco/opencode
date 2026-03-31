@@ -1194,6 +1194,14 @@ export type ServerConfig = {
    * Additional domains to allow for CORS
    */
   cors?: Array<string>
+  /**
+   * Web UI delivery mode: proxy (default) serves frontend through server, direct loads from CDN
+   */
+  webMode?: "proxy" | "direct"
+  /**
+   * URL for the web frontend (CDN origin for direct mode, proxy target for proxy mode)
+   */
+  webUrl?: string
 }
 
 export type PermissionActionConfig = "ask" | "allow" | "deny"

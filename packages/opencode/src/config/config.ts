@@ -734,6 +734,8 @@ export namespace Config {
       mdns: z.boolean().optional().describe("Enable mDNS service discovery"),
       mdnsDomain: z.string().optional().describe("Custom domain name for mDNS service (default: opencode.local)"),
       cors: z.array(z.string()).optional().describe("Additional domains to allow for CORS"),
+      webMode: z.enum(["proxy", "direct"]).optional().describe("Web UI delivery mode: proxy (default) serves frontend through server, direct loads from CDN"),
+      webUrl: z.string().optional().describe("URL for the web frontend (CDN origin for direct mode, proxy target for proxy mode)"),
     })
     .strict()
     .meta({

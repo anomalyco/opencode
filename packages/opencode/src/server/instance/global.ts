@@ -128,6 +128,8 @@ export const GlobalRoutes = lazy(() =>
 
         return streamEvents(c, (q) => {
           async function handler(event: any) {
+            const type = event?.payload?.type
+            if (typeof type === "string" && type.startsWith("tui.")) return
             q.push(JSON.stringify(event))
           }
           GlobalBus.on("event", handler)

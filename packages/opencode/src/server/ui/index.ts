@@ -36,11 +36,15 @@ export const UIRoutes = (): Hono =>
         return c.json({ error: "Not Found" }, 404)
       }
     } else {
-      const response = await proxy(`https://app.opencode.ai${path}`, {
+      const req = new URL(c.req.url)
+      const base = new URL(Flag.OPENCODE_WEB_URL ?? "https://app.opencode.ai")
+      const url = new URL(path, base)
+      url.search = req.search
+      const response = await proxy(url.toString(), {
         ...c.req,
         headers: {
           ...c.req.raw.headers,
-          host: "app.opencode.ai",
+          host: url.host,
         },
       })
       const match = response.headers.get("content-type")?.includes("text/html")
