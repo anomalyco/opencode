@@ -159,8 +159,6 @@ export namespace SyncEvent {
     })
   }
 
-  // TODO:
-  //
   // * Support applying multiple events at one time. One transaction,
   //   and it validets all the sequence ids
   // * when loading events from db, apply zod validation to ensure shape

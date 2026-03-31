@@ -49,6 +49,7 @@ import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
+import { getLangfuse, flushLangfuse } from "./langfuse"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -293,6 +294,14 @@ export namespace SessionPrompt {
     // on the user message and will be retrieved from lastUser below
     let structuredOutput: unknown | undefined
 
+    // Langfuse tracing: one trace per loop invocation (coding session turn)
+    const langfuse = getLangfuse()
+    const trace = langfuse?.trace({
+      name: "opencode.loop",
+      sessionId: sessionID,
+      metadata: { resume_existing },
+    })
+
     let step = 0
     const session = await Session.get(sessionID)
     while (true) {
@@ -335,13 +344,29 @@ export namespace SessionPrompt {
       }
 
       step++
-      if (step === 1)
+      if (step === 1) {
+        // Langfuse: capture user input on first step
+        if (trace) {
+          const userMsg = msgs.findLast((m) => m.info.role === "user")
+          const userText = userMsg?.parts
+            .filter((p): p is MessageV2.TextPart => p.type === "text")
+            .map((p) => p.text)
+            .join("\n")
+          trace.update({
+            input: userText,
+            metadata: {
+              agent: lastUser.agent,
+              model: `${lastUser.model.providerID}/${lastUser.model.modelID}`,
+            },
+          })
+        }
         ensureTitle({
           session,
           modelID: lastUser.model.modelID,
           providerID: lastUser.model.providerID,
           history: msgs,
         })
+      }
 
       const model = await Provider.getModel(lastUser.model.providerID, lastUser.model.modelID).catch((e) => {
         if (Provider.ModelNotFoundError.isInstance(e)) {
@@ -690,6 +715,16 @@ export namespace SessionPrompt {
         system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
       }
 
+      // Langfuse: create a span for this loop iteration
+      const iterationSpan = trace?.span({
+        name: `loop.step-${step}`,
+        input: {
+          agent: agent.name,
+          model: `${model.providerID}/${model.id}`,
+          toolCount: Object.keys(tools).length,
+        },
+      })
+
       const result = await processor.process({
         user: lastUser,
         agent,
@@ -712,6 +747,70 @@ export namespace SessionPrompt {
         model,
         toolChoice: format.type === "json_schema" ? "required" : undefined,
       })
+
+      // Langfuse: record the LLM generation and tool calls from this iteration
+      if (iterationSpan) {
+        const parts = await MessageV2.parts(processor.message.id)
+
+        // Record each LLM step as a generation
+        for (const part of parts) {
+          if (part.type === "step-finish") {
+            iterationSpan.generation({
+              name: "llm",
+              model: `${model.providerID}/${model.id}`,
+              modelParameters: {
+                ...(agent.temperature != null ? { temperature: agent.temperature } : {}),
+              },
+              usage: {
+                input: part.tokens.input,
+                output: part.tokens.output,
+                total: part.tokens.total ?? part.tokens.input + part.tokens.output,
+              },
+              metadata: {
+                finishReason: part.reason,
+                cost: part.cost,
+                reasoning_tokens: part.tokens.reasoning,
+                cache_read: part.tokens.cache.read,
+                cache_write: part.tokens.cache.write,
+              },
+            })
+          }
+
+          // Record each tool call as a span
+          if (part.type === "tool" && part.state.status === "completed") {
+            iterationSpan.span({
+              name: `tool.${part.tool}`,
+              input: part.state.input,
+              output: part.state.output,
+              startTime: new Date(part.state.time.start),
+              endTime: new Date(part.state.time.end),
+              metadata: {
+                title: part.state.title,
+                ...part.state.metadata,
+              },
+            })
+          }
+          if (part.type === "tool" && part.state.status === "error") {
+            iterationSpan.span({
+              name: `tool.${part.tool}`,
+              input: part.state.input,
+              output: part.state.error,
+              startTime: new Date(part.state.time.start),
+              endTime: new Date(part.state.time.end),
+              level: "ERROR",
+            })
+          }
+        }
+
+        iterationSpan.end({
+          output: {
+            finish: processor.message.finish,
+            result,
+            tokens: processor.message.tokens,
+            cost: processor.message.cost,
+          },
+        })
+      }
 
       // If structured output was captured, save it and exit immediately
       // This takes priority because the StructuredOutput tool was called successfully
@@ -749,6 +848,14 @@ export namespace SessionPrompt {
       }
       continue
     }
+    // Langfuse: finalize trace
+    if (trace) {
+      trace.update({
+        output: { steps: step },
+      })
+      flushLangfuse().catch(() => {})
+    }
+
     SessionCompaction.prune({ sessionID })
     for await (const item of MessageV2.stream(sessionID)) {
       if (item.info.role === "user") continue
