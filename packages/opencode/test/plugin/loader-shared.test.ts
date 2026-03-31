@@ -487,7 +487,7 @@ describe("plugin.loader.shared", () => {
         .catch(() => false)
 
       expect(called).toBe(false)
-      expect(errors.some((x) => x.includes('exports["./server"]') && x.includes("package.json main"))).toBe(true)
+      expect(errors).toHaveLength(0)
     } finally {
       install.mockRestore()
     }

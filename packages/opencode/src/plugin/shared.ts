@@ -34,7 +34,7 @@ export type PluginEntry = {
   source: PluginSource
   target: string
   pkg?: PluginPackage
-  entry: string
+  entry?: string
 }
 
 const INDEX_FILES = ["index.ts", "index.tsx", "index.js", "index.mjs", "index.cjs"]
@@ -128,13 +128,8 @@ async function resolvePluginEntrypoint(spec: string, target: string, kind: Plugi
       if (index) return pathToFileURL(index).href
     }
 
-    if (source === "npm") {
-      throw new TypeError(`Plugin ${spec} must define package.json exports["./tui"]`)
-    }
-
-    if (dir) {
-      throw new TypeError(`Plugin ${spec} must define package.json exports["./tui"] or include index file`)
-    }
+    if (source === "npm") return
+    if (dir) return
 
     return target
   }
@@ -145,7 +140,7 @@ async function resolvePluginEntrypoint(spec: string, target: string, kind: Plugi
       if (index) return pathToFileURL(index).href
     }
 
-    throw new TypeError(`Plugin ${spec} must define package.json exports["./server"] or package.json main`)
+    return
   }
 
   return target

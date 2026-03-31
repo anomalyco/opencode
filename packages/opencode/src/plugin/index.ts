@@ -157,6 +157,14 @@ export namespace Plugin {
 
                 const resolved = await PluginLoader.resolve(plan, "server")
                 if (!resolved.ok) {
+                  if (resolved.stage === "missing") {
+                    log.warn("plugin has no server entrypoint", {
+                      path: plan.spec,
+                      message: resolved.message,
+                    })
+                    return
+                  }
+
                   const cause =
                     resolved.error instanceof Error ? (resolved.error.cause ?? resolved.error) : resolved.error
                   const message = errorMessage(cause)
