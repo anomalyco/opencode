@@ -84,12 +84,18 @@ export default plugin
 - TUI shape is `default export { id?, tui }`; including `server` is rejected.
 - A single module cannot export both `server` and `tui`.
 - `tui` signature is `(api, options, meta) => Promise<void>`.
-- If package `exports` contains `./tui`, the loader resolves that entrypoint. Otherwise it uses the resolved package target.
+- If package `exports` contains `./tui`, the loader resolves that entrypoint.
+- If package `exports` exists, loader only resolves `./tui` or `./server`; it never falls back to `exports["."]`.
+- For npm package specs, TUI does not use `package.json` `main` as a fallback entry.
+- `package.json` `main` is only used for server plugin entrypoint resolution.
 - If a package supports both server and TUI, use separate files and package `exports` (`./server` and `./tui`) so each target resolves to a target-only module.
 - File/path plugins must export a non-empty `id`.
 - npm plugins may omit `id`; package `name` is used.
 - Runtime identity is the resolved plugin id. Later plugins with the same id are rejected, including collisions with internal plugin ids.
-- If a path spec points at a directory, that directory must have `package.json` with `main`.
+- If a path spec points at a directory, server loading can use `package.json` `main`.
+- TUI path loading never uses `package.json` `main`.
+- Legacy compatibility: path specs like `./plugin` can resolve to `./plugin/index.ts` (or `index.js`) when `package.json` is missing.
+- The `./plugin -> ./plugin/index.*` fallback applies to both server and TUI v1 loading.
 - There is no directory auto-discovery for TUI plugins; they must be listed in `tui.json`.
 
 ## Package manifest and install
@@ -269,7 +275,9 @@ Theme install behavior:
 
 - Relative theme paths are resolved from the plugin root.
 - Theme name is the JSON basename.
-- Install is skipped if that theme name already exists.
+- First install writes only when the destination file is missing.
+- If the theme name already exists, install is skipped unless plugin metadata state is `updated`.
+- On `updated`, host only rewrites themes previously tracked for that plugin and only when source `mtime`/`size` changed.
 - Local plugins persist installed themes under the local `.opencode/themes` area near the plugin config source.
 - Global plugins persist installed themes under the global `themes` dir.
 - Invalid or unreadable theme files are ignored.

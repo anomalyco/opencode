@@ -1,4 +1,4 @@
-import { chmod, mkdir, readFile, writeFile } from "fs/promises"
+import { chmod, mkdir, readFile, stat as statFile, writeFile } from "fs/promises"
 import { createWriteStream, existsSync, statSync } from "fs"
 import { lookup } from "mime-types"
 import { realpathSync } from "fs"
@@ -23,6 +23,13 @@ export namespace Filesystem {
 
   export function stat(p: string): ReturnType<typeof statSync> | undefined {
     return statSync(p, { throwIfNoEntry: false }) ?? undefined
+  }
+
+  export async function statAsync(p: string): Promise<ReturnType<typeof statSync> | undefined> {
+    return statFile(p).catch((e) => {
+      if (isEnoent(e)) return undefined
+      throw e
+    })
   }
 
   export async function size(p: string): Promise<number> {

@@ -468,10 +468,18 @@ test("continues loading when a plugin is missing config metadata", async () => {
       [tmp.extra.goodSpec, { marker: tmp.extra.goodMarker }],
       tmp.extra.bareSpec,
     ],
-    plugin_meta: {
-      [tmp.extra.goodSpec]: { scope: "local", source: path.join(tmp.path, "tui.json") },
-      [tmp.extra.bareSpec]: { scope: "local", source: path.join(tmp.path, "tui.json") },
-    },
+    plugin_records: [
+      {
+        item: [tmp.extra.goodSpec, { marker: tmp.extra.goodMarker }],
+        scope: "local",
+        source: path.join(tmp.path, "tui.json"),
+      },
+      {
+        item: tmp.extra.bareSpec,
+        scope: "local",
+        source: path.join(tmp.path, "tui.json"),
+      },
+    ],
   })
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
@@ -490,6 +498,84 @@ test("continues loading when a plugin is missing config metadata", async () => {
     get.mockRestore()
     wait.mockRestore()
     delete process.env.OPENCODE_PLUGIN_META_FILE
+  }
+})
+
+test("initializes external tui plugins in config order", async () => {
+  const globalJson = path.join(Global.Path.config, "tui.json")
+  const globalJsonc = path.join(Global.Path.config, "tui.jsonc")
+  const backupJson = await Bun.file(globalJson)
+    .text()
+    .catch(() => undefined)
+  const backupJsonc = await Bun.file(globalJsonc)
+    .text()
+    .catch(() => undefined)
+
+  await fs.rm(globalJson, { force: true }).catch(() => {})
+  await fs.rm(globalJsonc, { force: true }).catch(() => {})
+
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const a = path.join(dir, "order-a.ts")
+      const b = path.join(dir, "order-b.ts")
+      const aSpec = pathToFileURL(a).href
+      const bSpec = pathToFileURL(b).href
+      const marker = path.join(dir, "tui-order.txt")
+
+      await Bun.write(
+        a,
+        `import fs from "fs/promises"
+
+export default {
+  id: "demo.tui.order.a",
+  tui: async () => {
+    await fs.appendFile(${JSON.stringify(marker)}, "a-start\\n")
+    await Bun.sleep(25)
+    await fs.appendFile(${JSON.stringify(marker)}, "a-end\\n")
+  },
+}
+`,
+      )
+      await Bun.write(
+        b,
+        `import fs from "fs/promises"
+
+export default {
+  id: "demo.tui.order.b",
+  tui: async () => {
+    await fs.appendFile(${JSON.stringify(marker)}, "b\\n")
+  },
+}
+`,
+      )
+      await Bun.write(path.join(dir, "tui.json"), JSON.stringify({ plugin: [aSpec, bSpec] }, null, 2))
+
+      return { marker }
+    },
+  })
+
+  process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
+  const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+
+  try {
+    await TuiPluginRuntime.init(createTuiPluginApi())
+    const lines = (await fs.readFile(tmp.extra.marker, "utf8")).trim().split("\n")
+    expect(lines).toEqual(["a-start", "a-end", "b"])
+  } finally {
+    await TuiPluginRuntime.dispose()
+    cwd.mockRestore()
+    delete process.env.OPENCODE_PLUGIN_META_FILE
+
+    if (backupJson === undefined) {
+      await fs.rm(globalJson, { force: true }).catch(() => {})
+    } else {
+      await Bun.write(globalJson, backupJson)
+    }
+    if (backupJsonc === undefined) {
+      await fs.rm(globalJsonc, { force: true }).catch(() => {})
+    } else {
+      await Bun.write(globalJsonc, backupJsonc)
+    }
   }
 })
 
@@ -560,4 +646,107 @@ describe("tui.plugin.loader", () => {
     expect(data.leaked_local_to_global).toBe(false)
     expect(data.leaked_global_to_local).toBe(false)
   })
+})
+
+test("updates installed theme when plugin metadata changes", async () => {
+  await using tmp = await tmpdir<{
+    spec: string
+    pluginPath: string
+    themePath: string
+    dest: string
+    themeName: string
+  }>({
+    init: async (dir) => {
+      const pluginPath = path.join(dir, "theme-update-plugin.ts")
+      const spec = pathToFileURL(pluginPath).href
+      const themeFile = "theme-update.json"
+      const themePath = path.join(dir, themeFile)
+      const dest = path.join(dir, ".opencode", "themes", themeFile)
+      const themeName = themeFile.replace(/\.json$/, "")
+      const configPath = path.join(dir, "tui.json")
+
+      await Bun.write(themePath, JSON.stringify({ theme: { primary: "#111111" } }, null, 2))
+      await Bun.write(
+        pluginPath,
+        `export default {
+  id: "demo.theme-update",
+  tui: async (api, options) => {
+    if (!options?.theme_path) return
+    await api.theme.install(options.theme_path)
+  },
+}
+`,
+      )
+      await Bun.write(
+        configPath,
+        JSON.stringify(
+          {
+            plugin: [[spec, { theme_path: `./${themeFile}` }]],
+          },
+          null,
+          2,
+        ),
+      )
+
+      return {
+        spec,
+        pluginPath,
+        themePath,
+        dest,
+        themeName,
+      }
+    },
+  })
+
+  process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
+  const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
+  const install = spyOn(Config, "installDependencies").mockResolvedValue()
+
+  const api = () =>
+    createTuiPluginApi({
+      theme: {
+        has(name) {
+          return allThemes()[name] !== undefined
+        },
+      },
+    })
+
+  try {
+    await TuiPluginRuntime.init(api())
+    await TuiPluginRuntime.dispose()
+    await expect(fs.readFile(tmp.extra.dest, "utf8")).resolves.toContain("#111111")
+
+    await Bun.write(tmp.extra.themePath, JSON.stringify({ theme: { primary: "#222222" } }, null, 2))
+    await Bun.write(
+      tmp.extra.pluginPath,
+      `export default {
+  id: "demo.theme-update",
+  tui: async (api, options) => {
+    if (!options?.theme_path) return
+    await api.theme.install(options.theme_path)
+  },
+}
+// v2
+`,
+    )
+    const stamp = new Date(Date.now() + 10_000)
+    await fs.utimes(tmp.extra.pluginPath, stamp, stamp)
+    await fs.utimes(tmp.extra.themePath, stamp, stamp)
+
+    await TuiPluginRuntime.init(api())
+    const text = await fs.readFile(tmp.extra.dest, "utf8")
+    expect(text).toContain("#222222")
+    expect(text).not.toContain("#111111")
+    const list = await Filesystem.readJson<Record<string, { themes?: Record<string, { dest: string }> }>>(
+      process.env.OPENCODE_PLUGIN_META_FILE!,
+    )
+    expect(list["demo.theme-update"]?.themes?.[tmp.extra.themeName]?.dest).toBe(tmp.extra.dest)
+  } finally {
+    await TuiPluginRuntime.dispose()
+    cwd.mockRestore()
+    wait.mockRestore()
+    install.mockRestore()
+    delete process.env.OPENCODE_PLUGIN_META_FILE
+  }
 })

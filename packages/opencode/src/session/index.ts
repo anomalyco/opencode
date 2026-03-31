@@ -334,14 +334,14 @@ export namespace Session {
     readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<MessageV2.WithParts[]>
     readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
     readonly remove: (sessionID: SessionID) => Effect.Effect<void>
-    readonly updateMessage: (msg: MessageV2.Info) => Effect.Effect<MessageV2.Info>
+    readonly updateMessage: <T extends MessageV2.Info>(msg: T) => Effect.Effect<T>
     readonly removeMessage: (input: { sessionID: SessionID; messageID: MessageID }) => Effect.Effect<MessageID>
     readonly removePart: (input: {
       sessionID: SessionID
       messageID: MessageID
       partID: PartID
     }) => Effect.Effect<PartID>
-    readonly updatePart: (part: MessageV2.Part) => Effect.Effect<MessageV2.Part>
+    readonly updatePart: <T extends MessageV2.Part>(part: T) => Effect.Effect<T>
     readonly updatePartDelta: (input: {
       sessionID: SessionID
       messageID: MessageID
@@ -469,26 +469,23 @@ export namespace Session {
         }
       })
 
-      const updateMessage = Effect.fn("Session.updateMessage")(function* (msg: MessageV2.Info) {
-        yield* Effect.sync(() =>
-          SyncEvent.run(MessageV2.Event.Updated, {
-            sessionID: msg.sessionID,
-            info: msg,
-          }),
-        )
-        return msg
-      })
+      const updateMessage = <T extends MessageV2.Info>(msg: T): Effect.Effect<T> =>
+        Effect.gen(function* () {
+          yield* Effect.sync(() => SyncEvent.run(MessageV2.Event.Updated, { sessionID: msg.sessionID, info: msg }))
+          return msg
+        }).pipe(Effect.withSpan("Session.updateMessage"))
 
-      const updatePart = Effect.fn("Session.updatePart")(function* (part: MessageV2.Part) {
-        yield* Effect.sync(() =>
-          SyncEvent.run(MessageV2.Event.PartUpdated, {
-            sessionID: part.sessionID,
-            part: structuredClone(part),
-            time: Date.now(),
-          }),
-        )
-        return part
-      })
+      const updatePart = <T extends MessageV2.Part>(part: T): Effect.Effect<T> =>
+        Effect.gen(function* () {
+          yield* Effect.sync(() =>
+            SyncEvent.run(MessageV2.Event.PartUpdated, {
+              sessionID: part.sessionID,
+              part: structuredClone(part),
+              time: Date.now(),
+            }),
+          )
+          return part
+        }).pipe(Effect.withSpan("Session.updatePart"))
 
       const create = Effect.fn("Session.create")(function* (input?: {
         parentID?: SessionID
@@ -851,7 +848,10 @@ export namespace Session {
 
   export const children = fn(SessionID.zod, (id) => runPromise((svc) => svc.children(id)))
   export const remove = fn(SessionID.zod, (id) => runPromise((svc) => svc.remove(id)))
-  export const updateMessage = fn(MessageV2.Info, (msg) => runPromise((svc) => svc.updateMessage(msg)))
+  export async function updateMessage<T extends MessageV2.Info>(msg: T): Promise<T> {
+    MessageV2.Info.parse(msg)
+    return runPromise((svc) => svc.updateMessage(msg))
+  }
 
   export const removeMessage = fn(z.object({ sessionID: SessionID.zod, messageID: MessageID.zod }), (input) =>
     runPromise((svc) => svc.removeMessage(input)),
@@ -862,7 +862,10 @@ export namespace Session {
     (input) => runPromise((svc) => svc.removePart(input)),
   )
 
-  export const updatePart = fn(MessageV2.Part, (part) => runPromise((svc) => svc.updatePart(part)))
+  export async function updatePart<T extends MessageV2.Part>(part: T): Promise<T> {
+    MessageV2.Part.parse(part)
+    return runPromise((svc) => svc.updatePart(part))
+  }
 
   export const updatePartDelta = fn(
     z.object({
