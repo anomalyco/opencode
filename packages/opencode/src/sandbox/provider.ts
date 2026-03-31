@@ -36,54 +36,52 @@ export class SrtProvider extends SandboxProvider {
     const settingsFile = path.join(tmpDir, `srt-settings-${id}.json`)
 
     const domainsRaw = options.env["OPENCODE_SANDBOX_DOMAINS"]
-    const allowedDomains = options.networkDomains ?? (domainsRaw ? domainsRaw.split(",").map(d => d.trim()).filter(Boolean) : [])
+    const domains = options.networkDomains ?? (domainsRaw ? domainsRaw.split(",").map(d => d.trim()).filter(Boolean) : [])
 
-    const denyReadPaths = [os.homedir()]
-    const denyWritePaths: string[] = []
+    // Resolve workspace patterns to absolute paths for blocking.
+    const denyWrite: string[] = []
+    const denyRead = [os.homedir()]
 
     if (options.denyWorkspacePatterns) {
       for (const pattern of options.denyWorkspacePatterns) {
         try {
           const glob = new Glob(pattern)
-          for (const file of glob.scanSync({ cwd: options.cwd })) {
-            const absolutePath = path.join(options.cwd, file)
-            denyReadPaths.push(absolutePath)
-            denyWritePaths.push(absolutePath)
+          for (const file of glob.scanSync({ cwd: options.cwd, dot: true })) {
+            const absolutePath = path.resolve(options.cwd, file)
+            denyWrite.push(absolutePath)
+            denyRead.push(absolutePath)
           }
-        } catch (e) {
-          // Ignore invalid globs
-        }
+        } catch (_) {}
       }
     }
 
     if (options.denyBinaries) {
       for (const binary of options.denyBinaries) {
         if (binary.startsWith("/")) {
-          denyReadPaths.push(binary)
+          denyRead.push(binary)
         } else {
-          const absolutePath = which(binary)
-          if (absolutePath) {
-            denyReadPaths.push(absolutePath)
-          }
+          const abs = which(binary)
+          if (abs) denyRead.push(abs)
         }
       }
     }
 
     const config = {
       network: {
-        // If empty, force the proxy engine to initialize by providing a dummy domain to enforce air-gapping
-        allowedDomains: allowedDomains.length === 0 ? ["sandbox.local"] : allowedDomains,
+        allowedDomains: domains.length === 0 ? ["sandbox.local"] : domains,
         deniedDomains: [],
       },
       filesystem: {
-        denyRead: denyReadPaths,
+        denyRead,
         allowRead: [options.cwd, "/tmp"],
         allowWrite: [options.cwd, "/tmp"],
-        denyWrite: denyWritePaths,
+        denyWrite,
       },
     }
 
     fs.writeFileSync(settingsFile, JSON.stringify(config, null, 2))
+    // Save a copy for debugging
+    try { fs.writeFileSync("/tmp/opencode-last-srt-settings.json", JSON.stringify(config, null, 2)) } catch (_) {}
 
     const args = ["--settings", settingsFile, shell, "-c", command]
 
@@ -100,11 +98,7 @@ export class SrtProvider extends SandboxProvider {
       args,
       env: safeEnv,
       cleanup: () => {
-        try {
-          fs.rmSync(tmpDir, { recursive: true, force: true })
-        } catch (e) {
-          // Ignore failures on cleanup
-        }
+        try { fs.rmSync(tmpDir, { recursive: true, force: true }) } catch (_) {}
       },
     }
   }

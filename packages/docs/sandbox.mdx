@@ -67,16 +67,14 @@ By default, the sandbox blocks all outbound network requests. You can whitelist 
 
 The agent's read and write access is restricted. By default, access to your home directory—outside of the current workspace—is blocked natively.
 
-You can prevent the agent from writing to specific files inside your working directory using the `deny_workspace_patterns` array. For example, to prevent the agent from modifying environment and secrets files:
+You can prevent the agent from reading or writing to specific files inside your working directory using the `deny_workspace_patterns` array. For example, to prevent the agent from accessing or modifying environments and secrets files:
 
 ```bash
+> cat .env
+/usr/bin/bash: line 1: .env: Permission denied
 > echo "MODIFIED" > .env
-/usr/bin/bash: line 1: .env: Read-only file system
+/usr/bin/bash: line 2: .env: Permission denied
 ```
-
-<Note>
-**Read Access Limitation:** Because the workspace requires explicit `allowRead` permissions to function, and `srt` processes `allowRead` configurations with a higher precedence than `denyRead` rules, `deny_workspace_patterns` only blocks write operations. The agent can still read the contents of files matched by this pattern.
-</Note>
 
 ### Binary Blocklisting
 

@@ -38,7 +38,7 @@ describe.skipIf(!isSrtAvailable)("SRT Sandbox Security Boundaries", () => {
           provider: "srt",
           domains: [],
           env_whitelist: ["PATH", "HOME", "TERM", "LANG", "USER", "SHELL", "TMPDIR", "TMP", "EDITOR"],
-          deny_workspace_patterns: ["**/*.secret"]
+          deny_workspace_patterns: ["**/*.secret", "**/*.key", "**/.env*", "secrets_dir/*"]
         }
       })
     })
@@ -138,36 +138,131 @@ describe.skipIf(!isSrtAvailable)("SRT Sandbox Security Boundaries", () => {
     })
   })
 
-  test("enforces deny_workspace_patterns via explicit file path resolution", async () => {
+  test("deny_workspace_patterns: blocks reads and writes for matched dotfiles and extensions", async () => {
     await using tmp = await tmpdir()
-    fs.writeFileSync(path.join(tmp.path, "test.secret"), "super_secret_data")
+    fs.writeFileSync(path.join(tmp.path, ".env"), "API_KEY=123")
+    fs.writeFileSync(path.join(tmp.path, "config.key"), "PRIVATE_KEY_DATA")
 
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
         const bash = await BashTool.init()
-        let result = await bash.execute(
-          {
-            command: `cat test.secret 2>&1 || true`,
-            description: "Attempt to read explicitly blocked pattern (will succeed due to srt reading precedence)",
-          },
-          ctx,
-        ) as any
+
+        // Test dotfile block
+        let result = await bash.execute({ command: `cat .env 2>&1`, description: "Read .env" }, ctx) as any
+        expect(result.metadata.exit).toBeGreaterThan(0)
+        expect(String(result.output).toLowerCase()).toMatch(/permission denied/)
+
+        result = await bash.execute({ command: `echo "hacked" > .env 2>&1`, description: "Write .env" }, ctx) as any
+        expect(result.metadata.exit).toBeGreaterThan(0)
+
+        // Test regular file extension match
+        result = await bash.execute({ command: `cat config.key 2>&1`, description: "Read config.key" }, ctx) as any
+        expect(result.metadata.exit).toBeGreaterThan(0)
+      },
+    })
+  })
+
+  test("deny_workspace_patterns: allows full access to unblocked sibling files", async () => {
+    await using tmp = await tmpdir()
+    fs.writeFileSync(path.join(tmp.path, ".env"), "blocked")
+    fs.writeFileSync(path.join(tmp.path, "readme.md"), "safe")
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
         
-        // srt architectural limitation: allowRead (which we use to allow the workspace) 
-        // strictly overrides any nested denyReads! So reading is actually allowed here.
+        let result = await bash.execute({ command: `cat readme.md && echo "edited" >> readme.md`, description: "RW safe file" }, ctx) as any
+        expect(result.metadata.exit).toBe(0)
+        expect(String(result.output)).toContain("safe")
+        expect(fs.readFileSync(path.join(tmp.path, "readme.md"), "utf8")).toContain("edited")
+      },
+    })
+  })
+
+  test("deny_workspace_patterns: safely handles deeply nested files and directory wildcards", async () => {
+    await using tmp = await tmpdir()
+    fs.mkdirSync(path.join(tmp.path, "a/b/c"), { recursive: true })
+    fs.writeFileSync(path.join(tmp.path, "a/b/c/deep.secret"), "deep_data")
+    
+    fs.mkdirSync(path.join(tmp.path, "secrets_dir"), { recursive: true })
+    fs.writeFileSync(path.join(tmp.path, "secrets_dir/anything.txt"), "dir_data")
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+
+        let result = await bash.execute({ command: `cat a/b/c/deep.secret 2>&1`, description: "Deep secret" }, ctx) as any
+        expect(result.metadata.exit).toBeGreaterThan(0)
+
+        result = await bash.execute({ command: `cat secrets_dir/anything.txt 2>&1`, description: "Dir wildcard" }, ctx) as any
+        expect(result.metadata.exit).toBeGreaterThan(0)
+      },
+    })
+  })
+
+  test("deny_workspace_patterns: blocks deletion (rm) and permission modification (chmod) of restricted files", async () => {
+    await using tmp = await tmpdir()
+    fs.writeFileSync(path.join(tmp.path, "test.secret"), "data")
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+
+        let result = await bash.execute({ command: `rm test.secret 2>&1`, description: "Delete secret" }, ctx) as any
+        expect(result.metadata.exit).toBeGreaterThan(0)
+        expect(String(result.output).toLowerCase()).toMatch(/device or resource busy|permission|read-only/)
+
+        result = await bash.execute({ command: `chmod 777 test.secret 2>&1`, description: "Chmod secret" }, ctx) as any
+        expect(result.metadata.exit).toBeGreaterThan(0)
+      },
+    })
+  })
+
+  test("deny_workspace_patterns: secures files with spaces or unusual characters in names", async () => {
+    await using tmp = await tmpdir()
+    fs.writeFileSync(path.join(tmp.path, "my weird secret.secret"), "weird_data")
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+
+        let result = await bash.execute({ command: `cat "my weird secret.secret" 2>&1`, description: "Weird name" }, ctx) as any
+        expect(result.metadata.exit).toBeGreaterThan(0)
+      },
+    })
+  })
+
+  test("deny_workspace_patterns: newly created matching files magically inherit read restrictions", async () => {
+    await using tmp = await tmpdir()
+    
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+
+        // Because 'new.secret' does not exist when the sandbox STARTS, the glob
+        // resolver doesn't pick it up, so it is omitted from denyWrite/denyRead.
+        let result = await bash.execute({ command: `echo "injected" > new.secret && ls -la new.secret`, description: "Create new secret" }, ctx) as any
+        
+        console.log("Creation output:", String(result.output))
         expect(result.metadata.exit).toBe(0)
         
-        result = await bash.execute(
-          {
-            command: `echo "hacked" > test.secret 2>&1`,
-            description: "Attempt to write to explicitly blocked pattern",
-          },
-          ctx,
-        ) as any
+        // It can also be read back since it evaded the initial glob scan
+        result = await bash.execute({ command: `cat new.secret 2>&1`, description: "Read new secret" }, ctx) as any
+        
+        if (result.metadata.exit !== 0) {
+          console.log("Unexpected read failure output:", String(result.output))
+          // Also check umask
+          const umaskRes = await bash.execute({ command: "umask", description: "check umask"}, ctx) as any
+          console.log("Current umask:", String(umaskRes.output))
+        }
         
         expect(result.metadata.exit).toBeGreaterThan(0)
-        expect(String(result.output).toLowerCase()).toContain("read-only file system")
       },
     })
   })
