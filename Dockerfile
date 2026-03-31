@@ -1,6 +1,6 @@
 FROM oven/bun:1.3.11-alpine AS build
 
-RUN apk add --no-cache git nodejs
+RUN apk add --no-cache git nodejs build-base python3
 
 WORKDIR /app
 COPY . .
