@@ -60,6 +60,10 @@ function classifyModel(model: ModelInfo): Tier {
 }
 
 function sortByCapability(a: ModelInfo, b: ModelInfo): number {
+  // Prefer non-codex models (more widely available across Copilot tiers)
+  const aCodex = a.id.includes("codex") ? 1 : 0
+  const bCodex = b.id.includes("codex") ? 1 : 0
+  if (aCodex !== bCodex) return aCodex - bCodex
   if (b.limit.output !== a.limit.output) return b.limit.output - a.limit.output
   return b.limit.context - a.limit.context
 }
