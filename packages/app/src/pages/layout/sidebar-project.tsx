@@ -17,6 +17,11 @@ export type ProjectSidebarContext = {
   sidebarOpened: Accessor<boolean>
   sidebarHovering: Accessor<boolean>
   nav: Accessor<HTMLElement | undefined>
+  hoverProject: Accessor<string | undefined>
+  onProjectMouseEnter: (worktree: string, event: MouseEvent) => void
+  onProjectMouseLeave: (worktree: string) => void
+  onProjectFocus: (worktree: string) => void
+  onHoverOpenChanged: (worktree: string, hoverOpen: boolean) => void
   navigateToProject: (directory: string) => void
   openSidebar: () => void
   closeProject: (directory: string) => void
