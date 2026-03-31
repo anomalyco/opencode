@@ -373,28 +373,51 @@ export namespace Config {
     }
 
     const nodeModules = path.join(dir, "node_modules")
-    if (!existsSync(nodeModules)) return true
+    if (!existsSync(nodeModules)) {
+      log.info("config dependency install needed", { dir, reason: "missing_node_modules" })
+      return true
+    }
 
     const pkg = path.join(dir, "package.json")
     const pkgExists = await Filesystem.exists(pkg)
-    if (!pkgExists) return true
+    if (!pkgExists) {
+      log.info("config dependency install needed", { dir, reason: "missing_package_json" })
+      return true
+    }
 
     const parsed = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => null)
     const dependencies = parsed?.dependencies ?? {}
     const depVersion = dependencies["@opencode-ai/plugin"]
-    if (!depVersion) return true
+    if (!depVersion) {
+      log.info("config dependency install needed", { dir, reason: "missing_plugin_dependency" })
+      return true
+    }
 
     const targetVersion = Installation.isPreview() ? "latest" : Installation.VERSION
+    log.info("checking config dependency version", {
+      dir,
+      pkg: "@opencode-ai/plugin",
+      depVersion,
+      targetVersion,
+    })
     if (targetVersion === "latest") {
       const isOutdated = await PackageRegistry.isOutdated("@opencode-ai/plugin", depVersion, dir)
       if (!isOutdated) return false
       log.info("Cached version is outdated, proceeding with install", {
+        dir,
         pkg: "@opencode-ai/plugin",
         cachedVersion: depVersion,
       })
       return true
     }
     if (depVersion === targetVersion) return false
+    log.info("config dependency install needed", {
+      dir,
+      reason: "version_mismatch",
+      pkg: "@opencode-ai/plugin",
+      depVersion,
+      targetVersion,
+    })
     return true
   }
 

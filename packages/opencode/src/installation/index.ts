@@ -41,10 +41,14 @@ export namespace Installation {
   }
 
   export function getReleaseType(current: string, latest: string): ReleaseType {
-    const currMajor = semver.major(current)
-    const currMinor = semver.minor(current)
-    const newMajor = semver.major(latest)
-    const newMinor = semver.minor(latest)
+    const curr = semver.coerce(current)
+    const next = semver.coerce(latest)
+    if (!curr || !next) return "patch"
+
+    const currMajor = curr.major
+    const currMinor = curr.minor
+    const newMajor = next.major
+    const newMinor = next.minor
 
     if (newMajor > currMajor) return "major"
     if (newMinor > currMinor) return "minor"

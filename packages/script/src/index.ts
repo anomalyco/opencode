@@ -4,6 +4,8 @@ import path from "path"
 
 const rootPkgPath = path.resolve(import.meta.dir, "../../../package.json")
 const rootPkg = await Bun.file(rootPkgPath).json()
+const appPkgPath = path.resolve(import.meta.dir, "../../opencode/package.json")
+const appPkg = await Bun.file(appPkgPath).json()
 const expectedBunVersion = rootPkg.packageManager?.split("@")[1]
 
 if (!expectedBunVersion) {
@@ -23,17 +25,42 @@ const env = {
   OPENCODE_VERSION: process.env["OPENCODE_VERSION"],
   OPENCODE_RELEASE: process.env["OPENCODE_RELEASE"],
 }
+const base = (() => {
+  const value = typeof appPkg.version === "string" ? appPkg.version.trim() : ""
+  return semver.valid(value) ?? "0.0.0"
+})()
+const explicit = (() => {
+  const value = env.OPENCODE_VERSION?.trim()
+  if (!value) return
+  return semver.valid(value.replace(/^v(?=\d)/, "")) ?? undefined
+})()
+const stamp = () => new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")
+const tag = (value: string) => {
+  const clean = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^0-9a-z-]+/g, "-")
+    .replace(/^-+/, "")
+    .replace(/-+$/, "")
+  return clean || "dev"
+}
+const preview = (value: string, channel: string) => {
+  const parsed = semver.parse(value)
+  if (!parsed) return `0.0.0-${tag(channel)}.${stamp()}`
+  return `${parsed.major}.${parsed.minor}.${parsed.patch}-${tag(channel)}.${stamp()}`
+}
+
 const CHANNEL = await (async () => {
   if (env.OPENCODE_CHANNEL) return env.OPENCODE_CHANNEL
   if (env.OPENCODE_BUMP) return "latest"
-  if (env.OPENCODE_VERSION && !env.OPENCODE_VERSION.startsWith("0.0.0-")) return "latest"
+  if (explicit && !semver.prerelease(explicit)) return "latest"
   return await $`git branch --show-current`.text().then((x) => x.trim())
 })()
 const IS_PREVIEW = CHANNEL !== "latest"
 
 const VERSION = await (async () => {
-  if (env.OPENCODE_VERSION) return env.OPENCODE_VERSION
-  if (IS_PREVIEW) return `0.0.0-${CHANNEL}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
+  if (explicit) return explicit
+  if (IS_PREVIEW) return preview(base, CHANNEL)
   const version = await fetch("https://registry.npmjs.org/opencode-ai/latest")
     .then((res) => {
       if (!res.ok) throw new Error(res.statusText)

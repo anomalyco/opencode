@@ -746,7 +746,14 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     const version = evt.properties.version
 
     const skipped = kv.get("skipped_version")
-    if (skipped && !semver.gt(version, skipped)) return
+    if (skipped) {
+      const next = semver.coerce(version)
+      const prev = semver.coerce(skipped)
+      if (next && prev && !semver.gt(next, prev)) return
+      if (!next || !prev) {
+        if (version === skipped) return
+      }
+    }
 
     const choice = await DialogConfirm.show(
       dialog,

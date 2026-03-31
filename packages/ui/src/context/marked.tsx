@@ -493,6 +493,10 @@ function renderMathInText(text: string, output: MathOutput): string {
 
   let result = text
 
+  result = result.replace(/<div data-opencode-math-style="display">([\s\S]*?)<\/div>/g, (_, math) =>
+    render(math, true, `$$${math}$$`),
+  )
+
   // Display math: <span data-math-style="display">...</span> (from comrak math_dollars)
   result = result.replace(/<span data-math-style="display">([\s\S]*?)<\/span>/g, (_, math) =>
     render(math, true, `$$${math}$$`),

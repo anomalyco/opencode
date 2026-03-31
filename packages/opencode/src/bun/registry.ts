@@ -30,15 +30,48 @@ export namespace PackageRegistry {
   }
 
   export async function isOutdated(pkg: string, cachedVersion: string, cwd?: string): Promise<boolean> {
-    const latestVersion = await info(pkg, "version", cwd)
+    const latestVersion = await PackageRegistry.info(pkg, "version", cwd)
     if (!latestVersion) {
       log.warn("Failed to resolve latest version, using cached", { pkg, cachedVersion })
       return false
     }
+    const latest = semver.valid(latestVersion)
+    if (!latest) {
+      log.warn("Invalid latest dependency version, using cached", {
+        pkg,
+        cwd,
+        cachedVersion,
+        latestVersion,
+      })
+      return false
+    }
 
     const isRange = /[\s^~*xX<>|=]/.test(cachedVersion)
-    if (isRange) return !semver.satisfies(latestVersion, cachedVersion)
+    if (isRange) {
+      const ok = semver.validRange(cachedVersion)
+      if (!ok) {
+        log.warn("Invalid cached dependency range, forcing reinstall", {
+          pkg,
+          cwd,
+          cachedVersion,
+          latestVersion,
+        })
+        return true
+      }
+      return !semver.satisfies(latest, cachedVersion)
+    }
 
-    return semver.lt(cachedVersion, latestVersion)
+    const curr = semver.valid(cachedVersion)
+    if (!curr) {
+      log.warn("Invalid cached dependency version, forcing reinstall", {
+        pkg,
+        cwd,
+        cachedVersion,
+        latestVersion,
+      })
+      return true
+    }
+
+    return semver.lt(curr, latest)
   }
 }
