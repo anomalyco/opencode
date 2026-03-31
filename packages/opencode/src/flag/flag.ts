@@ -27,7 +27,6 @@ export const Flag = {
   OTEL_EXPORTER_OTLP_ENDPOINT: process.env["OTEL_EXPORTER_OTLP_ENDPOINT"],
   OTEL_EXPORTER_OTLP_HEADERS: process.env["OTEL_EXPORTER_OTLP_HEADERS"],
 
-  OPENCODE_YOLO: truthy("OPENCODE_YOLO"),
   OPENCODE_AUTO_SHARE: truthy("OPENCODE_AUTO_SHARE"),
   OPENCODE_AUTO_HEAP_SNAPSHOT: truthy("OPENCODE_AUTO_HEAP_SNAPSHOT"),
   OPENCODE_GIT_BASH_PATH: process.env["OPENCODE_GIT_BASH_PATH"],
@@ -89,6 +88,9 @@ export const Flag = {
   // external tooling set these env vars at runtime.
   get OPENCODE_DISABLE_PROJECT_CONFIG() {
     return truthy("OPENCODE_DISABLE_PROJECT_CONFIG")
+  },
+  get OPENCODE_YOLO() {
+    return truthy("OPENCODE_YOLO")
   },
   get OPENCODE_TUI_CONFIG() {
     return process.env["OPENCODE_TUI_CONFIG"]

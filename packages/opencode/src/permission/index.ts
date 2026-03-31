@@ -10,6 +10,7 @@ import { zod } from "@/util/effect-zod"
 import { Log } from "@/util"
 import { withStatics } from "@/util/schema"
 import { Wildcard } from "@/util"
+import { Yolo } from "@/yolo"
 import { Deferred, Effect, Layer, Schema, Context } from "effect"
 import os from "os"
 import { evaluate as evalRule } from "./evaluate"
@@ -180,7 +181,9 @@ export const layer = Layer.effect(
     const ask = Effect.fn("Permission.ask")(function* (input: AskInput) {
       const { approved, pending } = yield* InstanceState.get(state)
       const { ruleset, ...request } = input
+      const yolo = Yolo.isEnabled()
       let needsAsk = false
+      let auto = false
 
       for (const pattern of request.patterns) {
         const rule = evaluate(request.permission, pattern, ruleset, approved)
@@ -191,9 +194,16 @@ export const layer = Layer.effect(
           })
         }
         if (rule.action === "allow") continue
+        if (yolo) {
+          auto = true
+          continue
+        }
         needsAsk = true
       }
 
+      if (auto) {
+        log.warn("auto-approved by yolo", { permission: request.permission, patterns: request.patterns })
+      }
       if (!needsAsk) return
 
       const id = request.id ?? PermissionID.ascending()

@@ -9,6 +9,7 @@ import { Instance } from "../../src/project/instance"
 import { provideInstance, provideTmpdirInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { MessageID, SessionID } from "../../src/session/schema"
+import { Yolo } from "../../src/yolo"
 
 const bus = Bus.layer
 const env = Layer.mergeAll(Permission.layer.pipe(Layer.provide(bus)), bus, CrossSpawnSpawner.defaultLayer)
@@ -1078,3 +1079,67 @@ it.live("ask - abort should clear pending request", () =>
     if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Permission.RejectedError)
   }),
 )
+
+it.live("ask - auto-approves ask when yolo is enabled", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped({ git: true })
+    const run = withProvided(dir)
+
+    const previous = Yolo.isEnabled()
+    Yolo.set(true)
+    try {
+      const result = yield* ask({
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [{ permission: "bash", pattern: "*", action: "ask" }],
+      }).pipe(run)
+      expect(result).toBeUndefined()
+      expect(yield* list().pipe(run)).toHaveLength(0)
+    } finally {
+      Yolo.set(previous)
+    }
+  }),
+)
+
+it.live("ask - yolo still respects deny rules", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped({ git: true })
+    const run = withProvided(dir)
+
+    const previous = Yolo.isEnabled()
+    Yolo.set(true)
+    try {
+      const err = yield* fail(
+        ask({
+          sessionID: SessionID.make("session_test"),
+          permission: "bash",
+          patterns: ["rm -rf /"],
+          metadata: {},
+          always: [],
+          ruleset: [{ permission: "bash", pattern: "*", action: "deny" }],
+        }).pipe(run),
+      )
+      expect(err).toBeInstanceOf(Permission.DeniedError)
+    } finally {
+      Yolo.set(previous)
+    }
+  }),
+)
+
+test("yolo - init reads OPENCODE_YOLO at runtime", async () => {
+  const previous = Yolo.isEnabled()
+  const prevEnv = process.env.OPENCODE_YOLO
+  Yolo.set(false)
+  process.env.OPENCODE_YOLO = "1"
+  try {
+    await Yolo.init()
+    expect(Yolo.isEnabled()).toBe(true)
+  } finally {
+    Yolo.set(previous)
+    if (prevEnv === undefined) delete process.env.OPENCODE_YOLO
+    else process.env.OPENCODE_YOLO = prevEnv
+  }
+})

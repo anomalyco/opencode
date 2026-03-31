@@ -1,7 +1,8 @@
+import path from "path"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
-import { Config } from "@/config/config"
 import { Flag } from "@/flag/flag"
+import { Global } from "@/global"
 import { Log } from "@/util/log"
 import z from "zod"
 
@@ -19,9 +20,19 @@ export namespace Yolo {
     ),
   }
 
+  async function readGlobalYolo(): Promise<boolean> {
+    const filepath = path.join(Global.Path.config, "config.json")
+    try {
+      const text = await Bun.file(filepath).text()
+      const parsed = JSON.parse(text)
+      return parsed?.yolo === true
+    } catch {
+      return false
+    }
+  }
+
   export async function init() {
-    const config = await Config.getGlobal()
-    if (config.yolo === true) {
+    if (await readGlobalYolo()) {
       enabled = true
       log.warn("YOLO mode enabled via config")
     }
@@ -43,7 +54,9 @@ export namespace Yolo {
     enabled = value
     if (previous !== value) {
       log.warn(`YOLO mode ${value ? "ENABLED" : "DISABLED"}`)
-      Bus.publish(Event.Changed, { enabled: value })
+      void Bus.publish(Event.Changed, { enabled: value }).catch((err) => {
+        log.debug("failed to publish yolo.changed", { err: String(err) })
+      })
     }
   }
 
