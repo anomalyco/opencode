@@ -1427,12 +1427,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     data-action="prompt-submit"
                     type="button"
                     variant="primary"
-                    class="size-8 p-0"
+                    class="relative size-8 p-0"
                     disabled
                     style={buttons()}
                     aria-label="Reverting..."
                   >
-                    <Spinner class="size-3.5" />
+                    <Icon name="arrow-up" class="opacity-0" />
+                    <div class="absolute inset-0 flex items-center justify-center">
+                      <Spinner class="size-3.5" />
+                    </div>
                   </Button>
                 </Show>
               </Tooltip>
