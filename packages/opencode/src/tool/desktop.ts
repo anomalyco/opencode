@@ -3,9 +3,7 @@ import { Tool } from "./tool"
 import DESCRIPTION from "./desktop.txt"
 import { Log } from "../util/log"
 import path from "path"
-import os from "os"
 import fsSync from "fs"
-import fs from "fs/promises"
 import { pathToFileURL } from "url"
 
 const log = Log.create({ service: "desktop-tool" })
@@ -44,12 +42,6 @@ async function loadNutJs() {
   }
 }
 
-async function tempFile() {
-  const tmpDir = os.tmpdir()
-  const filename = `opencode-desktop-${Date.now()}.png`
-  return path.join(tmpDir, filename)
-}
-
 export const DesktopTool = Tool.define("desktop", async () => {
   return {
     description: DESCRIPTION,
@@ -86,21 +78,23 @@ export const DesktopTool = Tool.define("desktop", async () => {
         case "screenshot": {
           log.info("Taking screenshot", { region: params.region })
 
-          const tmpFile = await tempFile()
+          let image: any
+          let width: number
+          let height: number
 
           if (params.region) {
             const region = new nut.Region(params.region.x, params.region.y, params.region.width, params.region.height)
-            await nut.screen.captureRegion(tmpFile, region)
+            image = await nut.screen.grabRegion(region)
+            width = params.region.width
+            height = params.region.height
           } else {
-            await nut.screen.capture(tmpFile)
+            image = await nut.screen.grab()
+            width = await nut.screen.width()
+            height = await nut.screen.height()
           }
 
-          const imageBuffer = await fs.readFile(tmpFile)
+          const imageBuffer = await image.toPNG()
           const base64Data = imageBuffer.toString("base64")
-          const width = params.region ? params.region.width : await nut.screen.width()
-          const height = params.region ? params.region.height : await nut.screen.height()
-
-          await fs.unlink(tmpFile)
 
           return {
             title: params.region ? "Partial screenshot captured" : "Screenshot captured",
