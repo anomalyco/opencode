@@ -123,10 +123,11 @@ html[data-platform="desktop"][data-os="windows"] [data-component="context-menu-s
   background-color: var(--surface-raised-stronger-non-alpha);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+}
 
-  [data-slot="context-menu-arrow"] {
-    fill: var(--surface-raised-stronger-non-alpha);
-  }
+html[data-platform="desktop"][data-os="windows"] [data-component="context-menu-content"] [data-slot="context-menu-arrow"],
+html[data-platform="desktop"][data-os="windows"] [data-component="context-menu-sub-content"] [data-slot="context-menu-arrow"] {
+  fill: var(--surface-raised-stronger-non-alpha);
 }
 
 @keyframes contextMenuContentShow {

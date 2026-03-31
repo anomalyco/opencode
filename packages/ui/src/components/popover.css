@@ -80,10 +80,10 @@ html[data-platform="desktop"][data-os="windows"] [data-component="popover-conten
   background-color: var(--surface-raised-stronger-non-alpha);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+}
 
-  [data-slot="popover-arrow"] {
-    fill: var(--surface-raised-stronger-non-alpha);
-  }
+html[data-platform="desktop"][data-os="windows"] [data-component="popover-content"] [data-slot="popover-arrow"] {
+  fill: var(--surface-raised-stronger-non-alpha);
 }
 
 @keyframes popover-open {

@@ -126,3 +126,22 @@
 .w-\[200px\] {
   width: 150px;
 }
+
+.bg-surface-panel {
+  background-color: var(--surface-raised-base);
+}
+
+.backdrop-blur {
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.backdrop-blur-xl {
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+}
+
+.backdrop-blur-2xl {
+  -webkit-backdrop-filter: blur(40px);
+  backdrop-filter: blur(40px);
+}

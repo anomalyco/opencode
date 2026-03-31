@@ -333,6 +333,16 @@
   }
 }
 
+html[data-platform="desktop"][data-os="windows"] [data-component="list"] [data-slot="list-header"] {
+  background: var(--surface-raised-stronger-non-alpha);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-platform="desktop"][data-os="windows"] [data-component="list"] [data-slot="list-header"]::after {
+  background: linear-gradient(to bottom, var(--surface-raised-stronger-non-alpha), transparent);
+}
+
 [data-component="dialog"] [data-component="list"],
 [data-component="popover-content"] [data-component="list"] {
   [data-slot="list-search"] {
