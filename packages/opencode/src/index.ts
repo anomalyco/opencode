@@ -69,9 +69,16 @@ const cli = yargs(hideBin(process.argv))
     describe: "run without external plugins",
     type: "boolean",
   })
+  .option("yolo", {
+    describe: "auto-approve ask permission prompts",
+    type: "boolean",
+  })
   .middleware(async (opts) => {
     if (opts.pure) {
       process.env.OPENCODE_PURE = "1"
+    }
+    if (opts.yolo) {
+      process.env.OPENCODE_YOLO = "1"
     }
 
     await Log.init({

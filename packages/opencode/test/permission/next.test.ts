@@ -6,8 +6,11 @@ import { PermissionID } from "../../src/permission/schema"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { MessageID, SessionID } from "../../src/session/schema"
+import { Yolo } from "../../src/yolo"
 
 afterEach(async () => {
+  delete process.env.OPENCODE_YOLO
+  Yolo.set(false)
   await Instance.disposeAll()
 })
 
@@ -496,6 +499,28 @@ test("ask - resolves immediately when action is allow", async () => {
   })
 })
 
+test("ask - auto-approves ask when yolo is enabled", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      Yolo.set(true)
+
+      const result = await Permission.ask({
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [{ permission: "bash", pattern: "*", action: "ask" }],
+      })
+
+      expect(result).toBeUndefined()
+      expect(await Permission.list()).toHaveLength(0)
+    },
+  })
+})
+
 test("ask - throws RejectedError when action is deny", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
@@ -511,6 +536,42 @@ test("ask - throws RejectedError when action is deny", async () => {
           ruleset: [{ permission: "bash", pattern: "*", action: "deny" }],
         }),
       ).rejects.toBeInstanceOf(Permission.DeniedError)
+    },
+  })
+})
+
+test("ask - yolo still respects deny rules", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      Yolo.set(true)
+
+      await expect(
+        Permission.ask({
+          sessionID: SessionID.make("session_test"),
+          permission: "bash",
+          patterns: ["rm -rf /"],
+          metadata: {},
+          always: [],
+          ruleset: [{ permission: "bash", pattern: "*", action: "deny" }],
+        }),
+      ).rejects.toBeInstanceOf(Permission.DeniedError)
+    },
+  })
+})
+
+test("yolo - init reads OPENCODE_YOLO at runtime", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      Yolo.set(false)
+      process.env.OPENCODE_YOLO = "1"
+
+      await Yolo.init()
+
+      expect(Yolo.isEnabled()).toBe(true)
     },
   })
 })

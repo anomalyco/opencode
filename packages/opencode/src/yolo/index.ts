@@ -43,7 +43,9 @@ export namespace Yolo {
     enabled = value
     if (previous !== value) {
       log.warn(`YOLO mode ${value ? "ENABLED" : "DISABLED"}`)
-      Bus.publish(Event.Changed, { enabled: value })
+      void Bus.publish(Event.Changed, { enabled: value }).catch((err) => {
+        log.debug("failed to publish yolo.changed", { err: String(err) })
+      })
     }
   }
 

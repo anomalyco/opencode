@@ -11,7 +11,7 @@ function falsy(key: string) {
 }
 
 export namespace Flag {
-  export const OPENCODE_YOLO = truthy("OPENCODE_YOLO")
+  export declare const OPENCODE_YOLO: boolean
   export const OPENCODE_AUTO_SHARE = truthy("OPENCODE_AUTO_SHARE")
   export const OPENCODE_GIT_BASH_PATH = process.env["OPENCODE_GIT_BASH_PATH"]
   export const OPENCODE_CONFIG = process.env["OPENCODE_CONFIG"]
@@ -87,6 +87,17 @@ export namespace Flag {
     return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
   }
 }
+
+// Dynamic getter for OPENCODE_YOLO
+// This must be evaluated at access time, not module load time,
+// because the CLI can set this flag at runtime
+Object.defineProperty(Flag, "OPENCODE_YOLO", {
+  get() {
+    return truthy("OPENCODE_YOLO")
+  },
+  enumerable: true,
+  configurable: false,
+})
 
 // Dynamic getter for OPENCODE_DISABLE_PROJECT_CONFIG
 // This must be evaluated at access time, not module load time,
