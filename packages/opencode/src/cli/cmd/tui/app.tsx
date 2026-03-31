@@ -514,6 +514,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         const sessionID=route.data.sessionID
         const messages=await sdk.client.session.messages({sessionID})
         if (!messages.data?.length) return
+        await sdk.client.session.deleteTodo({ sessionID })
         const results=await Promise.all(
           messages.data.map((m) =>
             sdk.client.session.deleteMessage({

@@ -3210,6 +3210,40 @@ export type SessionChildrenResponses = {
 
 export type SessionChildrenResponse = SessionChildrenResponses[keyof SessionChildrenResponses]
 
+export type SessionDeleteTodoData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/todo"
+}
+
+export type SessionDeleteTodoErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionDeleteTodoError = SessionDeleteTodoErrors[keyof SessionDeleteTodoErrors]
+
+export type SessionDeleteTodoResponses = {
+  /**
+   * Successfully deleted todos
+   */
+  200: boolean
+}
+
+export type SessionDeleteTodoResponse = SessionDeleteTodoResponses[keyof SessionDeleteTodoResponses]
+
 export type SessionTodoData = {
   body?: never
   path: {
