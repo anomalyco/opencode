@@ -438,10 +438,10 @@ export namespace Provider {
 
       const location = String(
         provider.options?.location ??
-          Env.get("GOOGLE_VERTEX_LOCATION") ??
-          Env.get("GOOGLE_CLOUD_LOCATION") ??
-          Env.get("VERTEX_LOCATION") ??
-          "us-central1",
+        Env.get("GOOGLE_VERTEX_LOCATION") ??
+        Env.get("GOOGLE_CLOUD_LOCATION") ??
+        Env.get("VERTEX_LOCATION") ??
+        "us-central1",
       )
 
       const autoload = Boolean(project)
@@ -568,6 +568,7 @@ export namespace Provider {
             const sdkModelID = isWorkflowModel(modelID) ? modelID : "duo-workflow"
             const model = sdk.workflowChat(sdkModelID, {
               featureFlags,
+              workflowDefinition: options?.workflowDefinition as string | undefined,
             })
             if (workflowRef) {
               model.selectedModelRef = workflowRef
@@ -600,9 +601,9 @@ export namespace Provider {
               log.info("gitlab model discovery skipped: no models found", {
                 project: result.project
                   ? {
-                      id: result.project.id,
-                      path: result.project.pathWithNamespace,
-                    }
+                    id: result.project.id,
+                    path: result.project.pathWithNamespace,
+                  }
                   : null,
               })
               return {}
@@ -710,7 +711,7 @@ export namespace Provider {
       if (!apiToken) {
         throw new Error(
           "CLOUDFLARE_API_TOKEN (or CF_AIG_TOKEN) is required for Cloudflare AI Gateway. " +
-            "Set it via environment variable or run `opencode auth cloudflare-ai-gateway`.",
+          "Set it via environment variable or run `opencode auth cloudflare-ai-gateway`.",
         )
       }
 
@@ -881,7 +882,7 @@ export namespace Provider {
     varsLoaders: Record<string, CustomVarsLoader>
   }
 
-  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Provider") {}
+  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Provider") { }
 
   function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
     const m: Model = {
@@ -906,13 +907,13 @@ export namespace Provider {
         },
         experimentalOver200K: model.cost?.context_over_200k
           ? {
-              cache: {
-                read: model.cost.context_over_200k.cache_read ?? 0,
-                write: model.cost.context_over_200k.cache_write ?? 0,
-              },
-              input: model.cost.context_over_200k.input,
-              output: model.cost.context_over_200k.output,
-            }
+            cache: {
+              read: model.cost.context_over_200k.cache_read ?? 0,
+              write: model.cost.context_over_200k.cache_write ?? 0,
+            },
+            input: model.cost.context_over_200k.input,
+            output: model.cost.context_over_200k.output,
+          }
           : undefined,
       },
       limit: {
@@ -1418,9 +1419,9 @@ export namespace Provider {
           try {
             const language = s.modelLoaders[model.providerID]
               ? await s.modelLoaders[model.providerID](sdk, model.api.id, {
-                  ...provider.options,
-                  ...model.options,
-                })
+                ...provider.options,
+                ...model.options,
+              })
               : sdk.languageModel(model.api.id)
             s.models.set(key, language)
             return language

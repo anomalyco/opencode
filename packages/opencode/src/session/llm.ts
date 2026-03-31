@@ -246,6 +246,7 @@ export namespace LLM {
     // and results sent back over the WebSocket.
     if (language instanceof GitLabWorkflowLanguageModel) {
       const workflowModel = language
+      workflowModel.sessionID = input.sessionID
       workflowModel.systemPrompt = system.join("\n")
       workflowModel.toolExecutor = async (toolName, argsJson, _requestID) => {
         const t = tools[toolName]
@@ -270,7 +271,10 @@ export namespace LLM {
       }
 
       const ruleset = Permission.merge(input.agent.permission ?? [], input.permission ?? [])
-      workflowModel.sessionPreapprovedTools = preapprovedWorkflowTools(Object.keys(tools), ruleset)
+      workflowModel.sessionPreapprovedTools = Object.keys(tools).filter((name) => {
+        const match = ruleset.findLast((rule) => Wildcard.match(name, rule.permission))
+        return !match || match.action !== "ask"
+      })
 
       workflowModel.approvalHandler = Instance.bind(async (approvalTools) => {
         const id = PermissionID.ascending()
@@ -280,20 +284,28 @@ export namespace LLM {
           unsub = Bus.subscribe(Permission.Event.Replied, (evt) => {
             if (evt.properties.requestID === id) reply = evt.properties.reply
           })
+          const toolPatterns = approvalTools.map((t: { name: string; args: string }) => {
+            try {
+              const parsed = JSON.parse(t.args) as Record<string, unknown>
+              const title = (parsed?.title ?? parsed?.name ?? "") as string
+              return title ? `${t.name}: ${title}` : t.name
+            } catch {
+              return t.name
+            }
+          })
+          const uniquePatterns = [...new Set(toolPatterns)] as string[]
+          const uniqueNames = [...new Set(approvalTools.map((t: { name: string }) => t.name))] as string[]
           await Permission.ask({
             id,
-            sessionID: SessionID.zod.parse(input.sessionID),
+            sessionID: SessionID.make(input.sessionID),
             permission: "workflow_tool_approval",
-            patterns: approvalTools.map((t) => t.name),
+            patterns: uniquePatterns,
             metadata: { tools: approvalTools },
-            always: approvalTools.map((t) => t.name),
+            always: uniquePatterns,
             ruleset: [],
           })
           if (reply === "always") {
-            workflowModel.sessionPreapprovedTools = [
-              ...workflowModel.sessionPreapprovedTools,
-              ...approvalTools.map((t) => t.name),
-            ]
+            workflowModel.sessionPreapprovedTools = [...workflowModel.sessionPreapprovedTools, ...uniqueNames]
           }
           return { approved: true }
         } catch {
@@ -387,13 +399,6 @@ export namespace LLM {
       Permission.merge(input.agent.permission, input.permission ?? []),
     )
     return Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k))
-  }
-
-  export function preapprovedWorkflowTools(tools: string[], ruleset: Permission.Ruleset): string[] {
-    return tools.filter((name) => {
-      const match = ruleset.findLast((rule) => Wildcard.match(name, rule.permission))
-      return !match || match.action !== "ask"
-    })
   }
 
   // Check if messages contain any tool-call content
