@@ -148,7 +148,9 @@ export function Session() {
   })
 
   const dimensions = useTerminalDimensions()
-  const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto")
+  // FORK: default sidebar to hidden; upstream defaults to "auto" (shows on wide terminals)
+  // Re-apply this change after upstream syncs — tracked in GitHub issues
+  const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "hide")
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
   const [conceal, setConceal] = createSignal(true)
   const [showThinking, setShowThinking] = kv.signal("thinking_visibility", true)
