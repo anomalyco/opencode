@@ -32,8 +32,14 @@ export const settingsReleaseNotesSelector = '[data-action="settings-release-note
 
 export const sidebarNavSelector = '[data-component="sidebar-nav-desktop"]'
 
+// DEPRECATED: Old sidebar used project-switch buttons. New sidebar uses folder rows.
+// Kept for backward compatibility but may not work with new UI.
 export const projectSwitchSelector = (slug: string) =>
   `${sidebarNavSelector} [data-action="project-switch"][data-project="${slug}"]`
+
+// NEW: Project folder row selector for the redesigned sidebar
+export const projectRowSelector = (slug: string) =>
+  `${sidebarNavSelector} [data-project="${slug}"]`
 
 export const projectMenuTriggerSelector = (slug: string) =>
   `${sidebarNavSelector} [data-action="project-menu"][data-project="${slug}"]`
