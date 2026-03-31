@@ -266,8 +266,8 @@ describe("plugin.loader.shared", () => {
     try {
       await load(tmp.path)
 
-      expect(install.mock.calls).toContainEqual(["acme-plugin", "latest"])
-      expect(install.mock.calls).toContainEqual(["scope-plugin", "2.3.4"])
+      expect(install.mock.calls).toContainEqual(["acme-plugin", "latest", { ignoreScripts: true }])
+      expect(install.mock.calls).toContainEqual(["scope-plugin", "2.3.4", { ignoreScripts: true }])
     } finally {
       install.mockRestore()
     }
