@@ -5,6 +5,7 @@ import type {
 import { Log } from "@/util/log"
 
 const log = Log.create({ service: "copilot-auto" })
+const DRY_RUN = process.env.OPENCODE_AUTO_DRY_RUN === "1" || process.env.OPENCODE_AUTO_DRY_RUN === "true"
 
 interface ModelInfo {
   id: string
@@ -178,7 +179,44 @@ export class CopilotAutoLanguageModel implements LanguageModelV3 {
     return candidates.length > 0 ? candidates : [this.options.models[0].id]
   }
 
+  /**
+   * Fast local heuristic for dry-run mode (no API calls).
+   * Uses keyword patterns and length to approximate GPT-5-mini's classification.
+   */
+  private classifyLocally(promptText: string): Tier {
+    const lower = promptText.toLowerCase()
+    const len = promptText.length
+
+    // Check reasoning keywords first (even short prompts can be complex)
+    // Reasoning keywords
+    const reasoningPatterns = [
+      /\b(distributed|consensus|lock.?free|concurrent|fault.?tolerant)\b/,
+      /\b(compiler|parser|type.?inference|garbage.?collect|runtime)\b/,
+      /\b(architect|trade.?off|race.?condition|deadlock|backpressure)\b/,
+      /\b(optimize|bottleneck|profil|latency|throughput)\b/,
+      /\b(security|vulnerabilit|exploit|audit|penetration)\b/,
+      /\b(formal.?verif|proof|theorem|invariant|correctness)\b/,
+    ]
+    if (reasoningPatterns.some((p) => p.test(lower))) return "reasoning"
+
+    // Short without reasoning keywords = fast
+    if (len < 80) return "fast"
+
+    // Long or code-heavy = standard
+    if (len > 300) return "standard"
+    if (/```/.test(promptText)) return "standard"
+
+    return "standard"
+  }
+
   private async classifyWithLLM(promptText: string): Promise<Tier> {
+    // Dry-run mode: use local heuristic, no API calls
+    if (DRY_RUN) {
+      const tier = this.classifyLocally(promptText)
+      log.info("auto model dry-run classification", { tier, promptLength: promptText.length })
+      return tier
+    }
+
     if (!this.classifierModel) return "standard"
 
     try {
