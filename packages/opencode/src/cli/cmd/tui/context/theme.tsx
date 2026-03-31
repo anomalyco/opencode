@@ -896,7 +896,7 @@ function getSyntaxRules(theme: Theme) {
     {
       scope: ["variable.builtin", "type.builtin", "function.builtin", "module.builtin", "constant.builtin"],
       style: {
-        foreground: theme.error,
+        foreground: theme.syntaxType,
       },
     },
     {
