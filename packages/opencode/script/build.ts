@@ -233,6 +233,8 @@ for (const item of targets) {
     },
   })
 
+  await Bun.file(`dist/${name}/bin/desktop.runtime.mjs`).write(await Bun.file("./src/tool/desktop.runtime.ts").text())
+
   // Smoke test: only run if binary is for current platform
   if (item.os === process.platform && item.arch === process.arch && !item.abi) {
     const binaryPath = `dist/${name}/bin/opencode`

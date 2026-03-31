@@ -4,13 +4,23 @@ import DESCRIPTION from "./desktop.txt"
 import { Log } from "../util/log"
 import path from "path"
 import os from "os"
+import fsSync from "fs"
 import fs from "fs/promises"
+import { pathToFileURL } from "url"
 
 const log = Log.create({ service: "desktop-tool" })
 
 let nutCache: any = undefined
 let nutFailed = false
 let nutError: Error | undefined = undefined
+
+export function resolveNutJsImportSpecifier(moduleURL = import.meta.url, execPath = process.execPath) {
+  if (!moduleURL.includes("/$bunfs/root/")) return "@nut-tree-fork/nut-js"
+
+  const realExecPath = fsSync.realpathSync(execPath)
+  const helperPath = path.join(path.dirname(realExecPath), "desktop.runtime.mjs")
+  return pathToFileURL(helperPath).href
+}
 
 async function loadNutJs() {
   if (nutCache) return nutCache
@@ -19,7 +29,7 @@ async function loadNutJs() {
     throw new Error(`Desktop automation library not available${details} Please ensure @nut-tree-fork/nut-js is installed.`)
   }
   try {
-    nutCache = await import("@nut-tree-fork/nut-js")
+    nutCache = await import(resolveNutJsImportSpecifier())
     return nutCache
   } catch (error) {
     nutFailed = true
