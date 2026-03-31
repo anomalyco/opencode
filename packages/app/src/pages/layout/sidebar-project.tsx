@@ -118,41 +118,50 @@ const ProjectRow = (props: {
     >
       <div class="flex flex-col">
         {/* Project Header Row */}
-        <ContextMenu.Trigger
-          as="button"
-          type="button"
-          data-project={base64Encode(props.project.worktree)}
-          classList={{
-            "flex items-center gap-2 px-4 py-2 w-full text-left transition-colors": true,
-            "hover:bg-surface-base-hover": true,
-            "bg-surface-base-active": isSelected(),
-          }}
-          onClick={toggleExpand}
+        <div class="group flex items-center gap-2 px-4 py-2 w-full hover:bg-surface-base-hover transition-colors"
+          classList={{ "bg-surface-base-active": isSelected() }}
         >
-          <Icon 
-            name={isExpanded() ? "chevron-down" : "chevron-right"} 
-            size="small" 
-            class="text-icon-weak shrink-0" 
-          />
-          <Icon 
-            name="folder" 
-            size="small" 
-            classList={{
-              "text-icon-base shrink-0": true,
-              "text-icon-interactive-base": isSelected(),
-            }} 
-          />
-          <span classList={{
-            "flex-1 truncate text-14-medium": true,
-            "text-text-strong": !isSelected(),
-            "text-text-interactive-base": isSelected(),
-          }}>
-            {displayName(props.project)}
-          </span>
+          <button
+            type="button"
+            data-project={base64Encode(props.project.worktree)}
+            class="flex items-center gap-2 flex-1 text-left min-w-0"
+            onClick={toggleExpand}
+          >
+            <Icon 
+              name={isExpanded() ? "chevron-down" : "chevron-right"} 
+              size="small" 
+              class="text-icon-weak shrink-0" 
+            />
+            <Icon 
+              name="folder" 
+              size="small" 
+              classList={{
+                "text-icon-base shrink-0": true,
+                "text-icon-interactive-base": isSelected(),
+              }} 
+            />
+            <span classList={{
+              "flex-1 truncate text-14-medium": true,
+              "text-text-strong": !isSelected(),
+              "text-text-interactive-base": isSelected(),
+            }}>
+              {displayName(props.project)}
+            </span>
+          </button>
+          
           <Show when={unseenCount() > 0}>
             <div class="size-1.5 rounded-full bg-text-interactive-base shrink-0" />
           </Show>
-        </ContextMenu.Trigger>
+          
+          {/* Menu trigger button for tests and accessibility */}
+          <ContextMenu.Trigger 
+            class="shrink-0 p-1 rounded hover:bg-surface-base-hover opacity-0 group-hover:opacity-100 focus:opacity-100"
+            data-action="project-menu"
+            data-project={base64Encode(props.project.worktree)}
+          >
+            <Icon name="more" size="small" class="text-icon-weak" />
+          </ContextMenu.Trigger>
+        </div>
         
         <ContextMenu.Portal>
           <ContextMenu.Content>
