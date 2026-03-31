@@ -26,6 +26,7 @@ import { ConfigRoutes } from "./routes/config"
 import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
 import { EventRoutes } from "./routes/event"
+import { BrowserRoutes } from "./routes/browser"
 import { InstanceBootstrap } from "../project/bootstrap"
 import { errorHandler } from "./middleware"
 
@@ -76,6 +77,7 @@ export const InstanceRoutes = (app?: Hono) =>
     .route("/", FileRoutes())
     .route("/", EventRoutes())
     .route("/mcp", McpRoutes())
+    .route("/browser", BrowserRoutes())
     .route("/tui", TuiRoutes())
     .post(
       "/instance/dispose",
