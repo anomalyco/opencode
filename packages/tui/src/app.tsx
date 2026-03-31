@@ -972,6 +972,57 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     })
   })
 
+  event.on("mcp.resource.updated", (evt, { workspace }) => {
+    if (workspace !== project.workspace.current()) return
+    toast.show({
+      title: "Resource Updated",
+      message: `${evt.properties.uri} (${evt.properties.server})`,
+      variant: "info",
+      duration: 5000,
+    })
+
+    const mcpConfig = sync.data.config.mcp?.[evt.properties.server]
+    if (!mcpConfig || typeof mcpConfig !== "object" || !("autoprompt" in mcpConfig) || !mcpConfig.autoprompt) return
+
+    const prompt = {
+      system: `An MCP resource has been updated. Resource URI: "${evt.properties.uri}" from server "${evt.properties.server}". Read the resource to review the latest content and take appropriate action.`,
+      parts: [
+        {
+          type: "text" as const,
+          text: `Resource updated: ${evt.properties.uri} (${evt.properties.server})`,
+        },
+      ],
+    }
+    const currentWorkspace = project.workspace.current()
+    if (route.data.type === "session") {
+      if (sync.session.status(route.data.sessionID) !== "idle") return
+      void sdk.client.session
+        .promptAsync({ sessionID: route.data.sessionID, workspace: currentWorkspace, ...prompt })
+        .catch((error) => console.error("failed to trigger AI for resource update", error))
+      return
+    }
+
+    void sdk.client.session
+      .create({ workspace: currentWorkspace })
+      .then((res) => {
+        const sessionID = res.data?.id
+        if (!sessionID) return
+        route.navigate({ type: "session", sessionID })
+        return sdk.client.session.promptAsync({ sessionID, workspace: currentWorkspace, ...prompt })
+      })
+      .catch((error) => console.error("failed to create session for resource update", error))
+  })
+
+  event.on("mcp.resource.list.changed", (evt, { workspace }) => {
+    if (workspace !== project.workspace.current()) return
+    toast.show({
+      title: "MCP Resources Changed",
+      message: `Server "${evt.properties.server}" resource list updated`,
+      variant: "info",
+      duration: 3000,
+    })
+  })
+
   event.on("session.deleted", (evt) => {
     if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
       route.navigate({ type: "home" })

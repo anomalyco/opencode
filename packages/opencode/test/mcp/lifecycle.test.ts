@@ -24,6 +24,9 @@ interface MockClientState {
   listToolsError: string
   listPromptsShouldFail: boolean
   listResourcesShouldFail: boolean
+  supportsSubscriptions: boolean
+  subscribeCalls: string[]
+  unsubscribeCalls: string[]
   prompts: Array<{ name: string; description?: string }>
   resources: Array<{ name: string; uri: string; description?: string }>
   toolPages: Record<
@@ -72,6 +75,9 @@ function getOrCreateClientState(name?: string): MockClientState {
       listToolsError: "listTools failed",
       listPromptsShouldFail: false,
       listResourcesShouldFail: false,
+      supportsSubscriptions: false,
+      subscribeCalls: [],
+      unsubscribeCalls: [],
       prompts: [],
       resources: [],
       toolPages: {},
@@ -176,7 +182,8 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
 
     getServerCapabilities() {
       if (this._state?.capabilitiesShouldThrow) throw new Error("capability discovery failed")
-      return this._state?.capabilities
+      if (!this._state?.supportsSubscriptions) return this._state?.capabilities
+      return { ...this._state?.capabilities, resources: { ...this._state?.capabilities.resources, subscribe: true } }
     }
 
     async listTools(params?: { cursor?: string }) {
@@ -234,6 +241,13 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
       return { contents: [{ uri: params.uri, text: "test" }] }
     }
 
+    async subscribeResource(input: { uri: string }) {
+      this._state?.subscribeCalls.push(input.uri)
+    }
+
+    async unsubscribeResource(input: { uri: string }) {
+      this._state?.unsubscribeCalls.push(input.uri)
+    }
     async close() {
       if (this._state) this._state.closed = true
     }
@@ -924,6 +938,71 @@ it.instance(
 )
 
 it.instance(
+  "service exposes subscribe, unsubscribe, and subscriptions for resource updates",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "sub-server"
+        const serverState = getOrCreateClientState("sub-server")
+        serverState.supportsSubscriptions = true
+
+        expect(typeof mcp.subscribe).toBe("function")
+        expect(typeof mcp.unsubscribe).toBe("function")
+        expect(typeof mcp.subscriptions).toBe("function")
+
+        yield* mcp.add("sub-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        const subscribe = mcp.subscribe
+        const unsubscribe = mcp.unsubscribe
+        const subscriptions = mcp.subscriptions
+
+        expect(yield* subscribe("sub-server", "file:///notes.md")).toBe(true)
+        expect(yield* subscriptions()).toEqual({ "sub-server": ["file:///notes.md"] })
+        expect(yield* unsubscribe("sub-server", "file:///notes.md")).toBe(true)
+        expect(yield* subscriptions()).toEqual({})
+
+        expect(serverState.subscribeCalls).toEqual(["file:///notes.md"])
+        expect(serverState.unsubscribeCalls).toEqual(["file:///notes.md"])
+      }),
+    ),
+  {
+    config: {
+      mcp: {
+        "sub-server": {
+          type: "local",
+          command: ["echo", "test"],
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "subscribes configured resources after connecting",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "configured-sub-server"
+        const serverState = getOrCreateClientState("configured-sub-server")
+        serverState.supportsSubscriptions = true
+
+        yield* mcp.add("configured-sub-server", {
+          type: "local",
+          command: ["echo", "test"],
+          subscriptions: ["file:///configured.md"],
+        })
+
+        expect(yield* mcp.subscriptions()).toEqual({ "configured-sub-server": ["file:///configured.md"] })
+        expect(serverState.subscribeCalls).toEqual(["file:///configured.md"])
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
   "prompts() skips disconnected servers",
   () =>
     MCP.Service.use((mcp: MCPNS.Interface) =>
@@ -1063,6 +1142,13 @@ it.live("McpOAuthCallback.cancelPending is keyed by mcpName but pendingAuths use
     (callback) =>
       Effect.gen(function* () {
         McpOAuthCallback.cancelPending("my-mcp-server")
+        let resolved = false
+        callback.then(
+          () => {
+            resolved = true
+          },
+          () => {},
+        )
 
         const exit = yield* Effect.tryPromise({
           try: () => callback,
@@ -1076,6 +1162,7 @@ it.live("McpOAuthCallback.cancelPending is keyed by mcpName but pendingAuths use
         )
 
         expect(Exit.isFailure(exit)).toBe(true)
+        expect(resolved).toBe(false)
       }),
     () => Effect.promise(() => McpOAuthCallback.stop()).pipe(Effect.ignore),
   ),

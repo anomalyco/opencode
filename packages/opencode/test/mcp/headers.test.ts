@@ -48,6 +48,10 @@ beforeEach(() => {
 const { MCP } = await import("../../src/mcp/index")
 const it = testEffect(MCP.defaultLayer)
 
+function targetCalls() {
+  return transportCalls.filter((call) => call.url === "https://example.com/mcp")
+}
+
 describe("mcp.headers", () => {
   it.instance("headers are passed to transports when oauth is enabled (default)", () =>
     Effect.gen(function* () {
@@ -64,9 +68,10 @@ describe("mcp.headers", () => {
         .pipe(Effect.catch(() => Effect.void))
 
       // Both transports should have been created with headers
-      expect(transportCalls.length).toBeGreaterThanOrEqual(1)
+      const calls = targetCalls()
+      expect(calls.length).toBeGreaterThanOrEqual(1)
 
-      for (const call of transportCalls) {
+      for (const call of calls) {
         expect(call.options.requestInit).toBeDefined()
         expect(call.options.requestInit?.headers).toEqual({
           Authorization: "Bearer test-token",
@@ -92,9 +97,10 @@ describe("mcp.headers", () => {
         })
         .pipe(Effect.catch(() => Effect.void))
 
-      expect(transportCalls.length).toBeGreaterThanOrEqual(1)
+      const calls = targetCalls()
+      expect(calls.length).toBeGreaterThanOrEqual(1)
 
-      for (const call of transportCalls) {
+      for (const call of calls) {
         expect(call.options.requestInit).toBeDefined()
         expect(call.options.requestInit?.headers).toEqual({
           Authorization: "Bearer test-token",
@@ -115,9 +121,10 @@ describe("mcp.headers", () => {
         })
         .pipe(Effect.catch(() => Effect.void))
 
-      expect(transportCalls.length).toBeGreaterThanOrEqual(1)
+      const calls = targetCalls()
+      expect(calls.length).toBeGreaterThanOrEqual(1)
 
-      for (const call of transportCalls) {
+      for (const call of calls) {
         // No headers means requestInit should be undefined
         expect(call.options.requestInit).toBeUndefined()
       }

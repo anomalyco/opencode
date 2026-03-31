@@ -14689,6 +14689,12 @@
             "$ref": "#/components/schemas/EventMcpBrowserOpenFailed"
           },
           {
+            "$ref": "#/components/schemas/EventMcpResourceUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/EventMcpResourceListChanged"
+          },
+          {
             "$ref": "#/components/schemas/EventCommandExecuted"
           },
           {
@@ -19168,6 +19174,59 @@
                   },
                   "type": {
                     "type": "string",
+                    "enum": ["mcp.resource.updated"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "server": {
+                        "type": "string"
+                      },
+                      "uri": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["server", "uri"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["mcp.resource.list.changed"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "server": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["server"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
                     "enum": ["command.executed"]
                   },
                   "properties": {
@@ -20232,6 +20291,15 @@
           "timeout": {
             "type": "integer",
             "exclusiveMinimum": 0
+          },
+          "subscriptions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "autoprompt": {
+            "type": "boolean"
           }
         },
         "required": ["type", "command"],
@@ -20296,6 +20364,15 @@
           "timeout": {
             "type": "integer",
             "exclusiveMinimum": 0
+          },
+          "subscriptions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "autoprompt": {
+            "type": "boolean"
           }
         },
         "required": ["type", "url"],
@@ -29985,6 +30062,59 @@
               }
             },
             "required": ["mcpName", "url"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventMcpResourceUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["mcp.resource.updated"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "server": {
+                "type": "string"
+              },
+              "uri": {
+                "type": "string"
+              }
+            },
+            "required": ["server", "uri"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventMcpResourceListChanged": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["mcp.resource.list.changed"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "server": {
+                "type": "string"
+              }
+            },
+            "required": ["server"],
             "additionalProperties": false
           }
         },
