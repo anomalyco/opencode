@@ -207,6 +207,14 @@ export namespace Snapshot {
               Effect.gen(function* () {
                 if (!(yield* enabled())) return
                 if (!(yield* exists(state.gitdir))) return
+                // Use --aggressive=false to avoid repacking which can affect worktree HEAD refs (issue #20274)
+                // Also skip gc if this is a worktree directory
+                const worktreeCheck = yield* git(["rev-parse", "--is-inside-work-tree"], { cwd: state.directory })
+                if (worktreeCheck.code === 0) {
+                  // We're inside a worktree, skip gc to avoid affecting worktree HEAD refs
+                  log.debug("skipping gc cleanup inside worktree")
+                  return
+                }
                 const result = yield* git(args(["gc", `--prune=${prune}`]), { cwd: state.directory })
                 if (result.code !== 0) {
                   log.warn("cleanup failed", {

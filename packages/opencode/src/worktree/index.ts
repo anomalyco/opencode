@@ -235,6 +235,13 @@ export namespace Worktree {
           throw new CreateFailedError({ message: created.stderr || created.text || "Failed to create git worktree" })
         }
 
+        // Disable automatic gc in worktrees to prevent worktree HEAD from being reset
+        // when gc runs in the main repository (issue #20274)
+        const gcDisabled = yield* git(["config", "gc.auto", "0"], { cwd: info.directory })
+        if (gcDisabled.code !== 0) {
+          log.warn("failed to disable gc.auto in worktree", { directory: info.directory, stderr: gcDisabled.stderr })
+        }
+
         yield* project.addSandbox(Instance.project.id, info.directory).pipe(Effect.catch(() => Effect.void))
       })
 
