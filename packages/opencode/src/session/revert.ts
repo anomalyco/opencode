@@ -35,6 +35,7 @@ export namespace SessionRevert {
     Effect.gen(function* () {
       const sessions = yield* Session.Service
       const snap = yield* Snapshot.Service
+      const storage = yield* Storage.Service
       const bus = yield* Bus.Service
 
       const revert = Effect.fn("SessionRevert.revert")(function* (input: RevertInput) {
@@ -74,7 +75,7 @@ export namespace SessionRevert {
         if (rev.snapshot) rev.diff = yield* snap.diff(rev.snapshot as string)
         const range = all.filter((msg) => msg.info.id >= rev!.messageID)
         const diffs = yield* Effect.promise(() => SessionSummary.computeDiff({ messages: range }))
-        yield* Effect.promise(() => Storage.write(["session_diff", input.sessionID], diffs))
+        yield* storage.write(["session_diff", input.sessionID], diffs).pipe(Effect.ignore)
         yield* bus.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: diffs })
         yield* sessions.setRevert({
           sessionID: input.sessionID,
@@ -147,7 +148,12 @@ export namespace SessionRevert {
 
   export const defaultLayer = Layer.unwrap(
     Effect.sync(() =>
-      layer.pipe(Layer.provide(Session.defaultLayer), Layer.provide(Snapshot.defaultLayer), Layer.provide(Bus.layer)),
+      layer.pipe(
+        Layer.provide(Session.defaultLayer),
+        Layer.provide(Snapshot.defaultLayer),
+        Layer.provide(Storage.defaultLayer),
+        Layer.provide(Bus.layer),
+      ),
     ),
   )
 
