@@ -11,7 +11,7 @@ import { makeRuntime } from "@/effect/run-service"
 import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 import { Permission } from "@/permission"
-import { Filesystem } from "@/util/filesystem"
+import { AppFileSystem } from "@/filesystem"
 import { Config } from "../config/config"
 import { ConfigMarkdown } from "../config/markdown"
 import { Glob } from "../util/glob"
@@ -139,28 +139,20 @@ export namespace Skill {
     config: Config.Interface,
     discovery: Discovery.Interface,
     bus: Bus.Interface,
+    fsys: AppFileSystem.Interface,
     directory: string,
     worktree: string,
   ) {
     if (!Flag.OPENCODE_DISABLE_EXTERNAL_SKILLS) {
       for (const dir of EXTERNAL_DIRS) {
         const root = path.join(Global.Path.home, dir)
-        const isDir = yield* Effect.promise(() => Filesystem.isDir(root))
-        if (!isDir) continue
+        if (!(yield* fsys.isDir(root))) continue
         yield* scan(state, bus, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
       }
 
-      const upDirs = yield* Effect.promise(async () => {
-        const dirs: string[] = []
-        for await (const root of Filesystem.up({
-          targets: EXTERNAL_DIRS,
-          start: directory,
-          stop: worktree,
-        })) {
-          dirs.push(root)
-        }
-        return dirs
-      })
+      const upDirs = yield* fsys
+        .up({ targets: EXTERNAL_DIRS, start: directory, stop: worktree })
+        .pipe(Effect.catch(() => Effect.succeed([] as string[])))
 
       for (const root of upDirs) {
         yield* scan(state, bus, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
@@ -176,8 +168,7 @@ export namespace Skill {
     for (const item of cfg.skills?.paths ?? []) {
       const expanded = item.startsWith("~/") ? path.join(os.homedir(), item.slice(2)) : item
       const dir = path.isAbsolute(expanded) ? expanded : path.join(directory, expanded)
-      const isDir = yield* Effect.promise(() => Filesystem.isDir(dir))
-      if (!isDir) {
+      if (!(yield* fsys.isDir(dir))) {
         log.warn("skill path not found", { path: dir })
         continue
       }
@@ -198,16 +189,17 @@ export namespace Skill {
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Skill") {}
 
-  export const layer: Layer.Layer<Service, never, Discovery.Service | Config.Service | Bus.Service> = Layer.effect(
+  export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
       const discovery = yield* Discovery.Service
       const config = yield* Config.Service
       const bus = yield* Bus.Service
+      const fsys = yield* AppFileSystem.Service
       const state = yield* InstanceState.make(
         Effect.fn("Skill.state")(function* (ctx) {
           const s: State = { skills: {}, dirs: new Set() }
-          yield* loadSkills(s, config, discovery, bus, ctx.directory, ctx.worktree)
+          yield* loadSkills(s, config, discovery, bus, fsys, ctx.directory, ctx.worktree)
           return s
         }),
       )
@@ -238,10 +230,11 @@ export namespace Skill {
     }),
   )
 
-  export const defaultLayer: Layer.Layer<Service> = layer.pipe(
+  export const defaultLayer = layer.pipe(
     Layer.provide(Discovery.defaultLayer),
     Layer.provide(Config.defaultLayer),
     Layer.provide(Bus.layer),
+    Layer.provide(AppFileSystem.defaultLayer),
   )
 
   export function fmt(list: Info[], opts: { verbose: boolean }) {

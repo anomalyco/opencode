@@ -129,7 +129,7 @@ async function tool(sessionID: SessionID, messageID: MessageID, tool: string, ou
 }
 
 function fake(
-  input: Parameters<(typeof SessionProcessorModule.SessionProcessor)["create"]>[0],
+  input: Parameters<SessionProcessorModule.SessionProcessor.Interface["create"]>[0],
   result: "continue" | "compact",
 ) {
   const msg = input.assistantMessage
@@ -509,6 +509,36 @@ describe("session.compaction.prune", () => {
 })
 
 describe("session.compaction.process", () => {
+  test("throws when parent is not a user message", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const msg = await user(session.id, "hello")
+        const reply = await assistant(session.id, msg.id, tmp.path)
+        const rt = runtime("continue")
+        try {
+          const msgs = await Session.messages({ sessionID: session.id })
+          await expect(
+            rt.runPromise(
+              SessionCompaction.Service.use((svc) =>
+                svc.process({
+                  parentID: reply.id,
+                  messages: msgs,
+                  sessionID: session.id,
+                  auto: false,
+                }),
+              ),
+            ),
+          ).rejects.toThrow(`Compaction parent must be a user message: ${reply.id}`)
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
   test("publishes compacted event on continue", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
@@ -540,7 +570,6 @@ describe("session.compaction.process", () => {
                 parentID: msg.id,
                 messages: msgs,
                 sessionID: session.id,
-                abort: new AbortController().signal,
                 auto: false,
               }),
             ),
@@ -580,7 +609,6 @@ describe("session.compaction.process", () => {
                 parentID: msg.id,
                 messages: msgs,
                 sessionID: session.id,
-                abort: new AbortController().signal,
                 auto: false,
               }),
             ),
@@ -621,7 +649,6 @@ describe("session.compaction.process", () => {
                 parentID: msg.id,
                 messages: msgs,
                 sessionID: session.id,
-                abort: new AbortController().signal,
                 auto: true,
               }),
             ),
@@ -675,7 +702,6 @@ describe("session.compaction.process", () => {
                 parentID: msg.id,
                 messages: msgs,
                 sessionID: session.id,
-                abort: new AbortController().signal,
                 auto: true,
                 overflow: true,
               }),
@@ -717,7 +743,6 @@ describe("session.compaction.process", () => {
                 parentID: msg.id,
                 messages: msgs,
                 sessionID: session.id,
-                abort: new AbortController().signal,
                 auto: true,
                 overflow: true,
               }),
@@ -792,7 +817,6 @@ describe("session.compaction.process", () => {
                   parentID: msg.id,
                   messages: msgs,
                   sessionID: session.id,
-                  abort: abort.signal,
                   auto: false,
                 }),
               ),
@@ -858,7 +882,6 @@ describe("session.compaction.process", () => {
                   parentID: msg.id,
                   messages: msgs,
                   sessionID: session.id,
-                  abort: abort.signal,
                   auto: false,
                 }),
               ),
@@ -888,6 +911,91 @@ describe("session.compaction.process", () => {
           abort.abort()
           await rt.dispose()
           await run?.catch(() => undefined)
+        }
+      },
+    })
+  })
+
+  test("does not allow tool calls while generating the summary", async () => {
+    const stub = llm()
+    stub.push(
+      Stream.make(
+        { type: "start" } satisfies LLM.Event,
+        { type: "tool-input-start", id: "call-1", toolName: "_noop" } satisfies LLM.Event,
+        { type: "tool-call", toolCallId: "call-1", toolName: "_noop", input: {} } satisfies LLM.Event,
+        {
+          type: "finish-step",
+          finishReason: "tool-calls",
+          rawFinishReason: "tool_calls",
+          response: { id: "res", modelId: "test-model", timestamp: new Date() },
+          providerMetadata: undefined,
+          usage: {
+            inputTokens: 1,
+            outputTokens: 1,
+            totalTokens: 2,
+            inputTokenDetails: {
+              noCacheTokens: undefined,
+              cacheReadTokens: undefined,
+              cacheWriteTokens: undefined,
+            },
+            outputTokenDetails: {
+              textTokens: undefined,
+              reasoningTokens: undefined,
+            },
+          },
+        } satisfies LLM.Event,
+        {
+          type: "finish",
+          finishReason: "tool-calls",
+          rawFinishReason: "tool_calls",
+          totalUsage: {
+            inputTokens: 1,
+            outputTokens: 1,
+            totalTokens: 2,
+            inputTokenDetails: {
+              noCacheTokens: undefined,
+              cacheReadTokens: undefined,
+              cacheWriteTokens: undefined,
+            },
+            outputTokenDetails: {
+              textTokens: undefined,
+              reasoningTokens: undefined,
+            },
+          },
+        } satisfies LLM.Event,
+      ),
+    )
+
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        spyOn(ProviderModule.Provider, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
+
+        const session = await Session.create({})
+        const msg = await user(session.id, "hello")
+        const rt = liveRuntime(stub.layer)
+        try {
+          const msgs = await Session.messages({ sessionID: session.id })
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: msg.id,
+                messages: msgs,
+                sessionID: session.id,
+                auto: false,
+              }),
+            ),
+          )
+
+          const summary = (await Session.messages({ sessionID: session.id })).find(
+            (item) => item.info.role === "assistant" && item.info.summary,
+          )
+
+          expect(summary?.info.role).toBe("assistant")
+          expect(summary?.parts.some((part) => part.type === "tool")).toBe(false)
+        } finally {
+          await rt.dispose()
         }
       },
     })

@@ -18,17 +18,8 @@ import { Log } from "@/util/log"
 import { errorData, errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
 import { Instance } from "@/project/instance"
-import {
-  checkPluginCompatibility,
-  isDeprecatedPlugin,
-  pluginSource,
-  readPluginId,
-  readV1Plugin,
-  resolvePluginEntrypoint,
-  resolvePluginId,
-  resolvePluginTarget,
-  type PluginSource,
-} from "@/plugin/shared"
+import { pluginSource, readPluginId, readV1Plugin, resolvePluginId, type PluginSource } from "@/plugin/shared"
+import { PluginLoader } from "@/plugin/loader"
 import { PluginMeta } from "@/plugin/meta"
 import { installPlugin as installModulePlugin, patchPluginConfig, readPluginManifest } from "@/plugin/install"
 import { hasTheme, upsertTheme } from "../context/theme"
@@ -36,13 +27,12 @@ import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
 import { Flag } from "@/flag/flag"
-import { Installation } from "@/installation"
 import { INTERNAL_TUI_PLUGINS, type InternalTuiPlugin } from "./internal"
 import { setupSlots, Slot as View } from "./slots"
 import type { HostPluginApi, HostSlots } from "./slots"
 
 type PluginLoad = {
-  item?: Config.PluginSpec
+  options: Config.PluginOptions | undefined
   spec: string
   target: string
   retry: boolean
@@ -67,7 +57,6 @@ type PluginEntry = {
   meta: TuiPluginMeta
   themes: Record<string, PluginMeta.Theme>
   plugin: TuiPlugin
-  options: Config.PluginOptions | undefined
   enabled: boolean
   scope?: PluginScope
 }
@@ -78,13 +67,7 @@ type RuntimeState = {
   slots: HostSlots
   plugins: PluginEntry[]
   plugins_by_id: Map<string, PluginEntry>
-  pending: Map<
-    string,
-    {
-      item: Config.PluginSpec
-      meta: TuiConfig.PluginMeta
-    }
-  >
+  pending: Map<string, TuiConfig.PluginRecord>
 }
 
 const log = Log.create({ service: "tui.plugin" })
@@ -239,73 +222,76 @@ function createThemeInstaller(
   }
 }
 
-async function loadExternalPlugin(
-  item: Config.PluginSpec,
-  meta: TuiConfig.PluginMeta | undefined,
-  retry = false,
-): Promise<PluginLoad | undefined> {
-  const spec = Config.pluginSpecifier(item)
-  if (isDeprecatedPlugin(spec)) return
-  log.info("loading tui plugin", { path: spec, retry })
-  const resolved = await resolvePluginTarget(spec).catch((error) => {
-    fail("failed to resolve tui plugin", { path: spec, retry, error })
-    return
-  })
-  if (!resolved) return
+async function loadExternalPlugin(cfg: TuiConfig.PluginRecord, retry = false): Promise<PluginLoad | undefined> {
+  const plan = PluginLoader.plan(cfg.item)
+  if (plan.deprecated) return
 
-  const source = pluginSource(spec)
-  if (source === "npm") {
-    const ok = await checkPluginCompatibility(resolved, Installation.VERSION)
-      .then(() => true)
-      .catch((error) => {
-        fail("tui plugin incompatible", { path: spec, retry, error })
-        return false
-      })
-    if (!ok) return
+  log.info("loading tui plugin", { path: plan.spec, retry })
+  const resolved = await PluginLoader.resolve(plan, "tui")
+  if (!resolved.ok) {
+    if (resolved.stage === "install") {
+      fail("failed to resolve tui plugin", { path: plan.spec, retry, error: resolved.error })
+      return
+    }
+    if (resolved.stage === "compatibility") {
+      fail("tui plugin incompatible", { path: plan.spec, retry, error: resolved.error })
+      return
+    }
+    fail("failed to resolve tui plugin entry", { path: plan.spec, retry, error: resolved.error })
+    return
   }
 
-  const target = resolved
-  if (!meta) {
-    fail("missing tui plugin metadata", {
-      path: spec,
+  const loaded = await PluginLoader.load(resolved.value)
+  if (!loaded.ok) {
+    fail("failed to load tui plugin", {
+      path: plan.spec,
+      target: resolved.value.entry,
       retry,
+      error: loaded.error,
     })
     return
   }
 
-  const root = resolveRoot(source === "file" ? spec : target)
-  const entry = await resolvePluginEntrypoint(spec, target, "tui").catch((error) => {
-    fail("failed to resolve tui plugin entry", { path: spec, target, retry, error })
-    return
-  })
-  if (!entry) return
-
-  const mod = await import(entry)
-    .then((raw) => {
-      return readV1Plugin(raw as Record<string, unknown>, spec, "tui") as TuiPluginModule
+  const mod = await Promise.resolve()
+    .then(() => {
+      return readV1Plugin(loaded.value.mod as Record<string, unknown>, plan.spec, "tui") as TuiPluginModule
     })
     .catch((error) => {
-      fail("failed to load tui plugin", { path: spec, target: entry, retry, error })
+      fail("failed to load tui plugin", {
+        path: plan.spec,
+        target: loaded.value.entry,
+        retry,
+        error,
+      })
       return
     })
   if (!mod) return
 
-  const id = await resolvePluginId(source, spec, target, readPluginId(mod.id, spec)).catch((error) => {
-    fail("failed to load tui plugin", { path: spec, target, retry, error })
+  const id = await resolvePluginId(
+    loaded.value.source,
+    plan.spec,
+    loaded.value.target,
+    readPluginId(mod.id, plan.spec),
+    loaded.value.pkg,
+  ).catch((error) => {
+    fail("failed to load tui plugin", { path: plan.spec, target: loaded.value.target, retry, error })
     return
   })
   if (!id) return
 
   return {
-    item,
-    spec,
-    target,
+    options: plan.options,
+    spec: plan.spec,
+    target: loaded.value.target,
     retry,
-    source,
+    source: loaded.value.source,
     id,
     module: mod,
-    theme_meta: meta,
-    theme_root: root,
+    theme_meta: {
+      scope: cfg.scope,
+      source: cfg.source,
+    },
+    theme_root: loaded.value.pkg?.dir ?? resolveRoot(loaded.value.target),
   }
 }
 
@@ -343,6 +329,7 @@ function loadInternalPlugin(item: InternalTuiPlugin): PluginLoad {
   const target = spec
 
   return {
+    options: undefined,
     spec,
     target,
     retry: false,
@@ -488,7 +475,7 @@ async function activatePluginEntry(state: RuntimeState, plugin: PluginEntry, per
   const api = pluginApi(state, plugin, scope, plugin.id)
   const ok = await Promise.resolve()
     .then(async () => {
-      await plugin.plugin(api, plugin.options, plugin.meta)
+      await plugin.plugin(api, plugin.load.options, plugin.meta)
       return true
     })
     .catch((error) => {
@@ -613,21 +600,6 @@ function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScop
   }
 }
 
-function collectPluginEntries(load: PluginLoad, meta: TuiPluginMeta, themes: Record<string, PluginMeta.Theme> = {}) {
-  const options = load.item ? Config.pluginOptions(load.item) : undefined
-  return [
-    {
-      id: load.id,
-      load,
-      meta,
-      themes,
-      plugin: load.module.tui,
-      options,
-      enabled: true,
-    },
-  ]
-}
-
 function addPluginEntry(state: RuntimeState, plugin: PluginEntry) {
   if (state.plugins_by_id.has(plugin.id)) {
     fail("duplicate tui plugin id", {
@@ -651,12 +623,8 @@ function applyInitialPluginEnabledState(state: RuntimeState, config: TuiConfig.I
   }
 }
 
-async function resolveExternalPlugins(
-  list: Config.PluginSpec[],
-  wait: () => Promise<void>,
-  meta: (item: Config.PluginSpec) => TuiConfig.PluginMeta | undefined,
-) {
-  const loaded = await Promise.all(list.map((item) => loadExternalPlugin(item, meta(item))))
+async function resolveExternalPlugins(list: TuiConfig.PluginRecord[], wait: () => Promise<void>) {
+  const loaded = await Promise.all(list.map((item) => loadExternalPlugin(item)))
   const ready: PluginLoad[] = []
   let deps: Promise<void> | undefined
 
@@ -665,13 +633,12 @@ async function resolveExternalPlugins(
     if (!entry) {
       const item = list[i]
       if (!item) continue
-      const spec = Config.pluginSpecifier(item)
-      if (pluginSource(spec) !== "file") continue
+      if (pluginSource(Config.pluginSpecifier(item.item)) !== "file") continue
       deps ??= wait().catch((error) => {
         log.warn("failed waiting for tui plugin dependencies", { error })
       })
       await deps
-      entry = await loadExternalPlugin(item, meta(item), true)
+      entry = await loadExternalPlugin(item, true)
     }
     if (!entry) continue
     ready.push(entry)
@@ -713,20 +680,27 @@ async function addExternalPluginEntries(state: RuntimeState, ready: PluginLoad[]
 
     const row = createMeta(entry.source, entry.spec, entry.target, hit, entry.id)
     const themes = hit?.entry.themes ? { ...hit.entry.themes } : {}
-    for (const plugin of collectPluginEntries(entry, row, themes)) {
-      if (!addPluginEntry(state, plugin)) {
-        ok = false
-        continue
-      }
-      plugins.push(plugin)
+    const plugin: PluginEntry = {
+      id: entry.id,
+      load: entry,
+      meta: row,
+      themes,
+      plugin: entry.module.tui,
+      enabled: true,
     }
+    if (!addPluginEntry(state, plugin)) {
+      ok = false
+      continue
+    }
+    plugins.push(plugin)
   }
 
   return { plugins, ok }
 }
 
-function defaultPluginMeta(state: RuntimeState): TuiConfig.PluginMeta {
+function defaultPluginRecord(state: RuntimeState, spec: string): TuiConfig.PluginRecord {
   return {
+    item: spec,
     scope: "local",
     source: state.api.state.path.config || path.join(state.directory, ".opencode", "tui.json"),
   }
@@ -764,36 +738,28 @@ async function addPluginBySpec(state: RuntimeState | undefined, raw: string) {
   const spec = raw.trim()
   if (!spec) return false
 
-  const pending = state.pending.get(spec)
-  const item = pending?.item ?? spec
-  const nextSpec = Config.pluginSpecifier(item)
-  if (state.plugins.some((plugin) => plugin.load.spec === nextSpec)) {
+  const cfg = state.pending.get(spec) ?? defaultPluginRecord(state, spec)
+  const next = Config.pluginSpecifier(cfg.item)
+  if (state.plugins.some((plugin) => plugin.load.spec === next)) {
     state.pending.delete(spec)
     return true
   }
 
-  const meta = pending?.meta ?? defaultPluginMeta(state)
-
   const ready = await Instance.provide({
     directory: state.directory,
-    fn: () =>
-      resolveExternalPlugins(
-        [item],
-        () => TuiConfig.waitForDependencies(),
-        () => meta,
-      ),
+    fn: () => resolveExternalPlugins([cfg], () => TuiConfig.waitForDependencies()),
   }).catch((error) => {
-    fail("failed to add tui plugin", { path: nextSpec, error })
+    fail("failed to add tui plugin", { path: next, error })
     return [] as PluginLoad[]
   })
   if (!ready.length) {
-    fail("failed to add tui plugin", { path: nextSpec })
+    fail("failed to add tui plugin", { path: next })
     return false
   }
 
   const first = ready[0]
   if (!first) {
-    fail("failed to add tui plugin", { path: nextSpec })
+    fail("failed to add tui plugin", { path: next })
     return false
   }
   if (state.plugins_by_id.has(first.id)) {
@@ -810,7 +776,7 @@ async function addPluginBySpec(state: RuntimeState | undefined, raw: string) {
 
   if (ok) state.pending.delete(spec)
   if (!ok) {
-    fail("failed to add tui plugin", { path: nextSpec })
+    fail("failed to add tui plugin", { path: next })
   }
   return ok
 }
@@ -893,12 +859,11 @@ async function installPluginBySpec(
   const tui = manifest.targets.find((item) => item.kind === "tui")
   if (tui) {
     const file = patch.items.find((item) => item.kind === "tui")?.file
+    const item = tui.opts ? ([spec, tui.opts] as Config.PluginSpec) : spec
     state.pending.set(spec, {
-      item: tui.opts ? [spec, tui.opts] : spec,
-      meta: {
-        scope: global ? "global" : "local",
-        source: (file ?? dir.config) || path.join(patch.dir, "tui.json"),
-      },
+      item,
+      scope: global ? "global" : "local",
+      source: (file ?? dir.config) || path.join(patch.dir, "tui.json"),
     })
   }
 
@@ -981,25 +946,26 @@ export namespace TuiPluginRuntime {
       directory: cwd,
       fn: async () => {
         const config = await TuiConfig.get()
-        const plugins = Flag.OPENCODE_PURE ? [] : (config.plugin ?? [])
-        if (Flag.OPENCODE_PURE && config.plugin?.length) {
-          log.info("skipping external tui plugins in pure mode", { count: config.plugin.length })
+        const records = Flag.OPENCODE_PURE ? [] : (config.plugin_records ?? [])
+        if (Flag.OPENCODE_PURE && config.plugin_records?.length) {
+          log.info("skipping external tui plugins in pure mode", { count: config.plugin_records.length })
         }
 
         for (const item of INTERNAL_TUI_PLUGINS) {
           log.info("loading internal tui plugin", { id: item.id })
           const entry = loadInternalPlugin(item)
           const meta = createMeta(entry.source, entry.spec, entry.target, undefined, entry.id)
-          for (const plugin of collectPluginEntries(entry, meta)) {
-            addPluginEntry(next, plugin)
-          }
+          addPluginEntry(next, {
+            id: entry.id,
+            load: entry,
+            meta,
+            themes: {},
+            plugin: entry.module.tui,
+            enabled: true,
+          })
         }
 
-        const ready = await resolveExternalPlugins(
-          plugins,
-          () => TuiConfig.waitForDependencies(),
-          (item) => config.plugin_meta?.[Config.pluginSpecifier(item)],
-        )
+        const ready = await resolveExternalPlugins(records, () => TuiConfig.waitForDependencies())
         await addExternalPluginEntries(next, ready)
 
         applyInitialPluginEnabledState(next, config)

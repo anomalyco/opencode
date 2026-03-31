@@ -3,7 +3,7 @@ import { Effect, Layer, Record, Result, Schema, ServiceMap } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 import { zod } from "@/util/effect-zod"
 import { Global } from "../global"
-import { Filesystem } from "../util/filesystem"
+import { AppFileSystem } from "../filesystem"
 
 export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
@@ -53,17 +53,13 @@ export namespace Auth {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
+      const fsys = yield* AppFileSystem.Service
       const decode = Schema.decodeUnknownOption(Info)
 
-      const all = Effect.fn("Auth.all")(() =>
-        Effect.tryPromise({
-          try: async () => {
-            const data = await Filesystem.readJson<Record<string, unknown>>(file).catch(() => ({}))
-            return Record.filterMap(data, (value) => Result.fromOption(decode(value), () => undefined))
-          },
-          catch: fail("Failed to read auth data"),
-        }),
-      )
+      const all = Effect.fn("Auth.all")(function* () {
+        const data = (yield* fsys.readJson(file).pipe(Effect.orElseSucceed(() => ({})))) as Record<string, unknown>
+        return Record.filterMap(data, (value) => Result.fromOption(decode(value), () => undefined))
+      })
 
       const get = Effect.fn("Auth.get")(function* (providerID: string) {
         return (yield* all())[providerID]
@@ -74,10 +70,9 @@ export namespace Auth {
         const data = yield* all()
         if (norm !== key) delete data[key]
         delete data[norm + "/"]
-        yield* Effect.tryPromise({
-          try: () => Filesystem.writeJson(file, { ...data, [norm]: info }, 0o600),
-          catch: fail("Failed to write auth data"),
-        })
+        yield* fsys
+          .writeJson(file, { ...data, [norm]: info }, 0o600)
+          .pipe(Effect.mapError(fail("Failed to write auth data")))
       })
 
       const remove = Effect.fn("Auth.remove")(function* (key: string) {
@@ -85,17 +80,16 @@ export namespace Auth {
         const data = yield* all()
         delete data[key]
         delete data[norm]
-        yield* Effect.tryPromise({
-          try: () => Filesystem.writeJson(file, data, 0o600),
-          catch: fail("Failed to write auth data"),
-        })
+        yield* fsys.writeJson(file, data, 0o600).pipe(Effect.mapError(fail("Failed to write auth data")))
       })
 
       return Service.of({ get, all, set, remove })
     }),
   )
 
-  const { runPromise } = makeRuntime(Service, layer)
+  export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer))
+
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export async function get(providerID: string) {
     return runPromise((service) => service.get(providerID))
