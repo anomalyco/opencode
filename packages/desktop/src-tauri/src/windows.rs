@@ -1,11 +1,14 @@
 use crate::{
     constants::{UPDATER_ENABLED, window_state_flags},
-    server::get_wsl_config,
+    server::load_wsl,
 };
 use std::{ops::Deref, time::Duration};
 use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_window_state::AppHandleExt;
 use tokio::sync::mpsc;
+
+pub const MAIN_WINDOW_LABEL: &str = "main";
+pub const LOADING_WINDOW_LABEL: &str = "loading";
 
 #[cfg(target_os = "linux")]
 use std::sync::OnceLock;
@@ -23,33 +26,31 @@ fn use_decorations() -> bool {
     true
 }
 
-pub struct MainWindow(WebviewWindow);
+pub struct MainWindow<R: Runtime = tauri::Wry>(WebviewWindow<R>);
 
-impl Deref for MainWindow {
-    type Target = WebviewWindow;
+impl<R: Runtime> Deref for MainWindow<R> {
+    type Target = WebviewWindow<R>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl MainWindow {
-    pub const LABEL: &str = "main";
-
-    pub fn create(app: &AppHandle) -> Result<Self, tauri::Error> {
-        if let Some(window) = app.get_webview_window(Self::LABEL) {
+impl<R: Runtime> MainWindow<R> {
+    pub fn create(app: &AppHandle<R>) -> Result<Self, tauri::Error> {
+        if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
             let _ = window.set_focus();
             let _ = window.unminimize();
-            return Ok(Self(window));
+            return Ok(MainWindow(window));
         }
 
-        let wsl_enabled = get_wsl_config(app.clone())
+        let wsl_enabled = load_wsl(app.clone())
             .ok()
             .map(|v| v.enabled)
             .unwrap_or(false);
         let decorations = use_decorations();
         let window_builder = base_window_config(
-            WebviewWindowBuilder::new(app, Self::LABEL, WebviewUrl::App("/".into())),
+            WebviewWindowBuilder::new(app, MAIN_WINDOW_LABEL, WebviewUrl::App("/".into())),
             app,
             decorations,
         )
@@ -71,7 +72,9 @@ impl MainWindow {
         // Ensure window is focused after creation (e.g., after update/relaunch)
         let _ = window.set_focus();
 
-        setup_window_state_listener(app, &window);
+        if tokio::runtime::Handle::try_current().is_ok() {
+            setup_window_state_listener(app, &window);
+        }
 
         #[cfg(windows)]
         {
@@ -79,11 +82,11 @@ impl MainWindow {
             let _ = window.create_overlay_titlebar();
         }
 
-        Ok(Self(window))
+        Ok(MainWindow(window))
     }
 }
 
-fn setup_window_state_listener(app: &AppHandle, window: &WebviewWindow) {
+fn setup_window_state_listener<R: Runtime>(app: &AppHandle<R>, window: &WebviewWindow<R>) {
     let (tx, mut rx) = mpsc::channel::<()>(1);
 
     window.on_window_event(move |event| {
@@ -115,24 +118,22 @@ fn setup_window_state_listener(app: &AppHandle, window: &WebviewWindow) {
     });
 }
 
-pub struct LoadingWindow(WebviewWindow);
+pub struct LoadingWindow<R: Runtime = tauri::Wry>(WebviewWindow<R>);
 
-impl Deref for LoadingWindow {
-    type Target = WebviewWindow;
+impl<R: Runtime> Deref for LoadingWindow<R> {
+    type Target = WebviewWindow<R>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl LoadingWindow {
-    pub const LABEL: &str = "loading";
-
-    pub fn create(app: &AppHandle) -> Result<Self, tauri::Error> {
+impl<R: Runtime> LoadingWindow<R> {
+    pub fn create(app: &AppHandle<R>) -> Result<Self, tauri::Error> {
         let decorations = use_decorations();
 
         let window_builder = base_window_config(
-            WebviewWindowBuilder::new(app, Self::LABEL, tauri::WebviewUrl::App("/loading".into())),
+            WebviewWindowBuilder::new(app, LOADING_WINDOW_LABEL, tauri::WebviewUrl::App("/loading".into())),
             app,
             decorations,
         )
@@ -141,13 +142,13 @@ impl LoadingWindow {
         .inner_size(640.0, 480.0)
         .visible(true);
 
-        Ok(Self(window_builder.build()?))
+        Ok(LoadingWindow(window_builder.build()?))
     }
 }
 
 fn base_window_config<'a, R: Runtime, M: Manager<R>>(
     window_builder: WebviewWindowBuilder<'a, R, M>,
-    _app: &AppHandle,
+    _app: &AppHandle<R>,
     decorations: bool,
 ) -> WebviewWindowBuilder<'a, R, M> {
     let window_builder = window_builder.decorations(decorations);

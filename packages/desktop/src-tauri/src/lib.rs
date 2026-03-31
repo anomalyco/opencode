@@ -22,7 +22,7 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-use tauri::{AppHandle, Listener, Manager, RunEvent, State, ipc::Channel};
+use tauri::{AppHandle, Listener, Manager, RunEvent, Runtime, State, ipc::Channel};
 #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_specta::Event;
@@ -33,7 +33,13 @@ use tokio::{
 
 use crate::cli::{sqlite_migration::SqliteMigrationProgress, sync_cli};
 use crate::constants::*;
-use crate::windows::{LoadingWindow, MainWindow};
+use crate::windows::{LOADING_WINDOW_LABEL, MAIN_WINDOW_LABEL, LoadingWindow, MainWindow};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MainAction {
+    Focused,
+    Created,
+}
 
 #[derive(Clone, serde::Serialize, specta::Type, Debug)]
 struct ServerReadyData {
@@ -89,6 +95,19 @@ fn kill_sidecar(app: AppHandle) {
     let _ = server_state.kill();
 
     tracing::info!("Killed server");
+}
+
+fn restore_main<R: Runtime>(app: &AppHandle<R>) -> Result<MainAction, tauri::Error> {
+    let existing = app.get_webview_window(MAIN_WINDOW_LABEL).is_some();
+    let window = MainWindow::create(app)?;
+    let _ = window.show();
+    let _ = window.set_focus();
+    let _ = window.unminimize();
+    Ok(if existing {
+        MainAction::Focused
+    } else {
+        MainAction::Created
+    })
 }
 
 #[tauri::command]
@@ -312,10 +331,16 @@ pub fn run() {
 
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            // Focus existing window when another instance is launched
-            if let Some(window) = app.get_webview_window(MainWindow::LABEL) {
-                let _ = window.set_focus();
-                let _ = window.unminimize();
+            match restore_main(app) {
+                Ok(MainAction::Focused) => {
+                    tracing::info!("Focused main window for relaunch");
+                }
+                Ok(MainAction::Created) => {
+                    tracing::warn!("Recreated missing main window for relaunch");
+                }
+                Err(err) => {
+                    tracing::error!(?err, "Failed to restore main window for relaunch");
+                }
             }
         }))
         .plugin(tauri_plugin_deep_link::init())
@@ -323,7 +348,7 @@ pub fn run() {
         .plugin(
             tauri_plugin_window_state::Builder::new()
                 .with_state_flags(window_state_flags())
-                .with_denylist(&[LoadingWindow::LABEL])
+                .with_denylist(&[LOADING_WINDOW_LABEL])
                 .build(),
         )
         .plugin(tauri_plugin_store::Builder::new().build())
@@ -362,6 +387,26 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            if let RunEvent::Reopen {
+                has_visible_windows: false,
+                ..
+            } = event
+            {
+                match restore_main(&app) {
+                    Ok(MainAction::Focused) => {
+                        tracing::info!("Focused main window for reopen");
+                    }
+                    Ok(MainAction::Created) => {
+                        tracing::warn!("Recreated missing main window for reopen");
+                    }
+                    Err(err) => {
+                        tracing::error!(?err, "Failed to restore main window for reopen");
+                    }
+                }
+                return;
+            }
+
             if let RunEvent::Exit = event {
                 tracing::info!("Received Exit");
 
@@ -410,6 +455,21 @@ fn export_types(builder: &tauri_specta::Builder<tauri::Wry>) {
 fn test_export_types() {
     let builder = make_specta_builder();
     export_types(&builder);
+}
+
+#[cfg(test)]
+#[test]
+fn test_restore_main_reuses_existing_window() {
+    let app = tauri::test::mock_builder()
+        .build(tauri::test::mock_context(tauri::test::noop_assets()))
+        .unwrap();
+
+    let first = restore_main(app.handle()).unwrap();
+    let second = restore_main(app.handle()).unwrap();
+
+    assert_eq!(first, MainAction::Created);
+    assert_eq!(second, MainAction::Focused);
+    assert!(app.get_webview_window(MAIN_WINDOW_LABEL).is_some());
 }
 
 #[derive(tauri_specta::Event, serde::Deserialize, specta::Type)]

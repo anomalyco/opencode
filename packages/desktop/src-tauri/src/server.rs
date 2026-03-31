@@ -55,6 +55,10 @@ pub async fn set_default_server_url(app: AppHandle, url: Option<String>) -> Resu
 #[tauri::command]
 #[specta::specta]
 pub fn get_wsl_config(_app: AppHandle) -> Result<WslConfig, String> {
+    load_wsl(_app)
+}
+
+pub(crate) fn load_wsl<R: tauri::Runtime>(_app: AppHandle<R>) -> Result<WslConfig, String> {
     // let store = app
     //     .store(SETTINGS_STORE)
     //     .map_err(|e| format!("Failed to open settings store: {}", e))?;
