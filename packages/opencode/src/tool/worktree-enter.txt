@@ -1,0 +1,5 @@
+Use this tool to create and enter an isolated git worktree sandbox for the current project.
+
+Call this tool when you need a safe sandbox for changes that should stay isolated from the primary workspace.
+
+The tool returns the created worktree info (name, branch, directory) for follow-up actions.

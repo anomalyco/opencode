@@ -1,0 +1,5 @@
+Use this tool to remove and exit an existing git worktree sandbox.
+
+Call this tool when work in a sandbox is complete and the worktree should be torn down.
+
+Provide the sandbox directory to remove.
