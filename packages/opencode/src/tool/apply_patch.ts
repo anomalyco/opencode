@@ -8,7 +8,7 @@ import { Instance } from "../project/instance"
 import { Patch } from "../patch"
 import { createTwoFilesPatch, diffLines } from "diff"
 import { assertExternalDirectory } from "./external-directory"
-import { trimDiff } from "./edit"
+import { trimDiff, detectLineEnding, normalizeLineEndings, convertToLineEnding } from "./edit"
 import { LSP } from "../lsp"
 import { Filesystem } from "../util/filesystem"
 import DESCRIPTION from "./apply_patch.txt"
@@ -106,6 +106,11 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
             newContent = fileUpdate.content
           } catch (error) {
             throw new Error(`apply_patch verification failed: ${error}`)
+          }
+
+          const hasBOM = oldContent.charCodeAt(0) === 0xfeff
+          if (hasBOM && newContent.charCodeAt(0) !== 0xfeff) {
+            newContent = "\uFEFF" + newContent
           }
 
           const diff = trimDiff(createTwoFilesPatch(filePath, filePath, oldContent, newContent))

@@ -297,6 +297,146 @@ describe("tool.write", () => {
     })
   })
 
+  describe("line ending and BOM preservation", () => {
+    test("preserves CRLF line endings when overwriting existing file", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "crlf-existing.txt")
+      await fs.writeFile(filepath, "old line 1\r\nold line 2\r\nold line 3", "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const { FileTime } = await import("../../src/file/time")
+          await FileTime.read(ctx.sessionID, filepath)
+
+          const write = await WriteTool.init()
+          await write.execute(
+            {
+              filePath: filepath,
+              content: "new line 1\nnew line 2\nnew line 3",
+            },
+            ctx,
+          )
+
+          const buf = await fs.readFile(filepath)
+          const written = buf.toString()
+          expect(written).toBe("new line 1\r\nnew line 2\r\nnew line 3")
+          expect(written).toContain("\r\n")
+          expect(written).not.toMatch(/[^\r]\n/)
+        },
+      })
+    })
+
+    test("preserves UTF-8 BOM when overwriting existing file", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "bom-existing.txt")
+      await fs.writeFile(filepath, "\uFEFFold content with BOM", "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const { FileTime } = await import("../../src/file/time")
+          await FileTime.read(ctx.sessionID, filepath)
+
+          const write = await WriteTool.init()
+          await write.execute(
+            {
+              filePath: filepath,
+              content: "new content without BOM",
+            },
+            ctx,
+          )
+
+          const buf = await fs.readFile(filepath)
+          const written = buf.toString()
+          expect(written.charCodeAt(0)).toBe(0xFEFF)
+          expect(written).toBe("\uFEFFnew content without BOM")
+        },
+      })
+    })
+
+    test("preserves both CRLF and BOM when overwriting existing file", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "bom-crlf-existing.txt")
+      await fs.writeFile(filepath, "\uFEFFold line 1\r\nold line 2\r\n", "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const { FileTime } = await import("../../src/file/time")
+          await FileTime.read(ctx.sessionID, filepath)
+
+          const write = await WriteTool.init()
+          await write.execute(
+            {
+              filePath: filepath,
+              content: "new line 1\nnew line 2\n",
+            },
+            ctx,
+          )
+
+          const buf = await fs.readFile(filepath)
+          const written = buf.toString()
+          expect(written.charCodeAt(0)).toBe(0xFEFF)
+          expect(written).toBe("\uFEFFnew line 1\r\nnew line 2\r\n")
+        },
+      })
+    })
+
+    test("does not add BOM or CRLF to new files", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "brand-new.txt")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const write = await WriteTool.init()
+          await write.execute(
+            {
+              filePath: filepath,
+              content: "line 1\nline 2\nline 3",
+            },
+            ctx,
+          )
+
+          const buf = await fs.readFile(filepath)
+          const written = buf.toString()
+          expect(written.charCodeAt(0)).not.toBe(0xFEFF)
+          expect(written).toBe("line 1\nline 2\nline 3")
+          expect(written).not.toContain("\r\n")
+        },
+      })
+    })
+
+    test("does not modify overwrite of empty file", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "empty-existing.txt")
+      await fs.writeFile(filepath, "", "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const { FileTime } = await import("../../src/file/time")
+          await FileTime.read(ctx.sessionID, filepath)
+
+          const write = await WriteTool.init()
+          await write.execute(
+            {
+              filePath: filepath,
+              content: "line 1\nline 2",
+            },
+            ctx,
+          )
+
+          const buf = await fs.readFile(filepath)
+          const written = buf.toString()
+          expect(written).toBe("line 1\nline 2")
+          expect(written.charCodeAt(0)).not.toBe(0xFEFF)
+        },
+      })
+    })
+  })
+
   describe("error handling", () => {
     test("throws error when OS denies write access", async () => {
       await using tmp = await tmpdir()
