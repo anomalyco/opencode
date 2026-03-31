@@ -404,7 +404,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             Effect.runPromise(
               Effect.gen(function* () {
                 const match = input.processor.partFromToolCall(options.toolCallId)
-                if (!match || match.state.status !== "running") return
+                if (!match || !["running", "pending"].includes(match.state.status)) return
                 yield* sessions.updatePart({
                   ...match,
                   state: {
