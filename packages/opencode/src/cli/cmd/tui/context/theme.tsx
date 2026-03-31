@@ -36,6 +36,8 @@ import vercel from "./theme/vercel.json" with { type: "json" }
 import vesper from "./theme/vesper.json" with { type: "json" }
 import zenburn from "./theme/zenburn.json" with { type: "json" }
 import carbonfox from "./theme/carbonfox.json" with { type: "json" }
+import adwaitaLight from "./theme/adwaita-light.json" with { type: "json" }
+import adwaitaDark from "./theme/adwaita-dark.json" with { type: "json" }
 import { useKV } from "./kv"
 import { useRenderer } from "@opentui/solid"
 import { createStore, produce } from "solid-js/store"
@@ -119,6 +121,8 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   vercel,
   zenburn,
   carbonfox,
+  ["adwaita-light"]: adwaitaLight,
+  ["adwaita-dark"]: adwaitaDark,
 }
 
 type State = {

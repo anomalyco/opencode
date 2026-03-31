@@ -1,0 +1,218 @@
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "defs": {
+    "bg": "#fafafb",
+    "bgAlt": "#f0f0f2",
+    "bgPanel": "#ffffff",
+    "fg": "#1c1c1f",
+    "fgMuted": "#5e5e63",
+    "accent": "#3584e4",
+    "success": "#2ec27e",
+    "warning": "#e5a50a",
+    "error": "#c01c28",
+    "border": "#dcdcdc",
+    "borderSubtle": "#e8e8e8"
+  },
+  "theme": {
+    "primary": {
+      "dark": "accent",
+      "light": "accent"
+    },
+    "secondary": {
+      "dark": "accent",
+      "light": "accent"
+    },
+    "accent": {
+      "dark": "accent",
+      "light": "accent"
+    },
+    "error": {
+      "dark": "error",
+      "light": "error"
+    },
+    "warning": {
+      "dark": "warning",
+      "light": "warning"
+    },
+    "success": {
+      "dark": "success",
+      "light": "success"
+    },
+    "info": {
+      "dark": "accent",
+      "light": "accent"
+    },
+    "text": {
+      "dark": "fg",
+      "light": "fg"
+    },
+    "textMuted": {
+      "dark": "fgMuted",
+      "light": "fgMuted"
+    },
+    "background": {
+      "dark": "bg",
+      "light": "bg"
+    },
+    "backgroundPanel": {
+      "dark": "bgAlt",
+      "light": "bgAlt"
+    },
+    "backgroundElement": {
+      "dark": "bgPanel",
+      "light": "bgPanel"
+    },
+    "border": {
+      "dark": "border",
+      "light": "border"
+    },
+    "borderActive": {
+      "dark": "accent",
+      "light": "accent"
+    },
+    "borderSubtle": {
+      "dark": "borderSubtle",
+      "light": "borderSubtle"
+    },
+    "diffAdded": {
+      "dark": "success",
+      "light": "success"
+    },
+    "diffRemoved": {
+      "dark": "error",
+      "light": "error"
+    },
+    "diffContext": {
+      "dark": "fgMuted",
+      "light": "fgMuted"
+    },
+    "diffHunkHeader": {
+      "dark": "accent",
+      "light": "accent"
+    },
+    "diffHighlightAdded": {
+      "dark": "#2ec27e",
+      "light": "#2ec27e"
+    },
+    "diffHighlightRemoved": {
+      "dark": "#c01c28",
+      "light": "#c01c28"
+    },
+    "diffAddedBg": {
+      "dark": "#d6f5e0",
+      "light": "#d6f5e0"
+    },
+    "diffRemovedBg": {
+      "dark": "#f5d6d6",
+      "light": "#f5d6d6"
+    },
+    "diffContextBg": {
+      "dark": "bgAlt",
+      "light": "bgAlt"
+    },
+    "diffLineNumber": {
+      "dark": "#9a9a9e",
+      "light": "#9a9a9e"
+    },
+    "diffAddedLineNumberBg": {
+      "dark": "#d6f5e0",
+      "light": "#d6f5e0"
+    },
+    "diffRemovedLineNumberBg": {
+      "dark": "#f5d6d6",
+      "light": "#f5d6d6"
+    },
+    "markdownText": {
+      "dark": "fg",
+      "light": "fg"
+    },
+    "markdownHeading": {
+      "dark": "accent",
+      "light": "accent"
+    },
+    "markdownLink": {
+      "dark": "accent",
+      "light": "accent"
+    },
+    "markdownLinkText": {
+      "dark": "accent",
+      "light": "accent"
+    },
+    "markdownCode": {
+      "dark": "success",
+      "light": "success"
+    },
+    "markdownBlockQuote": {
+      "dark": "fgMuted",
+      "light": "fgMuted"
+    },
+    "markdownEmph": {
+      "dark": "warning",
+      "light": "warning"
+    },
+    "markdownStrong": {
+      "dark": "fg",
+      "light": "fg"
+    },
+    "markdownHorizontalRule": {
+      "dark": "border",
+      "light": "border"
+    },
+    "markdownListItem": {
+      "dark": "accent",
+      "light": "accent"
+    },
+    "markdownListEnumeration": {
+      "dark": "accent",
+      "light": "accent"
+    },
+    "markdownImage": {
+      "dark": "accent",
+      "light": "accent"
+    },
+    "markdownImageText": {
+      "dark": "accent",
+      "light": "accent"
+    },
+    "markdownCodeBlock": {
+      "dark": "fg",
+      "light": "fg"
+    },
+    "syntaxComment": {
+      "dark": "fgMuted",
+      "light": "fgMuted"
+    },
+    "syntaxKeyword": {
+      "dark": "accent",
+      "light": "accent"
+    },
+    "syntaxFunction": {
+      "dark": "warning",
+      "light": "warning"
+    },
+    "syntaxVariable": {
+      "dark": "success",
+      "light": "success"
+    },
+    "syntaxString": {
+      "dark": "success",
+      "light": "success"
+    },
+    "syntaxNumber": {
+      "dark": "warning",
+      "light": "warning"
+    },
+    "syntaxType": {
+      "dark": "accent",
+      "light": "accent"
+    },
+    "syntaxOperator": {
+      "dark": "fg",
+      "light": "fg"
+    },
+    "syntaxPunctuation": {
+      "dark": "fg",
+      "light": "fg"
+    }
+  }
+}
