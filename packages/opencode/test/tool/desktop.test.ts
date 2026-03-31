@@ -14,6 +14,16 @@ mock.module("@nut-tree-fork/nut-js", () => ({
       calls.push(input)
     },
   },
+  screen: {
+    grab: async () => ({
+      width: 1,
+      height: 1,
+      data: Buffer.from([255, 0, 0, 255]),
+      colorMode: undefined,
+    }),
+    width: async () => 1,
+    height: async () => 1,
+  },
   Key: {
     LeftSuper: "LeftSuper",
     LeftControl: "LeftControl",
@@ -78,5 +88,16 @@ describe("DesktopTool", () => {
 
     expect(calls).toEqual([["LeftSuper", "Space"]])
     expect(result.output).toContain("cmd+space")
+  })
+
+  test("returns a PNG attachment for screenshots", async () => {
+    const desktop = await DesktopTool.init()
+    const result = await desktop.execute({ action: "screenshot" }, ctx)
+
+    expect(result.output).toContain("1x1")
+    expect(result.attachments).toHaveLength(1)
+    expect(result.attachments?.[0]?.type).toBe("file")
+    expect(result.attachments?.[0]?.mime).toBe("image/png")
+    expect(result.attachments?.[0]?.url.startsWith("data:image/png;base64,")).toBe(true)
   })
 })

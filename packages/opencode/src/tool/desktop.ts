@@ -5,6 +5,7 @@ import { Log } from "../util/log"
 import path from "path"
 import fsSync from "fs"
 import { pathToFileURL } from "url"
+import { imageToJimp } from "@nut-tree-fork/shared"
 
 const log = Log.create({ service: "desktop-tool" })
 
@@ -134,7 +135,7 @@ export const DesktopTool = Tool.define("desktop", async () => {
             height = await nut.screen.height()
           }
 
-          const imageBuffer = await image.toPNG()
+          const imageBuffer = await imageToJimp(image).getBufferAsync("image/png")
           const base64Data = imageBuffer.toString("base64")
 
           return {
