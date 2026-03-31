@@ -234,6 +234,33 @@ export namespace Server {
           return c.json(true)
         },
       )
+      .post(
+        "/shutdown",
+        describeRoute({
+          summary: "Shutdown server",
+          description: "Gracefully shut down the OpenCode server. This will stop accepting new connections and close the server.",
+          operationId: "server.shutdown",
+          responses: {
+            200: {
+              description: "Server shutdown initiated",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      success: z.boolean(),
+                    }),
+                  ),
+                },
+              },
+            },
+            ...errors(500),
+          },
+        }),
+        async (c) => {
+          const success = await shutdown()
+          return c.json({ success })
+        },
+      )
       .use(WorkspaceRouterMiddleware)
   }
 
@@ -264,6 +291,9 @@ export namespace Server {
   /** @deprecated do not use this dumb shit */
   export let url: URL
 
+  // Store server reference for shutdown endpoint
+  let currentServer: ReturnType<typeof Bun.serve> | undefined
+
   export function listen(opts: {
     port: number
     hostname: string
@@ -289,6 +319,8 @@ export namespace Server {
     const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
 
+    currentServer = server
+
     const shouldPublishMDNS =
       opts.mdns &&
       server.port &&
@@ -304,9 +336,19 @@ export namespace Server {
     const originalStop = server.stop.bind(server)
     server.stop = async (closeActiveConnections?: boolean) => {
       if (shouldPublishMDNS) MDNS.unpublish()
+      currentServer = undefined
       return originalStop(closeActiveConnections)
     }
 
     return server
+  }
+
+  export async function shutdown() {
+    if (currentServer) {
+      await currentServer.stop()
+      currentServer = undefined
+      return true
+    }
+    return false
   }
 }
