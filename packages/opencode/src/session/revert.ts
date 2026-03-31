@@ -4,8 +4,7 @@ import { Snapshot } from "../snapshot"
 import { MessageV2 } from "./message-v2"
 import { Session } from "."
 import { Log } from "../util/log"
-import { Database, eq } from "../storage/db"
-import { MessageTable, PartTable } from "./session.sql"
+import { SyncEvent } from "../sync"
 import { Storage } from "@/storage/storage"
 import { Bus } from "../bus"
 import { SessionPrompt } from "./prompt"
@@ -22,7 +21,7 @@ export namespace SessionRevert {
   export type RevertInput = z.infer<typeof RevertInput>
 
   export async function revert(input: RevertInput) {
-    SessionPrompt.assertNotBusy(input.sessionID)
+    await SessionPrompt.assertNotBusy(input.sessionID)
     const all = await Session.messages({ sessionID: input.sessionID })
     let lastUser: MessageV2.User | undefined
     const session = await Session.get(input.sessionID)
@@ -81,7 +80,7 @@ export namespace SessionRevert {
 
   export async function unrevert(input: { sessionID: SessionID }) {
     log.info("unreverting", input)
-    SessionPrompt.assertNotBusy(input.sessionID)
+    await SessionPrompt.assertNotBusy(input.sessionID)
     const session = await Session.get(input.sessionID)
     if (!session.revert) return session
     if (session.revert.snapshot) await Snapshot.restore(session.revert.snapshot)
@@ -93,12 +92,10 @@ export namespace SessionRevert {
     const sessionID = session.id
     const msgs = await Session.messages({ sessionID })
     const messageID = session.revert.messageID
-    const preserve = [] as MessageV2.WithParts[]
     const remove = [] as MessageV2.WithParts[]
     let target: MessageV2.WithParts | undefined
     for (const msg of msgs) {
       if (msg.info.id < messageID) {
-        preserve.push(msg)
         continue
       }
       if (msg.info.id > messageID) {
@@ -106,15 +103,16 @@ export namespace SessionRevert {
         continue
       }
       if (session.revert.partID) {
-        preserve.push(msg)
         target = msg
         continue
       }
       remove.push(msg)
     }
     for (const msg of remove) {
-      Database.use((db) => db.delete(MessageTable).where(eq(MessageTable.id, msg.info.id)).run())
-      await Bus.publish(MessageV2.Event.Removed, { sessionID: sessionID, messageID: msg.info.id })
+      SyncEvent.run(MessageV2.Event.Removed, {
+        sessionID: sessionID,
+        messageID: msg.info.id,
+      })
     }
     if (session.revert.partID && target) {
       const partID = session.revert.partID
@@ -124,8 +122,7 @@ export namespace SessionRevert {
         const removeParts = target.parts.slice(removeStart)
         target.parts = preserveParts
         for (const part of removeParts) {
-          Database.use((db) => db.delete(PartTable).where(eq(PartTable.id, part.id)).run())
-          await Bus.publish(MessageV2.Event.PartRemoved, {
+          SyncEvent.run(MessageV2.Event.PartRemoved, {
             sessionID: sessionID,
             messageID: target.info.id,
             partID: part.id,

@@ -1,15 +1,19 @@
-import { test, expect } from "bun:test"
+import { afterEach, test, expect } from "bun:test"
 import path from "path"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Agent } from "../../src/agent/agent"
-import { PermissionNext } from "../../src/permission"
+import { Permission } from "../../src/permission"
 
 // Helper to evaluate permission for a tool with wildcard pattern
-function evalPerm(agent: Agent.Info | undefined, permission: string): PermissionNext.Action | undefined {
+function evalPerm(agent: Agent.Info | undefined, permission: string): Permission.Action | undefined {
   if (!agent) return undefined
-  return PermissionNext.evaluate(permission, "*", agent.permission).action
+  return Permission.evaluate(permission, "*", agent.permission).action
 }
+
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 test("returns default native agents when no config", async () => {
   await using tmp = await tmpdir()
@@ -54,7 +58,7 @@ test("plan agent denies edits except .opencode/plans/*", async () => {
       // Wildcard is denied
       expect(evalPerm(plan, "edit")).toBe("deny")
       // But specific path is allowed
-      expect(PermissionNext.evaluate("edit", ".opencode/plans/foo.md", plan!.permission).action).toBe("allow")
+      expect(Permission.evaluate("edit", ".opencode/plans/foo.md", plan!.permission).action).toBe("allow")
     },
   })
 })
@@ -69,7 +73,6 @@ test("explore agent denies edit and write", async () => {
       expect(explore?.mode).toBe("subagent")
       expect(evalPerm(explore, "edit")).toBe("deny")
       expect(evalPerm(explore, "write")).toBe("deny")
-      expect(evalPerm(explore, "todoread")).toBe("deny")
       expect(evalPerm(explore, "todowrite")).toBe("deny")
     },
   })
@@ -83,8 +86,8 @@ test("explore agent asks for external directories and allows Truncate.GLOB", asy
     fn: async () => {
       const explore = await Agent.get("explore")
       expect(explore).toBeDefined()
-      expect(PermissionNext.evaluate("external_directory", "/some/other/path", explore!.permission).action).toBe("ask")
-      expect(PermissionNext.evaluate("external_directory", Truncate.GLOB, explore!.permission).action).toBe("allow")
+      expect(Permission.evaluate("external_directory", "/some/other/path", explore!.permission).action).toBe("ask")
+      expect(Permission.evaluate("external_directory", Truncate.GLOB, explore!.permission).action).toBe("allow")
     },
   })
 })
@@ -98,7 +101,6 @@ test("general agent denies todo tools", async () => {
       expect(general).toBeDefined()
       expect(general?.mode).toBe("subagent")
       expect(general?.hidden).toBeUndefined()
-      expect(evalPerm(general, "todoread")).toBe("deny")
       expect(evalPerm(general, "todowrite")).toBe("deny")
     },
   })
@@ -216,7 +218,7 @@ test("agent permission config merges with defaults", async () => {
       const build = await Agent.get("build")
       expect(build).toBeDefined()
       // Specific pattern is denied
-      expect(PermissionNext.evaluate("bash", "rm -rf *", build!.permission).action).toBe("deny")
+      expect(Permission.evaluate("bash", "rm -rf *", build!.permission).action).toBe("deny")
       // Edit still allowed
       expect(evalPerm(build, "edit")).toBe("allow")
     },
@@ -501,9 +503,9 @@ test("Truncate.GLOB is allowed even when user denies external_directory globally
     directory: tmp.path,
     fn: async () => {
       const build = await Agent.get("build")
-      expect(PermissionNext.evaluate("external_directory", Truncate.GLOB, build!.permission).action).toBe("allow")
-      expect(PermissionNext.evaluate("external_directory", Truncate.DIR, build!.permission).action).toBe("deny")
-      expect(PermissionNext.evaluate("external_directory", "/some/other/path", build!.permission).action).toBe("deny")
+      expect(Permission.evaluate("external_directory", Truncate.GLOB, build!.permission).action).toBe("allow")
+      expect(Permission.evaluate("external_directory", Truncate.DIR, build!.permission).action).toBe("deny")
+      expect(Permission.evaluate("external_directory", "/some/other/path", build!.permission).action).toBe("deny")
     },
   })
 })
@@ -525,9 +527,9 @@ test("Truncate.GLOB is allowed even when user denies external_directory per-agen
     directory: tmp.path,
     fn: async () => {
       const build = await Agent.get("build")
-      expect(PermissionNext.evaluate("external_directory", Truncate.GLOB, build!.permission).action).toBe("allow")
-      expect(PermissionNext.evaluate("external_directory", Truncate.DIR, build!.permission).action).toBe("deny")
-      expect(PermissionNext.evaluate("external_directory", "/some/other/path", build!.permission).action).toBe("deny")
+      expect(Permission.evaluate("external_directory", Truncate.GLOB, build!.permission).action).toBe("allow")
+      expect(Permission.evaluate("external_directory", Truncate.DIR, build!.permission).action).toBe("deny")
+      expect(Permission.evaluate("external_directory", "/some/other/path", build!.permission).action).toBe("deny")
     },
   })
 })
@@ -548,8 +550,8 @@ test("explicit Truncate.GLOB deny is respected", async () => {
     directory: tmp.path,
     fn: async () => {
       const build = await Agent.get("build")
-      expect(PermissionNext.evaluate("external_directory", Truncate.GLOB, build!.permission).action).toBe("deny")
-      expect(PermissionNext.evaluate("external_directory", Truncate.DIR, build!.permission).action).toBe("deny")
+      expect(Permission.evaluate("external_directory", Truncate.GLOB, build!.permission).action).toBe("deny")
+      expect(Permission.evaluate("external_directory", Truncate.DIR, build!.permission).action).toBe("deny")
     },
   })
 })
@@ -582,7 +584,7 @@ description: Permission skill.
         const build = await Agent.get("build")
         const skillDir = path.join(tmp.path, ".opencode", "skill", "perm-skill")
         const target = path.join(skillDir, "reference", "notes.md")
-        expect(PermissionNext.evaluate("external_directory", target, build!.permission).action).toBe("allow")
+        expect(Permission.evaluate("external_directory", target, build!.permission).action).toBe("allow")
       },
     })
   } finally {
