@@ -126,7 +126,7 @@ jobs:
         run: |
           subjects=$(git log --format="%s" upstream/$UPSTREAM_BRANCH..HEAD)
           missing=""
-          for sig in "fix: filter empty/whitespace message content" "fork onboarding - rebrand" "simplify CI for fork" "persistent footer with p10k-style git status"; do
+          for sig in "fix: filter empty/whitespace message content" "fork onboarding - rebrand" "simplify CI for fork" "persistent footer with p10k-style git status" "bake f5xc theme as default"; do
             if ! echo "$subjects" | grep -q "$sig"; then
               missing="$missing  - $sig\n"
             fi
@@ -134,7 +134,7 @@ jobs:
           actual=$(git rev-list --count upstream/$UPSTREAM_BRANCH..HEAD)
           if [ -z "$missing" ]; then
             echo "valid=true" >> "$GITHUB_OUTPUT"
-            echo "✅ All 4 required fork commits present ($actual total ahead)"
+            echo "✅ All 5 required fork commits present ($actual total ahead)"
           else
             echo "valid=false" >> "$GITHUB_OUTPUT"
             echo "missing<<MISSLIST" >> "$GITHUB_OUTPUT"
