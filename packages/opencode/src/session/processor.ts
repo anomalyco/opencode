@@ -3,6 +3,7 @@ import * as Stream from "effect/Stream"
 import { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
 import { Config } from "@/config/config"
+import { MemoryExtractor } from "@/memory/extractor"
 import { Permission } from "@/permission"
 import { Plugin } from "@/plugin"
 import { Snapshot } from "@/snapshot"
@@ -180,6 +181,9 @@ export namespace SessionProcessor {
                 metadata: value.providerMetadata,
               } satisfies MessageV2.ToolPart)
 
+              // Feed to memory extractor (fire-and-forget)
+              try { MemoryExtractor.onToolCall(value.toolName, value.input as Record<string, unknown>) } catch {}
+
               const parts = yield* Effect.promise(() => MessageV2.parts(ctx.assistantMessage.id))
               const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
 
@@ -223,6 +227,18 @@ export namespace SessionProcessor {
                   attachments: value.output.attachments,
                 },
               })
+
+              // Feed to memory extractor (fire-and-forget)
+              try {
+                const exitCode = (value.output.metadata as Record<string, unknown>)?.exitCode as number | undefined
+                MemoryExtractor.onToolResult(
+                  match.tool,
+                  (value.input ?? match.state.input) as Record<string, unknown>,
+                  value.output.output,
+                  exitCode,
+                )
+              } catch {}
+
               delete ctx.toolcalls[value.toolCallId]
               return
             }
@@ -442,6 +458,16 @@ export namespace SessionProcessor {
           log.info("process")
           ctx.needsCompaction = false
           ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
+
+          // Initialize memory extractor
+          try {
+            const cfg = yield* config.get()
+            if (cfg.memory?.enabled !== false && cfg.memory?.auto_extract !== false) {
+              MemoryExtractor.init(Instance.directory, ctx.sessionID)
+            }
+          } catch {
+            // Memory extraction is best-effort
+          }
 
           return yield* Effect.gen(function* () {
             yield* Effect.gen(function* () {
