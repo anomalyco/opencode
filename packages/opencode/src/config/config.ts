@@ -1540,7 +1540,7 @@ export namespace Config {
 
   export const defaultLayer = layer.pipe(
     Layer.provide(AppFileSystem.defaultLayer),
-    Layer.provide(Auth.layer),
+    Layer.provide(Auth.defaultLayer),
     Layer.provide(Account.defaultLayer),
   )
 
