@@ -46,12 +46,14 @@ export namespace SessionProcessor {
 
   interface ProcessorContext extends Input {
     toolcalls: Record<string, MessageV2.ToolPart>
+    toolCallHistory: MessageV2.ToolPart[]
     shouldBreak: boolean
     snapshot: string | undefined
     blocked: boolean
     needsCompaction: boolean
     currentText: MessageV2.TextPart | undefined
     reasoningMap: Record<string, MessageV2.ReasoningPart>
+    stepCount: number
   }
 
   type StreamEvent = Event
@@ -89,12 +91,14 @@ export namespace SessionProcessor {
           sessionID: input.sessionID,
           model: input.model,
           toolcalls: {},
+          toolCallHistory: [],
           shouldBreak: false,
           snapshot: undefined,
           blocked: false,
           needsCompaction: false,
           currentText: undefined,
           reasoningMap: {},
+          stepCount: 0,
         }
         let aborted = false
 
@@ -180,12 +184,13 @@ export namespace SessionProcessor {
                 metadata: value.providerMetadata,
               } satisfies MessageV2.ToolPart)
 
-              const parts = yield* Effect.promise(() => MessageV2.parts(ctx.assistantMessage.id))
-              const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
+              // Track tool call history in-memory for doom loop detection
+              ctx.toolCallHistory.push(ctx.toolcalls[value.toolCallId])
+              const recentCalls = ctx.toolCallHistory.slice(-DOOM_LOOP_THRESHOLD)
 
               if (
-                recentParts.length !== DOOM_LOOP_THRESHOLD ||
-                !recentParts.every(
+                recentCalls.length !== DOOM_LOOP_THRESHOLD ||
+                !recentCalls.every(
                   (part) =>
                     part.type === "tool" &&
                     part.tool === value.toolName &&
@@ -294,12 +299,15 @@ export namespace SessionProcessor {
                 }
                 ctx.snapshot = undefined
               }
-              yield* Effect.promise(() =>
-                SessionSummary.summarize({
-                  sessionID: ctx.sessionID,
-                  messageID: ctx.assistantMessage.parentID,
-                }),
-              ).pipe(Effect.ignoreCause({ log: true, message: "session summary failed" }), Effect.forkDetach)
+              ctx.stepCount++
+              if (ctx.stepCount === 1) {
+                yield* Effect.promise(() =>
+                  SessionSummary.summarize({
+                    sessionID: ctx.sessionID,
+                    messageID: ctx.assistantMessage.parentID,
+                  }),
+                ).pipe(Effect.ignoreCause({ log: true, message: "session summary failed" }), Effect.forkDetach)
+              }
               if (
                 !ctx.assistantMessage.summary &&
                 isOverflow({ cfg: yield* config.get(), tokens: usage.tokens, model: ctx.model })

@@ -250,13 +250,20 @@ export namespace Plugin {
           }
 
           // Subscribe to bus events, fiber interrupted when scope closes
+          // Run plugin event handlers in parallel so slow handlers don't block the main event stream
           yield* bus.subscribeAll().pipe(
             Stream.runForEach((input) =>
-              Effect.sync(() => {
-                for (const hook of hooks) {
-                  hook["event"]?.({ event: input as any })
-                }
-              }),
+              Effect.forEach(
+                hooks,
+                (hook) =>
+                  Effect.tryPromise({
+                    try: () => Promise.resolve(hook["event"]?.({ event: input as any })),
+                    catch: (err) => {
+                      log.error("plugin event handler failed", { error: err })
+                    },
+                  }).pipe(Effect.ignore),
+                { concurrency: "unbounded", discard: true },
+              ),
             ),
             Effect.forkScoped,
           )

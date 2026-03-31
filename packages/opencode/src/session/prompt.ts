@@ -100,13 +100,21 @@ export namespace SessionPrompt {
       const cache = yield* InstanceState.make(
         Effect.fn("SessionPrompt.state")(function* () {
           const runners = new Map<string, Runner<MessageV2.WithParts>>()
+          const cachedMessages = new Map<string, MessageV2.WithParts[]>()
+          const cachedTools = new Map<string, Record<string, AITool>>()
+          const lastAgentName = new Map<string, string>()
+          const lastModelKey = new Map<string, string>()
           yield* Effect.addFinalizer(
             Effect.fnUntraced(function* () {
               yield* Effect.forEach(runners.values(), (r) => r.cancel, { concurrency: "unbounded", discard: true })
               runners.clear()
+              cachedMessages.clear()
+              cachedTools.clear()
+              lastAgentName.clear()
+              lastModelKey.clear()
             }),
           )
-          return { runners }
+          return { runners, cachedMessages, cachedTools, lastAgentName, lastModelKey }
         }),
       )
 
@@ -1333,12 +1341,17 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           let structured: unknown | undefined
           let step = 0
           const session = yield* sessions.get(sessionID)
+          const s = yield* InstanceState.get(cache)
 
           while (true) {
             yield* status.set(sessionID, { type: "busy" })
             log.info("loop", { step, sessionID })
 
-            let msgs = yield* Effect.promise(() => MessageV2.filterCompacted(MessageV2.stream(sessionID)))
+            // Use cached messages on subsequent iterations to avoid DB re-read
+            let msgs =
+              step > 0 && s.cachedMessages.has(sessionID)
+                ? s.cachedMessages.get(sessionID)!
+                : yield* Effect.promise(() => MessageV2.filterCompacted(MessageV2.stream(sessionID)))
 
             let lastUser: MessageV2.User | undefined
             let lastAssistant: MessageV2.Assistant | undefined
@@ -1389,6 +1402,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 auto: task.auto,
                 overflow: task.overflow,
               })
+              // Invalidate caches after compaction since messages change
+              s.cachedMessages.delete(sessionID)
+              s.cachedTools.delete(sessionID)
               if (result === "stop") break
               continue
             }
@@ -1399,6 +1415,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
             ) {
               yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
+              // Invalidate caches after compaction
+              s.cachedMessages.delete(sessionID)
+              s.cachedTools.delete(sessionID)
               continue
             }
 
@@ -1441,15 +1460,23 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
                 const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
 
-                const tools = yield* resolveTools({
-                  agent,
-                  session,
-                  model,
-                  tools: lastUser.tools,
-                  processor: handle,
-                  bypassAgentCheck,
-                  messages: msgs,
-                })
+                // Use cached tools if agent and model haven't changed
+                const modelKey = `${model.providerID}/${model.id}`
+                const toolsCacheValid =
+                  s.cachedTools.has(sessionID) &&
+                  s.lastAgentName.get(sessionID) === agent.name &&
+                  s.lastModelKey.get(sessionID) === modelKey
+                const tools: Record<string, AITool> = toolsCacheValid
+                  ? s.cachedTools.get(sessionID)!
+                  : yield* resolveTools({
+                      agent,
+                      session,
+                      model,
+                      tools: lastUser.tools,
+                      processor: handle,
+                      bypassAgentCheck,
+                      messages: msgs,
+                    })
 
                 if (lastUser.format?.type === "json_schema") {
                   tools["StructuredOutput"] = createStructuredOutputTool({
@@ -1534,6 +1561,13 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     overflow: !handle.message.finish,
                   })
                 }
+
+                // Cache messages and tools for next iteration to avoid DB re-read
+                s.cachedMessages.set(sessionID, msgs)
+                s.cachedTools.set(sessionID, tools)
+                s.lastAgentName.set(sessionID, agent.name)
+                s.lastModelKey.set(sessionID, `${model.providerID}/${model.id}`)
+
                 return "continue" as const
               }),
               Effect.fnUntraced(function* (exit) {
