@@ -15,7 +15,7 @@ import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 import { NotFoundError } from "@/storage/db"
 import { ModelID, ProviderID } from "@/provider/schema"
-import { Cause, Effect, Exit, Layer, ServiceMap } from "effect"
+import { Effect, Layer, ServiceMap } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 import { isOverflow as overflow } from "./overflow"
 
@@ -45,7 +45,6 @@ export namespace SessionCompaction {
       parentID: MessageID
       messages: MessageV2.WithParts[]
       sessionID: SessionID
-      abort: AbortSignal
       auto: boolean
       overflow?: boolean
     }) => Effect.Effect<"continue" | "stop">
@@ -135,20 +134,28 @@ export namespace SessionCompaction {
         parentID: MessageID
         messages: MessageV2.WithParts[]
         sessionID: SessionID
-        abort: AbortSignal
         auto: boolean
         overflow?: boolean
       }) {
-        const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
+        const parent = input.messages.findLast((m) => m.info.id === input.parentID)
+        if (!parent || parent.info.role !== "user") {
+          throw new Error(`Compaction parent must be a user message: ${input.parentID}`)
+        }
+        const userMessage = parent.info
 
         let messages = input.messages
-        let replay: MessageV2.WithParts | undefined
+        let replay:
+          | {
+              info: MessageV2.User
+              parts: MessageV2.Part[]
+            }
+          | undefined
         if (input.overflow) {
           const idx = input.messages.findIndex((m) => m.info.id === input.parentID)
           for (let i = idx - 1; i >= 0; i--) {
             const msg = input.messages[i]
             if (msg.info.role === "user" && !msg.parts.some((p) => p.type === "compaction")) {
-              replay = msg
+              replay = { info: msg.info, parts: msg.parts }
               messages = input.messages.slice(0, i)
               break
             }
@@ -206,7 +213,7 @@ When constructing the summary, try to stick to this template:
         const msgs = structuredClone(messages)
         yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
         const modelMessages = yield* Effect.promise(() => MessageV2.toModelMessages(msgs, model, { stripMedia: true }))
-        const msg = (yield* session.updateMessage({
+        const msg: MessageV2.Assistant = {
           id: MessageID.ascending(),
           role: "assistant",
           parentID: input.parentID,
@@ -231,25 +238,17 @@ When constructing the summary, try to stick to this template:
           time: {
             created: Date.now(),
           },
-        })) as MessageV2.Assistant
+        }
+        yield* session.updateMessage(msg)
         const processor = yield* processors.create({
           assistantMessage: msg,
           sessionID: input.sessionID,
           model,
-          abort: input.abort,
-        })
-        const cancel = Effect.fn("SessionCompaction.cancel")(function* () {
-          if (!input.abort.aborted || msg.time.completed) return
-          msg.error = msg.error ?? new MessageV2.AbortedError({ message: "Aborted" }).toObject()
-          msg.finish = msg.finish ?? "error"
-          msg.time.completed = Date.now()
-          yield* session.updateMessage(msg)
         })
         const result = yield* processor
           .process({
             user: userMessage,
             agent,
-            abort: input.abort,
             sessionID: input.sessionID,
             tools: {},
             system: [],
@@ -262,7 +261,7 @@ When constructing the summary, try to stick to this template:
             ],
             model,
           })
-          .pipe(Effect.ensuring(cancel()))
+          .pipe(Effect.onInterrupt(() => processor.abort()))
 
         if (result === "compact") {
           processor.message.error = new MessageV2.ContextOverflowError({
@@ -277,7 +276,7 @@ When constructing the summary, try to stick to this template:
 
         if (result === "continue" && input.auto) {
           if (replay) {
-            const original = replay.info as MessageV2.User
+            const original = replay.info
             const replayMsg = yield* session.updateMessage({
               id: MessageID.ascending(),
               role: "user",
@@ -386,7 +385,7 @@ When constructing the summary, try to stick to this template:
     ),
   )
 
-  const { runPromise, runPromiseExit } = makeRuntime(Service, defaultLayer)
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
     return runPromise((svc) => svc.isOverflow(input))
@@ -396,21 +395,16 @@ When constructing the summary, try to stick to this template:
     return runPromise((svc) => svc.prune(input))
   }
 
-  export async function process(input: {
-    parentID: MessageID
-    messages: MessageV2.WithParts[]
-    sessionID: SessionID
-    abort: AbortSignal
-    auto: boolean
-    overflow?: boolean
-  }) {
-    const exit = await runPromiseExit((svc) => svc.process(input), { signal: input.abort })
-    if (Exit.isFailure(exit)) {
-      if (Cause.hasInterrupts(exit.cause) && input.abort.aborted) return "stop"
-      throw Cause.squash(exit.cause)
-    }
-    return exit.value
-  }
+  export const process = fn(
+    z.object({
+      parentID: MessageID.zod,
+      messages: z.custom<MessageV2.WithParts[]>(),
+      sessionID: SessionID.zod,
+      auto: z.boolean(),
+      overflow: z.boolean().optional(),
+    }),
+    (input) => runPromise((svc) => svc.process(input)),
+  )
 
   export const create = fn(
     z.object({

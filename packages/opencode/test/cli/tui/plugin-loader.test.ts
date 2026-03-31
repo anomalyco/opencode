@@ -468,10 +468,18 @@ test("continues loading when a plugin is missing config metadata", async () => {
       [tmp.extra.goodSpec, { marker: tmp.extra.goodMarker }],
       tmp.extra.bareSpec,
     ],
-    plugin_meta: {
-      [tmp.extra.goodSpec]: { scope: "local", source: path.join(tmp.path, "tui.json") },
-      [tmp.extra.bareSpec]: { scope: "local", source: path.join(tmp.path, "tui.json") },
-    },
+    plugin_records: [
+      {
+        item: [tmp.extra.goodSpec, { marker: tmp.extra.goodMarker }],
+        scope: "local",
+        source: path.join(tmp.path, "tui.json"),
+      },
+      {
+        item: tmp.extra.bareSpec,
+        scope: "local",
+        source: path.join(tmp.path, "tui.json"),
+      },
+    ],
   })
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
@@ -490,6 +498,84 @@ test("continues loading when a plugin is missing config metadata", async () => {
     get.mockRestore()
     wait.mockRestore()
     delete process.env.OPENCODE_PLUGIN_META_FILE
+  }
+})
+
+test("initializes external tui plugins in config order", async () => {
+  const globalJson = path.join(Global.Path.config, "tui.json")
+  const globalJsonc = path.join(Global.Path.config, "tui.jsonc")
+  const backupJson = await Bun.file(globalJson)
+    .text()
+    .catch(() => undefined)
+  const backupJsonc = await Bun.file(globalJsonc)
+    .text()
+    .catch(() => undefined)
+
+  await fs.rm(globalJson, { force: true }).catch(() => {})
+  await fs.rm(globalJsonc, { force: true }).catch(() => {})
+
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const a = path.join(dir, "order-a.ts")
+      const b = path.join(dir, "order-b.ts")
+      const aSpec = pathToFileURL(a).href
+      const bSpec = pathToFileURL(b).href
+      const marker = path.join(dir, "tui-order.txt")
+
+      await Bun.write(
+        a,
+        `import fs from "fs/promises"
+
+export default {
+  id: "demo.tui.order.a",
+  tui: async () => {
+    await fs.appendFile(${JSON.stringify(marker)}, "a-start\\n")
+    await Bun.sleep(25)
+    await fs.appendFile(${JSON.stringify(marker)}, "a-end\\n")
+  },
+}
+`,
+      )
+      await Bun.write(
+        b,
+        `import fs from "fs/promises"
+
+export default {
+  id: "demo.tui.order.b",
+  tui: async () => {
+    await fs.appendFile(${JSON.stringify(marker)}, "b\\n")
+  },
+}
+`,
+      )
+      await Bun.write(path.join(dir, "tui.json"), JSON.stringify({ plugin: [aSpec, bSpec] }, null, 2))
+
+      return { marker }
+    },
+  })
+
+  process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
+  const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
+
+  try {
+    await TuiPluginRuntime.init(createTuiPluginApi())
+    const lines = (await fs.readFile(tmp.extra.marker, "utf8")).trim().split("\n")
+    expect(lines).toEqual(["a-start", "a-end", "b"])
+  } finally {
+    await TuiPluginRuntime.dispose()
+    cwd.mockRestore()
+    delete process.env.OPENCODE_PLUGIN_META_FILE
+
+    if (backupJson === undefined) {
+      await fs.rm(globalJson, { force: true }).catch(() => {})
+    } else {
+      await Bun.write(globalJson, backupJson)
+    }
+    if (backupJsonc === undefined) {
+      await fs.rm(globalJsonc, { force: true }).catch(() => {})
+    } else {
+      await Bun.write(globalJsonc, backupJsonc)
+    }
   }
 })
 
