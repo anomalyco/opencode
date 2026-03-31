@@ -1390,6 +1390,25 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 overflow: task.overflow,
               })
               if (result === "stop") break
+              // After compaction, the model loses context about available tools.
+              // Inject a synthetic user message to re-announce tools on next iteration.
+              const userMsg: MessageV2.User = {
+                id: MessageID.ascending(),
+                sessionID,
+                role: "user",
+                time: { created: Date.now() },
+                agent: lastUser.agent,
+                model: lastUser.model,
+              }
+              yield* sessions.updateMessage(userMsg)
+              yield* sessions.updatePart({
+                id: PartID.ascending(),
+                messageID: userMsg.id,
+                sessionID,
+                type: "text",
+                text: "<system-reminder>Context was compacted. You still have access to all previously available tools and capabilities. Continue with your current task.</system-reminder>",
+                synthetic: true,
+              })
               continue
             }
 
