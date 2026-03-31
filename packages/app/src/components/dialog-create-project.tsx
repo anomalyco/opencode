@@ -8,6 +8,7 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useServer } from "@/context/server"
 import { useLanguage } from "@/context/language"
+import { DialogClientConfig } from "./dialog-client-config"
 
 export function DialogCreateProject(props: { onSelect: (path: string) => void }) {
   const dialog = useDialog()
@@ -61,7 +62,7 @@ export function DialogCreateProject(props: { onSelect: (path: string) => void })
     if (!ok) return
 
     props.onSelect(path)
-    dialog.close()
+    dialog.show(() => <DialogClientConfig directory={path} />)
   }
 
   return (

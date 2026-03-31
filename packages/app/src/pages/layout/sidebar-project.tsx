@@ -27,6 +27,7 @@ export type ProjectSidebarContext = {
   openSidebar: () => void
   closeProject: (directory: string) => void
   showEditProjectDialog: (project: LocalProject) => void
+  showClientConfigDialog: (project: LocalProject) => void
   toggleProjectWorkspaces: (project: LocalProject) => void
   workspacesEnabled: (project: LocalProject) => boolean
   workspaceIds: (project: LocalProject) => string[]
@@ -148,6 +149,9 @@ export const SortableProject = (props: {
         <ContextMenu.Content>
           <ContextMenu.Item onSelect={() => props.ctx.showEditProjectDialog(props.project)}>
             <ContextMenu.ItemLabel>{language.t("common.edit")}</ContextMenu.ItemLabel>
+          </ContextMenu.Item>
+          <ContextMenu.Item onSelect={() => props.ctx.showClientConfigDialog(props.project)}>
+            <ContextMenu.ItemLabel>Modifier le paramétrage</ContextMenu.ItemLabel>
           </ContextMenu.Item>
           <ContextMenu.Item
             data-action="project-workspaces-toggle"
