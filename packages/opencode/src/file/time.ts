@@ -1,6 +1,7 @@
-import { DateTime, Effect, Layer, Semaphore, ServiceMap } from "effect"
+import { DateTime, Effect, Layer, Option, Semaphore, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
+import { AppFileSystem } from "@/filesystem"
 import { Flag } from "@/flag/flag"
 import type { SessionID } from "@/session/schema"
 import { Filesystem } from "../util/filesystem"
@@ -12,20 +13,8 @@ export namespace FileTime {
   export type Stamp = {
     readonly read: Date
     readonly mtime: number | undefined
-    readonly ctime: number | undefined
     readonly size: number | undefined
   }
-
-  const stamp = Effect.fnUntraced(function* (file: string) {
-    const stat = Filesystem.stat(file)
-    const size = typeof stat?.size === "bigint" ? Number(stat.size) : stat?.size
-    return {
-      read: yield* DateTime.nowAsDate,
-      mtime: stat?.mtime?.getTime(),
-      ctime: stat?.ctime?.getTime(),
-      size,
-    }
-  })
 
   const session = (reads: Map<SessionID, Map<string, Stamp>>, sessionID: SessionID) => {
     const value = reads.get(sessionID)
@@ -53,7 +42,17 @@ export namespace FileTime {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
+      const fsys = yield* AppFileSystem.Service
       const disableCheck = yield* Flag.OPENCODE_DISABLE_FILETIME_CHECK
+
+      const stamp = Effect.fnUntraced(function* (file: string) {
+        const info = yield* fsys.stat(file).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        return {
+          read: yield* DateTime.nowAsDate,
+          mtime: info ? Option.getOrUndefined(info.mtime)?.getTime() : undefined,
+          size: info ? Number(info.size) : undefined,
+        }
+      })
       const state = yield* InstanceState.make<State>(
         Effect.fn("FileTime.state")(() =>
           Effect.succeed({
@@ -96,7 +95,7 @@ export namespace FileTime {
         if (!time) throw new Error(`You must read file ${filepath} before overwriting it. Use the Read tool first`)
 
         const next = yield* stamp(filepath)
-        const changed = next.mtime !== time.mtime || next.ctime !== time.ctime || next.size !== time.size
+        const changed = next.mtime !== time.mtime || next.size !== time.size
         if (!changed) return
 
         throw new Error(
@@ -113,7 +112,9 @@ export namespace FileTime {
     }),
   ).pipe(Layer.orDie)
 
-  const { runPromise } = makeRuntime(Service, layer)
+  export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer))
+
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export function read(sessionID: SessionID, file: string) {
     return runPromise((s) => s.read(sessionID, file))

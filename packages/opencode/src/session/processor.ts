@@ -1,8 +1,7 @@
-import { Cause, Effect, Exit, Layer, ServiceMap } from "effect"
+import { Cause, Effect, Layer, ServiceMap } from "effect"
 import * as Stream from "effect/Stream"
 import { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
-import { makeRuntime } from "@/effect/run-service"
 import { Config } from "@/config/config"
 import { Permission } from "@/permission"
 import { Plugin } from "@/plugin"
@@ -35,17 +34,10 @@ export namespace SessionProcessor {
     readonly process: (streamInput: LLM.StreamInput) => Effect.Effect<Result>
   }
 
-  export interface Info {
-    readonly message: MessageV2.Assistant
-    readonly partFromToolCall: (toolCallID: string) => MessageV2.ToolPart | undefined
-    readonly process: (streamInput: LLM.StreamInput) => Promise<Result>
-  }
-
   type Input = {
     assistantMessage: MessageV2.Assistant
     sessionID: SessionID
     model: Provider.Model
-    abort: AbortSignal
   }
 
   export interface Interface {
@@ -96,7 +88,6 @@ export namespace SessionProcessor {
           assistantMessage: input.assistantMessage,
           sessionID: input.sessionID,
           model: input.model,
-          abort: input.abort,
           toolcalls: {},
           shouldBreak: false,
           snapshot: undefined,
@@ -105,11 +96,12 @@ export namespace SessionProcessor {
           currentText: undefined,
           reasoningMap: {},
         }
+        let aborted = false
 
         const parse = (e: unknown) =>
           MessageV2.fromError(e, {
             providerID: input.model.providerID,
-            aborted: input.abort.aborted,
+            aborted,
           })
 
         const handleEvent = Effect.fn("SessionProcessor.handleEvent")(function* (value: StreamEvent) {
@@ -155,7 +147,10 @@ export namespace SessionProcessor {
               return
 
             case "tool-input-start":
-              ctx.toolcalls[value.id] = (yield* session.updatePart({
+              if (ctx.assistantMessage.summary) {
+                throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
+              }
+              ctx.toolcalls[value.id] = yield* session.updatePart({
                 id: ctx.toolcalls[value.id]?.id ?? PartID.ascending(),
                 messageID: ctx.assistantMessage.id,
                 sessionID: ctx.assistantMessage.sessionID,
@@ -163,7 +158,7 @@ export namespace SessionProcessor {
                 tool: value.toolName,
                 callID: value.id,
                 state: { status: "pending", input: {}, raw: "" },
-              })) as MessageV2.ToolPart
+              } satisfies MessageV2.ToolPart)
               return
 
             case "tool-input-delta":
@@ -173,14 +168,17 @@ export namespace SessionProcessor {
               return
 
             case "tool-call": {
+              if (ctx.assistantMessage.summary) {
+                throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
+              }
               const match = ctx.toolcalls[value.toolCallId]
               if (!match) return
-              ctx.toolcalls[value.toolCallId] = (yield* session.updatePart({
+              ctx.toolcalls[value.toolCallId] = yield* session.updatePart({
                 ...match,
                 tool: value.toolName,
                 state: { status: "running", input: value.input, time: { start: Date.now() } },
                 metadata: value.providerMetadata,
-              })) as MessageV2.ToolPart
+              } satisfies MessageV2.ToolPart)
 
               const parts = yield* Effect.promise(() => MessageV2.parts(ctx.assistantMessage.id))
               const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
@@ -414,7 +412,7 @@ export namespace SessionProcessor {
         })
 
         const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {
-          log.error("process", { error: e, stack: JSON.stringify((e as any)?.stack) })
+          log.error("process", { error: e, stack: e instanceof Error ? e.stack : undefined })
           const error = parse(e)
           if (MessageV2.ContextOverflowError.isInstance(error)) {
             ctx.needsCompaction = true
@@ -429,59 +427,6 @@ export namespace SessionProcessor {
           yield* status.set(ctx.sessionID, { type: "idle" })
         })
 
-        const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
-          log.info("process")
-          ctx.needsCompaction = false
-          ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
-
-          yield* Effect.gen(function* () {
-            ctx.currentText = undefined
-            ctx.reasoningMap = {}
-            const stream = llm.stream(streamInput)
-
-            yield* stream.pipe(
-              Stream.tap((event) =>
-                Effect.gen(function* () {
-                  input.abort.throwIfAborted()
-                  yield* handleEvent(event)
-                }),
-              ),
-              Stream.takeUntil(() => ctx.needsCompaction),
-              Stream.runDrain,
-            )
-          }).pipe(
-            Effect.catchCauseIf(
-              (cause) => !Cause.hasInterruptsOnly(cause),
-              (cause) => Effect.fail(Cause.squash(cause)),
-            ),
-            Effect.retry(
-              SessionRetry.policy({
-                parse,
-                set: (info) =>
-                  status.set(ctx.sessionID, {
-                    type: "retry",
-                    attempt: info.attempt,
-                    message: info.message,
-                    next: info.next,
-                  }),
-              }),
-            ),
-            Effect.catchCause((cause) =>
-              Cause.hasInterruptsOnly(cause)
-                ? halt(new DOMException("Aborted", "AbortError"))
-                : halt(Cause.squash(cause)),
-            ),
-            Effect.ensuring(cleanup()),
-          )
-
-          if (input.abort.aborted && !ctx.assistantMessage.error) {
-            yield* abort()
-          }
-          if (ctx.needsCompaction) return "compact"
-          if (ctx.blocked || ctx.assistantMessage.error || input.abort.aborted) return "stop"
-          return "continue"
-        })
-
         const abort = Effect.fn("SessionProcessor.abort")(() =>
           Effect.gen(function* () {
             if (!ctx.assistantMessage.error) {
@@ -494,6 +439,53 @@ export namespace SessionProcessor {
             yield* session.updateMessage(ctx.assistantMessage)
           }),
         )
+
+        const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
+          log.info("process")
+          ctx.needsCompaction = false
+          ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
+
+          return yield* Effect.gen(function* () {
+            yield* Effect.gen(function* () {
+              ctx.currentText = undefined
+              ctx.reasoningMap = {}
+              const stream = llm.stream(streamInput)
+
+              yield* stream.pipe(
+                Stream.tap((event) => handleEvent(event)),
+                Stream.takeUntil(() => ctx.needsCompaction),
+                Stream.runDrain,
+              )
+            }).pipe(
+              Effect.onInterrupt(() => Effect.sync(() => void (aborted = true))),
+              Effect.catchCauseIf(
+                (cause) => !Cause.hasInterruptsOnly(cause),
+                (cause) => Effect.fail(Cause.squash(cause)),
+              ),
+              Effect.retry(
+                SessionRetry.policy({
+                  parse,
+                  set: (info) =>
+                    status.set(ctx.sessionID, {
+                      type: "retry",
+                      attempt: info.attempt,
+                      message: info.message,
+                      next: info.next,
+                    }),
+                }),
+              ),
+              Effect.catch(halt),
+              Effect.ensuring(cleanup()),
+            )
+
+            if (aborted && !ctx.assistantMessage.error) {
+              yield* abort()
+            }
+            if (ctx.needsCompaction) return "compact"
+            if (ctx.blocked || ctx.assistantMessage.error || aborted) return "stop"
+            return "continue"
+          }).pipe(Effect.onInterrupt(() => abort().pipe(Effect.asVoid)))
+        })
 
         return {
           get message() {
@@ -526,29 +518,4 @@ export namespace SessionProcessor {
       ),
     ),
   )
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function create(input: Input): Promise<Info> {
-    const hit = await runPromise((svc) => svc.create(input))
-    return {
-      get message() {
-        return hit.message
-      },
-      partFromToolCall(toolCallID: string) {
-        return hit.partFromToolCall(toolCallID)
-      },
-      async process(streamInput: LLM.StreamInput) {
-        const exit = await Effect.runPromiseExit(hit.process(streamInput), { signal: input.abort })
-        if (Exit.isFailure(exit)) {
-          if (Cause.hasInterrupts(exit.cause) && input.abort.aborted) {
-            await Effect.runPromise(hit.abort())
-            return "stop"
-          }
-          throw Cause.squash(exit.cause)
-        }
-        return exit.value
-      },
-    }
-  }
 }

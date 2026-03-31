@@ -296,6 +296,7 @@ export type TuiSlotMap = {
     workspace_id?: string
   }
   home_bottom: {}
+  home_footer: {}
   sidebar_title: {
     session_id: string
     title: string
