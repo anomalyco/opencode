@@ -932,7 +932,7 @@ export async function openStatusPopover(page: Page) {
 }
 
 // New sidebar uses context menus instead of popover menus for projects
-// This function opens the context menu by right-clicking on the project row
+// This function opens the context menu by clicking the menu button on the project row
 export async function openProjectMenu(page: Page, projectSlug: string) {
   await openSidebar(page)
   
@@ -940,8 +940,13 @@ export async function openProjectMenu(page: Page, projectSlug: string) {
   const projectRow = page.locator(projectRowSelector(projectSlug)).first()
   await expect(projectRow).toBeVisible()
   
-  // Right-click to open context menu
-  await projectRow.click({ button: 'right' })
+  // Hover over the project row to make the menu button visible
+  await projectRow.hover()
+  
+  // Look for the menu trigger button and click it
+  const menuTrigger = page.locator(projectMenuTriggerSelector(projectSlug)).first()
+  await expect(menuTrigger).toBeVisible({ timeout: 1000 })
+  await menuTrigger.click()
 
   const menu = page
     .locator(dropdownMenuContentSelector)
@@ -957,21 +962,6 @@ export async function openProjectMenu(page: Page, projectSlug: string) {
   if (opened) {
     await expect(close).toBeVisible()
     return menu
-  }
-
-  // Fallback: try clicking on the row and looking for a menu trigger button
-  // Some implementations might have a visible menu button
-  const menuTrigger = page.locator(projectMenuTriggerSelector(projectSlug)).first()
-  if (await menuTrigger.isVisible().catch(() => false)) {
-    await menuTrigger.click()
-    const opened = await menu
-      .waitFor({ state: "visible", timeout: 1500 })
-      .then(() => true)
-      .catch(() => false)
-    if (opened) {
-      await expect(close).toBeVisible()
-      return menu
-    }
   }
 
   throw new Error(`Failed to open project menu: ${projectSlug}`)
