@@ -15,6 +15,16 @@ import { createSdk, dirSlug, getWorktree, sessionPath } from "./utils"
 
 export const settingsKey = "settings.v3"
 
+const seedModel = (() => {
+  const [providerID = "opencode", modelID = "big-pickle"] = (
+    process.env.OPENCODE_E2E_MODEL ?? "opencode/big-pickle"
+  ).split("/")
+  return {
+    providerID: providerID || "opencode",
+    modelID: modelID || "big-pickle",
+  }
+})()
+
 type TestFixtures = {
   sdk: ReturnType<typeof createSdk>
   gotoSession: (sessionID?: string) => Promise<void>
@@ -125,7 +135,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
 
 async function seedStorage(page: Page, input: { directory: string; extra?: string[] }) {
   await seedProjects(page, input)
-  await page.addInitScript(() => {
+  await page.addInitScript((model: { providerID: string; modelID: string }) => {
     const win = window as E2EWindow
     win.__opencode_e2e = {
       ...win.__opencode_e2e,
@@ -143,12 +153,12 @@ async function seedStorage(page: Page, input: { directory: string; extra?: strin
     localStorage.setItem(
       "opencode.global.dat:model",
       JSON.stringify({
-        recent: [{ providerID: "opencode", modelID: "big-pickle" }],
+        recent: [model],
         user: [],
         variant: {},
       }),
     )
-  })
+  }, seedModel)
 }
 
 export { expect }
