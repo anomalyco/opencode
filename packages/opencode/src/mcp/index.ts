@@ -821,7 +821,7 @@ export namespace MCP {
         const mcpConfig = yield* getMcpConfig(mcpName)
         if (!mcpConfig) return { status: "failed", error: "MCP config not found after auth" } as Status
 
-        return yield* createAndStore(mcpName, mcpConfig)
+        return yield* createAndStore(mcpName, { ...mcpConfig, enabled: true })
       })
 
       const removeAuth = Effect.fn("MCP.removeAuth")(function* (mcpName: string) {
