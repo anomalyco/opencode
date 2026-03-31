@@ -167,6 +167,8 @@ beforeEach(() => {
 const { MCP } = await import("../../src/mcp/index")
 const { Instance } = await import("../../src/project/instance")
 const { tmpdir } = await import("../fixture/fixture")
+const { Bus } = await import("../../src/bus")
+const { TuiEvent } = await import("../../src/cli/cmd/tui/event")
 
 // --- Helper ---
 
@@ -746,5 +748,51 @@ test(
     expect(serverStatus.status).toBe("failed")
     // Both StreamableHTTP and SSE transports should be closed
     expect(transportCloseCount).toBeGreaterThanOrEqual(2)
+  }),
+)
+
+// ========================================================================
+// Test: dynamically added server appears in MCP.status()
+// ========================================================================
+
+test(
+  "dynamically added server appears in status",
+  withInstance({}, async () => {
+    lastCreatedClientName = "dynamic-server"
+    getOrCreateClientState("dynamic-server")
+
+    await MCP.add("dynamic-server", {
+      type: "local",
+      command: ["echo", "test"],
+    })
+
+    const status = await MCP.status()
+    expect(status["dynamic-server"]).toBeDefined()
+    expect(status["dynamic-server"]?.status).toBe("connected")
+  }),
+)
+
+// ========================================================================
+// Test: MCP.add() publishes TuiEvent.McpRefresh
+// ========================================================================
+
+test(
+  "add publishes TuiEvent.McpRefresh",
+  withInstance({}, async () => {
+    const events: Array<Record<string, unknown>> = []
+    const unsubscribe = Bus.subscribe(TuiEvent.McpRefresh, (evt) => {
+      events.push(evt.properties)
+    })
+
+    lastCreatedClientName = "refresh-server"
+    getOrCreateClientState("refresh-server")
+
+    await MCP.add("refresh-server", {
+      type: "local",
+      command: ["echo", "test"],
+    })
+
+    unsubscribe()
+    expect(events).toHaveLength(1)
   }),
 )
