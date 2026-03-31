@@ -1,3 +1,6 @@
+// @ts-ignore Suppress AI SDK warnings from bleeding into TUI as raw text
+globalThis.AI_SDK_LOG_WARNINGS = false
+
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { RunCommand } from "./cli/cmd/run"
