@@ -3,16 +3,8 @@ FROM oven/bun:1.3.11-alpine AS build
 RUN apk add --no-cache git nodejs
 
 WORKDIR /app
-COPY package.json bun.lock ./
-COPY packages/opencode/package.json packages/opencode/
-COPY packages/app/package.json packages/app/
-COPY packages/sdk packages/sdk
-COPY packages/ui packages/ui
-COPY packages/tui packages/tui
+COPY . .
 RUN bun install --frozen-lockfile
-
-COPY packages/opencode packages/opencode
-COPY packages/app packages/app
 RUN cd packages/opencode && bun run build --single --skip-embed-web-ui
 
 FROM alpine:3.21 AS dev
