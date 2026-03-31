@@ -541,7 +541,7 @@ export namespace File {
         const exists = yield* appFs.existsSafe(full)
         if (!exists) return { type: "text" as const, content: "" }
 
-        const mimeType = Filesystem.mimeType(full)
+        const mimeType = AppFileSystem.mimeType(full)
         const encode = knownText ? false : shouldEncode(mimeType)
 
         if (encode && !isImage(mimeType)) return { type: "binary" as const, content: "", mimeType }
