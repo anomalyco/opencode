@@ -145,6 +145,12 @@
   }
 }
 
+html[data-platform="desktop"][data-os="windows"] [data-component="dialog"] [data-slot="dialog-content"] {
+  background-color: var(--surface-raised-stronger-non-alpha);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 @keyframes overlayShow {
   from {
     opacity: 0;

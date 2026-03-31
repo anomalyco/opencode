@@ -167,6 +167,7 @@ const GitContext = () => {
   const sdk = useSDK()
   const sync = useSync()
   const language = useLanguage()
+  const platform = usePlatform()
   const [open, setOpen] = createSignal(false)
   const [snap, setSnap] = createSignal(sync.data.vcs)
 
@@ -193,6 +194,7 @@ const GitContext = () => {
   })
   const extras = createMemo(() => worktrees().filter((item) => item.path !== root()))
   const title = createMemo(() => (extras().length > 0 ? "Workspaces" : "Workspace"))
+  const win = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
 
   createEffect(() => {
     setSnap(sync.data.vcs)
@@ -222,9 +224,9 @@ const GitContext = () => {
         }}
         class="w-[420px] max-w-[calc(100vw-40px)] rounded-xl border border-white/10 bg-transparent shadow-[var(--shadow-lg-border-base)]"
         style={{
-          "background-color": "rgb(12 12 14 / 0.34)",
-          "backdrop-filter": "blur(40px) saturate(150%)",
-          "-webkit-backdrop-filter": "blur(40px) saturate(150%)",
+          "background-color": win() ? "var(--surface-raised-stronger-non-alpha)" : "rgb(12 12 14 / 0.34)",
+          "backdrop-filter": win() ? "none" : "blur(40px) saturate(150%)",
+          "-webkit-backdrop-filter": win() ? "none" : "blur(40px) saturate(150%)",
         }}
         trigger={
           <div class="min-w-0 flex items-center gap-1.5 px-1.5">
