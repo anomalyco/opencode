@@ -5,6 +5,7 @@ import {
   pickPin,
   restorePinnedTop,
   restoreScroll,
+  virtualizeTop,
   virtualize,
 } from "./message-timeline-utils"
 
@@ -91,6 +92,32 @@ describe("message timeline helpers", () => {
         nextTop: 120,
       }),
     ).toBe(860)
+  })
+
+  test("keeps the timeline pinned to the bottom while virtualization flips in follow mode", () => {
+    expect(
+      virtualizeTop({
+        follow: true,
+        top: 0,
+        gap: 0,
+        bottom: true,
+        scrollHeight: 7063,
+        clientHeight: 834,
+      }),
+    ).toBe(6229)
+  })
+
+  test("preserves the previous reading position when virtualization flips away from follow mode", () => {
+    expect(
+      virtualizeTop({
+        follow: false,
+        top: 320,
+        gap: 480,
+        bottom: false,
+        scrollHeight: 1600,
+        clientHeight: 200,
+      }),
+    ).toBe(320)
   })
 
   test("keeps centered item layout without intrinsic size shortcuts", () => {
