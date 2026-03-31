@@ -17,26 +17,26 @@ import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
-import { hasProjectPermissions } from "./helpers"
 
 const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
-export const ProjectIcon = (props: { project: LocalProject; class?: string; notify?: boolean }): JSX.Element => {
+export const ProjectIcon = (props: { project: LocalProject; class?: string }): JSX.Element => {
   const globalSync = useGlobalSync()
-  const notification = useNotification()
-  const permission = usePermission()
   const dirs = createMemo(() => [props.project.worktree, ...(props.project.sandboxes ?? [])])
-  const unseenCount = createMemo(() =>
-    dirs().reduce((total, directory) => total + notification.project.unseenCount(directory), 0),
-  )
-  const hasError = createMemo(() => dirs().some((directory) => notification.project.unseenHasError(directory)))
-  const hasPermissions = createMemo(() =>
+  const busy = createMemo(() =>
     dirs().some((directory) => {
       const [store] = globalSync.child(directory, { bootstrap: false })
-      return hasProjectPermissions(store.permission, (item) => !permission.autoResponds(item, directory))
+      return (store.session ?? []).some((session) => {
+        const status = store.session_status[session.id]
+        if (status?.type !== "idle") return true
+        return (store.message[session.id] ?? []).some(
+          (message) =>
+            message.role === "assistant" &&
+            typeof (message as { time?: { completed?: unknown } }).time?.completed !== "number",
+        )
+      })
     }),
   )
-  const notify = createMemo(() => props.notify && (hasPermissions() || unseenCount() > 0))
   const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
   return (
     <div class={`relative size-8 shrink-0 rounded ${props.class ?? ""}`}>
@@ -48,18 +48,13 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
           }
           {...getAvatarColors(props.project.icon?.color)}
           class="size-full rounded"
-          classList={{ "badge-mask": notify() }}
+          classList={{ "badge-mask": busy() }}
         />
       </div>
-      <Show when={notify()}>
-        <div
-          classList={{
-            "absolute top-px right-px size-1.5 rounded-full z-10": true,
-            "bg-surface-warning-strong": hasPermissions(),
-            "bg-icon-critical-base": !hasPermissions() && hasError(),
-            "bg-text-interactive-base": !hasPermissions() && !hasError(),
-          }}
-        />
+      <Show when={busy()}>
+        <div class="absolute top-px right-px z-10 rounded-full bg-surface-base px-0.5 py-px shadow-sm">
+          <Spinner class="size-3" />
+        </div>
       </Show>
     </div>
   )

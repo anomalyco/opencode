@@ -146,7 +146,7 @@ const ProjectTile = (props: {
         }}
         onBlur={() => props.setOpen(false)}
       >
-        <ProjectIcon project={props.project} notify />
+        <ProjectIcon project={props.project} />
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
         <ContextMenu.Content>
