@@ -10,7 +10,7 @@ if (!stage) throw new Error("Stage is required")
 const root = path.resolve(process.cwd(), "..", "..", "..")
 
 // read the secret
-const ret = await $`bun sst secret list`.cwd(root).text()
+const ret = await $`bun sst secret list --stage frank`.cwd(root).text()
 const lines = ret.split("\n")
 const value = lines.find((line) => line.startsWith("ZEN_LIMITS"))?.split("=")[1]
 if (!value) throw new Error("ZEN_LIMITS not found")
