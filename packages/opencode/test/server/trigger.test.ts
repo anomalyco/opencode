@@ -1,12 +1,17 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
 import { Trigger } from "../../src/trigger"
+import { resetDatabase } from "../fixture/db"
 import { tmpdir } from "../fixture/fixture"
 
 function auth(password: string, username = "opencode") {
   return `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`
 }
+
+beforeEach(async () => {
+  await resetDatabase()
+})
 
 afterEach(async () => {
   await Instance.disposeAll()

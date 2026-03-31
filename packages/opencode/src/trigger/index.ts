@@ -3,10 +3,12 @@ import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
+import type { ProjectID } from "@/project/schema"
 import { SessionPrompt } from "@/session/prompt"
 import { SessionStatus } from "@/session/status"
 import { SessionID } from "@/session/schema"
-import { NotFoundError } from "@/storage/db"
+import { TriggerTable } from "@/session/session.sql"
+import { Database, NotFoundError, eq } from "@/storage/db"
 import { Cause, Duration, Effect, Layer, Schedule, ServiceMap } from "effect"
 import z from "zod"
 import { Log } from "../util/log"
@@ -85,13 +87,91 @@ export namespace Trigger {
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Trigger") {}
 
+  const row = (project_id: ProjectID, item: Info, time_updated = Date.now()): typeof TriggerTable.$inferInsert => ({
+    id: item.id,
+    project_id,
+    schedule: item.schedule,
+    action: item.action ?? null,
+    enabled: item.enabled,
+    runs: item.runs,
+    time_created: item.time.created,
+    time_updated,
+    time_last: item.time.last ?? null,
+    time_next: item.time.next,
+  })
+
+  const from = (row: typeof TriggerTable.$inferSelect): Info => ({
+    id: row.id,
+    schedule: row.schedule,
+    ...(row.action ? { action: row.action } : {}),
+    enabled: row.enabled,
+    runs: row.runs,
+    time: {
+      created: row.time_created,
+      ...(row.time_last === null ? {} : { last: row.time_last }),
+      next: row.time_next,
+    },
+  })
+
+  const ensure = Effect.sync(() => {
+    Database.Client()
+      .$client.query(
+        `
+      CREATE TABLE IF NOT EXISTS trigger (
+        id text PRIMARY KEY,
+        project_id text NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+        schedule text NOT NULL,
+        action text,
+        enabled integer NOT NULL,
+        runs integer NOT NULL,
+        time_created integer NOT NULL,
+        time_updated integer NOT NULL,
+        time_last integer,
+        time_next integer NOT NULL
+      )
+    `,
+      )
+      .run()
+    Database.Client().$client.query(`CREATE INDEX IF NOT EXISTS trigger_project_idx ON trigger (project_id)`).run()
+  })
+
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
       const bus = yield* Bus.Service
+
       const state = yield* InstanceState.make<State>(
-        Effect.fn("Trigger.state")(function* () {
-          const data = new Map<string, Info>()
+        Effect.fn("Trigger.state")(function* (ctx) {
+          yield* ensure
+          const data = new Map(
+            Database.use((db) =>
+              db
+                .select()
+                .from(TriggerTable)
+                .where(eq(TriggerTable.project_id, ctx.project.id))
+                .all()
+                .map((row) => [row.id, from(row)] as const),
+            ),
+          )
+
+          const save = Effect.fnUntraced(function* (next: Info) {
+            yield* Effect.sync(() =>
+              Database.use((db) =>
+                db
+                  .insert(TriggerTable)
+                  .values(row(ctx.project.id, next))
+                  .onConflictDoUpdate({
+                    target: TriggerTable.id,
+                    set: row(ctx.project.id, next),
+                  })
+                  .run(),
+              ),
+            )
+          })
+
+          const delrow = Effect.fnUntraced(function* (id: string) {
+            yield* Effect.sync(() => Database.use((db) => db.delete(TriggerTable).where(eq(TriggerTable.id, id)).run()))
+          })
 
           const get = Effect.fn("Trigger.get")((id: string) =>
             Effect.sync(() => {
@@ -113,6 +193,7 @@ export namespace Trigger {
               },
             }
             data.set(item.id, next)
+            yield* save(next)
             yield* bus.publish(Event.Fired, {
               triggerID: item.id,
               runs: next.runs,
@@ -175,6 +256,7 @@ export namespace Trigger {
               },
             } satisfies Info
             data.set(item.id, item)
+            yield* save(item)
             return item
           })
 
@@ -182,6 +264,7 @@ export namespace Trigger {
             const item = yield* get(id)
             const next = { ...item, enabled }
             data.set(id, next)
+            yield* save(next)
             return next
           })
 
@@ -200,6 +283,7 @@ export namespace Trigger {
           const del = Effect.fn("Trigger.delete")(function* (id: string) {
             yield* get(id)
             data.delete(id)
+            yield* delrow(id)
           })
 
           return { create, get, list, fire, enable, disable, delete: del }
