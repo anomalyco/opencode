@@ -100,6 +100,29 @@ export const TriggerRoutes = lazy(() =>
       },
     )
     .post(
+      "/:id/fire/webhook",
+      describeRoute({
+        summary: "Fire trigger webhook",
+        description: "Invoke a lightweight scheduled trigger immediately through an authenticated webhook endpoint.",
+        operationId: "trigger.fire_webhook",
+        responses: {
+          200: {
+            description: "Trigger",
+            content: {
+              "application/json": {
+                schema: resolver(Trigger.Info),
+              },
+            },
+          },
+          ...errors(404),
+        },
+      }),
+      validator("param", Params),
+      async (c) => {
+        return c.json(await Trigger.fire(c.req.valid("param").id))
+      },
+    )
+    .post(
       "/:id/enable",
       describeRoute({
         summary: "Enable trigger",
