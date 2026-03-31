@@ -15,8 +15,12 @@ export function Footer() {
   const mcp = createMemo(() => Object.values(sync.data.mcp).filter((x) => x.status === "connected").length)
   const mcpError = createMemo(() => Object.values(sync.data.mcp).some((x) => x.status === "failed"))
   const lsp = createMemo(() => Object.keys(sync.data.lsp))
-  const model = createMemo(() => local.model.parsed())
-  const variant = createMemo(() => local.model.variant.current())
+  const model = createMemo(() => {
+    const cur = local.model.current()
+    if (!cur) return undefined
+    if (cur.modelID.length <= 16) return cur.modelID
+    return `${cur.modelID.slice(0, 15)}…`
+  })
   const permissions = createMemo(() => {
     if (route.data.type !== "session") return []
     return sync.data.permission[route.data.sessionID] ?? []
@@ -65,11 +69,7 @@ export function Footer() {
           </Match>
           <Match when={connected()}>
             <text fg={theme.text}>
-              <span style={{ fg: theme.textMuted }}>Model</span> {model().model}
-              <span style={{ fg: theme.textMuted }}> · {model().provider}</span>
-              <Show when={variant()}>
-                {(item) => <span style={{ fg: theme.warning }}> · {item()}</span>}
-              </Show>
+              <span style={{ fg: theme.textMuted }}>Model</span> {model() ?? "default"}
             </text>
             <Show when={permissions().length > 0}>
               <text fg={theme.warning}>
