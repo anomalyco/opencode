@@ -1,5 +1,4 @@
 import { Hono } from "hono"
-import { stream } from "hono/streaming"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import { SessionID, MessageID, PartID } from "@/session/schema"
 import z from "zod"
@@ -20,7 +19,7 @@ import { ModelID, ProviderID } from "@/provider/schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { Bus } from "../../bus"
-import { NamedError } from "@opencode-ai/util/error"
+import { Instance } from "@/project/instance"
 
 const log = Log.create({ service: "server" })
 
@@ -811,14 +810,10 @@ export const SessionRoutes = lazy(() =>
       ),
       validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
       async (c) => {
-        c.status(200)
-        c.header("Content-Type", "application/json")
-        return stream(c, async (stream) => {
-          const sessionID = c.req.valid("param").sessionID
-          const body = c.req.valid("json")
-          const msg = await SessionPrompt.prompt({ ...body, sessionID })
-          stream.write(JSON.stringify(msg))
-        })
+        const sessionID = c.req.valid("param").sessionID
+        const body = c.req.valid("json")
+        const msg = await SessionPrompt.prompt({ ...body, sessionID })
+        return c.json(msg)
       },
     )
     .post(
@@ -843,19 +838,25 @@ export const SessionRoutes = lazy(() =>
       ),
       validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
       async (c) => {
-        c.status(204)
-        c.header("Content-Type", "application/json")
-        return stream(c, async () => {
-          const sessionID = c.req.valid("param").sessionID
-          const body = c.req.valid("json")
+        const sessionID = c.req.valid("param").sessionID
+        const body = c.req.valid("json")
+        const run = Instance.bind(() => {
           SessionPrompt.prompt({ ...body, sessionID }).catch((err) => {
-            log.error("prompt_async failed", { sessionID, error: err })
+            log.error("prompt_async failed", {
+              sessionID,
+              error: err,
+              stack: err instanceof Error ? err.stack : undefined,
+            })
+            const error = MessageV2.fromError(err, { providerID: "unknown" as any })
             Bus.publish(Session.Event.Error, {
               sessionID,
-              error: new NamedError.Unknown({ message: err instanceof Error ? err.message : String(err) }).toObject(),
+              error,
             })
           })
         })
+        run()
+        c.status(204)
+        return c.body(null)
       },
     )
     .post(

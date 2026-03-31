@@ -12,6 +12,7 @@ import { useSync } from "@tui/context/sync"
 import { MessageID, PartID } from "@/session/schema"
 import { createStore, produce } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
+import { Log } from "@/util/log"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { assign } from "./part"
 import { usePromptStash } from "./stash"
@@ -102,6 +103,23 @@ export function Prompt(props: PromptProps) {
     if (sync.data.provider.length === 0) {
       dialog.replace(() => <DialogProviderConnect />)
     }
+  }
+
+  function failure(error: unknown) {
+    toast.show({
+      variant: "error",
+      message: error instanceof Error ? error.message : String(error),
+      duration: 5000,
+    })
+  }
+
+  function report(promise: Promise<unknown>) {
+    promise
+      .then((result) => {
+        if (!result || typeof result !== "object" || !("error" in result) || !result.error) return
+        failure(result.error)
+      })
+      .catch(failure)
   }
 
   const textareaKeybindings = useTextareaKeybindings()
@@ -595,10 +613,10 @@ export function Prompt(props: PromptProps) {
       })
 
       if (res.error) {
-        console.log("Creating a session failed:", res.error)
+        Log.Default.error("session creation failed", { error: res.error })
 
         toast.show({
-          message: "Creating a session failed. Open console for more details.",
+          message: "Creating a session failed",
           variant: "error",
         })
 
@@ -635,15 +653,17 @@ export function Prompt(props: PromptProps) {
     const variant = local.model.variant.current()
 
     if (store.mode === "shell") {
-      sdk.client.session.shell({
-        sessionID,
-        agent: local.agent.current().name,
-        model: {
-          providerID: selectedModel.providerID,
-          modelID: selectedModel.modelID,
-        },
-        command: inputText,
-      })
+      report(
+        sdk.client.session.shell({
+          sessionID,
+          agent: local.agent.current().name,
+          model: {
+            providerID: selectedModel.providerID,
+            modelID: selectedModel.modelID,
+          },
+          command: inputText,
+        }),
+      )
       setStore("mode", "normal")
     } else if (
       inputText.startsWith("/") &&
@@ -660,24 +680,26 @@ export function Prompt(props: PromptProps) {
       const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
       const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
 
-      sdk.client.session.command({
-        sessionID,
-        command: command.slice(1),
-        arguments: args,
-        agent: local.agent.current().name,
-        model: `${selectedModel.providerID}/${selectedModel.modelID}`,
-        messageID,
-        variant,
-        parts: nonTextParts
-          .filter((x) => x.type === "file")
-          .map((x) => ({
-            id: PartID.ascending(),
-            ...x,
-          })),
-      })
+      report(
+        sdk.client.session.command({
+          sessionID,
+          command: command.slice(1),
+          arguments: args,
+          agent: local.agent.current().name,
+          model: `${selectedModel.providerID}/${selectedModel.modelID}`,
+          messageID,
+          variant,
+          parts: nonTextParts
+            .filter((x) => x.type === "file")
+            .map((x) => ({
+              id: PartID.ascending(),
+              ...x,
+            })),
+        }),
+      )
     } else {
-      sdk.client.session
-        .prompt({
+      report(
+        sdk.client.session.prompt({
           sessionID,
           ...selectedModel,
           messageID,
@@ -692,8 +714,8 @@ export function Prompt(props: PromptProps) {
             },
             ...nonTextParts.map(assign),
           ],
-        })
-        .catch(() => {})
+        }),
+      )
     }
     history.append({
       ...store.prompt,
