@@ -57,7 +57,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
             model.api.npm = "@ai-sdk/github-copilot"
           }
 
-          // Add the "auto" virtual model that uses client-side model routing
+          // Add the "auto" virtual model for automatic model selection
           provider.models["auto"] = {
             id: "auto" as any,
             providerID: "github-copilot" as any,

@@ -119,7 +119,6 @@ export namespace SessionProcessor {
               }
               return
 
-
             case "reasoning-start":
               if (value.id in ctx.reasoningMap) return
               ctx.reasoningMap[value.id] = {
