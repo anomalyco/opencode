@@ -749,35 +749,106 @@ export namespace SessionPrompt {
       })
 
       // Langfuse: record the LLM generation and tool calls from this iteration
+      // The parts array for an assistant message flows in order:
+      //   step-start → reasoning → text → tool (calls+results) → step-finish
+      //   → step-start (next internal step) → reasoning → text → ... → step-finish
+      // We reconstruct each LLM call as a generation with its full context.
       if (iterationSpan) {
         const parts = await MessageV2.parts(processor.message.id)
 
-        // Record each LLM step as a generation
+        let stepIndex = 0
+        // Accumulate parts for the current LLM step
+        let currentReasoning: string[] = []
+        let currentText: string[] = []
+        let currentToolCalls: { tool: string; input: any; output?: string; error?: string }[] = []
+        // Track tool results from the PREVIOUS step (they become input to the next LLM call)
+        let prevToolResults: { tool: string; input: any; output?: string; error?: string }[] = []
+
+        const flushStep = (stepPart: MessageV2.StepFinishPart) => {
+          const reasoning = currentReasoning.join("")
+          const text = currentText.join("")
+          const toolCalls = currentToolCalls.map((tc) => ({
+            tool: tc.tool,
+            input: tc.input,
+            ...(tc.output ? { output: tc.output.slice(0, 500) } : {}),
+            ...(tc.error ? { error: tc.error } : {}),
+          }))
+
+          // Input: first step gets the user message; subsequent steps get tool results
+          const input = stepIndex === 0
+            ? msgs
+                .filter((m) => m.info.role === "user")
+                .slice(-1)
+                .map((m) =>
+                  m.parts
+                    .filter((p): p is MessageV2.TextPart => p.type === "text")
+                    .map((p) => p.text)
+                    .join("\n"),
+                )
+                .join("\n")
+            : prevToolResults
+
+          // Output: structured to show reasoning + text + tool calls (mirrors the TUI)
+          const outputParts: Record<string, unknown> = {}
+          if (reasoning) outputParts.thinking = reasoning
+          if (text) outputParts.text = text
+          if (toolCalls.length > 0) outputParts.toolCalls = toolCalls
+          const output = Object.keys(outputParts).length > 0 ? outputParts : undefined
+
+          iterationSpan.generation({
+            name: `llm-call-${stepIndex}`,
+            model: `${model.providerID}/${model.id}`,
+            modelParameters: {
+              ...(agent.temperature != null ? { temperature: String(agent.temperature) } : {}),
+            },
+            input,
+            output,
+            usage: {
+              input: stepPart.tokens.input,
+              output: stepPart.tokens.output,
+              total: stepPart.tokens.total ?? stepPart.tokens.input + stepPart.tokens.output,
+            },
+            metadata: {
+              finishReason: stepPart.reason,
+              cost: stepPart.cost,
+              reasoning_tokens: stepPart.tokens.reasoning,
+              cache_read: stepPart.tokens.cache.read,
+              cache_write: stepPart.tokens.cache.write,
+            },
+          })
+
+          // Carry tool calls forward as input context for the next step
+          prevToolResults = currentToolCalls.map((tc) => ({
+            tool: tc.tool,
+            input: tc.input,
+            ...(tc.output ? { output: tc.output.slice(0, 500) } : {}),
+            ...(tc.error ? { error: tc.error } : {}),
+          }))
+
+          stepIndex++
+          currentReasoning = []
+          currentText = []
+          currentToolCalls = []
+        }
+
         for (const part of parts) {
-          if (part.type === "step-finish") {
-            iterationSpan.generation({
-              name: "llm",
-              model: `${model.providerID}/${model.id}`,
-              modelParameters: {
-                ...(agent.temperature != null ? { temperature: agent.temperature } : {}),
-              },
-              usage: {
-                input: part.tokens.input,
-                output: part.tokens.output,
-                total: part.tokens.total ?? part.tokens.input + part.tokens.output,
-              },
-              metadata: {
-                finishReason: part.reason,
-                cost: part.cost,
-                reasoning_tokens: part.tokens.reasoning,
-                cache_read: part.tokens.cache.read,
-                cache_write: part.tokens.cache.write,
-              },
-            })
+          // Accumulate reasoning (thinking) for the current step
+          if (part.type === "reasoning") {
+            currentReasoning.push(part.text)
           }
 
-          // Record each tool call as a span
+          // Accumulate text output for the current step
+          if (part.type === "text") {
+            currentText.push(part.text)
+          }
+
+          // Record each tool call as a span and accumulate for generation context
           if (part.type === "tool" && part.state.status === "completed") {
+            currentToolCalls.push({
+              tool: part.tool,
+              input: part.state.input,
+              output: part.state.output,
+            })
             iterationSpan.span({
               name: `tool.${part.tool}`,
               input: part.state.input,
@@ -791,6 +862,11 @@ export namespace SessionPrompt {
             })
           }
           if (part.type === "tool" && part.state.status === "error") {
+            currentToolCalls.push({
+              tool: part.tool,
+              input: part.state.input,
+              error: part.state.error,
+            })
             iterationSpan.span({
               name: `tool.${part.tool}`,
               input: part.state.input,
@@ -799,6 +875,11 @@ export namespace SessionPrompt {
               endTime: new Date(part.state.time.end),
               level: "ERROR",
             })
+          }
+
+          // Flush accumulated content when a step finishes
+          if (part.type === "step-finish") {
+            flushStep(part)
           }
         }
 

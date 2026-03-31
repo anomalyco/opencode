@@ -329,7 +329,7 @@ export namespace ProviderTransform {
     if (id.includes("glm-4.7")) return 1.0
     if (id.includes("minimax-m2")) return 1.0
     if (id.includes("kimi-k2")) {
-      // kimi-k2-thinking & kimi-k2.5 && kimi-k2p5 && kimi-k2-5
+      // kimi-k2-thinking, kimi-k2.5, kimi-k2p5, kimi-k2-5
       if (["thinking", "k2.", "k2p", "k2-5"].some((s) => id.includes(s))) {
         return 1.0
       }
@@ -373,9 +373,7 @@ export namespace ProviderTransform {
       id.includes("minimax") ||
       id.includes("glm") ||
       id.includes("mistral") ||
-      id.includes("kimi") ||
-      // TODO: Remove this after models.dev data is fixed to use "kimi-k2.5" instead of "k2p5"
-      id.includes("k2p5")
+      id.includes("kimi")
     )
       return {}
 
