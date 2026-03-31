@@ -28,6 +28,11 @@ const options = {
     describe: "additional domains to allow for CORS",
     default: [] as string[],
   },
+  "base-path": {
+    type: "string" as const,
+    describe: "base path prefix for reverse proxy (e.g. /user/alice/)",
+    default: "",
+  },
 }
 
 export type NetworkOptions = InferredOptionTypes<typeof options>
@@ -56,5 +61,10 @@ export async function resolveNetworkOptions(args: NetworkOptions) {
   const argsCors = Array.isArray(args.cors) ? args.cors : args.cors ? [args.cors] : []
   const cors = [...configCors, ...argsCors]
 
-  return { hostname, port, mdns, mdnsDomain, cors }
+  const basePathExplicitlySet = process.argv.includes("--base-path")
+  const basePath = basePathExplicitlySet
+    ? args["base-path"]
+    : (process.env.JUPYTERHUB_SERVICE_PREFIX ?? config?.server?.basePath ?? args["base-path"])
+
+  return { hostname, port, mdns, mdnsDomain, cors, basePath }
 }

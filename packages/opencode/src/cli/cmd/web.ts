@@ -38,13 +38,14 @@ export const WebCommand = cmd({
     }
     const opts = await resolveNetworkOptions(args)
     const server = Server.listen(opts)
+    const suffix = opts.basePath && opts.basePath !== "/" ? opts.basePath : ""
     UI.empty()
     UI.println(UI.logo("  "))
     UI.empty()
 
     if (opts.hostname === "0.0.0.0") {
       // Show localhost for local access
-      const localhostUrl = `http://localhost:${server.port}`
+      const localhostUrl = `http://localhost:${server.port}${suffix}`
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Local access:      ", UI.Style.TEXT_NORMAL, localhostUrl)
 
       // Show network IPs for remote access
