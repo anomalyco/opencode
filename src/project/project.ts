@@ -467,6 +467,29 @@ export namespace Project {
   // Promise-based API (delegates to Effect service via runPromise)
   // ---------------------------------------------------------------------------
 
+  /**
+   * Ensure the global project row exists in the database.
+   * Called once during instance boot. Athena uses a single global project
+   * for all sessions (no git-based project discovery).
+   */
+  export function ensureGlobalProject() {
+    Database.use((db) =>
+      db
+        .insert(ProjectTable)
+        .values({
+          id: ProjectID.global,
+          worktree: "/",
+          vcs: null,
+          name: "Athena",
+          time_created: Date.now(),
+          time_updated: Date.now(),
+          sandboxes: [],
+        })
+        .onConflictDoNothing()
+        .run(),
+    )
+  }
+
   export function fromDirectory(directory: string) {
     return runPromise((svc) => svc.fromDirectory(directory))
   }

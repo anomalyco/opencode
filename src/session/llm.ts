@@ -256,7 +256,7 @@ export namespace LLM {
       headers: {
         ...(input.model.providerID.startsWith("athena")
           ? {
-              "x-athena-project": Instance.project.id,
+              "x-athena-project": "global",
               "x-athena-session": input.sessionID,
               "x-athena-request": input.user.id,
               "x-athena-client": Flag.ATHENA_CLIENT,

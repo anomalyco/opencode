@@ -1,6 +1,7 @@
 import { Plugin } from "../plugin"
 import { Snapshot } from "../snapshot"
 import { Project } from "./project"
+import { ProjectID } from "./schema"
 import { Bus } from "../bus"
 import { Command } from "../command"
 import { Instance } from "./instance"
@@ -20,7 +21,7 @@ export async function InstanceBootstrap() {
 
   Bus.subscribe(Command.Event.Executed, async (payload) => {
     if (payload.properties.name === Command.Default.INIT) {
-      Project.setInitialized(Instance.project.id)
+      Project.setInitialized(ProjectID.global)
     }
   })
 }

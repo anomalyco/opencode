@@ -143,7 +143,7 @@ export namespace Permission {
       const state = yield* InstanceState.make<State>(
         Effect.fn("Permission.state")(function* (ctx) {
           const row = Database.use((db) =>
-            db.select().from(PermissionTable).where(eq(PermissionTable.project_id, ctx.project.id)).get(),
+            db.select().from(PermissionTable).where(eq(PermissionTable.project_id, "global")).get(),
           )
           const state = {
             pending: new Map<PermissionID, PendingEntry>(),

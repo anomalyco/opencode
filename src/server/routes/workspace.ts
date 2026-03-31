@@ -3,6 +3,7 @@ import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
 import { Workspace } from "../../control-plane/workspace"
 import { Instance } from "../../project/instance"
+import { ProjectID } from "../../project/schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 
@@ -35,7 +36,7 @@ export const WorkspaceRoutes = lazy(() =>
       async (c) => {
         const body = c.req.valid("json")
         const workspace = await Workspace.create({
-          projectID: Instance.project.id,
+          projectID: ProjectID.global,
           ...body,
         })
         return c.json(workspace)

@@ -313,7 +313,7 @@ export namespace Session {
       id: SessionID.descending(input.id),
       slug: Slug.create(),
       version: Installation.VERSION,
-      projectID: Instance.project.id,
+      projectID: ProjectID.global,
       directory: input.directory,
       workspaceID: input.workspaceID,
       parentID: input.parentID,
@@ -348,9 +348,8 @@ export namespace Session {
   }
 
   export function plan(input: { slug: string; time: { created: number } }) {
-    const base = Instance.project.vcs
-      ? path.join(Instance.worktree, ".athena", "plans")
-      : path.join(Global.Path.data, "plans")
+    // Browser agent: always store plans in data directory
+    const base = path.join(Global.Path.data, "plans")
     return path.join(base, [input.time.created, input.slug].join("-") + ".md")
   }
 
@@ -490,8 +489,8 @@ export namespace Session {
     search?: string
     limit?: number
   }) {
-    const project = Instance.project
-    const conditions = [eq(SessionTable.project_id, project.id)]
+    // Browser agent: no project filtering — all sessions are global
+    const conditions: SQL[] = []
 
     if (input?.workspaceID) {
       conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
@@ -595,12 +594,12 @@ export namespace Session {
   }
 
   export const children = fn(SessionID.zod, async (parentID) => {
-    const project = Instance.project
+    // Browser agent: no project filtering — just find children by parent_id
     const rows = Database.use((db) =>
       db
         .select()
         .from(SessionTable)
-        .where(and(eq(SessionTable.project_id, project.id), eq(SessionTable.parent_id, parentID)))
+        .where(eq(SessionTable.parent_id, parentID))
         .all(),
     )
     return rows.map(fromRow)

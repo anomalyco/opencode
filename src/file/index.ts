@@ -353,7 +353,8 @@ export namespace File {
 
       const scan = Effect.fn("File.scan")(function* () {
         if (Instance.directory === path.parse(Instance.directory).root) return
-        const isGlobalHome = Instance.directory === Global.Path.home && Instance.project.id === "global"
+        // Browser agent: project is always global
+        const isGlobalHome = Instance.directory === Global.Path.home
         const next: Entry = { files: [], dirs: [] }
 
         yield* Effect.promise(async () => {
@@ -416,7 +417,8 @@ export namespace File {
       })
 
       const status = Effect.fn("File.status")(function* () {
-        if (Instance.project.vcs !== "git") return []
+        // Browser agent: no git VCS — always return empty status
+        if (!Instance.project.vcs) return []
 
         return yield* Effect.promise(async () => {
           const diffOutput = (

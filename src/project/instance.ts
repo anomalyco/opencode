@@ -5,12 +5,26 @@ import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
 import { Context } from "../util/context"
 import { Project } from "./project"
+import { ProjectID } from "./schema"
 import { State } from "./state"
 
 export interface InstanceContext {
   directory: string
   worktree: string
   project: Project.Info
+}
+
+/**
+ * The single global project used for all sessions.
+ * Athena is a browser agent — no git/project discovery needed.
+ * All sessions share this one project record.
+ */
+const GLOBAL_PROJECT: Project.Info = {
+  id: ProjectID.global,
+  worktree: "/",
+  vcs: undefined,
+  sandboxes: [],
+  time: { created: 0, updated: 0 },
 }
 
 const context = Context.create<InstanceContext>("instance")
@@ -34,18 +48,16 @@ function emit(directory: string) {
 
 function boot(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
   return iife(async () => {
-    const ctx =
-      input.project && input.worktree
-        ? {
-            directory: input.directory,
-            worktree: input.worktree,
-            project: input.project,
-          }
-        : await Project.fromDirectory(input.directory).then(({ project, sandbox }) => ({
-            directory: input.directory,
-            worktree: sandbox,
-            project,
-          }))
+    // Browser agent: always use the global project, skip git discovery
+    const project = input.project ?? GLOBAL_PROJECT
+    const worktree = input.worktree ?? input.directory
+    const ctx: InstanceContext = {
+      directory: input.directory,
+      worktree,
+      project,
+    }
+    // Ensure the global project row exists in DB
+    await Project.ensureGlobalProject()
     await context.provide(ctx, async () => {
       await input.init?.()
     })
