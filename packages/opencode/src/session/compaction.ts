@@ -35,6 +35,49 @@ export namespace SessionCompaction {
   export const PRUNE_PROTECT = 40_000
   const PRUNE_PROTECTED_TOOLS = ["skill"]
 
+  export function prunePlan(input: {
+    messages: MessageV2.WithParts[]
+    protect?: number
+    minimum?: number
+    turns?: number
+    protected?: readonly string[]
+  }) {
+    const protect = input.protect ?? PRUNE_PROTECT
+    const minimum = input.minimum ?? PRUNE_MINIMUM
+    const turnsToKeep = input.turns ?? 2
+    const protectedTools = input.protected ?? PRUNE_PROTECTED_TOOLS
+    let total = 0
+    let pruned = 0
+    let turns = 0
+    const parts: MessageV2.ToolPart[] = []
+
+    loop: for (let msgIndex = input.messages.length - 1; msgIndex >= 0; msgIndex--) {
+      const msg = input.messages[msgIndex]
+      if (msg.info.role === "user") turns++
+      if (turns < turnsToKeep) continue
+      if (msg.info.role === "assistant" && msg.info.summary) break loop
+      for (let partIndex = msg.parts.length - 1; partIndex >= 0; partIndex--) {
+        const part = msg.parts[partIndex]
+        if (part.type !== "tool") continue
+        if (part.state.status !== "completed") continue
+        if (protectedTools.includes(part.tool)) continue
+        if (part.state.time.compacted) break loop
+        const estimate = Token.estimate(part.state.output)
+        total += estimate
+        if (total <= protect) continue
+        pruned += estimate
+        parts.push(part)
+      }
+    }
+
+    return {
+      total,
+      pruned,
+      parts,
+      shouldPrune: pruned > minimum,
+    }
+  }
+
   export interface Interface {
     readonly isOverflow: (input: {
       tokens: MessageV2.Assistant["tokens"]
@@ -92,42 +135,15 @@ export namespace SessionCompaction {
           .pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed(undefined)))
         if (!msgs) return
 
-        let total = 0
-        let pruned = 0
-        const toPrune: MessageV2.ToolPart[] = []
-        let turns = 0
-
-        loop: for (let msgIndex = msgs.length - 1; msgIndex >= 0; msgIndex--) {
-          const msg = msgs[msgIndex]
-          if (msg.info.role === "user") turns++
-          if (turns < 2) continue
-          if (msg.info.role === "assistant" && msg.info.summary) break loop
-          for (let partIndex = msg.parts.length - 1; partIndex >= 0; partIndex--) {
-            const part = msg.parts[partIndex]
-            if (part.type === "tool")
-              if (part.state.status === "completed") {
-                if (PRUNE_PROTECTED_TOOLS.includes(part.tool)) continue
-                if (part.state.time.compacted) break loop
-                const estimate = Token.estimate(part.state.output)
-                total += estimate
-                if (total > PRUNE_PROTECT) {
-                  pruned += estimate
-                  toPrune.push(part)
-                }
-              }
-          }
+        const plan = prunePlan({ messages: msgs })
+        log.info("found", { pruned: plan.pruned, total: plan.total })
+        if (!plan.shouldPrune) return
+        for (const part of plan.parts) {
+          if (part.state.status !== "completed") continue
+          part.state.time.compacted = Date.now()
+          yield* session.updatePart(part)
         }
-
-        log.info("found", { pruned, total })
-        if (pruned > PRUNE_MINIMUM) {
-          for (const part of toPrune) {
-            if (part.state.status === "completed") {
-              part.state.time.compacted = Date.now()
-              yield* session.updatePart(part)
-            }
-          }
-          log.info("pruned", { count: toPrune.length })
-        }
+        log.info("pruned", { count: plan.parts.length })
       })
 
       const processCompaction = Effect.fn("SessionCompaction.process")(function* (input: {
