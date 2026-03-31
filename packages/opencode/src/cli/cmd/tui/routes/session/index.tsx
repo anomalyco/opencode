@@ -7,6 +7,7 @@ import {
   For,
   Match,
   on,
+  onCleanup,
   onMount,
   Show,
   Switch,
@@ -1323,12 +1324,33 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
   })
 
-  const duration = createMemo(() => {
-    if (!final()) return 0
-    if (!props.message.time.completed) return 0
+  const [now, setNow] = createSignal(Date.now())
+  createEffect(() => {
+    if (final()) return
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    onCleanup(() => clearInterval(id))
+  })
+
+  const elapsed = createMemo(() => {
     const user = messages().find((x) => x.role === "user" && x.id === props.message.parentID)
     if (!user || !user.time) return 0
-    return props.message.time.completed - user.time.created
+    const end = props.message.time.completed ?? now()
+    return end - user.time.created
+  })
+
+  const duration = createMemo(() => {
+    if (!final() && elapsed() < 1000) return 0
+    return elapsed()
+  })
+
+  const durationText = createMemo(() => {
+    const ms = duration()
+    if (!ms) return ""
+    const total = Math.floor(ms / 1000)
+    if (total < 60) return `${total}s`
+    const m = Math.floor(total / 60)
+    const s = total % 60
+    return `${m}m ${s}s`
   })
 
   const keybind = useKeybind()
@@ -1389,7 +1411,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
               <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
               <span style={{ fg: theme.textMuted }}> · {props.message.modelID}</span>
               <Show when={duration()}>
-                <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
+                <span style={{ fg: theme.textMuted }}> · {durationText()}</span>
               </Show>
               <Show when={props.message.error?.name === "MessageAbortedError"}>
                 <span style={{ fg: theme.textMuted }}> · interrupted</span>
