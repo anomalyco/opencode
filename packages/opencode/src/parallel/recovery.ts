@@ -9,6 +9,8 @@ import type { ProjectID } from "../project/schema"
 import * as fs from "fs"
 import path from "path"
 import { Global } from "../global"
+import { ParallelEvent } from "./events"
+import { Bus } from "@/bus"
 
 export namespace Recovery {
   const log = Log.create({ service: "parallel-recovery" })
@@ -80,6 +82,37 @@ export namespace Recovery {
     const branch = (input.branch ?? "").replace(/^refs\/heads\//, "")
     if (!branch) return
     await git(["branch", "-D", branch], { cwd: input.cwd }).catch(() => {})
+  }
+
+  async function emit(plan: Plan) {
+    try {
+      await Bus.publish(ParallelEvent.PlanUpdated, { plan })
+    } catch (error) {
+      log.warn("skipped recovery plan update publish", {
+        planID: plan.id,
+        error,
+      })
+    }
+  }
+
+  async function write(planID: PlanID, input: {
+    status?: PlanStatus
+    workers?: WorkerState[]
+  }) {
+    Database.use((db) => {
+      db.update(PlanTable)
+        .set({
+          ...(input.status ? { status: input.status } : {}),
+          ...(input.workers ? { workers: input.workers as any } : {}),
+          ...(input.status === "done" || input.status === "failed" ? { time_completed: Date.now() } : {}),
+          time_updated: Date.now(),
+        })
+        .where(eq(PlanTable.id, planID))
+        .run()
+    })
+    const plan = await PlanStore.get(planID)
+    await emit(plan)
+    return plan
   }
 
   async function sweep(input: { projectID: ProjectID; cwd: string }): Promise<void> {
@@ -432,7 +465,7 @@ export namespace Recovery {
     }
 
     if (allDone && anyDone) {
-      // All workers done — transition to merging and run merge
+      // All workers done — transition through full merge lifecycle
       await forceStatus(planID, "merging")
       log.info("all workers recovered - starting merge", {
         planID,
@@ -443,7 +476,14 @@ export namespace Recovery {
 
       const { MergePipeline } = await import("./merge")
       const result = await MergePipeline.run(planID)
-      await forceStatus(planID, result.success ? "done" : "failed")
+      if (!result.success) {
+        await forceStatus(planID, "failed")
+      } else {
+        await forceStatus(planID, "integrating")
+        await forceStatus(planID, "integrated")
+        await forceStatus(planID, "publishing")
+        await forceStatus(planID, "done")
+      }
 
       if (!result.success) {
         log.info("merge failed during resume", {
@@ -482,7 +522,7 @@ export namespace Recovery {
    * Abandon an interrupted or failed plan — clean up worktrees and ensure failed status.
    */
   export async function abandon(planID: PlanID): Promise<Plan> {
-    const plan = await PlanStore.get(planID)
+    let plan = await PlanStore.get(planID)
 
     log.info("abandoning plan", { planID, status: plan.status })
 
@@ -491,16 +531,16 @@ export namespace Recovery {
     const incompleteCount = plan.workers.filter((w) => INTERRUPTED_WORKER_STATUSES.includes(w.status)).length
 
     // Mark all incomplete workers as failed (for interrupted plans)
-    for (const worker of plan.workers) {
-      if (INTERRUPTED_WORKER_STATUSES.includes(worker.status)) {
-        await PlanStore.updateWorker({
-          id: planID,
-          subtaskID: worker.subtaskID,
-          status: "failed",
-          error: "Abandoned by user - plan cleanup requested",
-        } as any)
-      }
-    }
+    const workers = plan.workers.map((worker) =>
+      INTERRUPTED_WORKER_STATUSES.includes(worker.status)
+        ? {
+            ...worker,
+            status: "failed" as const,
+            error: "Abandoned by user - plan cleanup requested",
+          }
+        : worker,
+    )
+    plan = await write(planID, { workers })
 
     // Clean up worktrees
     await cleanupWorktrees(plan)
@@ -508,14 +548,12 @@ export namespace Recovery {
     // Mark plan as failed
     await forceStatus(planID, "failed")
 
-    const cleanedWorktrees = plan.workers.filter((w) => w.worktreeDir).length
-
     log.info("plan abandoned and cleaned up", {
       planID,
       workersMarkedFailed: incompleteCount,
-      worktreesRemoved: cleanedWorktrees,
+      worktreesRemoved: worktreesToClean,
       branchesRemoved: plan.workers.filter((w) => w.branch).length,
-      confirmation: `Plan ${plan.id} has been abandoned. ${cleanedWorktrees} worktree(s) cleaned up, ${incompleteCount} incomplete worker(s) marked as failed.`,
+      confirmation: `Plan ${plan.id} has been abandoned. ${worktreesToClean} worktree(s) cleaned up, ${incompleteCount} incomplete worker(s) marked as failed.`,
     })
 
     return PlanStore.get(planID)
@@ -567,21 +605,7 @@ export namespace Recovery {
    * Used only during recovery where the state machine may be in an invalid state.
    */
   async function forceStatus(planID: PlanID, status: PlanStatus): Promise<void> {
-    Database.use((db) => {
-      db.update(PlanTable)
-        .set({
-          status,
-          ...(status === "done" || status === "failed" ? { time_completed: Date.now() } : {}),
-        })
-        .where(eq(PlanTable.id, planID))
-        .run()
-    })
-
-    // Re-fetch and publish event
-    const plan = await PlanStore.get(planID)
-    const { Bus } = await import("@/bus")
-    const { ParallelEvent } = await import("./events")
-    Bus.publish(ParallelEvent.PlanUpdated, { plan })
+    await write(planID, { status })
   }
 
   /** Check if a worktree has commits ahead of the main branch */

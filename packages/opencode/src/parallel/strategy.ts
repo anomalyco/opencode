@@ -2,6 +2,7 @@ import z from "zod"
 import { buildWaves } from "./scheduler"
 import type { Plan, ExecutionMode } from "./schema"
 import type { Project } from "@/project/project"
+import fs from "fs"
 
 export const StrategyMode = z.enum(["single-agent", "task-agent", "worktree"])
 export type StrategyMode = z.infer<typeof StrategyMode>
@@ -25,6 +26,51 @@ function uniq(input: string[]) {
 
 function alternatives(mode: StrategyMode) {
   return (["worktree", "task-agent", "single-agent"] as const).filter((item) => item !== mode)
+}
+
+function fresh(project?: Project.Info) {
+  if (!project || project.vcs !== "git" || project.worktree === "/") return false
+  try {
+    const keep = new Set([
+      ".git",
+      ".gitignore",
+      ".gitattributes",
+      "README.md",
+      "LICENSE",
+      "AGENTS.md",
+      "plan.md",
+      "task.md",
+      "implementation_plan.md",
+    ])
+    const live = new Set([
+      "src",
+      "app",
+      "lib",
+      "server",
+      "packages",
+      "components",
+      "pages",
+      "tests",
+      "test",
+      "package.json",
+      "bunfig.toml",
+      "bun.lock",
+      "bun.lockb",
+      "tsconfig.json",
+      "vite.config.ts",
+      "vite.config.js",
+      "next.config.js",
+      "next.config.ts",
+      "Cargo.toml",
+      "go.mod",
+      "pyproject.toml",
+    ])
+    const rows = fs.readdirSync(project.worktree, { withFileTypes: true }).map((row) => row.name)
+    if (rows.some((row) => live.has(row))) return false
+    return rows.filter((row) => !keep.has(row)).length === 0
+  } catch {
+    return false
+  }
 }
 
 export function analyzeStrategy(plan: Pick<Plan, "task" | "subtasks" | "workers">, project?: Project.Info): StrategyAnalysis {
@@ -58,6 +104,19 @@ export function analyzeStrategy(plan: Pick<Plan, "task" | "subtasks" | "workers"
       reasons,
       risks,
       alternatives: alternatives("single-agent"),
+    }
+  }
+
+  if (fresh(project)) {
+    reasons.push("This repository still looks like a bootstrap shell, so early worktree isolation adds startup risk without much merge value.")
+    risks.push("Spawning parallel worktrees before the first real app files exist makes bootstrap failures harder to diagnose and recover.")
+    return {
+      recommended: "task-agent",
+      confidence: "high",
+      requiresConfirmation: true,
+      reasons: uniq(reasons),
+      risks: uniq(risks),
+      alternatives: alternatives("task-agent"),
     }
   }
 

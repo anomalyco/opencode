@@ -86,10 +86,23 @@ export const ParallelExecuteTool = Tool.define<typeof params, Meta>("parallel_ex
     })
 
     await Orchestrator.approve(planID as any)
-    const launched = await PlanStore.get(planID as any)
+    let launched = await PlanStore.get(planID as any)
+    for (const _ of Array.from({ length: 10 })) {
+      if (launched.status !== "approved") break
+      await new Promise((resolve) => setTimeout(resolve, 200))
+      launched = await PlanStore.get(planID as any)
+    }
     const done = launched.workers.filter((x) => x.status === "done" || x.status === "merged").length
     const running = launched.workers.filter((x) => x.status === "running" || x.status === "spawning").length
     const failed = launched.workers.filter((x) => x.status === "failed" || x.status === "conflict").length
+    const err = launched.error
+      ? `${launched.error.code} @ ${launched.error.stage}: ${launched.error.message}`
+      : undefined
+    const line =
+      launched.status === "failed"
+        ? `Execution failed quickly: ${failed} failed, ${running} running, ${done} done.`
+        : `Current worker state: ${running} running, ${failed} failed, ${done} done.`
+    const info = launched.status === "failed" && err ? `Failure: ${err}` : undefined
 
     return {
       title: `Launched ${plan.subtasks.length} parallel workers`,
@@ -98,6 +111,8 @@ export const ParallelExecuteTool = Tool.define<typeof params, Meta>("parallel_ex
         mode === "worktree"
           ? `${plan.subtasks.length} workers are spawning in isolated git worktrees.`
           : `${plan.subtasks.length} workers are launching as direct task-agent sessions in the current workspace.`,
+        line,
+        ...(info ? [info] : []),
         ``,
         live
           ? `Live worker status is now reported by default in this orchestrator thread.`

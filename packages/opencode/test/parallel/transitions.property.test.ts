@@ -16,6 +16,7 @@ import type { PlanStatus, WorkerStatus } from "../../src/parallel/schema"
 const PLAN_STATUSES: PlanStatus[] = [
   "draft",
   "proposed",
+  "paused",
   "approved",
   "spawning",
   "running",

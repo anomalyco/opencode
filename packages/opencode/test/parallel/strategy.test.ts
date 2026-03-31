@@ -1,8 +1,11 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import { analyzeStrategy, selectExecutionMode } from "../../src/parallel/strategy"
 import { SubtaskID } from "../../src/parallel/schema"
 import type { Plan } from "../../src/parallel/schema"
 import { ProjectID } from "../../src/project/schema"
+import { Instance } from "../../src/project/instance"
+import { InstanceBootstrap } from "../../src/project/bootstrap"
+import { tmpdir } from "../fixture/fixture"
 
 function plan(input: { count: number; kind?: "semantic" | "structural"; overlap?: boolean }): Pick<Plan, "task" | "subtasks" | "workers"> {
   const ids = Array.from({ length: input.count }, () => SubtaskID.ascending())
@@ -19,6 +22,10 @@ function plan(input: { count: number; kind?: "semantic" | "structural"; overlap?
     workers: ids.map((subtaskID) => ({ subtaskID, status: "pending" as const })),
   }
 }
+
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 describe("Parallel Strategy", () => {
   test("recommends task agents when git is not verified", () => {
@@ -58,6 +65,22 @@ describe("Parallel Strategy", () => {
 
     expect(result.recommended).toBe("worktree")
     expect(result.confidence).toBe("high")
+  })
+
+  test("recommends task agents for bootstrap repos", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        const result = analyzeStrategy(plan({ count: 4 }), Instance.project)
+
+        expect(result.recommended).toBe("task-agent")
+        expect(result.confidence).toBe("high")
+        expect(result.reasons.join(" ")).toContain("bootstrap")
+      },
+    })
   })
 
   test("recommends task agents for overlap-heavy plans", () => {

@@ -140,13 +140,16 @@ describe("Parallel E2E", () => {
         await PlanStore.updateWorker({ id: plan.id, subtaskID: plan.subtasks[i].id, status: "done" } as any)
       }
 
-      // Merge
+      // Merge + Integration + Publishing lifecycle
       await PlanStore.transition({ id: plan.id, status: "merging" })
+      await PlanStore.transition({ id: plan.id, status: "integrating" })
       for (const wt of wts) {
         const r = await $`git merge --no-ff -m "Merge ${wt.branch}" ${wt.branch}`.cwd(worktree).quiet().nothrow()
         expect(r.exitCode).toBe(0)
         await PlanStore.updateWorker({ id: plan.id, subtaskID: wt.subtaskID, status: "merged" } as any)
       }
+      await PlanStore.transition({ id: plan.id, status: "integrated" })
+      await PlanStore.transition({ id: plan.id, status: "publishing" })
 
       const done = await PlanStore.transition({ id: plan.id, status: "done" })
       expect(done.status).toBe("done")
@@ -420,6 +423,9 @@ describe("Parallel E2E", () => {
       await PlanStore.transition({ id: plan.id, status: "spawning" })
       await PlanStore.transition({ id: plan.id, status: "running" })
       await PlanStore.transition({ id: plan.id, status: "merging" })
+      await PlanStore.transition({ id: plan.id, status: "integrating" })
+      await PlanStore.transition({ id: plan.id, status: "integrated" })
+      await PlanStore.transition({ id: plan.id, status: "publishing" })
       const done = await PlanStore.transition({ id: plan.id, status: "done" })
       expect(done.status).toBe("done")
     })
@@ -615,14 +621,17 @@ describe("Parallel E2E", () => {
       // Start merging
       await PlanStore.transition({ id: plan.id, status: "merging" })
 
-      // Cannot cancel during merge - merging can only transition to done or failed
+      // Cannot cancel during merge - merging can only transition to integrating, recovering, partial_success, or failed
       // Test that invalid transition throws
       await expect(PlanStore.transition({ id: plan.id, status: "cancelled" })).rejects.toThrow()
 
-      // Complete merge properly
+      // Complete merge properly via full lifecycle
+      await PlanStore.transition({ id: plan.id, status: "integrating" })
       const merge = await $`git merge --no-ff -m "Merge completed" ${info.branch}`.cwd(worktree).quiet().nothrow()
       expect(merge.exitCode).toBe(0)
       await PlanStore.updateWorker({ id: plan.id, subtaskID: plan.subtasks[0].id, status: "merged" } as any)
+      await PlanStore.transition({ id: plan.id, status: "integrated" })
+      await PlanStore.transition({ id: plan.id, status: "publishing" })
 
       const done = await PlanStore.transition({ id: plan.id, status: "done" })
       expect(done.status).toBe("done")
@@ -736,11 +745,14 @@ describe("Parallel E2E", () => {
       await PlanStore.updateWorker({ id: plan.id, subtaskID: plan.subtasks[0].id, status: "done" } as any)
 
       await PlanStore.transition({ id: plan.id, status: "merging" })
+      await PlanStore.transition({ id: plan.id, status: "integrating" })
 
       // Merge single branch
       const merge = await $`git merge --no-ff -m "Merge single" ${info.branch}`.cwd(worktree).quiet().nothrow()
       expect(merge.exitCode).toBe(0)
       await PlanStore.updateWorker({ id: plan.id, subtaskID: plan.subtasks[0].id, status: "merged" } as any)
+      await PlanStore.transition({ id: plan.id, status: "integrated" })
+      await PlanStore.transition({ id: plan.id, status: "publishing" })
 
       const done = await PlanStore.transition({ id: plan.id, status: "done" })
       expect(done.status).toBe("done")

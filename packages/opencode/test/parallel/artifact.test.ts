@@ -215,5 +215,19 @@ describe("Artifact Analyzer", () => {
       expect(rewritten[2].dependencies).toContain(lib1.id)
       expect(rewritten[2].dependencies).toContain(lib2.id)
     })
+
+    test("skips implicit deps that would create a cycle", () => {
+      const a = makeSubtask("a", "Alpha", "Uses beta", ["src/alpha.ts"])
+      const b = makeSubtask("b", "Beta", "Uses alpha", ["src/beta.ts"])
+
+      const report = analyze([a, b])
+      const { rewritten, addedDeps } = rewrite([a, b], report)
+
+      expect(addedDeps).toBe(1)
+      const aDeps = rewritten.find((item) => item.id === a.id)?.dependencies ?? []
+      const bDeps = rewritten.find((item) => item.id === b.id)?.dependencies ?? []
+      expect(aDeps.length + bDeps.length).toBe(1)
+      expect(aDeps.includes(b.id) && bDeps.includes(a.id)).toBe(false)
+    })
   })
 })

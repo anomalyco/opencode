@@ -121,12 +121,17 @@ export namespace WorkerManager {
     project: Project.Info
   }) {
     if (input.mode === "worktree") {
+      // Capture the original project root before switching context so config
+      // resolution can still find project-level opencode.json (which may be
+      // gitignored and therefore absent from the worktree checkout).
+      const configBoundary = Instance.worktree
       return Instance.provide({
         directory: input.dir,
         init: ParallelBootstrap,
         fn: input.fn,
         project: input.project,
         worktree: input.dir,
+        configBoundary,
       })
     }
     return Instance.provide({
@@ -237,7 +242,8 @@ export namespace WorkerManager {
     timeoutMs: number
     retry?: Retry
   }): Promise<{ type: "done" } | Retry> {
-    const baseline = input.mode === "worktree" ? ((await progress(input.dir)) ?? parseProgress("", "")) : parseProgress("", "")
+    const baseline =
+      input.mode === "worktree" ? ((await progress(input.dir)) ?? parseProgress("", "")) : parseProgress("", "")
     const started = Date.now()
     let advanced = started
     let latest = baseline
@@ -245,11 +251,7 @@ export namespace WorkerManager {
     let finished = false
 
     // Collect dependency outputs before entering worker context
-    const dependencyOutputs = await collectDependencyOutputs(
-      input.subtask,
-      input.plan.subtasks,
-      input.plan.workers,
-    )
+    const dependencyOutputs = await collectDependencyOutputs(input.subtask, input.plan.subtasks, input.plan.workers)
 
     const task = run({
       dir: input.dir,
@@ -625,6 +627,19 @@ export namespace WorkerManager {
       throw new Error("Worker retry loop exited unexpectedly")
     } catch (err) {
       Metrics.recordSpawnFailure()
+      // Clean up worktree on spawn failure to prevent orphans
+      try {
+        const { Worktree } = await import("../worktree")
+        await Worktree.remove({ directory: info.directory })
+      } catch {
+        // Best-effort cleanup — worktree may not exist yet or removal may fail
+        try {
+          const fs = await import("fs")
+          if (fs.existsSync(info.directory)) {
+            fs.rmSync(info.directory, { recursive: true, force: true })
+          }
+        } catch {}
+      }
       throw err
     }
   }
@@ -1017,11 +1032,21 @@ export namespace WorkerManager {
         }
       }
 
+      const abortHandler = async () => {
+        if (debounceTimer) {
+          clearTimeout(debounceTimer)
+          await processBatch()
+        }
+        cleanup()
+        resolve()
+      }
+
       const cleanup = () => {
         GlobalBus.off("event", handler)
         if (fallbackTimer) clearInterval(fallbackTimer)
         if (debounceTimer) clearTimeout(debounceTimer)
         warned.clear()
+        abort.removeEventListener("abort", abortHandler)
       }
 
       GlobalBus.on("event", handler)
@@ -1041,8 +1066,7 @@ export namespace WorkerManager {
 
           // Check for timeout
           const elapsed = Date.now() - worker.startTime
-          const warnAt =
-            worker.kind === "structural" ? Math.min(warningThreshold, 2 * 60 * 1000) : warningThreshold
+          const warnAt = worker.kind === "structural" ? Math.min(warningThreshold, 2 * 60 * 1000) : warningThreshold
 
           // Check for timeout warning at 80% threshold
           if (elapsed > warnAt && !warned.has(sessionID)) {
@@ -1123,19 +1147,8 @@ export namespace WorkerManager {
         }
       }, 5_000)
 
-      // Handle abort
-      abort.addEventListener(
-        "abort",
-        async () => {
-          if (debounceTimer) {
-            clearTimeout(debounceTimer)
-            await processBatch()
-          }
-          cleanup()
-          resolve()
-        },
-        { once: true },
-      )
+      // Handle abort — uses named handler so cleanup() can remove it
+      abort.addEventListener("abort", abortHandler, { once: true })
     })
 
     log.info("all workers complete", { planID, durationMs: Date.now() - waitStartTime })
@@ -1170,15 +1183,7 @@ export namespace WorkerManager {
 
     const msg = `parallel: snapshot ${String(subtaskID).slice(0, 10)}`
     const commit = await git(
-      [
-        "-c",
-        "user.name=opencode-parallel",
-        "-c",
-        "user.email=parallel@opencode.local",
-        "commit",
-        "-m",
-        msg,
-      ],
+      ["-c", "user.name=opencode-parallel", "-c", "user.email=parallel@opencode.local", "commit", "-m", msg],
       { cwd: worktreeDir },
     )
 
@@ -1225,10 +1230,7 @@ export namespace WorkerManager {
 
         // Also grab a compact name-only list for quick reference
         const nameOnly = await git(["diff", "--name-only", "HEAD"], { cwd: worker.worktreeDir })
-        const files = outputText(nameOnly.stdout)
-          .split("\n")
-          .filter(Boolean)
-          .slice(0, 15)
+        const files = outputText(nameOnly.stdout).split("\n").filter(Boolean).slice(0, 15)
 
         if (files.length > 0) {
           depOutputs.push(
@@ -1239,9 +1241,7 @@ export namespace WorkerManager {
           const commitStat = await git(["show", "--stat", "--format=", "HEAD"], { cwd: worker.worktreeDir })
           const commitText = outputText(commitStat.stdout)
           depOutputs.push(
-            commitText
-              ? `- **${title}**: ${commitText.split("\n").pop() ?? "completed"}`
-              : `- **${title}**: completed`,
+            commitText ? `- **${title}**: ${commitText.split("\n").pop() ?? "completed"}` : `- **${title}**: completed`,
           )
         }
       } catch {
@@ -1274,10 +1274,9 @@ export namespace WorkerManager {
             .join("\n")}${options?.dependencyOutputs ?? ""}`
         : ""
 
-    const constraintInfo =
-      subtask.constraints?.length
-        ? `\n## CONSTRAINTS (you MUST follow these)\n${subtask.constraints.map((c) => `- **${c}**`).join("\n")}`
-        : ""
+    const constraintInfo = subtask.constraints?.length
+      ? `\n## CONSTRAINTS (you MUST follow these)\n${subtask.constraints.map((c) => `- **${c}**`).join("\n")}`
+      : ""
 
     const conventionInfo = (() => {
       const conv = options?.conventions

@@ -691,7 +691,13 @@ describe("Parallel Stress Tests", () => {
           plan = await PlanStore.transition({ id: plan.id, status: "merging" })
           expect(plan.status).toBe("merging")
 
-          // Merging -> done
+          // Merging -> integrating -> integrated -> publishing -> done
+          plan = await PlanStore.transition({ id: plan.id, status: "integrating" })
+          expect(plan.status).toBe("integrating")
+          plan = await PlanStore.transition({ id: plan.id, status: "integrated" })
+          expect(plan.status).toBe("integrated")
+          plan = await PlanStore.transition({ id: plan.id, status: "publishing" })
+          expect(plan.status).toBe("publishing")
           plan = await PlanStore.transition({ id: plan.id, status: "done" })
           expect(plan.status).toBe("done")
           expect(plan.time.completed).toBeGreaterThan(0)

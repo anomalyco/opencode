@@ -3,6 +3,8 @@ import { Instance } from "../../src/project/instance"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { PlanStore } from "../../src/parallel/plan"
 import { Orchestrator } from "../../src/parallel/orchestrator"
+import { Recovery } from "../../src/parallel/recovery"
+import { WorkerManager } from "../../src/parallel/worker"
 import { Provider } from "../../src/provider/provider"
 import { SubtaskID } from "../../src/parallel/schema"
 import type { WorkerState } from "../../src/parallel/schema"
@@ -405,6 +407,164 @@ describe("Parallel Infrastructure", () => {
     })
   })
 
+  describe("Orchestrator.execute", () => {
+    test("cleans up worktrees when workers remain active after wait", async () => {
+      await using tmp = await tmpdir({ git: true })
+
+      await Instance.provide({
+        directory: tmp.path,
+        init: InstanceBootstrap,
+        fn: async () => {
+          const spawned = spyOn(WorkerManager, "spawnAll").mockResolvedValue(undefined)
+          const waited = spyOn(WorkerManager, "waitAll").mockResolvedValue(undefined)
+          const cleaned = spyOn(Recovery, "cleanupWorktrees").mockResolvedValue(undefined)
+
+          try {
+            const plan = await PlanStore.create({
+              projectID: Instance.project.id,
+              sessionID: undefined,
+              task: "Test task",
+              orchestratorModel: { providerID: "test" as any, modelID: "test-model" as any },
+              workerModel: { providerID: "test" as any, modelID: "test-model" as any },
+              executionMode: "worktree",
+            })
+
+            const subtaskID = SubtaskID.ascending()
+            await PlanStore.update({
+              id: plan.id,
+              subtasks: [
+                {
+                  id: subtaskID,
+                  title: "Subtask 1",
+                  description: "Do something",
+                  fileScope: ["src/a.ts"],
+                  dependencies: [],
+                },
+              ],
+              workers: [{ subtaskID, status: "pending" }],
+              status: "proposed",
+            })
+            await PlanStore.transition({ id: plan.id, status: "approved" })
+
+            await Orchestrator.execute(plan.id, new AbortController().signal)
+
+            const failed = await PlanStore.get(plan.id)
+            expect(failed.status).toBe("failed")
+            expect(failed.error?.code).toBe("workers_incomplete")
+            expect(cleaned).toHaveBeenCalledTimes(1)
+            expect(spawned).toHaveBeenCalledTimes(1)
+            expect(waited).not.toHaveBeenCalled()
+          } finally {
+            spawned.mockRestore()
+            waited.mockRestore()
+            cleaned.mockRestore()
+          }
+        },
+      })
+    })
+  })
+
+  describe("Orchestrator.cancel", () => {
+    test("marks in-flight workers as failed before plan cleanup", async () => {
+      await using tmp = await tmpdir({ git: true })
+
+      await Instance.provide({
+        directory: tmp.path,
+        init: InstanceBootstrap,
+        fn: async () => {
+          const cleaned = spyOn(Recovery, "cleanupWorktrees").mockResolvedValue(undefined)
+
+          try {
+            const a = SubtaskID.ascending()
+            const b = SubtaskID.ascending()
+            const c = SubtaskID.ascending()
+            const plan = await PlanStore.create({
+              projectID: Instance.project.id,
+              sessionID: undefined,
+              task: "Cancel test",
+              orchestratorModel: { providerID: "test" as any, modelID: "test-model" as any },
+              workerModel: { providerID: "test" as any, modelID: "test-model" as any },
+              executionMode: "worktree",
+            })
+
+            await PlanStore.update({
+              id: plan.id,
+              subtasks: [
+                { id: a, title: "A", description: "A", fileScope: ["src/a.ts"], dependencies: [] },
+                { id: b, title: "B", description: "B", fileScope: ["src/b.ts"], dependencies: [] },
+                { id: c, title: "C", description: "C", fileScope: ["src/c.ts"], dependencies: [] },
+              ],
+              workers: [
+                { subtaskID: a, status: "running" },
+                { subtaskID: b, status: "pending" },
+                { subtaskID: c, status: "done" },
+              ],
+              status: "proposed",
+            })
+            await PlanStore.transition({ id: plan.id, status: "approved" })
+            await PlanStore.transition({ id: plan.id, status: "spawning" })
+            await PlanStore.transition({ id: plan.id, status: "running" })
+
+            await Orchestrator.cancel(plan.id)
+
+            const stopped = await PlanStore.get(plan.id)
+            expect(stopped.status).toBe("failed")
+            expect(stopped.workers.map((worker) => worker.status)).toEqual(["failed", "failed", "done"])
+            expect(stopped.workers[0].error).toBe("Cancelled by user")
+            expect(stopped.workers[1].error).toBe("Cancelled by user")
+            expect(cleaned).toHaveBeenCalledTimes(1)
+          } finally {
+            cleaned.mockRestore()
+          }
+        },
+      })
+    })
+  })
+
+  describe("Recovery.abandon", () => {
+    test("works outside instance context", async () => {
+      await using tmp = await tmpdir({ git: true })
+
+      const id = await Instance.provide({
+        directory: tmp.path,
+        init: InstanceBootstrap,
+        fn: async () => {
+          const subtaskID = SubtaskID.ascending()
+          const plan = await PlanStore.create({
+            projectID: Instance.project.id,
+            sessionID: undefined,
+            task: "Headless abandon",
+            orchestratorModel: { providerID: "test" as any, modelID: "test-model" as any },
+            workerModel: { providerID: "test" as any, modelID: "test-model" as any },
+            executionMode: "worktree",
+          })
+
+          await PlanStore.update({
+            id: plan.id,
+            subtasks: [
+              {
+                id: subtaskID,
+                title: "Subtask 1",
+                description: "Do something",
+                fileScope: ["src/a.ts"],
+                dependencies: [],
+              },
+            ],
+            workers: [{ subtaskID, status: "pending" }],
+            status: "proposed",
+          })
+
+          return plan.id
+        },
+      })
+
+      const plan = await Recovery.abandon(id)
+      expect(plan.status).toBe("failed")
+      expect(plan.workers[0]?.status).toBe("failed")
+      expect(plan.workers[0]?.error).toBe("Abandoned by user - plan cleanup requested")
+    })
+  })
+
   describe("Orchestrator.resolveOutcome", () => {
     function worker(status: WorkerState["status"]): WorkerState {
       return {
@@ -445,6 +605,13 @@ describe("Parallel Infrastructure", () => {
 
       expect(result.status).toBe("partial_success")
       expect(result.failed).toBe(2)
+    })
+
+    test("treats done workers as terminal in direct execution", () => {
+      const result = Orchestrator.resolveDirectOutcome([worker("done"), worker("done")])
+
+      expect(result.status).toBe("done")
+      expect(result.unresolved).toBe(0)
     })
   })
 

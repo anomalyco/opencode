@@ -38,6 +38,29 @@ export interface ArtifactReport {
   }
 }
 
+function cyclic(subtasks: Subtask[]): boolean {
+  const graph = new Map(subtasks.map((st) => [st.id, st.dependencies]))
+  const seen = new Set<SubtaskID>()
+  const stack = new Set<SubtaskID>()
+
+  function walk(id: SubtaskID): boolean {
+    if (stack.has(id)) return true
+    if (seen.has(id)) return false
+    seen.add(id)
+    stack.add(id)
+    for (const dep of graph.get(id) ?? []) {
+      if (walk(dep)) return true
+    }
+    stack.delete(id)
+    return false
+  }
+
+  for (const st of subtasks) {
+    if (walk(st.id)) return true
+  }
+  return false
+}
+
 /**
  * Infer produced artifacts from a subtask's fileScope.
  * Artifacts are typically output files that other subtasks might consume.
@@ -391,19 +414,28 @@ export function rewrite(subtasks: Subtask[], report: ArtifactReport): { rewritte
   }
 
   let addedCount = 0
-  const rewritten: Subtask[] = []
+  const rewritten = subtasks.map((st) => ({
+    ...st,
+    dependencies: [...st.dependencies].sort(),
+  }))
 
-  for (const st of subtasks) {
-    const implicit = report.missingDependencies.get(st.id)
-    if (implicit && implicit.length > 0) {
-      const newDeps = [...new Set([...st.dependencies, ...implicit])].sort()
-      addedCount += implicit.length
-      rewritten.push({
-        ...st,
-        dependencies: newDeps,
-      })
-    } else {
-      rewritten.push(st)
+  for (const st of rewritten) {
+    const implicit = report.missingDependencies.get(st.id)?.slice().sort()
+    if (!implicit?.length) continue
+
+    for (const dep of implicit) {
+      if (st.dependencies.includes(dep)) continue
+      const next = rewritten.map((item) =>
+        item.id === st.id
+          ? {
+              ...item,
+              dependencies: [...item.dependencies, dep].sort(),
+            }
+          : item,
+      )
+      if (cyclic(next)) continue
+      st.dependencies = [...st.dependencies, dep].sort()
+      addedCount += 1
     }
   }
 

@@ -57,7 +57,7 @@ export namespace Orchestrator {
   }
 
   function unresolved(workers: Plan["workers"]) {
-    return workers.filter((worker) => !["merged", "failed", "conflict"].includes(worker.status))
+    return workers.filter((worker) => !["done", "merged", "failed", "conflict"].includes(worker.status))
   }
 
   function inflight(workers: Plan["workers"]) {
@@ -269,12 +269,33 @@ export namespace Orchestrator {
     }
   }
 
+  async function cleanup(planID: PlanID) {
+    const plan = await PlanStore.get(planID)
+    if (selectExecutionMode(plan, Project.get(plan.projectID)) !== "worktree") return
+    await Recovery.cleanupWorktrees(plan)
+  }
+
+  async function cancelWorkers(planID: PlanID) {
+    const plan = await PlanStore.get(planID)
+    const workers = plan.workers.map((worker) => {
+      if (["done", "merged", "failed", "conflict"].includes(worker.status)) return worker
+      return {
+        ...worker,
+        status: "failed" as const,
+        error: worker.error?.trim() ? worker.error : "Cancelled by user",
+      }
+    })
+    await PlanStore.update({ id: planID, workers })
+  }
+
   async function fail(planID: PlanID, err: unknown) {
     const data = detail(err)
     await PlanStore.update({ id: planID, status: "failed", error: data }).catch(async () => {
       await PlanStore.update({ id: planID, error: data }).catch(() => {})
       await PlanStore.transition({ id: planID, status: "failed" }).catch(() => {})
     })
+    if (data.code === "recovery_required") return
+    await cleanup(planID).catch(() => {})
   }
 
   async function stage<T>(name: string, fn: () => Promise<T>) {
@@ -308,17 +329,45 @@ export namespace Orchestrator {
     let subtasks = plan.subtasks
     let changed = false
 
-    const ids = new Set(subtasks.map((subtask) => subtask.id))
-    for (const subtask of subtasks) {
-      for (const dep of subtask.dependencies) {
-        if (ids.has(dep)) continue
+    const validateGraph = (items: typeof subtasks) => {
+      const ids = new Set(items.map((subtask) => subtask.id))
+      for (const subtask of items) {
+        for (const dep of subtask.dependencies) {
+          if (ids.has(dep)) continue
+          throw issue({
+            code: "dependency_missing",
+            stage: "preflight",
+            message: `Subtask "${subtask.title}" references missing dependency ${dep}`,
+          })
+        }
+      }
+
+      const marks = new Map<string, number>()
+      const graph = new Map(items.map((subtask) => [String(subtask.id), subtask.dependencies.map(String)]))
+      const walk = (id: string): boolean => {
+        const mark = marks.get(id) ?? 0
+        if (mark === 1) return true
+        if (mark === 2) return false
+        marks.set(id, 1)
+        const deps = graph.get(id) ?? []
+        for (const dep of deps) {
+          if (walk(dep)) return true
+        }
+        marks.set(id, 2)
+        return false
+      }
+
+      for (const id of graph.keys()) {
+        if (!walk(id)) continue
         throw issue({
-          code: "dependency_missing",
+          code: "dependency_cycle",
           stage: "preflight",
-          message: `Subtask "${subtask.title}" references missing dependency ${dep}`,
+          message: "Subtask dependency graph has a cycle",
         })
       }
     }
+
+    validateGraph(subtasks)
 
     if (mode === "worktree") {
       const root =
@@ -370,30 +419,6 @@ export namespace Orchestrator {
           stage: "preflight",
           message: `Model failed preflight: ${key}`,
         })
-      })
-    }
-
-    const marks = new Map<string, number>()
-    const graph = new Map(subtasks.map((subtask) => [String(subtask.id), subtask.dependencies.map(String)]))
-    const walk = (id: string): boolean => {
-      const mark = marks.get(id) ?? 0
-      if (mark === 1) return true
-      if (mark === 2) return false
-      marks.set(id, 1)
-      const deps = graph.get(id) ?? []
-      for (const dep of deps) {
-        if (walk(dep)) return true
-      }
-      marks.set(id, 2)
-      return false
-    }
-
-    for (const id of graph.keys()) {
-      if (!walk(id)) continue
-      throw issue({
-        code: "dependency_cycle",
-        stage: "preflight",
-        message: "Subtask dependency graph has a cycle",
       })
     }
 
@@ -500,6 +525,8 @@ export namespace Orchestrator {
 
     if (!changed) return
 
+    validateGraph(subtasks)
+
     const workers = subtasks.map((subtask) => {
       const existing = plan.workers.find((worker) => worker.subtaskID === subtask.id)
       if (existing) return existing
@@ -566,15 +593,12 @@ export namespace Orchestrator {
   }
 
   export async function checkRunningPlan(projectID: Plan["projectID"]): Promise<void> {
-    const paused = await PlanStore.listByProjectAndStatus(projectID, "paused")
-    const active = await PlanStore.listByProjectAndStatus(projectID, "running")
-    const spawning = await PlanStore.listByProjectAndStatus(projectID, "spawning")
-    const merging = await PlanStore.listByProjectAndStatus(projectID, "merging")
-    const integrating = await PlanStore.listByProjectAndStatus(projectID, "integrating")
-    const recovering = await PlanStore.listByProjectAndStatus(projectID, "recovering")
-    const integrated = await PlanStore.listByProjectAndStatus(projectID, "integrated")
-    const publishing = await PlanStore.listByProjectAndStatus(projectID, "publishing")
-    const running = [...paused, ...active, ...spawning, ...merging, ...integrating, ...recovering, ...integrated, ...publishing]
+    const inflightStatuses: Plan["status"][] = [
+      "paused", "running", "spawning", "merging",
+      "integrating", "recovering", "integrated", "publishing",
+    ]
+    const plans = await PlanStore.listByProject(projectID)
+    const running = plans.filter((p) => inflightStatuses.includes(p.status))
 
     if (running.length > 0) {
       const existingPlan = running[0]
@@ -733,16 +757,14 @@ export namespace Orchestrator {
     const afterWait = await PlanStore.get(planID)
     const active = inflight(afterWait.workers)
     if (active.length > 0) {
-      await PlanStore.update({
-        id: planID,
-        status: "failed",
-        error: {
+      await fail(
+        planID,
+        issue({
           code: "workers_incomplete",
           stage: "running",
           message: `Workers still active after wait: ${active.length}`,
-          at: Date.now(),
-        },
-      })
+        }),
+      )
       Metrics.recordPlanOutcome("failed")
       log.error("workers still active after wait; skipping merge", {
         planID,
@@ -767,16 +789,14 @@ export namespace Orchestrator {
     if (mode === "task-agent") {
       const result = resolveDirectOutcome(afterWait.workers)
       if (result.unresolved > 0) {
-        await PlanStore.update({
-          id: planID,
-          status: "failed",
-          error: {
+        await fail(
+          planID,
+          issue({
             code: "workers_incomplete",
             stage: "running",
             message: `Workers still unresolved after task-agent execution: ${result.unresolved}`,
-            at: Date.now(),
-          },
-        })
+          }),
+        )
         Metrics.recordPlanOutcome("failed")
         return
       }
@@ -917,10 +937,6 @@ export namespace Orchestrator {
       .catch(async (error) => {
         log.error("plan execution failed", { planID, error })
         Metrics.recordPlanOutcome("failed")
-        try {
-          const plan = await PlanStore.get(planID)
-          await Recovery.cleanupWorktrees(plan)
-        } catch {}
         await fail(planID, error)
       })
       .finally(() => {
@@ -936,6 +952,7 @@ export namespace Orchestrator {
       controller.abort()
       activeExecutions.delete(planID)
     }
+    await cancelWorkers(planID)
     await PlanStore.transition({ id: planID, status: "failed" })
     const plan = await PlanStore.get(planID)
     await Recovery.cleanupWorktrees(plan)
@@ -1025,6 +1042,7 @@ export namespace Orchestrator {
       })
 
       const controller = new AbortController()
+      activeExecutions.set(planID, controller)
 
       WorkerManager.spawnOne(plan, subtask, controller.signal)
         .then(async () => {
@@ -1083,6 +1101,12 @@ export namespace Orchestrator {
             status: "failed",
             error: error instanceof Error ? error.message : "Retry failed",
           }).catch(() => {})
+        })
+        .finally(() => {
+          // Clean up abort controller so cancel() doesn't target a finished retry
+          if (activeExecutions.get(planID) === controller) {
+            activeExecutions.delete(planID)
+          }
         })
 
       log.info("worker retry initiated", { planID, subtaskID })

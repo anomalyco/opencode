@@ -8,6 +8,8 @@ import { useSDK } from "@tui/context/sdk"
 import { ParallelPlan } from "./parallel-plan"
 import { ParallelStatus } from "./parallel-status"
 import { ParallelMerge } from "./parallel-merge"
+import { ParallelDAG } from "./parallel-dag"
+import { ParallelKanban } from "./parallel-kanban"
 import { TextAttributes } from "@opentui/core"
 import type { Plan } from "@/parallel/schema"
 
@@ -22,14 +24,17 @@ export function Parallel() {
   const [loading, setLoading] = createSignal(true)
   const [error, setError] = createSignal<string | null>(null)
   const [switchedOnComplete, setSwitchedOnComplete] = createSignal(false)
+  const [viewMode, setViewMode] = createSignal<"manager" | "dag" | "kanban">("manager")
   const isStatus = () => {
     const s = parallel.plan?.status
     return (
+      s === "paused" ||
       s === "approved" ||
       s === "spawning" ||
       s === "running" ||
       s === "merging" ||
       s === "integrating" ||
+      s === "integrated" ||
       s === "recovering" ||
       s === "publishing"
     )
@@ -61,6 +66,7 @@ export function Parallel() {
     setLoading(true)
     setError(null)
     setSwitchedOnComplete(false)
+    setViewMode("manager")
     fetchPlan(id)
       .then((plan) => parallel.setPlan(plan))
       .catch(() => setError("Plan not found"))
@@ -106,8 +112,29 @@ export function Parallel() {
     }
   })
 
+  createEffect(() => {
+    const s = parallel.plan?.status
+    if (!s) return
+    // Only reset view on terminal states — let user keep Kanban/DAG during merge phases
+    if (s === "done" || s === "partial_success" || s === "failed") {
+      setViewMode("manager")
+    }
+  })
+
+  const nextView = () => {
+    const list = ["manager", "dag", "kanban"] as const
+    const idx = list.indexOf(viewMode())
+    setViewMode(list[(idx + 1) % list.length])
+  }
+
   useKeyboard((evt) => {
     if (evt.defaultPrevented) return
+    if ((evt.name === "v" || (evt.sequence === "v" && !evt.ctrl)) && isStatus()) {
+      evt.preventDefault()
+      evt.stopPropagation()
+      nextView()
+      return
+    }
     if (evt.name === "escape") {
       if (isStatus()) return
       back()
@@ -153,34 +180,27 @@ export function Parallel() {
           <Show when={plan.status === "proposed" || plan.status === "draft"}>
             <ParallelPlan plan={plan} onApproved={() => {}} onCancelled={back} />
           </Show>
-          <Show when={plan.status === "paused" || plan.status === "approved" || plan.status === "spawning" || plan.status === "running"}>
-            <ParallelStatus plan={plan} onCancelled={back} onBack={back} />
-          </Show>
-          <Show
-            when={
-              plan.status === "merging" ||
-              plan.status === "integrating" ||
-              plan.status === "recovering" ||
-              plan.status === "publishing"
-            }
-          >
-            <ParallelMerge plan={plan} />
-          </Show>
-          <Show when={plan.status === "integrated"}>
-            <box
-              flexDirection="column"
-              width={Math.min(60, dim().width - 2)}
-              backgroundColor={theme.backgroundPanel}
-              padding={2}
-              alignItems="center"
-            >
-              <text attributes={TextAttributes.BOLD} fg={theme.info}>
-                Integrated
-              </text>
-              <text fg={theme.text}>Workers merged into integration branch</text>
-              <text fg={theme.textMuted}>Publish step can be triggered from CLI or resume flow</text>
-              <text fg={theme.textMuted}>Press ESC to go back</text>
-            </box>
+          <Show when={isStatus()}>
+            <Show when={viewMode() === "manager"}>
+              <Show
+                when={
+                  plan.status === "merging" ||
+                  plan.status === "integrating" ||
+                  plan.status === "integrated" ||
+                  plan.status === "recovering" ||
+                  plan.status === "publishing"
+                }
+                fallback={<ParallelStatus plan={plan} onCancelled={back} onBack={back} />}
+              >
+                <ParallelMerge plan={plan} />
+              </Show>
+            </Show>
+            <Show when={viewMode() === "dag"}>
+              <ParallelDAG plan={plan} onBack={back} />
+            </Show>
+            <Show when={viewMode() === "kanban"}>
+              <ParallelKanban plan={plan} onBack={back} />
+            </Show>
           </Show>
           <Show when={plan.status === "done"}>
             <box
@@ -224,9 +244,11 @@ export function Parallel() {
                 Failed
               </text>
               <text fg={theme.text}>
-                {plan.workers.length > 0 && plan.workers.every((w) => w.status === "pending")
-                  ? "No workers started. Check /parallel config and selected models."
-                  : "Plan execution failed"}
+                {plan.error
+                  ? "Plan execution failed before the next recovery step."
+                  : plan.workers.length > 0 && plan.workers.every((w) => w.status === "pending")
+                    ? "No workers started. Check /parallel config and selected models."
+                    : "Plan execution failed"}
               </text>
               <Show when={plan.error}>
                 <text fg={theme.textMuted}>

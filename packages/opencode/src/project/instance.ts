@@ -11,6 +11,8 @@ export interface Shape {
   directory: string
   worktree: string
   project: Project.Info
+  /** Original project root for config resolution in worktree contexts. */
+  configBoundary?: string
 }
 const context = Context.create<Shape>("instance")
 const cache = new Map<string, Promise<Shape>>()
@@ -31,7 +33,13 @@ function emit(directory: string) {
   })
 }
 
-function boot(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
+function boot(input: {
+  directory: string
+  init?: () => Promise<any>
+  project?: Project.Info
+  worktree?: string
+  configBoundary?: string
+}) {
   return iife(async () => {
     const ctx =
       input.project && input.worktree
@@ -39,6 +47,7 @@ function boot(input: { directory: string; init?: () => Promise<any>; project?: P
             directory: input.directory,
             worktree: input.worktree,
             project: input.project,
+            configBoundary: input.configBoundary,
           }
         : await Project.fromDirectory(input.directory).then(({ project, sandbox }) => ({
             directory: input.directory,
@@ -68,6 +77,7 @@ export const Instance = {
     fn: () => R
     project?: Project.Info // Optional: pass project directly to avoid detection
     worktree?: string // Optional: pass worktree directly
+    configBoundary?: string // Optional: original project root for config resolution
   }): Promise<R> {
     const directory = Filesystem.resolve(input.directory)
     let existing = cache.get(directory)
@@ -80,6 +90,7 @@ export const Instance = {
           init: input.init,
           project: input.project,
           worktree: input.worktree,
+          configBoundary: input.configBoundary,
         }),
       )
     }
@@ -99,6 +110,9 @@ export const Instance = {
   },
   get project() {
     return context.use().project
+  },
+  get configBoundary() {
+    return context.use().configBoundary
   },
   /**
    * Check if a path is within the project boundary.
@@ -124,7 +138,13 @@ export const Instance = {
   state<S>(init: () => S, dispose?: (state: Awaited<S>) => Promise<void>): () => S {
     return State.create(() => Instance.directory, init, dispose)
   },
-  async reload(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
+  async reload(input: {
+    directory: string
+    init?: () => Promise<any>
+    project?: Project.Info
+    worktree?: string
+    configBoundary?: string
+  }) {
     const directory = Filesystem.resolve(input.directory)
     Log.Default.info("reloading instance", { directory })
     await Promise.all([State.dispose(directory), disposeInstance(directory)])

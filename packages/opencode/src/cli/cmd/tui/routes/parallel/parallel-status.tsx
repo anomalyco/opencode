@@ -11,85 +11,7 @@ import { summarizeWaves } from "@/parallel/scheduler"
 import { selectExecutionMode } from "@/parallel/strategy"
 import { ScrollBoxRenderable, TextAttributes } from "@opentui/core"
 import { pipe, sumBy } from "remeda"
-
-function formatDuration(ms: number) {
-  const seconds = Math.floor(ms / 1000)
-  if (seconds < 60) return `${seconds}s`
-  const minutes = Math.floor(seconds / 60)
-  const secs = seconds % 60
-  return `${minutes}m ${secs}s`
-}
-
-function formatCost(cost: number) {
-  if (cost === 0) return "$0.00"
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 4,
-  }).format(cost)
-}
-
-function formatTokens(n: number) {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-  return String(n)
-}
-
-function formatTime(ts: number) {
-  const date = new Date(ts)
-  return date.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })
-}
-
-function waveLabel(index: number, type: "parallel" | "serial") {
-  return `${type === "parallel" ? "P" : "S"}${index + 1}`
-}
-
-function statusRank(status: WorkerState["status"]) {
-  switch (status) {
-    case "running":
-      return 0
-    case "spawning":
-      return 1
-    case "failed":
-    case "conflict":
-      return 2
-    case "pending":
-      return 3
-    case "stopping":
-      return 4
-    case "done":
-      return 5
-    case "merged":
-      return 6
-  }
-}
-
-function statusLabel(worker: WorkerState) {
-  if ((worker.status === "merged" || worker.status === "conflict") && worker.resolutionMode) {
-    return `${worker.status} (${worker.resolutionMode})`
-  }
-  return worker.status
-}
-
-function statusIcon(status: WorkerState["status"]) {
-  switch (status) {
-    case "pending":
-      return "○"
-    case "spawning":
-      return "◐"
-    case "running":
-      return "●"
-    case "done":
-    case "merged":
-      return "✓"
-    case "failed":
-    case "conflict":
-      return "✗"
-    default:
-      return "○"
-  }
-}
+import { formatCost, formatDuration, formatTime, formatTokens, statusIcon, statusLabel, statusRank, waveLabel } from "./helpers"
 
 function WorkerLane(props: {
   worker: WorkerState
@@ -1026,7 +948,7 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
             </box>
             <box flexDirection="row" gap={2} marginTop={1}>
               <text fg={theme.textMuted}>
-                arrows navigate | pgup/pgdn scroll | home/end jump | f filter | s sort | l logs | o open | r retry | c cancel | esc back
+                arrows navigate | pgup/pgdn scroll | home/end jump | f filter | s sort | l logs | o open | r retry | c cancel | v view | esc back
               </text>
             </box>
           </box>

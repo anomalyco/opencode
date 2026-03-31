@@ -125,6 +125,14 @@ export namespace Config {
       for (const file of await ConfigPaths.projectFiles("opencode", Instance.directory, Instance.worktree)) {
         result = mergeConfigConcatArrays(result, await loadFile(file))
       }
+      // In worktree contexts the checkout is outside the project tree, so findUp
+      // cannot reach the original project config. Load it explicitly from configBoundary.
+      const boundary = Instance.configBoundary
+      if (boundary && boundary !== Instance.worktree) {
+        for (const file of await ConfigPaths.projectFiles("opencode", boundary, boundary)) {
+          result = mergeConfigConcatArrays(result, await loadFile(file))
+        }
+      }
     }
 
     result.agent = result.agent || {}
@@ -132,6 +140,11 @@ export namespace Config {
     result.plugin = result.plugin || []
 
     const directories = await ConfigPaths.directories(Instance.directory, Instance.worktree)
+    // In worktree contexts, also include .opencode/ dirs from the original project root.
+    const boundary = Instance.configBoundary
+    if (boundary && boundary !== Instance.worktree) {
+      directories.push(...(await ConfigPaths.directories(boundary, boundary)))
+    }
 
     // .opencode directory config overrides (project and global) config sources.
     if (Flag.OPENCODE_CONFIG_DIR) {
