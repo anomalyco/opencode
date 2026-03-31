@@ -9,7 +9,6 @@
         "@opencode-ai/plugin": "workspace:*",
         "@opencode-ai/script": "workspace:*",
         "@opencode-ai/sdk": "workspace:*",
-        "chromium-bidi": "15.0.0",
         "typescript": "catalog:",
       },
       "devDependencies": {
