@@ -103,6 +103,7 @@ export class CopilotAutoLanguageModel implements LanguageModelV3 {
   private readonly options: CopilotAutoModelOptions
   private readonly tiers: { reasoning: ModelInfo[]; standard: ModelInfo[]; fast: ModelInfo[] }
   private classifierModel: LanguageModelV3 | null = null
+  private unavailableModels = new Set<string>()
 
   get resolvedModelId(): string | null {
     return this._lastResolvedModelId
@@ -149,16 +150,21 @@ export class CopilotAutoLanguageModel implements LanguageModelV3 {
     return {}
   }
 
-  private pickFromTier(tier: Tier): string {
+  private getCandidates(tier: Tier): string[] {
     const order: Tier[] =
       tier === "reasoning" ? ["reasoning", "standard", "fast"] :
       tier === "fast" ? ["fast", "standard", "reasoning"] :
       ["standard", "reasoning", "fast"]
 
+    const candidates: string[] = []
     for (const t of order) {
-      if (this.tiers[t].length > 0) return this.tiers[t][0].id
+      for (const m of this.tiers[t]) {
+        if (!this.unavailableModels.has(m.id)) {
+          candidates.push(m.id)
+        }
+      }
     }
-    return this.options.models[0].id
+    return candidates.length > 0 ? candidates : [this.options.models[0].id]
   }
 
   private async classifyWithLLM(promptText: string): Promise<Tier> {
@@ -196,33 +202,73 @@ export class CopilotAutoLanguageModel implements LanguageModelV3 {
     }
   }
 
-  private async resolveModel(callOptions: LanguageModelV3CallOptions): Promise<LanguageModelV3> {
+  private async getCandidatesForPrompt(callOptions: LanguageModelV3CallOptions): Promise<string[]> {
     const promptText = extractPromptText(callOptions)
 
     const classification = promptText.length < 20
       ? "fast" as Tier
       : await this.classifyWithLLM(promptText)
 
-    const selectedModelId = this.pickFromTier(classification)
-    this._lastResolvedModelId = selectedModelId
+    const candidates = this.getCandidates(classification)
 
-    log.info("auto model selected", {
+    log.info("auto model candidates", {
       classification,
-      modelId: selectedModelId,
+      candidates: candidates.slice(0, 5),
       promptLength: promptText.length,
     })
 
-    return this.options.createModel(selectedModelId)
+    return candidates
+  }
+
+  private isModelUnavailableError(error: unknown): boolean {
+    const msg = String(error)
+    return msg.includes("model_not_supported") ||
+      msg.includes("not supported") ||
+      msg.includes("does not exist") ||
+      msg.includes("not found") ||
+      msg.includes("not available")
   }
 
   async doGenerate(options: LanguageModelV3CallOptions) {
-    const model = await this.resolveModel(options)
-    return model.doGenerate(options)
+    const candidates = await this.getCandidatesForPrompt(options)
+
+    for (const modelId of candidates) {
+      try {
+        this._lastResolvedModelId = modelId
+        log.info("auto model trying", { modelId })
+        const model = this.options.createModel(modelId)
+        return await model.doGenerate(options)
+      } catch (e) {
+        if (this.isModelUnavailableError(e)) {
+          log.warn("auto model unavailable, trying next", { modelId, error: String(e).slice(0, 100) })
+          this.unavailableModels.add(modelId)
+          continue
+        }
+        throw e
+      }
+    }
+    throw new Error("auto model: all candidate models are unavailable")
   }
 
   async doStream(options: LanguageModelV3CallOptions) {
-    const model = await this.resolveModel(options)
-    return model.doStream(options)
+    const candidates = await this.getCandidatesForPrompt(options)
+
+    for (const modelId of candidates) {
+      try {
+        this._lastResolvedModelId = modelId
+        log.info("auto model trying", { modelId })
+        const model = this.options.createModel(modelId)
+        return await model.doStream(options)
+      } catch (e) {
+        if (this.isModelUnavailableError(e)) {
+          log.warn("auto model unavailable, trying next", { modelId, error: String(e).slice(0, 100) })
+          this.unavailableModels.add(modelId)
+          continue
+        }
+        throw e
+      }
+    }
+    throw new Error("auto model: all candidate models are unavailable")
   }
 }
 
