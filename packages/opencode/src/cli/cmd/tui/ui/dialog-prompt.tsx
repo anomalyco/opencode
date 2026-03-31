@@ -1,14 +1,17 @@
 import { TextareaRenderable, TextAttributes } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
-import { onMount, type JSX } from "solid-js"
+import { Show, createEffect, onMount, type JSX } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
+import { Spinner } from "../component/spinner"
 
 export type DialogPromptProps = {
   title: string
   description?: () => JSX.Element
   placeholder?: string
   value?: string
+  busy?: boolean
+  busyText?: string
   onConfirm?: (value: string) => void
   onCancel?: () => void
 }
@@ -19,6 +22,12 @@ export function DialogPrompt(props: DialogPromptProps) {
   let textarea: TextareaRenderable
 
   useKeyboard((evt) => {
+    if (props.busy) {
+      if (evt.name === "escape") return
+      evt.preventDefault()
+      evt.stopPropagation()
+      return
+    }
     if (evt.name === "return") {
       props.onConfirm?.(textarea.plainText)
     }
@@ -28,9 +37,19 @@ export function DialogPrompt(props: DialogPromptProps) {
     dialog.setSize("medium")
     setTimeout(() => {
       if (!textarea || textarea.isDestroyed) return
+      if (props.busy) return
       textarea.focus()
     }, 1)
     textarea.gotoLineEnd()
+  })
+
+  createEffect(() => {
+    if (!textarea || textarea.isDestroyed) return
+    if (props.busy) {
+      textarea.blur()
+      return
+    }
+    textarea.focus()
   })
 
   return (
@@ -47,22 +66,29 @@ export function DialogPrompt(props: DialogPromptProps) {
         {props.description}
         <textarea
           onSubmit={() => {
+            if (props.busy) return
             props.onConfirm?.(textarea.plainText)
           }}
           height={3}
-          keyBindings={[{ name: "return", action: "submit" }]}
+          keyBindings={props.busy ? [] : [{ name: "return", action: "submit" }]}
           ref={(val: TextareaRenderable) => (textarea = val)}
           initialValue={props.value}
           placeholder={props.placeholder ?? "Enter text"}
-          textColor={theme.text}
-          focusedTextColor={theme.text}
-          cursorColor={theme.text}
+          placeholderColor={theme.textMuted}
+          textColor={props.busy ? theme.textMuted : theme.text}
+          focusedTextColor={props.busy ? theme.textMuted : theme.text}
+          cursorColor={props.busy ? theme.backgroundElement : theme.text}
         />
+        <Show when={props.busy}>
+          <Spinner color={theme.textMuted}>{props.busyText ?? "Working..."}</Spinner>
+        </Show>
       </box>
       <box paddingBottom={1} gap={1} flexDirection="row">
-        <text fg={theme.text}>
-          enter <span style={{ fg: theme.textMuted }}>submit</span>
-        </text>
+        <Show when={!props.busy} fallback={<text fg={theme.textMuted}>processing...</text>}>
+          <text fg={theme.text}>
+            enter <span style={{ fg: theme.textMuted }}>submit</span>
+          </text>
+        </Show>
       </box>
     </box>
   )
