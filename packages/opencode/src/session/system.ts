@@ -11,11 +11,13 @@ import PROMPT_KIMI from "./prompt/kimi.txt"
 
 import PROMPT_CODEX from "./prompt/codex.txt"
 import PROMPT_TRINITY from "./prompt/trinity.txt"
-import SOUL from "./prompt/soul.txt"
+import DEFAULT_SOUL from "./prompt/default-soul.txt"
+import ROUTING from "./prompt/routing.txt"
 import type { Provider } from "@/provider/provider"
 import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
 import { Skill } from "@/skill"
+import { Personality } from "@/personality"
 
 export namespace SystemPrompt {
   export function provider(model: Provider.Model) {
@@ -34,10 +36,20 @@ export namespace SystemPrompt {
     return [PROMPT_DEFAULT]
   }
 
-  export async function environment(model: Provider.Model) {
+  export type EnvironmentOptions = {
+    soulConfigDir?: string
+    projectDir?: string
+  }
+
+  export async function environment(model: Provider.Model, options?: EnvironmentOptions) {
     const project = Instance.project
+    const soul = await Personality.loadSoul({
+      configDir: options?.soulConfigDir,
+      projectDir: options?.projectDir ?? Instance.directory,
+    })
     return [
-      SOUL,
+      soul,
+      ROUTING,
       [
         `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
         `Here is some useful information about the environment you are running in:`,
@@ -60,6 +72,21 @@ export namespace SystemPrompt {
         `</directories>`,
       ].join("\n"),
     ]
+  }
+
+  /**
+   * Get the active personality overlay prompt for a session.
+   * Returns undefined if no personality is active.
+   */
+  export async function getSessionPrompt(
+    sessionID: string,
+    config: { personality?: { active?: string; custom?: Record<string, Personality.Spec> } },
+  ): Promise<string | undefined> {
+    const name = Personality.getSession(sessionID)
+    if (!name) return undefined
+    const p = Personality.resolve(name, { personality: config.personality })
+    if (!p) return undefined
+    return Personality.resolvePrompt(p)
   }
 
   export async function skills(agent: Agent.Info) {
