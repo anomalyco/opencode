@@ -1,6 +1,5 @@
 import z from "zod"
 import os from "os"
-import { spawn } from "child_process"
 import { Tool } from "./tool"
 import path from "path"
 import DESCRIPTION from "./bash.txt"
@@ -18,6 +17,9 @@ import { Shell } from "@/shell/shell"
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncate"
 import { Plugin } from "@/plugin"
+import { Cause, Effect, Exit, Stream } from "effect"
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
@@ -293,26 +295,25 @@ async function shellEnv(ctx: Tool.Context, cwd: string) {
   }
 }
 
-function launch(shell: string, name: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
+function cmd(shell: string, name: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
   if (process.platform === "win32" && PS.has(name)) {
-    return spawn(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], {
+    return ChildProcess.make(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], {
       cwd,
       env,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdin: "ignore",
       detached: false,
-      windowsHide: true,
     })
   }
 
-  return spawn(command, {
+  return ChildProcess.make(command, [], {
     shell,
     cwd,
     env,
-    stdio: ["ignore", "pipe", "pipe"],
+    stdin: "ignore",
     detached: process.platform !== "win32",
-    windowsHide: process.platform === "win32",
   })
 }
+
 
 async function run(
   input: {
@@ -326,8 +327,9 @@ async function run(
   },
   ctx: Tool.Context,
 ) {
-  const proc = launch(input.shell, input.name, input.command, input.cwd, input.env)
   let output = ""
+  let expired = false
+  let aborted = false
 
   ctx.metadata({
     metadata: {
@@ -336,76 +338,78 @@ async function run(
     },
   })
 
-  const append = (chunk: Buffer) => {
-    output += chunk.toString()
-    ctx.metadata({
-      metadata: {
-        output: preview(output),
-        description: input.description,
-      },
-    })
+  const exit = await CrossSpawnSpawner.runPromiseExit((spawner) =>
+    Effect.gen(function* () {
+      const handle = yield* spawner.spawn(
+        cmd(input.shell, input.name, input.command, input.cwd, input.env),
+      )
+
+      yield* Effect.forkScoped(
+        Stream.runForEach(
+          Stream.decodeText(handle.all),
+          (chunk) =>
+            Effect.sync(() => {
+              output += chunk
+              ctx.metadata({
+                metadata: {
+                  output: preview(output),
+                  description: input.description,
+                },
+              })
+            }),
+        ),
+      )
+
+      const abort = Effect.callback<void>((resume) => {
+        if (ctx.abort.aborted) return resume(Effect.void)
+        const handler = () => resume(Effect.void)
+        ctx.abort.addEventListener("abort", handler, { once: true })
+        return Effect.sync(() => ctx.abort.removeEventListener("abort", handler))
+      })
+
+      const timeout = Effect.sleep(`${input.timeout + 100} millis`)
+
+      const exit = yield* Effect.raceAll([
+        handle.exitCode.pipe(Effect.map((code) => ({ kind: "exit" as const, code }))),
+        abort.pipe(Effect.map(() => ({ kind: "abort" as const, code: null }))),
+        timeout.pipe(Effect.map(() => ({ kind: "timeout" as const, code: null }))),
+      ])
+
+      if (exit.kind === "abort") {
+        aborted = true
+        yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
+      }
+      if (exit.kind === "timeout") {
+        expired = true
+        yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
+      }
+
+      return exit.kind === "exit" ? exit.code : null
+    }).pipe(
+      Effect.scoped,
+      Effect.orDie,
+    ),
+  )
+
+  let code: number | null = null
+  if (Exit.isSuccess(exit)) {
+    code = exit.value
+  } else if (!Cause.hasInterruptsOnly(exit.cause)) {
+    throw Cause.squash(exit.cause)
   }
 
-  proc.stdout?.on("data", append)
-  proc.stderr?.on("data", append)
-
-  let expired = false
-  let aborted = false
-  let exited = false
-
-  const kill = () => Shell.killTree(proc, { exited: () => exited })
-
-  if (ctx.abort.aborted) {
-    aborted = true
-    await kill()
-  }
-
-  const abort = () => {
-    aborted = true
-    void kill()
-  }
-
-  ctx.abort.addEventListener("abort", abort, { once: true })
-  const timer = setTimeout(() => {
-    expired = true
-    void kill()
-  }, input.timeout + 100)
-
-  await new Promise<void>((resolve, reject) => {
-    const cleanup = () => {
-      clearTimeout(timer)
-      ctx.abort.removeEventListener("abort", abort)
-    }
-
-    proc.once("exit", () => {
-      exited = true
-    })
-
-    proc.once("close", () => {
-      exited = true
-      cleanup()
-      resolve()
-    })
-
-    proc.once("error", (error) => {
-      exited = true
-      cleanup()
-      reject(error)
-    })
-  })
-
-  const metadata: string[] = []
-  if (expired) metadata.push(`bash tool terminated command after exceeding timeout ${input.timeout} ms`)
-  if (aborted) metadata.push("User aborted the command")
-  if (metadata.length > 0) {
-    output += "\n\n<bash_metadata>\n" + metadata.join("\n") + "\n</bash_metadata>"
+  const meta: string[] = []
+  if (expired) meta.push(`bash tool terminated command after exceeding timeout ${input.timeout} ms`)
+  if (aborted) meta.push("User aborted the command")
+  if (meta.length > 0) {
+    output += "\n\n<bash_metadata>\n" + meta.join("\n") + "\n</bash_metadata>"
   }
 
   return {
     title: input.description,
     metadata: {
       output: preview(output),
-      exit: proc.exitCode,
+      exit: code,
       description: input.description,
     },
     output,
