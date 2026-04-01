@@ -564,67 +564,7 @@
       "autoincrement": false,
       "default": null,
       "generated": null,
-      "name": "shared_contracts",
-      "entityType": "columns",
-      "table": "plan"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "conventions",
-      "entityType": "columns",
-      "table": "plan"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
       "name": "feedback",
-      "entityType": "columns",
-      "table": "plan"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "integration_branch",
-      "entityType": "columns",
-      "table": "plan"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "publish_mode",
-      "entityType": "columns",
-      "table": "plan"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "approval_mode",
-      "entityType": "columns",
-      "table": "plan"
-    },
-    {
-      "type": "text",
-      "notNull": false,
-      "autoincrement": false,
-      "default": null,
-      "generated": null,
-      "name": "execution_mode",
       "entityType": "columns",
       "table": "plan"
     },

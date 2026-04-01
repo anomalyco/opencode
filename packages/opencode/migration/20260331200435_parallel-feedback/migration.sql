@@ -16,11 +16,5 @@ CREATE TABLE `parallel_metrics` (
 	CONSTRAINT `fk_parallel_metrics_plan_id_plan_id_fk` FOREIGN KEY (`plan_id`) REFERENCES `plan`(`id`) ON DELETE CASCADE
 );
 --> statement-breakpoint
-ALTER TABLE `plan` ADD `shared_contracts` text;--> statement-breakpoint
-ALTER TABLE `plan` ADD `conventions` text;--> statement-breakpoint
 ALTER TABLE `plan` ADD `feedback` text;--> statement-breakpoint
-ALTER TABLE `plan` ADD `integration_branch` text;--> statement-breakpoint
-ALTER TABLE `plan` ADD `publish_mode` text;--> statement-breakpoint
-ALTER TABLE `plan` ADD `approval_mode` text;--> statement-breakpoint
-ALTER TABLE `plan` ADD `execution_mode` text;--> statement-breakpoint
 CREATE INDEX `parallel_metrics_outcome_idx` ON `parallel_metrics` (`plan_outcome`);

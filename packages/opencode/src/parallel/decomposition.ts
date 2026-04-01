@@ -26,7 +26,7 @@ Rules:
 6. Subtask descriptions should be detailed enough for an agent to execute without ambiguity.
 7. Use the dependencies field to specify when one subtask must complete before another can start. Reference dependencies by the 0-based index of the subtask they depend on (e.g., 0, 1, 2).
 8. Avoid circular dependencies - the dependency graph must be acyclic.
-9. If subtasks are truly independent, leave dependencies empty.
+9. If subtasks are truly independent, leave dependencies empty. PREFER zero-dependency subtasks — only add a dependency when a subtask literally cannot start without the output of another (e.g., needs a type defined by another subtask).
 10. When subtasks share an interface boundary (API producer + consumer, shared types, config contracts), define SHARED CONTRACTS with exact type definitions that both sides must conform to. This prevents mismatches when workers implement independently.
 11. Identify NEGATIVE CONSTRAINTS — things each subtask must NOT do (forbidden libraries, services, patterns). Attach relevant constraints to each subtask.
 12. Identify PROJECT CONVENTIONS all workers must follow: serialization format, auth mechanism, timestamp format, naming conventions. Omit if the task is simple enough not to need cross-cutting conventions.
@@ -62,8 +62,12 @@ Output format: a JSON object with "subtasks" array, optional "sharedContracts" a
           name: z.string().describe("Contract name, e.g., 'OrganizeEndpoint API Contract'"),
           description: z.string().describe("What this contract covers"),
           types: z.string().describe("Exact type definitions both sides must use"),
-          producerIndices: z.array(z.number().int().nonnegative()).describe("0-based subtask indices that implement this"),
-          consumerIndices: z.array(z.number().int().nonnegative()).describe("0-based subtask indices that consume this"),
+          producerIndices: z
+            .array(z.number().int().nonnegative())
+            .describe("0-based subtask indices that implement this"),
+          consumerIndices: z
+            .array(z.number().int().nonnegative())
+            .describe("0-based subtask indices that consume this"),
         }),
       )
       .optional()
@@ -434,6 +438,32 @@ Output format: a JSON object with "subtasks" array, optional "sharedContracts" a
     return { order, levels }
   }
 
+  function transitiveReduce(deps: number[][]): number[][] {
+    const n = deps.length
+    const closure = new Array<Set<number>>(n)
+    for (let i = 0; i < n; i++) closure[i] = new Set(deps[i])
+    for (let k = 0; k < n; k++) {
+      for (let i = 0; i < n; i++) {
+        if (!closure[i].has(k)) continue
+        for (const j of closure[k]) closure[i].add(j)
+      }
+    }
+    return deps.map((direct) => {
+      const essential = new Set<number>()
+      for (const d of direct) {
+        let redundant = false
+        for (const other of direct) {
+          if (other !== d && closure[other].has(d)) {
+            redundant = true
+            break
+          }
+        }
+        if (!redundant) essential.add(d)
+      }
+      return Array.from(essential)
+    })
+  }
+
   export function assignSubtaskIDs<
     T extends {
       title: string
@@ -447,12 +477,20 @@ Output format: a JSON object with "subtasks" array, optional "sharedContracts" a
     const n = subtasks.length
     const ids = Array.from({ length: n }, () => SubtaskID.ascending())
 
+    const rawDeps = subtasks.map((st) => st.dependencies)
+    const reduced = transitiveReduce(rawDeps)
+
+    const removed = rawDeps.reduce((sum, deps, i) => sum + deps.length - reduced[i].length, 0)
+    if (removed > 0) {
+      log.info("transitive reduction removed redundant dependencies", { removed })
+    }
+
     return subtasks.map((st, i) => ({
       id: ids[i],
       title: st.title,
       description: st.description,
       fileScope: st.fileScope,
-      dependencies: st.dependencies.map((depIdx) => ids[depIdx]),
+      dependencies: reduced[i].map((depIdx) => ids[depIdx]),
       constraints: st.constraints,
       kind: st.kind,
     }))
