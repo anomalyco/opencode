@@ -279,8 +279,8 @@ export namespace Plugin {
         Output = Parameters<Required<Hooks>[Name]>[1],
       >(name: Name, input: Input, output: Output) {
         if (!name) return output
-        const state = yield* InstanceState.get(state)
-        for (const hook of state.hooks) {
+        const s = yield* InstanceState.get(state)
+        for (const hook of s.hooks) {
           const fn = hook[name] as any
           if (!fn) continue
           yield* Effect.promise(async () => fn(input, output))
@@ -289,8 +289,8 @@ export namespace Plugin {
       })
 
       const list = Effect.fn("Plugin.list")(function* () {
-        const state = yield* InstanceState.get(state)
-        return state.hooks
+        const s = yield* InstanceState.get(state)
+        return s.hooks
       })
 
       const init = Effect.fn("Plugin.init")(function* () {
