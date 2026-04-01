@@ -2,9 +2,9 @@ import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import type { Model } from "@opencode-ai/sdk/v2"
 import { Installation } from "@/installation"
 import { iife } from "@/util/iife"
-import { Log } from "../util/log"
+import { Log } from "../../util/log"
 import { setTimeout as sleep } from "node:timers/promises"
-import { CopilotModels } from "./github-copilot/models"
+import { CopilotModels } from "./models"
 
 const log = Log.create({ service: "plugin.copilot" })
 
