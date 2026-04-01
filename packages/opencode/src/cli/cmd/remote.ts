@@ -7,6 +7,26 @@ type Input = {
   fetch?: typeof globalThis.fetch
 }
 
+type TargetInput = {
+  sdk: OpencodeClient
+  directory?: string
+  continue?: boolean
+  sessionID?: string
+  fork?: boolean
+}
+
+type Target = {
+  baseID?: string
+}
+
+function suffix(dir?: string) {
+  return dir ? ` for ${dir}` : ""
+}
+
+function message(error: unknown) {
+  return error instanceof Error ? error.message : "request failed"
+}
+
 export async function preflightRemote(input: Input): Promise<OpencodeClient> {
   const sdk = createOpencodeClient({
     baseUrl: input.url,
@@ -28,4 +48,23 @@ export async function preflightRemote(input: Input): Promise<OpencodeClient> {
     const msg = error instanceof Error ? error.message : "request failed"
     throw new Error(`Failed to validate remote server at ${input.url}: ${msg}`)
   }
+}
+
+export async function resolveRemoteTarget(input: TargetInput): Promise<Target> {
+  if (!input.continue && !input.sessionID) return {}
+
+  if (input.sessionID) {
+    await input.sdk.session.get({ sessionID: input.sessionID }, { throwOnError: true }).catch(() => {
+      const kind = input.fork ? "Remote fork base session" : "Remote session"
+      throw new Error(`${kind} "${input.sessionID}" not found${suffix(input.directory)}`)
+    })
+    return { baseID: input.sessionID }
+  }
+
+  const result = await input.sdk.session.list({ roots: true }, { throwOnError: true }).catch((error) => {
+    throw new Error(`Failed to resolve remote continue target${suffix(input.directory)}: ${message(error)}`)
+  })
+  const baseID = result.data?.find((item) => !item.parentID)?.id
+  if (!baseID) throw new Error(`No remote session found to continue${suffix(input.directory)}`)
+  return { baseID }
 }
