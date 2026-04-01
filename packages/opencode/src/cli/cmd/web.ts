@@ -39,7 +39,7 @@ export const WebCommand = cmd({
     const opts = await resolveNetworkOptions(args)
     const server = Server.listen(opts)
     UI.empty()
-    UI.println(UI.logo("  "))
+    UI.println(UI.f5logo("  "))
     UI.empty()
 
     if (opts.hostname === "0.0.0.0") {

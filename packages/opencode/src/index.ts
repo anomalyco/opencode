@@ -130,7 +130,7 @@ const cli = yargs(hideBin(process.argv))
       process.stderr.write("Database migration complete." + EOL)
     }
   })
-  .usage("\n" + UI.logo())
+  .usage("\n" + UI.f5logo())
   .completion("completion", "generate shell completion script")
   .command(AcpCommand)
   .command(McpCommand)

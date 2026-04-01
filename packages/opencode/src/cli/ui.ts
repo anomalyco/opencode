@@ -3,6 +3,59 @@ import { EOL } from "os"
 import { NamedError } from "@opencode-ai/util/error"
 import { logo as glyphs } from "./logo"
 
+const F5_LOGO_LINES = [
+  "         ──────────────────────────",
+  "                   ________",
+  "              (▒▒▒▒▓▓▓▓▓▓▓▓▒▒▒▒)",
+  "         (▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒)",
+  "      (▒▒▓▓▓▓██████████▓▓▓▓█████████████)",
+  "    (▒▓▓▓▓██████▒▒▒▒▒███▓▓██████████████▒)",
+  "   (▒▓▓▓▓██████▒▓▓▓▓▓▒▒▒▓██▒▒▒▒▒▒▒▒▒▒▒▒▒▓▒)",
+  "  (▒▓▓▓▓▓██████▓▓▓▓▓▓▓▓▓██▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒)",
+  " (▒▓▓███████████████▓▓▓▓█████████████▓▓▓▓▓▓▒)",
+  "(▒▓▓▓▒▒▒███████▒▒▒▒▒▓▓▓████████████████▓▓▓▓▓▒)",
+  "|▒▓▓▓▓▓▓▒██████▓▓▓▓▓▓▓████████████████████▓▓▒|",
+  "|▒▓▓▓▓▓▓▓██████▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒██████████▓▒|",
+  "(▒▓▓▓▓▓▓▓██████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒████████▒▒)",
+  " (▒▓▓▓▓▓▓██████▓▓▓▓▓▓▓███▓▓▓▓▓▓▓▓▓▓▒▒▒████▒▒)",
+  "  (▒▓▓▓▓▓██████▓▓▓▓▓▓█████▓▓▓▓▓▓▓▓▓▓▓▓███▒▒)",
+  "   (▒▒██████████▓▓▓▓▓▒██████▓▓▓▓▓▓▓▓███▒▒▒)",
+  "    (▒▒▒▒▒██████████▓▓▒▒█████████████▒▒▓▒)",
+  "      (▒▓▓▒▒▒▒▒▒▒▒▒▒▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▓▒)",
+  "         (▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒)",
+  "              (▒▒▒▒▓▓▓▓▓▓▓▓▒▒▒▒)",
+  "         ──────────────────────────",
+]
+
+const ANSI_RED = "\x1b[38;2;228;0;43m"
+const ANSI_RED_DIM = "\x1b[38;2;167;0;32m"
+const ANSI_RED_OUTLINE = "\x1b[38;2;90;16;32m"
+const ANSI_RESET = "\x1b[0m"
+
+function renderF5Line(line: string): string {
+  const parts: string[] = []
+  let i = 0
+  while (i < line.length) {
+    const ch = line[i]!
+    let j = i + 1
+    while (j < line.length && line[j] === ch) j++
+    const len = j - i
+    if (ch === "▓") {
+      parts.push(ANSI_RED + "█".repeat(len) + ANSI_RESET)
+    } else if (ch === "█") {
+      parts.push("█".repeat(len))
+    } else if (ch === "▒") {
+      parts.push(ANSI_RED_DIM + "█".repeat(len) + ANSI_RESET)
+    } else if ("()|_─".includes(ch)) {
+      parts.push(ANSI_RED_OUTLINE + line.slice(i, j) + ANSI_RESET)
+    } else {
+      parts.push(line.slice(i, j))
+    }
+    i = j
+  }
+  return parts.join("")
+}
+
 export namespace UI {
   export const CancelledError = NamedError.create("UICancelledError", z.void())
 
@@ -38,6 +91,10 @@ export namespace UI {
     if (blank) return
     println("" + Style.TEXT_NORMAL)
     blank = true
+  }
+
+  export function f5logo(pad?: string) {
+    return F5_LOGO_LINES.map((line) => (pad ?? "") + renderF5Line(line)).join(EOL)
   }
 
   export function logo(pad?: string) {

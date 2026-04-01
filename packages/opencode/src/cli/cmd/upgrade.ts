@@ -21,7 +21,7 @@ export const UpgradeCommand = {
   },
   handler: async (args: { target?: string; method?: string }) => {
     UI.empty()
-    UI.println(UI.logo("  "))
+    UI.println(UI.f5logo("  "))
     UI.empty()
     prompts.intro("Upgrade")
     const detectedMethod = await Installation.method()

@@ -3,6 +3,7 @@ import { For, type JSX } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 
 const F5_LOGO = [
+  "         ──────────────────────────",
   "                   ________",
   "              (▒▒▒▒▓▓▓▓▓▓▓▓▒▒▒▒)",
   "         (▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒)",
@@ -22,6 +23,7 @@ const F5_LOGO = [
   "      (▒▓▓▒▒▒▒▒▒▒▒▒▒▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▓▒)",
   "         (▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒)",
   "              (▒▒▒▒▓▓▓▓▓▓▓▓▒▒▒▒)",
+  "         ──────────────────────────",
 ]
 
 const RED = RGBA.fromHex("#e4002b")
@@ -45,7 +47,7 @@ export function Logo() {
         spans.push(<span style={{ fg: theme.text }}>{"█".repeat(len)}</span>)
       } else if (ch === "▒") {
         spans.push(<span style={{ fg: RED_DIM }}>{"█".repeat(len)}</span>)
-      } else if ("()|_".includes(ch)) {
+      } else if ("()|_─".includes(ch)) {
         spans.push(<span style={{ fg: RED_OUTLINE }}>{line.slice(i, j)}</span>)
       } else {
         spans.push(<span>{line.slice(i, j)}</span>)
