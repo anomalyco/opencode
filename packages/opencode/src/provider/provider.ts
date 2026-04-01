@@ -961,11 +961,12 @@ export namespace Provider {
     }
   }
 
-  const layer: Layer.Layer<Service, never, Config.Service | Auth.Service> = Layer.effect(
+  const layer: Layer.Layer<Service, never, Config.Service | Auth.Service | Plugin.Service> = Layer.effect(
     Service,
     Effect.gen(function* () {
       const config = yield* Config.Service
       const auth = yield* Auth.Service
+      const plugin = yield* Plugin.Service
 
       const state = yield* InstanceState.make<State>(() =>
         Effect.gen(function* () {
@@ -1128,7 +1129,7 @@ export namespace Provider {
             }
           }
 
-          const plugins = yield* Effect.promise(() => Plugin.list())
+          const plugins = yield* plugin.list()
           for (const plugin of plugins) {
             if (!plugin.auth) continue
             const providerID = ProviderID.make(plugin.auth.provider)
@@ -1541,7 +1542,9 @@ export namespace Provider {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(Auth.defaultLayer))
+  export const defaultLayer = Layer.suspend(() =>
+    layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(Auth.defaultLayer), Layer.provide(Plugin.defaultLayer)),
+  )
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
