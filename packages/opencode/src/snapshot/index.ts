@@ -338,12 +338,12 @@ export namespace Snapshot {
                         continue
                       }
 
-                      const paths = fileChunk.map((file) => ({
+                      const chunkPaths = fileChunk.map((file) => ({
                         rel: path.relative(state.worktree, file).replaceAll("\\", "/"),
                         file,
                       }))
                       const tree = yield* git(
-                        [...core, ...args(["ls-tree", "--name-only", hash, "--", ...paths.map((item) => item.rel)])],
+                        [...core, ...args(["ls-tree", "--name-only", hash, "--", ...chunkPaths.map((item) => item.rel)])],
                         {
                           cwd: state.worktree,
                         },
@@ -359,7 +359,7 @@ export namespace Snapshot {
                       const snapshotPaths = new Set(tree.text.trim().split("\n").map((item) => item.trim()).filter(Boolean))
                       const filesToCheckout: string[] = []
                       const missingFiles: string[] = []
-                      for (const item of paths) {
+                      for (const item of chunkPaths) {
                         if (snapshotPaths.has(item.rel)) {
                           filesToCheckout.push(item.file)
                           continue
