@@ -331,9 +331,8 @@ export namespace Snapshot {
                     yield* remove(file)
                   })
 
-                  // Preserve the old first-file-wins behavior, then batch the selected files by snapshot hash.
                   for (const [hash, filesByHash] of groupByHash) {
-                    // Run batched git commands in 100-file chunks to avoid oversized argv calls.
+                    // run batched git commands in 100-file chunks to avoid oversized argv calls.
                     for (let i = 0; i < filesByHash.length; i += 100) {
                       const fileChunk = filesByHash.slice(i, i + 100)
                       if (fileChunk.length === 1) {
@@ -360,7 +359,6 @@ export namespace Snapshot {
                         continue
                       }
 
-                      // Only checkout files that exist in this snapshot; files missing from the tree should be removed.
                       const snapshotPaths = new Set(tree.text.trim().split("\n").map((item) => item.trim()).filter(Boolean))
                       const filesToCheckout: string[] = []
                       const missingFiles: string[] = []
