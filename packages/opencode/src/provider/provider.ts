@@ -681,6 +681,9 @@ export namespace Provider {
         autoload: !!apiKey,
         options: {
           apiKey,
+          headers: {
+            "User-Agent": `opencode/${Installation.VERSION} cloudflare-workers-ai (${os.platform()} ${os.release()}; ${os.arch()})`,
+          },
         },
         async getModel(sdk: any, modelID: string) {
           return sdk.languageModel(modelID)
@@ -732,6 +735,9 @@ export namespace Provider {
         cacheKey: input.options?.cacheKey,
         skipCache: input.options?.skipCache,
         collectLog: input.options?.collectLog,
+        headers: {
+          "User-Agent": `opencode/${Installation.VERSION} cloudflare-ai-gateway (${os.platform()} ${os.release()}; ${os.arch()})`,
+        },
       }
 
       const aigateway = createAiGateway({
