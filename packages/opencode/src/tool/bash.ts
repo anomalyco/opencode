@@ -17,13 +17,8 @@ import { Shell } from "@/shell/shell"
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncate"
 import { Plugin } from "@/plugin"
-import * as Effect from "effect/Effect"
-import * as ManagedRuntime from "effect/ManagedRuntime"
-import * as Stream from "effect/Stream"
-import * as Cause from "effect/Cause"
-import * as Exit from "effect/Exit"
-import * as ChildProcess from "effect/unstable/process/ChildProcess"
-import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
+import { Cause, Effect, Exit, Stream } from "effect"
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 
 const MAX_METADATA_LENGTH = 30_000
@@ -310,7 +305,8 @@ function cmd(shell: string, name: string, command: string, cwd: string, env: Nod
     })
   }
 
-  return ChildProcess.make(shell, ["-c", command], {
+  return ChildProcess.make(command, [], {
+    shell,
     cwd,
     env,
     stdin: "ignore",
@@ -318,7 +314,6 @@ function cmd(shell: string, name: string, command: string, cwd: string, env: Nod
   })
 }
 
-const runtime = lazy(() => ManagedRuntime.make(CrossSpawnSpawner.defaultLayer))
 
 async function run(
   input: {
@@ -343,59 +338,58 @@ async function run(
     },
   })
 
-  const effect = Effect.gen(function* () {
-    const spawner = yield* ChildProcessSpawner
-    const handle = yield* spawner.spawn(
-      cmd(input.shell, input.name, input.command, input.cwd, input.env),
-    )
+  const exit = await CrossSpawnSpawner.runPromiseExit((spawner) =>
+    Effect.gen(function* () {
+      const handle = yield* spawner.spawn(
+        cmd(input.shell, input.name, input.command, input.cwd, input.env),
+      )
 
-    yield* Effect.forkScoped(
-      Stream.runForEach(
-        Stream.decodeText(handle.all),
-        (chunk) =>
-          Effect.sync(() => {
-            output += chunk
-            ctx.metadata({
-              metadata: {
-                output: preview(output),
-                description: input.description,
-              },
-            })
-          }),
-      ),
-    )
+      yield* Effect.forkScoped(
+        Stream.runForEach(
+          Stream.decodeText(handle.all),
+          (chunk) =>
+            Effect.sync(() => {
+              output += chunk
+              ctx.metadata({
+                metadata: {
+                  output: preview(output),
+                  description: input.description,
+                },
+              })
+            }),
+        ),
+      )
 
-    const abort = Effect.callback<void>((resume) => {
-      if (ctx.abort.aborted) return resume(Effect.void)
-      const handler = () => resume(Effect.void)
-      ctx.abort.addEventListener("abort", handler, { once: true })
-      return Effect.sync(() => ctx.abort.removeEventListener("abort", handler))
-    })
+      const abort = Effect.callback<void>((resume) => {
+        if (ctx.abort.aborted) return resume(Effect.void)
+        const handler = () => resume(Effect.void)
+        ctx.abort.addEventListener("abort", handler, { once: true })
+        return Effect.sync(() => ctx.abort.removeEventListener("abort", handler))
+      })
 
-    const timeout = Effect.sleep(`${input.timeout + 100} millis`)
+      const timeout = Effect.sleep(`${input.timeout + 100} millis`)
 
-    const exit = yield* Effect.raceAll([
-      handle.exitCode.pipe(Effect.map((code) => ({ kind: "exit" as const, code }))),
-      abort.pipe(Effect.map(() => ({ kind: "abort" as const, code: null }))),
-      timeout.pipe(Effect.map(() => ({ kind: "timeout" as const, code: null }))),
-    ])
+      const exit = yield* Effect.raceAll([
+        handle.exitCode.pipe(Effect.map((code) => ({ kind: "exit" as const, code }))),
+        abort.pipe(Effect.map(() => ({ kind: "abort" as const, code: null }))),
+        timeout.pipe(Effect.map(() => ({ kind: "timeout" as const, code: null }))),
+      ])
 
-    if (exit.kind === "abort") {
-      aborted = true
-      yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
-    }
-    if (exit.kind === "timeout") {
-      expired = true
-      yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
-    }
+      if (exit.kind === "abort") {
+        aborted = true
+        yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
+      }
+      if (exit.kind === "timeout") {
+        expired = true
+        yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
+      }
 
-    return exit.kind === "exit" ? exit.code : null
-  }).pipe(
-    Effect.scoped,
-    Effect.orDie,
+      return exit.kind === "exit" ? exit.code : null
+    }).pipe(
+      Effect.scoped,
+      Effect.orDie,
+    ),
   )
-
-  const exit = await runtime().runPromiseExit(effect)
 
   let code: number | null = null
   if (Exit.isSuccess(exit)) {
