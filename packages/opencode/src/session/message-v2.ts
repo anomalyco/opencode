@@ -208,6 +208,12 @@ export namespace MessageV2 {
     type: z.literal("compaction"),
     auto: z.boolean(),
     overflow: z.boolean().optional(),
+    retry: z
+      .object({
+        attempt: z.number().int(),
+        strategy: z.enum(["full", "compact-tools", "recent-turns"]),
+      })
+      .optional(),
   }).meta({
     ref: "CompactionPart",
   })

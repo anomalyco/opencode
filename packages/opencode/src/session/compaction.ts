@@ -21,8 +21,40 @@ import { InstanceState } from "@/effect/instance-state"
 import { isOverflow as overflow } from "./overflow"
 import { SessionCompactionPolicy } from "./compaction-policy"
 
-export namespace SessionCompaction {
+  export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
+
+  const COMPACTION_MAX_RETRIES = 2
+  const PTL_KEEP_RECENT_TURNS = 5
+
+  // Marks all completed tool parts as compacted and strips attachments.
+  // Operates on cloned messages — originals are never mutated.
+  const compactTools = (msgs: MessageV2.WithParts[]) =>
+    msgs.map((msg) => ({
+      ...msg,
+      parts: msg.parts.map((part) =>
+        part.type === "tool" && part.state.status === "completed" && !part.state.time.compacted
+          ? {
+              ...part,
+              state: {
+                ...part.state,
+                time: { ...part.state.time, compacted: Date.now() },
+                attachments: [],
+              },
+            }
+          : part,
+      ),
+    }))
+
+  // Keeps only the last N user turns worth of messages.
+  const keepRecent = (msgs: MessageV2.WithParts[], turns: number) => {
+    let seen = 0
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].info.role === "user") seen++
+      if (seen >= turns) return msgs.slice(i)
+    }
+    return msgs
+  }
 
   export const Event = {
     Compacted: BusEvent.define(
@@ -219,73 +251,115 @@ When constructing the summary, try to stick to this template:
 ---`
 
         const prompt = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
-        const msgs = structuredClone(messages)
-        yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
-        const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, { stripMedia: true })
         const ctx = yield* InstanceState.context
-        const msg: MessageV2.Assistant = {
-          id: MessageID.ascending(),
-          role: "assistant",
-          parentID: input.parentID,
-          sessionID: input.sessionID,
-          mode: "compaction",
-          agent: "compaction",
-          variant: userMessage.variant,
-          summary: true,
-          path: {
-            cwd: ctx.directory,
-            root: ctx.worktree,
-          },
-          cost: 0,
-          tokens: {
-            output: 0,
-            input: 0,
-            reasoning: 0,
-            cache: { read: 0, write: 0 },
-          },
-          modelID: model.id,
-          providerID: model.providerID,
-          time: {
-            created: Date.now(),
-          },
-        }
-        yield* session.updateMessage(msg)
-        const processor = yield* processors.create({
-          assistantMessage: msg,
-          sessionID: input.sessionID,
-          model,
-        })
-        const result = yield* processor
-          .process({
-            user: userMessage,
-            agent,
+        const cfg = yield* config.get()
+
+        const maxRetries = (cfg.compaction?.max_retries as number | undefined) ?? COMPACTION_MAX_RETRIES
+        let exhausted = true
+        let finalResult: "continue" | "stop" = "stop"
+        let processor: SessionProcessor.Handle | undefined
+        let strategy: "full" | "compact-tools" | "recent-turns" = "full"
+
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          const attemptMessages =
+            attempt === 0 ? messages
+            : attempt === 1 ? compactTools(messages)
+            : keepRecent(compactTools(messages), PTL_KEEP_RECENT_TURNS)
+
+          strategy = attempt === 0 ? "full" : attempt === 1 ? "compact-tools" : "recent-turns"
+
+          const clonedMsgs = structuredClone(attemptMessages)
+          yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: clonedMsgs })
+          const modelMessages = yield* Effect.promise(() =>
+            MessageV2.toModelMessages(clonedMsgs, model, { stripMedia: true })
+          )
+
+          const summary: MessageV2.Assistant = {
+            id: MessageID.ascending(),
+            role: "assistant",
+            parentID: input.parentID,
             sessionID: input.sessionID,
-            tools: {},
-            system: [],
-            messages: [
-              ...modelMessages,
-              {
-                role: "user",
-                content: [{ type: "text", text: prompt }],
-              },
-            ],
+            mode: "compaction",
+            agent: "compaction",
+            variant: userMessage.variant,
+            summary: true,
+            path: { cwd: ctx.directory, root: ctx.worktree },
+            cost: 0,
+            tokens: { output: 0, input: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            modelID: model.id,
+            providerID: model.providerID,
+            time: { created: Date.now() },
+          }
+          yield* session.updateMessage(summary)
+
+          const handle = yield* processors.create({
+            assistantMessage: summary,
+            sessionID: input.sessionID,
             model,
           })
-          .pipe(Effect.onInterrupt(() => processor.abort()))
 
-        if (result === "compact") {
+          const result = yield* handle
+            .process({
+              user: userMessage,
+              agent,
+              sessionID: input.sessionID,
+              tools: {},
+              system: [],
+              messages: [
+                ...modelMessages,
+                { role: "user", content: [{ type: "text", text: prompt }] },
+              ],
+              model,
+            })
+            .pipe(Effect.onInterrupt(() => handle.abort()))
+
+          if (result === "compact") {
+            yield* session.removeMessage({ sessionID: input.sessionID, messageID: summary.id })
+            log.info("ptl retry", { attempt, strategy })
+            continue
+          }
+
+          // Success or non-PTL error
+          exhausted = false
+          processor = handle
+          if (handle.message.error) {
+            if (input.auto) yield* policy.failAutoCompact(input.sessionID)
+            finalResult = "stop"
+            break
+          }
+
+          finalResult = result === "continue" ? "continue" : "stop"
+          break
+        }
+
+        // All retries exhausted — create final error summary
+        if (exhausted) {
           if (input.auto) yield* policy.failAutoCompact(input.sessionID)
-          processor.message.error = new MessageV2.ContextOverflowError({
-            message: replay
-              ? "Conversation history too large to compact - exceeds model context limit"
-              : "Session too large to compact - context exceeds model limit even after stripping media",
-          }).toObject()
-          processor.message.finish = "error"
-          yield* session.updateMessage(processor.message)
+          const errorSummary: MessageV2.Assistant = {
+            id: MessageID.ascending(),
+            role: "assistant",
+            parentID: input.parentID,
+            sessionID: input.sessionID,
+            mode: "compaction",
+            agent: "compaction",
+            variant: userMessage.variant,
+            summary: true,
+            path: { cwd: ctx.directory, root: ctx.worktree },
+            cost: 0,
+            tokens: { output: 0, input: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            modelID: model.id,
+            providerID: model.providerID,
+            time: { created: Date.now() },
+            error: new MessageV2.ContextOverflowError({
+              message: "Session too large to compact — exhausted all retry strategies",
+            }).toObject(),
+            finish: "error",
+          }
+          yield* session.updateMessage(errorSummary)
           return "stop"
         }
 
-        if (result === "continue" && input.auto) {
+        if (finalResult === "continue" && input.auto) {
           if (replay) {
             const original = replay.info
             const replayMsg = yield* session.updateMessage({
@@ -344,15 +418,15 @@ When constructing the summary, try to stick to this template:
           }
         }
 
-        if (processor.message.error) {
+        if (processor?.message.error) {
           if (input.auto) yield* policy.failAutoCompact(input.sessionID)
           return "stop"
         }
-        if (result === "continue") {
+        if (finalResult === "continue") {
           if (input.auto) yield* policy.resetAutoCompact(input.sessionID)
           yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
         }
-        return result
+        return finalResult
       })
 
       const create = Effect.fn("SessionCompaction.create")(function* (input: {

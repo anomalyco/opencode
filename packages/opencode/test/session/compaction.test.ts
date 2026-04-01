@@ -165,6 +165,38 @@ function layer(result: "continue" | "compact") {
   )
 }
 
+function sequenceLayer(results: ("continue" | "compact")[]) {
+  let idx = 0
+  return Layer.succeed(
+    SessionProcessorModule.SessionProcessor.Service,
+    SessionProcessorModule.SessionProcessor.Service.of({
+      create: Effect.fn("TestSessionProcessor.create")((input) => {
+        const r = results[Math.min(idx++, results.length - 1)]
+        return Effect.succeed(fake(input, r))
+      }),
+    }),
+  )
+}
+
+function sequenceRuntime(results: ("continue" | "compact")[], plugin = Plugin.defaultLayer, provider = ProviderTest.fake()) {
+  const bus = Bus.layer
+  return ManagedRuntime.make(
+    Layer.mergeAll(
+      SessionCompaction.layer.pipe(Layer.provide(SessionCompactionPolicy.defaultLayer)),
+      SessionCompactionPolicy.defaultLayer,
+      bus,
+    ).pipe(
+      Layer.provide(provider.layer),
+      Layer.provide(Session.defaultLayer),
+      Layer.provide(sequenceLayer(results)),
+      Layer.provide(Agent.defaultLayer),
+      Layer.provide(plugin),
+      Layer.provide(bus),
+      Layer.provide(Config.defaultLayer),
+    ),
+  )
+}
+
 function runtime(result: "continue" | "compact", plugin = Plugin.defaultLayer, provider = ProviderTest.fake()) {
   const bus = Bus.layer
   return ManagedRuntime.make(
@@ -1348,6 +1380,124 @@ describe("session.compaction.breaker", () => {
             ),
           )
           expect(result).toBe("stop")
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+})
+
+describe("session.compaction.retry", () => {
+  test("retries with compacted tools on first PTL", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const msg = await user(session.id, "hello")
+        const rt = sequenceRuntime(["compact", "continue"], Plugin.defaultLayer, wide())
+        try {
+          const msgs = await Session.messages({ sessionID: session.id })
+          const result = await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: msg.id,
+                messages: msgs,
+                sessionID: session.id,
+                auto: false,
+              }),
+            ),
+          )
+
+          const all = await Session.messages({ sessionID: session.id })
+          const summaries = all.filter((m) => m.info.role === "assistant" && m.info.summary)
+
+          expect(result).toBe("continue")
+          // First attempt summary removed, only the successful one remains
+          expect(summaries).toHaveLength(1)
+          expect(summaries[0].info.role).toBe("assistant")
+          if (summaries[0].info.role === "assistant") {
+            expect(summaries[0].info.finish).not.toBe("error")
+          }
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("retries with trimmed history on second PTL", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const msg = await user(session.id, "hello")
+        const rt = sequenceRuntime(["compact", "compact", "continue"], Plugin.defaultLayer, wide())
+        try {
+          const msgs = await Session.messages({ sessionID: session.id })
+          const result = await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: msg.id,
+                messages: msgs,
+                sessionID: session.id,
+                auto: false,
+              }),
+            ),
+          )
+
+          const all = await Session.messages({ sessionID: session.id })
+          const summaries = all.filter((m) => m.info.role === "assistant" && m.info.summary)
+
+          expect(result).toBe("continue")
+          // Two failed attempts cleaned up, only the successful one remains
+          expect(summaries).toHaveLength(1)
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("stops and errors after retry budget exhausted", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const msg = await user(session.id, "hello")
+        const rt = sequenceRuntime(["compact", "compact", "compact"], Plugin.defaultLayer, wide())
+        try {
+          const msgs = await Session.messages({ sessionID: session.id })
+          const result = await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: msg.id,
+                messages: msgs,
+                sessionID: session.id,
+                auto: true,
+              }),
+            ),
+          )
+
+          const all = await Session.messages({ sessionID: session.id })
+          const summaries = all.filter((m) => m.info.role === "assistant" && m.info.summary)
+
+          expect(result).toBe("stop")
+          // All 3 attempts cleaned up, only the final error summary remains
+          expect(summaries).toHaveLength(1)
+          if (summaries[0].info.role === "assistant") {
+            expect(summaries[0].info.finish).toBe("error")
+            expect(JSON.stringify(summaries[0].info.error)).toContain("exhausted all retry strategies")
+          }
+
+          // One failure counted (process call), but max_failures defaults to 3
+          const canCompact = await rt.runPromise(
+            SessionCompactionPolicy.Service.use((svc) => svc.canAutoCompact(session.id)),
+          )
+          expect(canCompact).toBe(true)
         } finally {
           await rt.dispose()
         }

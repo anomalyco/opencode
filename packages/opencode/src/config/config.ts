@@ -959,8 +959,10 @@ export namespace Config {
             .min(0)
             .optional()
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
-          max_failures: z.number().int().min(1).optional()
+          max_failures: z.number().int().min(1).optional().default(3)
             .describe("Max consecutive auto-compaction failures before stopping (default: 3)"),
+          max_retries: z.number().int().min(0).optional().default(2)
+            .describe("Max PTL retry attempts before giving up (default: 2)"),
         })
         .optional(),
       experimental: z
@@ -1391,10 +1393,10 @@ export namespace Config {
           }
 
           if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) {
-            result.compaction = { ...result.compaction, auto: false }
+            result.compaction = { ...result.compaction, auto: false, max_failures: 3, max_retries: 2 }
           }
           if (Flag.OPENCODE_DISABLE_PRUNE) {
-            result.compaction = { ...result.compaction, prune: false }
+            result.compaction = { ...result.compaction, prune: false, max_failures: 3, max_retries: 2 }
           }
 
           return {
