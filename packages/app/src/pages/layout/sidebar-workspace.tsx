@@ -304,7 +304,7 @@ const WorkspaceSessionList = (props: {
 export const SortableWorkspace = (props: {
   ctx: WorkspaceSidebarContext
   directory: string
-  project: LocalProject
+  project?: LocalProject
   sortNow: Accessor<number>
   mobile?: boolean
   popover?: boolean
@@ -319,15 +319,16 @@ export const SortableWorkspace = (props: {
     open: false,
     pendingRename: false,
   })
+  const root = createMemo(() => props.project?.worktree ?? props.ctx.currentDir())
   const slug = createMemo(() => base64Encode(props.directory))
   const sessions = createMemo(() => sortedRootSessions(workspaceStore, props.sortNow()))
   const children = createMemo(() => childMapByParent(workspaceStore.session))
-  const local = createMemo(() => props.directory === props.project.worktree)
+  const local = createMemo(() => props.directory === root())
   const active = createMemo(() => workspaceKey(props.ctx.currentDir()) === workspaceKey(props.directory))
   const workspaceValue = createMemo(() => {
     const branch = workspaceStore.vcs?.branch
     const name = branch ?? getFilename(props.directory)
-    return props.ctx.workspaceName(props.directory, props.project.id, branch) ?? name
+    return props.ctx.workspaceName(props.directory, props.project?.id, branch) ?? name
   })
   const open = createMemo(() => props.ctx.workspaceExpanded(props.directory, local()))
   const boot = createMemo(() => open() || active())
@@ -358,7 +359,7 @@ export const SortableWorkspace = (props: {
       InlineEditor={props.ctx.InlineEditor}
       renameWorkspace={props.ctx.renameWorkspace}
       setEditor={props.ctx.setEditor}
-      projectId={props.project.id}
+      projectId={props.project?.id}
     />
   )
 
@@ -427,7 +428,7 @@ export const SortableWorkspace = (props: {
                 openEditor={props.ctx.openEditor}
                 showResetWorkspaceDialog={props.ctx.showResetWorkspaceDialog}
                 showDeleteWorkspaceDialog={props.ctx.showDeleteWorkspaceDialog}
-                root={props.project.worktree}
+                root={root()}
                 setHoverSession={props.ctx.setHoverSession}
                 clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
                 navigateToNewSession={() => navigate(`/${slug()}/session`)}
@@ -458,18 +459,19 @@ export const SortableWorkspace = (props: {
 
 export const LocalWorkspace = (props: {
   ctx: WorkspaceSidebarContext
-  project: LocalProject
+  project?: LocalProject
   sortNow: Accessor<number>
   mobile?: boolean
   popover?: boolean
 }): JSX.Element => {
   const globalSync = useGlobalSync()
   const language = useLanguage()
+  const root = createMemo(() => props.project?.worktree ?? props.ctx.currentDir())
   const workspace = createMemo(() => {
-    const [store, setStore] = globalSync.child(props.project.worktree)
+    const [store, setStore] = globalSync.child(root())
     return { store, setStore }
   })
-  const slug = createMemo(() => base64Encode(props.project.worktree))
+  const slug = createMemo(() => base64Encode(root()))
   const sessions = createMemo(() => sortedRootSessions(workspace().store, props.sortNow()))
   const children = createMemo(() => childMapByParent(workspace().store.session))
   const booted = createMemo((prev) => prev || workspace().store.status === "complete", false)
@@ -478,7 +480,7 @@ export const LocalWorkspace = (props: {
   const hasMore = createMemo(() => workspace().store.sessionTotal > count())
   const loadMore = async () => {
     workspace().setStore("limit", (limit) => (limit ?? 0) + 5)
-    await globalSync.project.loadSessions(props.project.worktree)
+    await globalSync.project.loadSessions(root())
   }
 
   return (
