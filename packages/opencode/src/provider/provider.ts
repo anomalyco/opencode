@@ -1365,7 +1365,9 @@ export namespace Provider {
 
           let installedPath: string
           if (!model.api.npm.startsWith("file://")) {
-            installedPath = await Npm.add(model.api.npm).then((item) => item.entrypoint)
+            const item = await Npm.add(model.api.npm)
+            if (!item.entrypoint) throw new Error(`Package ${model.api.npm} has no import entrypoint`)
+            installedPath = item.entrypoint
           } else {
             log.info("loading local provider", { pkg: model.api.npm })
             installedPath = model.api.npm

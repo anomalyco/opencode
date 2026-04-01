@@ -25,7 +25,10 @@ export namespace Npm {
   }
 
   function resolveEntryPoint(name: string, dir: string) {
-    const entrypoint = typeof Bun !== "undefined" ? import.meta.resolve(name, dir) : import.meta.resolve(dir)
+    let entrypoint: string | undefined
+    try {
+      entrypoint = typeof Bun !== "undefined" ? import.meta.resolve(name, dir) : import.meta.resolve(dir)
+    } catch {}
     const result = {
       directory: dir,
       entrypoint,
