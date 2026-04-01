@@ -141,6 +141,11 @@ describe("trigger routes", () => {
         expect(await fire.json()).toMatchObject({
           id: item.id,
           runs: 1,
+          last: {
+            source: "manual",
+            status: "success",
+            time: expect.any(Number),
+          },
           time: {
             created: item.time.created,
             last: expect.any(Number),
@@ -166,6 +171,11 @@ describe("trigger routes", () => {
     expect(await fire.json()).toMatchObject({
       id: item.id,
       runs: 1,
+      last: {
+        source: "webhook",
+        status: "success",
+        time: expect.any(Number),
+      },
       time: {
         created: item.time.created,
         last: expect.any(Number),

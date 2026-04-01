@@ -105,7 +105,7 @@ export const TriggerRoutes = lazy(() =>
       }),
       validator("param", Params),
       async (c) => {
-        return c.json(await Trigger.fire(c.req.valid("param").id))
+        return c.json(await Trigger.fire(c.req.valid("param").id, "manual"))
       },
     )
     .post(
@@ -141,7 +141,7 @@ export const TriggerRoutes = lazy(() =>
         if (item.webhook_secret && c.req.header("X-Trigger-Secret") !== item.webhook_secret) {
           return c.json({ message: "Unauthorized" }, 401)
         }
-        return c.json(await Trigger.fire(id))
+        return c.json(await Trigger.fire(id, "webhook"))
       },
     )
     .post(

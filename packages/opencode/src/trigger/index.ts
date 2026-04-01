@@ -25,6 +25,18 @@ export namespace Trigger {
     }),
   ])
 
+  const Source = z.enum(["schedule", "manual", "webhook"])
+  type Source = z.infer<typeof Source>
+
+  const Status = z.enum(["success", "skipped", "failed"])
+  const Last = z.object({
+    source: Source,
+    status: Status,
+    error: z.string().min(1).optional(),
+    time: z.number().int().nonnegative(),
+  })
+  type Last = z.infer<typeof Last>
+
   export const Info = z
     .object({
       id: z.string(),
@@ -36,6 +48,7 @@ export namespace Trigger {
       webhook_secret: z.string().min(1).optional(),
       enabled: z.boolean(),
       runs: z.number().int().nonnegative(),
+      last: Last.optional(),
       time: z.object({
         created: z.number().int().nonnegative(),
         last: z.number().int().nonnegative().optional(),
@@ -71,7 +84,7 @@ export namespace Trigger {
     create: (input: CreateInput) => Effect.Effect<Info>
     get: (id: string) => Effect.Effect<Info, Err>
     list: () => Effect.Effect<Info[]>
-    fire: (id: string) => Effect.Effect<Info, Err>
+    fire: (id: string, source: Source) => Effect.Effect<Info, Err>
     enable: (id: string) => Effect.Effect<Info, Err>
     disable: (id: string) => Effect.Effect<Info, Err>
     delete: (id: string) => Effect.Effect<void, Err>
@@ -81,7 +94,7 @@ export namespace Trigger {
     readonly create: (input: CreateInput) => Effect.Effect<Info>
     readonly get: (id: string) => Effect.Effect<Info, Err>
     readonly list: () => Effect.Effect<Info[]>
-    readonly fire: (id: string) => Effect.Effect<Info, Err>
+    readonly fire: (id: string, source?: Source) => Effect.Effect<Info, Err>
     readonly enable: (id: string) => Effect.Effect<Info, Err>
     readonly disable: (id: string) => Effect.Effect<Info, Err>
     readonly delete: (id: string) => Effect.Effect<void, Err>
@@ -97,9 +110,12 @@ export namespace Trigger {
     webhook_secret: item.webhook_secret ?? null,
     enabled: item.enabled,
     runs: item.runs,
+    last_source: item.last?.source ?? null,
+    last_status: item.last?.status ?? null,
+    last_error: item.last?.error ?? null,
     time_created: item.time.created,
     time_updated,
-    time_last: item.time.last ?? null,
+    time_last: item.last?.time ?? item.time.last ?? null,
     time_next: item.time.next,
   })
 
@@ -110,6 +126,16 @@ export namespace Trigger {
     ...(row.webhook_secret ? { webhook_secret: row.webhook_secret } : {}),
     enabled: row.enabled,
     runs: row.runs,
+    ...(row.last_source && row.last_status && row.time_last !== null
+      ? {
+          last: {
+            source: row.last_source,
+            status: row.last_status,
+            ...(row.last_error ? { error: row.last_error } : {}),
+            time: row.time_last,
+          },
+        }
+      : {}),
     time: {
       created: row.time_created,
       ...(row.time_last === null ? {} : { last: row.time_last }),
@@ -140,6 +166,15 @@ export namespace Trigger {
     const cols = Database.Client().$client.query(`PRAGMA table_info(trigger)`).all() as { name: string }[]
     if (!cols.some((col) => col.name === "webhook_secret")) {
       Database.Client().$client.query(`ALTER TABLE trigger ADD COLUMN webhook_secret text`).run()
+    }
+    if (!cols.some((col) => col.name === "last_source")) {
+      Database.Client().$client.query(`ALTER TABLE trigger ADD COLUMN last_source text`).run()
+    }
+    if (!cols.some((col) => col.name === "last_status")) {
+      Database.Client().$client.query(`ALTER TABLE trigger ADD COLUMN last_status text`).run()
+    }
+    if (!cols.some((col) => col.name === "last_error")) {
+      Database.Client().$client.query(`ALTER TABLE trigger ADD COLUMN last_error text`).run()
     }
     Database.Client().$client.query(`CREATE INDEX IF NOT EXISTS trigger_project_idx ON trigger (project_id)`).run()
   })
@@ -190,7 +225,21 @@ export namespace Trigger {
             }),
           )
 
-          const run = Effect.fnUntraced(function* (item: Info) {
+          const last = Effect.fnUntraced(function* (item: Info, next: Last) {
+            const out = {
+              ...item,
+              last: next,
+              time: {
+                ...item.time,
+                last: next.time,
+              },
+            }
+            data.set(item.id, out)
+            yield* save(out)
+            return out
+          })
+
+          const run = Effect.fnUntraced(function* (item: Info, source: Source) {
             const at = Date.now()
             const next = {
               ...item,
@@ -209,32 +258,41 @@ export namespace Trigger {
               at,
             })
             const action = item.action
-            if (!action) return next
+            if (!action) return yield* last(next, { source, status: "success", time: at })
             const st = yield* Effect.promise(() => SessionStatus.get(action.sessionID))
-            if (st.type !== "idle") return next
-            yield* Effect.promise(() =>
+            if (st.type !== "idle") return yield* last(next, { source, status: "skipped", time: at })
+            return yield* Effect.promise(() =>
               SessionPrompt.command({
                 sessionID: action.sessionID,
                 command: action.command,
                 arguments: action.arguments ?? "",
               }),
             ).pipe(
+              Effect.flatMap(() => last(next, { source, status: "success", time: at })),
               Effect.catchCause((cause) =>
-                Effect.sync(() =>
-                  log.error("trigger action failed", {
-                    triggerID: item.id,
-                    cause: Cause.pretty(cause),
-                  }),
-                ),
+                Effect.gen(function* () {
+                  const err = Cause.squash(cause)
+                  yield* Effect.sync(() =>
+                    log.error("trigger action failed", {
+                      triggerID: item.id,
+                      cause: Cause.pretty(cause),
+                    }),
+                  )
+                  return yield* last(next, {
+                    source,
+                    status: "failed",
+                    error: err instanceof Error ? err.message : String(err),
+                    time: at,
+                  })
+                }),
               ),
             )
-            return next
           })
 
           const tick = Effect.fnUntraced(function* () {
             yield* Effect.forEach(
               Array.from(data.values()).filter((item) => item.enabled && item.time.next <= Date.now()),
-              (item) => run(item),
+              (item) => run(item, "schedule"),
               { discard: true },
             )
           })
@@ -282,8 +340,8 @@ export namespace Trigger {
             Effect.succeed(Array.from(data.values()).sort((a, b) => a.time.created - b.time.created)),
           )
 
-          const fire = Effect.fn("Trigger.fire")(function* (id: string) {
-            return yield* run(yield* get(id))
+          const fire = Effect.fn("Trigger.fire")(function* (id: string, source: Source) {
+            return yield* run(yield* get(id), source)
           })
 
           const enable = Effect.fn("Trigger.enable")((id: string) => update(id, true))
@@ -310,8 +368,8 @@ export namespace Trigger {
         list: Effect.fn("Trigger.list")(function* () {
           return yield* InstanceState.useEffect(state, (svc) => svc.list())
         }),
-        fire: Effect.fn("Trigger.fire")(function* (id: string) {
-          return yield* InstanceState.useEffect(state, (svc) => svc.fire(id))
+        fire: Effect.fn("Trigger.fire")(function* (id: string, source = "manual") {
+          return yield* InstanceState.useEffect(state, (svc) => svc.fire(id, source))
         }),
         enable: Effect.fn("Trigger.enable")(function* (id: string) {
           return yield* InstanceState.useEffect(state, (svc) => svc.enable(id))
@@ -345,8 +403,8 @@ export namespace Trigger {
     return runPromise((svc) => svc.enable(id))
   }
 
-  export async function fire(id: string) {
-    return runPromise((svc) => svc.fire(id))
+  export async function fire(id: string, source: Source = "manual") {
+    return runPromise((svc) => svc.fire(id, source))
   }
 
   export async function disable(id: string) {
