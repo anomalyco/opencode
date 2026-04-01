@@ -18,11 +18,8 @@ import { type ToolDefinition } from "./tool.js"
 
 export * from "./tool.js"
 
-export type ProviderContext = {
-  source: "env" | "config" | "custom" | "api"
-  info: Provider
-  options: Record<string, any>
-}
+/** @deprecated Use `Provider` from `@opencode-ai/sdk` instead. The runtime value is a flat `Provider` object, not a wrapped context. */
+export type ProviderContext = Provider
 
 export type PluginInput = {
   client: ReturnType<typeof createOpencodeClient>
@@ -211,11 +208,11 @@ export interface Hooks {
    * Modify parameters sent to LLM
    */
   "chat.params"?: (
-    input: { sessionID: string; agent: string; model: Model; provider: ProviderContext; message: UserMessage },
+    input: { sessionID: string; agent: string; model: Model; provider: Provider; message: UserMessage },
     output: { temperature: number; topP: number; topK: number; options: Record<string, any> },
   ) => Promise<void>
   "chat.headers"?: (
-    input: { sessionID: string; agent: string; model: Model; provider: ProviderContext; message: UserMessage },
+    input: { sessionID: string; agent: string; model: Model; provider: Provider; message: UserMessage },
     output: { headers: Record<string, string> },
   ) => Promise<void>
   "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void>
