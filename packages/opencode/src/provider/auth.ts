@@ -1,4 +1,4 @@
-import type { AuthOuathResult, Hooks } from "@opencode-ai/plugin"
+import type { AuthOAuthResult, Hooks } from "@opencode-ai/plugin"
 import { NamedError } from "@opencode-ai/util/error"
 import { Auth } from "@/auth"
 import { InstanceState } from "@/effect/instance-state"
@@ -106,31 +106,30 @@ export namespace ProviderAuth {
 
   interface State {
     hooks: Record<ProviderID, Hook>
-    pending: Map<ProviderID, AuthOuathResult>
+    pending: Map<ProviderID, AuthOAuthResult>
   }
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/ProviderAuth") {}
 
-  export const layer = Layer.effect(
+  export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> = Layer.effect(
     Service,
     Effect.gen(function* () {
       const auth = yield* Auth.Service
+      const plugin = yield* Plugin.Service
       const state = yield* InstanceState.make<State>(
-        Effect.fn("ProviderAuth.state")(() =>
-          Effect.promise(async () => {
-            const plugins = await Plugin.list()
-            return {
-              hooks: Record.fromEntries(
-                Arr.filterMap(plugins, (x) =>
-                  x.auth?.provider !== undefined
-                    ? Result.succeed([ProviderID.make(x.auth.provider), x.auth] as const)
-                    : Result.failVoid,
-                ),
+        Effect.fn("ProviderAuth.state")(function* () {
+          const plugins = yield* plugin.list()
+          return {
+            hooks: Record.fromEntries(
+              Arr.filterMap(plugins, (x) =>
+                x.auth?.provider !== undefined
+                  ? Result.succeed([ProviderID.make(x.auth.provider), x.auth] as const)
+                  : Result.failVoid,
               ),
-              pending: new Map<ProviderID, AuthOuathResult>(),
-            }
-          }),
-        ),
+            ),
+            pending: new Map<ProviderID, AuthOAuthResult>(),
+          }
+        }),
       )
 
       const methods = Effect.fn("ProviderAuth.methods")(function* () {
@@ -230,7 +229,9 @@ export namespace ProviderAuth {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Auth.layer))
+  export const defaultLayer = Layer.suspend(() =>
+    layer.pipe(Layer.provide(Auth.defaultLayer), Layer.provide(Plugin.defaultLayer)),
+  )
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
