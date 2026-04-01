@@ -90,7 +90,7 @@ export const SessionListCommand = cmd({
   },
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
-      const sessions = [...Session.list({ roots: true, limit: args.maxCount })]
+      const sessions = [...Session.listGlobal({ roots: true, limit: args.maxCount })]
 
       if (sessions.length === 0) {
         return
