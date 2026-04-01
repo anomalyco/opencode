@@ -31,6 +31,7 @@ export const EventRoutes = () =>
       c.header("Cache-Control", "no-cache, no-transform")
       c.header("X-Accel-Buffering", "no")
       c.header("X-Content-Type-Options", "nosniff")
+      const filterSessionID = c.req.query("sessionID")
       return streamSSE(c, async (stream) => {
         const q = new AsyncQueue<string | null>()
         let done = false
@@ -62,6 +63,10 @@ export const EventRoutes = () =>
         }
 
         const unsub = Bus.subscribeAll((event) => {
+          if (filterSessionID) {
+            const props = event.properties ?? {}
+            if (props.sessionID && props.sessionID !== filterSessionID) return
+          }
           q.push(JSON.stringify(event))
           if (event.type === Bus.InstanceDisposed.type) {
             stop()

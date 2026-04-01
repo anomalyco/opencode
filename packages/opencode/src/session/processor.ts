@@ -52,9 +52,27 @@ export namespace SessionProcessor {
     needsCompaction: boolean
     currentText: MessageV2.TextPart | undefined
     reasoningMap: Record<string, MessageV2.ReasoningPart>
+    modifiedFiles: Set<string>
   }
 
   type StreamEvent = Event
+
+  function trackModifiedFiles(set: Set<string>, meta: Record<string, any>) {
+    if (!meta) return
+    if (meta.filepath) set.add(meta.filepath)
+    if (meta.filediff?.file) set.add(meta.filediff.file)
+    if (Array.isArray(meta.files)) {
+      for (const f of meta.files) {
+        if (f.filePath) set.add(f.filePath)
+      }
+    }
+    if (Array.isArray(meta.results)) {
+      for (const r of meta.results) {
+        if (r.filepath) set.add(r.filepath)
+        if (r.filediff?.file) set.add(r.filediff.file)
+      }
+    }
+  }
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/SessionProcessor") {}
 
@@ -95,6 +113,7 @@ export namespace SessionProcessor {
           needsCompaction: false,
           currentText: undefined,
           reasoningMap: {},
+          modifiedFiles: new Set(),
         }
         let aborted = false
 
@@ -180,6 +199,13 @@ export namespace SessionProcessor {
                 metadata: value.providerMetadata,
               } satisfies MessageV2.ToolPart)
 
+              if (value.toolName === "batch" && value.input?.tool_calls) {
+                for (const call of value.input.tool_calls) {
+                  if (call.parameters?.filePath) ctx.modifiedFiles.add(call.parameters.filePath)
+                  if (call.parameters?.file_path) ctx.modifiedFiles.add(call.parameters.file_path)
+                }
+              }
+
               const parts = yield* Effect.promise(() => MessageV2.parts(ctx.assistantMessage.id))
               const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
 
@@ -223,6 +249,7 @@ export namespace SessionProcessor {
                   attachments: value.output.attachments,
                 },
               })
+              trackModifiedFiles(ctx.modifiedFiles, value.output.metadata)
               delete ctx.toolcalls[value.toolCallId]
               return
             }
@@ -250,6 +277,7 @@ export namespace SessionProcessor {
               throw value.error
 
             case "start-step":
+              ctx.modifiedFiles.clear()
               ctx.snapshot = yield* snapshot.track()
               yield* session.updatePart({
                 id: PartID.ascending(),
@@ -282,14 +310,16 @@ export namespace SessionProcessor {
               yield* session.updateMessage(ctx.assistantMessage)
               if (ctx.snapshot) {
                 const patch = yield* snapshot.patch(ctx.snapshot)
-                if (patch.files.length) {
+                const files =
+                  ctx.modifiedFiles.size > 0 ? patch.files.filter((f) => ctx.modifiedFiles.has(f)) : patch.files
+                if (files.length) {
                   yield* session.updatePart({
                     id: PartID.ascending(),
                     messageID: ctx.assistantMessage.id,
                     sessionID: ctx.sessionID,
                     type: "patch",
                     hash: patch.hash,
-                    files: patch.files,
+                    files,
                   })
                 }
                 ctx.snapshot = undefined
@@ -363,14 +393,15 @@ export namespace SessionProcessor {
         const cleanup = Effect.fn("SessionProcessor.cleanup")(function* () {
           if (ctx.snapshot) {
             const patch = yield* snapshot.patch(ctx.snapshot)
-            if (patch.files.length) {
+            const files = ctx.modifiedFiles.size > 0 ? patch.files.filter((f) => ctx.modifiedFiles.has(f)) : patch.files
+            if (files.length) {
               yield* session.updatePart({
                 id: PartID.ascending(),
                 messageID: ctx.assistantMessage.id,
                 sessionID: ctx.sessionID,
                 type: "patch",
                 hash: patch.hash,
-                files: patch.files,
+                files,
               })
             }
             ctx.snapshot = undefined
