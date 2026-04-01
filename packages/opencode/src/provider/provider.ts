@@ -1542,11 +1542,13 @@ export namespace Provider {
     }),
   )
 
-  export const defaultLayer = Layer.suspend(() =>
-    layer.pipe(
-      Layer.provide(Config.defaultLayer),
-      Layer.provide(Auth.defaultLayer),
-      Layer.provide(Plugin.defaultLayer),
+  export const defaultLayer = Layer.unwrap(
+    Effect.sync(() =>
+      layer.pipe(
+        Layer.provide(Config.defaultLayer),
+        Layer.provide(Auth.defaultLayer),
+        Layer.provide(Plugin.defaultLayer),
+      ),
     ),
   )
 
