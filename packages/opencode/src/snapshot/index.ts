@@ -300,26 +300,85 @@ export namespace Snapshot {
             const revert = Effect.fnUntraced(function* (patches: Snapshot.Patch[]) {
               return yield* locked(
                 Effect.gen(function* () {
+                  const byHash = new Map<string, string[]>()
                   const seen = new Set<string>()
                   for (const item of patches) {
+                    const list = byHash.get(item.hash) ?? []
+                    byHash.set(item.hash, list)
                     for (const file of item.files) {
                       if (seen.has(file)) continue
                       seen.add(file)
-                      log.info("reverting", { file, hash: item.hash })
-                      const result = yield* git([...core, ...args(["checkout", item.hash, "--", file])], {
-                        cwd: state.worktree,
-                      })
-                      if (result.code !== 0) {
-                        const rel = path.relative(state.worktree, file)
-                        const tree = yield* git([...core, ...args(["ls-tree", item.hash, "--", rel])], {
+                      list.push(file)
+                    }
+                  }
+
+                  const one = Effect.fnUntraced(function* (hash: string, file: string) {
+                    log.info("reverting", { file, hash })
+                    const result = yield* git([...core, ...args(["checkout", hash, "--", file])], {
+                      cwd: state.worktree,
+                    })
+                    if (result.code === 0) return
+                    const rel = path.relative(state.worktree, file).replaceAll("\\", "/")
+                    const tree = yield* git([...core, ...args(["ls-tree", hash, "--", rel])], {
+                      cwd: state.worktree,
+                    })
+                    if (tree.code === 0 && tree.text.trim()) {
+                      log.info("file existed in snapshot but checkout failed, keeping", { file, hash })
+                      return
+                    }
+                    log.info("file did not exist in snapshot, deleting", { file, hash })
+                    yield* remove(file)
+                  })
+
+                  for (const [hash, list] of byHash) {
+                    for (let i = 0; i < list.length; i += 100) {
+                      const chunk = list.slice(i, i + 100)
+                      if (chunk.length === 1) {
+                        yield* one(hash, chunk[0]!)
+                        continue
+                      }
+
+                      const rels = chunk.map((file) => [path.relative(state.worktree, file).replaceAll("\\", "/"), file] as const)
+                      const tree = yield* git(
+                        [...core, ...args(["ls-tree", "--name-only", hash, "--", ...rels.map(([rel]) => rel)])],
+                        {
+                          cwd: state.worktree,
+                        },
+                      )
+
+                      if (tree.code !== 0) {
+                        for (const file of chunk) {
+                          yield* one(hash, file)
+                        }
+                        continue
+                      }
+
+                      const existing = new Set(tree.text.trim().split("\n").map((item) => item.trim()).filter(Boolean))
+                      const restore: string[] = []
+                      const absent: string[] = []
+                      for (const [rel, file] of rels) {
+                        if (existing.has(rel)) {
+                          restore.push(file)
+                          continue
+                        }
+                        absent.push(file)
+                      }
+
+                      if (restore.length) {
+                        log.info("reverting", { hash, files: restore.length })
+                        const result = yield* git([...core, ...args(["checkout", hash, "--", ...restore])], {
                           cwd: state.worktree,
                         })
-                        if (tree.code === 0 && tree.text.trim()) {
-                          log.info("file existed in snapshot but checkout failed, keeping", { file })
-                        } else {
-                          log.info("file did not exist in snapshot, deleting", { file })
-                          yield* remove(file)
+                        if (result.code !== 0) {
+                          for (const file of restore) {
+                            yield* one(hash, file)
+                          }
                         }
+                      }
+
+                      for (const file of absent) {
+                        log.info("file did not exist in snapshot, deleting", { file, hash })
+                        yield* remove(file)
                       }
                     }
                   }
