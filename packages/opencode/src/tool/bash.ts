@@ -314,7 +314,6 @@ function cmd(shell: string, name: string, command: string, cwd: string, env: Nod
   })
 }
 
-
 async function run(
   input: {
     shell: string
@@ -340,23 +339,19 @@ async function run(
 
   const exit = await CrossSpawnSpawner.runPromiseExit((spawner) =>
     Effect.gen(function* () {
-      const handle = yield* spawner.spawn(
-        cmd(input.shell, input.name, input.command, input.cwd, input.env),
-      )
+      const handle = yield* spawner.spawn(cmd(input.shell, input.name, input.command, input.cwd, input.env))
 
       yield* Effect.forkScoped(
-        Stream.runForEach(
-          Stream.decodeText(handle.all),
-          (chunk) =>
-            Effect.sync(() => {
-              output += chunk
-              ctx.metadata({
-                metadata: {
-                  output: preview(output),
-                  description: input.description,
-                },
-              })
-            }),
+        Stream.runForEach(Stream.decodeText(handle.all), (chunk) =>
+          Effect.sync(() => {
+            output += chunk
+            ctx.metadata({
+              metadata: {
+                output: preview(output),
+                description: input.description,
+              },
+            })
+          }),
         ),
       )
 
@@ -385,10 +380,7 @@ async function run(
       }
 
       return exit.kind === "exit" ? exit.code : null
-    }).pipe(
-      Effect.scoped,
-      Effect.orDie,
-    ),
+    }).pipe(Effect.scoped, Effect.orDie),
   )
 
   let code: number | null = null

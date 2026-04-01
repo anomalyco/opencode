@@ -722,7 +722,10 @@ describe("MessageV2.filterCompacted", () => {
         const u1 = await addUser(session.id, "hello")
         await addCompactionPart(session.id, u1)
 
-        const error = new MessageV2.APIError({ message: "boom", isRetryable: true }).toObject() as MessageV2.Assistant["error"]
+        const error = new MessageV2.APIError({
+          message: "boom",
+          isRetryable: true,
+        }).toObject() as MessageV2.Assistant["error"]
         await addAssistant(session.id, u1, { summary: true, finish: "end_turn", error })
         const u2 = await addUser(session.id, "retry")
 

@@ -900,7 +900,6 @@ export namespace MessageV2 {
     }
   }
 
-
   export function filterCompacted(msgs: Iterable<MessageV2.WithParts>) {
     const result = [] as MessageV2.WithParts[]
     const completed = new Set<string>()

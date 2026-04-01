@@ -497,5 +497,6 @@ const rt = lazy(() => {
   return makeRuntime(ChildProcessSpawner, defaultLayer)
 })
 
-export const runPromiseExit: ReturnType<typeof rt>["runPromiseExit"] = (...args) => rt().runPromiseExit(...(args as [any]))
+export const runPromiseExit: ReturnType<typeof rt>["runPromiseExit"] = (...args) =>
+  rt().runPromiseExit(...(args as [any]))
 export const runPromise: ReturnType<typeof rt>["runPromise"] = (...args) => rt().runPromise(...(args as [any]))
