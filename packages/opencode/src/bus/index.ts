@@ -90,8 +90,9 @@ export namespace Bus {
           if (ps) yield* PubSub.publish(ps, payload)
           yield* PubSub.publish(state.wildcard, payload)
 
+          const dir = yield* InstanceState.directory
           GlobalBus.emit("event", {
-            directory: Instance.directory,
+            directory: dir,
             payload,
           })
         })

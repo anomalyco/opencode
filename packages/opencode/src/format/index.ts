@@ -108,10 +108,11 @@ export namespace Format {
               for (const item of yield* Effect.promise(() => getFormatter(ext))) {
                 log.info("running", { command: item.command })
                 const cmd = item.command.map((x) => x.replace("$FILE", filepath))
+                const dir = yield* InstanceState.directory
                 const code = yield* spawner
                   .spawn(
                     ChildProcess.make(cmd[0]!, cmd.slice(1), {
-                      cwd: Instance.directory,
+                      cwd: dir,
                       env: item.environment,
                       extendEnv: true,
                     }),
