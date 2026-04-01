@@ -41,6 +41,13 @@ export namespace Trigger {
       command: z.string(),
       arguments: z.string().optional(),
     }),
+    z.object({
+      type: z.literal("webhook"),
+      url: z.url(),
+      method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]).optional(),
+      headers: z.record(z.string(), z.string()).optional(),
+      body: z.string().optional(),
+    }),
   ])
 
   const Source = z.enum(["schedule", "manual", "webhook"])
@@ -313,16 +320,37 @@ export namespace Trigger {
             })
             const action = item.action
             if (!action) return yield* last(next, { source, status: "success", time: at })
-            const st = yield* Effect.promise(() => SessionStatus.get(action.sessionID))
-            if (st.type !== "idle") return yield* last(next, { source, status: "skipped", time: at })
-            return yield* Effect.promise(() =>
-              SessionPrompt.command({
-                sessionID: action.sessionID,
-                command: action.command,
-                arguments: action.arguments ?? "",
-              }),
-            ).pipe(
-              Effect.flatMap(() => last(next, { source, status: "success", time: at })),
+
+            const exec =
+              action.type === "command"
+                ? Effect.gen(function* () {
+                    const st = yield* Effect.promise(() => SessionStatus.get(action.sessionID))
+                    if (st.type !== "idle") return yield* last(next, { source, status: "skipped", time: at })
+                    return yield* Effect.promise(() =>
+                      SessionPrompt.command({
+                        sessionID: action.sessionID,
+                        command: action.command,
+                        arguments: action.arguments ?? "",
+                      }),
+                    ).pipe(Effect.flatMap(() => last(next, { source, status: "success", time: at })))
+                  })
+                : Effect.promise(async () => {
+                    const res = await fetch(action.url, {
+                      method: action.method,
+                      headers: action.headers,
+                      body: action.body,
+                    })
+                    if (res.ok) return last(next, { source, status: "success", time: at })
+                    const err = await res.text()
+                    return last(next, {
+                      source,
+                      status: "failed",
+                      error: `HTTP ${res.status}: ${err || res.statusText}`,
+                      time: at,
+                    })
+                  }).pipe(Effect.flatMap((x) => x))
+
+            return yield* exec.pipe(
               Effect.catchCause((cause) =>
                 Effect.gen(function* () {
                   const err = Cause.squash(cause)

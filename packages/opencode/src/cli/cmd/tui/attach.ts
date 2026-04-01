@@ -21,6 +21,10 @@ export const AttachCommand = cmd({
         type: "string",
         description: "directory to run in",
       })
+      .option("workspace", {
+        type: "string",
+        description: "workspace ID to use on the remote server",
+      })
       .option("continue", {
         alias: ["c"],
         describe: "continue the last session",
@@ -70,6 +74,7 @@ export const AttachCommand = cmd({
       const sdk = await preflightRemote({
         url: args.url,
         directory,
+        workspaceID: args.workspace,
         headers,
       }).catch((error) => {
         UI.error(error instanceof Error ? error.message : String(error))
@@ -104,6 +109,7 @@ export const AttachCommand = cmd({
           remote: true,
           continue: target.remoteSessions || target.picked ? false : args.continue,
           sessionID: target.picked ? target.baseID : args.session,
+          workspaceID: args.workspace,
           fork: args.fork,
           remoteSessions: target.remoteSessions,
         },

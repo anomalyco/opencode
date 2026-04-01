@@ -230,6 +230,7 @@ export function tui(input: {
                       <SDKProvider
                         url={input.url}
                         directory={input.directory}
+                        workspaceID={input.args.workspaceID}
                         fetch={input.fetch}
                         headers={input.headers}
                         events={input.events}

@@ -13,12 +13,13 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
   init: (props: {
     url: string
     directory?: string
+    workspaceID?: string
     fetch?: typeof fetch
     headers?: RequestInit["headers"]
     events?: EventSource
   }) => {
     const abort = new AbortController()
-    let workspaceID: string | undefined
+    let workspaceID = props.workspaceID
     let sse: AbortController | undefined
 
     function createSDK() {

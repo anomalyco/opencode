@@ -290,6 +290,10 @@ export const RunCommand = cmd({
         type: "string",
         describe: "directory to run in, path on remote server if attaching",
       })
+      .option("workspace", {
+        type: "string",
+        describe: "workspace ID to use on the remote server when attaching",
+      })
       .option("port", {
         type: "number",
         describe: "port for the local server (defaults to random port if no value provided)",
@@ -665,6 +669,7 @@ export const RunCommand = cmd({
       const sdk = await preflightRemote({
         url: args.attach,
         directory,
+        workspaceID: args.workspace,
         headers,
       }).catch((error) => {
         UI.error(error instanceof Error ? error.message : String(error))
