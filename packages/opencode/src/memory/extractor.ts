@@ -40,26 +40,40 @@ interface ExtractorState {
 }
 
 export namespace MemoryExtractor {
-  let state: ExtractorState | null = null
+  const sessions = new Map<string, ExtractorState>()
+  let activeSessionId: string | null = null
   let flushTimer: ReturnType<typeof setTimeout> | null = null
-  const pendingSaves: Array<{ type: MemoryType; topic: string; content: string }> = []
+  const pendingSaves: Array<{ type: MemoryType; topic: string; content: string; sessionId?: string }> = []
   const FLUSH_DELAY_MS = 3000
 
+  function getState(): ExtractorState | null {
+    return activeSessionId ? sessions.get(activeSessionId) ?? null : null
+  }
+
   export function init(projectPath: string, sessionId?: string) {
-    state = {
+    const sid = sessionId ?? "__default__"
+    sessions.set(sid, {
       bashCommandCount: new Map(),
       lastToolCalls: [],
       currentTurnEdits: new Set(),
       projectPath,
       sessionId,
       detectedTopics: new Set(),
-    }
+    })
+    activeSessionId = sid
     pendingSaves.length = 0
   }
 
   export function reset() {
-    flushPending()
-    state = null
+    try {
+      flushPending()
+    } catch (err) {
+      log.warn("error during flush in reset", { error: String(err) })
+    }
+    if (activeSessionId) {
+      sessions.delete(activeSessionId)
+      activeSessionId = null
+    }
   }
 
   /** Flush any buffered memory saves (debounced writes) */
@@ -84,6 +98,7 @@ export namespace MemoryExtractor {
   }
 
   export function onToolCall(tool: string, input: Record<string, unknown>) {
+    const state = getState()
     if (!state) return
 
     // Track bash commands
@@ -97,7 +112,7 @@ export namespace MemoryExtractor {
         // build-command pattern: same command 3+ times
         if (count >= 3 && !state.detectedTopics.has(`build:${base}`)) {
           state.detectedTopics.add(`build:${base}`)
-          saveMemory({
+          saveMemory(state, {
             type: "build-command",
             topic: `build:${base}`,
             content: `Frequently used command: ${cmd} (used ${count} times)`,
@@ -115,7 +130,7 @@ export namespace MemoryExtractor {
       const basename = filePath.split(/[/\\]/).pop() ?? ""
       if (CONFIG_FILES.has(basename) && !state.detectedTopics.has(`config:${basename}`)) {
         state.detectedTopics.add(`config:${basename}`)
-        saveMemory({
+        saveMemory(state, {
           type: "config-pattern",
           topic: `config:${basename}`,
           content: `Config file ${basename} was modified in this project`,
@@ -127,7 +142,7 @@ export namespace MemoryExtractor {
         const topic = `fix:${filePath}`
         if (!state.detectedTopics.has(topic)) {
           state.detectedTopics.add(topic)
-          saveMemory({
+          saveMemory(state, {
             type: "error-solution",
             topic,
             content: `Error with command "${state.lastBashError.command}" was fixed by editing ${filePath}. Error: ${state.lastBashError.error.slice(0, 200)}`,
@@ -141,6 +156,7 @@ export namespace MemoryExtractor {
   }
 
   export function onToolResult(tool: string, input: Record<string, unknown>, output: string, exitCode?: number) {
+    const state = getState()
     if (!state) return
 
     // Track bash failures for error-solution pattern
@@ -156,7 +172,7 @@ export namespace MemoryExtractor {
         const topic = `fix:${filePath}`
         if (!state.detectedTopics.has(topic)) {
           state.detectedTopics.add(topic)
-          saveMemory({
+          saveMemory(state, {
             type: "error-solution",
             topic,
             content: `Error with command "${state.lastBashError.command}" was fixed by editing ${filePath}. Error: ${state.lastBashError.error.slice(0, 200)}`,
@@ -168,7 +184,7 @@ export namespace MemoryExtractor {
         const topic = `fix:${normalizeCommand((input.command as string) || "")}`
         if (!state.detectedTopics.has(topic)) {
           state.detectedTopics.add(topic)
-          saveMemory({
+          saveMemory(state, {
             type: "error-solution",
             topic,
             content: `Error with command "${state.lastBashError.command}" was resolved with: ${(input.command as string) || ""}`,
@@ -180,6 +196,7 @@ export namespace MemoryExtractor {
   }
 
   export function onUserMessage(text: string) {
+    const state = getState()
     if (!state) return
 
     // Check for preference patterns — require 2+ matches to reduce false positives
@@ -191,7 +208,7 @@ export namespace MemoryExtractor {
       const topic = `pref:${text.slice(0, 80).replace(/[^a-zA-Z0-9]/g, "_")}`
       if (!state.detectedTopics.has(topic)) {
         state.detectedTopics.add(topic)
-        saveMemory({
+        saveMemory(state, {
           type: "preference",
           topic,
           content: `User preference: ${text.slice(0, 300)}`,
@@ -205,7 +222,7 @@ export namespace MemoryExtractor {
       if (!state.detectedTopics.has(topic)) {
         state.detectedTopics.add(topic)
         const files = Array.from(state.currentTurnEdits).join(", ")
-        saveMemory({
+        saveMemory(state, {
           type: "decision",
           topic,
           content: `Architecture decision: ${state.currentTurnEdits.size} files edited in one turn: ${files}`,
@@ -215,12 +232,12 @@ export namespace MemoryExtractor {
     state.currentTurnEdits.clear()
   }
 
-  function saveMemory(input: { type: MemoryType; topic: string; content: string }) {
-    if (!state) return
-    scheduleSave(input)
+  function saveMemory(state: ExtractorState, input: { type: MemoryType; topic: string; content: string }) {
+    scheduleSave({ ...input, sessionId: state.sessionId })
   }
 
-  function commitSave(input: { type: MemoryType; topic: string; content: string }) {
+  function commitSave(input: { type: MemoryType; topic: string; content: string; sessionId?: string }) {
+    const state = getState()
     if (!state) return
     try {
       MemoryStore.save({
@@ -228,7 +245,7 @@ export namespace MemoryExtractor {
         type: input.type,
         topic: input.topic,
         content: input.content,
-        sessionId: state.sessionId,
+        sessionId: input.sessionId,
       })
       log.debug("saved memory", { type: input.type, topic: input.topic })
     } catch (err) {
@@ -237,15 +254,16 @@ export namespace MemoryExtractor {
   }
 
   function normalizeCommand(cmd: string): string {
-    // Normalize but keep the first positional arg (package name, file, etc.)
-    const tokens = cmd.trim().split(/\s+/)
-    // Find the end of flags (starts with -) to preserve the first real argument
-    let lastFlagIdx = 0
-    for (let i = 0; i < Math.min(tokens.length, 8); i++) {
-      if (tokens[i].startsWith("-")) lastFlagIdx = i
-      else if (lastFlagIdx > 0) break
+    const tokens = cmd.trim().split(/\s+/).filter(Boolean)
+    if (tokens.length === 0) return ""
+    // Keep command name + first 2 meaningful tokens (skip flags)
+    const result: string[] = [tokens[0]]
+    let argCount = 0
+    for (let i = 1; i < tokens.length && argCount < 2; i++) {
+      if (tokens[i].startsWith("-")) continue
+      result.push(tokens[i])
+      argCount++
     }
-    // Keep command + flags + first non-flag argument
-    return tokens.slice(0, Math.min(lastFlagIdx + 2, tokens.length, 6)).join(" ")
+    return result.join(" ")
   }
 }
