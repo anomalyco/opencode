@@ -332,13 +332,15 @@ export namespace Snapshot {
 
                   for (const [hash, filesByHash] of groupByHash) {
                     for (let i = 0; i < filesByHash.length; i += 100) {
-                      const chunk = filesByHash.slice(i, i + 100)
-                      if (chunk.length === 1) {
-                        yield* revertSingle(hash, chunk[0]!)
+                      const fileChunk = filesByHash.slice(i, i + 100)
+                      if (fileChunk.length === 1) {
+                        yield* revertSingle(hash, fileChunk[0]!)
                         continue
                       }
 
-                      const rels = chunk.map((file) => [path.relative(state.worktree, file).replaceAll("\\", "/"), file] as const)
+                      const rels = fileChunk.map(
+                        (file) => [path.relative(state.worktree, file).replaceAll("\\", "/"), file] as const,
+                      )
                       const tree = yield* git(
                         [...core, ...args(["ls-tree", "--name-only", hash, "--", ...rels.map(([rel]) => rel)])],
                         {
@@ -347,7 +349,7 @@ export namespace Snapshot {
                       )
 
                       if (tree.code !== 0) {
-                        for (const file of chunk) {
+                        for (const file of fileChunk) {
                           yield* revertSingle(hash, file)
                         }
                         continue
