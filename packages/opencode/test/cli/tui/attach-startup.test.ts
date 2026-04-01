@@ -5,6 +5,129 @@ afterEach(() => {
 })
 
 describe("attach startup", () => {
+  test("remote browser command exists for remote tui", async () => {
+    const mod: Record<string, unknown> = await import("../../../src/cli/cmd/tui/app")
+    const fn = mod["getRemoteSessionCommand"]
+    expect(fn).toBeTypeOf("function")
+
+    if (typeof fn !== "function") return
+    const result = fn({
+      remote: true,
+      onSelect: mock(async () => {}),
+    })
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        title: "Browse remote sessions",
+        value: "remote.session.list",
+        category: "Session",
+        slash: {
+          name: "remote",
+        },
+      }),
+    )
+  })
+
+  test("remote browser fetches root remote sessions", async () => {
+    const mod: Record<string, unknown> = await import("../../../src/cli/cmd/tui/component/dialog-remote-session-list")
+    const fn = mod["listRemoteSessions"]
+    expect(fn).toBeTypeOf("function")
+
+    const list = mock(async () => ({
+      data: [
+        {
+          id: "sess_root",
+          title: "Root draft",
+        },
+        {
+          id: "sess_child",
+          title: "Child fix",
+          parentID: "sess_root",
+        },
+        {
+          id: "sess_next",
+          title: "Next root",
+        },
+      ],
+    }))
+
+    if (typeof fn !== "function") return
+    const result = await fn({
+      sdk: {
+        client: {
+          session: {
+            list,
+          },
+        },
+      },
+    })
+
+    expect(list).toHaveBeenCalledWith({
+      roots: true,
+    })
+    expect(result).toEqual([
+      {
+        id: "sess_root",
+        title: "Root draft",
+      },
+      {
+        id: "sess_next",
+        title: "Next root",
+      },
+    ])
+  })
+
+  test("remote browser selection reuses the existing child browse flow", async () => {
+    const mod: Record<string, unknown> = await import("../../../src/cli/cmd/tui/component/dialog-remote-session-list")
+    const fn = mod["selectRemoteSession"]
+    expect(fn).toBeTypeOf("function")
+
+    const route = {
+      navigate: mock(() => {}),
+    }
+    const dialog = {
+      clear: mock(() => {}),
+      replace: mock(() => {}),
+    }
+    const sdk = {
+      client: {
+        session: {
+          children: mock(async () => ({
+            data: [
+              {
+                id: "sess_child",
+                title: "Child fix",
+              },
+            ],
+          })),
+          fork: mock(async () => ({
+            data: {
+              id: "sess_forked",
+            },
+          })),
+        },
+      },
+    }
+    const toast = {
+      show: mock(() => {}),
+    }
+
+    if (typeof fn !== "function") return
+    await fn({
+      id: "sess_root",
+      title: "Root draft",
+      route,
+      dialog,
+      sdk,
+      toast,
+    })
+
+    expect(dialog.replace).toHaveBeenCalledTimes(1)
+    expect(dialog.clear).not.toHaveBeenCalled()
+    expect(route.navigate).not.toHaveBeenCalled()
+    expect(sdk.client.session.fork).not.toHaveBeenCalled()
+  })
+
   test("fork browse copy makes the fork target explicit", async () => {
     const mod: Record<string, unknown> = await import("../../../src/cli/cmd/tui/component/dialog-remote-session-list")
     const fn = mod["getRemoteBrowse"]

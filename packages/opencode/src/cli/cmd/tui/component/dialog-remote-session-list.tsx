@@ -10,6 +10,48 @@ type Session = {
   title?: string
 }
 
+type Listed = Session & {
+  parentID?: string
+}
+
+export async function listRemoteSessions(input: {
+  sdk: {
+    client: {
+      session: {
+        list(input: { roots: true }): Promise<{ data?: Listed[] }>
+      }
+    }
+  }
+}) {
+  const result = await input.sdk.client.session.list({ roots: true })
+  return (result.data ?? []).filter((item) => !item.parentID).map((item) => ({ id: item.id, title: item.title }))
+}
+
+export async function openRemoteSessionList(input: {
+  dialog: Pick<DialogContext, "replace">
+  sdk: {
+    client: {
+      session: {
+        list(input: { roots: true }): Promise<{ data?: Listed[] }>
+      }
+    }
+  }
+  toast: {
+    show(input: { message: string; variant?: "error" | "warning" | "info" | "success" }): void
+  }
+  fork?: boolean
+}) {
+  const sessions = await listRemoteSessions({ sdk: input.sdk })
+  if (!sessions.length) {
+    input.toast.show({
+      message: "No remote sessions found",
+      variant: "info",
+    })
+    return
+  }
+  input.dialog.replace(() => <DialogRemoteSessionList sessions={sessions} fork={input.fork} />)
+}
+
 export function getRemoteBrowse(input: { root: Session; sessions: Session[]; fork?: boolean }) {
   return {
     title: input.fork ? "Fork from remote session" : "Continue remote session",
