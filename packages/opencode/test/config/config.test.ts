@@ -1,4 +1,4 @@
-import { test, expect, describe, mock, afterEach, spyOn } from "bun:test"
+import { test, expect, describe, mock, afterEach, beforeEach, spyOn } from "bun:test"
 import { Effect, Layer, Option } from "effect"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Config } from "../../src/config/config"
@@ -34,8 +34,13 @@ const emptyAuth = Layer.mock(Auth.Service)({
 // Get managed config directory from environment (set in preload.ts)
 const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
 
+beforeEach(async () => {
+  await Config.invalidate(true)
+})
+
 afterEach(async () => {
   await fs.rm(managedConfigDir, { force: true, recursive: true }).catch(() => {})
+  await Config.invalidate(true)
 })
 
 async function writeManagedSettings(settings: object, filename = "opencode.json") {

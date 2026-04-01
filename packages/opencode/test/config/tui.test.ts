@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test"
+import { afterEach, beforeEach, expect, test } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
 import { tmpdir } from "../fixture/fixture"
@@ -10,6 +10,10 @@ import { Filesystem } from "../../src/util/filesystem"
 
 const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
 
+beforeEach(async () => {
+  await Config.invalidate(true)
+})
+
 afterEach(async () => {
   delete process.env.OPENCODE_CONFIG
   delete process.env.OPENCODE_TUI_CONFIG
@@ -18,6 +22,7 @@ afterEach(async () => {
   await fs.rm(path.join(Global.Path.config, "tui.json"), { force: true }).catch(() => {})
   await fs.rm(path.join(Global.Path.config, "tui.jsonc"), { force: true }).catch(() => {})
   await fs.rm(managedConfigDir, { force: true, recursive: true }).catch(() => {})
+  await Config.invalidate(true)
 })
 
 test("keeps server and tui plugin merge semantics aligned", async () => {
