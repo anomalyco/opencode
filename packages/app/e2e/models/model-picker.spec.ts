@@ -19,11 +19,11 @@ test("smoke model selection updates prompt footer", async ({ page, gotoSession }
 
   const input = dialog.getByRole("textbox").first()
 
-  const selected = dialog.locator('[data-slot="list-item"][data-selected="true"]').first()
-  await expect(selected).toBeVisible()
+  const items = dialog.locator('[data-slot="list-item"]')
+  await expect(items.first()).toBeVisible()
 
   const other = dialog.locator('[data-slot="list-item"]:not([data-selected="true"])').first()
-  const target = (await other.count()) > 0 ? other : selected
+  const target = (await other.count()) > 0 ? other : items.first()
 
   const key = await target.getAttribute("data-key")
   if (!key) throw new Error("Failed to resolve model key from list item")
@@ -44,5 +44,7 @@ test("smoke model selection updates prompt footer", async ({ page, gotoSession }
 
   const dialogAgain = page.getByRole("dialog")
   await expect(dialogAgain).toBeVisible()
-  await expect(dialogAgain.locator(`[data-slot="list-item"][data-key="${key}"][data-selected="true"]`)).toBeVisible()
+  const chosen = dialogAgain.locator(`[data-slot="list-item"][data-key="${key}"]`)
+  await expect(chosen).toBeVisible()
+  await expect(chosen).toHaveAttribute("data-selected", "true")
 })

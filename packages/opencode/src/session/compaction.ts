@@ -112,7 +112,7 @@ export namespace SessionCompaction {
         const context = input.model.limit.context
         if (context === 0) return
         const count =
-          input.tokens.total ||
+          input.tokens.total ??
           input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
         const fraction = count / context
         const t = cfg.compaction?.thresholds
