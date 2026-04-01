@@ -238,6 +238,8 @@ const createPlatform = (): Platform => {
         type: "image/png",
       })
     },
+
+    openInTui: (session, url, password) => window.api.openInTui(session, url, password),
   }
 }
 

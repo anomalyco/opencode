@@ -1,5 +1,6 @@
 import type { Message, Session, TextPart, UserMessage } from "@opencode-ai/sdk/v2/client"
 import { Avatar } from "@opencode-ai/ui/avatar"
+import { ContextMenu } from "@opencode-ai/ui/context-menu"
 import { HoverCard } from "@opencode-ai/ui/hover-card"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -15,6 +16,8 @@ import { useLanguage } from "@/context/language"
 import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
+import { usePlatform } from "@/context/platform"
+import { useServer } from "@/context/server"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
 import { hasProjectPermissions } from "./helpers"
@@ -205,6 +208,8 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const notification = useNotification()
   const permission = usePermission()
   const globalSync = useGlobalSync()
+  const server = useServer()
+  const platform = usePlatform()
   const unseenCount = createMemo(() => notification.session.unseenCount(props.session.id))
   const hasError = createMemo(() => notification.session.unseenHasError(props.session.id))
   const [sessionStore] = globalSync.child(props.session.directory)
@@ -307,75 +312,101 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   )
 
   return (
-    <div
-      data-session-id={props.session.id}
-      class="group/session relative w-full min-w-0 rounded-md cursor-default pl-2 pr-3 transition-colors
-             hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[[data-expanded]]:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active"
-    >
-      <div class="flex min-w-0 items-center gap-1">
-        <div class="min-w-0 flex-1">
-          <Show
-            when={hoverEnabled()}
-            fallback={
-              <Tooltip
-                placement={props.mobile ? "bottom" : "right"}
-                value={props.session.title}
-                gutter={10}
-                class="min-w-0 w-full"
-              >
-                {item}
-              </Tooltip>
-            }
+    <ContextMenu>
+      <ContextMenu.Trigger
+        as="div"
+        data-session-id={props.session.id}
+        class="group/session relative w-full min-w-0 rounded-md cursor-default pl-2 pr-3 transition-colors
+               hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[[data-expanded]]:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active"
+      >
+        <div class="flex min-w-0 items-center gap-1">
+          <div class="min-w-0 flex-1">
+            <Show
+              when={hoverEnabled()}
+              fallback={
+                <Tooltip
+                  placement={props.mobile ? "bottom" : "right"}
+                  value={props.session.title}
+                  gutter={10}
+                  class="min-w-0 w-full"
+                >
+                  {item}
+                </Tooltip>
+              }
+            >
+              <SessionHoverPreview
+                mobile={props.mobile}
+                nav={props.nav}
+                hoverSession={props.hoverSession}
+                session={props.session}
+                sidebarHovering={props.sidebarHovering}
+                hoverReady={hoverReady}
+                hoverMessages={hoverMessages}
+                language={language}
+                isActive={isActive}
+                slug={props.slug}
+                setHoverSession={props.setHoverSession}
+                messageLabel={messageLabel}
+                onMessageSelect={(message) => {
+                  if (!isActive())
+                    layout.pendingMessage.set(`${base64Encode(props.session.directory)}/${props.session.id}`, message.id)
+
+                  navigate(`${props.slug}/session/${props.session.id}#message-${message.id}`)
+                }}
+                trigger={item}
+              />
+            </Show>
+          </div>
+
+          <div
+            class="shrink-0 overflow-hidden transition-[width,opacity]"
+            classList={{
+              "w-6 opacity-100 pointer-events-auto": !!props.mobile,
+              "w-0 opacity-0 pointer-events-none": !props.mobile,
+              "group-hover/session:w-6 group-hover/session:opacity-100 group-hover/session:pointer-events-auto": true,
+              "group-focus-within/session:w-6 group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto": true,
+            }}
           >
-            <SessionHoverPreview
-              mobile={props.mobile}
-              nav={props.nav}
-              hoverSession={props.hoverSession}
-              session={props.session}
-              sidebarHovering={props.sidebarHovering}
-              hoverReady={hoverReady}
-              hoverMessages={hoverMessages}
-              language={language}
-              isActive={isActive}
-              slug={props.slug}
-              setHoverSession={props.setHoverSession}
-              messageLabel={messageLabel}
-              onMessageSelect={(message) => {
-                if (!isActive())
-                  layout.pendingMessage.set(`${base64Encode(props.session.directory)}/${props.session.id}`, message.id)
-
-                navigate(`${props.slug}/session/${props.session.id}#message-${message.id}`)
-              }}
-              trigger={item}
-            />
-          </Show>
+            <Tooltip value={language.t("common.archive")} placement="top">
+              <IconButton
+                icon="archive"
+                variant="ghost"
+                class="size-6 rounded-md"
+                aria-label={language.t("common.archive")}
+                onClick={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  void props.archiveSession(props.session)
+                }}
+              />
+            </Tooltip>
+          </div>
         </div>
-
-        <div
-          class="shrink-0 overflow-hidden transition-[width,opacity]"
-          classList={{
-            "w-6 opacity-100 pointer-events-auto": !!props.mobile,
-            "w-0 opacity-0 pointer-events-none": !props.mobile,
-            "group-hover/session:w-6 group-hover/session:opacity-100 group-hover/session:pointer-events-auto": true,
-            "group-focus-within/session:w-6 group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto": true,
-          }}
-        >
-          <Tooltip value={language.t("common.archive")} placement="top">
-            <IconButton
-              icon="archive"
-              variant="ghost"
-              class="size-6 rounded-md"
-              aria-label={language.t("common.archive")}
-              onClick={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-                void props.archiveSession(props.session)
-              }}
-            />
-          </Tooltip>
-        </div>
-      </div>
-    </div>
+      </ContextMenu.Trigger>
+      <ContextMenu.Portal>
+        <ContextMenu.Content>
+          <ContextMenu.Item
+            onSelect={() => {
+              const conn = server.current
+              if (!conn) return
+              const url = conn.http.url
+              const pwd = conn.http.password ?? ""
+              void platform.openInTui?.(props.session.id, url, pwd)
+            }}
+          >
+            <ContextMenu.ItemLabel>Open in TUI</ContextMenu.ItemLabel>
+          </ContextMenu.Item>
+          <ContextMenu.Separator />
+          <ContextMenu.Item
+            onSelect={() => {
+              void props.archiveSession(props.session)
+            }}
+          >
+            <ContextMenu.ItemLabel>{language.t("common.archive")}</ContextMenu.ItemLabel>
+          </ContextMenu.Item>
+        </ContextMenu.Content>
+      </ContextMenu.Portal>
+    </ContextMenu>
   )
 }
 

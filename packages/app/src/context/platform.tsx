@@ -87,6 +87,9 @@ export type Platform = {
 
   /** Read image from clipboard (desktop only) */
   readClipboardImage?(): Promise<File | null>
+
+  /** Open a session in the TUI terminal (desktop only) */
+  openInTui?(session: string, url: string, password: string): Promise<void>
 }
 
 export type DisplayBackend = "auto" | "wayland"

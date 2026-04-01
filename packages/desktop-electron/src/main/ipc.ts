@@ -1,5 +1,6 @@
-import { execFile } from "node:child_process"
+import { execFile, spawn } from "node:child_process"
 import { BrowserWindow, Notification, app, clipboard, dialog, ipcMain, shell } from "electron"
+import { getSidecarPath } from "./cli"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 
 import type { InitStep, ServerReadyData, SqliteMigrationProgress, TitlebarTheme, WslConfig } from "../preload/types"
@@ -60,6 +61,44 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("check-update", () => deps.checkUpdate())
   ipcMain.handle("install-update", () => deps.installUpdate())
   ipcMain.handle("set-background-color", (_event: IpcMainInvokeEvent, color: string) => deps.setBackgroundColor(color))
+
+  ipcMain.handle("open-in-tui", (_event: IpcMainInvokeEvent, session: string, url: string, password: string) => {
+    const bin = getSidecarPath()
+    const args = ["attach", url, "--session", session, "--password", password]
+
+    switch (process.platform) {
+      case "win32":
+        spawn("cmd", ["/c", "start", "cmd", "/k", bin, ...args], {
+          detached: true,
+          stdio: "ignore",
+          windowsHide: false,
+        }).unref()
+        break
+      case "darwin": {
+        const escaped = [bin, ...args].map((a) => `'${a.replace(/'/g, `'"'"'`)}'`).join(" ")
+        spawn("osascript", ["-e", `tell app "Terminal" to do script "${escaped.replace(/"/g, '\\"')}"`], {
+          detached: true,
+          stdio: "ignore",
+        }).unref()
+        break
+      }
+      default:
+        // Linux: try common terminal emulators
+        for (const term of ["x-terminal-emulator", "gnome-terminal", "konsole", "xterm"]) {
+          try {
+            const child = spawn(term, ["-e", bin, ...args], {
+              detached: true,
+              stdio: "ignore",
+            })
+            child.unref()
+            break
+          } catch {
+            continue
+          }
+        }
+    }
+  })
+
   ipcMain.handle("store-get", (_event: IpcMainInvokeEvent, name: string, key: string) => {
     const store = getStore(name)
     const value = store.get(key)
