@@ -82,16 +82,7 @@ import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
 
 addDefaultParsers(parsers.parsers)
-
-class CustomSpeedScroll implements ScrollAcceleration {
-  constructor(private speed: number) {}
-
-  tick(_now?: number): number {
-    return this.speed
-  }
-
-  reset(): void {}
-}
+import { getScrollAcceleration } from "../../util/scroll"
 
 const context = createContext<{
   width: number
@@ -168,17 +159,7 @@ export function Session() {
   const showTimestamps = createMemo(() => timestamps() === "show")
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
 
-  const scrollAcceleration = createMemo(() => {
-    const tui = tuiConfig
-    if (tui?.scroll_acceleration?.enabled) {
-      return new MacOSScrollAccel()
-    }
-    if (tui?.scroll_speed) {
-      return new CustomSpeedScroll(tui.scroll_speed)
-    }
-
-    return new CustomSpeedScroll(3)
-  })
+  const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
 
   createEffect(() => {
     if (session()?.workspaceID) {
