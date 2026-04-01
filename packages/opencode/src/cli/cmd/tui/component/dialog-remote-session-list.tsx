@@ -10,7 +10,7 @@ type Session = {
   title?: string
 }
 
-type Input = {
+type OpenInput = {
   id: string
   fork?: boolean
   route: RouteContext
@@ -27,7 +27,20 @@ type Input = {
   }
 }
 
-export async function selectRemoteSession(input: Input) {
+type Input = OpenInput & {
+  title?: string
+  dialog: Pick<DialogContext, "clear" | "replace">
+  sdk: {
+    client: {
+      session: {
+        children?(input: { sessionID: string }): Promise<{ data?: Session[] }>
+        fork(input: { sessionID: string }): Promise<{ data?: { id?: string } }>
+      }
+    }
+  }
+}
+
+export async function openRemoteSession(input: OpenInput) {
   if (!input.fork) {
     input.route.navigate({
       type: "session",
@@ -56,6 +69,53 @@ export async function selectRemoteSession(input: Input) {
   input.dialog.clear()
 }
 
+export async function selectRemoteSession(input: Input) {
+  const result = await input.sdk.client.session.children?.({
+    sessionID: input.id,
+  })
+  if (result?.data?.length) {
+    input.dialog.replace(() => (
+      <DialogRemoteSessionBrowse
+        root={{ id: input.id, title: input.title }}
+        sessions={result.data ?? []}
+        fork={input.fork}
+      />
+    ))
+    return
+  }
+
+  await openRemoteSession(input)
+}
+
+function DialogRemoteSessionBrowse(props: { root: Session; sessions: Session[]; fork?: boolean }) {
+  const dialog = useDialog()
+  const route = useRoute()
+  const sdk = useSDK()
+  const toast = useToast()
+
+  return (
+    <DialogSelect
+      title="Continue remote session"
+      options={[props.root, ...props.sessions].map((item) => ({
+        title: item.title ?? item.id,
+        value: item.id,
+        footer: item.id,
+      }))}
+      skipFilter={true}
+      onSelect={(option) => {
+        void openRemoteSession({
+          id: option.value,
+          fork: props.fork,
+          route,
+          dialog,
+          sdk,
+          toast,
+        })
+      }}
+    />
+  )
+}
+
 export function DialogRemoteSessionList(props: { sessions: Session[]; fork?: boolean }) {
   const dialog = useDialog()
   const route = useRoute()
@@ -78,6 +138,7 @@ export function DialogRemoteSessionList(props: { sessions: Session[]; fork?: boo
       onSelect={(option) => {
         void selectRemoteSession({
           id: option.value,
+          title: props.sessions.find((item) => item.id === option.value)?.title,
           fork: props.fork,
           route,
           dialog,
