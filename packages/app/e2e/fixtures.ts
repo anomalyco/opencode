@@ -15,6 +15,7 @@ import {
   waitSlug,
   waitSession,
 } from "./actions"
+import { openaiModel, withMockOpenAI } from "./prompt/mock"
 import { createSdk, dirSlug, getWorktree, sessionPath } from "./utils"
 
 type LLMFixture = {
@@ -84,6 +85,7 @@ type TestFixtures = {
   gotoSession: (sessionID?: string) => Promise<void>
   withProject: <T>(callback: (project: ProjectHandle) => Promise<T>, options?: ProjectOptions) => Promise<T>
   withBackendProject: <T>(callback: (project: ProjectHandle) => Promise<T>, options?: ProjectOptions) => Promise<T>
+  withMockProject: <T>(callback: (project: ProjectHandle) => Promise<T>, options?: ProjectOptions) => Promise<T>
 }
 
 type WorkerFixtures = {
@@ -193,6 +195,21 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   withBackendProject: async ({ page, backend }, use) => {
     await use((callback, options) =>
       runProject(page, callback, { ...options, serverUrl: backend.url, sdk: backend.sdk }),
+    )
+  },
+  withMockProject: async ({ page, llm, backend }, use) => {
+    await use((callback, options) =>
+      withMockOpenAI({
+        serverUrl: backend.url,
+        llmUrl: llm.url,
+        fn: () =>
+          runProject(page, callback, {
+            ...options,
+            model: options?.model ?? openaiModel,
+            serverUrl: backend.url,
+            sdk: backend.sdk,
+          }),
+      }),
     )
   },
 })

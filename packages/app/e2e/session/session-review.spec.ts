@@ -1,6 +1,6 @@
 import { waitSessionIdle, withSession } from "../actions"
 import { test, expect } from "../fixtures"
-import { inputMatch, openaiModel, withMockOpenAI } from "../prompt/mock"
+import { inputMatch } from "../prompt/mock"
 
 const count = 14
 
@@ -247,12 +247,7 @@ async function fileOverflow(page: Parameters<typeof test>[0]["page"]) {
   }
 }
 
-test("review applies inline comment clicks without horizontal overflow", async ({
-  page,
-  llm,
-  backend,
-  withBackendProject,
-}) => {
+test("review applies inline comment clicks without horizontal overflow", async ({ page, llm, withMockProject }) => {
   test.setTimeout(180_000)
 
   const tag = `review-comment-${Date.now()}`
@@ -261,60 +256,46 @@ test("review applies inline comment clicks without horizontal overflow", async (
 
   await page.setViewportSize({ width: 1280, height: 900 })
 
-  await withMockOpenAI({
-    serverUrl: backend.url,
-    llmUrl: llm.url,
-    fn: async () => {
-      await withBackendProject(
-        async (project) => {
-          await withSession(project.sdk, `e2e review comment ${tag}`, async (session) => {
-            project.trackSession(session.id)
-            await patchWithMock(llm, project.sdk, session.id, seed([{ file, mark: tag }]))
+  await withMockProject(async (project) => {
+    await withSession(project.sdk, `e2e review comment ${tag}`, async (session) => {
+      project.trackSession(session.id)
+      await patchWithMock(llm, project.sdk, session.id, seed([{ file, mark: tag }]))
 
-            await expect
-              .poll(
-                async () => {
-                  const diff = await project.sdk.session.diff({ sessionID: session.id }).then((res) => res.data ?? [])
-                  return diff.length
-                },
-                { timeout: 60_000 },
-              )
-              .toBe(1)
+      await expect
+        .poll(
+          async () => {
+            const diff = await project.sdk.session.diff({ sessionID: session.id }).then((res) => res.data ?? [])
+            return diff.length
+          },
+          { timeout: 60_000 },
+        )
+        .toBe(1)
 
-            await project.gotoSession(session.id)
-            await show(page)
+      await project.gotoSession(session.id)
+      await show(page)
 
-            const tab = page.getByRole("tab", { name: /Review/i }).first()
-            await expect(tab).toBeVisible()
-            await tab.click()
+      const tab = page.getByRole("tab", { name: /Review/i }).first()
+      await expect(tab).toBeVisible()
+      await tab.click()
 
-            await expand(page)
-            await waitMark(page, file, tag)
-            await comment(page, file, note)
+      await expand(page)
+      await waitMark(page, file, tag)
+      await comment(page, file, note)
 
-            await expect
-              .poll(async () => (await overflow(page, file))?.width ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
-              .toBeLessThanOrEqual(1)
-            await expect
-              .poll(async () => (await overflow(page, file))?.pop ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
-              .toBeLessThanOrEqual(1)
-            await expect
-              .poll(async () => (await overflow(page, file))?.tools ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
-              .toBeLessThanOrEqual(1)
-          })
-        },
-        { model: openaiModel },
-      )
-    },
+      await expect
+        .poll(async () => (await overflow(page, file))?.width ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
+        .toBeLessThanOrEqual(1)
+      await expect
+        .poll(async () => (await overflow(page, file))?.pop ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
+        .toBeLessThanOrEqual(1)
+      await expect
+        .poll(async () => (await overflow(page, file))?.tools ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
+        .toBeLessThanOrEqual(1)
+    })
   })
 })
 
-test("review file comments submit on click without clipping actions", async ({
-  page,
-  llm,
-  backend,
-  withBackendProject,
-}) => {
+test("review file comments submit on click without clipping actions", async ({ page, llm, withMockProject }) => {
   test.setTimeout(180_000)
 
   const tag = `review-file-comment-${Date.now()}`
@@ -323,56 +304,47 @@ test("review file comments submit on click without clipping actions", async ({
 
   await page.setViewportSize({ width: 1280, height: 900 })
 
-  await withMockOpenAI({
-    serverUrl: backend.url,
-    llmUrl: llm.url,
-    fn: async () => {
-      await withBackendProject(
-        async (project) => {
-          await withSession(project.sdk, `e2e review file comment ${tag}`, async (session) => {
-            project.trackSession(session.id)
-            await patchWithMock(llm, project.sdk, session.id, seed([{ file, mark: tag }]))
+  await withMockProject(async (project) => {
+    await withSession(project.sdk, `e2e review file comment ${tag}`, async (session) => {
+      project.trackSession(session.id)
+      await patchWithMock(llm, project.sdk, session.id, seed([{ file, mark: tag }]))
 
-            await expect
-              .poll(
-                async () => {
-                  const diff = await project.sdk.session.diff({ sessionID: session.id }).then((res) => res.data ?? [])
-                  return diff.length
-                },
-                { timeout: 60_000 },
-              )
-              .toBe(1)
+      await expect
+        .poll(
+          async () => {
+            const diff = await project.sdk.session.diff({ sessionID: session.id }).then((res) => res.data ?? [])
+            return diff.length
+          },
+          { timeout: 60_000 },
+        )
+        .toBe(1)
 
-            await project.gotoSession(session.id)
-            await show(page)
+      await project.gotoSession(session.id)
+      await show(page)
 
-            const tab = page.getByRole("tab", { name: /Review/i }).first()
-            await expect(tab).toBeVisible()
-            await tab.click()
+      const tab = page.getByRole("tab", { name: /Review/i }).first()
+      await expect(tab).toBeVisible()
+      await tab.click()
 
-            await expand(page)
-            await waitMark(page, file, tag)
-            await openReviewFile(page, file)
-            await fileComment(page, note)
+      await expand(page)
+      await waitMark(page, file, tag)
+      await openReviewFile(page, file)
+      await fileComment(page, note)
 
-            await expect
-              .poll(async () => (await fileOverflow(page))?.width ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
-              .toBeLessThanOrEqual(1)
-            await expect
-              .poll(async () => (await fileOverflow(page))?.pop ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
-              .toBeLessThanOrEqual(1)
-            await expect
-              .poll(async () => (await fileOverflow(page))?.tools ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
-              .toBeLessThanOrEqual(1)
-          })
-        },
-        { model: openaiModel },
-      )
-    },
+      await expect
+        .poll(async () => (await fileOverflow(page))?.width ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
+        .toBeLessThanOrEqual(1)
+      await expect
+        .poll(async () => (await fileOverflow(page))?.pop ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
+        .toBeLessThanOrEqual(1)
+      await expect
+        .poll(async () => (await fileOverflow(page))?.tools ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
+        .toBeLessThanOrEqual(1)
+    })
   })
 })
 
-test.fixme("review keeps scroll position after a live diff update", async ({ page, llm, backend, withBackendProject }) => {
+test.fixme("review keeps scroll position after a live diff update", async ({ page, llm, withMockProject }) => {
   test.setTimeout(180_000)
 
   const tag = `review-${Date.now()}`
