@@ -1,8 +1,9 @@
 import type { ToolPart } from "@opencode-ai/sdk/v2/client"
 import type { Page } from "@playwright/test"
 import { test, expect } from "../fixtures"
-import { withSession } from "../actions"
+import { assistantText, sessionIDFromUrl } from "../actions"
 import { promptSelector } from "../selectors"
+import { openaiModel, promptMatch, titleMatch, withMockOpenAI } from "./mock"
 
 const text = (value: string | null) => (value ?? "").replace(/\u200B/g, "").trim()
 
@@ -43,20 +44,13 @@ async function wait(page: Page, value: string) {
   await expect.poll(async () => text(await page.locator(promptSelector).textContent())).toBe(value)
 }
 
-async function reply(sdk: Parameters<typeof withSession>[0], sessionID: string, token: string) {
+async function reply(
+  sdk: { session: { messages: Parameters<typeof assistantText>[0]["session"] } },
+  sessionID: string,
+  token: string,
+) {
   await expect
-    .poll(
-      async () => {
-        const messages = await sdk.session.messages({ sessionID, limit: 50 }).then((r) => r.data ?? [])
-        return messages
-          .filter((item) => item.info.role === "assistant")
-          .flatMap((item) => item.parts)
-          .filter((item) => item.type === "text")
-          .map((item) => item.text)
-          .join("\n")
-      },
-      { timeout: 90_000 },
-    )
+    .poll(() => assistantText(sdk as Parameters<typeof assistantText>[0], sessionID), { timeout: 90_000 })
     .toContain(token)
 }
 
@@ -79,106 +73,145 @@ async function shell(sdk: Parameters<typeof withSession>[0], sessionID: string, 
     .toContain(token)
 }
 
-test("prompt history restores unsent draft with arrow navigation", async ({ page, sdk, gotoSession }) => {
+test("prompt history restores unsent draft with arrow navigation", async ({
+  page,
+  llm,
+  backend,
+  withBackendProject,
+}) => {
   test.setTimeout(120_000)
 
-  await withSession(sdk, `e2e prompt history ${Date.now()}`, async (session) => {
-    await gotoSession(session.id)
+  await withMockOpenAI({
+    serverUrl: backend.url,
+    llmUrl: llm.url,
+    fn: async () => {
+      const firstToken = `E2E_HISTORY_ONE_${Date.now()}`
+      const secondToken = `E2E_HISTORY_TWO_${Date.now()}`
+      const first = `Reply with exactly: ${firstToken}`
+      const second = `Reply with exactly: ${secondToken}`
+      const draft = `draft ${Date.now()}`
 
-    const prompt = page.locator(promptSelector)
-    const firstToken = `E2E_HISTORY_ONE_${Date.now()}`
-    const secondToken = `E2E_HISTORY_TWO_${Date.now()}`
-    const first = `Reply with exactly: ${firstToken}`
-    const second = `Reply with exactly: ${secondToken}`
-    const draft = `draft ${Date.now()}`
+      await llm.textMatch(titleMatch, "E2E Title")
+      await llm.textMatch(promptMatch(firstToken), firstToken)
+      await llm.textMatch(promptMatch(secondToken), secondToken)
 
-    await prompt.click()
-    await page.keyboard.type(first)
-    await page.keyboard.press("Enter")
-    await wait(page, "")
-    await reply(sdk, session.id, firstToken)
+      await withBackendProject(
+        async (project) => {
+          const prompt = page.locator(promptSelector)
 
-    await prompt.click()
-    await page.keyboard.type(second)
-    await page.keyboard.press("Enter")
-    await wait(page, "")
-    await reply(sdk, session.id, secondToken)
+          await prompt.click()
+          await page.keyboard.type(first)
+          await page.keyboard.press("Enter")
+          await wait(page, "")
 
-    await prompt.click()
-    await page.keyboard.type(draft)
-    await wait(page, draft)
+          await expect(page).toHaveURL(/\/session\/[^/?#]+/, { timeout: 30_000 })
+          const sessionID = sessionIDFromUrl(page.url())!
+          project.trackSession(sessionID)
+          await reply(project.sdk, sessionID, firstToken)
 
-    // Clear the draft before navigating history (ArrowUp only works when prompt is empty)
-    await prompt.fill("")
-    await wait(page, "")
+          await prompt.click()
+          await page.keyboard.type(second)
+          await page.keyboard.press("Enter")
+          await wait(page, "")
+          await reply(project.sdk, sessionID, secondToken)
 
-    await page.keyboard.press("ArrowUp")
-    await wait(page, second)
+          await prompt.click()
+          await page.keyboard.type(draft)
+          await wait(page, draft)
 
-    await page.keyboard.press("ArrowUp")
-    await wait(page, first)
+          await prompt.fill("")
+          await wait(page, "")
 
-    await page.keyboard.press("ArrowDown")
-    await wait(page, second)
+          await page.keyboard.press("ArrowUp")
+          await wait(page, second)
 
-    await page.keyboard.press("ArrowDown")
-    await wait(page, "")
+          await page.keyboard.press("ArrowUp")
+          await wait(page, first)
+
+          await page.keyboard.press("ArrowDown")
+          await wait(page, second)
+
+          await page.keyboard.press("ArrowDown")
+          await wait(page, "")
+        },
+        {
+          model: openaiModel,
+        },
+      )
+    },
   })
 })
 
-test("shell history stays separate from normal prompt history", async ({ page, sdk, gotoSession }) => {
+test("shell history stays separate from normal prompt history", async ({ page, llm, backend, withBackendProject }) => {
   test.setTimeout(120_000)
 
-  await withSession(sdk, `e2e shell history ${Date.now()}`, async (session) => {
-    await gotoSession(session.id)
+  await withMockOpenAI({
+    serverUrl: backend.url,
+    llmUrl: llm.url,
+    fn: async () => {
+      const firstToken = `E2E_SHELL_ONE_${Date.now()}`
+      const secondToken = `E2E_SHELL_TWO_${Date.now()}`
+      const normalToken = `E2E_NORMAL_${Date.now()}`
+      const first = `echo ${firstToken}`
+      const second = `echo ${secondToken}`
+      const normal = `Reply with exactly: ${normalToken}`
 
-    const prompt = page.locator(promptSelector)
-    const firstToken = `E2E_SHELL_ONE_${Date.now()}`
-    const secondToken = `E2E_SHELL_TWO_${Date.now()}`
-    const normalToken = `E2E_NORMAL_${Date.now()}`
-    const first = `echo ${firstToken}`
-    const second = `echo ${secondToken}`
-    const normal = `Reply with exactly: ${normalToken}`
+      await llm.textMatch(titleMatch, "E2E Title")
+      await llm.textMatch(promptMatch(normalToken), normalToken)
 
-    await prompt.click()
-    await page.keyboard.type("!")
-    await page.keyboard.type(first)
-    await page.keyboard.press("Enter")
-    await wait(page, "")
-    await shell(sdk, session.id, first, firstToken)
+      await withBackendProject(
+        async (project) => {
+          const prompt = page.locator(promptSelector)
 
-    await prompt.click()
-    await page.keyboard.type("!")
-    await page.keyboard.type(second)
-    await page.keyboard.press("Enter")
-    await wait(page, "")
-    await shell(sdk, session.id, second, secondToken)
+          await prompt.click()
+          await page.keyboard.type("!")
+          await page.keyboard.type(first)
+          await page.keyboard.press("Enter")
+          await wait(page, "")
 
-    await prompt.click()
-    await page.keyboard.type("!")
-    await page.keyboard.press("ArrowUp")
-    await wait(page, second)
+          await expect(page).toHaveURL(/\/session\/[^/?#]+/, { timeout: 30_000 })
+          const sessionID = sessionIDFromUrl(page.url())!
+          project.trackSession(sessionID)
+          await shell(project.sdk, sessionID, first, firstToken)
 
-    await page.keyboard.press("ArrowUp")
-    await wait(page, first)
+          await prompt.click()
+          await page.keyboard.type("!")
+          await page.keyboard.type(second)
+          await page.keyboard.press("Enter")
+          await wait(page, "")
+          await shell(project.sdk, sessionID, second, secondToken)
 
-    await page.keyboard.press("ArrowDown")
-    await wait(page, second)
+          await prompt.click()
+          await page.keyboard.type("!")
+          await page.keyboard.press("ArrowUp")
+          await wait(page, second)
 
-    await page.keyboard.press("ArrowDown")
-    await wait(page, "")
+          await page.keyboard.press("ArrowUp")
+          await wait(page, first)
 
-    await page.keyboard.press("Escape")
-    await wait(page, "")
+          await page.keyboard.press("ArrowDown")
+          await wait(page, second)
 
-    await prompt.click()
-    await page.keyboard.type(normal)
-    await page.keyboard.press("Enter")
-    await wait(page, "")
-    await reply(sdk, session.id, normalToken)
+          await page.keyboard.press("ArrowDown")
+          await wait(page, "")
 
-    await prompt.click()
-    await page.keyboard.press("ArrowUp")
-    await wait(page, normal)
+          await page.keyboard.press("Escape")
+          await wait(page, "")
+
+          await prompt.click()
+          await page.keyboard.type(normal)
+          await page.keyboard.press("Enter")
+          await wait(page, "")
+          await reply(project.sdk, sessionID, normalToken)
+
+          await prompt.click()
+          await page.keyboard.press("ArrowUp")
+          await wait(page, normal)
+        },
+        {
+          model: openaiModel,
+        },
+      )
+    },
   })
 })
