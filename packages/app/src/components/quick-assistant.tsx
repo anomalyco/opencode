@@ -167,6 +167,16 @@ function join(root: string, child: string) {
   return root.replace(/[\\/]+$/, "") + "/" + child
 }
 
+function native(dir: string, win: boolean) {
+  if (!dir) return dir
+  return win ? dir.replace(/\//g, "\\") : dir.replace(/\\/g, "/")
+}
+
+function same(a: string, b: string, win: boolean) {
+  if (win) return native(a, true).toLowerCase() === native(b, true).toLowerCase()
+  return native(a, false) === native(b, false)
+}
+
 export function QuickAssistant() {
   const params = useParams()
   const command = useCommand()
@@ -188,16 +198,16 @@ export function QuickAssistant() {
   let input!: HTMLTextAreaElement
   const win = createMemo(() => platform.os === "windows")
 
-  const dir = createMemo(() => decode64(params.dir) ?? "")
+  const dir = createMemo(() => native(decode64(params.dir) ?? "", win()))
   const root = createMemo(() => {
     const base = globalSync.data.path.config
     if (!base) return ""
-    return join(base, "quick-assistant")
+    return native(join(base, "quick-assistant"), win())
   })
   const activeDir = createMemo(() => {
     const current = dir()
     if (!current) return ""
-    if (current === root()) return ""
+    if (same(current, root(), win())) return ""
     return current
   })
   const openclaw = createMemo(() => server.current?.integration === "openclaw")
@@ -417,7 +427,7 @@ export function QuickAssistant() {
     if (!current || !id || !setStore) return
 
     const off = globalSDK.event.listen((e) => {
-      if (e.name !== current) return
+      if (!same(e.name, current, win())) return
       const event = e.details
       if (event.type === "session.status") {
         if (event.properties.sessionID !== id) return
