@@ -450,6 +450,36 @@ export const SessionRoutes = lazy(() =>
         return c.json(result)
       },
     )
+    .get(
+      "/:sessionID/todo",
+      describeRoute({
+        summary: "Get session todos",
+        description: "Retrieve the todo list for a specific session.",
+        operationId: "session.todo",
+        responses: {
+          200: {
+            description: "List of todos",
+            content: {
+              "application/json": {
+                schema: resolver(Todo.Info.array()),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const todos = Todo.get(sessionID)
+        return c.json(todos)
+      },
+    )
     .delete(
       "/:sessionID/share",
       describeRoute({

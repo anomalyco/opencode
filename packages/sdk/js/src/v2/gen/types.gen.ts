@@ -134,6 +134,75 @@ export type EventPermissionReplied = {
   }
 }
 
+export type EventTuiPromptAppend = {
+  type: "tui.prompt.append"
+  properties: {
+    text: string
+  }
+}
+
+export type EventTuiCommandExecute = {
+  type: "tui.command.execute"
+  properties: {
+    command:
+      | "session.list"
+      | "session.new"
+      | "session.share"
+      | "session.interrupt"
+      | "session.compact"
+      | "session.page.up"
+      | "session.page.down"
+      | "session.line.up"
+      | "session.line.down"
+      | "session.half.page.up"
+      | "session.half.page.down"
+      | "session.first"
+      | "session.last"
+      | "prompt.clear"
+      | "prompt.submit"
+      | "agent.cycle"
+      | string
+  }
+}
+
+export type EventTuiToastShow = {
+  type: "tui.toast.show"
+  properties: {
+    title?: string
+    message: string
+    variant: "info" | "success" | "warning" | "error"
+    /**
+     * Duration in milliseconds
+     */
+    duration?: number
+  }
+}
+
+export type EventTuiSessionSelect = {
+  type: "tui.session.select"
+  properties: {
+    /**
+     * Session ID to navigate to
+     */
+    sessionID: string
+  }
+}
+
+export type EventMcpToolsChanged = {
+  type: "mcp.tools.changed"
+  properties: {
+    server: string
+  }
+}
+
+export type EventMcpBrowserOpenFailed = {
+  type: "mcp.browser.open.failed"
+  properties: {
+    mcpName: string
+    url: string
+  }
+}
+
 export type SessionStatus =
   | {
       type: "idle"
@@ -300,75 +369,6 @@ export type EventWorktreeFailed = {
   type: "worktree.failed"
   properties: {
     message: string
-  }
-}
-
-export type EventTuiPromptAppend = {
-  type: "tui.prompt.append"
-  properties: {
-    text: string
-  }
-}
-
-export type EventTuiCommandExecute = {
-  type: "tui.command.execute"
-  properties: {
-    command:
-      | "session.list"
-      | "session.new"
-      | "session.share"
-      | "session.interrupt"
-      | "session.compact"
-      | "session.page.up"
-      | "session.page.down"
-      | "session.line.up"
-      | "session.line.down"
-      | "session.half.page.up"
-      | "session.half.page.down"
-      | "session.first"
-      | "session.last"
-      | "prompt.clear"
-      | "prompt.submit"
-      | "agent.cycle"
-      | string
-  }
-}
-
-export type EventTuiToastShow = {
-  type: "tui.toast.show"
-  properties: {
-    title?: string
-    message: string
-    variant: "info" | "success" | "warning" | "error"
-    /**
-     * Duration in milliseconds
-     */
-    duration?: number
-  }
-}
-
-export type EventTuiSessionSelect = {
-  type: "tui.session.select"
-  properties: {
-    /**
-     * Session ID to navigate to
-     */
-    sessionID: string
-  }
-}
-
-export type EventMcpToolsChanged = {
-  type: "mcp.tools.changed"
-  properties: {
-    server: string
-  }
-}
-
-export type EventMcpBrowserOpenFailed = {
-  type: "mcp.browser.open.failed"
-  properties: {
-    mcpName: string
-    url: string
   }
 }
 
@@ -998,6 +998,12 @@ export type Event =
   | EventPermissionModeChanged
   | EventPermissionAsked
   | EventPermissionReplied
+  | EventTuiPromptAppend
+  | EventTuiCommandExecute
+  | EventTuiToastShow
+  | EventTuiSessionSelect
+  | EventMcpToolsChanged
+  | EventMcpBrowserOpenFailed
   | EventSessionStatus
   | EventSessionIdle
   | EventQuestionAsked
@@ -1010,12 +1016,6 @@ export type Event =
   | EventTodoUpdated
   | EventWorktreeReady
   | EventWorktreeFailed
-  | EventTuiPromptAppend
-  | EventTuiCommandExecute
-  | EventTuiToastShow
-  | EventTuiSessionSelect
-  | EventMcpToolsChanged
-  | EventMcpBrowserOpenFailed
   | EventCommandExecuted
   | EventSessionDiff
   | EventSessionError
@@ -1486,6 +1486,54 @@ export type Config = {
         },
       ]
   >
+  /**
+   * Plugin manifests with contribution point definitions
+   */
+  plugin_manifests?: Array<{
+    /**
+     * Unique plugin identifier
+     */
+    id: string
+    /**
+     * Paths to skill directories provided by this plugin
+     */
+    skills?: Array<string>
+    /**
+     * Lifecycle hooks provided by this plugin
+     */
+    hooks?: Array<{
+      event: string
+      pattern?: string
+      command: string
+      timeout?: number
+    }>
+    /**
+     * MCP servers bundled with this plugin
+     */
+    mcpServers?: {
+      [key: string]: {
+        type: "local"
+        command: Array<string>
+        environment?: {
+          [key: string]: string
+        }
+        timeout?: number
+      }
+    }
+    /**
+     * Enable or disable this plugin
+     */
+    enabled?: boolean
+  }>
+  /**
+   * Plugin marketplace configuration
+   */
+  marketplace?: {
+    /**
+     * URL for plugin marketplace index
+     */
+    url?: string
+  }
   /**
    * Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing
    */
@@ -2119,6 +2167,7 @@ export type Command = {
   template: string
   subtask?: boolean
   hints: Array<string>
+  allowedTools?: Array<string>
 }
 
 export type Agent = {
@@ -3504,6 +3553,40 @@ export type SessionDiffResponses = {
 }
 
 export type SessionDiffResponse = SessionDiffResponses[keyof SessionDiffResponses]
+
+export type SessionTodoData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/todo"
+}
+
+export type SessionTodoErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionTodoError = SessionTodoErrors[keyof SessionTodoErrors]
+
+export type SessionTodoResponses = {
+  /**
+   * List of todos
+   */
+  200: Array<Todo>
+}
+
+export type SessionTodoResponse = SessionTodoResponses[keyof SessionTodoResponses]
 
 export type SessionSummarizeData = {
   body?: {
@@ -5326,6 +5409,12 @@ export type AppSkillsResponses = {
     description: string
     location: string
     content: string
+    paths?: Array<string>
+    allowedTools?: Array<string>
+    model?: string
+    effort?: "low" | "medium" | "high"
+    whenToUse?: string
+    argumentHint?: string
   }>
 }
 
