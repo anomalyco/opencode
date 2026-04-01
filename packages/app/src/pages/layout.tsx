@@ -1363,6 +1363,7 @@ export default function Layout(props: ParentProps) {
   }
 
   function fresh(directory: string) {
+    // Picker selections should always land on the fresh-session route.
     layout.projects.open(directory)
     server.projects.touch(directory)
     navigateWithSidebarReset(`/${base64Encode(directory)}/session`)
