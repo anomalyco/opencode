@@ -846,6 +846,7 @@ export const dict = {
   "settings.assistant.description": "配置悬浮快捷助手。",
   "settings.assistant.model.title": "助手模型",
   "settings.assistant.model.description": "选择快捷助手使用的模型。自动会回退到当前可用的默认模型。",
+  "settings.assistant.model.option.disabled": "禁用",
   "settings.assistant.model.option.auto": "自动",
 
   "settings.agents.title": "智能体",

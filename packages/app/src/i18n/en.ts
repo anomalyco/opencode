@@ -971,6 +971,7 @@ export const dict = {
   "settings.assistant.model.title": "Assistant model",
   "settings.assistant.model.description":
     "Choose the model used by the quick assistant. Auto uses the best available default.",
+  "settings.assistant.model.option.disabled": "Disabled",
   "settings.assistant.model.option.auto": "Auto",
   "settings.agents.title": "Agents",
   "settings.agents.description": "Agent settings will be configurable here.",

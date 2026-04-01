@@ -11,6 +11,15 @@ export const SettingsAssistant: Component = () => {
   const models = useModels()
   const settings = useSettings()
 
+  const off = {
+    value: "disabled" as const,
+    label: language.t("settings.assistant.model.option.disabled"),
+  }
+  const auto = {
+    value: undefined,
+    label: language.t("settings.assistant.model.option.auto"),
+  }
+
   const list = createMemo(() =>
     models
       .list()
@@ -21,21 +30,19 @@ export const SettingsAssistant: Component = () => {
       .sort((a, b) => a.label.localeCompare(b.label)),
   )
 
-  const options = createMemo(() => [
-    {
-      value: undefined,
-      label: language.t("settings.assistant.model.option.auto"),
-    },
-    ...list(),
-  ])
+  const options = createMemo(() => [off, auto, ...list()])
 
   const current = createMemo(() => {
     const selected = settings.assistant.model()
-    if (!selected) return options()[0]
+    if (selected === "disabled") return off
+    if (!selected) return auto
     return (
       options().find(
-        (item) => item.value?.providerID === selected.providerID && item.value?.modelID === selected.modelID,
-      ) ?? options()[0]
+        (item) =>
+          typeof item.value === "object" &&
+          item.value.providerID === selected.providerID &&
+          item.value.modelID === selected.modelID,
+      ) ?? auto
     )
   })
 
@@ -58,7 +65,13 @@ export const SettingsAssistant: Component = () => {
                 data-action="settings-assistant-model"
                 options={options()}
                 current={current()}
-                value={(item) => (item.value ? `${item.value.providerID}/${item.value.modelID}` : "auto")}
+                value={(item) =>
+                  item.value === "disabled"
+                    ? "disabled"
+                    : item.value
+                      ? `${item.value.providerID}/${item.value.modelID}`
+                      : "auto"
+                }
                 label={(item) => item.label}
                 onSelect={(item) => settings.assistant.setModel(item?.value)}
                 variant="secondary"
