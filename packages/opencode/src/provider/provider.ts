@@ -1364,7 +1364,7 @@ export namespace Provider {
 
           let installedPath: string
           if (!model.api.npm.startsWith("file://")) {
-            installedPath = await BunProc.install(model.api.npm, "latest", model.providerID)
+            installedPath = await BunProc.install(model.api.npm, "latest", { provider: model.providerID })
           } else {
             log.info("loading local provider", { pkg: model.api.npm })
             installedPath = model.api.npm
@@ -1541,10 +1541,9 @@ export namespace Provider {
     }),
   )
 
-  const { runPromise } = makeRuntime(
-    Service,
-    layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(Auth.defaultLayer)),
-  )
+  export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(Auth.defaultLayer))
+
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export async function list() {
     return runPromise((svc) => svc.list())

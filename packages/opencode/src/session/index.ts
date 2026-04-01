@@ -19,6 +19,7 @@ import { Log } from "../util/log"
 import { updateSchema } from "../util/update-schema"
 import { MessageV2 } from "./message-v2"
 import { Instance } from "../project/instance"
+import { InstanceState } from "@/effect/instance-state"
 import { SessionPrompt } from "./prompt"
 import { fn } from "@/util/fn"
 import { Command } from "../command"
@@ -257,6 +258,9 @@ export namespace Session {
     const cacheReadInputTokens = safe(input.usage.cachedInputTokens ?? 0)
     const cacheWriteInputTokens = safe(
       (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
+        // google-vertex-anthropic returns metadata under "vertex" key
+        // (AnthropicMessagesLanguageModel custom provider key from 'vertex.anthropic.messages')
+        input.metadata?.["vertex"]?.["cacheCreationInputTokens"] ??
         // @ts-expect-error
         input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
         // @ts-expect-error
@@ -379,11 +383,12 @@ export namespace Session {
         directory: string
         permission?: Permission.Ruleset
       }) {
+        const ctx = yield* InstanceState.context
         const result: Info = {
           id: SessionID.descending(input.id),
           slug: Slug.create(),
           version: Installation.VERSION,
-          projectID: Instance.project.id,
+          projectID: ctx.project.id,
           directory: input.directory,
           workspaceID: input.workspaceID,
           parentID: input.parentID,
@@ -441,12 +446,12 @@ export namespace Session {
       })
 
       const children = Effect.fn("Session.children")(function* (parentID: SessionID) {
-        const project = Instance.project
+        const ctx = yield* InstanceState.context
         const rows = yield* db((d) =>
           d
             .select()
             .from(SessionTable)
-            .where(and(eq(SessionTable.project_id, project.id), eq(SessionTable.parent_id, parentID)))
+            .where(and(eq(SessionTable.project_id, ctx.project.id), eq(SessionTable.parent_id, parentID)))
             .all(),
         )
         return rows.map(fromRow)
@@ -493,9 +498,10 @@ export namespace Session {
         permission?: Permission.Ruleset
         workspaceID?: WorkspaceID
       }) {
+        const directory = yield* InstanceState.directory
         return yield* createNext({
           parentID: input?.parentID,
-          directory: Instance.directory,
+          directory,
           title: input?.title,
           permission: input?.permission,
           workspaceID: input?.workspaceID,
@@ -503,10 +509,11 @@ export namespace Session {
       })
 
       const fork = Effect.fn("Session.fork")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
+        const directory = yield* InstanceState.directory
         const original = yield* get(input.sessionID)
         const title = getForkedTitle(original.title)
         const session = yield* createNext({
-          directory: Instance.directory,
+          directory,
           workspaceID: original.workspaceID,
           title,
         })

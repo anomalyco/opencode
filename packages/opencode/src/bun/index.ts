@@ -95,9 +95,14 @@ export namespace BunProc {
     if (oldPkg && oldPkg !== pkg) await cleanup(provider!, oldPkg)
   }
 
-  export async function install(pkg: string, version = "latest", provider?: string) {
+  export async function install(
+    pkg: string,
+    version = "latest",
+    opts?: { provider?: string; ignoreScripts?: boolean },
+  ) {
     using _ = await Lock.write("bun-install")
 
+    const provider = opts?.provider
     const mod = path.join(Global.Path.cache, "node_modules", pkg)
     const state = await readPackageJson()
     const cached = state.dependencies?.[pkg]
@@ -126,6 +131,7 @@ export namespace BunProc {
         "add",
         "--force",
         "--exact",
+        ...(opts?.ignoreScripts ? ["--ignore-scripts"] : []),
         // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
         ...(proxied() || process.env.CI ? ["--no-cache"] : []),
         "--cwd",
