@@ -2251,11 +2251,11 @@ export default function Layout(props: ParentProps) {
                       </Button>
                     </div>
                     <div class="flex-1 min-h-0">
-                      <Show when={project()}>
-                        {(item) => (
+                      <Show when={worktree()}>
+                        {(root) => (
                           <LocalWorkspace
                             ctx={workspaceSidebarCtx}
-                            project={item()}
+                            root={root()}
                             sortNow={sortNow}
                             mobile={panelProps.mobile}
                             popover={popover()}
@@ -2296,15 +2296,16 @@ export default function Layout(props: ParentProps) {
                         }}
                         class="size-full flex flex-col py-2 gap-4 overflow-y-auto no-scrollbar [overflow-anchor:none]"
                       >
-                        <Show when={project()}>
-                          {(item) => (
+                        <Show when={worktree()}>
+                          {(root) => (
                             <SortableProvider ids={workspaces()}>
                               <For each={workspaces()}>
                                 {(directory) => (
                                   <SortableWorkspace
                                     ctx={workspaceSidebarCtx}
                                     directory={directory}
-                                    project={item()}
+                                    root={root()}
+                                    projectId={projectId()}
                                     sortNow={sortNow}
                                     mobile={panelProps.mobile}
                                     popover={popover()}
