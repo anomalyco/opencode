@@ -34,6 +34,7 @@ export namespace LLM {
     tools: Record<string, Tool>
     retries?: number
     toolChoice?: "auto" | "required" | "none"
+    maxOutputTokens?: number
   }
 
   export type StreamRequest = StreamInput & {
@@ -193,9 +194,10 @@ export namespace LLM {
     )
 
     const maxOutputTokens =
-      isOpenaiOauth || provider.id.includes("github-copilot")
+      input.maxOutputTokens ??
+      (isOpenaiOauth || provider.id.includes("github-copilot")
         ? undefined
-        : ProviderTransform.maxOutputTokens(input.model)
+        : ProviderTransform.maxOutputTokens(input.model))
 
     const tools = await resolveTools(input)
 

@@ -963,6 +963,12 @@ export namespace Config {
             .describe("Max consecutive auto-compaction failures before stopping (default: 3)"),
           max_retries: z.number().int().min(0).optional().default(2)
             .describe("Max PTL retry attempts before giving up (default: 2)"),
+          max_output_tokens: z.number().int().min(1).optional()
+            .describe("Max output tokens for compaction summary (default: 20000)"),
+          post_budget: z.number().int().min(1).optional()
+            .describe("Post-compaction context budget in tokens (default: 50000)"),
+          restore_attachments: z.boolean().optional()
+            .describe("Restore tool attachments after compaction (default: true)"),
         })
         .optional(),
       experimental: z
@@ -1393,10 +1399,10 @@ export namespace Config {
           }
 
           if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) {
-            result.compaction = { ...result.compaction, auto: false, max_failures: 3, max_retries: 2 }
+            result.compaction = { ...result.compaction, auto: false } as NonNullable<typeof result.compaction>
           }
           if (Flag.OPENCODE_DISABLE_PRUNE) {
-            result.compaction = { ...result.compaction, prune: false, max_failures: 3, max_retries: 2 }
+            result.compaction = { ...result.compaction, prune: false } as NonNullable<typeof result.compaction>
           }
 
           return {

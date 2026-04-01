@@ -26,6 +26,8 @@ import { SessionCompactionPolicy } from "./compaction-policy"
 
   const COMPACTION_MAX_RETRIES = 2
   const PTL_KEEP_RECENT_TURNS = 5
+  const COMPACTION_MAX_OUTPUT_TOKENS = 20_000
+  const POST_COMPACT_TOKEN_BUDGET = 50_000
 
   // Marks all completed tool parts as compacted and strips attachments.
   // Operates on cloned messages — originals are never mutated.
@@ -310,6 +312,7 @@ When constructing the summary, try to stick to this template:
                 { role: "user", content: [{ type: "text", text: prompt }] },
               ],
               model,
+              maxOutputTokens: cfg.compaction?.max_output_tokens ?? COMPACTION_MAX_OUTPUT_TOKENS,
             })
             .pipe(Effect.onInterrupt(() => handle.abort()))
 
@@ -358,6 +361,13 @@ When constructing the summary, try to stick to this template:
           yield* session.updateMessage(errorSummary)
           return "stop"
         }
+
+        // Post-compact budget accounting: compute remaining room for restored context
+        const postBudget = cfg.compaction?.post_budget ?? POST_COMPACT_TOKEN_BUDGET
+        const summaryTokens = processor?.message.tokens?.output ?? 0
+        const used = summaryTokens
+        const left = Math.max(0, postBudget - used)
+        log.info("post-compact budget", { postBudget, summaryTokens, left })
 
         if (finalResult === "continue" && input.auto) {
           if (replay) {
@@ -419,7 +429,6 @@ When constructing the summary, try to stick to this template:
         }
 
         if (processor?.message.error) {
-          if (input.auto) yield* policy.failAutoCompact(input.sessionID)
           return "stop"
         }
         if (finalResult === "continue") {
@@ -451,6 +460,7 @@ When constructing the summary, try to stick to this template:
           type: "compaction",
           auto: input.auto,
           overflow: input.overflow,
+          retry: { attempt: 0, strategy: "full" },
         })
       })
 

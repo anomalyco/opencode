@@ -86,7 +86,7 @@ export namespace SessionCompactionPolicy {
           const current = (s.failures.get(sessionID) ?? 0) + 1
           s.failures.set(sessionID, current)
           log.info("failure recorded", { sessionID, current, max })
-          if (current >= max) {
+          if (current === max) {
             yield* bus.publish(Event.BreakerTripped, { sessionID, failures: current })
           }
           return current
