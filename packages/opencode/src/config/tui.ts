@@ -18,7 +18,6 @@ export namespace TuiConfig {
 
   type Acc = {
     result: Info
-    entries: Config.PluginOrigin[]
   }
 
   export type Info = z.output<typeof Info> & {
@@ -34,7 +33,7 @@ export namespace TuiConfig {
   function mergeInfo(target: Info, source: Info): Info {
     const merged = mergeDeep(target, source)
     if (target.plugin && source.plugin) {
-      merged.plugin = [...target.plugin, ...source.plugin]
+      merged.plugin = Array.from(new Set([...target.plugin, ...source.plugin]))
     }
     return merged
   }
@@ -69,7 +68,12 @@ export namespace TuiConfig {
     if (!data.plugin?.length) return
 
     const scope = pluginScope(file)
-    for (const spec of data.plugin) acc.entries.push({ spec, scope, source: file })
+    const plugins = Config.deduplicatePluginOrigins([
+      ...(acc.result.plugin_origins ?? []),
+      ...data.plugin.map((spec) => ({ spec, scope, source: file })),
+    ])
+    acc.result.plugin = plugins.map((item) => item.spec)
+    acc.result.plugin_origins = plugins
   }
 
   const state = Instance.state(async () => {
@@ -87,7 +91,6 @@ export namespace TuiConfig {
 
     const acc: Acc = {
       result: {},
-      entries: [],
     }
 
     for (const file of ConfigPaths.fileInDirectory(Global.Path.config, "tui")) {
@@ -116,10 +119,7 @@ export namespace TuiConfig {
       }
     }
 
-    const merged = Config.deduplicatePluginOrigins(acc.entries)
     acc.result.keybinds = Config.Keybinds.parse(acc.result.keybinds ?? {})
-    acc.result.plugin = merged.map((item) => item.spec)
-    acc.result.plugin_origins = merged.length ? merged : undefined
 
     const deps: Promise<void>[] = []
     if (acc.result.plugin?.length) {

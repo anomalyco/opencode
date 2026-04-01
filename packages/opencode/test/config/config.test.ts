@@ -1920,11 +1920,20 @@ describe("resolvePluginSpec", () => {
   })
 })
 
-describe("deduplicatePlugins", () => {
+describe("deduplicatePluginOrigins", () => {
+  const dedupe = (plugins: Config.PluginSpec[]) =>
+    Config.deduplicatePluginOrigins(
+      plugins.map((spec) => ({
+        spec,
+        source: "",
+        scope: "global" as const,
+      })),
+    ).map((item) => item.spec)
+
   test("removes duplicates keeping higher priority (later entries)", () => {
     const plugins = ["global-plugin@1.0.0", "shared-plugin@1.0.0", "local-plugin@2.0.0", "shared-plugin@2.0.0"]
 
-    const result = Config.deduplicatePlugins(plugins)
+    const result = dedupe(plugins)
 
     expect(result).toContain("global-plugin@1.0.0")
     expect(result).toContain("local-plugin@2.0.0")
@@ -1936,7 +1945,7 @@ describe("deduplicatePlugins", () => {
   test("keeps path plugins separate from package plugins", () => {
     const plugins = ["oh-my-opencode@2.4.3", "file:///project/.opencode/plugin/oh-my-opencode.js"]
 
-    const result = Config.deduplicatePlugins(plugins)
+    const result = dedupe(plugins)
 
     expect(result).toEqual(plugins)
   })
@@ -1944,7 +1953,7 @@ describe("deduplicatePlugins", () => {
   test("deduplicates direct path plugins by exact spec", () => {
     const plugins = ["file:///project/.opencode/plugin/demo.ts", "file:///project/.opencode/plugin/demo.ts"]
 
-    const result = Config.deduplicatePlugins(plugins)
+    const result = dedupe(plugins)
 
     expect(result).toEqual(["file:///project/.opencode/plugin/demo.ts"])
   })
@@ -1952,7 +1961,7 @@ describe("deduplicatePlugins", () => {
   test("preserves order of remaining plugins", () => {
     const plugins = ["a-plugin@1.0.0", "b-plugin@1.0.0", "c-plugin@1.0.0"]
 
-    const result = Config.deduplicatePlugins(plugins)
+    const result = dedupe(plugins)
 
     expect(result).toEqual(["a-plugin@1.0.0", "b-plugin@1.0.0", "c-plugin@1.0.0"])
   })

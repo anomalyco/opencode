@@ -303,27 +303,6 @@ export namespace Config {
     return resolved
   }
 
-  /**
-   * Deduplicates plugins by name, with later entries (higher priority) winning.
-   * Priority order (highest to lowest):
-   * 1. Local plugin/ directory
-   * 2. Local opencode.json
-   * 3. Global plugin/ directory
-   * 4. Global opencode.json
-   *
-   * Since plugins are added in low-to-high priority order,
-   * we reverse, deduplicate (keeping first occurrence), then restore order.
-   */
-  export function deduplicatePlugins(plugins: PluginSpec[]): PluginSpec[] {
-    return deduplicatePluginOrigins(
-      plugins.map((spec) => ({
-        spec,
-        source: "",
-        scope: "global",
-      })),
-    ).map((item) => item.spec)
-  }
-
   export function deduplicatePluginOrigins(plugins: PluginOrigin[]): PluginOrigin[] {
     const seen = new Set<string>()
     const list: PluginOrigin[] = []
@@ -1230,7 +1209,6 @@ export namespace Config {
           const auth = yield* authSvc.all().pipe(Effect.orDie)
 
           let result: Info = {}
-          const origins: PluginOrigin[] = []
 
           const scope = (source: string): PluginScope => {
             if (source.startsWith("http://") || source.startsWith("https://")) return "global"
@@ -1242,14 +1220,17 @@ export namespace Config {
           const track = (source: string, list: PluginSpec[] | undefined, kind?: PluginScope) => {
             if (!list?.length) return
             const hit = kind ?? scope(source)
-            for (const spec of list) {
-              origins.push({ spec, source, scope: hit })
-            }
+            const plugins = deduplicatePluginOrigins([
+              ...(result.plugin_origins ?? []),
+              ...list.map((spec) => ({ spec, source, scope: hit })),
+            ])
+            result.plugin = plugins.map((item) => item.spec)
+            result.plugin_origins = plugins
           }
 
           const merge = (source: string, next: Info, kind?: PluginScope) => {
-            track(source, next.plugin, kind)
             result = mergeConfigConcatArrays(result, next)
+            track(source, next.plugin, kind)
           }
 
           for (const [key, value] of Object.entries(auth)) {
@@ -1326,7 +1307,6 @@ export namespace Config {
             result.agent = mergeDeep(result.agent, yield* Effect.promise(() => loadAgent(dir)))
             result.agent = mergeDeep(result.agent, yield* Effect.promise(() => loadMode(dir)))
             const list = yield* Effect.promise(() => loadPlugin(dir))
-            result.plugin.push(...list)
             track(dir, list)
           }
 
@@ -1417,10 +1397,6 @@ export namespace Config {
           if (Flag.OPENCODE_DISABLE_PRUNE) {
             result.compaction = { ...result.compaction, prune: false }
           }
-
-          const plugins = deduplicatePluginOrigins(origins)
-          result.plugin = plugins.map((item) => item.spec)
-          result.plugin_origins = plugins.length ? plugins : undefined
 
           return {
             config: result,
