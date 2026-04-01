@@ -19,15 +19,7 @@ import { useSync } from "@tui/context/sync"
 import { SplitBorder } from "@tui/component/border"
 import { Spinner } from "@tui/component/spinner"
 import { selectedForeground, useTheme } from "@tui/context/theme"
-import {
-  BoxRenderable,
-  ScrollBoxRenderable,
-  addDefaultParsers,
-  MacOSScrollAccel,
-  type ScrollAcceleration,
-  TextAttributes,
-  RGBA,
-} from "@opentui/core"
+import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
 import { useLocal } from "@tui/context/local"
@@ -89,9 +81,9 @@ import {
   formatOutput,
   SOURCE_COLORS,
 } from "../../component/call-trace-helpers"
+import { getScrollAcceleration } from "../../util/scroll"
 
 addDefaultParsers(parsers.parsers)
-import { getScrollAcceleration } from "../../util/scroll"
 
 const context = createContext<{
   width: number
