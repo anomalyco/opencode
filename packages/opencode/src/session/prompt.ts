@@ -1413,15 +1413,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             }
 
             if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
-            if (
-              lastAssistant?.finish &&
-              !["tool-calls"].includes(lastAssistant.finish) &&
-              lastUser.id < lastAssistant.id
-            ) {
-              log.info("exiting loop", { sessionID })
-              break
-            }
-
             step++
 
             // Budget guards — check maxTurns and maxUsd before each turn
@@ -1453,6 +1444,15 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 )
                 break
               }
+            }
+
+            if (
+              lastAssistant?.finish &&
+              !["tool-calls"].includes(lastAssistant.finish) &&
+              lastUser.id < lastAssistant.id
+            ) {
+              log.info("exiting loop", { sessionID })
+              break
             }
 
             if (step === 1)

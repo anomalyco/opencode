@@ -6,7 +6,7 @@ import { isDangerousDirectory, hasShellExpansion, hasTraversal } from "../util/p
  * Hard-block for dangerous paths that should never be accessed.
  * These paths are protected regardless of permission mode or allow rules.
  */
-export function assertSafePath(target: string): void {
+export function assertSafePath(target: string, opts?: { allowEnv?: boolean }): void {
   if (!target) return
 
   // 1. Block shell expansion patterns - these are always dangerous (check before resolving)
@@ -42,6 +42,7 @@ export function assertSafePath(target: string): void {
   // 4. Hard-block dangerous directories
   const dangerousResult = isDangerousDirectory(full)
   if (dangerousResult) {
+    if (opts?.allowEnv && [".env file", ".env.* file"].includes(dangerousResult)) return
     throw new Error(
       `Security error: Access to ${dangerousResult} is blocked for safety. ` +
         `This location contains sensitive configuration or data that should not be modified by tools. ` +

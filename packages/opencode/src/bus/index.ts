@@ -120,6 +120,12 @@ export namespace Bus {
       }
 
       function on<T>(pubsub: PubSub.PubSub<T>, type: string, callback: (event: T) => unknown) {
+        const promise = (value: unknown): value is PromiseLike<unknown> => {
+          if (!value) return false
+          if (typeof value !== "object" && typeof value !== "function") return false
+          return typeof Reflect.get(value, "then") === "function"
+        }
+
         return Effect.gen(function* () {
           log.info("subscribing", { type })
           const scope = yield* Scope.make()
@@ -128,11 +134,20 @@ export namespace Bus {
           yield* Scope.provide(scope)(
             Stream.fromSubscription(subscription).pipe(
               Stream.runForEach((msg) =>
-                Effect.tryPromise({
-                  try: () => Promise.resolve().then(() => callback(msg)),
-                  catch: (cause) => {
-                    log.error("subscriber failed", { type, cause })
-                  },
+                Effect.gen(function* () {
+                  const result = yield* Effect.try({
+                    try: () => callback(msg),
+                    catch: (cause) => {
+                      log.error("subscriber failed", { type, cause })
+                    },
+                  })
+                  if (!promise(result)) return
+                  yield* Effect.tryPromise({
+                    try: () => result,
+                    catch: (cause) => {
+                      log.error("subscriber failed", { type, cause })
+                    },
+                  })
                 }).pipe(Effect.ignore),
               ),
               Effect.forkScoped,

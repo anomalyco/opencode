@@ -48,7 +48,7 @@ export const ReadTool = Tool.define("read", {
     }
 
     // Hard-block dangerous paths before any other checks
-    assertSafePath(filepath)
+    assertSafePath(filepath, { allowEnv: true })
 
     const title = path.relative(Instance.worktree, filepath)
 
