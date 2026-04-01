@@ -3,6 +3,7 @@ import * as SDK from "@opencode-ai/sdk/v2"
 import * as App from "../../src/cli/cmd/tui/app"
 import { AttachCommand } from "../../src/cli/cmd/tui/attach"
 import { RunCommand } from "../../src/cli/cmd/run"
+import { resolveRemoteTarget } from "../../src/cli/cmd/remote"
 import * as Win32 from "../../src/cli/cmd/tui/win32"
 import { TuiConfig } from "../../src/config/tui"
 import { Instance } from "../../src/project/instance"
@@ -247,6 +248,39 @@ describe("remote preflight", () => {
       expect.stringContaining("sess_123"),
     )
     expect(tui).toHaveBeenCalledTimes(1)
+  })
+
+  test("resolveRemoteTarget lets attach choose among multiple remote root sessions", async () => {
+    const list = mock(async () => ({
+      data: [
+        {
+          id: "sess_123",
+          title: "Remote draft",
+          parentID: undefined,
+        },
+        {
+          id: "sess_456",
+          title: "Remote fix",
+          parentID: undefined,
+        },
+      ],
+    }))
+
+    const result = await resolveRemoteTarget({
+      sdk: client({
+        session: { list },
+      }),
+      directory: "/srv/app",
+      continue: true,
+      pick: async (items) => items[1]?.id,
+    })
+
+    expect(list).toHaveBeenCalledWith({ roots: true }, { throwOnError: true })
+    expect(result).toEqual({
+      baseID: "sess_456",
+      picked: true,
+      title: "Remote fix",
+    })
   })
 
   test("run --attach fails before creating a session when the remote is unreachable", async () => {

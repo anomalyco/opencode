@@ -6,6 +6,29 @@ import { TuiConfig } from "@/config/tui"
 import { Instance } from "@/project/instance"
 import { existsSync } from "fs"
 import { preflightRemote, resolveRemoteTarget } from "../remote"
+import { createInterface } from "readline/promises"
+
+async function pick(items: { id: string; title?: string }[]) {
+  if (items.length < 2) return items[0]?.id
+  UI.println(UI.Style.TEXT_INFO_BOLD + "Select remote session" + UI.Style.TEXT_NORMAL)
+  items.forEach((item, i) => {
+    UI.println(`  ${i + 1}. ${item.title ?? item.id} ${UI.Style.TEXT_DIM}(${item.id})${UI.Style.TEXT_NORMAL}`)
+  })
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  })
+  try {
+    while (true) {
+      const txt = (await rl.question("Enter session number: ")).trim()
+      const n = Number(txt)
+      if (Number.isInteger(n) && n >= 1 && n <= items.length) return items[n - 1]?.id
+      UI.error(`Choose a number between 1 and ${items.length}`)
+    }
+  } finally {
+    rl.close()
+  }
+}
 
 export const AttachCommand = cmd({
   command: "attach <url>",
@@ -81,6 +104,7 @@ export const AttachCommand = cmd({
         continue: args.continue,
         sessionID: args.session,
         fork: args.fork,
+        pick: args.continue && !args.session ? pick : undefined,
       }).catch((error) => {
         UI.error(error instanceof Error ? error.message : String(error))
         process.exit(1)
@@ -100,8 +124,8 @@ export const AttachCommand = cmd({
         url: args.url,
         config,
         args: {
-          continue: args.continue,
-          sessionID: args.session,
+          continue: target.picked ? false : args.continue,
+          sessionID: target.picked ? target.baseID : args.session,
           fork: args.fork,
         },
         directory,
