@@ -30,6 +30,9 @@ export interface SessionReviewTabProps {
   onFocusedCommentChange?: (focus: { file: string; id: string } | null) => void
   focusedFile?: string
   onScrollRef?: (el: HTMLDivElement) => void
+  commentMentions?: {
+    items: (query: string) => string[] | Promise<string[]>
+  }
   classes?: {
     root?: string
     header?: string
@@ -162,6 +165,7 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
       onLineCommentUpdate={props.onLineCommentUpdate}
       onLineCommentDelete={props.onLineCommentDelete}
       lineCommentActions={props.lineCommentActions}
+      lineCommentMention={props.commentMentions}
       comments={props.comments}
       focusedComment={props.focusedComment}
       onFocusedCommentChange={props.onFocusedCommentChange}

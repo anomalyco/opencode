@@ -130,7 +130,7 @@ export namespace Pty {
         session.subscribers.clear()
       }
 
-      const cache = yield* InstanceState.make<State>(
+      const state = yield* InstanceState.make<State>(
         Effect.fn("Pty.state")(function* (ctx) {
           const state = {
             dir: ctx.directory,
@@ -151,27 +151,27 @@ export namespace Pty {
       )
 
       const remove = Effect.fn("Pty.remove")(function* (id: PtyID) {
-        const state = yield* InstanceState.get(cache)
-        const session = state.sessions.get(id)
+        const s = yield* InstanceState.get(state)
+        const session = s.sessions.get(id)
         if (!session) return
-        state.sessions.delete(id)
+        s.sessions.delete(id)
         log.info("removing session", { id })
         teardown(session)
         void Bus.publish(Event.Deleted, { id: session.info.id })
       })
 
       const list = Effect.fn("Pty.list")(function* () {
-        const state = yield* InstanceState.get(cache)
-        return Array.from(state.sessions.values()).map((session) => session.info)
+        const s = yield* InstanceState.get(state)
+        return Array.from(s.sessions.values()).map((session) => session.info)
       })
 
       const get = Effect.fn("Pty.get")(function* (id: PtyID) {
-        const state = yield* InstanceState.get(cache)
-        return state.sessions.get(id)?.info
+        const s = yield* InstanceState.get(state)
+        return s.sessions.get(id)?.info
       })
 
       const create = Effect.fn("Pty.create")(function* (input: CreateInput) {
-        const state = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         return yield* Effect.promise(async () => {
           const id = PtyID.ascending()
           const command = input.command || Shell.preferred()
@@ -180,7 +180,7 @@ export namespace Pty {
             args.push("-l")
           }
 
-          const cwd = input.cwd || state.dir
+          const cwd = input.cwd || s.dir
           const shellEnv = await Plugin.trigger("shell.env", { cwd }, { env: {} })
           const env = {
             ...process.env,
@@ -221,7 +221,7 @@ export namespace Pty {
             cursor: 0,
             subscribers: new Map(),
           }
-          state.sessions.set(id, session)
+          s.sessions.set(id, session)
           proc.onData(
             Instance.bind((chunk) => {
               session.cursor += chunk.length
@@ -264,8 +264,8 @@ export namespace Pty {
       })
 
       const update = Effect.fn("Pty.update")(function* (id: PtyID, input: UpdateInput) {
-        const state = yield* InstanceState.get(cache)
-        const session = state.sessions.get(id)
+        const s = yield* InstanceState.get(state)
+        const session = s.sessions.get(id)
         if (!session) return
         if (input.title) {
           session.info.title = input.title
@@ -278,24 +278,24 @@ export namespace Pty {
       })
 
       const resize = Effect.fn("Pty.resize")(function* (id: PtyID, cols: number, rows: number) {
-        const state = yield* InstanceState.get(cache)
-        const session = state.sessions.get(id)
+        const s = yield* InstanceState.get(state)
+        const session = s.sessions.get(id)
         if (session && session.info.status === "running") {
           session.process.resize(cols, rows)
         }
       })
 
       const write = Effect.fn("Pty.write")(function* (id: PtyID, data: string) {
-        const state = yield* InstanceState.get(cache)
-        const session = state.sessions.get(id)
+        const s = yield* InstanceState.get(state)
+        const session = s.sessions.get(id)
         if (session && session.info.status === "running") {
           session.process.write(data)
         }
       })
 
       const connect = Effect.fn("Pty.connect")(function* (id: PtyID, ws: Socket, cursor?: number) {
-        const state = yield* InstanceState.get(cache)
-        const session = state.sessions.get(id)
+        const s = yield* InstanceState.get(state)
+        const session = s.sessions.get(id)
         if (!session) {
           ws.close()
           return

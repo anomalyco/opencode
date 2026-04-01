@@ -114,6 +114,14 @@ export const Instance = {
     const ctx = context.use()
     return ((...args: any[]) => context.provide(ctx, () => fn(...args))) as F
   },
+  /**
+   * Run a synchronous function within the given instance context ALS.
+   * Use this to bridge from Effect (where InstanceRef carries context)
+   * back to sync code that reads Instance.directory from ALS.
+   */
+  restore<R>(ctx: InstanceContext, fn: () => R): R {
+    return context.provide(ctx, fn)
+  },
   state<S>(init: () => S, dispose?: (state: Awaited<S>) => Promise<void>): () => S {
     return State.create(() => Instance.directory, init, dispose)
   },

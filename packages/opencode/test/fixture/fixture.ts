@@ -2,10 +2,14 @@ import { $ } from "bun"
 import * as fs from "fs/promises"
 import os from "os"
 import path from "path"
-import { Effect, FileSystem, ServiceMap } from "effect"
+import { Effect, ServiceMap } from "effect"
+import type * as PlatformError from "effect/PlatformError"
+import type * as Scope from "effect/Scope"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import type { Config } from "../../src/config/config"
+import { InstanceRef } from "../../src/effect/instance-ref"
 import { Instance } from "../../src/project/instance"
+import { TestLLMServer } from "../lib/llm-server"
 
 // Strip null bytes from paths (defensive fix for CI environment issues)
 function sanitizePath(p: string): string {
@@ -78,9 +82,17 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
 /** Effectful scoped tmpdir. Cleaned up when the scope closes. Make sure these stay in sync */
 export function tmpdirScoped(options?: { git?: boolean; config?: Partial<Config.Info> }) {
   return Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
-    const dir = yield* fs.makeTempDirectoryScoped({ prefix: "opencode-test-" })
+    const dirpath = sanitizePath(path.join(os.tmpdir(), "opencode-test-" + Math.random().toString(36).slice(2)))
+    yield* Effect.promise(() => fs.mkdir(dirpath, { recursive: true }))
+    const dir = sanitizePath(yield* Effect.promise(() => fs.realpath(dirpath)))
+
+    yield* Effect.addFinalizer(() =>
+      Effect.promise(async () => {
+        if (options?.git) await stop(dir).catch(() => undefined)
+        await clean(dir).catch(() => undefined)
+      }),
+    )
 
     const git = (...args: string[]) =>
       spawner.spawn(ChildProcess.make("git", args, { cwd: dir })).pipe(Effect.flatMap((handle) => handle.exitCode))
@@ -94,9 +106,11 @@ export function tmpdirScoped(options?: { git?: boolean; config?: Partial<Config.
     }
 
     if (options?.config) {
-      yield* fs.writeFileString(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({ $schema: "https://opencode.ai/config.json", ...options.config }),
+      yield* Effect.promise(() =>
+        fs.writeFile(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({ $schema: "https://opencode.ai/config.json", ...options.config }),
+        ),
       )
     }
 
@@ -111,7 +125,7 @@ export const provideInstance =
       Effect.promise<A>(async () =>
         Instance.provide({
           directory,
-          fn: () => Effect.runPromiseWith(services)(self),
+          fn: () => Effect.runPromiseWith(services)(self.pipe(Effect.provideService(InstanceRef, Instance.current))),
         }),
       ),
     )
@@ -137,5 +151,22 @@ export function provideTmpdirInstance<A, E, R>(
 
     provided = true
     return yield* self(path).pipe(provideInstance(path))
+  })
+}
+
+export function provideTmpdirServer<A, E, R>(
+  self: (input: { dir: string; llm: TestLLMServer["Service"] }) => Effect.Effect<A, E, R>,
+  options?: { git?: boolean; config?: (url: string) => Partial<Config.Info> },
+): Effect.Effect<
+  A,
+  E | PlatformError.PlatformError,
+  R | TestLLMServer | ChildProcessSpawner.ChildProcessSpawner | Scope.Scope
+> {
+  return Effect.gen(function* () {
+    const llm = yield* TestLLMServer
+    return yield* provideTmpdirInstance((dir) => self({ dir, llm }), {
+      git: options?.git,
+      config: options?.config?.(llm.url),
+    })
   })
 }
