@@ -37,6 +37,17 @@ async function withDockSession<T>(
   }
 }
 
+const defaultQuestions = [
+  {
+    header: "Need input",
+    question: "Pick one option",
+    options: [
+      { label: "Continue", description: "Continue now" },
+      { label: "Stop", description: "Stop here" },
+    ],
+  },
+]
+
 test.setTimeout(120_000)
 
 async function withDockSeed<T>(sdk: Sdk, sessionID: string, fn: () => Promise<T>) {
@@ -293,16 +304,6 @@ test("auto-accept toggle works before first submit", async ({ page, withBackendP
 })
 
 test("blocked question flow unblocks after submit", async ({ page, llm, backend, withBackendProject }) => {
-  const questions = [
-    {
-      header: "Need input",
-      question: "Pick one option",
-      options: [
-        { label: "Continue", description: "Continue now" },
-        { label: "Stop", description: "Stop here" },
-      ],
-    },
-  ]
   await withMockOpenAI({
     serverUrl: backend.url,
     llmUrl: llm.url,
@@ -316,10 +317,10 @@ test("blocked question flow unblocks after submit", async ({ page, llm, backend,
               await withDockSeed(project.sdk, session.id, async () => {
                 await project.gotoSession(session.id)
 
-                await llm.tool("question", { questions })
+                await llm.tool("question", { questions: defaultQuestions })
                 await seedSessionQuestion(project.sdk, {
                   sessionID: session.id,
-                  questions,
+                  questions: defaultQuestions,
                 })
 
                 const dock = page.locator(questionDockSelector)
@@ -341,16 +342,6 @@ test("blocked question flow unblocks after submit", async ({ page, llm, backend,
 })
 
 test("blocked question flow supports keyboard shortcuts", async ({ page, llm, backend, withBackendProject }) => {
-  const questions = [
-    {
-      header: "Need input",
-      question: "Pick one option",
-      options: [
-        { label: "Continue", description: "Continue now" },
-        { label: "Stop", description: "Stop here" },
-      ],
-    },
-  ]
   await withMockOpenAI({
     serverUrl: backend.url,
     llmUrl: llm.url,
@@ -364,10 +355,10 @@ test("blocked question flow supports keyboard shortcuts", async ({ page, llm, ba
               await withDockSeed(project.sdk, session.id, async () => {
                 await project.gotoSession(session.id)
 
-                await llm.tool("question", { questions })
+                await llm.tool("question", { questions: defaultQuestions })
                 await seedSessionQuestion(project.sdk, {
                   sessionID: session.id,
-                  questions,
+                  questions: defaultQuestions,
                 })
 
                 const dock = page.locator(questionDockSelector)
@@ -395,16 +386,6 @@ test("blocked question flow supports keyboard shortcuts", async ({ page, llm, ba
 })
 
 test("blocked question flow supports escape dismiss", async ({ page, llm, backend, withBackendProject }) => {
-  const questions = [
-    {
-      header: "Need input",
-      question: "Pick one option",
-      options: [
-        { label: "Continue", description: "Continue now" },
-        { label: "Stop", description: "Stop here" },
-      ],
-    },
-  ]
   await withMockOpenAI({
     serverUrl: backend.url,
     llmUrl: llm.url,
@@ -418,10 +399,10 @@ test("blocked question flow supports escape dismiss", async ({ page, llm, backen
               await withDockSeed(project.sdk, session.id, async () => {
                 await project.gotoSession(session.id)
 
-                await llm.tool("question", { questions })
+                await llm.tool("question", { questions: defaultQuestions })
                 await seedSessionQuestion(project.sdk, {
                   sessionID: session.id,
-                  questions,
+                  questions: defaultQuestions,
                 })
 
                 const dock = page.locator(questionDockSelector)

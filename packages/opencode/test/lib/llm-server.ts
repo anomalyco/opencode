@@ -584,11 +584,7 @@ function hit(url: string, body: unknown) {
   } satisfies Hit
 }
 
-/**
- * Detect tool-result follow-up requests from the agent loop.
- * After a tool call executes, the agent sends the result back to the LLM.
- * These are mechanical follow-ups that tests rarely need to control.
- */
+/** Auto-acknowledging tool-result follow-ups avoids requiring tests to queue two responses per tool call. */
 function isToolResultFollowUp(body: unknown): boolean {
   if (!body || typeof body !== "object") return false
   // OpenAI chat format: last message has role "tool"

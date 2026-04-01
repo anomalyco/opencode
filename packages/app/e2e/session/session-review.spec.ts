@@ -1,6 +1,6 @@
 import { waitSessionIdle, withSession } from "../actions"
 import { test, expect } from "../fixtures"
-import { bodyText, openaiModel, withMockOpenAI } from "../prompt/mock"
+import { openaiModel, promptMatch, withMockOpenAI } from "../prompt/mock"
 
 const count = 14
 
@@ -40,10 +40,6 @@ function edit(file: string, prev: string, next: string) {
   )
 }
 
-function patchMatch(marker: string) {
-  return (hit: { body: Record<string, unknown> }) => bodyText(hit).includes(marker)
-}
-
 async function patchWithMock(
   llm: Parameters<typeof test>[0]["llm"],
   sdk: Parameters<typeof withSession>[0],
@@ -51,7 +47,7 @@ async function patchWithMock(
   patchText: string,
   marker: string,
 ) {
-  await llm.toolMatch(patchMatch(marker), "apply_patch", { patchText })
+  await llm.toolMatch(promptMatch(marker), "apply_patch", { patchText })
   await sdk.session.promptAsync({
     sessionID,
     agent: "build",
