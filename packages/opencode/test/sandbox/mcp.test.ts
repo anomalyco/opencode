@@ -1,7 +1,9 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test"
 import { wrapMcpCommand } from "../../src/mcp"
 
-describe("MCP Sandbox Configuration Merge", () => {
+const isSrtAvailable = Bun.which("srt") !== null && process.platform !== "win32"
+
+describe.skipIf(!isSrtAvailable)("MCP Sandbox Configuration Merge", () => {
   let originalEnv: NodeJS.ProcessEnv
 
   beforeAll(() => {
