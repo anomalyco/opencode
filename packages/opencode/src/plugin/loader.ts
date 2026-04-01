@@ -40,7 +40,7 @@ export namespace PluginLoader {
     ) => void
   }
 
-  export function plan(item: Config.PluginSpec): Plan {
+  function plan(item: Config.PluginSpec): Plan {
     const spec = Config.pluginSpecifier(item)
     return { spec, options: Config.pluginOptions(item), deprecated: isDeprecatedPlugin(spec) }
   }
@@ -119,22 +119,32 @@ export namespace PluginLoader {
     return finish(loaded.value, candidate.item, retry)
   }
 
-  export async function loadExternal<T, R = Loaded>(input: {
-    candidates: Candidate<T>[]
+  type Input<T, R> = {
+    items: T[]
     kind: PluginKind
+    pick?: (item: T) => Config.PluginSpec
     wait?: () => Promise<void>
     finish?: (load: Loaded, item: T, retry: boolean) => Promise<R | undefined>
     report?: Report<T>
-  }): Promise<R[]> {
+  }
+
+  export function loadExternal<R = Loaded>(input: Input<Config.PluginSpec, R>): Promise<R[]>
+  export function loadExternal<T, R = Loaded>(
+    input: Input<T, R> & {
+      pick: (item: T) => Config.PluginSpec
+    },
+  ): Promise<R[]>
+  export async function loadExternal<T, R = Loaded>(input: Input<T, R>): Promise<R[]> {
+    const pick = input.pick ?? ((item) => item as Config.PluginSpec)
+    const candidates = input.items.map((item) => ({ item, plan: plan(pick(item)) }))
     const list: Array<Promise<R | undefined>> = []
-    for (const candidate of input.candidates)
-      list.push(attempt(candidate, input.kind, false, input.finish, input.report))
+    for (const candidate of candidates) list.push(attempt(candidate, input.kind, false, input.finish, input.report))
     const out = await Promise.all(list)
     if (input.wait) {
       let deps: Promise<void> | undefined
-      for (let i = 0; i < input.candidates.length; i++) {
+      for (let i = 0; i < candidates.length; i++) {
         if (out[i] !== undefined) continue
-        const candidate = input.candidates[i]
+        const candidate = candidates[i]
         if (!candidate || pluginSource(candidate.plan.spec) !== "file") continue
         deps ??= input.wait()
         await deps

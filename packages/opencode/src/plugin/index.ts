@@ -144,7 +144,7 @@ export namespace Plugin {
 
           const loaded = yield* Effect.promise(() =>
             PluginLoader.loadExternal({
-              candidates: plugins.map((item) => ({ item, plan: PluginLoader.plan(item) })),
+              items: plugins,
               kind: "server",
               report: {
                 start(candidate) {

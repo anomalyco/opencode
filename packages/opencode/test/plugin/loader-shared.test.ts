@@ -852,7 +852,7 @@ export default {
     const calls: Array<[string, boolean]> = []
 
     const loaded = await PluginLoader.loadExternal({
-      candidates: [tmp.extra.aSpec, tmp.extra.bSpec].map((item) => ({ item, plan: PluginLoader.plan(item) })),
+      items: [tmp.extra.aSpec, tmp.extra.bSpec],
       kind: "tui",
       wait: async () => {
         wait += 1
@@ -890,7 +890,7 @@ export default {
     let count = 0
 
     const loaded = await PluginLoader.loadExternal({
-      candidates: [{ item: tmp.extra.spec, plan: PluginLoader.plan(tmp.extra.spec) }],
+      items: [tmp.extra.spec],
       kind: "tui",
       wait: async () => {
         wait += 1
@@ -917,7 +917,7 @@ export default {
 
     try {
       const loaded = await PluginLoader.loadExternal({
-        candidates: [{ item: "acme-plugin@1.0.0", plan: PluginLoader.plan("acme-plugin@1.0.0") }],
+        items: ["acme-plugin@1.0.0"],
         kind: "tui",
         wait: async () => {
           wait += 1

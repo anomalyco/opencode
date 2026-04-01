@@ -557,7 +557,8 @@ function applyInitialPluginEnabledState(state: RuntimeState, config: TuiConfig.I
 
 async function resolveExternalPlugins(list: TuiConfig.PluginRecord[], wait: () => Promise<void>) {
   return PluginLoader.loadExternal({
-    candidates: list.map((item) => ({ item, plan: PluginLoader.plan(item.item) })),
+    items: list,
+    pick: (item) => item.item,
     kind: "tui",
     wait: async () => {
       await wait().catch((error) => {
