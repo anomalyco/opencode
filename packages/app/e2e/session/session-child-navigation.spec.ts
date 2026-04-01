@@ -1,6 +1,6 @@
 import { seedSessionTask, withSession } from "../actions"
 import { test, expect } from "../fixtures"
-import { openaiModel, promptMatch, withMockOpenAI } from "../prompt/mock"
+import { inputMatch, openaiModel, withMockOpenAI } from "../prompt/mock"
 import { promptSelector } from "../selectors"
 
 test("task tool child-session link does not trigger stale show errors", async ({
@@ -30,7 +30,7 @@ test("task tool child-session link does not trigger stale show errors", async ({
                 prompt: "Search the repository for AssistantParts and then reply with exactly CHILD_OK.",
                 subagent_type: "general",
               }
-              await llm.toolMatch(promptMatch("Open child session"), "task", taskInput)
+              await llm.toolMatch(inputMatch(taskInput), "task", taskInput)
               const child = await seedSessionTask(sdk, {
                 sessionID: session.id,
                 description: taskInput.description,

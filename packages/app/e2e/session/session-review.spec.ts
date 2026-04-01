@@ -1,6 +1,6 @@
 import { waitSessionIdle, withSession } from "../actions"
 import { test, expect } from "../fixtures"
-import { openaiModel, promptMatch, withMockOpenAI } from "../prompt/mock"
+import { inputMatch, openaiModel, withMockOpenAI } from "../prompt/mock"
 
 const count = 14
 
@@ -45,9 +45,8 @@ async function patchWithMock(
   sdk: Parameters<typeof withSession>[0],
   sessionID: string,
   patchText: string,
-  marker: string,
 ) {
-  await llm.toolMatch(promptMatch(marker), "apply_patch", { patchText })
+  await llm.toolMatch(inputMatch({ patchText }), "apply_patch", { patchText })
   await sdk.session.promptAsync({
     sessionID,
     agent: "build",
@@ -262,7 +261,7 @@ test("review applies inline comment clicks without horizontal overflow", async (
         async (project) => {
           await withSession(project.sdk, `e2e review comment ${tag}`, async (session) => {
             project.trackSession(session.id)
-            await patchWithMock(llm, project.sdk, session.id, seed([{ file, mark: tag }]), tag)
+            await patchWithMock(llm, project.sdk, session.id, seed([{ file, mark: tag }]))
 
             await expect
               .poll(
@@ -324,7 +323,7 @@ test("review file comments submit on click without clipping actions", async ({
         async (project) => {
           await withSession(project.sdk, `e2e review file comment ${tag}`, async (session) => {
             project.trackSession(session.id)
-            await patchWithMock(llm, project.sdk, session.id, seed([{ file, mark: tag }]), tag)
+            await patchWithMock(llm, project.sdk, session.id, seed([{ file, mark: tag }]))
 
             await expect
               .poll(
@@ -383,7 +382,7 @@ test("review keeps scroll position after a live diff update", async ({ page, llm
         async (project) => {
           await withSession(project.sdk, `e2e review ${tag}`, async (session) => {
             project.trackSession(session.id)
-            await patchWithMock(llm, project.sdk, session.id, seed(list), tag)
+            await patchWithMock(llm, project.sdk, session.id, seed(list))
 
             await expect
               .poll(
@@ -437,7 +436,7 @@ test("review keeps scroll position after a live diff update", async ({ page, llm
             const prev = await spot(page, hit.file)
             if (!prev) throw new Error(`missing review row for ${hit.file}`)
 
-            await patchWithMock(llm, project.sdk, session.id, edit(hit.file, hit.mark, next), next)
+            await patchWithMock(llm, project.sdk, session.id, edit(hit.file, hit.mark, next))
 
             await expect
               .poll(

@@ -14,7 +14,7 @@ import {
   sessionTodoToggleButtonSelector,
 } from "../selectors"
 import { modKey } from "../utils"
-import { openaiModel, promptMatch, withMockOpenAI } from "../prompt/mock"
+import { inputMatch, openaiModel, withMockOpenAI } from "../prompt/mock"
 
 type Sdk = Parameters<typeof clearSessionDockSeed>[0]
 type PermissionRule = { permission: string; pattern: string; action: "allow" | "deny" | "ask" }
@@ -317,7 +317,7 @@ test("blocked question flow unblocks after submit", async ({ page, llm, backend,
               await withDockSeed(project.sdk, session.id, async () => {
                 await project.gotoSession(session.id)
 
-                await llm.toolMatch(promptMatch(defaultQuestions[0].header), "question", { questions: defaultQuestions })
+                await llm.toolMatch(inputMatch({ questions: defaultQuestions }), "question", { questions: defaultQuestions })
                 await seedSessionQuestion(project.sdk, {
                   sessionID: session.id,
                   questions: defaultQuestions,
@@ -355,7 +355,7 @@ test("blocked question flow supports keyboard shortcuts", async ({ page, llm, ba
               await withDockSeed(project.sdk, session.id, async () => {
                 await project.gotoSession(session.id)
 
-                await llm.toolMatch(promptMatch(defaultQuestions[0].header), "question", { questions: defaultQuestions })
+                await llm.toolMatch(inputMatch({ questions: defaultQuestions }), "question", { questions: defaultQuestions })
                 await seedSessionQuestion(project.sdk, {
                   sessionID: session.id,
                   questions: defaultQuestions,
@@ -399,7 +399,7 @@ test("blocked question flow supports escape dismiss", async ({ page, llm, backen
               await withDockSeed(project.sdk, session.id, async () => {
                 await project.gotoSession(session.id)
 
-                await llm.toolMatch(promptMatch(defaultQuestions[0].header), "question", { questions: defaultQuestions })
+                await llm.toolMatch(inputMatch({ questions: defaultQuestions }), "question", { questions: defaultQuestions })
                 await seedSessionQuestion(project.sdk, {
                   sessionID: session.id,
                   questions: defaultQuestions,
@@ -564,7 +564,7 @@ test("child session question request blocks parent dock and unblocks after submi
 
               try {
                 await withDockSeed(project.sdk, child.id, async () => {
-                  await llm.toolMatch(promptMatch(questions[0].header), "question", { questions })
+                  await llm.toolMatch(inputMatch({ questions }), "question", { questions })
                   await seedSessionQuestion(project.sdk, {
                     sessionID: child.id,
                     questions,
@@ -701,7 +701,7 @@ test("keyboard focus stays off prompt while blocked", async ({ page, llm, backen
               await withDockSeed(project.sdk, session.id, async () => {
                 await project.gotoSession(session.id)
 
-                await llm.toolMatch(promptMatch(questions[0].header), "question", { questions })
+                await llm.toolMatch(inputMatch({ questions }), "question", { questions })
                 await seedSessionQuestion(project.sdk, {
                   sessionID: session.id,
                   questions,
