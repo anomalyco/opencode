@@ -35,6 +35,21 @@ export namespace SessionCompaction {
   export const PRUNE_MINIMUM = 20_000
   export const PRUNE_PROTECT = 40_000
   const PRUNE_PROTECTED_TOOLS = ["skill"]
+  const ERROR_PURGE_TURNS = 4
+
+  function signature(part: MessageV2.ToolPart): string {
+    if (part.state.status === "pending" || part.state.status === "running") return ""
+    const input = part.state.input
+    if (!input || typeof input !== "object") return `${part.tool}::`
+    const sorted = Object.keys(input)
+      .sort()
+      .reduce<Record<string, unknown>>((o, k) => {
+        const v = input[k]
+        if (v !== undefined && v !== null) o[k] = v
+        return o
+      }, {})
+    return `${part.tool}::${JSON.stringify(sorted)}`
+  }
 
   export interface Interface {
     readonly isOverflow: (input: {
@@ -89,7 +104,9 @@ export namespace SessionCompaction {
       })
 
       // goes backwards through parts until there are PRUNE_PROTECT tokens worth of tool
-      // calls, then erases output of older tool calls to free context space
+      // calls, then erases output of older tool calls to free context space.
+      // When the model's context window is known, protect 30% of it instead of
+      // the fixed default so large-context models keep more history.
       const prune = Effect.fn("SessionCompaction.prune")(function* (input: { sessionID: SessionID }) {
         const cfg = yield* config.get()
         if (cfg.compaction?.prune === false) return
@@ -99,6 +116,16 @@ export namespace SessionCompaction {
           .messages({ sessionID: input.sessionID })
           .pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed(undefined)))
         if (!msgs) return
+
+        const lastUser = msgs.findLast((m) => m.info.role === "user")?.info as MessageV2.User | undefined
+        const context = yield* Effect.promise(() =>
+          lastUser?.model
+            ? Provider.getModel(lastUser.model.providerID, lastUser.model.modelID)
+                .then((m) => m.limit.context)
+                .catch(() => 0)
+            : Promise.resolve(0),
+        )
+        const protect = context > 0 ? Math.max(PRUNE_PROTECT, Math.floor(context * 0.3)) : PRUNE_PROTECT
 
         let total = 0
         let pruned = 0
@@ -118,7 +145,7 @@ export namespace SessionCompaction {
                 if (part.state.time.compacted) break loop
                 const estimate = Token.estimate(part.state.output)
                 total += estimate
-                if (total > PRUNE_PROTECT) {
+                if (total > protect) {
                   pruned += estimate
                   toPrune.push(part)
                 }
@@ -126,7 +153,7 @@ export namespace SessionCompaction {
           }
         }
 
-        log.info("found", { pruned, total })
+        log.info("found", { pruned, total, protect })
         if (pruned > PRUNE_MINIMUM) {
           for (const part of toPrune) {
             if (part.state.status === "completed") {
@@ -135,6 +162,63 @@ export namespace SessionCompaction {
             }
           }
           log.info("pruned", { count: toPrune.length })
+        }
+
+        // Deduplicate: keep only the most recent tool call per (tool, params) signature.
+        // Earlier duplicates get compacted so the model sees "[Old tool result content cleared]".
+        const seen = new Map<string, MessageV2.ToolPart>()
+        const dupes: MessageV2.ToolPart[] = []
+        for (const msg of msgs) {
+          for (const part of msg.parts) {
+            if (part.type !== "tool") continue
+            if (part.state.status !== "completed") continue
+            if (part.state.time.compacted) continue
+            if (PRUNE_PROTECTED_TOOLS.includes(part.tool)) continue
+            const sig = signature(part)
+            if (!sig) continue
+            const prev = seen.get(sig)
+            if (prev) dupes.push(prev)
+            seen.set(sig, part)
+          }
+        }
+        if (dupes.length > 0) {
+          for (const part of dupes) {
+            if (part.state.status === "completed") {
+              part.state.time.compacted = Date.now()
+              yield* session.updatePart(part)
+            }
+          }
+          log.info("deduped", { count: dupes.length })
+        }
+
+        // Error age-gate: clear string inputs of errored tool calls older than N turns
+        // so they stop wasting context. The error message itself is preserved.
+        let age = 0
+        const errors: MessageV2.ToolPart[] = []
+        for (let i = msgs.length - 1; i >= 0; i--) {
+          const msg = msgs[i]
+          if (msg.info.role === "user") age++
+          if (msg.info.role === "assistant" && msg.info.summary) break
+          if (age < ERROR_PURGE_TURNS) continue
+          for (const part of msg.parts) {
+            if (part.type !== "tool") continue
+            if (part.state.status !== "error") continue
+            if (PRUNE_PROTECTED_TOOLS.includes(part.tool)) continue
+            const input = part.state.input
+            if (!input || typeof input !== "object") continue
+            let changed = false
+            for (const key of Object.keys(input)) {
+              if (typeof input[key] === "string" && input[key].length > 0) {
+                input[key] = ""
+                changed = true
+              }
+            }
+            if (changed) errors.push(part)
+          }
+        }
+        if (errors.length > 0) {
+          for (const part of errors) yield* session.updatePart(part)
+          log.info("purged errors", { count: errors.length })
         }
       })
 

@@ -114,8 +114,11 @@ export namespace InstructionPrompt {
     return paths
   }
 
+  const DEFAULT_GUIDANCE_BUDGET = 32 * 1024
+
   export async function system() {
     const config = await Config.get()
+    const budget = config.truncation?.guidance_budget ?? DEFAULT_GUIDANCE_BUDGET
     const paths = await systemPaths()
 
     const files = Array.from(paths).map(async (p) => {
@@ -138,7 +141,23 @@ export namespace InstructionPrompt {
         .then((x) => (x ? "Instructions from: " + url + "\n" + x : "")),
     )
 
-    return Promise.all([...files, ...fetches]).then((result) => result.filter(Boolean))
+    const all = await Promise.all([...files, ...fetches]).then((result) => result.filter(Boolean))
+    let total = 0
+    const result: string[] = []
+    for (const entry of all) {
+      const size = Buffer.byteLength(entry, "utf-8")
+      if (total + size > budget) {
+        const remaining = budget - total
+        if (remaining > 0) {
+          result.push(entry.substring(0, remaining) + "\n...(instructions truncated to fit budget)")
+          log.info("guidance budget reached", { budget, files: result.length })
+        }
+        break
+      }
+      total += size
+      result.push(entry)
+    }
+    return result
   }
 
   export function loaded(messages: MessageV2.WithParts[]) {

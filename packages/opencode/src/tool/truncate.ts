@@ -9,6 +9,7 @@ import { Identifier } from "../id/id"
 import { Log } from "../util/log"
 import { ToolID } from "./schema"
 import { TRUNCATION_DIR } from "./truncation-dir"
+import { Config } from "@/config/config"
 
 export namespace Truncate {
   const log = Log.create({ service: "truncation" })
@@ -16,6 +17,7 @@ export namespace Truncate {
 
   export const MAX_LINES = 2000
   export const MAX_BYTES = 50 * 1024
+  export const MAX_LINE_BYTES = 4096
   export const DIR = TRUNCATION_DIR
   export const GLOB = path.join(TRUNCATION_DIR, "*")
 
@@ -24,7 +26,33 @@ export namespace Truncate {
   export interface Options {
     maxLines?: number
     maxBytes?: number
+    maxLineBytes?: number
     direction?: "head" | "tail"
+  }
+
+  function pruneLine(line: string, max: number): string {
+    if (Buffer.byteLength(line, "utf-8") <= max) return line
+    const half = Math.floor((max - 3) / 2)
+    let head = 0
+    let tail = line.length
+    let bytes = 0
+    while (head < line.length && bytes < half) {
+      const code = line.codePointAt(head)!
+      const size = code > 0xffff ? 4 : code > 0x7ff ? 3 : code > 0x7f ? 2 : 1
+      if (bytes + size > half) break
+      bytes += size
+      head += code > 0xffff ? 2 : 1
+    }
+    bytes = 0
+    while (tail > head && bytes < half) {
+      const prev = line.codePointAt(tail - 1)!
+      const code = prev >= 0xdc00 && prev <= 0xdfff && tail >= 2 ? line.codePointAt(tail - 2)! : prev
+      const size = code > 0xffff ? 4 : code > 0x7ff ? 3 : code > 0x7f ? 2 : 1
+      if (bytes + size > half) break
+      bytes += size
+      tail -= code > 0xffff ? 2 : 1
+    }
+    return line.substring(0, head) + "…" + line.substring(tail)
   }
 
   function hasTaskTool(agent?: Agent.Info) {
@@ -63,12 +91,20 @@ export namespace Truncate {
       const output = Effect.fn("Truncate.output")(function* (text: string, options: Options = {}, agent?: Agent.Info) {
         const maxLines = options.maxLines ?? MAX_LINES
         const maxBytes = options.maxBytes ?? MAX_BYTES
+        const maxLine = options.maxLineBytes ?? MAX_LINE_BYTES
         const direction = options.direction ?? "head"
         const lines = text.split("\n")
         const totalBytes = Buffer.byteLength(text, "utf-8")
 
         if (lines.length <= maxLines && totalBytes <= maxBytes) {
-          return { content: text, truncated: false } as const
+          let wide = false
+          for (const line of lines) {
+            if (Buffer.byteLength(line, "utf-8") > maxLine) {
+              wide = true
+              break
+            }
+          }
+          if (!wide) return { content: text, truncated: false } as const
         }
 
         const out: string[] = []
@@ -78,29 +114,36 @@ export namespace Truncate {
 
         if (direction === "head") {
           for (i = 0; i < lines.length && i < maxLines; i++) {
-            const size = Buffer.byteLength(lines[i], "utf-8") + (i > 0 ? 1 : 0)
+            const pruned = pruneLine(lines[i], maxLine)
+            const size = Buffer.byteLength(pruned, "utf-8") + (i > 0 ? 1 : 0)
             if (bytes + size > maxBytes) {
               hitBytes = true
               break
             }
-            out.push(lines[i])
+            out.push(pruned)
             bytes += size
           }
         } else {
           for (i = lines.length - 1; i >= 0 && out.length < maxLines; i--) {
-            const size = Buffer.byteLength(lines[i], "utf-8") + (out.length > 0 ? 1 : 0)
+            const pruned = pruneLine(lines[i], maxLine)
+            const size = Buffer.byteLength(pruned, "utf-8") + (out.length > 0 ? 1 : 0)
             if (bytes + size > maxBytes) {
               hitBytes = true
               break
             }
-            out.unshift(lines[i])
+            out.unshift(pruned)
             bytes += size
           }
         }
 
+        const preview = out.join("\n")
+        const allKept = !hitBytes && out.length === lines.length
+        if (allKept) {
+          return { content: preview, truncated: false } as const
+        }
+
         const removed = hitBytes ? totalBytes - bytes : lines.length - out.length
         const unit = hitBytes ? "bytes" : "lines"
-        const preview = out.join("\n")
         const file = path.join(TRUNCATION_DIR, ToolID.ascending())
 
         yield* fs.ensureDir(TRUNCATION_DIR).pipe(Effect.orDie)
@@ -139,6 +182,13 @@ export namespace Truncate {
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export async function output(text: string, options: Options = {}, agent?: Agent.Info): Promise<Result> {
-    return runPromise((s) => s.output(text, options, agent))
+    const cfg = await Config.get().catch(() => undefined)
+    const merged: Options = {
+      maxLines: options.maxLines ?? cfg?.truncation?.max_lines,
+      maxBytes: options.maxBytes ?? cfg?.truncation?.max_bytes,
+      maxLineBytes: options.maxLineBytes ?? cfg?.truncation?.max_line_bytes,
+      direction: options.direction,
+    }
+    return runPromise((s) => s.output(text, merged, agent))
   }
 }

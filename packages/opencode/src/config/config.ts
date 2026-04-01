@@ -1055,6 +1055,34 @@ export namespace Config {
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
         })
         .optional(),
+      truncation: z
+        .object({
+          max_lines: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Maximum lines for tool output truncation (default: 2000)"),
+          max_bytes: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Maximum bytes for tool output truncation (default: 51200)"),
+          max_line_bytes: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Maximum bytes per line before mid-ellipsis pruning (default: 4096)"),
+          guidance_budget: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Maximum bytes for AGENTS.md/instruction files loaded into system prompt (default: 32768)"),
+        })
+        .optional(),
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),
