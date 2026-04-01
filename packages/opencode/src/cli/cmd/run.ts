@@ -104,11 +104,14 @@ function grep(info: ToolProps<typeof GrepTool>) {
 
 function read(info: ToolProps<typeof ReadTool>) {
   const file = normalizePath(info.input.filePath)
-  const pairs = Object.entries(info.input).filter(([key, value]) => {
-    if (key === "filePath") return false
-    return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
-  })
-  const description = pairs.length ? `[${pairs.map(([key, value]) => `${key}=${value}`).join(", ")}]` : undefined
+  const parts: string[] = []
+  if (info.input.offset !== undefined) {
+    parts.push(`offset=${info.input.offset}`)
+  }
+  if (info.input.limit !== undefined) {
+    parts.push(`limit=${info.input.limit}`)
+  }
+  const description = parts.length ? `[${parts.join(", ")}]` : undefined
   inline({
     icon: "→",
     title: `Read ${file}`,
