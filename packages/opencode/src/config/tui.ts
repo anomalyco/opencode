@@ -10,7 +10,6 @@ import { Flag } from "@/flag/flag"
 import { Log } from "@/util/log"
 import { isRecord } from "@/util/record"
 import { Global } from "@/global"
-import { parsePluginSpecifier } from "@/plugin/shared"
 
 export namespace TuiConfig {
   const log = Log.create({ service: "tui.config" })
@@ -30,19 +29,6 @@ export namespace TuiConfig {
   function pluginScope(file: string): Config.PluginScope {
     if (Instance.containsPath(file)) return "local"
     return "global"
-  }
-
-  function dedupePlugins(list: Config.PluginOrigin[]) {
-    const seen = new Set<string>()
-    const result: Config.PluginOrigin[] = []
-    for (const item of list.toReversed()) {
-      const spec = Config.pluginSpecifier(item.spec)
-      const name = spec.startsWith("file://") ? spec : parsePluginSpecifier(spec).pkg
-      if (seen.has(name)) continue
-      seen.add(name)
-      result.push(item)
-    }
-    return result.toReversed()
   }
 
   function mergeInfo(target: Info, source: Info): Info {
@@ -130,7 +116,7 @@ export namespace TuiConfig {
       }
     }
 
-    const merged = dedupePlugins(acc.entries)
+    const merged = Config.deduplicatePluginOrigins(acc.entries)
     acc.result.keybinds = Config.Keybinds.parse(acc.result.keybinds ?? {})
     acc.result.plugin = merged.map((item) => item.spec)
     acc.result.plugin_origins = merged.length ? merged : undefined

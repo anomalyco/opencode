@@ -315,19 +315,13 @@ export namespace Config {
    * we reverse, deduplicate (keeping first occurrence), then restore order.
    */
   export function deduplicatePlugins(plugins: PluginSpec[]): PluginSpec[] {
-    const seenNames = new Set<string>()
-    const uniqueSpecifiers: PluginSpec[] = []
-
-    for (const specifier of plugins.toReversed()) {
-      const spec = pluginSpecifier(specifier)
-      const name = spec.startsWith("file://") ? spec : parsePluginSpecifier(spec).pkg
-      if (!seenNames.has(name)) {
-        seenNames.add(name)
-        uniqueSpecifiers.push(specifier)
-      }
-    }
-
-    return uniqueSpecifiers.toReversed()
+    return deduplicatePluginOrigins(
+      plugins.map((spec) => ({
+        spec,
+        source: "",
+        scope: "global",
+      })),
+    ).map((item) => item.spec)
   }
 
   export function deduplicatePluginOrigins(plugins: PluginOrigin[]): PluginOrigin[] {
