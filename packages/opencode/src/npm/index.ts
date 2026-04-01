@@ -26,11 +26,18 @@ export namespace Npm {
   }
 
   function resolveEntryPoint(pkg: string, dir: string) {
-    const resolved = import.meta.resolve(pkg, pathToFileURL(dir))
-    return {
-      directory: dir,
-      entrypoint: resolved,
+    const entrypoint =
+      typeof Bun !== undefined ? Bun.resolveSync(pkg, dir) : import.meta.resolve(pkg, pathToFileURL(dir))
+    const directory = path.dirname(
+      typeof Bun !== undefined
+        ? Bun.resolveSync(pkg + "/package.json", dir)
+        : import.meta.resolve(pkg, pathToFileURL(dir)),
+    )
+    const result = {
+      directory,
+      entrypoint,
     }
+    return result
   }
 
   export async function outdated(pkg: string, cachedVersion: string): Promise<boolean> {
