@@ -31,7 +31,11 @@ import { DialogModel, useConnected } from "@tui/component/dialog-model"
 import { DialogMcp } from "@tui/component/dialog-mcp"
 import { DialogStatus } from "@tui/component/dialog-status"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
-import { DialogRemoteSessionList, selectRemoteSession } from "@tui/component/dialog-remote-session-list"
+import {
+  DialogRemoteSessionList,
+  openRemoteSessionList,
+  selectRemoteSession,
+} from "@tui/component/dialog-remote-session-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
@@ -125,6 +129,21 @@ import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
 
 export { selectRemoteSession }
+
+export function getRemoteSessionCommand(input: { remote?: boolean; onSelect: () => void | Promise<void> }) {
+  if (!input.remote) return
+  return {
+    title: "Browse remote sessions",
+    value: "remote.session.list",
+    category: "Session",
+    slash: {
+      name: "remote",
+    },
+    onSelect: () => {
+      void input.onSelect()
+    },
+  }
+}
 
 function rendererConfig(_config: TuiConfig.Info): CliRendererConfig {
   return {
@@ -368,6 +387,16 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   })
 
   const args = useArgs()
+  const remote = getRemoteSessionCommand({
+    remote: args.remote,
+    onSelect: async () => {
+      await openRemoteSessionList({
+        dialog,
+        sdk,
+        toast,
+      })
+    },
+  })
   onMount(() => {
     batch(() => {
       if (args.agent) local.agent.set(args.agent)
@@ -462,6 +491,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         dialog.replace(() => <DialogSessionList />)
       },
     },
+    ...(remote ? [remote] : []),
     ...(Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
       ? [
           {

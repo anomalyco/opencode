@@ -101,6 +101,7 @@ export const AttachCommand = cmd({
         url: args.url,
         config,
         args: {
+          remote: true,
           continue: target.remoteSessions || target.picked ? false : args.continue,
           sessionID: target.picked ? target.baseID : args.session,
           fork: args.fork,
