@@ -1364,7 +1364,7 @@ export namespace Provider {
 
           let installedPath: string
           if (!model.api.npm.startsWith("file://")) {
-            installedPath = await Npm.add(model.api.npm)
+            installedPath = await Npm.add(model.api.npm).then((item) => item.entrypoint)
           } else {
             log.info("loading local provider", { pkg: model.api.npm })
             installedPath = model.api.npm

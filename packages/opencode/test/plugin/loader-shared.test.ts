@@ -259,8 +259,8 @@ describe("plugin.loader.shared", () => {
     })
 
     const add = spyOn(Npm, "add").mockImplementation(async (pkg) => {
-      if (pkg === "acme-plugin") return tmp.extra.acme
-      return tmp.extra.scope
+      if (pkg === "acme-plugin") return { directory: tmp.extra.acme, entrypoint: tmp.extra.acme }
+      return { directory: tmp.extra.scope, entrypoint: tmp.extra.scope }
     })
 
     try {
@@ -321,7 +321,7 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const install = spyOn(Npm, "add").mockResolvedValue(tmp.extra.mod)
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
 
     try {
       await load(tmp.path)
@@ -378,7 +378,7 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const install = spyOn(Npm, "add").mockResolvedValue(tmp.extra.mod)
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
 
     try {
       const errors = await errs(tmp.path)
@@ -431,7 +431,7 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const install = spyOn(Npm, "add").mockResolvedValue(tmp.extra.mod)
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
 
     try {
       const errors = await errs(tmp.path)
@@ -477,7 +477,7 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const install = spyOn(Npm, "add").mockResolvedValue(tmp.extra.mod)
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
 
     try {
       const errors = await errs(tmp.path)
@@ -541,7 +541,7 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const install = spyOn(Npm, "add").mockResolvedValue(tmp.extra.mod)
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
 
     try {
       const errors = await errs(tmp.path)
@@ -572,7 +572,7 @@ describe("plugin.loader.shared", () => {
       },
     })
 
-    const install = spyOn(Npm, "add").mockResolvedValue("")
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: "", entrypoint: "" })
 
     try {
       await load(tmp.path)

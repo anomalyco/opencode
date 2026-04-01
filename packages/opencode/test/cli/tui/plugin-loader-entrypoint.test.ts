@@ -56,7 +56,7 @@ test("loads npm tui plugin from package ./tui export", async () => {
   })
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
-  const install = spyOn(Npm, "add").mockResolvedValue(tmp.extra.mod)
+  const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
 
   try {
     await TuiPluginRuntime.init(createTuiPluginApi())
@@ -118,7 +118,7 @@ test("does not use npm package exports dot for tui entry", async () => {
   })
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
-  const install = spyOn(Npm, "add").mockResolvedValue(tmp.extra.mod)
+  const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
 
   try {
     await TuiPluginRuntime.init(createTuiPluginApi())
@@ -181,7 +181,7 @@ test("rejects npm tui export that resolves outside plugin directory", async () =
   })
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
-  const install = spyOn(Npm, "add").mockResolvedValue(tmp.extra.mod)
+  const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
 
   try {
     await TuiPluginRuntime.init(createTuiPluginApi())
@@ -244,7 +244,7 @@ test("rejects npm tui plugin that exports server and tui together", async () => 
   })
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
-  const install = spyOn(Npm, "add").mockResolvedValue(tmp.extra.mod)
+  const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
 
   try {
     await TuiPluginRuntime.init(createTuiPluginApi())
@@ -303,7 +303,7 @@ test("does not use npm package main for tui entry", async () => {
   })
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
-  const install = spyOn(Npm, "add").mockResolvedValue(tmp.extra.mod)
+  const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
   const warn = spyOn(console, "warn").mockImplementation(() => {})
   const error = spyOn(console, "error").mockImplementation(() => {})
 
@@ -475,7 +475,7 @@ test("uses npm package name when tui plugin id is omitted", async () => {
   })
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
-  const install = spyOn(Npm, "add").mockResolvedValue(tmp.extra.mod)
+  const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
 
   try {
     await TuiPluginRuntime.init(createTuiPluginApi())

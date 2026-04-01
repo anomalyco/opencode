@@ -25,9 +25,12 @@ export namespace Npm {
     return path.join(Global.Path.cache, "packages", pkg)
   }
 
-  function resolveEntryPoint(pkg: string, dir: string): string {
+  function resolveEntryPoint(pkg: string, dir: string) {
     const resolved = import.meta.resolve(pkg, pathToFileURL(dir))
-    return resolved
+    return {
+      directory: dir,
+      entrypoint: resolved,
+    }
   }
 
   export async function outdated(pkg: string, cachedVersion: string): Promise<boolean> {
