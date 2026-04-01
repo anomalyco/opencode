@@ -11,6 +11,11 @@
     --sidebar-session-active-shadow: rgba(0, 0, 0, 0.34);
   }
 
+  html[data-theme="aether"] [data-component="sidebar-session"] {
+    --sidebar-session-active-bg-top: rgb(65, 65, 65);
+    --sidebar-session-active-bg-bottom: rgb(65, 65, 65);
+  }
+
   [data-component="sidebar-session"]:hover,
   [data-component="sidebar-session"]:has(:focus-visible),
   [data-component="sidebar-session"]:has([data-expanded]) {
@@ -30,6 +35,11 @@
   [data-component="sidebar-session"][data-active="true"]:has(:focus-visible) {
     background: linear-gradient(180deg, #34302b, #2c2824);
     border-color: rgba(201, 138, 109, 0.28);
+  }
+
+  html[data-theme="aether"] [data-component="sidebar-session"][data-active="true"]:hover,
+  html[data-theme="aether"] [data-component="sidebar-session"][data-active="true"]:has(:focus-visible) {
+    background: rgb(65, 65, 65);
   }
 
   [data-component="sidebar-session-loading"] {
