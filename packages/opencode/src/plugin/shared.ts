@@ -34,7 +34,7 @@ export type PluginEntry = {
   source: PluginSource
   target: string
   pkg?: PluginPackage
-  entry: string
+  entry?: string
 }
 
 const INDEX_FILES = ["index.ts", "index.tsx", "index.js", "index.mjs", "index.cjs"]
@@ -45,9 +45,9 @@ export function pluginSource(spec: string): PluginSource {
 }
 
 function resolveExportPath(raw: string, dir: string) {
-  if (raw.startsWith("./") || raw.startsWith("../")) return path.resolve(dir, raw)
   if (raw.startsWith("file://")) return fileURLToPath(raw)
-  return raw
+  if (path.isAbsolute(raw)) return raw
+  return path.resolve(dir, raw)
 }
 
 function extractExportValue(value: unknown): string | undefined {
@@ -93,7 +93,7 @@ function resolvePackageEntrypoint(spec: string, kind: PluginKind, pkg: PluginPac
 
 function targetPath(target: string) {
   if (target.startsWith("file://")) return fileURLToPath(target)
-  if (path.isAbsolute(target) || /^[A-Za-z]:[\\/]/.test(target)) return target
+  if (path.isAbsolute(target)) return target
 }
 
 async function resolveDirectoryIndex(dir: string) {
@@ -128,13 +128,8 @@ async function resolvePluginEntrypoint(spec: string, target: string, kind: Plugi
       if (index) return pathToFileURL(index).href
     }
 
-    if (source === "npm") {
-      throw new TypeError(`Plugin ${spec} must define package.json exports["./tui"]`)
-    }
-
-    if (dir) {
-      throw new TypeError(`Plugin ${spec} must define package.json exports["./tui"] or include index file`)
-    }
+    if (source === "npm") return
+    if (dir) return
 
     return target
   }
@@ -145,7 +140,7 @@ async function resolvePluginEntrypoint(spec: string, target: string, kind: Plugi
       if (index) return pathToFileURL(index).href
     }
 
-    throw new TypeError(`Plugin ${spec} must define package.json exports["./server"] or package.json main`)
+    return
   }
 
   return target
@@ -189,7 +184,7 @@ export async function checkPluginCompatibility(target: string, opencodeVersion: 
 
 export async function resolvePluginTarget(spec: string, parsed = parsePluginSpecifier(spec)) {
   if (isPathPluginSpec(spec)) return resolvePathPluginTarget(spec)
-  return BunProc.install(parsed.pkg, parsed.version)
+  return BunProc.install(parsed.pkg, parsed.version, { ignoreScripts: true })
 }
 
 export async function readPluginPackage(target: string): Promise<PluginPackage> {
