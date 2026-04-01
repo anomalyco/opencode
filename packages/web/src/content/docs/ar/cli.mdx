@@ -1,0 +1,603 @@
+---
+title: CLI
+description: أوامر وخيارات CLI في OpenCode.
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+
+يبدأ CLI الخاص بـ OpenCode افتراضيا واجهة [TUI](/docs/tui) عند تشغيله بدون أي معاملات.
+
+```bash
+opencode
+```
+
+كما يدعم أيضا أوامر موثقة في هذه الصفحة، ما يتيح لك التفاعل مع OpenCode برمجيا.
+
+```bash
+opencode run "Explain how closures work in JavaScript"
+```
+
+---
+
+### tui
+
+بدء واجهة المستخدم terminal (TUI) الخاصة بـ OpenCode.
+
+```bash
+opencode [project]
+```
+
+#### الخيارات
+
+| الخيار       | المختصر | الوصف                                                             |
+| ------------ | ------- | ----------------------------------------------------------------- |
+| `--continue` | `-c`    | متابعة الجلسة الأخيرة                                             |
+| `--session`  | `-s`    | معرّف الجلسة للمتابعة                                             |
+| `--fork`     |         | تفريع الجلسة عند المتابعة (يستخدم مع `--continue` أو `--session`) |
+| `--prompt`   |         | الموجّه المراد استخدامه                                           |
+| `--model`    | `-m`    | النموذج المراد استخدامه بصيغة provider/model                      |
+| `--agent`    |         | الوكيل المراد استخدامه                                            |
+| `--port`     |         | المنفذ الذي يتم الاستماع عليه                                     |
+| `--hostname` |         | اسم المضيف الذي يتم الاستماع عليه                                 |
+
+---
+
+## الأوامر
+
+يتضمن CLI الخاص بـ OpenCode أيضا الأوامر التالية.
+
+---
+
+### agent
+
+إدارة وكلاء OpenCode.
+
+```bash
+opencode agent [command]
+```
+
+---
+
+### attach
+
+إرفاق terminal بخادم الواجهة الخلفية لـ OpenCode قيد التشغيل بالفعل، والذي تم تشغيله عبر الأمرين `serve` أو `web`.
+
+```bash
+opencode attach [url]
+```
+
+يتيح ذلك استخدام واجهة TUI مع واجهة خلفية لـ OpenCode تعمل عن بعد. على سبيل المثال:
+
+```bash
+# ابدأ خادم الواجهة الخلفية للوصول عبر الويب/الجوال
+opencode web --port 4096 --hostname 0.0.0.0
+
+# في محطة طرفية (terminal) أخرى، اربط TUI بالواجهة الخلفية قيد التشغيل
+opencode attach http://10.20.30.40:4096
+```
+
+#### الرايات
+
+| الراية      | المختصر | الوصف                               |
+| ----------- | ------- | ----------------------------------- |
+| `--dir`     |         | دليل العمل الذي ستبدأ منه واجهة TUI |
+| `--session` | `-s`    | معرّف الجلسة للمتابعة               |
+
+---
+
+#### create
+
+إنشاء وكيل جديد بإعدادات مخصصة.
+
+```bash
+opencode agent create
+```
+
+سيرشدك هذا الأمر خلال إنشاء وكيل جديد مع موجه نظام مخصص وإعدادات الأدوات.
+
+---
+
+#### list
+
+عرض جميع الوكلاء المتاحين.
+
+```bash
+opencode agent list
+```
+
+---
+
+### auth
+
+أمر لإدارة بيانات الاعتماد وتسجيل الدخول لمزودي الخدمة.
+
+```bash
+opencode auth [command]
+```
+
+---
+
+#### login
+
+يعتمد OpenCode على قائمة المزودين في [Models.dev](https://models.dev)، لذا يمكنك استخدام `opencode auth login` لتهيئة مفاتيح API لأي مزود ترغب باستخدامه. يتم حفظ ذلك في `~/.local/share/opencode/auth.json`.
+
+```bash
+opencode auth login
+```
+
+عند تشغيل OpenCode يقوم بتحميل المزودين من ملف بيانات الاعتماد، وكذلك أي مفاتيح معرّفة في متغيرات البيئة لديك أو في ملف `.env` ضمن مشروعك.
+
+---
+
+#### list
+
+يسرد جميع المزودين الذين تم توثيقهم كما هم محفوظون في ملف بيانات الاعتماد.
+
+```bash
+opencode auth list
+```
+
+أو النسخة المختصرة.
+
+```bash
+opencode auth ls
+```
+
+---
+
+#### logout
+
+يسجلك خارج مزود عبر حذفه من ملف بيانات الاعتماد.
+
+```bash
+opencode auth logout
+```
+
+---
+
+### github
+
+إدارة وكيل GitHub لأتمتة المستودع.
+
+```bash
+opencode github [command]
+```
+
+---
+
+#### install
+
+تثبيت وكيل GitHub في مستودعك.
+
+```bash
+opencode github install
+```
+
+يقوم ذلك بإعداد سير عمل GitHub Actions اللازم ويرشدك خلال عملية التهيئة. [اعرف المزيد](/docs/github).
+
+---
+
+#### run
+
+تشغيل وكيل GitHub. يُستخدم هذا عادة ضمن GitHub Actions.
+
+```bash
+opencode github run
+```
+
+##### الرايات
+
+| الراية    | الوصف                                |
+| --------- | ------------------------------------ |
+| `--event` | حدث GitHub مُحاكى لتشغيل الوكيل عليه |
+| `--token` | رمز وصول شخصي لـ GitHub              |
+
+---
+
+### mcp
+
+إدارة خوادم Model Context Protocol.
+
+```bash
+opencode mcp [command]
+```
+
+---
+
+#### add
+
+إضافة خادم MCP إلى تهيئتك.
+
+```bash
+opencode mcp add
+```
+
+سيرشدك هذا الأمر خلال إضافة خادم MCP محلي أو بعيد.
+
+---
+
+#### list
+
+عرض جميع خوادم MCP المُهيأة وحالة اتصالها.
+
+```bash
+opencode mcp list
+```
+
+أو استخدم النسخة المختصرة.
+
+```bash
+opencode mcp ls
+```
+
+---
+
+#### auth
+
+إجراء المصادقة مع خادم MCP يدعم OAuth.
+
+```bash
+opencode mcp auth [name]
+```
+
+إذا لم تُحدِّد اسم خادم، فسيُطلب منك الاختيار من الخوادم المتاحة الداعمة لـ OAuth.
+
+يمكنك أيضا عرض الخوادم الداعمة لـ OAuth وحالة المصادقة الخاصة بها.
+
+```bash
+opencode mcp auth list
+```
+
+أو استخدم النسخة المختصرة.
+
+```bash
+opencode mcp auth ls
+```
+
+---
+
+#### logout
+
+إزالة بيانات اعتماد OAuth لخادم MCP.
+
+```bash
+opencode mcp logout [name]
+```
+
+---
+
+#### debug
+
+تشخيص مشاكل اتصال OAuth لخادم MCP.
+
+```bash
+opencode mcp debug <name>
+```
+
+---
+
+### models
+
+عرض جميع النماذج المتاحة من المزودين المُهيأين.
+
+```bash
+opencode models [provider]
+```
+
+يعرض هذا الأمر جميع النماذج المتاحة عبر المزودين المُهيأين لديك بصيغة `provider/model`.
+
+هذا مفيد لتحديد اسم النموذج الدقيق الذي ستستخدمه في [تهيئتك](/docs/config/).
+
+يمكنك اختياريا تمرير معرّف مزود لتصفية النماذج حسب ذلك المزود.
+
+```bash
+opencode models anthropic
+```
+
+#### الرايات
+
+| الراية      | الوصف                                                         |
+| ----------- | ------------------------------------------------------------- |
+| `--refresh` | تحديث ذاكرة التخزين المؤقت للنماذج من models.dev              |
+| `--verbose` | استخدام مخرجات أكثر تفصيلا للنماذج (تشمل بيانات مثل التكاليف) |
+
+استخدم الراية `--refresh` لتحديث قائمة النماذج المخزنة مؤقتا. يفيد ذلك عند إضافة نماذج جديدة إلى مزود وتريد رؤيتها في OpenCode.
+
+```bash
+opencode models --refresh
+```
+
+---
+
+### run
+
+تشغيل opencode في وضع غير تفاعلي عبر تمرير موجه مباشرة.
+
+```bash
+opencode run [message..]
+```
+
+هذا مفيد للبرمجة النصية والأتمتة، أو عندما تريد إجابة سريعة دون تشغيل واجهة TUI كاملة. على سبيل المثال.
+
+```bash "opencode run"
+opencode run Explain the use of context in Go
+```
+
+يمكنك أيضا الإرفاق بمثيل `opencode serve` قيد التشغيل لتجنّب زمن الإقلاع البارد لخوادم MCP في كل تشغيل:
+
+```bash
+# ابدأ خادمًا بلا واجهة في محطة طرفية واحدة
+opencode serve
+
+# في محطة طرفية أخرى، شغّل الأوامر التي ترتبط به
+opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+```
+
+#### الرايات
+
+| الراية       | المختصر | الوصف                                                             |
+| ------------ | ------- | ----------------------------------------------------------------- |
+| `--command`  |         | الأمر المراد تشغيله؛ استخدم الرسالة كوسائط                        |
+| `--continue` | `-c`    | متابعة الجلسة الأخيرة                                             |
+| `--session`  | `-s`    | معرّف الجلسة للمتابعة                                             |
+| `--fork`     |         | تفريع الجلسة عند المتابعة (يستخدم مع `--continue` أو `--session`) |
+| `--share`    |         | مشاركة الجلسة                                                     |
+| `--model`    | `-m`    | النموذج المراد استخدامه بصيغة provider/model                      |
+| `--agent`    |         | الوكيل المراد استخدامه                                            |
+| `--file`     | `-f`    | ملف/ملفات لإرفاقها بالرسالة                                       |
+| `--format`   |         | التنسيق: default (منسق) أو json (أحداث JSON خام)                  |
+| `--title`    |         | عنوان للجلسة (يستخدم موجهًا مقتطعًا إن لم تُحدَّد قيمة)           |
+| `--attach`   |         | الإرفاق بخادم opencode قيد التشغيل (مثل http://localhost:4096)    |
+| `--port`     |         | منفذ الخادم المحلي (الافتراضي منفذ عشوائي)                        |
+
+---
+
+### serve
+
+بدء خادم OpenCode بدون واجهة للوصول عبر API. راجع [توثيق الخادم](/docs/server) لواجهة HTTP الكاملة.
+
+```bash
+opencode serve
+```
+
+يشغّل هذا خادم HTTP يوفّر وصولا عبر API لوظائف opencode دون واجهة TUI. اضبط `OPENCODE_SERVER_PASSWORD` لتفعيل مصادقة HTTP الأساسية (اسم المستخدم الافتراضي `opencode`).
+
+#### الرايات
+
+| الراية       | الوصف                                     |
+| ------------ | ----------------------------------------- |
+| `--port`     | المنفذ الذي يتم الاستماع عليه             |
+| `--hostname` | اسم المضيف الذي يتم الاستماع عليه         |
+| `--mdns`     | تفعيل اكتشاف mDNS                         |
+| `--cors`     | أصول/منشأات إضافية للمتصفح للسماح بـ CORS |
+
+---
+
+### session
+
+إدارة جلسات OpenCode.
+
+```bash
+opencode session [command]
+```
+
+---
+
+#### list
+
+عرض جميع جلسات OpenCode.
+
+```bash
+opencode session list
+```
+
+##### الرايات
+
+| الراية        | المختصر | الوصف                                 |
+| ------------- | ------- | ------------------------------------- |
+| `--max-count` | `-n`    | حصر النتائج في أحدث N جلسات           |
+| `--format`    |         | تنسيق المخرجات: table أو json (table) |
+
+---
+
+### stats
+
+عرض إحصاءات استخدام الرموز والتكلفة لجلسات OpenCode لديك.
+
+```bash
+opencode stats
+```
+
+#### الرايات
+
+| الراية      | الوصف                                                                     |
+| ----------- | ------------------------------------------------------------------------- |
+| `--days`    | عرض الإحصاءات لآخر N يومًا (الافتراضي: كل الوقت)                          |
+| `--tools`   | عدد الأدوات المطلوب عرضها (الافتراضي: الكل)                               |
+| `--models`  | عرض تفصيل استخدام النماذج (مخفي افتراضيا). مرّر رقمًا لعرض أعلى N         |
+| `--project` | التصفية حسب المشروع (الافتراضي: كل المشاريع، سلسلة فارغة: المشروع الحالي) |
+
+---
+
+### export
+
+تصدير بيانات الجلسة بصيغة JSON.
+
+```bash
+opencode export [sessionID]
+```
+
+إذا لم تُقدّم معرّف جلسة، فسيُطلب منك الاختيار من الجلسات المتاحة.
+
+---
+
+### import
+
+استيراد بيانات الجلسة من ملف JSON أو رابط مشاركة OpenCode.
+
+```bash
+opencode import <file>
+```
+
+يمكنك الاستيراد من ملف محلي أو من رابط مشاركة OpenCode.
+
+```bash
+opencode import session.json
+opencode import https://opncd.ai/s/abc123
+```
+
+---
+
+### web
+
+بدء خادم OpenCode بدون واجهة مع واجهة ويب.
+
+```bash
+opencode web
+```
+
+يشغّل هذا خادم HTTP ويفتح متصفح ويب للوصول إلى OpenCode عبر واجهة ويب. اضبط `OPENCODE_SERVER_PASSWORD` لتفعيل مصادقة HTTP الأساسية (اسم المستخدم الافتراضي `opencode`).
+
+#### الرايات
+
+| الراية       | الوصف                                     |
+| ------------ | ----------------------------------------- |
+| `--port`     | المنفذ الذي يتم الاستماع عليه             |
+| `--hostname` | اسم المضيف الذي يتم الاستماع عليه         |
+| `--mdns`     | تفعيل اكتشاف mDNS                         |
+| `--cors`     | أصول/منشأات إضافية للمتصفح للسماح بـ CORS |
+
+---
+
+### acp
+
+بدء خادم ACP (Agent Client Protocol).
+
+```bash
+opencode acp
+```
+
+يشغّل هذا الأمر خادم ACP يتواصل عبر stdin/stdout باستخدام nd-JSON.
+
+#### الرايات
+
+| الراية       | الوصف                             |
+| ------------ | --------------------------------- |
+| `--cwd`      | دليل العمل                        |
+| `--port`     | المنفذ الذي يتم الاستماع عليه     |
+| `--hostname` | اسم المضيف الذي يتم الاستماع عليه |
+
+---
+
+### uninstall
+
+إلغاء تثبيت OpenCode وإزالة جميع الملفات ذات الصلة.
+
+```bash
+opencode uninstall
+```
+
+#### الرايات
+
+| الراية          | المختصر | الوصف                               |
+| --------------- | ------- | ----------------------------------- |
+| `--keep-config` | `-c`    | الإبقاء على ملفات التهيئة           |
+| `--keep-data`   | `-d`    | الإبقاء على بيانات الجلسات واللقطات |
+| `--dry-run`     |         | عرض ما سيتم حذفه دون تنفيذ الحذف    |
+| `--force`       | `-f`    | تخطي مطالبات التأكيد                |
+
+---
+
+### upgrade
+
+تحديث opencode إلى أحدث إصدار أو إلى إصدار محدد.
+
+```bash
+opencode upgrade [target]
+```
+
+للترقية إلى أحدث إصدار.
+
+```bash
+opencode upgrade
+```
+
+للترقية إلى إصدار محدد.
+
+```bash
+opencode upgrade v0.1.48
+```
+
+#### الرايات
+
+| الراية     | المختصر | الوصف                                                       |
+| ---------- | ------- | ----------------------------------------------------------- |
+| `--method` | `-m`    | طريقة التثبيت المستخدمة: curl أو npm أو pnpm أو bun أو brew |
+
+---
+
+## الخيارات العامة
+
+يدعم سطر أوامر opencode الخيارات العامة التالية.
+
+| الراية         | المختصر | الوصف                                  |
+| -------------- | ------- | -------------------------------------- |
+| `--help`       | `-h`    | عرض المساعدة                           |
+| `--version`    | `-v`    | طباعة رقم الإصدار                      |
+| `--print-logs` |         | طباعة السجلات إلى stderr               |
+| `--log-level`  |         | مستوى السجل (DEBUG, INFO, WARN, ERROR) |
+
+---
+
+## متغيرات البيئة
+
+يمكن تهيئة OpenCode باستخدام متغيرات البيئة.
+
+| المتغير                               | النوع   | الوصف                                                     |
+| ------------------------------------- | ------- | --------------------------------------------------------- |
+| `OPENCODE_AUTO_SHARE`                 | boolean | مشاركة الجلسات تلقائيا                                    |
+| `OPENCODE_GIT_BASH_PATH`              | string  | مسار ملف Git Bash التنفيذي على Windows                    |
+| `OPENCODE_CONFIG`                     | string  | مسار ملف التهيئة                                          |
+| `OPENCODE_CONFIG_DIR`                 | string  | مسار دليل التهيئة                                         |
+| `OPENCODE_CONFIG_CONTENT`             | string  | محتوى تهيئة JSON مُضمّن                                   |
+| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | تعطيل التحقق التلقائي من التحديثات                        |
+| `OPENCODE_DISABLE_PRUNE`              | boolean | تعطيل تنقية البيانات القديمة                              |
+| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | تعطيل تحديث عنوان terminal تلقائيا                        |
+| `OPENCODE_PERMISSION`                 | string  | تهيئة أذونات JSON مُضمّنة                                 |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | تعطيل الإضافات الافتراضية                                 |
+| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | تعطيل تنزيل خوادم LSP تلقائيا                             |
+| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | تفعيل النماذج التجريبية                                   |
+| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | تعطيل ضغط السياق تلقائيا                                  |
+| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | تعطيل القراءة من `.claude` (الموجه + المهارات)            |
+| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | تعطيل قراءة `~/.claude/CLAUDE.md`                         |
+| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | تعطيل تحميل `.claude/skills`                              |
+| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | تعطيل جلب النماذج من مصادر بعيدة                          |
+| `OPENCODE_FAKE_VCS`                   | string  | مزود VCS وهمي لأغراض الاختبار                             |
+| `OPENCODE_DISABLE_FILETIME_CHECK`     | boolean | تعطيل التحقق من وقت الملف لتحسين الأداء                   |
+| `OPENCODE_CLIENT`                     | string  | معرّف العميل (الافتراضي `cli`)                            |
+| `OPENCODE_ENABLE_EXA`                 | boolean | تفعيل أدوات بحث الويب من Exa                              |
+| `OPENCODE_SERVER_PASSWORD`            | string  | تفعيل المصادقة الأساسية لخادمي `serve`/`web`              |
+| `OPENCODE_SERVER_USERNAME`            | string  | تجاوز اسم مستخدم المصادقة الأساسية (الافتراضي `opencode`) |
+| `OPENCODE_MODELS_URL`                 | string  | رابط مخصص لجلب تهيئة النماذج                              |
+
+---
+
+### تجريبي
+
+تقوم متغيرات البيئة التالية بتفعيل ميزات تجريبية قد تتغير أو تتم إزالتها.
+
+| المتغير                                         | النوع   | الوصف                                       |
+| ----------------------------------------------- | ------- | ------------------------------------------- |
+| `OPENCODE_EXPERIMENTAL`                         | boolean | تفعيل جميع الميزات التجريبية                |
+| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | تفعيل اكتشاف الأيقونات                      |
+| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | تعطيل النسخ عند التحديد في TUI              |
+| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | المهلة الافتراضية لأوامر bash بالميلي ثانية |
+| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | الحد الأقصى لرموز المخرجات لاستجابات LLM    |
+| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | تفعيل مراقب الملفات لكامل الدليل            |
+| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | تفعيل مُنسّق oxfmt                          |
+| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | تفعيل أداة LSP تجريبية                      |
+| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | تعطيل مراقب الملفات                         |
+| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | تفعيل ميزات Exa التجريبية                   |
+| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | تفعيل تدقيق أنواع LSP تجريبي                |
+| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean | تفعيل ميزات markdown تجريبية                |
+| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | تفعيل وضع الخطة                             |

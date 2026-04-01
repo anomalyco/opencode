@@ -1,0 +1,379 @@
+---
+title: Araçlar
+description: LLM'in kullanabileceği araçları yönetin.
+---
+
+Araçlar, LLM'in kod tabanınızda eylem gerçekleştirmesini sağlar. opencode yerleşik bir araç setiyle gelir, ancak bunu [özel araçlarla](/docs/custom-tools) veya [MCP sunucularıyla](/docs/mcp-servers) genişletebilirsiniz.
+
+Varsayılan olarak tüm araçlar **etkindir** ve çalışmak için izin istemez. Araç davranışını [izinler](/docs/permissions) üzerinden kontrol edebilirsiniz.
+
+---
+
+## Yapılandırma
+
+Araç davranışını kontrol etmek için `permission` alanını kullanın. Her araç için izin verebilir, reddedebilir veya onay isteyebilirsiniz.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "deny",
+    "bash": "ask",
+    "webfetch": "allow"
+  }
+}
+```
+
+Birden fazla aracı aynı anda kontrol etmek için joker karakterler de kullanabilirsiniz. Örneğin, bir MCP sunucusundan gelen tüm araçlar için onay istemek:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "mymcp_*": "ask"
+  }
+}
+```
+
+İzin yapılandırması için [daha fazla bilgi alın](/docs/permissions).
+
+---
+
+## Yerleşik
+
+opencode içinde bulunan tüm yerleşik araçlar aşağıdadır.
+
+---
+
+### bash
+
+Proje ortamınızda kabuk komutları çalıştırır.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": "allow"
+  }
+}
+```
+
+Bu araç LLM'in `npm install`, `git status` gibi terminal komutlarını veya diğer kabuk komutlarını çalıştırmasını sağlar.
+
+---
+
+### edit
+
+Birebir metin değiştirme ile mevcut dosyaları düzenler.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+Bu araç dosyalarda kesin metin eşleşmelerini değiştirerek hassas düzenleme yapar. LLM'in kodu değiştirmek için kullandığı temel yöntemdir.
+
+---
+
+### write
+
+Yeni dosyalar oluşturur veya mevcut dosyaları üzerine yazar.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+LLM'in yeni dosya oluşturmasına izin vermek için bunu kullanın. Dosya zaten varsa üzerine yazar.
+
+:::note
+`write` aracı `edit` izniyle kontrol edilir; bu izin tüm dosya değişikliklerini kapsar (`edit`, `write`, `patch`, `multiedit`).
+:::
+
+---
+
+### read
+
+Kod tabanınızdan dosya içeriği okur.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "read": "allow"
+  }
+}
+```
+
+Bu araç dosyaları okur ve içeriklerini döndürür. Büyük dosyalar için belirli satır aralıklarını okuma desteği vardır.
+
+---
+
+### grep
+
+Düzenli ifadelerle dosya içeriğinde arama yapar.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "grep": "allow"
+  }
+}
+```
+
+Kod tabanında hızlı içerik araması sunar. Tam regex sözdizimini ve dosya desen filtrelerini destekler.
+
+---
+
+### glob
+
+Desen eşleştirme ile dosya bulur.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "glob": "allow"
+  }
+}
+```
+
+`**/*.js` veya `src/**/*.ts` gibi glob desenleriyle dosya arar. Eşleşen dosya yollarını değişim zamanına göre sıralar.
+
+---
+
+### list
+
+Verilen yoldaki dosya ve dizinleri listeler.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "list": "allow"
+  }
+}
+```
+
+Bu araç dizin içeriğini listeler. Sonuçları filtrelemek için glob desenlerini kabul eder.
+
+---
+
+### lsp (deneysel)
+
+Tanım, referans, hover bilgisi ve çağrılar hiyerarşisi gibi kod zekası özellikleri için yapılandırdığınız LSP sunucularıyla etkileşir.
+
+:::note
+Bu araç yalnızca `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (veya `OPENCODE_EXPERIMENTAL=true`) olduğunda kullanılabilir.
+:::
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "lsp": "allow"
+  }
+}
+```
+
+Desteklenen işlemler: `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls`, `outgoingCalls`.
+
+Projeniz için kullanılabilir LSP sunucularını ayarlamak için [LSP Sunucuları](/docs/lsp) sayfasına bakın.
+
+---
+
+### patch
+
+Dosyalara patch uygular.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+Bu araç patch dosyalarını kod tabanınıza uygular. Farklı kaynaklardan gelen diff ve patch'leri uygulamak için kullanışlıdır.
+
+:::note
+`patch` aracı `edit` izniyle kontrol edilir; bu izin tüm dosya değişikliklerini kapsar (`edit`, `write`, `patch`, `multiedit`).
+:::
+
+---
+
+### skill
+
+Bir [skill](/docs/skills) (`SKILL.md` dosyası) yükler ve içeriğini konuşmaya döndürür.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "skill": "allow"
+  }
+}
+```
+
+---
+
+### todowrite
+
+Kodlama oturumlarında yapılacaklar listesini yönetir.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "todowrite": "allow"
+  }
+}
+```
+
+Karmaşık işlemlerde ilerlemeyi takip etmek için görev listeleri oluşturur ve günceller. LLM bunu çok adımlı görevleri düzenlemek için kullanır.
+
+:::note
+Bu araç alt agent'lar için varsayılan olarak devre dışıdır, ama manuel etkinleştirebilirsiniz. [Daha fazla bilgi](/docs/agents/#permissions)
+:::
+
+---
+
+### todoread
+
+Mevcut yapılacaklar listesini okur.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "todoread": "allow"
+  }
+}
+```
+
+Güncel todo listesi durumunu okur. LLM bunu hangi görevlerin beklediğini veya tamamlandığını takip etmek için kullanır.
+
+:::note
+Bu araç alt agent'lar için varsayılan olarak devre dışıdır, ama manuel etkinleştirebilirsiniz. [Daha fazla bilgi](/docs/agents/#permissions)
+:::
+
+---
+
+### webfetch
+
+Web içeriği getirir.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "webfetch": "allow"
+  }
+}
+```
+
+LLM'in web sayfalarını getirip okumasını sağlar. Dokümantasyon aramak veya çevrimiçi kaynakları incelemek için kullanışlıdır.
+
+---
+
+### websearch
+
+Web'de bilgi arar.
+
+:::note
+Bu araç yalnızca opencode provider kullanılırken veya `OPENCODE_ENABLE_EXA` ortam değişkeni doğru değerlerden birine ayarlandığında (örneğin `true` ya da `1`) kullanılabilir.
+
+opencode başlatırken etkinleştirmek için:
+
+```bash
+OPENCODE_ENABLE_EXA=1 opencode
+```
+
+:::
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "websearch": "allow"
+  }
+}
+```
+
+Exa AI ile web araması yaparak ilgili bilgileri bulur. Eğitim verisi kesim tarihinin ötesindeki konuları araştırmak, güncel olayları bulmak veya genel araştırma yapmak için kullanışlıdır.
+
+API anahtarı gerekmez - araç Exa AI'nin barındırılan MCP hizmetine doğrudan kimlik doğrulaması olmadan bağlanır.
+
+:::tip
+Bilgi keşfetmeniz gerekiyorsa `websearch`, belirli bir URL'den içerik çekmeniz gerekiyorsa `webfetch` kullanın.
+:::
+
+---
+
+### question
+
+Çalışma sırasında kullanıcıya soru sorar.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "question": "allow"
+  }
+}
+```
+
+Bu araç LLM'in görev sırasında kullanıcıya soru sormasını sağlar. Şunlar için kullanışlıdır:
+
+- Kullanıcı tercihleri veya gereksinimleri toplamak
+- Belirsiz talimatları netleştirmek
+- Uygulama seçeneklerinde karar almak
+- Hangi yöne gidileceğine dair seçenek sunmak
+
+Her soru bir başlık, soru metni ve seçenek listesi içerir. Kullanıcılar seçeneklerden birini seçebilir veya özel yanıt yazabilir. Birden fazla soru varsa tüm yanıtları göndermeden önce sorular arasında gezebilirler.
+
+---
+
+## Özel araçlar
+
+Özel araçlar, LLM'in çağırabileceği kendi fonksiyonlarınızı tanımlamanızı sağlar. Bunlar config dosyanızda tanımlanır ve keyfi kod çalıştırabilir.
+
+Özel araç oluşturma için [daha fazla bilgi alın](/docs/custom-tools).
+
+---
+
+## MCP sunucuları
+
+MCP (Model Context Protocol) sunucuları, harici araçları ve servisleri entegre etmenizi sağlar. Buna veritabanı erişimi, API entegrasyonları ve üçüncü taraf servisler dahildir.
+
+MCP sunucularını yapılandırma için [daha fazla bilgi alın](/docs/mcp-servers).
+
+---
+
+## Dahili detaylar
+
+Dahilde `grep`, `glob` ve `list` gibi araçlar [ripgrep](https://github.com/BurntSushi/ripgrep) kullanır. Varsayılan olarak ripgrep `.gitignore` desenlerine uyar; yani `.gitignore` içindeki dosya ve dizinler arama ve listeleme sonucuna dahil edilmez.
+
+---
+
+### Yoksayma desenleri
+
+Normalde yok sayılan dosyaları dahil etmek için proje kökünde bir `.ignore` dosyası oluşturun. Bu dosya belirli yolları açıkça izinli yapabilir.
+
+```text title=".ignore"
+!node_modules/
+!dist/
+!build/
+```
+
+Örneğin bu `.ignore` dosyası, `node_modules/` içinde olsalar bile ripgrep'in `dist/`, `build/` ve `.gitignore` dizinlerinde arama yapmasına izin verir.

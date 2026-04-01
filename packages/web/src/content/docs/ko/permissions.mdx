@@ -1,0 +1,237 @@
+---
+title: 권한
+description: 실행 승인이 필요한 작업을 제어합니다.
+---
+
+opencode는 주어진 동작이 자동으로 실행되는지 결정하기 위해 `permission` config를 사용하거나 차단합니다.
+
+`v1.1.1`의 것과 같이, 유산 `tools` 불린 구성은 deprecated이고 `permission`로 합병되었습니다. 오래된 `tools` config는 여전히 뒤쪽 호환성을 위해 지원됩니다.
+
+---
+
+## 동작
+
+각 권한 규칙은 다음과 같습니다:
+
+- `"allow"` - 승인없이 실행
+- `"ask"` - 승인을위한 prompt
+- `"deny"` - 동작 차단
+
+---
+
+## 구성
+
+글로벌 권한(`*` 포함) 및 특정 도구를 부여할 수 있습니다.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "*": "ask",
+    "bash": "allow",
+    "edit": "deny"
+  }
+}
+```
+
+한 번에 모든 권한을 설정할 수 있습니다.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": "allow"
+}
+```
+
+---
+
+## 세부 규칙 (객체 구문)
+
+대부분의 권한을 위해 도구 입력을 기반으로 다른 작업을 적용 할 수 있습니다.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "git *": "allow",
+      "npm *": "allow",
+      "rm *": "deny",
+      "grep *": "allow"
+    },
+    "edit": {
+      "*": "deny",
+      "packages/web/src/content/docs/*.mdx": "allow"
+    }
+  }
+}
+```
+
+규칙은 패턴 일치에 의해 평가됩니다, ** 마지막 일치 규칙 우승 **. 일반적인 패턴은 catch-all `"*"` 규칙을 먼저 넣는 것입니다, 그리고 그 후에 더 구체적인 규칙.
+
+## 와일드카드
+
+Permission 본 사용 간단한 wildcard 일치:
+
+- `*`는 어떤 성격든지의 0개 이상 일치합니다
+- `?`는 정확히 하나의 문자 일치
+- 다른 모든 문자 일치 말 그대로
+
+## 홈 디렉토리 확장
+
+`~` 또는 `$HOME`를 사용할 수 있습니다 패턴의 시작에 홈 디렉토리를 참조. 이것은 특히 유용합니다 [`external_directory`](#external-directories) 규칙.
+
+- `~/projects/*` -> `/Users/username/projects/*`
+- `$HOME/projects/*` -> `/Users/username/projects/*`
+- `~` -> `/Users/username`
+
+## 외부 디렉터리
+
+`external_directory`를 사용하여 도구가 opencode가 시작된 작업 디렉토리 밖에 터치 경로가 호출되도록합니다. 이것은 입력 (예 : `read`, `edit`, `list`, `glob`, `glob`, `grep` 및 많은 `bash` 명령)로 경로를 수행하는 모든 도구에 적용됩니다.
+
+홈 확장 (`~/...`와 같은) 패턴이 작성된 방법에 영향을 미칩니다. 그것은 현재의 작업 공간의 외부 경로 부분을 만들지 않습니다, 그래서 작업 디렉토리 외부 경로는 여전히 `external_directory`를 통해 허용해야합니다.
+
+예를 들어, 이것은 `~/projects/personal/`의 모든 것에 액세스 할 수 있습니다.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "~/projects/personal/**": "allow"
+    }
+  }
+}
+```
+
+여기에 허용되는 모든 디렉토리는 현재 작업 공간과 동일한 기본값을 상속합니다. [`read` defaults to `allow`](#defaults)는 `external_directory`에서 `external_directory`의 항목에 대해 읽을 수 있습니다. 도구가 이러한 경로에 제한 될 때 명시적 규칙을 추가하십시오.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "~/projects/personal/**": "allow"
+    },
+    "edit": {
+      "~/projects/personal/**": "deny"
+    }
+  }
+}
+```
+
+신뢰할 수있는 경로에 초점을 맞춘 목록을 유지하고 다른 도구 (예 : `bash`)에 필요한대로 추가 허용하거나 deny 규칙을 층을 설정합니다.
+
+---
+
+## 사용 가능한 권한
+
+opencode 권한은 도구 이름에 의해 키 입력되며, 두 개의 안전 가드 :
+
+- `read` - 파일 읽기 (파일 경로의 매칭)
+- `edit` - 모든 파일 수정 (covers `edit`, `write`, `patch`, `multiedit`)
+- `glob` - 파일 globbing (glob 패턴 매칭)
+- `grep` - 콘텐츠 검색 ( regex 패턴 매칭)
+- `list` - 디렉토리의 목록 파일 (폴더 경로 매칭)
+- `bash` - shell 명령 실행 (`git status --porcelain`와 같은 팟 명령)
+- `task` - 에이전트 실행 (작업 에이전트 유형)
+- `skill` - 기술을 로딩 (기술 이름을 매칭)
+- `lsp` - LSP 쿼리 실행 (현재 비 과립)
+- `todoread`, `todowrite` - 토도 목록의 읽기 / 업데이트
+- `webfetch` - URL을 fetching ( URL을 매칭)
+- `websearch`, `codesearch` - 웹 / 코드 검색 (문자 쿼리)
+- `external_directory` - 프로젝트 작업 디렉토리 외부의 도구 접촉 경로 때 트리거
+- `doom_loop` - 동일한 도구 호출이 동일한 입력으로 3 번 반복 할 때 트리거
+
+---
+
+## 기본값
+
+아무것도 지정하지 않는 경우, opencode는 permissive 기본값에서 시작합니다.
+
+- `"allow"`에 기본 권한.
+- `doom_loop` 및 `external_directory` 기본적으로 `"ask"`.
+- `read`는 `"allow"`이고, 그러나 `.env` 파일은 기본적으로 denied:
+
+```json title="opencode.json"
+{
+  "permission": {
+    "read": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow"
+    }
+  }
+}
+```
+
+---
+
+## "Ask"란 무엇입니까?
+
+opencode가 승인되면 UI는 세 가지 결과를 제공합니다.
+
+- `once` - 이 요청을 승인
+- `always` - 제안 된 패턴과 일치하는 미래 요청 (현재 opencode 세션의 나머지)
+- `reject` - 요청을 거부
+
+`always`는 도구 (예를 들면, bash 승인 일반적으로 `git status*`와 같은 안전한 명령 접두사)에 의해 approve가 제공 될 패턴의 집합.
+
+---
+
+## 에이전트
+
+에이전트 당 권한이 부여 될 수 있습니다. 에이전트 권한은 글로벌 구성과 합병되며, 에이전트 규칙은 우선합니다. [Learn more](/docs/agents#permissions) 약 에이전트 권한.
+
+:::note
+[Granular Rules (Object Syntax)](#granular-rules-object-syntax))에 대한 자세한 패턴 매칭 예제를 참조하십시오.
+:::
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "git *": "allow",
+      "git commit *": "deny",
+      "git push *": "deny",
+      "grep *": "allow"
+    }
+  },
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "*": "ask",
+          "git *": "allow",
+          "git commit *": "ask",
+          "git push *": "deny",
+          "grep *": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+Markdown의 에이전트 권한을 구성할 수 있습니다.
+
+```markdown title="~/.config/opencode/agents/review.md"
+---
+description: Code review without edits
+mode: subagent
+permission:
+  edit: deny
+  bash: ask
+  webfetch: deny
+---
+
+Only analyze code and suggest changes.
+```
+
+:::tip
+인자와 명령에 대한 패턴 매칭을 사용합니다. `"grep *"`는 `grep pattern file.txt`를 허용하고, `"grep"`는 혼자 그것을 막을 것입니다. `git status`와 같은 명령은 기본 동작을 위해 작동하지만, 인수가 전달될 때 명시된 권한 (`"git status *"`와 같은)이 필요합니다.
+:::

@@ -1,0 +1,159 @@
+---
+title: Go
+description: Povoljna pretplata za otvorene modele kodiranja.
+---
+
+import config from "../../../../config.mjs"
+export const console = config.console
+export const email = `mailto:${config.email}`
+
+OpenCode Go je povoljna pretplata od **$10/mjesečno** koja vam daje pouzdan pristup popularnim otvorenim modelima kodiranja.
+
+:::note
+OpenCode Go je trenutno u beta fazi.
+:::
+
+Go funkcioniše kao bilo koji drugi pružatelj usluga u OpenCode-u. Pretplatite se na OpenCode Go i
+dobijete svoj API ključ. To je **potpuno opcionalno** i ne morate ga koristiti da biste
+koristili OpenCode.
+
+Dizajniran je prvenstveno za međunarodne korisnike, sa modelima hostovanim u SAD-u, EU i Singapuru za stabilan globalni pristup.
+
+---
+
+## Pozadina
+
+Otvoreni modeli su postali zaista dobri. Sada dostižu performanse bliske
+vlasničkim modelima za zadatke kodiranja. A budući da ih mnogi pružatelji usluga mogu posluživati
+konkurentno, obično su daleko jeftiniji.
+
+Međutim, dobivanje pouzdanog pristupa s malim kašnjenjem može biti teško. Pružatelji usluga
+variraju u kvaliteti i dostupnosti.
+
+:::tip
+Testirali smo odabranu grupu modela i pružatelja usluga koji dobro rade sa OpenCode-om.
+:::
+
+Da bismo ovo riješili, uradili smo nekoliko stvari:
+
+1. Testirali smo odabranu grupu otvorenih modela i razgovarali sa njihovim timovima o tome kako ih
+   najbolje pokrenuti.
+2. Zatim smo radili sa nekoliko pružatelja usluga kako bismo bili sigurni da su ispravno
+   posluživani.
+3. Konačno, benchmarkirali smo kombinaciju modela/pružatelja usluga i došli do
+   liste koju se osjećamo dobro preporučiti.
+
+OpenCode Go vam daje pristup ovim modelima za **$10/mjesečno**.
+
+---
+
+## Kako to funkcioniše
+
+OpenCode Go funkcioniše kao bilo koji drugi pružatelj usluga u OpenCode-u.
+
+1. Prijavite se na **<a href={console}>OpenCode Zen</a>**, pretplatite se na Go i
+   kopirajte svoj API ključ.
+2. Pokrenite `/connect` komandu u TUI-ju, odaberite `OpenCode Go` i zalijepite
+   svoj API ključ.
+3. Pokrenite `/models` u TUI-ju da vidite listu modela dostupnih putem Go.
+
+:::note
+Samo jedan član po radnom prostoru se može pretplatiti na OpenCode Go.
+:::
+
+Trenutna lista modela uključuje:
+
+- **GLM-5**
+- **Kimi K2.5**
+- **MiniMax M2.5**
+
+Lista modela se može mijenjati kako testiramo i dodajemo nove.
+
+---
+
+## Ograničenja korištenja
+
+OpenCode Go uključuje sljedeća ograničenja:
+
+- **Limit od 5 sati** — $12 korištenja
+- **Sedmični limit** — $30 korištenja
+- **Mjesečni limit** — $60 korištenja
+
+Limiti su definisani u dolarskoj vrijednosti. To znači da vaš stvarni broj zahtjeva zavisi od modela koji koristite. Jeftiniji modeli kao što je MiniMax M2.5 omogućavaju više zahtjeva, dok skuplji modeli kao što je GLM-5 omogućavaju manje.
+
+Tabela ispod pruža procijenjeni broj zahtjeva na osnovu tipičnih Go obrazaca korištenja:
+
+|                    | GLM-5 | Kimi K2.5 | MiniMax M2.5 |
+| ------------------ | ----- | --------- | ------------ |
+| zahtjeva po 5 sati | 1,150 | 1,850     | 30,000       |
+| zahtjeva sedmično  | 2,880 | 4,630     | 75,000       |
+| zahtjeva mjesečno  | 5,750 | 9,250     | 150,000      |
+
+Procjene su zasnovane na uočenim prosječnim obrascima zahtjeva:
+
+- GLM-5 — 700 ulaznih, 52,000 keširanih, 150 izlaznih tokena po zahtjevu
+- Kimi K2.5 — 870 ulaznih, 55,000 keširanih, 200 izlaznih tokena po zahtjevu
+- MiniMax M2.5 — 300 ulaznih, 55,000 keširanih, 125 izlaznih tokena po zahtjevu
+
+Možete pratiti svoje trenutno korištenje u **<a href={console}>konzoli</a>**.
+
+:::tip
+Ako dosegnete limit korištenja, možete nastaviti koristiti besplatne modele.
+:::
+
+Ograničenja korištenja se mogu mijenjati kako učimo iz rane upotrebe i povratnih informacija.
+
+---
+
+### Cijene
+
+OpenCode Go je pretplatnički plan od **$10/mjesečno**. Ispod su cijene **po 1M tokena**.
+
+| Model        | Ulaz  | Izlaz | Keširano čitanje |
+| ------------ | ----- | ----- | ---------------- |
+| GLM-5        | $1.00 | $3.20 | $0.20            |
+| Kimi K2.5    | $0.60 | $3.00 | $0.10            |
+| MiniMax M2.5 | $0.30 | $1.20 | $0.03            |
+
+---
+
+### Korištenje izvan limita
+
+Ako također imate kredita na svom Zen saldu, možete omogućiti opciju **Use balance**
+u konzoli. Kada je omogućeno, Go će se prebaciti na vaš Zen saldo
+nakon što dosegnete limite korištenja umjesto blokiranja zahtjeva.
+
+---
+
+## Endpointi
+
+Također možete pristupiti Go modelima putem sljedećih API endpointa.
+
+| Model        | ID modela    | Endpoint                                         | AI SDK Paket                |
+| ------------ | ------------ | ------------------------------------------------ | --------------------------- |
+| GLM-5        | glm-5        | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.5    | kimi-k2.5    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiniMax M2.5 | minimax-m2.5 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+
+[Model id](/docs/config/#models) u vašoj OpenCode konfiguraciji
+koristi format `opencode-go/<model-id>`. Na primjer, za Kimi K2.5, biste
+koristili `opencode-go/kimi-k2.5` u vašoj konfiguraciji.
+
+---
+
+## Privatnost
+
+Plan je dizajniran prvenstveno za međunarodne korisnike, sa modelima hostovanim u SAD-u, EU i Singapuru za stabilan globalni pristup.
+
+<a href={email}>Kontaktirajte nas</a> ako imate bilo kakvih pitanja.
+
+---
+
+## Ciljevi
+
+Kreirali smo OpenCode Go da:
+
+1. Učinimo AI kodiranje **pristupačnim** većem broju ljudi uz povoljnu pretplatu.
+2. Pružimo **pouzdan** pristup najboljim otvorenim modelima kodiranja.
+3. Kurišemo modele koji su **testirani i benchmarkirani** za upotrebu agenata za kodiranje.
+4. Nemamo **zaključavanja (lock-in)** omogućavajući vam da koristite bilo kojeg drugog pružatelja usluga sa OpenCode-om također.

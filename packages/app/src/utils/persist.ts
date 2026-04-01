@@ -1,4 +1,4 @@
-import { usePlatform } from "@/context/platform"
+import { Platform, usePlatform } from "@/context/platform"
 import { makePersisted, type AsyncStorage, type SyncStorage } from "@solid-primitives/storage"
 import { checksum } from "@opencode-ai/util/encode"
 import { createResource, type Accessor } from "solid-js"
@@ -17,8 +17,61 @@ type PersistTarget = {
 const LEGACY_STORAGE = "default.dat"
 const GLOBAL_STORAGE = "opencode.global.dat"
 const LOCAL_PREFIX = "opencode."
-const fallback = { disabled: false }
-const cache = new Map<string, string>()
+const fallback = new Map<string, boolean>()
+
+const CACHE_MAX_ENTRIES = 500
+const CACHE_MAX_BYTES = 8 * 1024 * 1024
+
+type CacheEntry = { value: string; bytes: number }
+const cache = new Map<string, CacheEntry>()
+const cacheTotal = { bytes: 0 }
+
+function cacheDelete(key: string) {
+  const entry = cache.get(key)
+  if (!entry) return
+  cacheTotal.bytes -= entry.bytes
+  cache.delete(key)
+}
+
+function cachePrune() {
+  for (;;) {
+    if (cache.size <= CACHE_MAX_ENTRIES && cacheTotal.bytes <= CACHE_MAX_BYTES) return
+    const oldest = cache.keys().next().value as string | undefined
+    if (!oldest) return
+    cacheDelete(oldest)
+  }
+}
+
+function cacheSet(key: string, value: string) {
+  const bytes = value.length * 2
+  if (bytes > CACHE_MAX_BYTES) {
+    cacheDelete(key)
+    return
+  }
+
+  const entry = cache.get(key)
+  if (entry) cacheTotal.bytes -= entry.bytes
+  cache.delete(key)
+  cache.set(key, { value, bytes })
+  cacheTotal.bytes += bytes
+  cachePrune()
+}
+
+function cacheGet(key: string) {
+  const entry = cache.get(key)
+  if (!entry) return
+  cache.delete(key)
+  cache.set(key, entry)
+  return entry.value
+}
+
+function fallbackDisabled(scope: string) {
+  return fallback.get(scope) === true
+}
+
+function fallbackSet(scope: string) {
+  fallback.set(scope, true)
+}
 
 function quota(error: unknown) {
   if (error instanceof DOMException) {
@@ -63,9 +116,11 @@ function evict(storage: Storage, keep: string, value: string) {
 
   for (const item of items) {
     storage.removeItem(item.key)
+    cacheDelete(item.key)
 
     try {
       storage.setItem(keep, value)
+      cacheSet(keep, value)
       return true
     } catch (error) {
       if (!quota(error)) throw error
@@ -78,6 +133,7 @@ function evict(storage: Storage, keep: string, value: string) {
 function write(storage: Storage, key: string, value: string) {
   try {
     storage.setItem(key, value)
+    cacheSet(key, value)
     return true
   } catch (error) {
     if (!quota(error)) throw error
@@ -85,13 +141,16 @@ function write(storage: Storage, key: string, value: string) {
 
   try {
     storage.removeItem(key)
+    cacheDelete(key)
     storage.setItem(key, value)
+    cacheSet(key, value)
     return true
   } catch (error) {
     if (!quota(error)) throw error
   }
 
-  return evict(storage, key, value)
+  const ok = evict(storage, key, value)
+  return ok
 }
 
 function snapshot(value: unknown) {
@@ -136,6 +195,14 @@ function parse(value: string) {
   }
 }
 
+function normalize(defaults: unknown, raw: string, migrate?: (value: unknown) => unknown) {
+  const parsed = parse(raw)
+  if (parsed === undefined) return
+  const migrated = migrate ? migrate(parsed) : parsed
+  const merged = merge(defaults, migrated)
+  return JSON.stringify(merged)
+}
+
 function workspaceStorage(dir: string) {
   const head = dir.slice(0, 12) || "workspace"
   const sum = checksum(dir) ?? "0"
@@ -144,67 +211,95 @@ function workspaceStorage(dir: string) {
 
 function localStorageWithPrefix(prefix: string): SyncStorage {
   const base = `${prefix}:`
+  const scope = `prefix:${prefix}`
   const item = (key: string) => base + key
   return {
     getItem: (key) => {
       const name = item(key)
-      const cached = cache.get(name)
-      if (fallback.disabled && cached !== undefined) return cached
+      const cached = cacheGet(name)
+      if (fallbackDisabled(scope)) return cached ?? null
 
-      const stored = localStorage.getItem(name)
+      const stored = (() => {
+        try {
+          return localStorage.getItem(name)
+        } catch {
+          fallbackSet(scope)
+          return null
+        }
+      })()
       if (stored === null) return cached ?? null
-      cache.set(name, stored)
+      cacheSet(name, stored)
       return stored
     },
     setItem: (key, value) => {
       const name = item(key)
-      cache.set(name, value)
-      if (fallback.disabled) return
+      if (fallbackDisabled(scope)) return
       try {
         if (write(localStorage, name, value)) return
       } catch {
-        fallback.disabled = true
+        fallbackSet(scope)
         return
       }
-      fallback.disabled = true
+      fallbackSet(scope)
     },
     removeItem: (key) => {
       const name = item(key)
-      cache.delete(name)
-      if (fallback.disabled) return
-      localStorage.removeItem(name)
+      cacheDelete(name)
+      if (fallbackDisabled(scope)) return
+      try {
+        localStorage.removeItem(name)
+      } catch {
+        fallbackSet(scope)
+      }
     },
   }
 }
 
 function localStorageDirect(): SyncStorage {
+  const scope = "direct"
   return {
     getItem: (key) => {
-      const cached = cache.get(key)
-      if (fallback.disabled && cached !== undefined) return cached
+      const cached = cacheGet(key)
+      if (fallbackDisabled(scope)) return cached ?? null
 
-      const stored = localStorage.getItem(key)
+      const stored = (() => {
+        try {
+          return localStorage.getItem(key)
+        } catch {
+          fallbackSet(scope)
+          return null
+        }
+      })()
       if (stored === null) return cached ?? null
-      cache.set(key, stored)
+      cacheSet(key, stored)
       return stored
     },
     setItem: (key, value) => {
-      cache.set(key, value)
-      if (fallback.disabled) return
+      if (fallbackDisabled(scope)) return
       try {
         if (write(localStorage, key, value)) return
       } catch {
-        fallback.disabled = true
+        fallbackSet(scope)
         return
       }
-      fallback.disabled = true
+      fallbackSet(scope)
     },
     removeItem: (key) => {
-      cache.delete(key)
-      if (fallback.disabled) return
-      localStorage.removeItem(key)
+      cacheDelete(key)
+      if (fallbackDisabled(scope)) return
+      try {
+        localStorage.removeItem(key)
+      } catch {
+        fallbackSet(scope)
+      }
     },
   }
+}
+
+export const PersistTesting = {
+  localStorageDirect,
+  localStorageWithPrefix,
+  normalize,
 }
 
 export const Persist = {
@@ -223,9 +318,8 @@ export const Persist = {
   },
 }
 
-export function removePersisted(target: { storage?: string; key: string }) {
-  const platform = usePlatform()
-  const isDesktop = platform.platform === "desktop" && !!platform.storage
+export function removePersisted(target: { storage?: string; key: string }, platform?: Platform) {
+  const isDesktop = platform?.platform === "desktop" && !!platform.storage
 
   if (isDesktop) {
     return platform.storage?.(target.storage)?.removeItem(target.key)
@@ -272,12 +366,11 @@ export function persisted<T>(
         getItem: (key) => {
           const raw = current.getItem(key)
           if (raw !== null) {
-            const parsed = parse(raw)
-            if (parsed === undefined) return raw
-
-            const migrated = config.migrate ? config.migrate(parsed) : parsed
-            const merged = merge(defaults, migrated)
-            const next = JSON.stringify(merged)
+            const next = normalize(defaults, raw, config.migrate)
+            if (next === undefined) {
+              current.removeItem(key)
+              return null
+            }
             if (raw !== next) current.setItem(key, next)
             return next
           }
@@ -286,16 +379,13 @@ export function persisted<T>(
             const legacyRaw = legacyStore.getItem(legacyKey)
             if (legacyRaw === null) continue
 
-            current.setItem(key, legacyRaw)
+            const next = normalize(defaults, legacyRaw, config.migrate)
+            if (next === undefined) {
+              legacyStore.removeItem(legacyKey)
+              continue
+            }
+            current.setItem(key, next)
             legacyStore.removeItem(legacyKey)
-
-            const parsed = parse(legacyRaw)
-            if (parsed === undefined) return legacyRaw
-
-            const migrated = config.migrate ? config.migrate(parsed) : parsed
-            const merged = merge(defaults, migrated)
-            const next = JSON.stringify(merged)
-            if (legacyRaw !== next) current.setItem(key, next)
             return next
           }
 
@@ -319,12 +409,11 @@ export function persisted<T>(
       getItem: async (key) => {
         const raw = await current.getItem(key)
         if (raw !== null) {
-          const parsed = parse(raw)
-          if (parsed === undefined) return raw
-
-          const migrated = config.migrate ? config.migrate(parsed) : parsed
-          const merged = merge(defaults, migrated)
-          const next = JSON.stringify(merged)
+          const next = normalize(defaults, raw, config.migrate)
+          if (next === undefined) {
+            await current.removeItem(key).catch(() => undefined)
+            return null
+          }
           if (raw !== next) await current.setItem(key, next)
           return next
         }
@@ -335,16 +424,13 @@ export function persisted<T>(
           const legacyRaw = await legacyStore.getItem(legacyKey)
           if (legacyRaw === null) continue
 
-          await current.setItem(key, legacyRaw)
+          const next = normalize(defaults, legacyRaw, config.migrate)
+          if (next === undefined) {
+            await legacyStore.removeItem(legacyKey).catch(() => undefined)
+            continue
+          }
+          await current.setItem(key, next)
           await legacyStore.removeItem(legacyKey)
-
-          const parsed = parse(legacyRaw)
-          if (parsed === undefined) return legacyRaw
-
-          const migrated = config.migrate ? config.migrate(parsed) : parsed
-          const merged = merge(defaults, migrated)
-          const next = JSON.stringify(merged)
-          if (legacyRaw !== next) await current.setItem(key, next)
           return next
         }
 

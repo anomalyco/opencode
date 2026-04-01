@@ -1,0 +1,379 @@
+---
+title: Alati
+description: Upravljajte alatima koje LLM moze koristiti.
+---
+
+Alati omogucavaju LLM-u da izvrsava akcije u vasem kodu. OpenCode dolazi sa skupom ugradenih alata, a mozete ga prosiriti kroz [custom tools](/docs/custom-tools) ili [MCP servers](/docs/mcp-servers).
+
+Po defaultu su svi alati **ukljuceni** i ne traze dozvolu za pokretanje. Ponasanje alata kontrolisete kroz [permissions](/docs/permissions).
+
+---
+
+## Konfiguracija
+
+Koristite polje `permission` za kontrolu ponasanja alata. Za svaki alat mozete postaviti allow, deny ili ask.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "deny",
+    "bash": "ask",
+    "webfetch": "allow"
+  }
+}
+```
+
+Mozete koristiti i wildcard obrasce da kontrolisete vise alata odjednom. Na primjer, da trazite odobrenje za sve alate jednog MCP servera:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "mymcp_*": "ask"
+  }
+}
+```
+
+[Saznajte vise](/docs/permissions) o konfigurisanju dozvola.
+
+---
+
+## Ugrađeni
+
+Ovo su svi ugradeni alati dostupni u OpenCode.
+
+---
+
+### bash
+
+Izvrsava shell komande u okruzenju projekta.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": "allow"
+  }
+}
+```
+
+Ovaj alat omogucava LLM-u da pokrece terminalske komande kao `npm install`, `git status` i druge shell komande.
+
+---
+
+### edit
+
+Mijenja postojece datoteke tacnim zamjenama stringova.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+Ovaj alat radi precizne izmjene datoteka zamjenom tacnih poklapanja teksta. To je glavni nacin na koji LLM mijenja kod.
+
+---
+
+### write
+
+Kreira nove datoteke ili prepisuje postojece.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+Koristite ovo da dozvolite LLM-u kreiranje novih datoteka. Ako datoteka vec postoji, bit ce prepisana.
+
+:::note
+`write` alat kontrolise `edit` dozvola, koja pokriva sve izmjene datoteka (`edit`, `write`, `patch`, `multiedit`).
+:::
+
+---
+
+### read
+
+Cita sadrzaj datoteka iz vaseg koda.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "read": "allow"
+  }
+}
+```
+
+Ovaj alat cita datoteke i vraca njihov sadrzaj. Podrzava citanje odredenih raspona linija kod velikih fajlova.
+
+---
+
+### grep
+
+Pretrazuje sadrzaj datoteka pomocu regularnih izraza.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "grep": "allow"
+  }
+}
+```
+
+Brza pretraga sadrzaja kroz cijeli kod. Podrzava puni regex i filtriranje po obrascima datoteka.
+
+---
+
+### glob
+
+Pronalazi datoteke po obrascima.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "glob": "allow"
+  }
+}
+```
+
+Trazi datoteke koristeci glob obrasce kao `**/*.js` ili `src/**/*.ts`. Vraca putanje sortirane po vremenu izmjene.
+
+---
+
+### list
+
+Ispisuje datoteke i direktorije na zadanoj putanji.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "list": "allow"
+  }
+}
+```
+
+Ovaj alat ispisuje sadrzaj direktorija. Prihvata glob obrasce za filtriranje rezultata.
+
+---
+
+### lsp (eksperimentalno)
+
+Komunicira sa konfigurisanim LSP serverima za funkcije inteligencije koda kao definicije, reference, hover info i hijerarhija poziva.
+
+:::note
+Ovaj alat je dostupan samo kada je `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (ili `OPENCODE_EXPERIMENTAL=true`).
+:::
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "lsp": "allow"
+  }
+}
+```
+
+Podrzane operacije ukljucuju `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls` i `outgoingCalls`.
+
+Za konfiguraciju dostupnih LSP servera u projektu, pogledajte [LSP Servers](/docs/lsp).
+
+---
+
+### patch
+
+Primjenjuje zakrpe na datoteke.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+Ovaj alat primjenjuje patch datoteke na kod. Koristan je za diffs i patch-eve iz razlicitih izvora.
+
+:::note
+`patch` alat kontrolise `edit` dozvola, koja pokriva sve izmjene datoteka (`edit`, `write`, `patch`, `multiedit`).
+:::
+
+---
+
+### skill
+
+Ucitajte [skill](/docs/skills) (`SKILL.md` datoteku) i vratite njegov sadrzaj u razgovor.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "skill": "allow"
+  }
+}
+```
+
+---
+
+### todowrite
+
+Upravlja todo listama tokom coding sesija.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "todowrite": "allow"
+  }
+}
+```
+
+Kreira i azurira liste zadataka za pracenje napretka tokom slozenih operacija. LLM ovo koristi za organizaciju zadataka u vise koraka.
+
+:::note
+Ovaj alat je po defaultu iskljucen za subagente, ali ga mozete rucno ukljuciti. [Saznajte vise](/docs/agents/#permissions)
+:::
+
+---
+
+### todoread
+
+Cita postojece todo liste.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "todoread": "allow"
+  }
+}
+```
+
+Cita trenutno stanje todo liste. LLM ga koristi da prati sta je na cekanju i sta je zavrseno.
+
+:::note
+Ovaj alat je po defaultu iskljucen za subagente, ali ga mozete rucno ukljuciti. [Saznajte vise](/docs/agents/#permissions)
+:::
+
+---
+
+### webfetch
+
+Preuzima web sadrzaj.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "webfetch": "allow"
+  }
+}
+```
+
+Omogucava LLM-u da preuzima i cita web stranice. Korisno za dokumentaciju i online istrazivanje.
+
+---
+
+### websearch
+
+Pretrazuje web za informacije.
+
+:::note
+Ovaj alat je dostupan samo uz OpenCode provajdera ili kada je varijabla `OPENCODE_ENABLE_EXA` postavljena na truthy vrijednost (npr. `true` ili `1`).
+
+Da ukljucite pri pokretanju OpenCode:
+
+```bash
+OPENCODE_ENABLE_EXA=1 opencode
+```
+
+:::
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "websearch": "allow"
+  }
+}
+```
+
+Vrsi web pretrage preko Exa AI da pronade relevantne informacije online. Korisno za istrazivanje tema, aktuelnosti i podataka van granice trening skupa.
+
+API kljuc nije potreban - alat se direktno povezuje na Exa AI hosted MCP servis bez autentifikacije.
+
+:::tip
+Koristite `websearch` kada trebate pronaci informacije (discovery), a `webfetch` kada trebate preuzeti sadrzaj sa konkretnog URL-a (retrieval).
+:::
+
+---
+
+### question
+
+Postavlja korisniku pitanja tokom izvrsavanja.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "question": "allow"
+  }
+}
+```
+
+Ovaj alat omogucava LLM-u da postavlja pitanja korisniku tokom zadatka. Koristan je za:
+
+- Prikupljanje korisnickih preferencija i zahtjeva
+- Razjasnjavanje nejasnih uputstava
+- Donosenje odluka oko implementacije
+- Nudjenje izbora o smjeru rada
+
+Svako pitanje ukljucuje naslov, tekst pitanja i listu opcija. Korisnici mogu izabrati ponudenu opciju ili upisati vlastiti odgovor. Kada ima vise pitanja, mogu se kretati izmedu njih prije slanja svih odgovora.
+
+---
+
+## Prilagođeni alati
+
+Custom tools vam omogucavaju da definisete vlastite funkcije koje LLM moze pozivati. Definisu se u config datoteci i mogu izvrsavati proizvoljan kod.
+
+[Saznajte vise](/docs/custom-tools) o kreiranju custom tools.
+
+---
+
+## MCP serveri
+
+MCP (Model Context Protocol) serveri omogucavaju integraciju eksternih alata i servisa. Ovo ukljucuje pristup bazama, API integracije i third-party servise.
+
+[Saznajte vise](/docs/mcp-servers) o konfigurisanju MCP servera.
+
+---
+
+## Interno
+
+Interno, alati kao `grep`, `glob` i `list` koriste [ripgrep](https://github.com/BurntSushi/ripgrep). Po defaultu, ripgrep postuje `.gitignore` obrasce, pa se fajlovi i direktoriji iz `.gitignore` izostavljaju iz pretraga i listinga.
+
+---
+
+### Obrasci ignorisanja
+
+Da ukljucite fajlove koji bi inace bili ignorisani, kreirajte `.ignore` datoteku u korijenu projekta. Ova datoteka moze eksplicitno dozvoliti odredene putanje.
+
+```text title=".ignore"
+!node_modules/
+!dist/
+!build/
+```
+
+Na primjer, ova `.ignore` datoteka dozvoljava ripgrep-u da pretrazuje `node_modules/`, `dist/` i `build/` direktorije i kada su navedeni u `.gitignore`.

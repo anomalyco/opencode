@@ -11,6 +11,8 @@ import { Global } from "../../global"
 import { Plugin } from "../../plugin"
 import { Instance } from "../../project/instance"
 import type { Hooks } from "@opencode-ai/plugin"
+import { Process } from "../../util/process"
+import { text } from "node:stream/consumers"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
 
@@ -159,6 +161,38 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
   return false
 }
 
+/**
+ * Build a deduplicated list of plugin-registered auth providers that are not
+ * already present in models.dev, respecting enabled/disabled provider lists.
+ * Pure function with no side effects; safe to test without mocking.
+ */
+export function resolvePluginProviders(input: {
+  hooks: Hooks[]
+  existingProviders: Record<string, unknown>
+  disabled: Set<string>
+  enabled?: Set<string>
+  providerNames: Record<string, string | undefined>
+}): Array<{ id: string; name: string }> {
+  const seen = new Set<string>()
+  const result: Array<{ id: string; name: string }> = []
+
+  for (const hook of input.hooks) {
+    if (!hook.auth) continue
+    const id = hook.auth.provider
+    if (seen.has(id)) continue
+    seen.add(id)
+    if (Object.hasOwn(input.existingProviders, id)) continue
+    if (input.disabled.has(id)) continue
+    if (input.enabled && !input.enabled.has(id)) continue
+    result.push({
+      id,
+      name: input.providerNames[id] ?? id,
+    })
+  }
+
+  return result
+}
+
 export const AuthCommand = cmd({
   command: "auth",
   describe: "manage credentials",
@@ -229,25 +263,29 @@ export const AuthLoginCommand = cmd({
         UI.empty()
         prompts.intro("Add credential")
         if (args.url) {
-          const wellknown = await fetch(`${args.url}/.well-known/opencode`).then((x) => x.json() as any)
+          const url = args.url.replace(/\/+$/, "")
+          const wellknown = await fetch(`${url}/.well-known/opencode`).then((x) => x.json() as any)
           prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
-          const proc = Bun.spawn({
-            cmd: wellknown.auth.command,
+          const proc = Process.spawn(wellknown.auth.command, {
             stdout: "pipe",
           })
-          const exit = await proc.exited
+          if (!proc.stdout) {
+            prompts.log.error("Failed")
+            prompts.outro("Done")
+            return
+          }
+          const [exit, token] = await Promise.all([proc.exited, text(proc.stdout)])
           if (exit !== 0) {
             prompts.log.error("Failed")
             prompts.outro("Done")
             return
           }
-          const token = await new Response(proc.stdout).text()
-          await Auth.set(args.url, {
+          await Auth.set(url, {
             type: "wellknown",
             key: wellknown.auth.env,
             token: token.trim(),
           })
-          prompts.log.success("Logged into " + args.url)
+          prompts.log.success("Logged into " + url)
           prompts.outro("Done")
           return
         }
@@ -277,6 +315,13 @@ export const AuthLoginCommand = cmd({
           openrouter: 5,
           vercel: 6,
         }
+        const pluginProviders = resolvePluginProviders({
+          hooks: await Plugin.list(),
+          existingProviders: providers,
+          disabled,
+          enabled,
+          providerNames: Object.fromEntries(Object.entries(config.provider ?? {}).map(([id, p]) => [id, p.name])),
+        })
         let provider = await prompts.autocomplete({
           message: "Select provider",
           maxItems: 8,
@@ -298,6 +343,11 @@ export const AuthLoginCommand = cmd({
                 }[x.id],
               })),
             ),
+            ...pluginProviders.map((x) => ({
+              label: x.name,
+              value: x.id,
+              hint: "plugin",
+            })),
             {
               value: "other",
               label: "Other",
@@ -307,7 +357,7 @@ export const AuthLoginCommand = cmd({
 
         if (prompts.isCancel(provider)) throw new UI.CancelledError()
 
-        const plugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
+        const plugin = await Plugin.list().then((x) => x.findLast((x) => x.auth?.provider === provider))
         if (plugin && plugin.auth) {
           const handled = await handlePluginAuth({ auth: plugin.auth }, provider)
           if (handled) return
@@ -323,7 +373,7 @@ export const AuthLoginCommand = cmd({
           if (prompts.isCancel(provider)) throw new UI.CancelledError()
 
           // Check if a plugin provides auth for this custom provider
-          const customPlugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
+          const customPlugin = await Plugin.list().then((x) => x.findLast((x) => x.auth?.provider === provider))
           if (customPlugin && customPlugin.auth) {
             const handled = await handlePluginAuth({ auth: customPlugin.auth }, provider)
             if (handled) return

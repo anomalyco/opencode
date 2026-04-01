@@ -21,7 +21,6 @@ export class ACPSessionManager {
     const session = await this.sdk.session
       .create(
         {
-          title: `ACP Session ${crypto.randomUUID()}`,
           directory: cwd,
         },
         { throwOnError: true },
@@ -92,6 +91,18 @@ export class ACPSessionManager {
   setModel(sessionId: string, model: ACPSessionState["model"]) {
     const session = this.get(sessionId)
     session.model = model
+    this.sessions.set(sessionId, session)
+    return session
+  }
+
+  getVariant(sessionId: string) {
+    const session = this.get(sessionId)
+    return session.variant
+  }
+
+  setVariant(sessionId: string, variant?: string) {
+    const session = this.get(sessionId)
+    session.variant = variant
     this.sessions.set(sessionId, session)
     return session
   }

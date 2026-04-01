@@ -8,6 +8,11 @@
   }
 }
 
+@utility badge-mask {
+  -webkit-mask-image: radial-gradient(circle 5px at calc(100% - 4px) 4px, transparent 5px, black 5.5px);
+  mask-image: radial-gradient(circle 5px at calc(100% - 4px) 4px, transparent 5px, black 5.5px);
+}
+
 @utility truncate-start {
   text-overflow: ellipsis;
   overflow: hidden;

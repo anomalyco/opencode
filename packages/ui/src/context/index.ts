@@ -1,5 +1,5 @@
 export * from "./helper"
 export * from "./data"
-export * from "./diff"
+export * from "./file"
 export * from "./dialog"
 export * from "./i18n"

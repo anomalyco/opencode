@@ -1,6 +1,7 @@
 import { NamedError } from "@opencode-ai/util/error"
 import matter from "gray-matter"
 import { z } from "zod"
+import { Filesystem } from "../util/filesystem"
 
 export namespace ConfigMarkdown {
   export const FILE_REGEX = /(?<![\w`])@(\.?[^\s`,.]*(?:\.[^\s`,.]+)*)/g
@@ -14,12 +15,14 @@ export namespace ConfigMarkdown {
     return Array.from(template.matchAll(SHELL_REGEX))
   }
 
-  export function preprocessFrontmatter(content: string): string {
+  // other coding agents like claude code allow invalid yaml in their
+  // frontmatter, we need to fallback to a more permissive parser for those cases
+  export function fallbackSanitization(content: string): string {
     const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/)
     if (!match) return content
 
     const frontmatter = match[1]
-    const lines = frontmatter.split("\n")
+    const lines = frontmatter.split(/\r?\n/)
     const result: string[] = []
 
     for (const line of lines) {
@@ -53,7 +56,7 @@ export namespace ConfigMarkdown {
 
       // if value contains a colon, convert to block scalar
       if (value.includes(":")) {
-        result.push(`${key}: |`)
+        result.push(`${key}: |-`)
         result.push(`  ${value}`)
         continue
       }
@@ -66,20 +69,23 @@ export namespace ConfigMarkdown {
   }
 
   export async function parse(filePath: string) {
-    const raw = await Bun.file(filePath).text()
-    const template = preprocessFrontmatter(raw)
+    const template = await Filesystem.readText(filePath)
 
     try {
       const md = matter(template)
       return md
-    } catch (err) {
-      throw new FrontmatterError(
-        {
-          path: filePath,
-          message: `${filePath}: Failed to parse YAML frontmatter: ${err instanceof Error ? err.message : String(err)}`,
-        },
-        { cause: err },
-      )
+    } catch {
+      try {
+        return matter(fallbackSanitization(template))
+      } catch (err) {
+        throw new FrontmatterError(
+          {
+            path: filePath,
+            message: `${filePath}: Failed to parse YAML frontmatter: ${err instanceof Error ? err.message : String(err)}`,
+          },
+          { cause: err },
+        )
+      }
     }
   }
 

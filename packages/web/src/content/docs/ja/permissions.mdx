@@ -1,0 +1,284 @@
+---
+title: 権限
+description: どのアクションの実行に承認が必要かを制御します。
+---
+
+OpenCode は `permission` 設定を使用して、特定のアクションを自動的に実行するか、プロンプトを表示するか、ブロックするかを決定します。
+
+`v1.1.1` 現在、従来の `tools` ブール値設定は非推奨となり、`permission` にマージされました。古い `tools` 設定は、下位互換性のために引き続きサポートされています。
+
+---
+
+## アクション
+
+各権限ルールは次のいずれかに解決されます。
+
+- `"allow"` — 承認なしで実行します
+- `"ask"` — 承認を求めるプロンプト
+- `"deny"` — アクションをブロックする
+
+---
+
+## 設定
+
+権限をグローバルに (`*` を使用して) 設定し、特定のツールをオーバーライドできます。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "*": "ask",
+    "bash": "allow",
+    "edit": "deny"
+  }
+}
+```
+
+すべての権限を一度に設定することもできます。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": "allow"
+}
+```
+
+---
+
+## 詳細なルール (オブジェクト構文)
+
+ほとんどの権限では、オブジェクトを使用して、ツール入力に基づいてさまざまなアクションを適用できます。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "git *": "allow",
+      "npm *": "allow",
+      "rm *": "deny",
+      "grep *": "allow"
+    },
+    "edit": {
+      "*": "deny",
+      "packages/web/src/content/docs/*.mdx": "allow"
+    }
+  }
+}
+```
+
+ルールはパターンマッチによって評価され、**最後に一致したルールが優先されます**。一般的なパターンは、キャッチオール `"*"` ルールを最初に置き、その後により具体的なルールを置くことです。
+
+### ワイルドカード
+
+許可パターンでは、単純なワイルドカードマッチングを使用します。
+
+- `*` は 0 個以上の任意の文字と一致します
+- `?` は 1 つの文字に正確に一致します
+- 他のすべての文字は文字通り一致します
+
+### ホームディレクトリの展開
+
+パターンの先頭で `~` または `$HOME` を使用して、ホームディレクトリを参照できます。これは、[`external_directory`](#external-directories) ルールに特に役立ちます。
+
+- `~/projects/*` -> `/Users/username/projects/*`
+- `$HOME/projects/*` -> `/Users/username/projects/*`
+- `~` -> `/Users/username`
+
+### 外部ディレクトリ
+
+`external_directory` を使用して、OpenCode が開始された作業ディレクトリの外部のパスに触れるツール呼び出しを許可します。これは、パスを入力として受け取るすべてのツール (`read`、`edit`、`list`、`glob`、`grep`、および多くの `bash` コマンドなど) に適用されます。
+
+ホーム展開 (`~/...` など) は、パターンの記述方法にのみ影響します。外部パスは現在のワークスペースの一部にはならないため、作業ディレクトリの外部のパスも `external_directory` 経由で許可する必要があります。
+
+たとえば、これにより、`~/projects/personal/` の下にあるすべてのものへのアクセスが許可されます。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "~/projects/personal/**": "allow"
+    }
+  }
+}
+```
+
+ここで許可されるディレクトリはすべて、現在のワークスペースと同じデフォルトを継承します。 [`read` のデフォルトは `allow`](#defaults) であるため、オーバーライドされない限り、`external_directory` の下のエントリの読み取りも許可されます。読み取りを保持しながら編集をブロックするなど、ツールをこれらのパスで制限する必要がある場合は、明示的なルールを追加します。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "~/projects/personal/**": "allow"
+    },
+    "edit": {
+      "~/projects/personal/**": "deny"
+    }
+  }
+}
+```
+
+信頼できるパスに重点を置いたリストを維持し、他のツール (`bash` など) の必要に応じて追加の許可または拒否ルールを追加します。
+
+---
+
+## 利用可能な権限
+
+OpenCode の権限は、ツール名に加えて、いくつかの安全対策によってキー化されます。
+
+- `read` — ファイルの読み取り (ファイルパスと一致)
+- `edit` — すべてのファイル変更 (`edit`、`write`、`patch`、`multiedit` をカバー)
+- `glob` — ファイルのグロビング (グロブパターンと一致)
+- `grep` — コンテンツ検索 (正規表現パターンと一致)
+- `list` — ディレクトリ内のファイルのリスト (ディレクトリパスと一致)
+- `bash` — シェルコマンドの実行 (`git status --porcelain` などの解析されたコマンドと一致します)
+- `task` — サブエージェントの起動 (サブエージェントのタイプと一致)
+- `skill` — スキルをロードしています（スキル名と一致します）
+- `lsp` — LSP クエリの実行 (現在は非細分性)
+- `todoread`、`todowrite` — ToDo リストの読み取り/更新
+- `webfetch` — URL を取得します (URL と一致します)
+- `websearch`、`codesearch` — Web/コード検索 (クエリと一致)
+- `external_directory` — ツールがプロジェクトの作業ディレクトリ外のパスにアクセスするとトリガーされます。
+- `doom_loop` — 同じ入力で同じツール呼び出しが 3 回繰り返されたときにトリガーされます。
+
+---
+
+## デフォルト
+
+何も指定しない場合、OpenCode は許容的なデフォルトから開始します。
+
+- ほとんどの権限はデフォルトで `"allow"` に設定されます。
+- `doom_loop` と `external_directory` のデフォルトは `"ask"` です。
+- `read` は `"allow"` ですが、`.env` ファイルはデフォルトで拒否されます。
+
+```json title="opencode.json"
+{
+  "permission": {
+    "read": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow"
+    }
+  }
+}
+```
+
+---
+
+## 承認の要求
+
+OpenCode が承認を求めるプロンプトを表示すると、UI は 3 つの結果を提供します。
+
+- `once` — このリクエストのみを承認します
+- `always` — 提案されたパターンに一致する今後のリクエストを承認します（現在の OpenCode セッションの残りの部分）
+- `reject` — リクエストを拒否します
+
+`always` が承認するパターンのセットは、ツールによって提供されます (たとえば、bash の承認では通常、`git status*` のような安全なコマンドプレフィックスがホワイトリストに登録されます)。
+
+---
+
+## エージェント
+
+エージェントごとに権限をオーバーライドできます。エージェントの権限はグローバル設定とマージされ、エージェントルールが優先されます。 [エージェントの権限について詳しくは、](/docs/agents#permissions) をご覧ください。
+
+:::note
+パターンマッチングの詳細な例については、上記の[詳細なルール (オブジェクト構文)](#detailed-rules-object-syntax)セクションを参照してください。
+:::
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "git *": "allow",
+      "git commit *": "deny",
+      "git push *": "deny",
+      "grep *": "allow"
+    }
+  },
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "*": "ask",
+          "git *": "allow",
+          "git commit *": "ask",
+          "git push *": "deny",
+          "grep *": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+Markdown でエージェントの権限を構成することもできます。
+
+```markdown title="~/.config/opencode/agents/review.md"
+---
+description: Code review without edits
+mode: subagent
+permission:
+  edit: deny
+  bash: ask
+  webfetch: deny
+---
+
+Only analyze code and suggest changes.
+```
+
+:::tip
+引数のあるコマンドにはパターンマッチングを使用します。 `"grep *"` は `grep pattern file.txt` を許可しますが、`"grep"` だけではブロックされます。 `git status` のようなコマンドはデフォルトの動作で機能しますが、引数を渡すときに明示的な許可 (`"git status *"` など) が必要です。
+:::
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "git *": "allow",
+      "git commit *": "deny",
+      "git push *": "deny",
+      "grep *": "allow"
+    }
+  },
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "*": "ask",
+          "git *": "allow",
+          "git commit *": "ask",
+          "git push *": "deny",
+          "grep *": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+Markdownでエージェントの権限を構成することもできます。
+
+```markdown title="~/.config/opencode/agents/review.md"
+---
+description: Code review without edits
+mode: subagent
+permission:
+  edit: deny
+  bash: ask
+  webfetch: deny
+---
+
+Only analyze code and suggest changes.
+```
+
+:::tip
+引数のあるコマンドにはパターン マッチングを使用します。 `"grep *"` は `grep pattern file.txt` を許可しますが、`"grep"` だけではブロックされます。 `git status` のようなコマンドはデフォルトの動作で機能しますが、引数を渡すときに明示的な許可 (`"git status *"` など) が必要です。
+:::
