@@ -2,6 +2,7 @@ import { createMemo, Show, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { ContextMenu } from "@opencode-ai/ui/context-menu"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { createSortable } from "@thisbeyond/solid-dnd"
 import { useLayout, type LocalProject } from "@/context/layout"
 import { useLanguage } from "@/context/language"
@@ -64,6 +65,8 @@ const ProjectTile = (props: {
       .filter((directory) => notification.project.unseenCount(directory) > 0)
       .forEach((directory) => notification.project.markViewed(directory))
 
+  const name = () => displayName(props.project)
+
   return (
     <ContextMenu
       modal={!props.sidebarHovering()}
@@ -71,33 +74,41 @@ const ProjectTile = (props: {
         props.setMenu(value)
       }}
     >
-      <ContextMenu.Trigger
-        as="button"
-        type="button"
-        aria-label={displayName(props.project)}
-        data-action="project-switch"
-        data-project={base64Encode(props.project.worktree)}
-        classList={{
-          "flex items-center justify-center size-10 p-1 rounded-xl overflow-hidden transition-all duration-150 cursor-default": true,
-          "bg-surface-interactive-selected border-2 border-border-brand-base": props.selected(),
-          "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-base hover:scale-105":
-            !props.selected() && !props.active(),
-          "bg-surface-base-hover border border-border-base": !props.selected() && props.active(),
-        }}
-        onPointerDown={(event) => {
-          if (event.button !== 2 && !(event.button === 0 && event.ctrlKey)) return
-          event.preventDefault()
-        }}
-        onClick={() => {
-          if (props.selected()) {
-            layout.sidebar.toggle()
-            return
-          }
-          props.navigateToProject(props.project.worktree)
-        }}
+      <Tooltip
+        openDelay={0}
+        placement={props.mobile ? "bottom" : "right"}
+        contentClass="max-w-none border-border-strong-base bg-surface-float-base-hover shadow-lg"
+        value={<div class="px-2 py-1 text-14-medium text-text-invert-strong whitespace-nowrap">{name()}</div>}
+        gutter={10}
       >
-        <ProjectIcon project={props.project} notify />
-      </ContextMenu.Trigger>
+        <ContextMenu.Trigger
+          as="button"
+          type="button"
+          aria-label={name()}
+          data-action="project-switch"
+          data-project={base64Encode(props.project.worktree)}
+          classList={{
+            "flex items-center justify-center size-10 p-1 rounded-xl overflow-hidden transition-all duration-150 cursor-pointer": true,
+            "bg-surface-interactive-selected border-2 border-border-brand-base": props.selected(),
+            "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-base hover:scale-105":
+              !props.selected() && !props.active(),
+            "bg-surface-base-hover border border-border-base": !props.selected() && props.active(),
+          }}
+          onPointerDown={(event) => {
+            if (event.button !== 2 && !(event.button === 0 && event.ctrlKey)) return
+            event.preventDefault()
+          }}
+          onClick={() => {
+            if (props.selected()) {
+              layout.sidebar.toggle()
+              return
+            }
+            props.navigateToProject(props.project.worktree)
+          }}
+        >
+          <ProjectIcon project={props.project} notify />
+        </ContextMenu.Trigger>
+      </Tooltip>
       <ContextMenu.Portal>
         <ContextMenu.Content>
           <ContextMenu.Item onSelect={() => props.showEditProjectDialog(props.project)}>
