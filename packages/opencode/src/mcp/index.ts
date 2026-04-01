@@ -480,7 +480,18 @@ export namespace MCP {
       const cache = yield* InstanceState.make<State>(
         Effect.fn("MCP.state")(function* () {
           const cfg = yield* cfgSvc.get()
-          const config = cfg.mcp ?? {}
+          // 18.4: merge MCP servers contributed by plugin manifests (enabled manifests only)
+          const pluginMcpServers = Object.fromEntries(
+            (cfg.plugin_manifests ?? [])
+              .filter((m) => m.enabled !== false)
+              .flatMap((m) =>
+                Object.entries(m.mcpServers ?? {}).map(([k, v]) => [
+                  `${m.id}:${k}`,
+                  { type: "local" as const, command: v.command, environment: v.environment, timeout: v.timeout },
+                ]),
+              ),
+          )
+          const config = { ...pluginMcpServers, ...(cfg.mcp ?? {}) }
           const s: State = {
             status: {},
             clients: {},

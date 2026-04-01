@@ -396,6 +396,9 @@ export const dict = {
   "context.usage.cost": "Cost",
   "context.usage.clickToView": "Click to view context",
   "context.usage.view": "View context usage",
+  "context.usage.warning": "Context usage high — compaction may occur soon",
+  "context.usage.high": "Context usage very high",
+  "context.usage.blocking": "Context nearly full — new turns may be blocked",
 
   "language.en": "English",
   "language.zh": "简体中文",

@@ -302,8 +302,19 @@ export const RunCommand = cmd({
         describe: "show thinking blocks",
         default: false,
       })
+      .option("max-turns", {
+        type: "number",
+        describe: "maximum number of agent turns (overrides config budget.maxTurns)",
+      })
+      .option("max-usd", {
+        type: "number",
+        describe: "maximum spend in USD (overrides config budget.maxUsd)",
+      })
   },
   handler: async (args) => {
+    if (args["max-turns"] !== undefined) process.env.OPENCODE_MAX_TURNS = String(args["max-turns"])
+    if (args["max-usd"] !== undefined) process.env.OPENCODE_MAX_USD = String(args["max-usd"])
+
     let message = [...args.message, ...(args["--"] || [])]
       .map((arg) => (arg.includes(" ") ? `"${arg.replace(/"/g, '\\"')}"` : arg))
       .join(" ")

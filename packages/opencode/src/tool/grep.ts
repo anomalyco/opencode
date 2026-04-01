@@ -9,6 +9,7 @@ import DESCRIPTION from "./grep.txt"
 import { Instance } from "../project/instance"
 import path from "path"
 import { assertExternalDirectory } from "./external-directory"
+import { assertSafePath } from "./path-guard"
 
 const MAX_LINE_LENGTH = 2000
 
@@ -18,6 +19,20 @@ export const GrepTool = Tool.define("grep", {
     pattern: z.string().describe("The regex pattern to search for in file contents"),
     path: z.string().optional().describe("The directory to search in. Defaults to the current working directory."),
     include: z.string().optional().describe('File pattern to include in the search (e.g. "*.js", "*.{ts,tsx}")'),
+    mode: z
+      .enum(["content", "files_with_matches", "count"])
+      .optional()
+      .describe(
+        "Output mode: content (default, show matching lines), files_with_matches (list files only), count (count of matches per file)",
+      ),
+    contextLines: z
+      .number()
+      .int()
+      .min(0)
+      .optional()
+      .describe("Number of context lines to show before and after each match"),
+    multiline: z.boolean().optional().describe("Enable multiline matching (. matches newline)"),
+    offset: z.number().int().min(0).optional().describe("Skip the first N matches (for pagination)"),
   }),
   async execute(params, ctx) {
     if (!params.pattern) {
@@ -37,12 +52,31 @@ export const GrepTool = Tool.define("grep", {
 
     let searchPath = params.path ?? Instance.directory
     searchPath = path.isAbsolute(searchPath) ? searchPath : path.resolve(Instance.directory, searchPath)
+
+    // Hard-block dangerous paths before any other checks
+    assertSafePath(searchPath)
+
     await assertExternalDirectory(ctx, searchPath, { kind: "directory" })
 
     const rgPath = await Ripgrep.filepath()
-    const args = ["-nH", "--hidden", "--no-messages", "--field-match-separator=|", "--regexp", params.pattern]
+    const isSummaryMode = params.mode === "files_with_matches" || params.mode === "count"
+    // -nH and --field-match-separator are only needed for content mode
+    const args = isSummaryMode
+      ? ["--hidden", "--no-messages", "--regexp", params.pattern]
+      : ["-nH", "--hidden", "--no-messages", "--field-match-separator=|", "--regexp", params.pattern]
     if (params.include) {
       args.push("--glob", params.include)
+    }
+    if (params.mode === "files_with_matches") {
+      args.push("--files-with-matches")
+    } else if (params.mode === "count") {
+      args.push("--count")
+    }
+    if (params.contextLines && params.contextLines > 0) {
+      args.push("-C", String(params.contextLines))
+    }
+    if (params.multiline) {
+      args.push("--multiline")
     }
     args.push(searchPath)
 
@@ -76,12 +110,58 @@ export const GrepTool = Tool.define("grep", {
     }
 
     const hasErrors = exitCode === 2
+    const rawLines = output.trim().split(/\r?\n/)
 
-    // Handle both Unix (\n) and Windows (\r\n) line endings
-    const lines = output.trim().split(/\r?\n/)
+    // files_with_matches mode: output is one file path per line
+    if (params.mode === "files_with_matches") {
+      const files = rawLines.filter(Boolean)
+      const skip = params.offset ?? 0
+      const paged = skip > 0 ? files.slice(skip) : files
+      const limit = 100
+      const truncated = paged.length > limit
+      const shown = truncated ? paged.slice(0, limit) : paged
+      const outputLines = [`Found ${files.length} file(s)${skip > 0 ? ` (skipping first ${skip})` : ""}`, ...shown]
+      if (truncated) outputLines.push(`(showing ${limit} of ${files.length})`)
+      if (hasErrors) outputLines.push("(Some paths were inaccessible and skipped)")
+      return {
+        title: params.pattern,
+        metadata: { matches: files.length, truncated },
+        output: outputLines.join("\n"),
+      }
+    }
+
+    // count mode: output is "filePath:count" per file
+    if (params.mode === "count") {
+      const entries = rawLines
+        .filter(Boolean)
+        .map((line) => {
+          const sep = line.lastIndexOf(":")
+          return { path: line.slice(0, sep), count: parseInt(line.slice(sep + 1), 10) || 0 }
+        })
+        .filter((e) => e.count > 0)
+      const total = entries.reduce((s, e) => s + e.count, 0)
+      const skip = params.offset ?? 0
+      const paged = skip > 0 ? entries.slice(skip) : entries
+      const limit = 100
+      const truncated = paged.length > limit
+      const shown = truncated ? paged.slice(0, limit) : paged
+      const outputLines = [
+        `Found ${total} matches across ${entries.length} file(s)${skip > 0 ? ` (skipping first ${skip} files)` : ""}`,
+        ...shown.map((e) => `  ${e.path}: ${e.count}`),
+      ]
+      if (truncated) outputLines.push(`(showing ${limit} of ${entries.length} files)`)
+      if (hasErrors) outputLines.push("(Some paths were inaccessible and skipped)")
+      return {
+        title: params.pattern,
+        metadata: { matches: total, truncated },
+        output: outputLines.join("\n"),
+      }
+    }
+
+    // content mode (default): output is "filePath|lineNum|content" per match
     const matches = []
 
-    for (const line of lines) {
+    for (const line of rawLines) {
       if (!line) continue
 
       const [filePath, lineNumStr, ...lineTextParts] = line.split("|")
@@ -103,9 +183,13 @@ export const GrepTool = Tool.define("grep", {
 
     matches.sort((a, b) => b.modTime - a.modTime)
 
+    // Offset-based pagination: skip the first N matches
+    const skip = params.offset ?? 0
+    const paged = skip > 0 ? matches.slice(skip) : matches
+
     const limit = 100
-    const truncated = matches.length > limit
-    const finalMatches = truncated ? matches.slice(0, limit) : matches
+    const truncated = paged.length > limit
+    const finalMatches = truncated ? paged.slice(0, limit) : paged
 
     if (finalMatches.length === 0) {
       return {
@@ -116,7 +200,10 @@ export const GrepTool = Tool.define("grep", {
     }
 
     const totalMatches = matches.length
-    const outputLines = [`Found ${totalMatches} matches${truncated ? ` (showing first ${limit})` : ""}`]
+    const shown = paged.length
+    const outputLines = [
+      `Found ${totalMatches} matches${skip > 0 ? ` (skipping first ${skip})` : ""}${truncated ? `, showing ${limit} of ${shown}` : ""}`,
+    ]
 
     let currentFile = ""
     for (const match of finalMatches) {

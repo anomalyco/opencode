@@ -1,5 +1,6 @@
 import os from "os"
 import path from "path"
+import fs from "fs"
 import { pathToFileURL } from "url"
 import z from "zod"
 import { Effect, Layer, ServiceMap } from "effect"
@@ -14,6 +15,7 @@ import { Permission } from "@/permission"
 import { AppFileSystem } from "@/filesystem"
 import { Config } from "../config/config"
 import { ConfigMarkdown } from "../config/markdown"
+import { MCP } from "../mcp"
 import { Glob } from "../util/glob"
 import { Log } from "../util/log"
 import { Discovery } from "./discovery"
@@ -30,6 +32,12 @@ export namespace Skill {
     description: z.string(),
     location: z.string(),
     content: z.string(),
+    paths: z.array(z.string()).optional(),
+    allowedTools: z.array(z.string()).optional(),
+    model: z.string().optional(),
+    effort: z.enum(["low", "medium", "high"]).optional(),
+    whenToUse: z.string().optional(),
+    argumentHint: z.string().optional(),
   })
   export type Info = z.infer<typeof Info>
 
@@ -54,16 +62,28 @@ export namespace Skill {
   type State = {
     skills: Record<string, Info>
     dirs: Set<string>
+    resolved: Set<string>
   }
 
   export interface Interface {
     readonly get: (name: string) => Effect.Effect<Info | undefined>
     readonly all: () => Effect.Effect<Info[]>
     readonly dirs: () => Effect.Effect<string[]>
-    readonly available: (agent?: Agent.Info) => Effect.Effect<Info[]>
+    readonly available: (agent?: Agent.Info, contextFiles?: string[]) => Effect.Effect<Info[]>
   }
 
   const add = Effect.fnUntraced(function* (state: State, match: string, bus: Bus.Interface) {
+    // 17.4: deduplicate by resolved (symlink-aware) path
+    const real = (() => {
+      try {
+        return fs.realpathSync(match)
+      } catch {
+        return match
+      }
+    })()
+    if (state.resolved.has(real)) return
+    state.resolved.add(real)
+
     const md = yield* Effect.tryPromise({
       try: () => ConfigMarkdown.parse(match),
       catch: (err) => err,
@@ -86,6 +106,19 @@ export namespace Skill {
     const parsed = Info.pick({ name: true, description: true }).safeParse(md.data)
     if (!parsed.success) return
 
+    // 17.1: parse extended frontmatter fields
+    const extended = z
+      .object({
+        paths: z.array(z.string()).optional(),
+        "allowed-tools": z.array(z.string()).optional(),
+        model: z.string().optional(),
+        effort: z.enum(["low", "medium", "high"]).optional(),
+        when_to_use: z.string().optional(),
+        "argument-hint": z.string().optional(),
+      })
+      .safeParse(md.data)
+    const extra = extended.success ? extended.data : {}
+
     if (state.skills[parsed.data.name]) {
       log.warn("duplicate skill name", {
         name: parsed.data.name,
@@ -100,6 +133,12 @@ export namespace Skill {
       description: parsed.data.description,
       location: match,
       content: md.content,
+      paths: extra.paths,
+      allowedTools: extra["allowed-tools"],
+      model: extra.model,
+      effort: extra.effort,
+      whenToUse: extra.when_to_use,
+      argumentHint: extra["argument-hint"],
     }
   })
 
@@ -140,6 +179,7 @@ export namespace Skill {
     discovery: Discovery.Interface,
     bus: Bus.Interface,
     fsys: AppFileSystem.Interface,
+    mcp: MCP.Interface,
     directory: string,
     worktree: string,
   ) {
@@ -184,6 +224,33 @@ export namespace Skill {
       }
     }
 
+    // 18.2: Plugin skill registration — scan skill paths contributed by plugin manifests
+    for (const manifest of cfg.plugin_manifests ?? []) {
+      if (manifest.enabled === false) continue
+      for (const skillPath of manifest.skills ?? []) {
+        const dir = path.isAbsolute(skillPath) ? skillPath : path.join(directory, skillPath)
+        if (!(yield* fsys.isDir(dir))) {
+          log.warn("plugin skill path not found", { plugin: manifest.id, path: dir })
+          continue
+        }
+        yield* scan(state, bus, dir, SKILL_PATTERN)
+      }
+    }
+
+    // 17.3: MCP-sourced skills — wrap MCP server prompts as skills
+    for (const [name, prompt] of Object.entries(yield* mcp.prompts())) {
+      if (state.skills[name]) continue
+      const args = prompt.arguments ?? []
+      const argHint = args.map((a) => `$${a.name}`).join(" ")
+      state.skills[name] = {
+        name,
+        description: prompt.description ?? name,
+        location: `mcp:${name}`,
+        content: argHint ? `Use this skill with arguments: ${argHint}` : `Invoke the MCP prompt: ${name}`,
+        argumentHint: argHint || undefined,
+      }
+    }
+
     log.info("init", { count: Object.keys(state.skills).length })
   })
 
@@ -196,10 +263,11 @@ export namespace Skill {
       const config = yield* Config.Service
       const bus = yield* Bus.Service
       const fsys = yield* AppFileSystem.Service
+      const mcp = yield* MCP.Service
       const state = yield* InstanceState.make(
         Effect.fn("Skill.state")(function* (ctx) {
-          const s: State = { skills: {}, dirs: new Set() }
-          yield* loadSkills(s, config, discovery, bus, fsys, ctx.directory, ctx.worktree)
+          const s: State = { skills: {}, dirs: new Set(), resolved: new Set() }
+          yield* loadSkills(s, config, discovery, bus, fsys, mcp, ctx.directory, ctx.worktree)
           return s
         }),
       )
@@ -219,11 +287,18 @@ export namespace Skill {
         return Array.from(s.dirs)
       })
 
-      const available = Effect.fn("Skill.available")(function* (agent?: Agent.Info) {
+      const available = Effect.fn("Skill.available")(function* (agent?: Agent.Info, contextFiles?: string[]) {
         const s = yield* InstanceState.get(state)
-        const list = Object.values(s.skills).toSorted((a, b) => a.name.localeCompare(b.name))
-        if (!agent) return list
-        return list.filter((skill) => Permission.evaluate("skill", skill.name, agent.permission).action !== "deny")
+        let list = Object.values(s.skills).toSorted((a, b) => a.name.localeCompare(b.name))
+        if (agent)
+          list = list.filter((skill) => Permission.evaluate("skill", skill.name, agent.permission).action !== "deny")
+        // 17.2: filter by paths if context files are explicitly provided
+        if (contextFiles !== undefined)
+          list = list.filter((skill) => {
+            if (!skill.paths || skill.paths.length === 0) return true
+            return contextFiles.some((file) => skill.paths!.some((pat) => Glob.match(pat, file)))
+          })
+        return list
       })
 
       return Service.of({ get, all, dirs, available })
@@ -235,6 +310,7 @@ export namespace Skill {
     Layer.provide(Config.defaultLayer),
     Layer.provide(Bus.layer),
     Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(MCP.defaultLayer),
   )
 
   export function fmt(list: Info[], opts: { verbose: boolean }) {
@@ -271,7 +347,7 @@ export namespace Skill {
     return runPromise((skill) => skill.dirs())
   }
 
-  export async function available(agent?: Agent.Info) {
-    return runPromise((skill) => skill.available(agent))
+  export async function available(agent?: Agent.Info, contextFiles?: string[]) {
+    return runPromise((skill) => skill.available(agent, contextFiles))
   }
 }

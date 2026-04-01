@@ -18,6 +18,8 @@ import { Shell } from "@/shell/shell"
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncate"
 import { Plugin } from "@/plugin"
+import { checkAllDangerous } from "./bash-dangerous"
+import { Sandbox } from "./sandbox"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
@@ -57,6 +59,7 @@ type Scan = {
   dirs: Set<string>
   patterns: Set<string>
   always: Set<string>
+  dangerous: Set<string>
 }
 
 export const log = Log.create({ service: "bash-tool" })
@@ -225,12 +228,20 @@ async function collect(root: Node, cwd: string, ps: boolean, shell: string): Pro
     dirs: new Set<string>(),
     patterns: new Set<string>(),
     always: new Set<string>(),
+    dangerous: new Set<string>(),
   }
 
   for (const node of commands(root)) {
     const command = parts(node)
     const tokens = command.map((item) => item.text)
     const cmd = ps ? tokens[0]?.toLowerCase() : tokens[0]
+    const sourceCmd = source(node)
+
+    // Check for dangerous patterns
+    const dangerousResult = checkAllDangerous(sourceCmd, cwd)
+    if (dangerousResult.isDangerous) {
+      scan.dangerous.add(sourceCmd)
+    }
 
     if (cmd && FILES.has(cmd)) {
       for (const arg of pathArgs(command, ps)) {
@@ -243,7 +254,7 @@ async function collect(root: Node, cwd: string, ps: boolean, shell: string): Pro
     }
 
     if (tokens.length && (!cmd || !CWD.has(cmd))) {
-      scan.patterns.add(source(node))
+      scan.patterns.add(sourceCmd)
       scan.always.add(BashArity.prefix(tokens).join(" ") + " *")
     }
   }
@@ -276,11 +287,30 @@ async function ask(ctx: Tool.Context, scan: Scan) {
     })
   }
 
+  // Dangerous patterns require explicit approval regardless of permission mode
+  // They are asked separately with special metadata
+  if (scan.dangerous.size > 0) {
+    const dangerousPatterns = Array.from(scan.dangerous)
+    await ctx.ask({
+      permission: "bash",
+      patterns: dangerousPatterns,
+      always: [], // Never auto-approve dangerous patterns
+      metadata: { dangerous: true },
+    })
+  }
+
   if (scan.patterns.size === 0) return
+
+  // Filter out patterns that are already in dangerous set
+  const patterns = Array.from(scan.patterns).filter((p) => !scan.dangerous.has(p))
+  const always = Array.from(scan.always)
+
+  if (patterns.length === 0) return
+
   await ctx.ask({
     permission: "bash",
-    patterns: Array.from(scan.patterns),
-    always: Array.from(scan.always),
+    patterns,
+    always,
     metadata: {},
   })
 }
@@ -481,13 +511,21 @@ export const BashTool = Tool.define("bash", async () => {
       const root = await parse(params.command, ps)
       const scan = await collect(root, cwd, ps, shell)
       if (!Instance.containsPath(cwd)) scan.dirs.add(cwd)
-      await ask(ctx, scan)
+
+      // Sandbox: wrap command when enabled — sandboxed commands skip permission prompt
+      const sandboxed = await Sandbox.isEnabled()
+      const command = sandboxed ? await Sandbox.wrap(params.command, cwd) : params.command
+
+      if (!sandboxed) {
+        // Only ask for permission when NOT sandboxed (sandboxed = isolated = auto-approved)
+        await ask(ctx, scan)
+      }
 
       return run(
         {
           shell,
           name,
-          command: params.command,
+          command,
           cwd,
           env: await shellEnv(ctx, cwd),
           timeout,

@@ -544,3 +544,97 @@ describe("tool.read binary detection", () => {
     })
   })
 })
+
+describe("tool.read enhanced features", () => {
+  test("renders .ipynb notebook as readable text", async () => {
+    const nb = JSON.stringify({
+      nbformat: 4,
+      nbformat_minor: 5,
+      metadata: {},
+      cells: [
+        { cell_type: "markdown", source: ["# Hello"], metadata: {}, outputs: [] },
+        {
+          cell_type: "code",
+          source: ["print('hello')"],
+          metadata: {},
+          outputs: [{ output_type: "stream", text: ["hello\n"] }],
+        },
+      ],
+    })
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "notebook.ipynb"), nb)
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: path.join(tmp.path, "notebook.ipynb") }, ctx)
+        expect(result.output).toContain("# Hello")
+        expect(result.output).toContain("print('hello')")
+      },
+    })
+  })
+
+  test("PDF pageRange param rejects invalid format", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        // Minimal valid-looking PDF header (won't pass pdftotext but validates param)
+        await Bun.write(path.join(dir, "doc.pdf"), "%PDF-1.4\n")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        await expect(read.execute({ filePath: path.join(tmp.path, "doc.pdf"), pageRange: "abc" }, ctx)).rejects.toThrow(
+          "Invalid pageRange",
+        )
+      },
+    })
+  })
+
+  test("deduplication returns reference on second unchanged read", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "dedup.txt"), "line1\nline2\nline3")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const fp = path.join(tmp.path, "dedup.txt")
+        // First read — full content
+        const first = await read.execute({ filePath: fp }, ctx)
+        expect(first.output).toContain("line1")
+        // Second read — same file, unchanged — should return reference
+        const second = await read.execute({ filePath: fp }, ctx)
+        expect(second.output).toContain("already read")
+      },
+    })
+  })
+
+  test("deduplication re-reads if file changed", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "reread.txt"), "original content")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const fp = path.join(tmp.path, "reread.txt")
+        // First read
+        await read.execute({ filePath: fp }, ctx)
+        // Modify file (touch mtime)
+        await Bun.write(fp, "updated content")
+        // Second read — changed, so should re-read
+        const second = await read.execute({ filePath: fp }, ctx)
+        expect(second.output).toContain("updated content")
+      },
+    })
+  })
+})

@@ -5,6 +5,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { ProjectID } from "@/project/schema"
 import { Instance } from "@/project/instance"
+import { Session } from "@/session"
 import { MessageID, SessionID } from "@/session/schema"
 import { PermissionTable } from "@/session/session.sql"
 import { Database, eq } from "@/storage/db"
@@ -14,7 +15,9 @@ import { Deferred, Effect, Layer, Schema, ServiceMap } from "effect"
 import os from "os"
 import z from "zod"
 import { evaluate as evalRule } from "./evaluate"
-import { PermissionID } from "./schema"
+import { PermissionID, PermissionMode, DEFAULT_PERMISSION_MODE } from "./schema"
+import { evaluatePermissionForMode } from "./mode"
+import { checkDangerousPattern, ALL_DANGEROUS_PATTERNS } from "@/tool/bash-dangerous"
 
 export namespace Permission {
   const log = Log.create({ service: "permission" })
@@ -106,6 +109,7 @@ export namespace Permission {
 
   export const AskInput = Request.partial({ id: true }).extend({
     ruleset: Ruleset,
+    permissionMode: PermissionMode.optional(),
   })
 
   export const ReplyInput = z.object({
@@ -165,7 +169,37 @@ export namespace Permission {
 
       const ask = Effect.fn("Permission.ask")(function* (input: z.infer<typeof AskInput>) {
         const { approved, pending } = yield* InstanceState.get(state)
-        const { ruleset, ...request } = input
+        const { ruleset, permissionMode, ...request } = input
+
+        // Use the provided permission mode or default
+        const mode: PermissionMode = permissionMode ?? DEFAULT_PERMISSION_MODE
+
+        // Check mode-based auto-approval/denial
+        for (const pattern of request.patterns) {
+          const modeResult = evaluatePermissionForMode(request.permission, mode)
+          if (modeResult.action === "deny") {
+            log.info("denied by mode", {
+              permission: request.permission,
+              pattern,
+              mode,
+              reason: modeResult.reason,
+            })
+            return yield* new DeniedError({
+              ruleset: [{ permission: request.permission, pattern, action: "deny" }],
+            })
+          }
+          if (modeResult.action === "allow") {
+            log.info("auto-approved by mode", {
+              permission: request.permission,
+              pattern,
+              mode,
+              reason: modeResult.reason,
+            })
+            continue
+          }
+        }
+
+        // Now evaluate rules
         let needsAsk = false
 
         for (const pattern of request.patterns) {
@@ -306,7 +340,94 @@ export namespace Permission {
     return result
   }
 
-  export const { runPromise } = makeRuntime(Service, layer)
+  /**
+   * Check if a Bash permission rule is overly broad and would match dangerous patterns.
+   * Returns warning information if the rule is dangerous, null otherwise.
+   *
+   * @param rule - The permission rule to check
+   * @returns Warning information if dangerous, null if safe
+   */
+  export function isDangerousBashPermission(rule: Rule): { warning: string; severity: "warn" | "error" } | null {
+    // Only check allow rules for bash permissions
+    if (rule.action !== "allow") return null
+    if (!Wildcard.match("bash", rule.permission)) return null
+
+    // Check for COMPLETELY broad patterns like "*" or "* *"
+    // These would match ALL commands including dangerous ones
+    if (rule.pattern === "*" || rule.pattern === "") {
+      return {
+        warning:
+          "This rule allows ALL bash commands without restriction, including dangerous ones. Consider using bypassPermissions mode instead.",
+        severity: "warn",
+      }
+    }
+
+    // Check for prefix patterns that match dangerous command categories
+    // E.g., "python *", "node *", "sudo *"
+    // Patterns are space-separated command prefixes like "git checkout *"
+    const dangerousPrefixes: Array<{ prefixes: string[]; category: string }> = [
+      { prefixes: ["python", "python3", "python2", "py"], category: "interpreter" },
+      { prefixes: ["node", "nodejs"], category: "interpreter" },
+      { prefixes: ["deno run", "deno eval"], category: "interpreter" },
+      { prefixes: ["bun test", "bun build", "bun eval"], category: "interpreter" },
+      { prefixes: ["ruby", "rbx", "jruby"], category: "interpreter" },
+      { prefixes: ["perl", "perl5"], category: "interpreter" },
+      { prefixes: ["php", "hhvm"], category: "interpreter" },
+      { prefixes: ["lua", "lua5", "luajit"], category: "interpreter" },
+      { prefixes: ["npx", "bunx"], category: "package-runner" },
+      { prefixes: ["npm run", "npm exec", "npm start", "npm test", "npm build"], category: "package-runner" },
+      { prefixes: ["yarn run", "yarn exec", "yarn start", "yarn test", "yarn build"], category: "package-runner" },
+      { prefixes: ["pnpm run", "pnpm exec", "pnpm start", "pnpm test", "pnpm build"], category: "package-runner" },
+      { prefixes: ["bun run", "bun start", "bun test", "bun build"], category: "package-runner" },
+      { prefixes: ["bash -c", "sh -c", "zsh -c", "fish -c"], category: "shell-eval" },
+      { prefixes: ["eval", "exec"], category: "shell-eval" },
+      { prefixes: ["sudo", "su", "doas", "pkexec"], category: "privilege" },
+      { prefixes: ["ssh", "scp", "rsync"], category: "network" },
+      { prefixes: ["rm"], category: "filesystem" },
+      { prefixes: ["dd"], category: "filesystem" },
+      { prefixes: ["mkfs"], category: "filesystem" },
+    ]
+
+    for (const { prefixes, category } of dangerousPrefixes) {
+      for (const prefix of prefixes) {
+        // Build test commands that would match this prefix pattern
+        // Pattern "python *" should match "python test"
+        // Pattern "python install" should match "python install"
+        const testCommand = `${prefix} test`
+        if (Wildcard.match(testCommand, rule.pattern)) {
+          return {
+            warning: `This rule would allow '${prefix}' commands (${category} category) which can be dangerous. Consider being more specific.`,
+            severity: "warn",
+          }
+        }
+      }
+    }
+
+    return null
+  }
+
+  /**
+   * Check all rules in a ruleset for dangerous permissions.
+   * Returns array of warnings for rules that match dangerous patterns.
+   */
+  export function checkDangerousRules(
+    ruleset: Ruleset,
+  ): Array<{ rule: Rule; warning: string; severity: "warn" | "error" }> {
+    const result: Array<{ rule: Rule; warning: string; severity: "warn" | "error" }> = []
+
+    for (const rule of ruleset) {
+      const check = isDangerousBashPermission(rule)
+      if (check) {
+        result.push({ rule, ...check })
+      }
+    }
+
+    return result
+  }
+
+  export const defaultLayer = Layer.unwrap(Effect.sync(() => layer.pipe(Layer.provide(Session.defaultLayer))))
+
+  export const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export async function ask(input: z.infer<typeof AskInput>) {
     return runPromise((s) => s.ask(input))
@@ -320,3 +441,6 @@ export namespace Permission {
     return runPromise((s) => s.list())
   }
 }
+
+export { PermissionModeService, evaluatePermissionForMode } from "./mode"
+export { PermissionMode, getNextPermissionMode, DEFAULT_PERMISSION_MODE } from "./schema"

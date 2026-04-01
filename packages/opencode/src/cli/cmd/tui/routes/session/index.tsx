@@ -965,6 +965,35 @@ export function Session() {
         dialog.clear()
       }),
     },
+    {
+      title: "Cycle permission mode",
+      value: "session.permission_mode_cycle",
+      keybind: "permission_mode_cycle",
+      category: "Session",
+      hidden: true,
+      onSelect: async () => {
+        const sessionData = session()
+        if (!sessionData) return
+        try {
+          // POST to the permission-mode endpoint to cycle
+          const res = await fetch(`/api/session/${sessionData.id}/permission-mode`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+          })
+          const data = await res.json()
+          toast.show({
+            message: `Permission mode: ${data.permissionMode ?? "default"}`,
+            variant: "success",
+          })
+        } catch (err) {
+          toast.show({
+            message: err instanceof Error ? err.message : "Failed to cycle permission mode",
+            variant: "error",
+          })
+        }
+      },
+    },
   ])
 
   const revertInfo = createMemo(() => session()?.revert)

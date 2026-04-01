@@ -28,6 +28,7 @@ import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
 import { Event } from "../server/event"
 import { Glob } from "../util/glob"
+import { PermissionMode } from "@/permission/schema"
 import { PackageRegistry } from "@/bun/registry"
 import { online, proxied } from "@/util/network"
 import { iife } from "@/util/iife"
@@ -45,7 +46,38 @@ import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from 
 
 export namespace Config {
   const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
-  const PluginOptions = z.record(z.string(), z.unknown())
+  // 18.1: Plugin contribution point schema — skills, hooks, mcpServers arrays in plugin manifest
+  export const PluginManifest = z.object({
+    id: z.string().describe("Unique plugin identifier"),
+    skills: z.array(z.string()).optional().describe("Paths to skill directories provided by this plugin"),
+    hooks: z
+      .array(
+        z.object({
+          event: z.string(),
+          pattern: z.string().optional(),
+          command: z.string(),
+          timeout: z.number().int().min(100).optional(),
+        }),
+      )
+      .optional()
+      .describe("Lifecycle hooks provided by this plugin"),
+    mcpServers: z
+      .record(
+        z.string(),
+        z.object({
+          type: z.literal("local"),
+          command: z.array(z.string()),
+          environment: z.record(z.string(), z.string()).optional(),
+          timeout: z.number().int().positive().optional(),
+        }),
+      )
+      .optional()
+      .describe("MCP servers bundled with this plugin"),
+    enabled: z.boolean().optional().default(true).describe("Enable or disable this plugin"),
+  })
+  export type PluginManifest = z.infer<typeof PluginManifest>
+
+  export const PluginOptions = z.record(z.string(), z.unknown())
   export const PluginSpec = z.union([z.string(), z.tuple([z.string(), PluginOptions])])
 
   export type PluginOptions = z.infer<typeof PluginOptions>
@@ -77,6 +109,14 @@ export namespace Config {
     const merged = mergeDeep(target, source)
     if (target.plugin && source.plugin) {
       merged.plugin = Array.from(new Set([...target.plugin, ...source.plugin]))
+    }
+    if (target.plugin_manifests && source.plugin_manifests) {
+      const seen = new Set<string>()
+      merged.plugin_manifests = [...target.plugin_manifests, ...source.plugin_manifests].filter((m) => {
+        if (seen.has(m.id)) return false
+        seen.add(m.id)
+        return true
+      })
     }
     if (target.instructions && source.instructions) {
       merged.instructions = Array.from(new Set([...target.instructions, ...source.instructions]))
@@ -800,6 +840,11 @@ export namespace Config {
       tips_toggle: z.string().optional().default("<leader>h").describe("Toggle tips on home screen"),
       plugin_manager: z.string().optional().default("none").describe("Open plugin manager dialog"),
       display_thinking: z.string().optional().default("none").describe("Toggle thinking blocks visibility"),
+      permission_mode_cycle: z
+        .string()
+        .optional()
+        .default("shift+tab")
+        .describe("Cycle through permission modes (default → acceptEdits → plan → bypassPermissions)"),
     })
     .strict()
     .meta({
@@ -907,6 +952,17 @@ export namespace Config {
           "Enable or disable snapshot tracking. When false, filesystem snapshots are not recorded and undoing or reverting will not undo/redo file changes. Defaults to true.",
         ),
       plugin: PluginSpec.array().optional(),
+      // 18.1: Plugin manifests with contribution points (skills, hooks, mcpServers, enabled)
+      plugin_manifests: PluginManifest.array()
+        .optional()
+        .describe("Plugin manifests with contribution point definitions"),
+      // 18.5: Marketplace config
+      marketplace: z
+        .object({
+          url: z.string().optional().describe("URL for plugin marketplace index"),
+        })
+        .optional()
+        .describe("Plugin marketplace configuration"),
       share: z
         .enum(["manual", "auto", "disabled"])
         .optional()
@@ -1037,7 +1093,23 @@ export namespace Config {
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
       permission: Permission.optional(),
+      permission_mode: PermissionMode.optional().describe(
+        "Default permission mode: 'default' (ask for writes), 'plan' (read-only), 'acceptEdits' (auto-approve edits), 'bypassPermissions' (skip all checks)",
+      ),
       tools: z.record(z.string(), z.boolean()).optional(),
+      sandbox: z
+        .object({
+          enabled: z.boolean().optional().describe("Enable sandbox execution via bubblewrap (Linux only)"),
+          read: z.array(z.string()).optional().describe("Paths to bind read-only inside the sandbox"),
+          write: z.array(z.string()).optional().describe("Paths to bind read-write inside the sandbox"),
+          network: z.boolean().optional().describe("Allow network access inside the sandbox (default: true)"),
+          proxyPorts: z
+            .array(z.number().int().min(1).max(65535))
+            .optional()
+            .describe("Proxy ports to forward into the sandbox"),
+        })
+        .optional()
+        .describe("Sandbox execution configuration (bubblewrap/bwrap, Linux only)"),
       enterprise: z
         .object({
           url: z.string().optional().describe("Enterprise URL"),
@@ -1053,8 +1125,58 @@ export namespace Config {
             .min(0)
             .optional()
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
+          thresholds: z
+            .object({
+              warning: z
+                .number()
+                .min(0)
+                .max(1)
+                .optional()
+                .describe("Context usage fraction to show warning (default: 0.70)"),
+              error: z
+                .number()
+                .min(0)
+                .max(1)
+                .optional()
+                .describe("Context usage fraction to show error (default: 0.85)"),
+              blocking: z
+                .number()
+                .min(0)
+                .max(1)
+                .optional()
+                .describe("Context usage fraction to block new turns (default: 0.95)"),
+            })
+            .optional()
+            .describe("Graduated context usage thresholds"),
         })
         .optional(),
+      hooks: z
+        .array(
+          z.object({
+            event: z.string().describe("Bus event to hook (e.g. 'session.start', 'tool.pre', 'tool.post')"),
+            pattern: z.string().optional().describe("Optional tool/event pattern filter"),
+            command: z.string().describe("Shell command to execute"),
+            timeout: z.number().int().min(100).optional().describe("Timeout in ms (default 10000)"),
+          }),
+        )
+        .optional()
+        .describe("Lifecycle hooks — shell commands run on bus events"),
+      budget: z
+        .object({
+          maxTurns: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Maximum number of agent turns per session (stops loop when exceeded)"),
+          maxUsd: z
+            .number()
+            .positive()
+            .optional()
+            .describe("Maximum spend in USD per session (stops loop when exceeded)"),
+        })
+        .optional()
+        .describe("Budget limits for agent sessions"),
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),

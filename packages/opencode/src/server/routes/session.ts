@@ -15,7 +15,7 @@ import { Agent } from "../../agent/agent"
 import { Snapshot } from "@/snapshot"
 import { Log } from "../../util/log"
 import { Permission } from "@/permission"
-import { PermissionID } from "@/permission/schema"
+import { PermissionID, PermissionMode } from "@/permission/schema"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
@@ -126,49 +126,23 @@ export const SessionRoutes = lazy(() =>
         return c.json(session)
       },
     )
-    .get(
-      "/:sessionID/children",
+    .post(
+      "/:sessionID/permission-mode",
       describeRoute({
-        summary: "Get session children",
-        tags: ["Session"],
-        description: "Retrieve all child sessions that were forked from the specified parent session.",
-        operationId: "session.children",
+        summary: "Cycle permission mode",
+        description:
+          "Cycle through permission modes (default → acceptEdits → plan → bypassPermissions → default) or set a specific mode.",
+        operationId: "session.permissionMode",
         responses: {
           200: {
-            description: "List of children",
+            description: "Successfully updated permission mode",
             content: {
               "application/json": {
-                schema: resolver(Session.Info.array()),
-              },
-            },
-          },
-          ...errors(400, 404),
-        },
-      }),
-      validator(
-        "param",
-        z.object({
-          sessionID: Session.children.schema,
-        }),
-      ),
-      async (c) => {
-        const sessionID = c.req.valid("param").sessionID
-        const session = await Session.children(sessionID)
-        return c.json(session)
-      },
-    )
-    .get(
-      "/:sessionID/todo",
-      describeRoute({
-        summary: "Get session todos",
-        description: "Retrieve the todo list associated with a specific session, showing tasks and action items.",
-        operationId: "session.todo",
-        responses: {
-          200: {
-            description: "Todo list",
-            content: {
-              "application/json": {
-                schema: resolver(Todo.Info.array()),
+                schema: resolver(
+                  z.object({
+                    permissionMode: PermissionMode,
+                  }),
+                ),
               },
             },
           },
@@ -181,10 +155,31 @@ export const SessionRoutes = lazy(() =>
           sessionID: SessionID.zod,
         }),
       ),
+      validator(
+        "json",
+        z.object({
+          permissionMode: PermissionMode.optional(),
+        }),
+      ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        const todos = await Todo.get(sessionID)
-        return c.json(todos)
+        const body = c.req.valid("json")
+
+        let newMode: z.infer<typeof PermissionMode>
+        if (body.permissionMode) {
+          // Set specific mode
+          newMode = body.permissionMode
+        } else {
+          // Cycle to next mode
+          const currentSession = await Session.get(sessionID)
+          const currentMode = currentSession.permissionMode ?? "default"
+          const order: z.infer<typeof PermissionMode>[] = ["default", "acceptEdits", "plan", "bypassPermissions"]
+          const idx = order.indexOf(currentMode)
+          newMode = order[(idx + 1) % order.length]
+        }
+
+        await Session.setPermissionMode({ sessionID, permissionMode: newMode })
+        return c.json({ permissionMode: newMode })
       },
     )
     .post(

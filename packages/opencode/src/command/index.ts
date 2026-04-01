@@ -42,6 +42,7 @@ export namespace Command {
       template: z.promise(z.string()).or(z.string()),
       subtask: z.boolean().optional(),
       hints: z.array(z.string()),
+      allowedTools: z.array(z.string()).optional(),
     })
     .meta({
       ref: "Command",
@@ -63,6 +64,17 @@ export namespace Command {
   export const Default = {
     INIT: "init",
     REVIEW: "review",
+    COMPACT: "compact",
+    COST: "cost",
+    DOCTOR: "doctor",
+    DIFF: "diff",
+    CONTEXT: "context",
+    MEMORY: "memory",
+    PERMISSIONS: "permissions",
+    PLAN: "plan",
+    VIM: "vim",
+    EFFORT: "effort",
+    HOOKS: "hooks",
   } as const
 
   export interface Interface {
@@ -101,6 +113,90 @@ export namespace Command {
           },
           subtask: true,
           hints: hints(PROMPT_REVIEW),
+        }
+        commands[Default.COMPACT] = {
+          name: Default.COMPACT,
+          description: "trigger context compaction immediately",
+          source: "command",
+          template: "",
+          hints: [],
+        }
+        commands[Default.COST] = {
+          name: Default.COST,
+          description: "display session cost breakdown (tokens, USD, per-model)",
+          source: "command",
+          template:
+            "Show the session cost breakdown: total tokens used (input, output, cache read/write), total cost in USD, and a per-model breakdown if multiple models were used. Format it clearly for the user.",
+          hints: [],
+        }
+        commands[Default.DOCTOR] = {
+          name: Default.DOCTOR,
+          description: "run diagnostics (config validation, API connectivity, tool availability)",
+          source: "command",
+          template:
+            "Run a system health check and report: 1) Validate the current configuration for any issues, 2) Check API key availability for the configured providers, 3) Check tool availability (bash, ripgrep, git, etc.), 4) Report any issues found with suggestions to fix them.",
+          hints: [],
+        }
+        commands[Default.DIFF] = {
+          name: Default.DIFF,
+          description: "show git-style diff of all file changes in current session",
+          source: "command",
+          template:
+            "Show a git-style diff of all file changes made in the current session. Run `git diff` to show unstaged changes and `git diff --cached` for staged changes. If there are no changes, say so.",
+          hints: [],
+        }
+        commands[Default.CONTEXT] = {
+          name: Default.CONTEXT,
+          description: "show current token usage and context window utilization",
+          source: "command",
+          template:
+            "Display the current context window utilization: tokens used vs the model's context limit, percentage used, and whether any compaction thresholds (warning 70%, error 85%, blocking 95%) have been reached.",
+          hints: [],
+        }
+        commands[Default.MEMORY] = {
+          name: Default.MEMORY,
+          description: "manage persistent memories (list, view, add, delete)",
+          source: "command",
+          template:
+            "List all stored memories. For each memory show its ID, type, title, and a short preview of the content. Provide instructions on how to view, add, or delete memories using follow-up commands.",
+          hints: [],
+        }
+        commands[Default.PERMISSIONS] = {
+          name: Default.PERMISSIONS,
+          description: "view current permission mode and active rules",
+          source: "command",
+          template:
+            "Display the current permission mode and all active permission rules. Show the mode name (default/plan/acceptEdits/bypassPermissions), and list each rule with its tool, pattern, and source (project config, user config, or session).",
+          hints: [],
+        }
+        commands[Default.PLAN] = {
+          name: Default.PLAN,
+          description: "toggle plan mode (read-only, no file writes)",
+          source: "command",
+          template: "",
+          hints: [],
+        }
+        commands[Default.VIM] = {
+          name: Default.VIM,
+          description: "toggle vim keybinding mode in the TUI",
+          source: "command",
+          template: "",
+          hints: [],
+        }
+        commands[Default.EFFORT] = {
+          name: Default.EFFORT,
+          description: "set AI effort/thinking level (low, medium, high)",
+          source: "command",
+          template: "Set the AI thinking effort level to: $ARGUMENTS. Valid values are low, medium, or high.",
+          hints: hints("$ARGUMENTS"),
+        }
+        commands[Default.HOOKS] = {
+          name: Default.HOOKS,
+          description: "list active hooks and their event subscriptions",
+          source: "command",
+          template:
+            "List all active lifecycle hooks configured for this session. For each hook show its event type, optional pattern filter, command, and timeout. If no hooks are configured, say so.",
+          hints: [],
         }
 
         for (const [name, command] of Object.entries(cfg.command ?? {})) {
@@ -153,6 +249,7 @@ export namespace Command {
               return item.content
             },
             hints: [],
+            allowedTools: item.allowedTools,
           }
         }
 

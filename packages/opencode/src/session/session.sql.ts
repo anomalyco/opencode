@@ -3,6 +3,7 @@ import { ProjectTable } from "../project/project.sql"
 import type { MessageV2 } from "./message-v2"
 import type { Snapshot } from "../snapshot"
 import type { Permission } from "../permission"
+import type { PermissionMode } from "../permission/schema"
 import type { ProjectID } from "../project/schema"
 import type { SessionID, MessageID, PartID } from "./schema"
 import type { WorkspaceID } from "../control-plane/schema"
@@ -32,6 +33,8 @@ export const SessionTable = sqliteTable(
     summary_diffs: text({ mode: "json" }).$type<Snapshot.FileDiff[]>(),
     revert: text({ mode: "json" }).$type<{ messageID: MessageID; partID?: PartID; snapshot?: string; diff?: string }>(),
     permission: text({ mode: "json" }).$type<Permission.Ruleset>(),
+    permission_mode: text().$type<PermissionMode>(),
+    compact_failures: integer().default(0),
     ...Timestamps,
     time_compacting: integer(),
     time_archived: integer(),

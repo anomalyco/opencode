@@ -5,6 +5,15 @@ import { useDirectory } from "../../context/directory"
 import { useConnected } from "../../component/dialog-model"
 import { createStore } from "solid-js/store"
 import { useRoute } from "../../context/route"
+import type { Session, AssistantMessage } from "@opencode-ai/sdk/v2"
+
+// Permission mode display labels and colors
+const PERMISSION_MODE_INFO: Record<string, { label: string; color: string }> = {
+  default: { label: "Default", color: "textMuted" },
+  plan: { label: "Plan", color: "warning" },
+  acceptEdits: { label: "Edit", color: "success" },
+  bypassPermissions: { label: "Bypass", color: "error" },
+}
 
 export function Footer() {
   const { theme } = useTheme()
@@ -19,6 +28,58 @@ export function Footer() {
   })
   const directory = useDirectory()
   const connected = useConnected()
+
+  // Get current session's permission mode
+  const permissionMode = createMemo(() => {
+    if (route.data.type !== "session") return "default"
+    const sessionID = route.data.sessionID
+    const session = sync.data.session.find((s: Session) => s.id === sessionID)
+    return (session as any)?.permissionMode ?? "default"
+  })
+
+  const permissionModeInfo = createMemo(() => {
+    const mode = permissionMode()
+    return PERMISSION_MODE_INFO[mode] ?? PERMISSION_MODE_INFO.default
+  })
+
+  const permissionModeColor = createMemo(() => {
+    const colorName = permissionModeInfo().color
+    if (colorName === "warning") return theme.warning
+    if (colorName === "success") return theme.success
+    if (colorName === "error") return theme.error
+    return theme.textMuted
+  })
+
+  // Budget display: turns used/max, cost used/max
+  const budget = createMemo(() => {
+    if (route.data.type !== "session") return null
+    const cfg = sync.data.config as any
+    const maxTurns: number | undefined = cfg?.budget?.maxTurns
+    const maxUsd: number | undefined = cfg?.budget?.maxUsd
+    if (!maxTurns && !maxUsd) return null
+
+    const msgs = sync.data.message[route.data.sessionID] ?? []
+    const turns = msgs.filter((m) => m.role === "assistant").length
+    const cost = msgs.reduce((s, m) => s + (m.role === "assistant" ? (m as AssistantMessage).cost : 0), 0)
+
+    const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 4 })
+
+    const parts: string[] = []
+    if (maxTurns) parts.push(`${turns}/${maxTurns} turns`)
+    if (maxUsd) parts.push(`${money.format(cost)}/${money.format(maxUsd)}`)
+    return parts.join(" · ")
+  })
+
+  const budgetExceeded = createMemo(() => {
+    if (route.data.type !== "session") return false
+    const cfg = sync.data.config as any
+    const maxTurns: number | undefined = cfg?.budget?.maxTurns
+    const maxUsd: number | undefined = cfg?.budget?.maxUsd
+    const msgs = sync.data.message[route.data.sessionID] ?? []
+    const turns = msgs.filter((m) => m.role === "assistant").length
+    const cost = msgs.reduce((s, m) => s + (m.role === "assistant" ? (m as AssistantMessage).cost : 0), 0)
+    return (maxTurns !== undefined && turns >= maxTurns) || (maxUsd !== undefined && cost >= maxUsd)
+  })
 
   const [store, setStore] = createStore({
     welcome: false,
@@ -65,6 +126,12 @@ export function Footer() {
                 <span style={{ fg: theme.warning }}>△</span> {permissions().length} Permission
                 {permissions().length > 1 ? "s" : ""}
               </text>
+            </Show>
+            <Show when={budget()}>
+              {(b) => <text fg={budgetExceeded() ? theme.error : theme.textMuted}>{b()}</text>}
+            </Show>
+            <Show when={permissionMode() !== "default"}>
+              <text fg={permissionModeColor()}>{permissionModeInfo().label}</text>
             </Show>
             <text fg={theme.text}>
               <span style={{ fg: lsp().length > 0 ? theme.success : theme.textMuted }}>•</span> {lsp().length} LSP

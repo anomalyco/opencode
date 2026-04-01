@@ -11,6 +11,9 @@ import { Instance } from "../project/instance"
 import { assertExternalDirectory } from "./external-directory"
 import { InstructionPrompt } from "../session/instruction"
 import { Filesystem } from "../util/filesystem"
+import { assertSafePath } from "./path-guard"
+import { renderNotebook } from "./notebook"
+import type { SessionID } from "../session/schema"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -18,12 +21,19 @@ const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
 const MAX_BYTES = 50 * 1024
 const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
 
+// Session-level dedup: sessionID -> filepath -> { mtime, size }
+const readCache = new Map<SessionID, Map<string, { mtime: number; size: number }>>()
+
 export const ReadTool = Tool.define("read", {
   description: DESCRIPTION,
   parameters: z.object({
     filePath: z.string().describe("The absolute path to the file or directory to read"),
     offset: z.coerce.number().describe("The line number to start reading from (1-indexed)").optional(),
     limit: z.coerce.number().describe("The maximum number of lines to read (defaults to 2000)").optional(),
+    pageRange: z
+      .string()
+      .optional()
+      .describe('For PDF files: page range to extract, e.g. "1-5" or "3" (defaults to all pages)'),
   }),
   async execute(params, ctx) {
     if (params.offset !== undefined && params.offset < 1) {
@@ -36,6 +46,10 @@ export const ReadTool = Tool.define("read", {
     if (process.platform === "win32") {
       filepath = Filesystem.normalizePath(filepath)
     }
+
+    // Hard-block dangerous paths before any other checks
+    assertSafePath(filepath)
+
     const title = path.relative(Instance.worktree, filepath)
 
     const stat = Filesystem.stat(filepath)
@@ -120,11 +134,73 @@ export const ReadTool = Tool.define("read", {
 
     const instructions = await InstructionPrompt.resolve(ctx.messages, filepath, ctx.messageID)
 
+    // Deduplication: if this exact file was already read this session and hasn't changed, skip re-reading
+    if (!params.offset && !params.limit) {
+      const prev = await FileTime.get(ctx.sessionID, filepath)
+      if (prev) {
+        const cached = readCache.get(ctx.sessionID)?.get(filepath)
+        if (cached && cached.mtime === stat.mtime.getTime() && cached.size === Number(stat.size)) {
+          return {
+            title,
+            output: [
+              `<path>${filepath}</path>`,
+              `<type>file</type>`,
+              `<note>File already read this session and unchanged since ${prev.toISOString()}. Use offset/limit to read specific sections if needed.</note>`,
+            ].join("\n"),
+            metadata: { preview: "already read", truncated: false, loaded: [] as string[] },
+          }
+        }
+      }
+    }
+
+    // Record current stat in dedup cache
+    if (!readCache.has(ctx.sessionID)) readCache.set(ctx.sessionID, new Map())
+    readCache.get(ctx.sessionID)!.set(filepath, { mtime: stat.mtime.getTime(), size: Number(stat.size) })
+
     // Exclude SVG (XML-based) and vnd.fastbidsheet (.fbs extension, commonly FlatBuffers schema files)
     const mime = Filesystem.mimeType(filepath)
     const isImage = mime.startsWith("image/") && mime !== "image/svg+xml" && mime !== "image/vnd.fastbidsheet"
     const isPdf = mime === "application/pdf"
+    if (isPdf && params.pageRange) {
+      // Extract specific pages using pdftotext
+      const range = params.pageRange.trim()
+      const match = range.match(/^(\d+)(?:-(\d+))?$/)
+      if (!match) throw new Error(`Invalid pageRange "${range}". Use "N" or "N-M" format.`)
+      const first = match[1]
+      const last = match[2] ?? match[1]
+      const proc = Bun.spawn(["pdftotext", "-f", first, "-l", last, filepath, "-"], {
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+      const text = await new Response(proc.stdout).text()
+      const code = await proc.exited
+      if (code !== 0) throw new Error(`pdftotext failed for pages ${range}`)
+      const msg = `PDF pages ${range} extracted`
+      return {
+        title,
+        output: [`<path>${filepath}</path>`, `<type>file</type>`, "<content>", text.trim(), "</content>"].join("\n"),
+        metadata: { preview: msg, truncated: false, loaded: instructions.map((i) => i.filepath) },
+      }
+    }
     if (isImage || isPdf) {
+      let bytes = await Filesystem.readBytes(filepath)
+
+      // Auto-resize large images to fit token budget (~1MB = ~1.33M base64 chars ≈ high token cost)
+      const MAX_IMAGE_BYTES = 1 * 1024 * 1024 // 1MB
+      if (isImage && bytes.length > MAX_IMAGE_BYTES) {
+        const convert = Bun.which("convert")
+        if (convert) {
+          const proc = Bun.spawn([convert, "-", "-resize", "1024x1024>", "-quality", "85", `${mime.split("/")[1]}:-`], {
+            stdin: bytes,
+            stdout: "pipe",
+            stderr: "pipe",
+          })
+          const resized = await new Response(proc.stdout).arrayBuffer()
+          const code = await proc.exited
+          if (code === 0 && resized.byteLength < bytes.length) bytes = Buffer.from(resized)
+        }
+      }
+
       const msg = `${isImage ? "Image" : "PDF"} read successfully`
       return {
         title,
@@ -138,7 +214,7 @@ export const ReadTool = Tool.define("read", {
           {
             type: "file",
             mime,
-            url: `data:${mime};base64,${Buffer.from(await Filesystem.readBytes(filepath)).toString("base64")}`,
+            url: `data:${mime};base64,${Buffer.from(bytes).toString("base64")}`,
           },
         ],
       }
@@ -146,6 +222,18 @@ export const ReadTool = Tool.define("read", {
 
     const isBinary = await isBinaryFile(filepath, Number(stat.size))
     if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
+
+    // Render .ipynb notebooks as readable text
+    if (filepath.endsWith(".ipynb")) {
+      const raw = await Bun.file(filepath).text()
+      const rendered = renderNotebook(raw)
+      await FileTime.read(ctx.sessionID, filepath)
+      return {
+        title,
+        output: [`<path>${filepath}</path>`, `<type>file</type>`, "<content>", rendered, "</content>"].join("\n"),
+        metadata: { preview: rendered.slice(0, 200), truncated: false, loaded: [] as string[] },
+      }
+    }
 
     const stream = createReadStream(filepath, { encoding: "utf8" })
     const rl = createInterface({
