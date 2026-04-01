@@ -1174,6 +1174,51 @@ test("deduplicates duplicate plugins from global and local configs", async () =>
   })
 })
 
+test("keeps plugin origins aligned with merged plugin list", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const project = path.join(dir, "project")
+      const local = path.join(project, ".opencode")
+      await fs.mkdir(local, { recursive: true })
+
+      await Filesystem.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          plugin: [["shared-plugin@1.0.0", { source: "global" }], "global-only@1.0.0"],
+        }),
+      )
+
+      await Filesystem.write(
+        path.join(local, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          plugin: [["shared-plugin@2.0.0", { source: "local" }], "local-only@1.0.0"],
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: path.join(tmp.path, "project"),
+    fn: async () => {
+      const cfg = await Config.get()
+      const plugins = cfg.plugin ?? []
+      const origins = cfg.plugin_origins ?? []
+      const names = plugins.map((item) => Config.pluginSpecifier(item))
+
+      expect(names).toContain("shared-plugin@2.0.0")
+      expect(names).not.toContain("shared-plugin@1.0.0")
+      expect(names).toContain("global-only@1.0.0")
+      expect(names).toContain("local-only@1.0.0")
+
+      expect(origins.map((item) => item.spec)).toEqual(plugins)
+      const hit = origins.find((item) => Config.pluginSpecifier(item.spec) === "shared-plugin@2.0.0")
+      expect(hit?.scope).toBe("local")
+    },
+  })
+})
+
 // Legacy tools migration tests
 
 test("migrates legacy tools config to permissions - allow", async () => {

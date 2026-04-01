@@ -3,6 +3,7 @@ import path from "path"
 import fs from "fs/promises"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
+import { Config } from "../../src/config/config"
 import { TuiConfig } from "../../src/config/tui"
 import { Global } from "../../src/global"
 import { Filesystem } from "../../src/util/filesystem"
@@ -12,9 +13,82 @@ const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
 afterEach(async () => {
   delete process.env.OPENCODE_CONFIG
   delete process.env.OPENCODE_TUI_CONFIG
+  await fs.rm(path.join(Global.Path.config, "opencode.json"), { force: true }).catch(() => {})
+  await fs.rm(path.join(Global.Path.config, "opencode.jsonc"), { force: true }).catch(() => {})
   await fs.rm(path.join(Global.Path.config, "tui.json"), { force: true }).catch(() => {})
   await fs.rm(path.join(Global.Path.config, "tui.jsonc"), { force: true }).catch(() => {})
   await fs.rm(managedConfigDir, { force: true, recursive: true }).catch(() => {})
+})
+
+test("keeps server and tui plugin merge semantics aligned", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const local = path.join(dir, ".opencode")
+      await fs.mkdir(local, { recursive: true })
+
+      await Bun.write(
+        path.join(Global.Path.config, "opencode.json"),
+        JSON.stringify(
+          {
+            plugin: [["shared-plugin@1.0.0", { source: "global" }], "global-only@1.0.0"],
+          },
+          null,
+          2,
+        ),
+      )
+      await Bun.write(
+        path.join(Global.Path.config, "tui.json"),
+        JSON.stringify(
+          {
+            plugin: [["shared-plugin@1.0.0", { source: "global" }], "global-only@1.0.0"],
+          },
+          null,
+          2,
+        ),
+      )
+
+      await Bun.write(
+        path.join(local, "opencode.json"),
+        JSON.stringify(
+          {
+            plugin: [["shared-plugin@2.0.0", { source: "local" }], "local-only@1.0.0"],
+          },
+          null,
+          2,
+        ),
+      )
+      await Bun.write(
+        path.join(local, "tui.json"),
+        JSON.stringify(
+          {
+            plugin: [["shared-plugin@2.0.0", { source: "local" }], "local-only@1.0.0"],
+          },
+          null,
+          2,
+        ),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const server = await Config.get()
+      const tui = await TuiConfig.get()
+      const serverPlugins = (server.plugin ?? []).map((item) => Config.pluginSpecifier(item))
+      const tuiPlugins = (tui.plugin ?? []).map((item) => Config.pluginSpecifier(item))
+
+      expect(serverPlugins).toEqual(tuiPlugins)
+      expect(serverPlugins).toContain("shared-plugin@2.0.0")
+      expect(serverPlugins).not.toContain("shared-plugin@1.0.0")
+
+      const serverOrigins = server.plugin_origins ?? []
+      const tuiOrigins = tui.plugin_origins ?? []
+      expect(serverOrigins.map((item) => Config.pluginSpecifier(item.spec))).toEqual(serverPlugins)
+      expect(tuiOrigins.map((item) => Config.pluginSpecifier(item.spec))).toEqual(tuiPlugins)
+      expect(serverOrigins.map((item) => item.scope)).toEqual(tuiOrigins.map((item) => item.scope))
+    },
+  })
 })
 
 test("loads tui config with the same precedence order as server config paths", async () => {
