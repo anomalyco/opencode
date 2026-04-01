@@ -312,7 +312,7 @@ export namespace Snapshot {
                     }
                   }
 
-                  const one = Effect.fnUntraced(function* (hash: string, file: string) {
+                  const revertSingle = Effect.fnUntraced(function* (hash: string, file: string) {
                     log.info("reverting", { file, hash })
                     const result = yield* git([...core, ...args(["checkout", hash, "--", file])], {
                       cwd: state.worktree,
@@ -334,7 +334,7 @@ export namespace Snapshot {
                     for (let i = 0; i < list.length; i += 100) {
                       const chunk = list.slice(i, i + 100)
                       if (chunk.length === 1) {
-                        yield* one(hash, chunk[0]!)
+                        yield* revertSingle(hash, chunk[0]!)
                         continue
                       }
 
@@ -348,7 +348,7 @@ export namespace Snapshot {
 
                       if (tree.code !== 0) {
                         for (const file of chunk) {
-                          yield* one(hash, file)
+                          yield* revertSingle(hash, file)
                         }
                         continue
                       }
@@ -371,7 +371,7 @@ export namespace Snapshot {
                         })
                         if (result.code !== 0) {
                           for (const file of restore) {
-                            yield* one(hash, file)
+                            yield* revertSingle(hash, file)
                           }
                         }
                       }
