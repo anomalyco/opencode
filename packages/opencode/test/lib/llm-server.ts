@@ -20,6 +20,13 @@ type Hit = {
   body: Record<string, unknown>
 }
 
+type Match = (hit: Hit) => boolean
+
+type Queue = {
+  item: Item
+  match?: Match
+}
+
 type Wait = {
   count: number
   ready: Deferred.Deferred<void>
@@ -420,7 +427,7 @@ const reset = Effect.fn("TestLLMServer.reset")(function* (item: Sse) {
     for (const part of item.tail) res.write(line(part))
     res.destroy(new Error("connection reset"))
   })
-  yield* Effect.never
+  return yield* Effect.never
 })
 
 function fail(item: HttpError) {
@@ -581,6 +588,9 @@ namespace TestLLMServer {
   export interface Service {
     readonly url: string
     readonly push: (...input: (Item | Reply)[]) => Effect.Effect<void>
+    readonly pushMatch: (match: Match, ...input: (Item | Reply)[]) => Effect.Effect<void>
+    readonly textMatch: (match: Match, value: string, opts?: { usage?: Usage }) => Effect.Effect<void>
+    readonly toolMatch: (match: Match, name: string, input: unknown) => Effect.Effect<void>
     readonly text: (value: string, opts?: { usage?: Usage }) => Effect.Effect<void>
     readonly tool: (name: string, input: unknown) => Effect.Effect<void>
     readonly toolHang: (name: string, input: unknown) => Effect.Effect<void>
@@ -605,11 +615,15 @@ export class TestLLMServer extends ServiceMap.Service<TestLLMServer, TestLLMServ
       const router = yield* HttpRouter.HttpRouter
 
       let hits: Hit[] = []
-      let list: Item[] = []
+      let list: Queue[] = []
       let waits: Wait[] = []
 
       const queue = (...input: (Item | Reply)[]) => {
-        list = [...list, ...input.map(item)]
+        list = [...list, ...input.map((value) => ({ item: item(value) }))]
+      }
+
+      const queueMatch = (match: Match, ...input: (Item | Reply)[]) => {
+        list = [...list, ...input.map((value) => ({ item: item(value), match }))]
       }
 
       const notify = Effect.fnUntraced(function* () {
@@ -619,19 +633,21 @@ export class TestLLMServer extends ServiceMap.Service<TestLLMServer, TestLLMServ
         yield* Effect.forEach(ready, (item) => Deferred.succeed(item.ready, void 0))
       })
 
-      const pull = () => {
-        const first = list[0]
-        if (!first) return
-        list = list.slice(1)
-        return first
+      const pull = (hit: Hit) => {
+        const index = list.findIndex((entry) => !entry.match || entry.match(hit))
+        if (index === -1) return
+        const first = list[index]
+        list = [...list.slice(0, index), ...list.slice(index + 1)]
+        return first.item
       }
 
       const handle = Effect.fn("TestLLMServer.handle")(function* (mode: "chat" | "responses") {
         const req = yield* HttpServerRequest.HttpServerRequest
-        const next = pull()
-        if (!next) return HttpServerResponse.text("unexpected request", { status: 500 })
         const body = yield* req.json.pipe(Effect.orElseSucceed(() => ({})))
-        hits = [...hits, hit(req.originalUrl, body)]
+        const current = hit(req.originalUrl, body)
+        const next = pull(current)
+        if (!next) return HttpServerResponse.text("unexpected request", { status: 500 })
+        hits = [...hits, current]
         yield* notify()
         if (next.type !== "sse") return fail(next)
         if (mode === "responses") return send(responses(next, modelFrom(body)))
@@ -654,6 +670,21 @@ export class TestLLMServer extends ServiceMap.Service<TestLLMServer, TestLLMServ
             : `unix://${server.address.path}/v1`,
         push: Effect.fn("TestLLMServer.push")(function* (...input: (Item | Reply)[]) {
           queue(...input)
+        }),
+        pushMatch: Effect.fn("TestLLMServer.pushMatch")(function* (match: Match, ...input: (Item | Reply)[]) {
+          queueMatch(match, ...input)
+        }),
+        textMatch: Effect.fn("TestLLMServer.textMatch")(function* (
+          match: Match,
+          value: string,
+          opts?: { usage?: Usage },
+        ) {
+          const out = reply().text(value)
+          if (opts?.usage) out.usage(opts.usage)
+          queueMatch(match, out.stop().item())
+        }),
+        toolMatch: Effect.fn("TestLLMServer.toolMatch")(function* (match: Match, name: string, input: unknown) {
+          queueMatch(match, reply().tool(name, input).item())
         }),
         text: Effect.fn("TestLLMServer.text")(function* (value: string, opts?: { usage?: Usage }) {
           const out = reply().text(value)
