@@ -140,7 +140,7 @@ describe("Truncate", () => {
     const DAY_MS = 24 * 60 * 60 * 1000
     const it = testEffect(Layer.mergeAll(TruncateSvc.defaultLayer, NodeFileSystem.layer))
 
-    it.effect("deletes files older than 7 days and preserves recent files", () =>
+    it.live("deletes files older than 7 days and preserves recent files", () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem
 
