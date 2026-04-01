@@ -593,15 +593,13 @@ export namespace Session {
       })
 
       const messages = Effect.fn("Session.messages")(function* (input: { sessionID: SessionID; limit?: number }) {
-        return yield* Effect.promise(async () => {
-          const result = [] as MessageV2.WithParts[]
-          for await (const msg of MessageV2.stream(input.sessionID)) {
-            if (input.limit && result.length >= input.limit) break
-            result.push(msg)
-          }
-          result.reverse()
-          return result
-        })
+        if (input.limit) {
+          const result = yield* MessageV2.pageEffect({ sessionID: input.sessionID, limit: input.limit })
+          return result.items
+        }
+        const all = yield* MessageV2.streamEffect(input.sessionID)
+        all.reverse()
+        return all
       })
 
       const removeMessage = Effect.fn("Session.removeMessage")(function* (input: {

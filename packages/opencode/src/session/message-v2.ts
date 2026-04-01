@@ -15,6 +15,7 @@ import { errorMessage } from "@/util/error"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
+import { Effect } from "effect"
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
 interface FetchDecompressionError extends Error {
@@ -547,7 +548,7 @@ export namespace MessageV2 {
       and(eq(MessageTable.time_created, row.time), lt(MessageTable.id, row.id)),
     )
 
-  async function hydrate(rows: (typeof MessageTable.$inferSelect)[]) {
+  function hydrate(rows: (typeof MessageTable.$inferSelect)[]) {
     const ids = rows.map((row) => row.id)
     const partByMessage = new Map<string, MessageV2.Part[]>()
     if (ids.length > 0) {
@@ -809,48 +810,58 @@ export namespace MessageV2 {
     )
   }
 
+  export const toModelMessagesEffect = Effect.fnUntraced(function* (
+    input: WithParts[],
+    model: Provider.Model,
+    options?: { stripMedia?: boolean },
+  ) {
+    return yield* Effect.promise(() => toModelMessages(input, model, options))
+  })
+
+  function pageSync(input: { sessionID: SessionID; limit: number; before?: string }) {
+    const before = input.before ? cursor.decode(input.before) : undefined
+    const where = before
+      ? and(eq(MessageTable.session_id, input.sessionID), older(before))
+      : eq(MessageTable.session_id, input.sessionID)
+    const rows = Database.use((db) =>
+      db
+        .select()
+        .from(MessageTable)
+        .where(where)
+        .orderBy(desc(MessageTable.time_created), desc(MessageTable.id))
+        .limit(input.limit + 1)
+        .all(),
+    )
+    if (rows.length === 0) {
+      const row = Database.use((db) =>
+        db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.id, input.sessionID)).get(),
+      )
+      if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
+      return {
+        items: [] as MessageV2.WithParts[],
+        more: false,
+      }
+    }
+
+    const more = rows.length > input.limit
+    const slice = more ? rows.slice(0, input.limit) : rows
+    const items = hydrate(slice)
+    items.reverse()
+    const tail = slice.at(-1)
+    return {
+      items,
+      more,
+      cursor: more && tail ? cursor.encode({ id: tail.id, time: tail.time_created }) : undefined,
+    }
+  }
+
   export const page = fn(
     z.object({
       sessionID: SessionID.zod,
       limit: z.number().int().positive(),
       before: z.string().optional(),
     }),
-    async (input) => {
-      const before = input.before ? cursor.decode(input.before) : undefined
-      const where = before
-        ? and(eq(MessageTable.session_id, input.sessionID), older(before))
-        : eq(MessageTable.session_id, input.sessionID)
-      const rows = Database.use((db) =>
-        db
-          .select()
-          .from(MessageTable)
-          .where(where)
-          .orderBy(desc(MessageTable.time_created), desc(MessageTable.id))
-          .limit(input.limit + 1)
-          .all(),
-      )
-      if (rows.length === 0) {
-        const row = Database.use((db) =>
-          db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.id, input.sessionID)).get(),
-        )
-        if (!row) throw new NotFoundError({ message: `Session not found: ${input.sessionID}` })
-        return {
-          items: [] as MessageV2.WithParts[],
-          more: false,
-        }
-      }
-
-      const more = rows.length > input.limit
-      const page = more ? rows.slice(0, input.limit) : rows
-      const items = await hydrate(page)
-      items.reverse()
-      const tail = page.at(-1)
-      return {
-        items,
-        more,
-        cursor: more && tail ? cursor.encode({ id: tail.id, time: tail.time_created }) : undefined,
-      }
-    },
+    async (input) => pageSync(input),
   )
 
   export const stream = fn(SessionID.zod, async function* (sessionID) {
@@ -867,7 +878,7 @@ export namespace MessageV2 {
     }
   })
 
-  export const parts = fn(MessageID.zod, async (message_id) => {
+  function partsSync(message_id: MessageID) {
     const rows = Database.use((db) =>
       db.select().from(PartTable).where(eq(PartTable.message_id, message_id)).orderBy(PartTable.id).all(),
     )
@@ -880,28 +891,82 @@ export namespace MessageV2 {
           messageID: row.message_id,
         }) as MessageV2.Part,
     )
-  })
+  }
+
+  export const parts = fn(MessageID.zod, async (message_id) => partsSync(message_id))
+
+  function getSync(input: { sessionID: SessionID; messageID: MessageID }): WithParts {
+    const row = Database.use((db) =>
+      db
+        .select()
+        .from(MessageTable)
+        .where(and(eq(MessageTable.id, input.messageID), eq(MessageTable.session_id, input.sessionID)))
+        .get(),
+    )
+    if (!row) throw new NotFoundError({ message: `Message not found: ${input.messageID}` })
+    return {
+      info: info(row),
+      parts: partsSync(input.messageID),
+    }
+  }
 
   export const get = fn(
     z.object({
       sessionID: SessionID.zod,
       messageID: MessageID.zod,
     }),
-    async (input): Promise<WithParts> => {
-      const row = Database.use((db) =>
-        db
-          .select()
-          .from(MessageTable)
-          .where(and(eq(MessageTable.id, input.messageID), eq(MessageTable.session_id, input.sessionID)))
-          .get(),
-      )
-      if (!row) throw new NotFoundError({ message: `Message not found: ${input.messageID}` })
-      return {
-        info: info(row),
-        parts: await parts(input.messageID),
-      }
-    },
+    async (input): Promise<WithParts> => getSync(input),
   )
+
+  export const partsEffect = Effect.fnUntraced(function* (id: MessageID) {
+    return partsSync(id)
+  })
+
+  export const getEffect = Effect.fnUntraced(function* (input: { sessionID: SessionID; messageID: MessageID }) {
+    return getSync(input)
+  })
+
+  export const pageEffect = Effect.fnUntraced(function* (input: {
+    sessionID: SessionID
+    limit: number
+    before?: string
+  }) {
+    return pageSync(input)
+  })
+
+  export const streamEffect = Effect.fnUntraced(function* (sessionID: SessionID) {
+    const result: WithParts[] = []
+    const size = 50
+    let before: string | undefined
+    while (true) {
+      const next = pageSync({ sessionID, limit: size, before })
+      if (next.items.length === 0) break
+      for (let i = next.items.length - 1; i >= 0; i--) {
+        result.push(next.items[i])
+      }
+      if (!next.more || !next.cursor) break
+      before = next.cursor
+    }
+    return result
+  })
+
+  function applyCompactionFilter(msgs: MessageV2.WithParts[]) {
+    const result = [] as MessageV2.WithParts[]
+    const completed = new Set<string>()
+    for (const msg of msgs) {
+      result.push(msg)
+      if (
+        msg.info.role === "user" &&
+        completed.has(msg.info.id) &&
+        msg.parts.some((part) => part.type === "compaction")
+      )
+        break
+      if (msg.info.role === "assistant" && msg.info.summary && msg.info.finish && !msg.info.error)
+        completed.add(msg.info.parentID)
+    }
+    result.reverse()
+    return result
+  }
 
   export async function filterCompacted(stream: AsyncIterable<MessageV2.WithParts>) {
     const result = [] as MessageV2.WithParts[]
@@ -920,6 +985,10 @@ export namespace MessageV2 {
     result.reverse()
     return result
   }
+
+  export const filterCompactedEffect = Effect.fnUntraced(function* (sessionID: SessionID) {
+    return applyCompactionFilter(yield* streamEffect(sessionID))
+  })
 
   export function fromError(
     e: unknown,
