@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { bodyText, inputMatch, promptMatch } from "./mock"
+import { bodyText, inputMatch, promptMatch } from "../../e2e/prompt/mock"
 
 function hit(body: Record<string, unknown>) {
   return { body }
