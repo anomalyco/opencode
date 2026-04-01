@@ -30,6 +30,12 @@ export const ProjectIcon = (props: {
   const notification = useNotification()
   const permission = usePermission()
   const dirs = createMemo(() => [props.project.worktree, ...(props.project.sandboxes ?? [])])
+  const loaded = createMemo(() =>
+    dirs().some((directory) => {
+      const [store] = globalSync.peek(directory, { bootstrap: false })
+      return !!store.path.directory
+    }),
+  )
   const unseenCount = createMemo(() =>
     dirs().reduce((total, directory) => total + notification.project.unseenCount(directory), 0),
   )
@@ -50,8 +56,19 @@ export const ProjectIcon = (props: {
       <div class="size-full rounded overflow-clip">
         <Avatar
           fallback={name()}
-          src={getProjectAvatarSource(props.project.id, props.project.icon)}
-          {...getAvatarColors(props.project.icon?.color)}
+          src={
+            loaded() && props.project.id === OPENCODE_PROJECT_ID
+              ? "https://opencode.ai/favicon.svg"
+              : loaded()
+                ? props.project.icon?.override
+                : undefined
+          }
+          {...(loaded()
+            ? getAvatarColors(props.project.icon?.color)
+            : {
+                background: "var(--color-surface-base-hover)",
+                foreground: "var(--color-text-weak)",
+              })}
           class="size-full rounded"
           classList={{ "badge-mask": notify() }}
         />
