@@ -132,7 +132,7 @@ test("switching back to a project opens the latest workspace session", async ({ 
 test("reopening the current project from picker opens a fresh session view", async ({ page, withProject }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
 
-  await withProject(async ({ directory }) => {
+  await withProject(async ({ directory, trackSession }) => {
     await defocus(page)
 
     const prompt = page.locator(promptSelector)
@@ -144,6 +144,7 @@ test("reopening the current project from picker opens a fresh session view", asy
 
     const created = sessionIDFromUrl(page.url())
     if (!created) throw new Error(`Failed to get session ID from url: ${page.url()}`)
+    trackSession(created, directory)
     await waitSessionSaved(directory, created)
 
     await reopen(page, directory)
@@ -161,7 +162,7 @@ test("reopening another open project from picker opens a fresh session view", as
 
   try {
     await withProject(
-      async ({ directory, slug }) => {
+      async ({ directory, slug, trackSession }) => {
         await defocus(page)
 
         const prompt = page.locator(promptSelector)
@@ -173,6 +174,7 @@ test("reopening another open project from picker opens a fresh session view", as
 
         const created = sessionIDFromUrl(page.url())
         if (!created) throw new Error(`Failed to get session ID from url: ${page.url()}`)
+        trackSession(created, directory)
         await waitSessionSaved(directory, created)
 
         await openSidebar(page)
