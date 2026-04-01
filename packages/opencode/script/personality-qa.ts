@@ -48,9 +48,7 @@ type Result = {
 async function main() {
   const { full, filter, question } = parseArgs()
 
-  const baseURL = process.env.ANTHROPIC_BASE_URL
-    ? `${process.env.ANTHROPIC_BASE_URL.replace(/\/$/, "")}/v1`
-    : undefined
+  const baseURL = process.env.ANTHROPIC_BASE_URL ? `${process.env.ANTHROPIC_BASE_URL.replace(/\/$/, "")}/v1` : undefined
 
   const anthropic = createAnthropic({ baseURL })
 
@@ -96,7 +94,9 @@ async function main() {
   console.log("=".repeat(55))
   console.log(" SUMMARY")
   console.log("=".repeat(55))
-  console.log(` ${"Personality".padEnd(14)} | ${"Words".padStart(5)} | ${"Lines".padStart(5)} | ${"Code blocks".padStart(11)}`)
+  console.log(
+    ` ${"Personality".padEnd(14)} | ${"Words".padStart(5)} | ${"Lines".padStart(5)} | ${"Code blocks".padStart(11)}`,
+  )
   console.log(` ${"-".repeat(14)} | ${"-".repeat(5)} | ${"-".repeat(5)} | ${"-".repeat(11)}`)
   for (const r of results) {
     console.log(

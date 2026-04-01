@@ -10,9 +10,7 @@ const QUESTION = "Explain what a closure is in JavaScript and give an example."
 
 const BUGGY_CODE = `Review this function:\n\nfunction add(a, b) { return a - b }`
 
-const baseURL = process.env.ANTHROPIC_BASE_URL
-  ? `${process.env.ANTHROPIC_BASE_URL.replace(/\/$/, "")}/v1`
-  : undefined
+const baseURL = process.env.ANTHROPIC_BASE_URL ? `${process.env.ANTHROPIC_BASE_URL.replace(/\/$/, "")}/v1` : undefined
 
 const anthropic = createAnthropic({
   apiKey: process.env.ANTHROPIC_API_KEY_EVAL ?? process.env.ANTHROPIC_API_KEY,
