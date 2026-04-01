@@ -792,6 +792,7 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
 
     expect(await Filesystem.exists(path.join(tmp.extra, "package.json"))).toBe(true)
     expect(await Filesystem.exists(path.join(tmp.extra, ".gitignore"))).toBe(true)
+    expect(await Filesystem.readText(path.join(tmp.extra, ".gitignore"))).toContain("package-lock.json")
   } finally {
     online.mockRestore()
     run.mockRestore()
