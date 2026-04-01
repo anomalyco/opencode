@@ -13,6 +13,7 @@ import {
   sessionComposerDockSelector,
   sessionTodoToggleButtonSelector,
 } from "../selectors"
+import { modKey } from "../utils"
 
 type Sdk = Parameters<typeof clearSessionDockSeed>[0]
 type PermissionRule = { permission: string; pattern: string; action: "allow" | "deny" | "ask" }
@@ -305,6 +306,73 @@ test("blocked question flow unblocks after submit", async ({ page, sdk, gotoSess
       await dock.locator('[data-slot="question-option"]').first().click()
       await dock.getByRole("button", { name: /submit/i }).click()
 
+      await expectQuestionOpen(page)
+    })
+  })
+})
+
+test("blocked question flow supports keyboard shortcuts", async ({ page, sdk, gotoSession }) => {
+  await withDockSession(sdk, "e2e composer dock question keyboard", async (session) => {
+    await withDockSeed(sdk, session.id, async () => {
+      await gotoSession(session.id)
+
+      await seedSessionQuestion(sdk, {
+        sessionID: session.id,
+        questions: [
+          {
+            header: "Need input",
+            question: "Pick one option",
+            options: [
+              { label: "Continue", description: "Continue now" },
+              { label: "Stop", description: "Stop here" },
+            ],
+          },
+        ],
+      })
+
+      const dock = page.locator(questionDockSelector)
+      const first = dock.locator('[data-slot="question-option"]').first()
+      const second = dock.locator('[data-slot="question-option"]').nth(1)
+
+      await expectQuestionBlocked(page)
+      await expect(first).toBeFocused()
+
+      await page.keyboard.press("ArrowDown")
+      await expect(second).toBeFocused()
+
+      await page.keyboard.press("Space")
+      await page.keyboard.press(`${modKey}+Enter`)
+      await expectQuestionOpen(page)
+    })
+  })
+})
+
+test("blocked question flow supports escape dismiss", async ({ page, sdk, gotoSession }) => {
+  await withDockSession(sdk, "e2e composer dock question escape", async (session) => {
+    await withDockSeed(sdk, session.id, async () => {
+      await gotoSession(session.id)
+
+      await seedSessionQuestion(sdk, {
+        sessionID: session.id,
+        questions: [
+          {
+            header: "Need input",
+            question: "Pick one option",
+            options: [
+              { label: "Continue", description: "Continue now" },
+              { label: "Stop", description: "Stop here" },
+            ],
+          },
+        ],
+      })
+
+      const dock = page.locator(questionDockSelector)
+      const first = dock.locator('[data-slot="question-option"]').first()
+
+      await expectQuestionBlocked(page)
+      await expect(first).toBeFocused()
+
+      await page.keyboard.press("Escape")
       await expectQuestionOpen(page)
     })
   })

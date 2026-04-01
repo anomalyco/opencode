@@ -8,6 +8,13 @@ export type Usage = { input: number; output: number }
 
 type Line = Record<string, unknown>
 
+type Flow =
+  | { type: "text"; text: string }
+  | { type: "reason"; text: string }
+  | { type: "tool-start"; id: string; name: string }
+  | { type: "tool-args"; text: string }
+  | { type: "usage"; usage: Usage }
+
 type Hit = {
   url: URL
   body: Record<string, unknown>
@@ -117,6 +124,276 @@ function toolArgsLine(value: string) {
 
 function bytes(input: Iterable<unknown>) {
   return Stream.fromIterable([...input].map(line)).pipe(Stream.encodeText)
+}
+
+function responseCreated(model: string) {
+  return {
+    type: "response.created",
+    sequence_number: 1,
+    response: {
+      id: "resp_test",
+      created_at: Math.floor(Date.now() / 1000),
+      model,
+      service_tier: null,
+    },
+  }
+}
+
+function responseCompleted(input: { seq: number; usage?: Usage }) {
+  return {
+    type: "response.completed",
+    sequence_number: input.seq,
+    response: {
+      incomplete_details: null,
+      service_tier: null,
+      usage: {
+        input_tokens: input.usage?.input ?? 0,
+        input_tokens_details: { cached_tokens: null },
+        output_tokens: input.usage?.output ?? 0,
+        output_tokens_details: { reasoning_tokens: null },
+      },
+    },
+  }
+}
+
+function responseMessage(id: string, seq: number) {
+  return {
+    type: "response.output_item.added",
+    sequence_number: seq,
+    output_index: 0,
+    item: { type: "message", id },
+  }
+}
+
+function responseText(id: string, text: string, seq: number) {
+  return {
+    type: "response.output_text.delta",
+    sequence_number: seq,
+    item_id: id,
+    delta: text,
+    logprobs: null,
+  }
+}
+
+function responseMessageDone(id: string, seq: number) {
+  return {
+    type: "response.output_item.done",
+    sequence_number: seq,
+    output_index: 0,
+    item: { type: "message", id },
+  }
+}
+
+function responseReason(id: string, seq: number) {
+  return {
+    type: "response.output_item.added",
+    sequence_number: seq,
+    output_index: 0,
+    item: { type: "reasoning", id, encrypted_content: null },
+  }
+}
+
+function responseReasonPart(id: string, seq: number) {
+  return {
+    type: "response.reasoning_summary_part.added",
+    sequence_number: seq,
+    item_id: id,
+    summary_index: 0,
+  }
+}
+
+function responseReasonText(id: string, text: string, seq: number) {
+  return {
+    type: "response.reasoning_summary_text.delta",
+    sequence_number: seq,
+    item_id: id,
+    summary_index: 0,
+    delta: text,
+  }
+}
+
+function responseReasonDone(id: string, seq: number) {
+  return {
+    type: "response.output_item.done",
+    sequence_number: seq,
+    output_index: 0,
+    item: { type: "reasoning", id, encrypted_content: null },
+  }
+}
+
+function responseTool(id: string, item: string, name: string, seq: number) {
+  return {
+    type: "response.output_item.added",
+    sequence_number: seq,
+    output_index: 0,
+    item: {
+      type: "function_call",
+      id: item,
+      call_id: id,
+      name,
+      arguments: "",
+      status: "in_progress",
+    },
+  }
+}
+
+function responseToolArgs(id: string, text: string, seq: number) {
+  return {
+    type: "response.function_call_arguments.delta",
+    sequence_number: seq,
+    output_index: 0,
+    item_id: id,
+    delta: text,
+  }
+}
+
+function responseToolDone(tool: { id: string; item: string; name: string; args: string }, seq: number) {
+  return {
+    type: "response.output_item.done",
+    sequence_number: seq,
+    output_index: 0,
+    item: {
+      type: "function_call",
+      id: tool.item,
+      call_id: tool.id,
+      name: tool.name,
+      arguments: tool.args,
+      status: "completed",
+    },
+  }
+}
+
+function choices(part: unknown) {
+  if (!part || typeof part !== "object") return
+  if (!("choices" in part) || !Array.isArray(part.choices)) return
+  const choice = part.choices[0]
+  if (!choice || typeof choice !== "object") return
+  return choice
+}
+
+function flow(item: Sse) {
+  const out: Flow[] = []
+  for (const part of [...item.head, ...item.tail]) {
+    const choice = choices(part)
+    const delta =
+      choice && "delta" in choice && choice.delta && typeof choice.delta === "object" ? choice.delta : undefined
+
+    if (delta && "content" in delta && typeof delta.content === "string") {
+      out.push({ type: "text", text: delta.content })
+    }
+
+    if (delta && "reasoning_content" in delta && typeof delta.reasoning_content === "string") {
+      out.push({ type: "reason", text: delta.reasoning_content })
+    }
+
+    if (delta && "tool_calls" in delta && Array.isArray(delta.tool_calls)) {
+      for (const tool of delta.tool_calls) {
+        if (!tool || typeof tool !== "object") continue
+        const fn = "function" in tool && tool.function && typeof tool.function === "object" ? tool.function : undefined
+        if ("id" in tool && typeof tool.id === "string" && fn && "name" in fn && typeof fn.name === "string") {
+          out.push({ type: "tool-start", id: tool.id, name: fn.name })
+        }
+        if (fn && "arguments" in fn && typeof fn.arguments === "string" && fn.arguments) {
+          out.push({ type: "tool-args", text: fn.arguments })
+        }
+      }
+    }
+
+    if (part && typeof part === "object" && "usage" in part && part.usage && typeof part.usage === "object") {
+      const raw = part.usage as Record<string, unknown>
+      if (typeof raw.prompt_tokens === "number" && typeof raw.completion_tokens === "number") {
+        out.push({
+          type: "usage",
+          usage: { input: raw.prompt_tokens, output: raw.completion_tokens },
+        })
+      }
+    }
+  }
+  return out
+}
+
+function responses(item: Sse, model: string) {
+  let seq = 1
+  let msg: string | undefined
+  let reason: string | undefined
+  let hasMsg = false
+  let hasReason = false
+  let call:
+    | {
+        id: string
+        item: string
+        name: string
+        args: string
+      }
+    | undefined
+  let usage: Usage | undefined
+  const lines: unknown[] = [responseCreated(model)]
+
+  for (const part of flow(item)) {
+    if (part.type === "text") {
+      msg ??= "msg_1"
+      if (!hasMsg) {
+        hasMsg = true
+        seq += 1
+        lines.push(responseMessage(msg, seq))
+      }
+      seq += 1
+      lines.push(responseText(msg, part.text, seq))
+      continue
+    }
+
+    if (part.type === "reason") {
+      reason ||= "rs_1"
+      if (!hasReason) {
+        hasReason = true
+        seq += 1
+        lines.push(responseReason(reason, seq))
+        seq += 1
+        lines.push(responseReasonPart(reason, seq))
+      }
+      seq += 1
+      lines.push(responseReasonText(reason, part.text, seq))
+      continue
+    }
+
+    if (part.type === "tool-start") {
+      call ||= { id: part.id, item: "fc_1", name: part.name, args: "" }
+      seq += 1
+      lines.push(responseTool(call.id, call.item, call.name, seq))
+      continue
+    }
+
+    if (part.type === "tool-args") {
+      if (!call) continue
+      call.args += part.text
+      seq += 1
+      lines.push(responseToolArgs(call.item, part.text, seq))
+      continue
+    }
+
+    usage = part.usage
+  }
+
+  if (msg) {
+    seq += 1
+    lines.push(responseMessageDone(msg, seq))
+  }
+  if (reason) {
+    seq += 1
+    lines.push(responseReasonDone(reason, seq))
+  }
+  if (call && !item.hang && !item.error) {
+    seq += 1
+    lines.push(responseToolDone(call, seq))
+  }
+  if (!item.hang && !item.error) lines.push(responseCompleted({ seq: seq + 1, usage }))
+  return { ...item, head: lines, tail: [] } satisfies Sse
+}
+
+function modelFrom(body: unknown) {
+  if (!body || typeof body !== "object") return "test-model"
+  if (!("model" in body) || typeof body.model !== "string") return "test-model"
+  return body.model
 }
 
 function send(item: Sse) {
@@ -293,6 +570,13 @@ function item(input: Item | Reply) {
   return input instanceof Reply ? input.item() : input
 }
 
+function hit(url: string, body: unknown) {
+  return {
+    url: new URL(url, "http://localhost"),
+    body: body && typeof body === "object" ? (body as Record<string, unknown>) : {},
+  } satisfies Hit
+}
+
 namespace TestLLMServer {
   export interface Service {
     readonly url: string
@@ -342,30 +626,24 @@ export class TestLLMServer extends ServiceMap.Service<TestLLMServer, TestLLMServ
         return first
       }
 
-      yield* router.add(
-        "POST",
-        "/v1/chat/completions",
-        Effect.gen(function* () {
-          const req = yield* HttpServerRequest.HttpServerRequest
-          const next = pull()
-          if (!next) return HttpServerResponse.text("unexpected request", { status: 500 })
-          const body = yield* req.json.pipe(Effect.orElseSucceed(() => ({})))
-          hits = [
-            ...hits,
-            {
-              url: new URL(req.originalUrl, "http://localhost"),
-              body: body && typeof body === "object" ? (body as Record<string, unknown>) : {},
-            },
-          ]
-          yield* notify()
-          if (next.type === "sse" && next.reset) {
-            yield* reset(next)
-            return HttpServerResponse.empty()
-          }
-          if (next.type === "sse") return send(next)
-          return fail(next)
-        }),
-      )
+      const handle = Effect.fn("TestLLMServer.handle")(function* (mode: "chat" | "responses") {
+        const req = yield* HttpServerRequest.HttpServerRequest
+        const next = pull()
+        if (!next) return HttpServerResponse.text("unexpected request", { status: 500 })
+        const body = yield* req.json.pipe(Effect.orElseSucceed(() => ({})))
+        hits = [...hits, hit(req.originalUrl, body)]
+        yield* notify()
+        if (next.type !== "sse") return fail(next)
+        if (mode === "responses") return send(responses(next, modelFrom(body)))
+        if (next.reset) {
+          yield* reset(next)
+          return HttpServerResponse.empty()
+        }
+        return send(next)
+      })
+
+      yield* router.add("POST", "/v1/chat/completions", handle("chat"))
+      yield* router.add("POST", "/v1/responses", handle("responses"))
 
       yield* server.serve(router.asHttpEffect())
 
