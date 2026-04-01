@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 
-const { DEFAULT_THEMES, allThemes, addTheme, hasTheme, resolveTheme } = await import(
+const { DEFAULT_THEMES, allThemes, addTheme, hasTheme, resolveTheme, resolveThemeModeState } = await import(
   "../../../src/cli/cmd/tui/context/theme"
 )
 
@@ -48,4 +48,32 @@ test("resolveTheme rejects circular color refs", () => {
   item.theme.primary = "one"
 
   expect(() => resolveTheme(item, "dark")).toThrow("Circular color reference")
+})
+
+test("resolveThemeModeState lets tui config force light mode", () => {
+  expect(
+    resolveThemeModeState({
+      detected: "dark",
+      config: "light",
+      persisted: "dark",
+      lock: "dark",
+    }),
+  ).toEqual({
+    mode: "light",
+    lock: "light",
+  })
+})
+
+test("resolveThemeModeState lets tui config reset back to system detection", () => {
+  expect(
+    resolveThemeModeState({
+      detected: "light",
+      config: "system",
+      persisted: "dark",
+      lock: "dark",
+    }),
+  ).toEqual({
+    mode: "light",
+    lock: undefined,
+  })
 })
