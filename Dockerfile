@@ -1,12 +1,12 @@
 FROM oven/bun:1.3.11-alpine AS build
 
-RUN apk add --no-cache nodejs build-base python3
+RUN apk add --no-cache nodejs-current build-base python3
 
 WORKDIR /app
 COPY . .
 RUN bun install --frozen-lockfile
 ENV OPENCODE_CHANNEL=latest OPENCODE_VERSION=0.0.0-enk
-RUN cd packages/opencode && bun run build --single --skip-embed-web-ui
+RUN cd packages/opencode && bun run build --single
 
 FROM alpine:3.21 AS dev
 
