@@ -1,0 +1,28 @@
+name: Build Dev
+
+on:
+  push:
+    branches: [develop]
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  build:
+    uses: team-monolith-product/tmn-gh-actions/.github/workflows/build_v2.yml@develop
+    with:
+      env: dev
+      target: develop
+      dockerTarget: dev
+      helmRepository: enk-opencode-hub-helm
+      propertyPath: jupyterhub.singleuser.image.tag
+      updateTargets: |
+        {
+          "aws": {
+            "imageName": "enk-ecr-opencode-all-dev",
+            "valueFilePath": ["aws-apne2-dev-hackathon.yaml"]
+          }
+        }
+    secrets:
+      MACHINE_TOKEN: ${{ secrets.MACHINE_TOKEN }}

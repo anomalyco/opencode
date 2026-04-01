@@ -36,6 +36,8 @@ export namespace Server {
 
   export const Default = lazy(() => ControlPlaneRoutes())
 
+  export let basePath = "/"
+
   export const ControlPlaneRoutes = (opts?: { cors?: string[] }): Hono => {
     const app = new Hono()
     return app
@@ -267,12 +269,29 @@ export namespace Server {
   export function listen(opts: {
     port: number
     hostname: string
+    basePath?: string
     mdns?: boolean
     mdnsDomain?: string
     cors?: string[]
   }) {
+    if (opts.basePath) {
+      basePath = opts.basePath.replace(/\/+$/, "") || "/"
+    }
     url = new URL(`http://${opts.hostname}:${opts.port}`)
-    const app = ControlPlaneRoutes({ cors: opts.cors })
+    const controlPlane = ControlPlaneRoutes({ cors: opts.cors })
+    let app: Hono
+    if (basePath !== "/") {
+      app = new Hono()
+      app.use("*", async (c, next) => {
+        const url = new URL(c.req.url)
+        if (url.pathname.startsWith(basePath)) {
+          url.pathname = url.pathname.slice(basePath.length) || "/"
+        }
+        return controlPlane.fetch(new Request(url.toString(), c.req.raw))
+      })
+    } else {
+      app = controlPlane
+    }
     const args = {
       hostname: opts.hostname,
       idleTimeout: 0,

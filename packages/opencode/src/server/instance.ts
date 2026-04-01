@@ -250,7 +250,11 @@ export const InstanceRoutes = (app?: Hono) =>
     )
     .all("/*", async (c) => {
       const embeddedWebUI = await embeddedUIPromise
-      const path = c.req.path
+      const { basePath } = await import("../server/server").then((m) => m.Server)
+      const rawPath = c.req.path
+      const path = basePath !== "/" && rawPath.startsWith(basePath)
+        ? rawPath.slice(basePath.length) || "/"
+        : rawPath
 
       if (embeddedWebUI) {
         const match = embeddedWebUI[path.replace(/^\//, "")] ?? embeddedWebUI["index.html"] ?? null
@@ -260,6 +264,13 @@ export const InstanceRoutes = (app?: Hono) =>
           c.header("Content-Type", file.type)
           if (file.type.startsWith("text/html")) {
             c.header("Content-Security-Policy", DEFAULT_CSP)
+            if (basePath !== "/") {
+              const html = await file.text()
+              const rewritten = html
+                .replace(/(href|src)="\//g, `$1="`)
+                .replace("<head>", `<head>\n    <base href="${basePath}/" />`)
+              return c.html(rewritten)
+            }
           }
           return c.body(await file.arrayBuffer())
         } else {
@@ -273,13 +284,21 @@ export const InstanceRoutes = (app?: Hono) =>
             host: "app.opencode.ai",
           },
         })
-        const match = response.headers.get("content-type")?.includes("text/html")
-          ? (await response.clone().text()).match(
-              /<script\b(?![^>]*\bsrc\s*=)[^>]*\bid=(['"])oc-theme-preload-script\1[^>]*>([\s\S]*?)<\/script>/i,
-            )
-          : undefined
-        const hash = match ? createHash("sha256").update(match[2]).digest("base64") : ""
-        response.headers.set("Content-Security-Policy", csp(hash))
+        const isHTML = response.headers.get("content-type")?.includes("text/html")
+        if (isHTML) {
+          let html = await response.text()
+          const scriptMatch = html.match(
+            /<script\b(?![^>]*\bsrc\s*=)[^>]*\bid=(['"])oc-theme-preload-script\1[^>]*>([\s\S]*?)<\/script>/i,
+          )
+          const hash = scriptMatch ? createHash("sha256").update(scriptMatch[2]).digest("base64") : ""
+          if (basePath !== "/") {
+            html = html
+              .replace(/(href|src)="\//g, `$1="`)
+              .replace("<head>", `<head>\n    <base href="${basePath}/" />`)
+          }
+          return c.html(html, { headers: { "Content-Security-Policy": csp(hash) } })
+        }
+        response.headers.set("Content-Security-Policy", csp(""))
         return response
       }
     })
