@@ -1,4 +1,4 @@
-import z from "zod"
+﻿import z from "zod"
 import os from "os"
 import { Tool } from "./tool"
 import path from "path"
@@ -337,6 +337,21 @@ async function run(
     },
   })
 
+  // Throttle metadata updates to at most once every 100 ms to avoid flooding
+  // the event loop when a command produces a very high volume of small chunks
+  // (e.g. compiler output, npm install). Final metadata is always flushed
+  // explicitly after the process exits.
+  const METADATA_THROTTLE_MS = 100
+  let lastMetadataTs = 0
+  const flushMetadata = () => {
+    ctx.metadata({
+      metadata: {
+        output: preview(output),
+        description: input.description,
+      },
+    })
+  }
+
   const exit = await CrossSpawnSpawner.runPromiseExit((spawner) =>
     Effect.gen(function* () {
       const handle = yield* spawner.spawn(cmd(input.shell, input.name, input.command, input.cwd, input.env))
@@ -345,12 +360,11 @@ async function run(
         Stream.runForEach(Stream.decodeText(handle.all), (chunk) =>
           Effect.sync(() => {
             output += chunk
-            ctx.metadata({
-              metadata: {
-                output: preview(output),
-                description: input.description,
-              },
-            })
+            const now = Date.now()
+            if (now - lastMetadataTs >= METADATA_THROTTLE_MS) {
+              lastMetadataTs = now
+              flushMetadata()
+            }
           }),
         ),
       )
@@ -382,6 +396,9 @@ async function run(
       return exit.kind === "exit" ? exit.code : null
     }).pipe(Effect.scoped, Effect.orDie),
   )
+
+  // Flush any buffered metadata that was skipped due to throttling.
+  flushMetadata()
 
   let code: number | null = null
   if (Exit.isSuccess(exit)) {

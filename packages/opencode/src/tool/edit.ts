@@ -1,4 +1,4 @@
-// the approaches in this edit tool are sourced from
+﻿// the approaches in this edit tool are sourced from
 // https://github.com/cline/cline/blob/main/evals/diff-edits/diff-apply/diff-06-23-25.ts
 // https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/utils/editCorrector.ts
 // https://github.com/cline/cline/blob/main/evals/diff-edits/diff-apply/diff-06-26-25.ts
@@ -20,6 +20,10 @@ import { Snapshot } from "@/snapshot"
 import { assertExternalDirectory } from "./external-directory"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
+
+// Skip diff computation for files larger than this threshold (bytes).
+// Myers diff is O(N^2) in the worst case and blocks the event loop on large files.
+const DIFF_SIZE_THRESHOLD = 100 * 1024 // 100 KB
 
 function normalizeLineEndings(text: string): string {
   return text.replaceAll("\r\n", "\n")
@@ -61,7 +65,12 @@ export const EditTool = Tool.define("edit", {
       if (params.oldString === "") {
         const existed = await Filesystem.exists(filePath)
         contentNew = params.newString
-        diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
+        // Only compute diff for small content to avoid blocking the event loop.
+        const newSize = Buffer.byteLength(contentNew, "utf-8")
+        diff =
+          newSize <= DIFF_SIZE_THRESHOLD
+            ? trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
+            : ""
         await ctx.ask({
           permission: "edit",
           patterns: [path.relative(Instance.worktree, filePath)],
@@ -94,9 +103,15 @@ export const EditTool = Tool.define("edit", {
 
       contentNew = replace(contentOld, old, next, params.replaceAll)
 
-      diff = trimDiff(
-        createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
-      )
+      // Only compute diff for small files to avoid blocking the event loop.
+      const oldSize = Buffer.byteLength(contentOld, "utf-8")
+      const newSize = Buffer.byteLength(contentNew, "utf-8")
+      if (oldSize <= DIFF_SIZE_THRESHOLD && newSize <= DIFF_SIZE_THRESHOLD) {
+        diff = trimDiff(
+          createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
+        )
+      }
+
       await ctx.ask({
         permission: "edit",
         patterns: [path.relative(Instance.worktree, filePath)],
@@ -114,10 +129,9 @@ export const EditTool = Tool.define("edit", {
         file: filePath,
         event: "change",
       })
-      contentNew = await Filesystem.readText(filePath)
-      diff = trimDiff(
-        createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
-      )
+      // Use the in-memory contentNew for diff computation instead of re-reading the file.
+      // Re-reading the file after Format.file() can be done lazily if the formatted
+      // content is needed; for the diff we already have both sides in memory.
       await FileTime.read(ctx.sessionID, filePath)
     })
 
@@ -128,9 +142,18 @@ export const EditTool = Tool.define("edit", {
       additions: 0,
       deletions: 0,
     }
-    for (const change of diffLines(contentOld, contentNew)) {
-      if (change.added) filediff.additions += change.count || 0
-      if (change.removed) filediff.deletions += change.count || 0
+    // Only run diffLines for small files — same O(N^2) concern as createTwoFilesPatch.
+    const oldDiffSize = Buffer.byteLength(contentOld, "utf-8")
+    const newDiffSize = Buffer.byteLength(contentNew, "utf-8")
+    if (oldDiffSize <= DIFF_SIZE_THRESHOLD && newDiffSize <= DIFF_SIZE_THRESHOLD) {
+      for (const change of diffLines(contentOld, contentNew)) {
+        if (change.added) filediff.additions += change.count || 0
+        if (change.removed) filediff.deletions += change.count || 0
+      }
+    } else {
+      // Approximate for large files
+      filediff.additions = contentNew.split("\n").length
+      filediff.deletions = contentOld.split("\n").length
     }
 
     ctx.metadata({
@@ -142,7 +165,8 @@ export const EditTool = Tool.define("edit", {
     })
 
     let output = "Edit applied successfully."
-    await LSP.touchFile(filePath, true)
+    // Notify LSP asynchronously so it does not block the edit response.
+    LSP.touchFile(filePath, true).catch(() => {})
     const diagnostics = await LSP.diagnostics()
     const normalizedFilePath = Filesystem.normalizePath(filePath)
     const issues = diagnostics[normalizedFilePath] ?? []

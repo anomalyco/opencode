@@ -1,4 +1,4 @@
-Writes a file to the local filesystem.
+﻿Writes a file to the local filesystem.
 
 Usage:
 - This tool will overwrite the existing file if there is one at the provided path.
@@ -6,3 +6,4 @@ Usage:
 - ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
 - NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
 - Only use emojis if the user explicitly requests it. Avoid writing emojis to files unless asked.
+- For large files (> ~150 lines), prefer using the Edit tool with targeted oldString/newString replacements instead of rewriting the entire file. This avoids blocking on large diff computation and is faster.
