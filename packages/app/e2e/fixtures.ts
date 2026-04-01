@@ -47,6 +47,7 @@ type LLMFixture = {
   wait: (count: number) => Promise<void>
   inputs: () => Promise<Record<string, unknown>[]>
   pending: () => Promise<number>
+  misses: () => Promise<Array<{ url: URL; body: Record<string, unknown> }>>
 }
 
 export const settingsKey = "settings.v3"
@@ -132,6 +133,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         wait: (count) => rt.runPromise(svc.wait(count)),
         inputs: () => rt.runPromise(svc.inputs),
         pending: () => rt.runPromise(svc.pending),
+        misses: () => rt.runPromise(svc.misses),
       })
     } finally {
       await rt.dispose()
