@@ -1434,7 +1434,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     class="relative size-8 p-0"
                     disabled
                     style={buttons()}
-                    aria-label="Reverting..."
+                    aria-label={`${language.t("common.loading")}${language.t("common.loading.ellipsis")}`}
                   >
                     <Icon name="arrow-up" class="opacity-0" />
                     <div class="absolute inset-0 flex items-center justify-center">
