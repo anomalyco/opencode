@@ -1,6 +1,7 @@
 import { test as base, expect, type Page } from "@playwright/test"
 import { ManagedRuntime } from "effect"
 import type { E2EWindow } from "../src/testing/terminal"
+import type { Item, Reply, Usage } from "../../opencode/test/lib/llm-server"
 import { TestLLMServer } from "../../opencode/test/lib/llm-server"
 import {
   healthPhase,
@@ -15,6 +16,24 @@ import {
 } from "./actions"
 import { createSdk, dirSlug, getWorktree, sessionPath } from "./utils"
 
+type LLMFixture = {
+  url: string
+  push: (...input: (Item | Reply)[]) => Promise<void>
+  text: (value: string, opts?: { usage?: Usage }) => Promise<void>
+  tool: (name: string, input: unknown) => Promise<void>
+  toolHang: (name: string, input: unknown) => Promise<void>
+  reason: (value: string, opts?: { text?: string; usage?: Usage }) => Promise<void>
+  fail: (message?: unknown) => Promise<void>
+  error: (status: number, body: unknown) => Promise<void>
+  hang: () => Promise<void>
+  hold: (value: string, wait: PromiseLike<unknown>) => Promise<void>
+  hits: () => Promise<Array<{ url: URL; body: Record<string, unknown> }>>
+  calls: () => Promise<number>
+  wait: (count: number) => Promise<void>
+  inputs: () => Promise<Record<string, unknown>[]>
+  pending: () => Promise<number>
+}
+
 export const settingsKey = "settings.v3"
 
 const seedModel = (() => {
@@ -28,7 +47,7 @@ const seedModel = (() => {
 })()
 
 type TestFixtures = {
-  llm: TestLLMServer["Service"]
+  llm: LLMFixture
   sdk: ReturnType<typeof createSdk>
   gotoSession: (sessionID?: string) => Promise<void>
   withProject: <T>(
@@ -56,7 +75,24 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   llm: async ({}, use) => {
     const rt = ManagedRuntime.make(TestLLMServer.layer)
     try {
-      await use(await rt.runPromise(TestLLMServer.asEffect()))
+      const svc = await rt.runPromise(TestLLMServer.asEffect())
+      await use({
+        url: svc.url,
+        push: (...input) => rt.runPromise(svc.push(...input)),
+        text: (value, opts) => rt.runPromise(svc.text(value, opts)),
+        tool: (name, input) => rt.runPromise(svc.tool(name, input)),
+        toolHang: (name, input) => rt.runPromise(svc.toolHang(name, input)),
+        reason: (value, opts) => rt.runPromise(svc.reason(value, opts)),
+        fail: (message) => rt.runPromise(svc.fail(message)),
+        error: (status, body) => rt.runPromise(svc.error(status, body)),
+        hang: () => rt.runPromise(svc.hang),
+        hold: (value, wait) => rt.runPromise(svc.hold(value, wait)),
+        hits: () => rt.runPromise(svc.hits),
+        calls: () => rt.runPromise(svc.calls),
+        wait: (count) => rt.runPromise(svc.wait(count)),
+        inputs: () => rt.runPromise(svc.inputs),
+        pending: () => rt.runPromise(svc.pending),
+      })
     } finally {
       await rt.dispose()
     }
