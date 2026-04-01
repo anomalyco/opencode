@@ -330,9 +330,9 @@ export namespace Snapshot {
                     yield* remove(file)
                   })
 
-                  for (const [hash, list] of groupByHash) {
-                    for (let i = 0; i < list.length; i += 100) {
-                      const chunk = list.slice(i, i + 100)
+                  for (const [hash, filesByHash] of groupByHash) {
+                    for (let i = 0; i < filesByHash.length; i += 100) {
+                      const chunk = filesByHash.slice(i, i + 100)
                       if (chunk.length === 1) {
                         yield* revertSingle(hash, chunk[0]!)
                         continue
