@@ -23,6 +23,8 @@ type ModelKey = {
   modelID: string
 }
 
+type AssistantModel = ModelKey | "disabled" | undefined
+
 export interface Settings {
   general: {
     autoSave: boolean
@@ -53,7 +55,7 @@ export interface Settings {
     autoApprove: boolean
   }
   assistant: {
-    model?: ModelKey
+    model: AssistantModel
   }
   notifications: NotificationSettings
   sounds: SoundSettings
@@ -142,7 +144,7 @@ const defaultSettings: Settings = {
     autoApprove: false,
   },
   assistant: {
-    model: undefined,
+    model: "disabled",
   },
   notifications: {
     agent: true,
@@ -328,8 +330,8 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         },
       },
       assistant: {
-        model: createMemo(() => store.assistant?.model),
-        setModel(value: ModelKey | undefined) {
+        model: withFallback(() => store.assistant?.model, defaultSettings.assistant.model),
+        setModel(value: AssistantModel) {
           setStore("assistant", "model", value)
         },
       },

@@ -167,11 +167,6 @@ function join(root: string, child: string) {
   return root.replace(/[\\/]+$/, "") + "/" + child
 }
 
-function clip(text: string, limit: number) {
-  if (text.length <= limit) return text
-  return text.slice(0, limit - 1).trimEnd() + "..."
-}
-
 export function QuickAssistant() {
   const params = useParams()
   const command = useCommand()
@@ -225,10 +220,12 @@ export function QuickAssistant() {
     if (!id) return false
     return working(data()?.session_status[id], list())
   })
+  const enabled = createMemo(() => settings.assistant.model() !== "disabled")
   const chosen = createMemo(() => {
     const store = data()
-    if (!store) return
-    return choose(store, settings.assistant.model(), openclaw())
+    const model = settings.assistant.model()
+    if (!store || model === "disabled") return
+    return choose(store, model, openclaw())
   })
   const currentChild = createMemo(() => {
     const current = activeDir()
@@ -241,28 +238,12 @@ export function QuickAssistant() {
     if (!id) return
     return currentData()?.session.find((item) => item.id === id)
   })
-  const currentMessages = createMemo(() => {
-    const id = params.id
-    if (!id) return [] as Message[]
-    return currentData()?.message[id] ?? []
-  })
   const currentContext = createMemo(() => {
     const current = activeDir()
     const id = params.id
     if (!current || !id) return ""
     const session = currentSession()
-    const messages = currentMessages()
-    const recent = messages
-      .slice(-8)
-      .map((item) => {
-        const text = clip(
-          render(currentData()?.part[item.id]) || (item.role === "assistant" ? "[no text parts]" : ""),
-          500,
-        )
-        if (!text) return undefined
-        return `${item.role}: ${text}`
-      })
-      .filter((item): item is string => !!item)
+    const messages = currentData()?.message[id] ?? []
 
     return [
       "<current-opencode-session>",
@@ -270,9 +251,6 @@ export function QuickAssistant() {
       `session_id: ${id}`,
       `title: ${session?.title || "Untitled"}`,
       `message_count: ${messages.length}`,
-      ...(recent.length > 0
-        ? ["recent_messages:", ...recent.map((item) => `- ${item}`)]
-        : ["recent_messages: unavailable"]),
       "</current-opencode-session>",
     ].join("\n")
   })
@@ -384,6 +362,7 @@ export function QuickAssistant() {
       description: "Open the floating project helper",
       category: language.t("command.category.session"),
       keybind: "mod+shift+j",
+      disabled: !enabled(),
       onSelect: toggle,
     },
   ])
@@ -584,7 +563,7 @@ export function QuickAssistant() {
     if (!busy()) setState("loading", false)
   }
 
-  const dock = createMemo(() => !!sessionID() || busy())
+  const dock = createMemo(() => enabled() && !!activeDir())
 
   return (
     <>
@@ -624,6 +603,11 @@ export function QuickAssistant() {
                 class="min-h-18 flex-1 resize-none bg-transparent text-14-regular text-text-strong outline-none placeholder:text-text-weaker"
                 onInput={(event) => setState("text", event.currentTarget.value)}
                 onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault()
+                    setSaved("open", false)
+                    return
+                  }
                   if (event.key !== "Enter" || event.shiftKey) return
                   event.preventDefault()
                   if (busy()) {
