@@ -65,8 +65,7 @@ export const WriteTool = Tool.define("write", {
     await FileTime.read(ctx.sessionID, filepath)
 
     let output = "Wrote file successfully."
-    // Notify LSP asynchronously so it does not block the write response.
-    LSP.touchFile(filepath, true).catch(() => {})
+    await LSP.touchFile(filepath, true)
     const diagnostics = await LSP.diagnostics()
     const normalizedFilepath = Filesystem.normalizePath(filepath)
     let projectDiagnosticsCount = 0

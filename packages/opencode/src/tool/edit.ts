@@ -129,9 +129,7 @@ export const EditTool = Tool.define("edit", {
         file: filePath,
         event: "change",
       })
-      // Use the in-memory contentNew for diff computation instead of re-reading the file.
-      // Re-reading the file after Format.file() can be done lazily if the formatted
-      // content is needed; for the diff we already have both sides in memory.
+      contentNew = await Filesystem.readText(filePath)
       await FileTime.read(ctx.sessionID, filePath)
     })
 
@@ -165,8 +163,7 @@ export const EditTool = Tool.define("edit", {
     })
 
     let output = "Edit applied successfully."
-    // Notify LSP asynchronously so it does not block the edit response.
-    LSP.touchFile(filePath, true).catch(() => {})
+    await LSP.touchFile(filePath, true)
     const diagnostics = await LSP.diagnostics()
     const normalizedFilePath = Filesystem.normalizePath(filePath)
     const issues = diagnostics[normalizedFilePath] ?? []
