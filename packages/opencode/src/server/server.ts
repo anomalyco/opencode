@@ -39,7 +39,7 @@ export namespace Server {
 
   export const ControlPlaneRoutes = (opts?: { cors?: string[] }): Hono => {
     const app = new Hono()
-    return app
+    app
       .onError(errorHandler(log))
       .use((c, next) => {
         // Allow CORS preflight requests to succeed without auth.
@@ -235,13 +235,15 @@ export namespace Server {
           return c.json(true)
         },
       )
-      .use(WorkspaceRouterMiddleware)
+
+    // 注册 Others 模块路由（包含认证中间件），在 WorkspaceRouterMiddleware 之前
+    registerOthersRoutes(app)
+
+    return app.use(WorkspaceRouterMiddleware)
   }
 
   export function createApp(opts: { cors?: string[] }) {
-    const app = ControlPlaneRoutes(opts)
-    registerOthersRoutes(app)
-    return app
+    return ControlPlaneRoutes(opts)
   }
 
   export async function openapi() {
@@ -276,7 +278,6 @@ export namespace Server {
   }) {
     url = new URL(`http://${opts.hostname}:${opts.port}`)
     const app = ControlPlaneRoutes({ cors: opts.cors })
-    registerOthersRoutes(app)
     const args = {
       hostname: opts.hostname,
       idleTimeout: 0,
