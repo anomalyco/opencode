@@ -27,3 +27,4 @@ rekram1-node
 -robinmordasiewicz
 -spider-yamet clawdbot/llm psychosis, spam pinging the team
 thdxr
+-toastythebot
