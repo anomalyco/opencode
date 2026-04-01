@@ -16,7 +16,7 @@ import {
   on,
   onCleanup,
 } from "solid-js"
-import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
+import { win32DisableProcessedInput, win32InstallCtrlCGuard, win32ResetTerminal } from "./win32"
 import { Flag } from "@/flag/flag"
 import semver from "semver"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
@@ -182,6 +182,8 @@ export function tui(input: {
     win32DisableProcessedInput()
 
     const onExit = async () => {
+      // Reset terminal on Windows to prevent ANSI corruption (issue #20224)
+      win32ResetTerminal()
       unguard?.()
       resolve()
     }

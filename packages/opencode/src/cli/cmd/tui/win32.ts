@@ -1,7 +1,11 @@
 import { dlopen, ptr } from "bun:ffi"
 
+const STD_OUTPUT_HANDLE = -11
+const STD_ERROR_HANDLE = -12
 const STD_INPUT_HANDLE = -10
 const ENABLE_PROCESSED_INPUT = 0x0001
+const ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
+const ENABLE_WRAP_AT_EOL_OUTPUT = 0x0002
 
 const kernel = () =>
   dlopen("kernel32.dll", {
@@ -20,6 +24,41 @@ function load() {
     return true
   } catch {
     return false
+  }
+}
+
+/**
+ * Reset terminal to a clean state on Windows.
+ * This clears any pending output and restores proper console modes.
+ */
+export function win32ResetTerminal() {
+  if (process.platform !== "win32") return
+  if (!load()) return
+
+  try {
+    // Clear any pending output buffers
+    const outputHandle = k32!.symbols.GetStdHandle(STD_OUTPUT_HANDLE)
+    const errorHandle = k32!.symbols.GetStdHandle(STD_ERROR_HANDLE)
+
+    // Reset output console modes to enable proper ANSI processing
+    const buf = new Uint32Array(1)
+    if (k32!.symbols.GetConsoleMode(outputHandle, ptr(buf)) !== 0) {
+      const mode = buf[0]! | ENABLE_VIRTUAL_TERMINAL_PROCESSING | ENABLE_WRAP_AT_EOL_OUTPUT
+      k32!.symbols.SetConsoleMode(outputHandle, mode)
+    }
+    if (k32!.symbols.GetConsoleMode(errorHandle, ptr(buf)) !== 0) {
+      const mode = buf[0]! | ENABLE_VIRTUAL_TERMINAL_PROCESSING | ENABLE_WRAP_AT_EOL_OUTPUT
+      k32!.symbols.SetConsoleMode(errorHandle, mode)
+    }
+
+    // Clear the screen and reset cursor position
+    process.stdout.write("\x1b[2J\x1b[H")
+    // Reset all SGR (Select Graphic Rendition) attributes
+    process.stdout.write("\x1b[0m")
+    // Disable any alternate screen buffer
+    process.stdout.write("\x1b[?1049l")
+  } catch {
+    // Ignore errors during terminal reset
   }
 }
 

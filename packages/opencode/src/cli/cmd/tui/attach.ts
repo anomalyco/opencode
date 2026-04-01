@@ -1,7 +1,7 @@
 import { cmd } from "../cmd"
 import { UI } from "@/cli/ui"
 import { tui } from "./app"
-import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
+import { win32DisableProcessedInput, win32InstallCtrlCGuard, win32ResetTerminal } from "./win32"
 import { TuiConfig } from "@/config/tui"
 import { Instance } from "@/project/instance"
 import { existsSync } from "fs"
@@ -82,6 +82,8 @@ export const AttachCommand = cmd({
         headers,
       })
     } finally {
+      // Reset terminal on Windows to prevent ANSI corruption (issue #20224)
+      win32ResetTerminal()
       unguard?.()
     }
   },
