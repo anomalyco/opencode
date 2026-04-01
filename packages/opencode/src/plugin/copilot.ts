@@ -306,6 +306,13 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
         output.headers["anthropic-beta"] = "interleaved-thinking-2025-05-14"
       }
 
+      // Enable 1M context window for Claude Opus 4.6+ via Copilot
+      if (incoming.model.id.includes("claude-opus-4.6")) {
+        const existing = output.headers["anthropic-beta"]
+        const contextBeta = "context-1m-2025-08-07"
+        output.headers["anthropic-beta"] = existing ? `${existing},${contextBeta}` : contextBeta
+      }
+
       const parts = await sdk.session
         .message({
           path: {
