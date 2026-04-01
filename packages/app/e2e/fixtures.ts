@@ -3,6 +3,7 @@ import { ManagedRuntime } from "effect"
 import type { E2EWindow } from "../src/testing/terminal"
 import type { Item, Reply, Usage } from "../../opencode/test/lib/llm-server"
 import { TestLLMServer } from "../../opencode/test/lib/llm-server"
+import { startBackend } from "./backend"
 import {
   healthPhase,
   cleanupSession,
@@ -19,6 +20,20 @@ import { createSdk, dirSlug, getWorktree, sessionPath } from "./utils"
 type LLMFixture = {
   url: string
   push: (...input: (Item | Reply)[]) => Promise<void>
+  pushMatch: (
+    match: (hit: { url: URL; body: Record<string, unknown> }) => boolean,
+    ...input: (Item | Reply)[]
+  ) => Promise<void>
+  textMatch: (
+    match: (hit: { url: URL; body: Record<string, unknown> }) => boolean,
+    value: string,
+    opts?: { usage?: Usage },
+  ) => Promise<void>
+  toolMatch: (
+    match: (hit: { url: URL; body: Record<string, unknown> }) => boolean,
+    name: string,
+    input: unknown,
+  ) => Promise<void>
   text: (value: string, opts?: { usage?: Usage }) => Promise<void>
   tool: (name: string, input: unknown) => Promise<void>
   toolHang: (name: string, input: unknown) => Promise<void>
@@ -46,32 +61,54 @@ const seedModel = (() => {
   }
 })()
 
+type ProjectHandle = {
+  directory: string
+  slug: string
+  gotoSession: (sessionID?: string) => Promise<void>
+  trackSession: (sessionID: string, directory?: string) => void
+  trackDirectory: (directory: string) => void
+  sdk: ReturnType<typeof createSdk>
+}
+
+type ProjectOptions = {
+  extra?: string[]
+  model?: { providerID: string; modelID: string }
+  setup?: (directory: string) => Promise<void>
+  beforeGoto?: (project: { directory: string; sdk: ReturnType<typeof createSdk> }) => Promise<void>
+}
+
 type TestFixtures = {
   llm: LLMFixture
   sdk: ReturnType<typeof createSdk>
   gotoSession: (sessionID?: string) => Promise<void>
-  withProject: <T>(
-    callback: (project: {
-      directory: string
-      slug: string
-      gotoSession: (sessionID?: string) => Promise<void>
-      trackSession: (sessionID: string, directory?: string) => void
-      trackDirectory: (directory: string) => void
-    }) => Promise<T>,
-    options?: {
-      extra?: string[]
-      model?: { providerID: string; modelID: string }
-      setup?: (directory: string) => Promise<void>
-    },
-  ) => Promise<T>
+  withProject: <T>(callback: (project: ProjectHandle) => Promise<T>, options?: ProjectOptions) => Promise<T>
+  withBackendProject: <T>(callback: (project: ProjectHandle) => Promise<T>, options?: ProjectOptions) => Promise<T>
 }
 
 type WorkerFixtures = {
+  backend: {
+    url: string
+    sdk: (directory?: string) => ReturnType<typeof createSdk>
+  }
   directory: string
   slug: string
 }
 
 export const test = base.extend<TestFixtures, WorkerFixtures>({
+  backend: [
+    async ({}, use, workerInfo) => {
+      const handle = await startBackend(`w${workerInfo.workerIndex}`)
+      try {
+        await use({
+          url: handle.url,
+          sdk: (directory?: string) => createSdk(directory, handle.url),
+        })
+      } finally {
+        await handle.stop()
+      }
+    },
+    { scope: "worker" },
+  ],
   llm: async ({}, use) => {
     const rt = ManagedRuntime.make(TestLLMServer.layer)
     try {
@@ -79,6 +116,9 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       await use({
         url: svc.url,
         push: (...input) => rt.runPromise(svc.push(...input)),
+        pushMatch: (match, ...input) => rt.runPromise(svc.pushMatch(match, ...input)),
+        textMatch: (match, value, opts) => rt.runPromise(svc.textMatch(match, value, opts)),
+        toolMatch: (match, name, input) => rt.runPromise(svc.toolMatch(match, name, input)),
         text: (value, opts) => rt.runPromise(svc.text(value, opts)),
         tool: (name, input) => rt.runPromise(svc.tool(name, input)),
         toolHang: (name, input) => rt.runPromise(svc.toolHang(name, input)),
@@ -146,44 +186,70 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     await use(gotoSession)
   },
   withProject: async ({ page }, use) => {
-    await use(async (callback, options) => {
-      const root = await createTestProject()
-      const sessions = new Map<string, string>()
-      const dirs = new Set<string>()
-      await options?.setup?.(root)
-      await seedStorage(page, { directory: root, extra: options?.extra, model: options?.model })
-
-      const gotoSession = async (sessionID?: string) => {
-        await page.goto(sessionPath(root, sessionID))
-        await waitSession(page, { directory: root, sessionID })
-        const current = sessionIDFromUrl(page.url())
-        if (current) trackSession(current)
-      }
-
-      const trackSession = (sessionID: string, directory?: string) => {
-        sessions.set(sessionID, directory ?? root)
-      }
-
-      const trackDirectory = (directory: string) => {
-        if (directory !== root) dirs.add(directory)
-      }
-
-      try {
-        await gotoSession()
-        const slug = await waitSlug(page)
-        return await callback({ directory: root, slug, gotoSession, trackSession, trackDirectory })
-      } finally {
-        setHealthPhase(page, "cleanup")
-        await Promise.allSettled(
-          Array.from(sessions, ([sessionID, directory]) => cleanupSession({ sessionID, directory })),
-        )
-        await Promise.allSettled(Array.from(dirs, (directory) => cleanupTestProject(directory)))
-        await cleanupTestProject(root)
-        setHealthPhase(page, "test")
-      }
-    })
+    await use((callback, options) =>
+      runProject(page, callback, options),
+    )
+  },
+  withBackendProject: async ({ page, backend }, use) => {
+    await use((callback, options) =>
+      runProject(page, callback, { ...options, serverUrl: backend.url, sdk: backend.sdk }),
+    )
   },
 })
+
+async function runProject<T>(
+  page: Page,
+  callback: (project: ProjectHandle) => Promise<T>,
+  options?: ProjectOptions & {
+    serverUrl?: string
+    sdk?: (directory?: string) => ReturnType<typeof createSdk>
+  },
+) {
+  const url = options?.serverUrl
+  const root = await createTestProject(url ? { serverUrl: url } : undefined)
+  const sdk = options?.sdk?.(root) ?? createSdk(root, url)
+  const sessions = new Map<string, string>()
+  const dirs = new Set<string>()
+  await options?.setup?.(root)
+  await seedStorage(page, {
+    directory: root,
+    extra: options?.extra,
+    model: options?.model,
+    serverUrl: url,
+  })
+
+  const gotoSession = async (sessionID?: string) => {
+    await page.goto(sessionPath(root, sessionID))
+    await waitSession(page, { directory: root, sessionID, serverUrl: url })
+    const current = sessionIDFromUrl(page.url())
+    if (current) trackSession(current)
+  }
+
+  const trackSession = (sessionID: string, directory?: string) => {
+    sessions.set(sessionID, directory ?? root)
+  }
+
+  const trackDirectory = (directory: string) => {
+    if (directory !== root) dirs.add(directory)
+  }
+
+  try {
+    await options?.beforeGoto?.({ directory: root, sdk })
+    await gotoSession()
+    const slug = await waitSlug(page)
+    return await callback({ directory: root, slug, gotoSession, trackSession, trackDirectory, sdk })
+  } finally {
+    setHealthPhase(page, "cleanup")
+    await Promise.allSettled(
+      Array.from(sessions, ([sessionID, directory]) =>
+        cleanupSession({ sessionID, directory, serverUrl: url }),
+      ),
+    )
+    await Promise.allSettled(Array.from(dirs, (directory) => cleanupTestProject(directory)))
+    await cleanupTestProject(root)
+    setHealthPhase(page, "test")
+  }
+}
 
 async function seedStorage(
   page: Page,
@@ -191,6 +257,7 @@ async function seedStorage(
     directory: string
     extra?: string[]
     model?: { providerID: string; modelID: string }
+    serverUrl?: string
   },
 ) {
   await seedProjects(page, input)
