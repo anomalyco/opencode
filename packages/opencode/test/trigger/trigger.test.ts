@@ -129,6 +129,35 @@ describe("trigger service", () => {
     })
   })
 
+  test("loads persisted webhook secret after instance disposal", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    const created = await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        return await Trigger.create({
+          interval: 5_000,
+          webhook_secret: "topsecret",
+        })
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => Instance.dispose(),
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        expect(await Trigger.get(created.id)).toMatchObject({
+          id: created.id,
+          webhook_secret: "topsecret",
+        })
+      },
+    })
+  })
+
   test("fires command action for an idle session", async () => {
     await using tmp = await tmpdir({ git: true })
 

@@ -6,6 +6,7 @@ import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 
 const Params = z.object({ id: z.string() })
+const AuthError = z.object({ message: z.string() }).meta({ ref: "UnauthorizedError" })
 
 export const TriggerRoutes = lazy(() =>
   new Hono()
@@ -91,6 +92,14 @@ export const TriggerRoutes = lazy(() =>
               },
             },
           },
+          401: {
+            description: "Unauthorized",
+            content: {
+              "application/json": {
+                schema: resolver(AuthError),
+              },
+            },
+          },
           ...errors(404),
         },
       }),
@@ -114,12 +123,25 @@ export const TriggerRoutes = lazy(() =>
               },
             },
           },
+          401: {
+            description: "Unauthorized",
+            content: {
+              "application/json": {
+                schema: resolver(AuthError),
+              },
+            },
+          },
           ...errors(404),
         },
       }),
       validator("param", Params),
       async (c) => {
-        return c.json(await Trigger.fire(c.req.valid("param").id))
+        const id = c.req.valid("param").id
+        const item = await Trigger.get(id)
+        if (item.webhook_secret && c.req.header("X-Trigger-Secret") !== item.webhook_secret) {
+          return c.json({ message: "Unauthorized" }, 401)
+        }
+        return c.json(await Trigger.fire(id))
       },
     )
     .post(

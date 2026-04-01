@@ -113,6 +113,7 @@ export const TriggerTable = sqliteTable(
       .references(() => ProjectTable.id, { onDelete: "cascade" }),
     schedule: text({ mode: "json" }).notNull().$type<Trigger.Info["schedule"]>(),
     action: text({ mode: "json" }).$type<Trigger.Info["action"]>(),
+    webhook_secret: text(),
     enabled: integer({ mode: "boolean" }).notNull(),
     runs: integer().notNull(),
     ...Timestamps,
