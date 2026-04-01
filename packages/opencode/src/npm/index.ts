@@ -9,6 +9,7 @@ import { readdir, rm } from "fs/promises"
 import { Filesystem } from "@/util/filesystem"
 import { Flock } from "@/util/flock"
 import { Arborist } from "@npmcli/arborist"
+import { pathToFileURL } from "url"
 
 export namespace Npm {
   const log = Log.create({ service: "npm" })
@@ -22,6 +23,11 @@ export namespace Npm {
 
   function directory(pkg: string) {
     return path.join(Global.Path.cache, "packages", pkg)
+  }
+
+  function resolveEntryPoint(pkg: string, dir: string): string {
+    const resolved = import.meta.resolve(pkg, pathToFileURL(dir))
+    return resolved
   }
 
   export async function outdated(pkg: string, cachedVersion: string): Promise<boolean> {
@@ -59,10 +65,9 @@ export namespace Npm {
     })
     const tree = await arborist.loadVirtual().catch(() => {})
     if (tree) {
-      const first = tree.edgesOut.values().next().value?.to
+      const first = tree.edgesOut.values().next().value?.name
       if (first) {
-        log.info("package already installed", { pkg })
-        return first.path
+        return resolveEntryPoint(first, dir)
       }
     }
 
@@ -81,9 +86,9 @@ export namespace Npm {
         )
       })
 
-    const first = result.edgesOut.values().next().value?.to
+    const first = result.edgesOut.values().next().value?.name
     if (!first) throw new InstallFailedError({ pkg })
-    return first.path
+    return resolveEntryPoint(first, dir)
   }
 
   export async function install(dir: string) {
