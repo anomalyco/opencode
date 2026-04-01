@@ -667,6 +667,14 @@ export namespace Provider {
     },
     "cloudflare-workers-ai": async (input) => {
       const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID")
+      if (!accountId)
+        return {
+          autoload: false,
+          async getModel() {
+            throw new Error("CLOUDFLARE_ACCOUNT_ID is missing. Set it with: export CLOUDFLARE_ACCOUNT_ID=<your-account-id>")
+          },
+        }
+
       const apiKey = await iife(async () => {
         const envToken = Env.get("CLOUDFLARE_API_KEY")
         if (envToken) return envToken
@@ -676,17 +684,17 @@ export namespace Provider {
       })
 
       return {
-        autoload: !!accountId && !!apiKey,
+        autoload: !!apiKey,
         options: {
           apiKey,
         },
         async getModel(sdk: any, modelID: string) {
-          if (!accountId)
-            throw new Error("CLOUDFLARE_ACCOUNT_ID is missing. Set it with: export CLOUDFLARE_ACCOUNT_ID=<your-account-id>")
           return sdk.languageModel(modelID)
         },
         vars(_options) {
-          return accountId ? { CLOUDFLARE_ACCOUNT_ID: accountId } : {}
+          return {
+            CLOUDFLARE_ACCOUNT_ID: accountId,
+          }
         },
       }
     },
