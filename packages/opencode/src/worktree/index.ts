@@ -18,6 +18,7 @@ import { NodePath } from "@effect/platform-node"
 import { AppFileSystem } from "@/filesystem"
 import { makeRuntime } from "@/effect/run-service"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+import { InstanceState } from "@/effect/instance-state"
 
 export namespace Worktree {
   const log = Log.create({ service: "worktree" })
@@ -199,6 +200,7 @@ export namespace Worktree {
 
       const MAX_NAME_ATTEMPTS = 26
       const candidate = Effect.fn("Worktree.candidate")(function* (root: string, base?: string) {
+        const ctx = yield* InstanceState.context
         for (const attempt of Array.from({ length: MAX_NAME_ATTEMPTS }, (_, i) => i)) {
           const name = base ? (attempt === 0 ? base : `${base}-${Slug.create()}`) : Slug.create()
           const branch = `opencode/${name}`
@@ -207,7 +209,7 @@ export namespace Worktree {
           if (yield* fs.exists(directory).pipe(Effect.orDie)) continue
 
           const ref = `refs/heads/${branch}`
-          const branchCheck = yield* git(["show-ref", "--verify", "--quiet", ref], { cwd: Instance.worktree })
+          const branchCheck = yield* git(["show-ref", "--verify", "--quiet", ref], { cwd: ctx.worktree })
           if (branchCheck.code === 0) continue
 
           return Info.parse({ name, branch, directory })
@@ -216,11 +218,12 @@ export namespace Worktree {
       })
 
       const makeWorktreeInfo = Effect.fn("Worktree.makeWorktreeInfo")(function* (name?: string) {
-        if (Instance.project.vcs !== "git") {
+        const ctx = yield* InstanceState.context
+        if (ctx.project.vcs !== "git") {
           throw new NotGitError({ message: "Worktrees are only supported for git projects" })
         }
 
-        const root = pathSvc.join(Global.Path.data, "worktree", Instance.project.id)
+        const root = pathSvc.join(Global.Path.data, "worktree", ctx.project.id)
         yield* fs.makeDirectory(root, { recursive: true }).pipe(Effect.orDie)
 
         const base = name ? slugify(name) : ""
@@ -228,18 +231,20 @@ export namespace Worktree {
       })
 
       const setup = Effect.fnUntraced(function* (info: Info) {
+        const ctx = yield* InstanceState.context
         const created = yield* git(["worktree", "add", "--no-checkout", "-b", info.branch, info.directory], {
-          cwd: Instance.worktree,
+          cwd: ctx.worktree,
         })
         if (created.code !== 0) {
           throw new CreateFailedError({ message: created.stderr || created.text || "Failed to create git worktree" })
         }
 
-        yield* project.addSandbox(Instance.project.id, info.directory).pipe(Effect.catch(() => Effect.void))
+        yield* project.addSandbox(ctx.project.id, info.directory).pipe(Effect.catch(() => Effect.void))
       })
 
       const boot = Effect.fnUntraced(function* (info: Info, startCommand?: string) {
-        const projectID = Instance.project.id
+        const ctx = yield* InstanceState.context
+        const projectID = ctx.project.id
         const extra = startCommand?.trim()
 
         const populated = yield* git(["reset", "--hard"], { cwd: info.directory })

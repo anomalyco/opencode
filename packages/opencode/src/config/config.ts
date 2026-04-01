@@ -1,7 +1,6 @@
 import { Log } from "../util/log"
 import path from "path"
 import { pathToFileURL } from "url"
-import { createRequire } from "module"
 import os from "os"
 import z from "zod"
 import { ModelsDev } from "../provider/models"
@@ -21,7 +20,6 @@ import {
 } from "jsonc-parser"
 import { Instance, type InstanceContext } from "../project/instance"
 import { LSPServer } from "../lsp/server"
-import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
 import { constants, existsSync } from "fs"
@@ -29,20 +27,18 @@ import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
 import { Event } from "../server/event"
 import { Glob } from "../util/glob"
-import { PackageRegistry } from "@/bun/registry"
-import { online, proxied } from "@/util/network"
 import { iife } from "@/util/iife"
 import { Account } from "@/account"
 import { isRecord } from "@/util/record"
 import { ConfigPaths } from "./paths"
 import { Filesystem } from "@/util/filesystem"
-import { Process } from "@/util/process"
 import { AppFileSystem } from "@/filesystem"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { Duration, Effect, Layer, Option, ServiceMap } from "effect"
 import { Flock } from "@/util/flock"
 import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "@/plugin/shared"
+import { Npm } from "@/npm"
 
 export namespace Config {
   const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
@@ -91,8 +87,7 @@ export namespace Config {
   }
 
   export async function installDependencies(dir: string, input?: InstallInput) {
-    if (!(await needsInstall(dir))) return
-
+    if (!(await isWritable(dir))) return
     await using _ = await Flock.acquire(`config-install:${Filesystem.resolve(dir)}`, {
       signal: input?.signal,
       onWait: (tick) =>
@@ -103,13 +98,10 @@ export namespace Config {
           waited: tick.waited,
         }),
     })
-
     input?.signal?.throwIfAborted()
-    if (!(await needsInstall(dir))) return
 
     const pkg = path.join(dir, "package.json")
     const target = Installation.isLocal() ? "*" : Installation.VERSION
-
     const json = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => ({
       dependencies: {},
     }))
@@ -122,51 +114,12 @@ export namespace Config {
     const gitignore = path.join(dir, ".gitignore")
     const ignore = await Filesystem.exists(gitignore)
     if (!ignore) {
-      await Filesystem.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
+      await Filesystem.write(
+        gitignore,
+        ["node_modules", "package.json", "package-lock.json", "bun.lock", ".gitignore"].join("\n"),
+      )
     }
-
-    // Bun can race cache writes on Windows when installs run in parallel across dirs.
-    // Serialize installs globally on win32, but keep parallel installs on other platforms.
-    await using __ =
-      process.platform === "win32"
-        ? await Flock.acquire("config-install:bun", {
-            signal: input?.signal,
-          })
-        : undefined
-
-    await BunProc.run(
-      [
-        "install",
-        // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
-        ...(proxied() || process.env.CI ? ["--no-cache"] : []),
-      ],
-      {
-        cwd: dir,
-        abort: input?.signal,
-      },
-    ).catch((err) => {
-      if (err instanceof Process.RunFailedError) {
-        const detail = {
-          dir,
-          cmd: err.cmd,
-          code: err.code,
-          stdout: err.stdout.toString(),
-          stderr: err.stderr.toString(),
-        }
-        if (Flag.OPENCODE_STRICT_CONFIG_DEPS) {
-          log.error("failed to install dependencies", detail)
-          throw err
-        }
-        log.warn("failed to install dependencies", detail)
-        return
-      }
-
-      if (Flag.OPENCODE_STRICT_CONFIG_DEPS) {
-        log.error("failed to install dependencies", { dir, error: err })
-        throw err
-      }
-      log.warn("failed to install dependencies", { dir, error: err })
-    })
+    await Npm.install(dir)
   }
 
   async function isWritable(dir: string) {
@@ -176,42 +129,6 @@ export namespace Config {
     } catch {
       return false
     }
-  }
-
-  export async function needsInstall(dir: string) {
-    // Some config dirs may be read-only.
-    // Installing deps there will fail; skip installation in that case.
-    const writable = await isWritable(dir)
-    if (!writable) {
-      log.debug("config dir is not writable, skipping dependency install", { dir })
-      return false
-    }
-
-    const mod = path.join(dir, "node_modules", "@opencode-ai", "plugin")
-    if (!existsSync(mod)) return true
-
-    const pkg = path.join(dir, "package.json")
-    const pkgExists = await Filesystem.exists(pkg)
-    if (!pkgExists) return true
-
-    const parsed = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => null)
-    const dependencies = parsed?.dependencies ?? {}
-    const depVersion = dependencies["@opencode-ai/plugin"]
-    if (!depVersion) return true
-
-    const targetVersion = Installation.isLocal() ? "latest" : Installation.VERSION
-    if (targetVersion === "latest") {
-      if (!online()) return false
-      const stale = await PackageRegistry.isOutdated("@opencode-ai/plugin", depVersion, dir)
-      if (!stale) return false
-      log.info("Cached version is outdated, proceeding with install", {
-        pkg: "@opencode-ai/plugin",
-        cachedVersion: depVersion,
-      })
-      return true
-    }
-    if (depVersion === targetVersion) return false
-    return true
   }
 
   function rel(item: string, patterns: string[]) {
@@ -366,33 +283,18 @@ export namespace Config {
   export async function resolvePluginSpec(plugin: PluginSpec, configFilepath: string): Promise<PluginSpec> {
     const spec = pluginSpecifier(plugin)
     if (!isPathPluginSpec(spec)) return plugin
-    if (spec.startsWith("file://")) {
-      const resolved = await resolvePathPluginTarget(spec).catch(() => spec)
-      if (Array.isArray(plugin)) return [resolved, plugin[1]]
-      return resolved
-    }
-    if (path.isAbsolute(spec) || /^[A-Za-z]:[\\/]/.test(spec)) {
-      const base = pathToFileURL(spec).href
-      const resolved = await resolvePathPluginTarget(base).catch(() => base)
-      if (Array.isArray(plugin)) return [resolved, plugin[1]]
-      return resolved
-    }
-    try {
-      const base = import.meta.resolve!(spec, configFilepath)
-      const resolved = await resolvePathPluginTarget(base).catch(() => base)
-      if (Array.isArray(plugin)) return [resolved, plugin[1]]
-      return resolved
-    } catch {
-      try {
-        const require = createRequire(configFilepath)
-        const base = pathToFileURL(require.resolve(spec)).href
-        const resolved = await resolvePathPluginTarget(base).catch(() => base)
-        if (Array.isArray(plugin)) return [resolved, plugin[1]]
-        return resolved
-      } catch {
-        return plugin
-      }
-    }
+
+    const base = path.dirname(configFilepath)
+    const file = (() => {
+      if (spec.startsWith("file://")) return spec
+      if (path.isAbsolute(spec) || /^[A-Za-z]:[\\/]/.test(spec)) return pathToFileURL(spec).href
+      return pathToFileURL(path.resolve(base, spec)).href
+    })()
+
+    const resolved = await resolvePathPluginTarget(file).catch(() => file)
+
+    if (Array.isArray(plugin)) return [resolved, plugin[1]]
+    return resolved
   }
 
   /**
@@ -1368,8 +1270,7 @@ export namespace Config {
             }
 
             const dep = iife(async () => {
-              const stale = await needsInstall(dir)
-              if (stale) await installDependencies(dir)
+              await installDependencies(dir)
             })
             void dep.catch((err) => {
               log.warn("background dependency install failed", { dir, error: err })
@@ -1499,7 +1400,8 @@ export namespace Config {
         })
 
         const update = Effect.fn("Config.update")(function* (config: Info) {
-          const file = path.join(Instance.directory, "config.json")
+          const dir = yield* InstanceState.directory
+          const file = path.join(dir, "config.json")
           const existing = yield* loadFile(file)
           yield* fs.writeFileString(file, JSON.stringify(mergeDeep(existing, config), null, 2)).pipe(Effect.orDie)
           yield* Effect.promise(() => Instance.dispose())
@@ -1556,7 +1458,7 @@ export namespace Config {
 
   export const defaultLayer = layer.pipe(
     Layer.provide(AppFileSystem.defaultLayer),
-    Layer.provide(Auth.layer),
+    Layer.provide(Auth.defaultLayer),
     Layer.provide(Account.defaultLayer),
   )
 

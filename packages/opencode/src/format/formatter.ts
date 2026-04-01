@@ -1,5 +1,4 @@
 import { text } from "node:stream/consumers"
-import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
 import { Process } from "../util/process"
@@ -34,7 +33,7 @@ export const mix: Info = {
 
 export const prettier: Info = {
   name: "prettier",
-  command: [BunProc.which(), "x", "prettier", "--write", "$FILE"],
+  command: ["bun", "x", "prettier", "--write", "$FILE"],
   environment: {
     BUN_BE_BUN: "1",
   },
@@ -82,7 +81,7 @@ export const prettier: Info = {
 
 export const oxfmt: Info = {
   name: "oxfmt",
-  command: [BunProc.which(), "x", "oxfmt", "$FILE"],
+  command: ["bun", "x", "oxfmt", "$FILE"],
   environment: {
     BUN_BE_BUN: "1",
   },
@@ -104,7 +103,7 @@ export const oxfmt: Info = {
 
 export const biome: Info = {
   name: "biome",
-  command: [BunProc.which(), "x", "@biomejs/biome", "check", "--write", "$FILE"],
+  command: ["bun", "x", "@biomejs/biome", "check", "--write", "$FILE"],
   environment: {
     BUN_BE_BUN: "1",
   },
