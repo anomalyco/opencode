@@ -1178,6 +1178,49 @@ export namespace Provider {
             mergeProvider(providerID, partial)
           }
 
+          const gitlab = ProviderID.make("gitlab")
+          if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
+            yield* Effect.promise(async () => {
+              try {
+                const discovered = await discoveryLoaders[gitlab]()
+                for (const [modelID, model] of Object.entries(discovered)) {
+                  if (!providers[gitlab].models[modelID]) {
+                    providers[gitlab].models[modelID] = model
+                  }
+                }
+              } catch (e) {
+                log.warn("state discovery error", { id: "gitlab", error: e })
+              }
+            })
+          }
+
+          for (const hook of plugins) {
+            const p = hook.provider
+            const models = p?.models
+            if (!p || !models) continue
+
+            const providerID = ProviderID.make(p.id)
+            if (disabled.has(providerID)) continue
+
+            const provider = providers[providerID]
+            if (!provider) continue
+            const pluginAuth = yield* auth.get(providerID).pipe(Effect.orDie)
+
+            provider.models = yield* Effect.promise(async () => {
+              const next = await models(provider, { auth: pluginAuth })
+              return Object.fromEntries(
+                Object.entries(next).map(([id, model]) => [
+                  id,
+                  {
+                    ...model,
+                    id: ModelID.make(id),
+                    providerID,
+                  },
+                ]),
+              )
+            })
+          }
+
           for (const [id, provider] of Object.entries(providers)) {
             const providerID = ProviderID.make(id)
             if (!isProviderAllowed(providerID)) {
@@ -1220,22 +1263,6 @@ export namespace Provider {
             }
 
             log.info("found", { providerID })
-          }
-
-          const gitlab = ProviderID.make("gitlab")
-          if (discoveryLoaders[gitlab] && providers[gitlab]) {
-            yield* Effect.promise(async () => {
-              try {
-                const discovered = await discoveryLoaders[gitlab]()
-                for (const [modelID, model] of Object.entries(discovered)) {
-                  if (!providers[gitlab].models[modelID]) {
-                    providers[gitlab].models[modelID] = model
-                  }
-                }
-              } catch (e) {
-                log.warn("state discovery error", { id: "gitlab", error: e })
-              }
-            })
           }
 
           return {
