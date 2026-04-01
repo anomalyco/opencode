@@ -1543,7 +1543,11 @@ export namespace Provider {
   )
 
   export const defaultLayer = Layer.suspend(() =>
-    layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(Auth.defaultLayer), Layer.provide(Plugin.defaultLayer)),
+    layer.pipe(
+      Layer.provide(Config.defaultLayer),
+      Layer.provide(Auth.defaultLayer),
+      Layer.provide(Plugin.defaultLayer),
+    ),
   )
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
