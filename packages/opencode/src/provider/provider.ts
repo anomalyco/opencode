@@ -1013,13 +1013,20 @@ export namespace Provider {
             providers[providerID] = mergeDeep(match, provider)
           }
 
-          function applyConfiguredModels(
-            providerID: string,
-            provider: (typeof configProviders)[number][1],
-            models: Record<string, Model>,
-          ) {
+          // extend database from config
+          for (const [providerID, provider] of configProviders) {
+            const existing = database[providerID]
+            const parsed: Info = {
+              id: ProviderID.make(providerID),
+              name: provider.name ?? existing?.name ?? providerID,
+              env: provider.env ?? existing?.env ?? [],
+              options: mergeDeep(existing?.options ?? {}, provider.options ?? {}),
+              source: "config",
+              models: existing?.models ?? {},
+            }
+
             for (const [modelID, model] of Object.entries(provider.models ?? {})) {
-              const existingModel = models[model.id ?? modelID]
+              const existingModel = parsed.models[model.id ?? modelID]
               const name = iife(() => {
                 if (model.name) return model.name
                 if (model.id && model.id !== modelID) return modelID
@@ -1090,23 +1097,8 @@ export namespace Provider {
                 pickBy(merged, (v) => !v.disabled),
                 (v) => omit(v, ["disabled"]),
               )
-              models[modelID] = parsedModel
+              parsed.models[modelID] = parsedModel
             }
-            return models
-          }
-
-          // extend database from config
-          for (const [providerID, provider] of configProviders) {
-            const existing = database[providerID]
-            const parsed: Info = {
-              id: ProviderID.make(providerID),
-              name: provider.name ?? existing?.name ?? providerID,
-              env: provider.env ?? existing?.env ?? [],
-              options: mergeDeep(existing?.options ?? {}, provider.options ?? {}),
-              source: "config",
-              models: existing?.models ?? {},
-            }
-            parsed.models = applyConfiguredModels(providerID, provider, parsed.models)
             database[providerID] = parsed
           }
 
@@ -1226,10 +1218,6 @@ export namespace Provider {
                 ]),
               )
             })
-
-            const item = cfg.provider?.[providerID]
-            // Reapply user config after plugin model discovery so fetched models don't drop overrides.
-            if (item?.models) provider.models = applyConfiguredModels(providerID, item, provider.models)
           }
 
           for (const [id, provider] of Object.entries(providers)) {

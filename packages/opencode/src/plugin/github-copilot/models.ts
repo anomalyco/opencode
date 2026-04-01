@@ -40,12 +40,77 @@ export namespace CopilotModels {
     ),
   })
 
+  type Item = z.infer<typeof schema>["data"][number]
+
+  function build(key: string, remote: Item, url: string, prev?: Model): Model {
+    const reasoning =
+      !!remote.capabilities.supports.adaptive_thinking ||
+      !!remote.capabilities.supports.reasoning_effort?.length ||
+      remote.capabilities.supports.max_thinking_budget !== undefined ||
+      remote.capabilities.supports.min_thinking_budget !== undefined
+    const image =
+      (remote.capabilities.supports.vision ?? false) ||
+      (remote.capabilities.limits.vision?.supported_media_types ?? []).some((item) => item.startsWith("image/"))
+
+    return {
+      id: key,
+      providerID: "github-copilot",
+      api: {
+        id: remote.id,
+        url,
+        npm: "@ai-sdk/github-copilot",
+      },
+      // API response wins
+      status: "active",
+      limit: {
+        context: remote.capabilities.limits.max_context_window_tokens,
+        input: remote.capabilities.limits.max_prompt_tokens,
+        output: remote.capabilities.limits.max_output_tokens,
+      },
+      capabilities: {
+        temperature: prev?.capabilities.temperature ?? true,
+        reasoning: prev?.capabilities.reasoning ?? reasoning,
+        attachment: prev?.capabilities.attachment ?? true,
+        toolcall: remote.capabilities.supports.tool_calls,
+        input: {
+          text: true,
+          audio: false,
+          image,
+          video: false,
+          pdf: false,
+        },
+        output: {
+          text: true,
+          audio: false,
+          image: false,
+          video: false,
+          pdf: false,
+        },
+        interleaved: false,
+      },
+      // existing wins
+      family: prev?.family ?? remote.capabilities.family,
+      name: prev?.name ?? remote.name,
+      cost: {
+        input: 0,
+        output: 0,
+        cache: { read: 0, write: 0 },
+      },
+      options: prev?.options ?? {},
+      headers: prev?.headers ?? {},
+      release_date:
+        prev?.release_date ??
+        (remote.version.startsWith(`${remote.id}-`) ? remote.version.slice(remote.id.length + 1) : remote.version),
+      variants: prev?.variants ?? {},
+    }
+  }
+
   export async function get(
     baseURL: string,
     headers: HeadersInit = {},
     existing: Record<string, Model> = {},
   ): Promise<Record<string, Model>> {
-    const models = await fetch(`${baseURL}/models`, {
+    const data = await fetch(`${baseURL}/models`, {
       headers,
     }).then(async (res) => {
       if (!res.ok) {
@@ -54,73 +119,25 @@ export namespace CopilotModels {
       return schema.parse(await res.json())
     })
 
-    const parsed: Record<string, Model> = {}
+    const result = { ...existing }
+    const remote = new Map(data.data.filter((m) => m.model_picker_enabled).map((m) => [m.id, m] as const))
 
-    models.data.forEach((model) => {
-      if (!model.model_picker_enabled) return
-
-      parsed[model.id] = {
-        id: model.id,
-        providerID: "github-copilot",
-        api: {
-          id: model.id,
-          url: baseURL,
-          npm: "@ai-sdk/github-copilot",
-        },
-        name: model.name,
-        family: model.capabilities.family,
-        capabilities: {
-          temperature: existing[model.id]?.capabilities.temperature ?? true,
-          reasoning:
-            !!model.capabilities.supports.adaptive_thinking ||
-            !!model.capabilities.supports.reasoning_effort?.length ||
-            model.capabilities.supports.max_thinking_budget !== undefined ||
-            model.capabilities.supports.min_thinking_budget !== undefined,
-          attachment:
-            (model.capabilities.supports.vision ?? false) ||
-            (model.capabilities.limits.vision?.supported_media_types ?? []).some((item) => item.startsWith("image/")),
-          toolcall: model.capabilities.supports.tool_calls,
-          input: {
-            text: true,
-            audio: false,
-            image:
-              (model.capabilities.supports.vision ?? false) ||
-              (model.capabilities.limits.vision?.supported_media_types ?? []).some((item) => item.startsWith("image/")),
-            video: false,
-            pdf: false,
-          },
-          output: {
-            text: true,
-            audio: false,
-            image: false,
-            video: false,
-            pdf: false,
-          },
-          interleaved: false,
-        },
-        cost: {
-          input: 0,
-          output: 0,
-          cache: {
-            read: 0,
-            write: 0,
-          },
-        },
-        limit: {
-          context: model.capabilities.limits.max_context_window_tokens,
-          input: model.capabilities.limits.max_prompt_tokens,
-          output: model.capabilities.limits.max_output_tokens,
-        },
-        options: {},
-        headers: {},
-        release_date: model.version.startsWith(`${model.id}-`)
-          ? model.version.slice(model.id.length + 1)
-          : model.version,
-        variants: {},
-        status: "active",
+    // prune existing models whose api.id isn't in the endpoint response
+    for (const [key, model] of Object.entries(result)) {
+      const m = remote.get(model.api.id)
+      if (!m) {
+        delete result[key]
+        continue
       }
-    })
+      result[key] = build(key, m, baseURL, model)
+    }
 
-    return parsed
+    // add new endpoint models not already keyed in result
+    for (const [id, m] of remote) {
+      if (id in result) continue
+      result[id] = build(id, m, baseURL)
+    }
+
+    return result
   }
 }
