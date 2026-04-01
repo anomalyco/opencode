@@ -1,5 +1,5 @@
 import { Log } from "../util/log"
-import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
+import { describeRoute, generateSpecs, validator, resolver } from "hono-openapi"
 import { Hono } from "hono"
 import { compress } from "hono/compress"
 import { cors } from "hono/cors"
@@ -160,19 +160,9 @@ export namespace Server {
           return c.json(true)
         },
       )
-      .get(
-        "/doc",
-        openAPIRouteHandler(app, {
-          documentation: {
-            info: {
-              title: "opencode",
-              version: "0.0.3",
-              description: "opencode api",
-            },
-            openapi: "3.1.1",
-          },
-        }),
-      )
+      .get("/doc", async (c) => {
+        return c.json(await openapi())
+      })
       .use(
         validator(
           "query",
