@@ -28,7 +28,9 @@ import { ReadTool } from "../tool/read"
 import { FileTime } from "../file/time"
 import { Flag } from "../flag/flag"
 import { ulid } from "ulid"
-import { spawn } from "child_process"
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+import * as Stream from "effect/Stream"
 import { Command } from "../command"
 import { pathToFileURL, fileURLToPath } from "url"
 import { ConfigMarkdown } from "../config/markdown"
@@ -96,6 +98,7 @@ export namespace SessionPrompt {
       const filetime = yield* FileTime.Service
       const registry = yield* ToolRegistry.Service
       const truncate = yield* Truncate.Service
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
       const scope = yield* Scope.Scope
 
       const state = yield* InstanceState.make(
@@ -809,22 +812,26 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           fish: { args: ["-c", input.command] },
           zsh: {
             args: [
-              "-c",
               "-l",
+              "-c",
               `
+                __oc_cwd=$PWD
                 [[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
                 [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
+                cd "$__oc_cwd"
                 eval ${JSON.stringify(input.command)}
               `,
             ],
           },
           bash: {
             args: [
-              "-c",
               "-l",
+              "-c",
               `
+                __oc_cwd=$PWD
                 shopt -s expand_aliases
                 [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
+                cd "$__oc_cwd"
                 eval ${JSON.stringify(input.command)}
               `,
             ],
@@ -832,7 +839,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           cmd: { args: ["/c", input.command] },
           powershell: { args: ["-NoProfile", "-Command", input.command] },
           pwsh: { args: ["-NoProfile", "-Command", input.command] },
-          "": { args: ["-c", `${input.command}`] },
+          "": { args: ["-c", input.command] },
         }
 
         const args = (invocations[shellName] ?? invocations[""]).args
@@ -842,51 +849,20 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           { cwd, sessionID: input.sessionID, callID: part.callID },
           { env: {} },
         )
-        const proc = yield* Effect.sync(() =>
-          spawn(sh, args, {
-            cwd,
-            detached: process.platform !== "win32",
-            windowsHide: process.platform === "win32",
-            stdio: ["ignore", "pipe", "pipe"],
-            env: {
-              ...process.env,
-              ...shellEnv.env,
-              TERM: "dumb",
-            },
-          }),
-        )
+
+        const cmd = ChildProcess.make(sh, args, {
+          cwd,
+          extendEnv: true,
+          env: { ...shellEnv.env, TERM: "dumb" },
+          stdin: "ignore",
+          forceKillAfter: "3 seconds",
+        })
 
         let output = ""
-        const write = () => {
-          if (part.state.status !== "running") return
-          part.state.metadata = { output, description: "" }
-          void Effect.runFork(sessions.updatePart(part))
-        }
-
-        proc.stdout?.on("data", (chunk) => {
-          output += chunk.toString()
-          write()
-        })
-        proc.stderr?.on("data", (chunk) => {
-          output += chunk.toString()
-          write()
-        })
-
         let aborted = false
-        let exited = false
-        let finished = false
-        const kill = Effect.promise(() => Shell.killTree(proc, { exited: () => exited }))
-
-        const abortHandler = () => {
-          if (aborted) return
-          aborted = true
-          void Effect.runFork(kill)
-        }
 
         const finish = Effect.uninterruptible(
           Effect.gen(function* () {
-            if (finished) return
-            finished = true
             if (aborted) {
               output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
             }
@@ -908,20 +884,26 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           }),
         )
 
-        const exit = yield* Effect.promise(() => {
-          signal.addEventListener("abort", abortHandler, { once: true })
-          if (signal.aborted) abortHandler()
-          return new Promise<void>((resolve) => {
-            const close = () => {
-              exited = true
-              proc.off("close", close)
-              resolve()
-            }
-            proc.once("close", close)
-          })
+        const exit = yield* Effect.gen(function* () {
+          const handle = yield* spawner.spawn(cmd)
+          yield* Stream.runForEach(Stream.decodeText(handle.all), (chunk) =>
+            Effect.sync(() => {
+              output += chunk
+              if (part.state.status === "running") {
+                part.state.metadata = { output, description: "" }
+                void Effect.runFork(sessions.updatePart(part))
+              }
+            }),
+          )
+          yield* handle.exitCode
         }).pipe(
-          Effect.onInterrupt(() => Effect.sync(abortHandler)),
-          Effect.ensuring(Effect.sync(() => signal.removeEventListener("abort", abortHandler))),
+          Effect.scoped,
+          Effect.onInterrupt(() =>
+            Effect.sync(() => {
+              aborted = true
+            }),
+          ),
+          Effect.orDie,
           Effect.ensuring(finish),
           Effect.exit,
         )
@@ -1735,6 +1717,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         Layer.provide(Session.defaultLayer),
         Layer.provide(Agent.defaultLayer),
         Layer.provide(Bus.layer),
+        Layer.provide(CrossSpawnSpawner.defaultLayer),
       ),
     ),
   )
