@@ -5,7 +5,6 @@ import { NamedError } from "@opencode-ai/util/error"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
 import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
-import { fn } from "@/util/fn"
 import { SyncEvent } from "../sync"
 import { Database, NotFoundError, and, desc, eq, inArray, lt, or } from "@/storage/db"
 import { MessageTable, PartTable, SessionTable } from "./session.sql"
@@ -574,11 +573,11 @@ export namespace MessageV2 {
     }))
   }
 
-  export async function toModelMessages(
+  export const toModelMessagesEffect = Effect.fnUntraced(function* (
     input: WithParts[],
     model: Provider.Model,
     options?: { stripMedia?: boolean },
-  ): Promise<ModelMessage[]> {
+  ) {
     const result: UIMessage[] = []
     const toolNames = new Set<string>()
     // Track media from tool results that need to be injected as user messages
@@ -801,24 +800,26 @@ export namespace MessageV2 {
 
     const tools = Object.fromEntries(Array.from(toolNames).map((toolName) => [toolName, { toModelOutput }]))
 
-    return await convertToModelMessages(
-      result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")),
-      {
-        //@ts-expect-error (convertToModelMessages expects a ToolSet but only actually needs tools[name]?.toModelOutput)
-        tools,
-      },
+    return yield* Effect.promise(() =>
+      convertToModelMessages(
+        result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")),
+        {
+          //@ts-expect-error (convertToModelMessages expects a ToolSet but only actually needs tools[name]?.toModelOutput)
+          tools,
+        },
+      ),
     )
-  }
+  })
 
-  export const toModelMessagesEffect = Effect.fnUntraced(function* (
+  export function toModelMessages(
     input: WithParts[],
     model: Provider.Model,
     options?: { stripMedia?: boolean },
-  ) {
-    return yield* Effect.promise(() => toModelMessages(input, model, options))
-  })
+  ): Promise<ModelMessage[]> {
+    return Effect.runPromise(toModelMessagesEffect(input, model, options))
+  }
 
-  function pageSync(input: { sessionID: SessionID; limit: number; before?: string }) {
+  export function page(input: { sessionID: SessionID; limit: number; before?: string }) {
     const before = input.before ? cursor.decode(input.before) : undefined
     const where = before
       ? and(eq(MessageTable.session_id, input.sessionID), older(before))
@@ -855,20 +856,11 @@ export namespace MessageV2 {
     }
   }
 
-  export const page = fn(
-    z.object({
-      sessionID: SessionID.zod,
-      limit: z.number().int().positive(),
-      before: z.string().optional(),
-    }),
-    async (input) => pageSync(input),
-  )
-
-  export const stream = fn(SessionID.zod, async function* (sessionID) {
+  export function* stream(sessionID: SessionID) {
     const size = 50
     let before: string | undefined
     while (true) {
-      const next = await page({ sessionID, limit: size, before })
+      const next = page({ sessionID, limit: size, before })
       if (next.items.length === 0) break
       for (let i = next.items.length - 1; i >= 0; i--) {
         yield next.items[i]
@@ -876,9 +868,9 @@ export namespace MessageV2 {
       if (!next.more || !next.cursor) break
       before = next.cursor
     }
-  })
+  }
 
-  function partsSync(message_id: MessageID) {
+  export function parts(message_id: MessageID) {
     const rows = Database.use((db) =>
       db.select().from(PartTable).where(eq(PartTable.message_id, message_id)).orderBy(PartTable.id).all(),
     )
@@ -893,9 +885,7 @@ export namespace MessageV2 {
     )
   }
 
-  export const parts = fn(MessageID.zod, async (message_id) => partsSync(message_id))
-
-  function getSync(input: { sessionID: SessionID; messageID: MessageID }): WithParts {
+  export function get(input: { sessionID: SessionID; messageID: MessageID }): WithParts {
     const row = Database.use((db) =>
       db
         .select()
@@ -906,51 +896,12 @@ export namespace MessageV2 {
     if (!row) throw new NotFoundError({ message: `Message not found: ${input.messageID}` })
     return {
       info: info(row),
-      parts: partsSync(input.messageID),
+      parts: parts(input.messageID),
     }
   }
 
-  export const get = fn(
-    z.object({
-      sessionID: SessionID.zod,
-      messageID: MessageID.zod,
-    }),
-    async (input): Promise<WithParts> => getSync(input),
-  )
 
-  export const partsEffect = Effect.fnUntraced(function* (id: MessageID) {
-    return partsSync(id)
-  })
-
-  export const getEffect = Effect.fnUntraced(function* (input: { sessionID: SessionID; messageID: MessageID }) {
-    return getSync(input)
-  })
-
-  export const pageEffect = Effect.fnUntraced(function* (input: {
-    sessionID: SessionID
-    limit: number
-    before?: string
-  }) {
-    return pageSync(input)
-  })
-
-  export const streamEffect = Effect.fnUntraced(function* (sessionID: SessionID) {
-    const result: WithParts[] = []
-    const size = 50
-    let before: string | undefined
-    while (true) {
-      const next = pageSync({ sessionID, limit: size, before })
-      if (next.items.length === 0) break
-      for (let i = next.items.length - 1; i >= 0; i--) {
-        result.push(next.items[i])
-      }
-      if (!next.more || !next.cursor) break
-      before = next.cursor
-    }
-    return result
-  })
-
-  function applyCompactionFilter(msgs: MessageV2.WithParts[]) {
+  export function filterCompacted(msgs: Iterable<MessageV2.WithParts>) {
     const result = [] as MessageV2.WithParts[]
     const completed = new Set<string>()
     for (const msg of msgs) {
@@ -968,26 +919,8 @@ export namespace MessageV2 {
     return result
   }
 
-  export async function filterCompacted(stream: AsyncIterable<MessageV2.WithParts>) {
-    const result = [] as MessageV2.WithParts[]
-    const completed = new Set<string>()
-    for await (const msg of stream) {
-      result.push(msg)
-      if (
-        msg.info.role === "user" &&
-        completed.has(msg.info.id) &&
-        msg.parts.some((part) => part.type === "compaction")
-      )
-        break
-      if (msg.info.role === "assistant" && msg.info.summary && msg.info.finish && !msg.info.error)
-        completed.add(msg.info.parentID)
-    }
-    result.reverse()
-    return result
-  }
-
   export const filterCompactedEffect = Effect.fnUntraced(function* (sessionID: SessionID) {
-    return applyCompactionFilter(yield* streamEffect(sessionID))
+    return filterCompacted(stream(sessionID))
   })
 
   export function fromError(

@@ -105,7 +105,7 @@ describe("session message pagination", () => {
         const b = await Session.create({})
         const [id] = await fill(a.id, 1)
 
-        await expect(MessageV2.get({ sessionID: b.id, messageID: id })).rejects.toMatchObject({ name: "NotFoundError" })
+        expect(() => MessageV2.get({ sessionID: b.id, messageID: id })).toThrow("NotFoundError")
 
         await Session.remove(a.id)
         await Session.remove(b.id)
