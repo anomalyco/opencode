@@ -38,9 +38,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const agents = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden))
       const visibleAgents = createMemo(() => sync.data.agent.filter((x) => !x.hidden))
       const [agentStore, setAgentStore] = createStore<{
-        current: string
+        current?: string
       }>({
-        current: agents()[0].name,
+        current: undefined,
       })
       const { theme } = useTheme()
       const colors = createMemo(() => [
@@ -52,12 +52,28 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         theme.error,
         theme.info,
       ])
+      const selected = createMemo(() => {
+        const name = agentStore.current
+        if (name) {
+          const match = agents().find((x) => x.name === name)
+          if (match) return match
+        }
+        return agents()[0]
+      })
+      createEffect(() => {
+        const name = selected()?.name
+        if (name === agentStore.current) return
+        setAgentStore("current", name)
+      })
       return {
         list() {
           return agents()
         },
+        maybe() {
+          return selected()
+        },
         current() {
-          return agents().find((x) => x.name === agentStore.current)!
+          return selected()!
         },
         set(name: string) {
           if (!agents().some((x) => x.name === name))
@@ -70,10 +86,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         move(direction: 1 | -1) {
           batch(() => {
-            let next = agents().findIndex((x) => x.name === agentStore.current) + direction
-            if (next < 0) next = agents().length - 1
-            if (next >= agents().length) next = 0
-            const value = agents()[next]
+            const list = agents()
+            if (!list.length) return
+            let next = list.findIndex((x) => x.name === selected()?.name) + direction
+            if (next < 0) next = list.length - 1
+            if (next >= list.length) next = 0
+            const value = list[next]
+            if (!value) return
             setAgentStore("current", value.name)
           })
         },
@@ -191,11 +210,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
 
       const currentModel = createMemo(() => {
-        const a = agent.current()
+        const a = agent.maybe()
         return (
           getFirstValidModel(
-            () => modelStore.model[a.name],
-            () => a.model,
+            () => a && modelStore.model[a.name],
+            () => a?.model,
             fallbackModel,
           ) ?? undefined
         )
@@ -386,8 +405,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     // Automatically update model when agent changes
     createEffect(() => {
-      const value = agent.current()
-      if (value.model) {
+      const value = agent.maybe()
+      if (value?.model) {
         if (isModelValid(value.model))
           model.set({
             providerID: value.model.providerID,
@@ -403,6 +422,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     })
 
     const result = {
+      get ready() {
+        return agent.list().length > 0
+      },
       model,
       agent,
       mcp,
