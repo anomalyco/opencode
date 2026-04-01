@@ -22,43 +22,45 @@ async function seed(sdk: Parameters<typeof withSession>[0], sessionID: string) {
     .toBeGreaterThan(0)
 }
 
-test("/share and /unshare update session share state", async ({ page, sdk, gotoSession }) => {
+test("/share and /unshare update session share state", async ({ page, withBackendProject }) => {
   test.skip(shareDisabled, "Share is disabled in this environment (OPENCODE_DISABLE_SHARE).")
 
-  await withSession(sdk, `e2e slash share ${Date.now()}`, async (session) => {
-    const prompt = page.locator(promptSelector)
+  await withBackendProject(async (project) => {
+    await withSession(project.sdk, `e2e slash share ${Date.now()}`, async (session) => {
+      const prompt = page.locator(promptSelector)
 
-    await seed(sdk, session.id)
-    await gotoSession(session.id)
+      await seed(project.sdk, session.id)
+      await project.gotoSession(session.id)
 
-    await prompt.click()
-    await page.keyboard.type("/share")
-    await expect(page.locator('[data-slash-id="session.share"]').first()).toBeVisible()
-    await page.keyboard.press("Enter")
+      await prompt.click()
+      await page.keyboard.type("/share")
+      await expect(page.locator('[data-slash-id="session.share"]').first()).toBeVisible()
+      await page.keyboard.press("Enter")
 
-    await expect
-      .poll(
-        async () => {
-          const data = await sdk.session.get({ sessionID: session.id }).then((r) => r.data)
-          return data?.share?.url || undefined
-        },
-        { timeout: 30_000 },
-      )
-      .not.toBeUndefined()
+      await expect
+        .poll(
+          async () => {
+            const data = await project.sdk.session.get({ sessionID: session.id }).then((r) => r.data)
+            return data?.share?.url || undefined
+          },
+          { timeout: 30_000 },
+        )
+        .not.toBeUndefined()
 
-    await prompt.click()
-    await page.keyboard.type("/unshare")
-    await expect(page.locator('[data-slash-id="session.unshare"]').first()).toBeVisible()
-    await page.keyboard.press("Enter")
+      await prompt.click()
+      await page.keyboard.type("/unshare")
+      await expect(page.locator('[data-slash-id="session.unshare"]').first()).toBeVisible()
+      await page.keyboard.press("Enter")
 
-    await expect
-      .poll(
-        async () => {
-          const data = await sdk.session.get({ sessionID: session.id }).then((r) => r.data)
-          return data?.share?.url || undefined
-        },
-        { timeout: 30_000 },
-      )
-      .toBeUndefined()
+      await expect
+        .poll(
+          async () => {
+            const data = await project.sdk.session.get({ sessionID: session.id }).then((r) => r.data)
+            return data?.share?.url || undefined
+          },
+          { timeout: 30_000 },
+        )
+        .toBeUndefined()
+    })
   })
 })

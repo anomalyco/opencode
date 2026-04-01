@@ -22,7 +22,7 @@ const live = Layer.mergeAll(Bus.layer, node)
 const it = testEffect(live)
 
 describe("Bus (Effect-native)", () => {
-  it.effect("publish + subscribe stream delivers events", () =>
+  it.live("publish + subscribe stream delivers events", () =>
     provideTmpdirInstance(() =>
       Effect.gen(function* () {
         const bus = yield* Bus.Service
@@ -46,7 +46,7 @@ describe("Bus (Effect-native)", () => {
     ),
   )
 
-  it.effect("subscribe filters by event type", () =>
+  it.live("subscribe filters by event type", () =>
     provideTmpdirInstance(() =>
       Effect.gen(function* () {
         const bus = yield* Bus.Service
@@ -70,7 +70,7 @@ describe("Bus (Effect-native)", () => {
     ),
   )
 
-  it.effect("subscribeAll receives all types", () =>
+  it.live("subscribeAll receives all types", () =>
     provideTmpdirInstance(() =>
       Effect.gen(function* () {
         const bus = yield* Bus.Service
@@ -95,7 +95,7 @@ describe("Bus (Effect-native)", () => {
     ),
   )
 
-  it.effect("multiple subscribers each receive the event", () =>
+  it.live("multiple subscribers each receive the event", () =>
     provideTmpdirInstance(() =>
       Effect.gen(function* () {
         const bus = yield* Bus.Service
@@ -129,7 +129,7 @@ describe("Bus (Effect-native)", () => {
     ),
   )
 
-  it.effect("subscribeAll stream sees InstanceDisposed on disposal", () =>
+  it.live("subscribeAll stream sees InstanceDisposed on disposal", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped()
       const types: string[] = []
