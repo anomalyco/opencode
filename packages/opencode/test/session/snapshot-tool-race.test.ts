@@ -205,54 +205,27 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
       const result = yield* prompt.loop({ sessionID: session.id })
       expect(result.info.role).toBe("assistant")
 
-      console.log(`calls=${yield* llm.calls} pending=${yield* llm.pending} misses=${(yield* llm.misses).length}`)
-
-      // Check all messages in session
-      const allMsgs = yield* Effect.promise(() => MessageV2.filterCompacted(MessageV2.stream(session.id)))
-      console.log(`total messages: ${allMsgs.length}`)
-      for (const msg of allMsgs) {
-        console.log(`  msg role=${msg.info.role} parts=${msg.parts.length} ${msg.info.role === "assistant" ? `finish=${msg.info.finish}` : ""}`)
-        for (const p of msg.parts) {
-          const extra = p.type === "tool" ? `tool=${p.tool} status=${p.state?.status}` : p.type === "text" ? `text=${p.text?.slice(0, 60)}` : p.type === "step-start" || p.type === "step-finish" ? `snapshot=${"snapshot" in p ? p.snapshot : "?"}` : ""
-          console.log(`    part: type=${p.type} ${extra}`)
-        }
-      }
-      // Debug: dump all parts
-      for (const p of result.parts) {
-        console.log(`part: type=${p.type} ${p.type === "tool" ? `tool=${p.tool} status=${p.state?.status}` : ""} ${p.type === "text" ? `text=${p.text?.slice(0, 80)}` : ""}`)
-        if (p.type === "tool" && p.state?.status === "error") {
-          console.log(`  error: ${JSON.stringify(p.state).slice(0, 300)}`)
-        }
-      }
-
       // Verify the file was created
       const filePath = path.join(dir, "race-test.txt")
       const fileExists = yield* Effect.promise(() =>
         fs.access(filePath).then(() => true).catch(() => false),
       )
-
-      // List files
-      const files = yield* Effect.promise(() => fs.readdir(dir))
-      console.log(`files in dir: ${files.filter(f => !f.startsWith(".")).join(", ")}`)
-
       expect(fileExists).toBe(true)
 
-      // Verify the tool call completed (it's in the first assistant message, not the last)
-      const allParts = allMsgs.flatMap((m) => m.parts)
-      const tool = allParts.find(
-        (p): p is MessageV2.ToolPart => p.type === "tool" && p.tool === "bash",
-      )
+      // Verify the tool call completed (in the first assistant message)
+      const allMsgs = yield* Effect.promise(() => MessageV2.filterCompacted(MessageV2.stream(session.id)))
+      const tool = allMsgs
+        .flatMap((m) => m.parts)
+        .find((p): p is MessageV2.ToolPart => p.type === "tool" && p.tool === "bash")
       expect(tool?.state.status).toBe("completed")
 
-      // Poll for diff — summarize() is fire-and-forget so it may take a moment
+      // Poll for diff — summarize() is fire-and-forget
       let diff: Awaited<ReturnType<typeof SessionSummary.diff>> = []
       for (let i = 0; i < 50; i++) {
         diff = yield* Effect.promise(() => SessionSummary.diff({ sessionID: session.id }))
         if (diff.length > 0) break
-        yield* Effect.promise(() => new Promise((r) => setTimeout(r, 100)))
+        yield* Effect.sleep("100 millis")
       }
-      console.log(`diff after polling: length=${diff.length}`)
-      if (diff.length > 0) console.log(`diff[0]: ${JSON.stringify(diff[0]).slice(0, 200)}`)
       expect(diff.length).toBeGreaterThan(0)
     }),
     { git: true, config: providerCfg },
