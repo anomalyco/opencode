@@ -17,6 +17,7 @@ import { NotFoundError } from "@/storage/db"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Effect, Layer, ServiceMap } from "effect"
 import { makeRuntime } from "@/effect/run-service"
+import { InstanceState } from "@/effect/instance-state"
 import { isOverflow as overflow } from "./overflow"
 
 export namespace SessionCompaction {
@@ -105,7 +106,13 @@ export namespace SessionCompaction {
   export const layer: Layer.Layer<
     Service,
     never,
-    Bus.Service | Config.Service | Session.Service | Agent.Service | Plugin.Service | SessionProcessor.Service
+    | Bus.Service
+    | Config.Service
+    | Session.Service
+    | Agent.Service
+    | Plugin.Service
+    | SessionProcessor.Service
+    | Provider.Service
   > = Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -115,6 +122,7 @@ export namespace SessionCompaction {
       const agents = yield* Agent.Service
       const plugin = yield* Plugin.Service
       const processors = yield* SessionProcessor.Service
+      const provider = yield* Provider.Service
 
       const isOverflow = Effect.fn("SessionCompaction.isOverflow")(function* (input: {
         tokens: MessageV2.Assistant["tokens"]
@@ -185,11 +193,9 @@ export namespace SessionCompaction {
         }
 
         const agent = yield* agents.get("compaction")
-        const model = yield* Effect.promise(() =>
-          agent.model
-            ? Provider.getModel(agent.model.providerID, agent.model.modelID)
-            : Provider.getModel(userMessage.model.providerID, userMessage.model.modelID),
-        )
+        const model = agent.model
+          ? yield* provider.getModel(agent.model.providerID, agent.model.modelID)
+          : yield* provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
         // Allow plugins to inject context or replace compaction prompt.
         const compacting = yield* plugin.trigger(
           "experimental.session.compacting",
@@ -229,6 +235,7 @@ When constructing the summary, try to stick to this template:
         const msgs = structuredClone(messages)
         yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
         const modelMessages = yield* Effect.promise(() => MessageV2.toModelMessages(msgs, model, { stripMedia: true }))
+        const ctx = yield* InstanceState.context
         const msg: MessageV2.Assistant = {
           id: MessageID.ascending(),
           role: "assistant",
@@ -239,8 +246,8 @@ When constructing the summary, try to stick to this template:
           variant: userMessage.variant,
           summary: true,
           path: {
-            cwd: Instance.directory,
-            root: Instance.worktree,
+            cwd: ctx.directory,
+            root: ctx.worktree,
           },
           cost: 0,
           tokens: {
@@ -391,6 +398,7 @@ When constructing the summary, try to stick to this template:
   export const defaultLayer = Layer.unwrap(
     Effect.sync(() =>
       layer.pipe(
+        Layer.provide(Provider.defaultLayer),
         Layer.provide(Session.defaultLayer),
         Layer.provide(SessionProcessor.defaultLayer),
         Layer.provide(Agent.defaultLayer),
