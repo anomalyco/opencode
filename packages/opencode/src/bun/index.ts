@@ -91,8 +91,9 @@ export namespace BunProc {
   }
 
   async function finalize(provider: string | undefined, pkg: string, oldPkg: string | undefined) {
-    if (provider) await track(provider, pkg)
-    if (oldPkg && oldPkg !== pkg) await cleanup(provider!, oldPkg)
+    if (!provider) return
+    await track(provider, pkg)
+    if (oldPkg && oldPkg !== pkg) await cleanup(provider, oldPkg)
   }
 
   export async function install(
@@ -155,7 +156,7 @@ export namespace BunProc {
     }
     await writePackageJson(updated)
 
-    if (oldPkg && oldPkg !== pkg) await cleanup(provider!, oldPkg)
+    if (provider && oldPkg && oldPkg !== pkg) await cleanup(provider, oldPkg)
     return mod
   }
 }
