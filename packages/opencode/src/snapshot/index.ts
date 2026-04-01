@@ -300,15 +300,15 @@ export namespace Snapshot {
             const revert = Effect.fnUntraced(function* (patches: Snapshot.Patch[]) {
               return yield* locked(
                 Effect.gen(function* () {
-                  const byHash = new Map<string, string[]>()
+                  const groupByHash = new Map<string, string[]>()
                   const seen = new Set<string>()
                   for (const item of patches) {
-                    const list = byHash.get(item.hash) ?? []
-                    byHash.set(item.hash, list)
+                    const filesForHash = groupByHash.get(item.hash) ?? []
+                    groupByHash.set(item.hash, filesForHash)
                     for (const file of item.files) {
                       if (seen.has(file)) continue
                       seen.add(file)
-                      list.push(file)
+                      filesForHash.push(file)
                     }
                   }
 
@@ -330,7 +330,7 @@ export namespace Snapshot {
                     yield* remove(file)
                   })
 
-                  for (const [hash, list] of byHash) {
+                  for (const [hash, list] of groupByHash) {
                     for (let i = 0; i < list.length; i += 100) {
                       const chunk = list.slice(i, i + 100)
                       if (chunk.length === 1) {
