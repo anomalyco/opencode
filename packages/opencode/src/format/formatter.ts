@@ -104,7 +104,7 @@ export const oxfmt: Info = {
 
 export const biome: Info = {
   name: "biome",
-  command: [BunProc.which(), "x", "@biomejs/biome", "check", "--write", "$FILE"],
+  command: [BunProc.which(), "x", "@biomejs/biome", "format", "--write", "$FILE"],
   environment: {
     BUN_BE_BUN: "1",
   },
