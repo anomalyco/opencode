@@ -438,9 +438,9 @@ export namespace Provider {
 
       const location = String(
         provider.options?.location ??
-        Env.get("GOOGLE_VERTEX_LOCATION") ??
-        Env.get("GOOGLE_CLOUD_LOCATION") ??
-        Env.get("VERTEX_LOCATION") ??
+          Env.get("GOOGLE_VERTEX_LOCATION") ??
+          Env.get("GOOGLE_CLOUD_LOCATION") ??
+          Env.get("VERTEX_LOCATION") ??
           "us-central1",
       )
 
@@ -788,14 +788,10 @@ export namespace Provider {
 
     // Get auth credentials
     const key = provider.options?.apiKey
-    const auth = key ? {"type": "api", "key": key} : await Auth.get(providerID)
+    const auth = key ? { type: "api", key: key } : await Auth.get(providerID)
 
     // Discover models
-    const discoveredModels = await discoverModelsFromEndpoint(
-      providerID,
-      baseURL,
-      auth?.type === "api" ? auth : null,
-    )
+    const discoveredModels = await discoverModelsFromEndpoint(providerID, baseURL, auth?.type === "api" ? auth : null)
     return discoveredModels
   }
 
@@ -1312,7 +1308,7 @@ export namespace Provider {
             if (provider.options) partial.options = provider.options
             const hasExplicitModels = Object.keys(provider.models ?? {}).length > 0
             if (!hasExplicitModels && provider.dynamicModelList) {
-              partial.models = await populateDynamicModels(providerID, provider)
+              partial.models = yield* Effect.promise(() => populateDynamicModels(providerID, provider))
             }
             mergeProvider(providerID, partial)
           }
