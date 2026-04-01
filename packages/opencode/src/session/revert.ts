@@ -37,6 +37,7 @@ export namespace SessionRevert {
       const snap = yield* Snapshot.Service
       const storage = yield* Storage.Service
       const bus = yield* Bus.Service
+      const summary = yield* SessionSummary.Service
 
       const revert = Effect.fn("SessionRevert.revert")(function* (input: RevertInput) {
         yield* Effect.promise(() => SessionPrompt.assertNotBusy(input.sessionID))
@@ -74,7 +75,7 @@ export namespace SessionRevert {
         yield* snap.revert(patches)
         if (rev.snapshot) rev.diff = yield* snap.diff(rev.snapshot as string)
         const range = all.filter((msg) => msg.info.id >= rev!.messageID)
-        const diffs = yield* Effect.promise(() => SessionSummary.computeDiff({ messages: range }))
+        const diffs = yield* summary.computeDiff({ messages: range })
         yield* storage.write(["session_diff", input.sessionID], diffs).pipe(Effect.ignore)
         yield* bus.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: diffs })
         yield* sessions.setRevert({
@@ -153,6 +154,7 @@ export namespace SessionRevert {
         Layer.provide(Snapshot.defaultLayer),
         Layer.provide(Storage.defaultLayer),
         Layer.provide(Bus.layer),
+        Layer.provide(SessionSummary.defaultLayer),
       ),
     ),
   )
