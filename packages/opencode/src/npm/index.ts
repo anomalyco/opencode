@@ -9,7 +9,6 @@ import { readdir, rm } from "fs/promises"
 import { Filesystem } from "@/util/filesystem"
 import { Flock } from "@/util/flock"
 import { Arborist } from "@npmcli/arborist"
-import { pathToFileURL } from "url"
 
 export namespace Npm {
   const log = Log.create({ service: "npm" })
@@ -25,16 +24,10 @@ export namespace Npm {
     return path.join(Global.Path.cache, "packages", pkg)
   }
 
-  function resolveEntryPoint(pkg: string, dir: string) {
-    const entrypoint =
-      typeof Bun !== undefined ? Bun.resolveSync(pkg, dir) : import.meta.resolve(pkg, pathToFileURL(dir))
-    const directory = path.dirname(
-      typeof Bun !== undefined
-        ? Bun.resolveSync(pkg + "/package.json", dir)
-        : import.meta.resolve(pkg, pathToFileURL(dir)),
-    )
+  function resolveEntryPoint(name: string, dir: string) {
+    const entrypoint = typeof Bun !== "undefined" ? import.meta.resolve(name, dir) : import.meta.resolve(dir)
     const result = {
-      directory,
+      directory: dir,
       entrypoint,
     }
     return result
@@ -75,9 +68,9 @@ export namespace Npm {
     })
     const tree = await arborist.loadVirtual().catch(() => {})
     if (tree) {
-      const first = tree.edgesOut.values().next().value?.name
+      const first = tree.edgesOut.values().next().value?.to
       if (first) {
-        return resolveEntryPoint(first, dir)
+        return resolveEntryPoint(first.name, first.path)
       }
     }
 
@@ -96,9 +89,9 @@ export namespace Npm {
         )
       })
 
-    const first = result.edgesOut.values().next().value?.name
+    const first = result.edgesOut.values().next().value?.to
     if (!first) throw new InstallFailedError({ pkg })
-    return resolveEntryPoint(first, dir)
+    return resolveEntryPoint(first.name, first.path)
   }
 
   export async function install(dir: string) {
