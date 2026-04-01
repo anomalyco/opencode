@@ -49,15 +49,16 @@ async function seedConversation(input: {
   return { prompt, userMessageID }
 }
 
-test("slash undo sets revert and restores prior prompt", async ({ page, withProject }) => {
+test("slash undo sets revert and restores prior prompt", async ({ page, withBackendProject }) => {
   test.setTimeout(120_000)
 
   const token = `undo_${Date.now()}`
 
-  await withProject(async (project) => {
-    const sdk = createSdk(project.directory)
+  await withBackendProject(async (project) => {
+    const sdk = project.sdk
 
     await withSession(sdk, `e2e undo ${Date.now()}`, async (session) => {
+      project.trackSession(session.id)
       await project.gotoSession(session.id)
 
       const seeded = await seedConversation({ page, sdk, sessionID: session.id, token })
@@ -81,15 +82,16 @@ test("slash undo sets revert and restores prior prompt", async ({ page, withProj
   })
 })
 
-test("slash redo clears revert and restores latest state", async ({ page, withProject }) => {
+test("slash redo clears revert and restores latest state", async ({ page, withBackendProject }) => {
   test.setTimeout(120_000)
 
   const token = `redo_${Date.now()}`
 
-  await withProject(async (project) => {
-    const sdk = createSdk(project.directory)
+  await withBackendProject(async (project) => {
+    const sdk = project.sdk
 
     await withSession(sdk, `e2e redo ${Date.now()}`, async (session) => {
+      project.trackSession(session.id)
       await project.gotoSession(session.id)
 
       const seeded = await seedConversation({ page, sdk, sessionID: session.id, token })
@@ -128,16 +130,17 @@ test("slash redo clears revert and restores latest state", async ({ page, withPr
   })
 })
 
-test("slash undo/redo traverses multi-step revert stack", async ({ page, withProject }) => {
+test("slash undo/redo traverses multi-step revert stack", async ({ page, withBackendProject }) => {
   test.setTimeout(120_000)
 
   const firstToken = `undo_redo_first_${Date.now()}`
   const secondToken = `undo_redo_second_${Date.now()}`
 
-  await withProject(async (project) => {
-    const sdk = createSdk(project.directory)
+  await withBackendProject(async (project) => {
+    const sdk = project.sdk
 
     await withSession(sdk, `e2e undo redo stack ${Date.now()}`, async (session) => {
+      project.trackSession(session.id)
       await project.gotoSession(session.id)
 
       const first = await seedConversation({
