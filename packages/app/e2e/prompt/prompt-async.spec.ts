@@ -38,9 +38,7 @@ test("prompt succeeds when sync message endpoint is unreachable", async ({
 
           await expect.poll(() => llm.calls()).toBeGreaterThanOrEqual(1)
 
-          await expect
-            .poll(() => assistantText(project.sdk, sessionID), { timeout: 90_000 })
-            .toContain(token)
+          await expect.poll(() => assistantText(project.sdk, sessionID), { timeout: 90_000 }).toContain(token)
         },
         {
           model: openaiModel,

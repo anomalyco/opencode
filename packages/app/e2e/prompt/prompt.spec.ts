@@ -40,9 +40,7 @@ test("can send a prompt and receive a reply", async ({ page, llm, backend, withB
 
             await expect.poll(() => llm.calls()).toBeGreaterThanOrEqual(1)
 
-            await expect
-              .poll(() => assistantText(project.sdk, sessionID), { timeout: 30_000 })
-              .toContain(token)
+            await expect.poll(() => assistantText(project.sdk, sessionID), { timeout: 30_000 }).toContain(token)
           },
           {
             model: openaiModel,

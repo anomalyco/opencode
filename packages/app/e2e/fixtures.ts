@@ -186,9 +186,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     await use(gotoSession)
   },
   withProject: async ({ page }, use) => {
-    await use((callback, options) =>
-      runProject(page, callback, options),
-    )
+    await use((callback, options) => runProject(page, callback, options))
   },
   withBackendProject: async ({ page, backend }, use) => {
     await use((callback, options) =>
@@ -241,9 +239,7 @@ async function runProject<T>(
   } finally {
     setHealthPhase(page, "cleanup")
     await Promise.allSettled(
-      Array.from(sessions, ([sessionID, directory]) =>
-        cleanupSession({ sessionID, directory, serverUrl: url }),
-      ),
+      Array.from(sessions, ([sessionID, directory]) => cleanupSession({ sessionID, directory, serverUrl: url })),
     )
     await Promise.allSettled(Array.from(dirs, (directory) => cleanupTestProject(directory)))
     await cleanupTestProject(root)

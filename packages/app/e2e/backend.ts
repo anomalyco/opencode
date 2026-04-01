@@ -85,8 +85,14 @@ export async function startBackend(label: string): Promise<Handle> {
       stdio: ["ignore", "pipe", "pipe"],
     },
   )
-  proc.stdout?.on("data", (chunk) => { out.push(String(chunk)); cap(out) })
-  proc.stderr?.on("data", (chunk) => { err.push(String(chunk)); cap(err) })
+  proc.stdout?.on("data", (chunk) => {
+    out.push(String(chunk))
+    cap(out)
+  })
+  proc.stderr?.on("data", (chunk) => {
+    err.push(String(chunk))
+    cap(err)
+  })
 
   const url = `http://127.0.0.1:${port}`
   try {
