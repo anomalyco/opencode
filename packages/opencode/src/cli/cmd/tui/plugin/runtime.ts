@@ -87,6 +87,11 @@ function fail(message: string, data: Record<string, unknown>) {
   console.error(`[tui.plugin] ${text}`, next)
 }
 
+function warn(message: string, data: Record<string, unknown>) {
+  log.warn(message, data)
+  console.warn(`[tui.plugin] ${message}`, data)
+}
+
 type CleanupResult = { type: "ok" } | { type: "error"; error: unknown } | { type: "timeout" }
 
 function runCleanup(fn: () => unknown, ms: number): Promise<CleanupResult> {
@@ -229,6 +234,15 @@ async function loadExternalPlugin(cfg: TuiConfig.PluginRecord, retry = false): P
   log.info("loading tui plugin", { path: plan.spec, retry })
   const resolved = await PluginLoader.resolve(plan, "tui")
   if (!resolved.ok) {
+    if (resolved.stage === "missing") {
+      warn("tui plugin has no entrypoint", {
+        path: plan.spec,
+        retry,
+        message: resolved.message,
+      })
+      return
+    }
+
     if (resolved.stage === "install") {
       fail("failed to resolve tui plugin", { path: plan.spec, retry, error: resolved.error })
       return
@@ -753,7 +767,6 @@ async function addPluginBySpec(state: RuntimeState | undefined, raw: string) {
     return [] as PluginLoad[]
   })
   if (!ready.length) {
-    fail("failed to add tui plugin", { path: next })
     return false
   }
 
@@ -824,7 +837,7 @@ async function installPluginBySpec(
     if (manifest.code === "manifest_no_targets") {
       return {
         ok: false,
-        message: `"${spec}" does not declare supported targets in package.json`,
+        message: `"${spec}" does not expose plugin entrypoints in package.json`,
       }
     }
 

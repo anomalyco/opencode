@@ -75,6 +75,7 @@ export namespace Agent {
       const config = yield* Config.Service
       const auth = yield* Auth.Service
       const skill = yield* Skill.Service
+      const provider = yield* Provider.Service
 
       const state = yield* InstanceState.make<State>(
         Effect.fn("Agent.state")(function* (ctx) {
@@ -330,9 +331,9 @@ export namespace Agent {
           model?: { providerID: ProviderID; modelID: ModelID }
         }) {
           const cfg = yield* config.get()
-          const model = input.model ?? (yield* Effect.promise(() => Provider.defaultModel()))
-          const resolved = yield* Effect.promise(() => Provider.getModel(model.providerID, model.modelID))
-          const language = yield* Effect.promise(() => Provider.getLanguage(resolved))
+          const model = input.model ?? (yield* provider.defaultModel())
+          const resolved = yield* provider.getModel(model.providerID, model.modelID)
+          const language = yield* provider.getLanguage(resolved)
 
           const system = [PROMPT_GENERATE]
           yield* Effect.promise(() =>
@@ -393,6 +394,7 @@ export namespace Agent {
   )
 
   export const defaultLayer = layer.pipe(
+    Layer.provide(Provider.defaultLayer),
     Layer.provide(Auth.defaultLayer),
     Layer.provide(Config.defaultLayer),
     Layer.provide(Skill.defaultLayer),
