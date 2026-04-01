@@ -1,5 +1,7 @@
 import { test as base, expect, type Page } from "@playwright/test"
+import { ManagedRuntime } from "effect"
 import type { E2EWindow } from "../src/testing/terminal"
+import { TestLLMServer } from "../../opencode/test/lib/llm-server"
 import {
   healthPhase,
   cleanupSession,
@@ -26,6 +28,7 @@ const seedModel = (() => {
 })()
 
 type TestFixtures = {
+  llm: TestLLMServer["Service"]
   sdk: ReturnType<typeof createSdk>
   gotoSession: (sessionID?: string) => Promise<void>
   withProject: <T>(
@@ -36,7 +39,11 @@ type TestFixtures = {
       trackSession: (sessionID: string, directory?: string) => void
       trackDirectory: (directory: string) => void
     }) => Promise<T>,
-    options?: { extra?: string[] },
+    options?: {
+      extra?: string[]
+      model?: { providerID: string; modelID: string }
+      setup?: (directory: string) => Promise<void>
+    },
   ) => Promise<T>
 }
 
@@ -46,6 +53,14 @@ type WorkerFixtures = {
 }
 
 export const test = base.extend<TestFixtures, WorkerFixtures>({
+  llm: async ({}, use) => {
+    const rt = ManagedRuntime.make(TestLLMServer.layer)
+    try {
+      await use(await rt.runPromise(TestLLMServer.asEffect()))
+    } finally {
+      await rt.dispose()
+    }
+  },
   page: async ({ page }, use) => {
     let boundary: string | undefined
     setHealthPhase(page, "test")
@@ -99,7 +114,8 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       const root = await createTestProject()
       const sessions = new Map<string, string>()
       const dirs = new Set<string>()
-      await seedStorage(page, { directory: root, extra: options?.extra })
+      await options?.setup?.(root)
+      await seedStorage(page, { directory: root, extra: options?.extra, model: options?.model })
 
       const gotoSession = async (sessionID?: string) => {
         await page.goto(sessionPath(root, sessionID))
@@ -133,7 +149,14 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   },
 })
 
-async function seedStorage(page: Page, input: { directory: string; extra?: string[] }) {
+async function seedStorage(
+  page: Page,
+  input: {
+    directory: string
+    extra?: string[]
+    model?: { providerID: string; modelID: string }
+  },
+) {
   await seedProjects(page, input)
   await page.addInitScript((model: { providerID: string; modelID: string }) => {
     const win = window as E2EWindow
@@ -158,7 +181,7 @@ async function seedStorage(page: Page, input: { directory: string; extra?: strin
         variant: {},
       }),
     )
-  }, seedModel)
+  }, input.model ?? seedModel)
 }
 
 export { expect }
