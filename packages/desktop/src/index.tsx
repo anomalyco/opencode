@@ -380,6 +380,28 @@ const createPlatform = (): Platform => {
       return commands.checkAppExists(appName)
     },
 
+    async createDesignWebview(url: string, x: number, y: number, width: number, height: number, script?: string) {
+      await commands.createDesignWebview(url, x, y, width, height, script ?? null)
+    },
+    async resizeDesignWebview(x: number, y: number, width: number, height: number) {
+      await commands.resizeDesignWebview(x, y, width, height)
+    },
+    async closeDesignWebview() {
+      await commands.closeDesignWebview()
+    },
+    async evalDesignWebview(script: string) {
+      await commands.evalDesignWebview(script)
+    },
+    async buildDesignIndex(root: string) {
+      return await commands.buildDesignIndex(root)
+    },
+    async updateDesignIndex(root: string, paths: string[]) {
+      return await commands.updateDesignIndex(root, paths)
+    },
+    async queryDesignIndex(root: string, component: string | null, classes: string[] | null) {
+      return await commands.queryDesignIndex(root, component, classes)
+    },
+
     async readClipboardImage() {
       const image = await readImage().catch(() => null)
       if (!image) return null

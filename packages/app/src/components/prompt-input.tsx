@@ -178,7 +178,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return diffs.some((diff) => diff.file === path)
   }
 
-  const openComment = (item: { path: string; commentID?: string; commentOrigin?: "review" | "file" }) => {
+  const openComment = (item: { path: string; commentID?: string; commentOrigin?: "review" | "file" | "design" }) => {
     if (!item.commentID) return
 
     const focus = { file: item.path, id: item.commentID }
@@ -201,7 +201,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       schedule(attempts)
     }
 
-    const wantsReview = item.commentOrigin === "review" || (item.commentOrigin !== "file" && commentInReview(item.path))
+    const wantsReview =
+      item.commentOrigin === "review" || (item.commentOrigin === undefined && commentInReview(item.path))
     if (wantsReview) {
       if (!view().reviewPanel.opened()) view().reviewPanel.open()
       layout.fileTree.setTab("changes")

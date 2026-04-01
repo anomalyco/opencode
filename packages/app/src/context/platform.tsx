@@ -87,6 +87,31 @@ export type Platform = {
 
   /** Read image from clipboard (desktop only) */
   readClipboardImage?(): Promise<File | null>
+
+  /** Create a native child webview for design preview (desktop only) */
+  createDesignWebview?(url: string, x: number, y: number, width: number, height: number, script?: string): Promise<void>
+
+  /** Resize/reposition the design preview webview (desktop only) */
+  resizeDesignWebview?(x: number, y: number, width: number, height: number): Promise<void>
+
+  /** Close/destroy the design preview webview (desktop only) */
+  closeDesignWebview?(): Promise<void>
+
+  /** Evaluate JS in the design preview webview (desktop only) */
+  evalDesignWebview?(script: string): Promise<void>
+
+  /** Build component file index for design preview (desktop only) */
+  buildDesignIndex?(root: string): Promise<string[]>
+
+  /** Update component file index for changed files (desktop only) */
+  updateDesignIndex?(root: string, paths: string[]): Promise<string[]>
+
+  /** Query the design index for a component or class match (desktop only) */
+  queryDesignIndex?(
+    root: string,
+    component: string | null,
+    classes: string[] | null,
+  ): Promise<{ file: string; line: number; confidence: number } | null>
 }
 
 export type DisplayBackend = "auto" | "wayland"

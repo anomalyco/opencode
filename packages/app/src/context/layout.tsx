@@ -251,6 +251,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         session: {
           width: DEFAULT_SESSION_WIDTH,
         },
+        design: {
+          opened: false,
+          url: "",
+        },
         mobileSidebar: {
           opened: false,
         },
@@ -689,6 +693,38 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             return
           }
           setStore("session", "width", width)
+        },
+      },
+      design: {
+        opened: createMemo(() => store.design?.opened ?? false),
+        url: createMemo(() => store.design?.url ?? ""),
+        open() {
+          if (!store.design) {
+            setStore("design", { opened: true, url: "" })
+            return
+          }
+          setStore("design", "opened", true)
+        },
+        close() {
+          if (!store.design) {
+            setStore("design", { opened: false, url: "" })
+            return
+          }
+          setStore("design", "opened", false)
+        },
+        toggle() {
+          if (!store.design) {
+            setStore("design", { opened: true, url: "" })
+            return
+          }
+          setStore("design", "opened", (x) => !x)
+        },
+        setUrl(url: string) {
+          if (!store.design) {
+            setStore("design", { opened: false, url })
+            return
+          }
+          setStore("design", "url", url)
         },
       },
       mobileSidebar: {

@@ -1,5 +1,7 @@
 mod cli;
 mod constants;
+mod design_index;
+mod design_webview;
 #[cfg(target_os = "linux")]
 pub mod linux_display;
 #[cfg(target_os = "linux")]
@@ -348,6 +350,8 @@ pub fn run() {
             // ensuring all buffered logs are flushed on shutdown.
             handle.manage(logging::init(&log_dir));
 
+            handle.manage(design_webview::DesignWebviewState(std::sync::Mutex::new(None)));
+            handle.manage(design_index::DesignIndexState(std::sync::Mutex::new(Default::default())));
             builder.mount_events(&handle);
             tauri::async_runtime::spawn(initialize(handle));
 
@@ -387,7 +391,15 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             check_app_exists,
             wsl_path,
             resolve_app_path,
-            open_path
+            open_path,
+            design_webview::create_design_webview,
+            design_webview::resize_design_webview,
+            design_webview::close_design_webview,
+            design_webview::eval_design_webview,
+            design_webview::design_bridge,
+            design_index::build_design_index,
+            design_index::update_design_index,
+            design_index::query_design_index
         ])
         .events(tauri_specta::collect_events![
             LoadingWindowComplete,
