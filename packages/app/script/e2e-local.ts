@@ -56,6 +56,7 @@ const [serverPort, webPort] = await Promise.all([freePort(), freePort()])
 
 const sandbox = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-e2e-"))
 const keepSandbox = process.env.OPENCODE_E2E_KEEP_SANDBOX === "1"
+const paid = process.env.OPENCODE_E2E_REQUIRE_PAID === "true" && !!process.env.OPENCODE_API_KEY
 
 const serverEnv = {
   ...process.env,
@@ -71,7 +72,9 @@ const serverEnv = {
   OPENCODE_E2E_PROJECT_DIR: repoDir,
   OPENCODE_E2E_SESSION_TITLE: "E2E Session",
   OPENCODE_E2E_MESSAGE: "Seeded for UI e2e",
-  OPENCODE_E2E_MODEL: process.env.OPENCODE_E2E_MODEL ?? "opencode/gpt-5-nano",
+<<<<<<< HEAD
+  OPENCODE_E2E_MODEL: paid ? (process.env.OPENCODE_E2E_MODEL ?? "opencode/gpt-5-nano") : "opencode/gpt-5-nano",
+  OPENCODE_E2E_REQUIRE_PAID: paid ? "true" : "false",
   OPENCODE_CLIENT: "app",
   OPENCODE_STRICT_CONFIG_DEPS: "true",
 } satisfies Record<string, string>
