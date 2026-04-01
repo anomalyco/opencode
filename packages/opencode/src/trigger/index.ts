@@ -6,6 +6,7 @@ import { makeRuntime } from "@/effect/run-service"
 import { SessionPrompt } from "@/session/prompt"
 import { SessionStatus } from "@/session/status"
 import { SessionID } from "@/session/schema"
+import { NotFoundError } from "@/storage/db"
 import { Cause, Duration, Effect, Layer, Schedule, ServiceMap } from "effect"
 import z from "zod"
 import { Log } from "../util/log"
@@ -30,6 +31,7 @@ export namespace Trigger {
         interval: z.number().int().positive(),
       }),
       action: Action.optional(),
+      enabled: z.boolean(),
       runs: z.number().int().nonnegative(),
       time: z.object({
         created: z.number().int().nonnegative(),
@@ -59,14 +61,24 @@ export namespace Trigger {
     ),
   }
 
+  type Err = InstanceType<typeof NotFoundError>
+
   type State = {
     create: (input: CreateInput) => Effect.Effect<Info>
+    get: (id: string) => Effect.Effect<Info, Err>
     list: () => Effect.Effect<Info[]>
+    enable: (id: string) => Effect.Effect<Info, Err>
+    disable: (id: string) => Effect.Effect<Info, Err>
+    delete: (id: string) => Effect.Effect<void, Err>
   }
 
   export interface Interface {
     readonly create: (input: CreateInput) => Effect.Effect<Info>
+    readonly get: (id: string) => Effect.Effect<Info, Err>
     readonly list: () => Effect.Effect<Info[]>
+    readonly enable: (id: string) => Effect.Effect<Info, Err>
+    readonly disable: (id: string) => Effect.Effect<Info, Err>
+    readonly delete: (id: string) => Effect.Effect<void, Err>
   }
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Trigger") {}
@@ -79,10 +91,18 @@ export namespace Trigger {
         Effect.fn("Trigger.state")(function* () {
           const data = new Map<string, Info>()
 
+          const get = Effect.fn("Trigger.get")((id: string) =>
+            Effect.sync(() => {
+              const item = data.get(id)
+              if (item !== undefined) return item
+              throw new NotFoundError({ message: `Trigger not found: ${id}` })
+            }),
+          )
+
           const tick = Effect.fnUntraced(function* () {
             const now = Date.now()
             yield* Effect.forEach(
-              Array.from(data.values()).filter((item) => item.time.next <= now),
+              Array.from(data.values()).filter((item) => item.enabled && item.time.next <= now),
               (item) =>
                 Effect.gen(function* () {
                   const at = Date.now()
@@ -144,6 +164,7 @@ export namespace Trigger {
                 interval: input.interval,
               },
               action: input.action,
+              enabled: true,
               runs: 0,
               time: {
                 created: now,
@@ -154,11 +175,27 @@ export namespace Trigger {
             return item
           })
 
+          const update = Effect.fnUntraced(function* (id: string, enabled: boolean) {
+            const item = yield* get(id)
+            const next = { ...item, enabled }
+            data.set(id, next)
+            return next
+          })
+
           const list = Effect.fn("Trigger.list")(() =>
             Effect.succeed(Array.from(data.values()).sort((a, b) => a.time.created - b.time.created)),
           )
 
-          return { create, list }
+          const enable = Effect.fn("Trigger.enable")((id: string) => update(id, true))
+
+          const disable = Effect.fn("Trigger.disable")((id: string) => update(id, false))
+
+          const del = Effect.fn("Trigger.delete")(function* (id: string) {
+            yield* get(id)
+            data.delete(id)
+          })
+
+          return { create, get, list, enable, disable, delete: del }
         }),
       )
 
@@ -166,8 +203,20 @@ export namespace Trigger {
         create: Effect.fn("Trigger.create")(function* (input: CreateInput) {
           return yield* InstanceState.useEffect(state, (svc) => svc.create(input))
         }),
+        get: Effect.fn("Trigger.get")(function* (id: string) {
+          return yield* InstanceState.useEffect(state, (svc) => svc.get(id))
+        }),
         list: Effect.fn("Trigger.list")(function* () {
           return yield* InstanceState.useEffect(state, (svc) => svc.list())
+        }),
+        enable: Effect.fn("Trigger.enable")(function* (id: string) {
+          return yield* InstanceState.useEffect(state, (svc) => svc.enable(id))
+        }),
+        disable: Effect.fn("Trigger.disable")(function* (id: string) {
+          return yield* InstanceState.useEffect(state, (svc) => svc.disable(id))
+        }),
+        delete: Effect.fn("Trigger.delete")(function* (id: string) {
+          return yield* InstanceState.useEffect(state, (svc) => svc.delete(id))
         }),
       })
     }),
@@ -182,5 +231,21 @@ export namespace Trigger {
 
   export async function list() {
     return runPromise((svc) => svc.list())
+  }
+
+  export async function get(id: string) {
+    return runPromise((svc) => svc.get(id))
+  }
+
+  export async function enable(id: string) {
+    return runPromise((svc) => svc.enable(id))
+  }
+
+  export async function disable(id: string) {
+    return runPromise((svc) => svc.disable(id))
+  }
+
+  export async function remove(id: string) {
+    return runPromise((svc) => svc["delete"](id))
   }
 }
