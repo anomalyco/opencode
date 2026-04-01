@@ -19,7 +19,7 @@ Vamos começar.
 
 Para usar o opencode no seu terminal, você precisará de:
 
-1. Um emulador de terminal moderno como:
+1. Um emulador de terminal moderno, como por exemplo:
    - [WezTerm](https://wezterm.org), multiplataforma
    - [Alacritty](https://alacritty.org), multiplataforma
    - [Ghostty](https://ghostty.org), Linux e macOS
@@ -91,7 +91,7 @@ Você também pode instalá-lo com os seguintes comandos:
 #### Windows
 
 :::tip[Recomendado: Use WSL]
-Para a melhor experiência no Windows, recomendamos usar o [Windows Subsystem for Linux (WSL)](/docs/windows-wsl). Ele oferece melhor desempenho e total compatibilidade com os recursos do opencode.
+Para uma melhor experiência no Windows, recomendamos usar o [Windows Subsystem for Linux (WSL)](/docs/windows-wsl). Ele oferece melhor desempenho e total compatibilidade com os recursos do opencode.
 :::
 
 - **Usando Chocolatey**
@@ -124,7 +124,7 @@ Para a melhor experiência no Windows, recomendamos usar o [Windows Subsystem fo
   docker run -it --rm ghcr.io/anomalyco/opencode
   ```
 
-O suporte para instalar o opencode no Windows usando Bun está atualmente em andamento.
+O suporte para instalar o opencode no Windows usando Bun está atualmente em desenvolvimento.
 
 Você também pode baixar o binário na seção [Releases](https://github.com/anomalyco/opencode/releases).
 
@@ -135,7 +135,7 @@ Você também pode baixar o binário na seção [Releases](https://github.com/an
 Com o opencode, você pode usar qualquer provedor de LLM configurando suas chaves de API.
 
 Se você é novo no uso de provedores de LLM, recomendamos usar o [OpenCode Zen](/docs/zen).
-É uma lista selecionada de modelos que foram testados e verificados pela equipe do opencode.
+Zen conta com uma lista selecionada de modelos que foram testados e verificados pela equipe do opencode.
 
 1. Execute o comando `/connect` no TUI, selecione opencode e acesse [opencode.ai/auth](https://opencode.ai/auth).
 
@@ -160,7 +160,7 @@ Alternativamente, você pode selecionar um dos outros provedores. [Saiba mais](/
 
 ## Inicialização
 
-Agora que você configurou um provedor, pode navegar até um projeto no qual deseja trabalhar.
+Agora que você configurou um provedor, navegue até um projeto no qual deseja trabalhar.
 
 ```bash
 cd /path/to/project
@@ -234,7 +234,7 @@ Você pode pedir ao opencode para adicionar novos recursos ao seu projeto. Embor
    From this screen, the user can undelete a note or permanently delete it.
    ```
 
-   Você quer dar ao opencode detalhes suficientes para entender o que você deseja. Ajuda conversar com ele como se você estivesse falando com um desenvolvedor júnior da sua equipe.
+   É importante fornecer ao opencode detalhes suficientes para entender o que você deseja. Ajuda conversar com ele como se você estivesse falando com um desenvolvedor júnior da sua equipe.
 
    :::tip
    Dê ao opencode bastante contexto e exemplos para ajudá-lo a entender o que você deseja.
@@ -281,7 +281,7 @@ handled in the /notes route in @packages/functions/src/notes.ts and implement
 the same logic in @packages/functions/src/settings.ts
 ```
 
-Você quer ter certeza de fornecer uma boa quantidade de detalhes para que o opencode faça as alterações corretas.
+Certifique-se de fornecer uma boa quantidade de detalhes para que o opencode faça as alterações corretas.
 
 ---
 
