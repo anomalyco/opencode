@@ -78,10 +78,75 @@ opencode attach http://10.20.30.40:4096
 
 #### Flags
 
-| Flag        | Short | Description                       |
-| ----------- | ----- | --------------------------------- |
-| `--dir`     |       | Working directory to start TUI in |
-| `--session` | `-s`  | Session ID to continue            |
+| Flag          | Short | Description                              |
+| ------------- | ----- | ---------------------------------------- |
+| `--dir`       |       | Working directory to start TUI in        |
+| `--workspace` |       | Workspace ID to use on the remote server |
+| `--session`   | `-s`  | Session ID to continue                   |
+
+---
+
+When you are attaching to a long-running OpenCode server, `--workspace` helps you land in the right remote workspace immediately instead of browsing into it after the connection is established.
+
+```bash
+opencode attach http://your-host:4096 --dir /srv/app --workspace ws_123 --continue
+```
+
+This is especially useful when you use OpenCode remotely from another laptop or from the web UI on a phone and want to continue the right session without hunting through old work.
+
+---
+
+### trigger
+
+Manage lightweight scheduled triggers.
+
+```bash
+opencode trigger [command]
+```
+
+Use triggers when you want OpenCode to do something later, on a schedule, or when another tool hits a webhook.
+
+#### list
+
+List the current triggers for the active project.
+
+```bash
+opencode trigger list
+```
+
+#### create
+
+Create a repeating command trigger:
+
+```bash
+opencode trigger create --interval 60000 --session ses_123 --command summarize --arguments "--daily"
+```
+
+Create a one-shot webhook trigger:
+
+```bash
+opencode trigger create --at 1743600000000 --webhook https://example.com/hook --method POST --body '{"ok":true}'
+```
+
+Command actions run an OpenCode command in a session. Webhook actions send an HTTP request to another service.
+
+#### fire
+
+Run a trigger immediately without waiting for its schedule.
+
+```bash
+opencode trigger fire <id>
+```
+
+#### enable / disable / delete
+
+```bash
+opencode trigger enable <id>
+opencode trigger disable <id>
+opencode trigger delete <id>
+```
+
+Use `disable` when you want to pause a trigger without losing its configuration.
 
 ---
 

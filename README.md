@@ -116,6 +116,56 @@ Learn more about [agents](https://opencode.ai/docs/agents).
 
 For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
 
+### Automation and remote control
+
+OpenCode can now be used for lightweight automation and remote human-in-the-loop workflows.
+
+#### Triggers
+
+List triggers:
+
+```bash
+opencode trigger list
+```
+
+Create a repeating command trigger:
+
+```bash
+opencode trigger create --interval 60000 --session ses_123 --command summarize --arguments "--daily"
+```
+
+Create a one-shot webhook trigger:
+
+```bash
+opencode trigger create --at 1743600000000 --webhook https://example.com/hook --method POST --body '{"ok":true}'
+```
+
+Fire, enable, disable, or delete a trigger:
+
+```bash
+opencode trigger fire <id>
+opencode trigger enable <id>
+opencode trigger disable <id>
+opencode trigger delete <id>
+```
+
+#### Remote control from another device
+
+Run OpenCode on a machine that stays on:
+
+```bash
+export OPENCODE_SERVER_PASSWORD='choose-a-strong-password'
+opencode web --hostname 0.0.0.0 --port 4096
+```
+
+From another computer, attach to it directly:
+
+```bash
+opencode attach http://your-host:4096 --dir /path/to/project --workspace ws_123 --continue
+```
+
+From a phone, open the web UI in a browser. The app now surfaces blocked sessions more clearly with an awaiting-input inbox, mobile session attention states, and browser title/app-badge attention when OpenCode needs you.
+
 ### Contributing
 
 If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.

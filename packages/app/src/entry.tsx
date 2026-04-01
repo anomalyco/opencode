@@ -2,7 +2,7 @@
 
 import { render } from "solid-js/web"
 import { AppBaseProviders, AppInterface } from "@/app"
-import { type Platform, PlatformProvider } from "@/context/platform"
+import { type NotificationPermissionState, type Platform, PlatformProvider } from "@/context/platform"
 import { dict as en } from "@/i18n/en"
 import { dict as zh } from "@/i18n/zh"
 import { handleNotificationClick } from "@/utils/notification-click"
@@ -52,13 +52,20 @@ const setStorage = (key: string, value: string | null) => {
 const readDefaultServerUrl = () => getStorage(DEFAULT_SERVER_URL_KEY)
 const writeDefaultServerUrl = (url: string | null) => setStorage(DEFAULT_SERVER_URL_KEY, url)
 
-const notify: Platform["notify"] = async (title, description, href) => {
-  if (!("Notification" in window)) return
+const notificationPermission = async (): Promise<NotificationPermissionState> => {
+  if (!("Notification" in window)) return "unsupported"
+  return Notification.permission
+}
 
-  const permission =
-    Notification.permission === "default"
-      ? await Notification.requestPermission().catch(() => "denied")
-      : Notification.permission
+const requestNotificationPermission = async (): Promise<NotificationPermissionState> => {
+  if (!("Notification" in window)) return "unsupported"
+  return Notification.permission === "default"
+    ? await Notification.requestPermission().catch(() => "denied")
+    : Notification.permission
+}
+
+const notify: Platform["notify"] = async (title, description, href) => {
+  const permission = await requestNotificationPermission()
 
   if (permission !== "granted") return
 
@@ -118,6 +125,8 @@ const platform: Platform = {
   forward,
   restart,
   notify,
+  notificationPermission,
+  requestNotificationPermission,
   getDefaultServer: async () => {
     const stored = readDefaultServerUrl()
     return stored ? ServerConnection.Key.make(stored) : null

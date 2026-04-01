@@ -7,6 +7,9 @@ import {
   createSessionTabs,
   focusTerminalById,
   getTabReorderIndex,
+  blockedIndicatorVisible,
+  nextMobileTab,
+  sessionTabAttention,
   shouldFocusTerminalOnKeyDown,
 } from "./helpers"
 
@@ -177,5 +180,34 @@ describe("createSessionTabs", () => {
       expect(result.closableTab()).toBeUndefined()
       dispose()
     })
+  })
+})
+
+describe("nextMobileTab", () => {
+  test("switches blocked mobile views back to session", () => {
+    expect(nextMobileTab({ current: "changes", blocked: true, mobile: true })).toBe("session")
+  })
+
+  test("preserves the current tab when not blocked or not mobile", () => {
+    expect(nextMobileTab({ current: "changes", blocked: false, mobile: true })).toBe("changes")
+    expect(nextMobileTab({ current: "changes", blocked: true, mobile: false })).toBe("changes")
+  })
+})
+
+describe("sessionTabAttention", () => {
+  test("flags the session tab when mobile changes view is blocked", () => {
+    expect(sessionTabAttention({ current: "changes", blocked: true, mobile: true })).toBe(true)
+  })
+
+  test("stays quiet when already on the session tab", () => {
+    expect(sessionTabAttention({ current: "session", blocked: true, mobile: true })).toBe(false)
+  })
+})
+
+describe("blockedIndicatorVisible", () => {
+  test("shows only on mobile changes view while blocked", () => {
+    expect(blockedIndicatorVisible({ current: "changes", blocked: true, mobile: true })).toBe(true)
+    expect(blockedIndicatorVisible({ current: "session", blocked: true, mobile: true })).toBe(false)
+    expect(blockedIndicatorVisible({ current: "changes", blocked: false, mobile: true })).toBe(false)
   })
 })

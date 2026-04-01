@@ -42,10 +42,13 @@ import { useTerminal } from "@/context/terminal"
 import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
 import {
+  blockedIndicatorVisible,
   createOpenReviewFile,
   createSessionTabs,
   createSizing,
   focusTerminalById,
+  nextMobileTab,
+  sessionTabAttention,
   shouldFocusTerminalOnKeyDown,
 } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/message-timeline"
@@ -918,6 +921,23 @@ export default function Page() {
   }
 
   const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
+  const mobileSessionAttention = createMemo(() =>
+    sessionTabAttention({ current: store.mobileTab, blocked: composer.blocked(), mobile: !isDesktop() }),
+  )
+  const mobileBlockedIndicator = createMemo(() =>
+    blockedIndicatorVisible({ current: store.mobileTab, blocked: composer.blocked(), mobile: !isDesktop() }),
+  )
+
+  createEffect(() => {
+    const next = nextMobileTab({ current: store.mobileTab, blocked: composer.blocked(), mobile: !isDesktop() })
+    if (next === store.mobileTab) return
+    setStore("mobileTab", next)
+  })
+
+  const revealPromptDock = () => {
+    setStore("mobileTab", "session")
+    promptDock?.scrollIntoView({ block: "end", behavior: "smooth" })
+  }
 
   const fileTreeTab = () => layout.fileTree.tab()
   const setFileTreeTab = (value: "changes" | "all") => layout.fileTree.setTab(value)
@@ -1714,7 +1734,15 @@ export default function Page() {
                 classes={{ button: "w-full" }}
                 onClick={() => setStore("mobileTab", "session")}
               >
-                {language.t("session.tab.session")}
+                <span class="inline-flex items-center gap-2">
+                  <span>{language.t("session.tab.session")}</span>
+                  <Show when={mobileSessionAttention()}>
+                    <span
+                      data-slot="session-tab-attention"
+                      class="inline-flex size-2 rounded-full bg-surface-warning-strong"
+                    />
+                  </Show>
+                </span>
               </Tabs.Trigger>
               <Tabs.Trigger
                 value="changes"
@@ -1728,6 +1756,18 @@ export default function Page() {
               </Tabs.Trigger>
             </Tabs.List>
           </Tabs>
+        </Show>
+
+        <Show when={mobileBlockedIndicator()}>
+          <div class="md:hidden absolute inset-x-0 bottom-24 z-30 px-3 pointer-events-none">
+            <div class="mx-auto max-w-120 pointer-events-auto">
+              <Button size="large" variant="secondary" class="w-full shadow-lg" onClick={revealPromptDock}>
+                {composer.permissionRequest()
+                  ? language.t("notification.permission.title")
+                  : language.t("notification.question.title")}
+              </Button>
+            </div>
+          </div>
         </Show>
 
         {/* Session panel */}

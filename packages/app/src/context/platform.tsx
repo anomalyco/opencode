@@ -8,6 +8,7 @@ type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
 type OpenFilePickerOptions = { title?: string; multiple?: boolean; accept?: string[]; extensions?: string[] }
 type SaveFilePickerOptions = { title?: string; defaultPath?: string }
 type UpdateInfo = { updateAvailable: boolean; version?: string }
+export type NotificationPermissionState = "unsupported" | "default" | "denied" | "granted"
 
 export type Platform = {
   /** Platform discriminator */
@@ -36,6 +37,8 @@ export type Platform = {
 
   /** Send a system notification (optional deep link) */
   notify(title: string, description?: string, href?: string): Promise<void>
+  notificationPermission?(): Promise<NotificationPermissionState>
+  requestNotificationPermission?(): Promise<NotificationPermissionState>
 
   /** Open directory picker dialog (native on Tauri, server-backed on web) */
   openDirectoryPickerDialog?(opts?: OpenDirectoryPickerOptions): Promise<PickerPaths>

@@ -8,11 +8,15 @@ import {
 } from "./deep-links"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import {
+  attentionTitle,
+  awaitingSessions,
   displayName,
   effectiveWorkspaceOrder,
   errorMessage,
   hasProjectPermissions,
   latestRootSession,
+  projectAttention,
+  sessionAttention,
   workspaceKey,
 } from "./helpers"
 
@@ -26,6 +30,15 @@ const session = (input: Partial<Session> & Pick<Session, "id" | "directory">) =>
     time: { created: 0, updated: 0, archived: undefined },
     ...input,
   }) as Session
+
+const permission = (id: string, sessionID: string) => ({
+  id,
+  sessionID,
+  permission: "bash",
+  patterns: [],
+  metadata: {},
+  always: [],
+})
 
 describe("layout deep links", () => {
   test("parses open-project deep links", () => {
@@ -165,6 +178,95 @@ describe("layout workspace helpers", () => {
     )
 
     expect(result).toBe(false)
+  })
+
+  test("prefers project question attention after permissions", () => {
+    expect(projectAttention({ permission: false, question: true, error: true, unseen: true })).toBe("question")
+  })
+
+  test("prefers project permission attention over question", () => {
+    expect(projectAttention({ permission: true, question: true, error: true, unseen: true })).toBe("permission")
+  })
+
+  test("prefers session question attention over error, unseen, and working", () => {
+    expect(sessionAttention({ permission: false, question: true, error: true, unseen: true, working: true })).toBe(
+      "question",
+    )
+  })
+
+  test("prefers session working state only when no stronger attention exists", () => {
+    expect(sessionAttention({ permission: false, question: false, error: false, unseen: false, working: true })).toBe(
+      "working",
+    )
+  })
+
+  test("collects awaiting root sessions for child questions", () => {
+    const result = awaitingSessions(
+      {
+        path: { directory: "/root" },
+        session: [
+          session({ id: "root", directory: "/root", time: { created: 1, updated: 10, archived: undefined } }),
+          session({
+            id: "child",
+            directory: "/root",
+            parentID: "root",
+            time: { created: 2, updated: 20, archived: undefined },
+          }),
+        ],
+        question: {
+          child: [{ id: "q-child", sessionID: "child", questions: [] }],
+        },
+      },
+      120_000,
+    )
+
+    expect(result).toHaveLength(1)
+    expect(result[0]?.session.id).toBe("root")
+    expect(result[0]?.reason).toBe("question")
+  })
+
+  test("prefers permission over question for awaiting sessions", () => {
+    const result = awaitingSessions(
+      {
+        path: { directory: "/root" },
+        session: [session({ id: "root", directory: "/root", time: { created: 1, updated: 10, archived: undefined } })],
+        permission: {
+          root: [permission("perm-root", "root")],
+        },
+        question: {
+          root: [{ id: "q-root", sessionID: "root", questions: [] }],
+        },
+      },
+      120_000,
+    )
+
+    expect(result).toEqual([
+      {
+        session: expect.objectContaining({ id: "root" }),
+        reason: "permission",
+      },
+    ])
+  })
+
+  test("filters out auto-approved awaiting permissions", () => {
+    const result = awaitingSessions(
+      {
+        path: { directory: "/root" },
+        session: [session({ id: "root", directory: "/root", time: { created: 1, updated: 10, archived: undefined } })],
+        permission: {
+          root: [permission("perm-root", "root")],
+        },
+      },
+      120_000,
+      () => false,
+    )
+
+    expect(result).toEqual([])
+  })
+
+  test("formats attention title with count", () => {
+    expect(attentionTitle("OpenCode", 0)).toBe("OpenCode")
+    expect(attentionTitle("OpenCode", 2)).toBe("(2) OpenCode")
   })
 
   test("ignores archived and child sessions when finding latest root session", () => {
