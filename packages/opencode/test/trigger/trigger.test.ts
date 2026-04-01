@@ -1,11 +1,16 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { Bus } from "../../src/bus"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionStatus } from "../../src/session/status"
 import { Trigger } from "../../src/trigger"
+import { resetDatabase } from "../fixture/db"
 import { tmpdir } from "../fixture/fixture"
+
+beforeEach(async () => {
+  await resetDatabase()
+})
 
 afterEach(async () => {
   mock.restore()
@@ -91,6 +96,35 @@ describe("trigger service", () => {
         await Bun.sleep(80)
 
         expect(await Trigger.list()).toEqual([])
+      },
+    })
+  })
+
+  test("loads persisted triggers after instance disposal", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    const created = await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const item = await Trigger.create({ interval: 5_000 })
+        await Trigger.fire(item.id)
+        return await Trigger.disable(item.id)
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => Instance.dispose(),
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        expect(await Trigger.list()).toEqual([
+          {
+            ...created,
+          },
+        ])
       },
     })
   })
