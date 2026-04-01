@@ -1,0 +1,89 @@
+diff --git a/index-wv534m5j.js b/index-wv534m5j.js
+index 135575a0b101cd4e2bedda5e18a660d6924fcb1f..42e5223ebc164c2370362fb7e43c3aec57dd40cc 100644
+--- a/index-wv534m5j.js
++++ b/index-wv534m5j.js
+@@ -6843,7 +6843,7 @@
+
+ // src/lib/stdin-parser.ts
+ import { Buffer as Buffer3 } from "buffer";
+-var DEFAULT_TIMEOUT_MS = 20;
++var DEFAULT_TIMEOUT_MS = 25;
+ var DEFAULT_MAX_PENDING_BYTES = 64 * 1024;
+ var INITIAL_PENDING_CAPACITY = 256;
+ var ESC = 27;
+@@ -7155,6 +7155,7 @@
+   pendingSinceMs = null;
+   forceFlush = false;
+   justFlushedEsc = false;
++  justFlushedEscBracket = false;
+   state = { tag: "ground" };
+   cursor = 0;
+   unitStart = 0;
+@@ -7295,6 +7296,15 @@
+               continue;
+             }
+             this.justFlushedEsc = false;
++          }
++          if (this.justFlushedEscBracket) {
++            if (byte === 60) {
++              this.justFlushedEscBracket = false;
++              this.cursor += 1;
++              this.state = { tag: "esc_less_mouse" };
++              continue;
++            }
++            this.justFlushedEscBracket = false;
+           }
+           if (byte === ESC) {
+             this.cursor += 1;
+@@ -7422,7 +7432,8 @@
+               this.markPending();
+               return;
+             }
+-            this.emitKeyOrResponse("unknown", decodeUtf8(bytes.subarray(this.unitStart, this.cursor)));
++            this.emitOpaqueResponse("unknown", bytes.subarray(this.unitStart, this.cursor));
++            this.justFlushedEscBracket = true;
+             this.state = { tag: "ground" };
+             this.consumePrefix(this.cursor);
+             continue;
+@@ -7449,6 +7460,7 @@
+               return;
+             }
+             this.emitOpaqueResponse("unknown", bytes.subarray(this.unitStart, this.cursor));
++            this.justFlushedEscBracket = true;
+             this.state = { tag: "ground" };
+             this.consumePrefix(this.cursor);
+             continue;
+@@ -7924,10 +7936,9 @@
+               this.markPending();
+               return;
+             }
+-            this.emitOpaqueResponse("unknown", bytes.subarray(this.unitStart, this.cursor));
+-            this.state = { tag: "ground" };
+-            this.consumePrefix(this.cursor);
+-            continue;
++            this.pendingSinceMs = null;
++            this.forceFlush = false;
++            return;
+           }
+           if (byte >= 48 && byte <= 57 || byte === 59) {
+             this.cursor += 1;
+@@ -8128,6 +8139,7 @@
+     this.pendingSinceMs = null;
+     this.forceFlush = false;
+     this.justFlushedEsc = false;
++    this.justFlushedEscBracket = false;
+     this.state = { tag: "ground" };
+     this.cursor = 0;
+     this.unitStart = 0;
+@@ -18837,7 +18849,11 @@
+       explicitWidthCprActive: false
+     }, true);
+     this.setCapturedRenderable(undefined);
++    if (this._useMouse) {
++      this.disableMouse();
++    }
+     this.stdin.removeListener("data", this.stdinListener);
++    while (this.stdin.read() !== null) {}
+     if (this.stdin.setRawMode) {
+       this.stdin.setRawMode(false);
+     }
