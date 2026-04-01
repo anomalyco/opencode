@@ -24,11 +24,11 @@
   }
 
   &[data-closed] {
-    animation: hover-card-close var(--transition-duration) var(--transition-easing);
+    animation: hover-card-close 0.15s ease-out;
   }
 
   &[data-expanded] {
-    animation: hover-card-open var(--transition-duration) var(--transition-easing);
+    animation: hover-card-open 0.15s ease-out;
   }
 
   [data-slot="hover-card-body"] {

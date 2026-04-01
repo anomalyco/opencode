@@ -26,9 +26,9 @@
     border-radius: 3px;
     border: 1px solid var(--border-weak-base);
     background: var(--surface-base);
-    transition-property: background-color, border-color, box-shadow;
-    transition-duration: var(--transition-duration);
-    transition-timing-function: var(--transition-easing);
+    transition:
+      background-color 150ms,
+      border-color 150ms;
   }
 
   [data-slot="switch-thumb"] {
@@ -47,9 +47,9 @@
       0 1px 3px 0 rgba(19, 16, 16, 0.08);
 
     transform: translateX(-1px);
-    transition-property: transform, background-color, border-color;
-    transition-duration: var(--transition-duration);
-    transition-timing-function: var(--transition-easing);
+    transition:
+      transform 150ms,
+      background-color 150ms;
   }
 
   [data-slot="switch-label"] {
@@ -86,9 +86,9 @@
     background-color: var(--surface-hover);
   }
 
-  &:focus-within:not([data-readonly]) [data-slot="switch-control"] {
+  &:not([data-readonly]) [data-slot="switch-input"]:focus-visible ~ [data-slot="switch-control"] {
     border-color: var(--border-focus);
-    box-shadow: 0 0 0 2px var(--surface-focus);
+    box-shadow: var(--shadow-xs-border-focus);
   }
 
   &[data-checked] [data-slot="switch-control"] {

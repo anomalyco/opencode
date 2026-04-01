@@ -12,6 +12,10 @@
       "icons/prod/icon.ico"
     ],
     "windows": {
+      "signCommand": {
+        "cmd": "powershell",
+        "args": ["-ExecutionPolicy", "Bypass", "-File", "../../../script/sign-windows.ps1", "%1"]
+      },
       "nsis": {
         "installerIcon": "icons/prod/icon.ico"
       }
@@ -20,6 +24,11 @@
       "deb": {
         "files": {
           "/usr/share/metainfo/ai.opencode.opencode.metainfo.xml": "release/appstream.metainfo.xml"
+        }
+      },
+      "rpm": {
+        "compression": {
+          "type": "none"
         }
       }
     }

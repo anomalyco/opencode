@@ -1,6 +1,6 @@
 import { OpenAICompatibleChatLanguageModel } from "@/provider/sdk/copilot/chat/openai-compatible-chat-language-model"
 import { describe, test, expect, mock } from "bun:test"
-import type { LanguageModelV2Prompt } from "@ai-sdk/provider"
+import type { LanguageModelV3Prompt } from "@ai-sdk/provider"
 
 async function convertReadableStreamToArray<T>(stream: ReadableStream<T>): Promise<T[]> {
   const reader = stream.getReader()
@@ -13,7 +13,7 @@ async function convertReadableStreamToArray<T>(stream: ReadableStream<T>): Promi
   return result
 }
 
-const TEST_PROMPT: LanguageModelV2Prompt = [{ role: "user", content: [{ type: "text", text: "Hello" }] }]
+const TEST_PROMPT: LanguageModelV3Prompt = [{ role: "user", content: [{ type: "text", text: "Hello" }] }]
 
 // Fixtures from copilot_test.exs
 const FIXTURES = {
@@ -63,6 +63,12 @@ const FIXTURES = {
     `data: {"choices":[{"index":0,"delta":{"content":null,"role":"assistant","reasoning_text":"**Executing and Analyzing HTML**\\n\\nI've successfully captured the HTML snapshot using the \`browser_eval\` tool, giving me a solid understanding of the page structure. Now, I'm shifting focus to Elixir code execution with \`project_eval\` to assess my ability to work within the project's environment.\\n\\n\\n"}}],"created":1766068643,"id":"oBFEaafzD9DVlOoPkY3l4Qs","usage":{"completion_tokens":0,"prompt_tokens":0,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":0,"reasoning_tokens":0},"model":"gemini-3-pro-preview"}`,
     `data: {"choices":[{"index":0,"delta":{"content":null,"role":"assistant","reasoning_text":"**Testing Project Contexts**\\n\\nI've got the HTML body snapshot from \`browser_eval\`, which is a helpful reference. Next, I'm testing my ability to run Elixir code in the project with \`project_eval\`. I'm starting with a simple sum: \`1 + 1\`. This will confirm I'm set up to interact with the project's codebase.\\n\\n\\n"}}],"created":1766068644,"id":"oBFEaafzD9DVlOoPkY3l4Qs","usage":{"completion_tokens":0,"prompt_tokens":0,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":0,"reasoning_tokens":0},"model":"gemini-3-pro-preview"}`,
     `data: {"choices":[{"finish_reason":"tool_calls","index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"function":{"arguments":"{\\"code\\":\\"1 + 1\\"}","name":"project_eval"},"id":"call_MHw3RDhmT1J5Z3B6WlhpVjlveTc","index":0,"type":"function"}],"reasoning_opaque":"ytGNWFf2doK38peANDvm7whkLPKrd+Fv6/k34zEPBF6Qwitj4bTZT0FBXleydLb6"}}],"created":1766068644,"id":"oBFEaafzD9DVlOoPkY3l4Qs","usage":{"completion_tokens":12,"prompt_tokens":8677,"prompt_tokens_details":{"cached_tokens":3692},"total_tokens":8768,"reasoning_tokens":79},"model":"gemini-3-pro-preview"}`,
+    `data: [DONE]`,
+  ],
+
+  reasoningOpaqueWithToolCallsNoReasoningText: [
+    `data: {"choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"function":{"arguments":"{}","name":"read_file"},"id":"call_reasoning_only","index":0,"type":"function"}],"reasoning_opaque":"opaque-xyz"}}],"created":1769917420,"id":"opaque-only","usage":{"completion_tokens":0,"prompt_tokens":0,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":0,"reasoning_tokens":0},"model":"gemini-3-flash-preview"}`,
+    `data: {"choices":[{"finish_reason":"tool_calls","index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"function":{"arguments":"{}","name":"read_file"},"id":"call_reasoning_only_2","index":1,"type":"function"}]}}],"created":1769917420,"id":"opaque-only","usage":{"completion_tokens":12,"prompt_tokens":123,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":135,"reasoning_tokens":0},"model":"gemini-3-flash-preview"}`,
     `data: [DONE]`,
   ],
 }
@@ -117,7 +123,7 @@ describe("doStream", () => {
       { type: "text-delta", id: "txt-0", delta: " world" },
       { type: "text-delta", id: "txt-0", delta: "!" },
       { type: "text-end", id: "txt-0" },
-      { type: "finish", finishReason: "stop" },
+      { type: "finish", finishReason: { unified: "stop" } },
     ])
   })
 
@@ -195,10 +201,10 @@ describe("doStream", () => {
     const finish = parts.find((p) => p.type === "finish")
     expect(finish).toMatchObject({
       type: "finish",
-      finishReason: "tool-calls",
+      finishReason: { unified: "tool-calls" },
       usage: {
-        inputTokens: 19581,
-        outputTokens: 53,
+        inputTokens: { total: 19581 },
+        outputTokens: { total: 53 },
       },
     })
   })
@@ -250,10 +256,10 @@ describe("doStream", () => {
     const finish = parts.find((p) => p.type === "finish")
     expect(finish).toMatchObject({
       type: "finish",
-      finishReason: "stop",
+      finishReason: { unified: "stop" },
       usage: {
-        inputTokens: 5778,
-        outputTokens: 59,
+        inputTokens: { total: 5778 },
+        outputTokens: { total: 59 },
       },
       providerMetadata: {
         copilot: {
@@ -309,7 +315,7 @@ describe("doStream", () => {
     const finish = parts.find((p) => p.type === "finish")
     expect(finish).toMatchObject({
       type: "finish",
-      finishReason: "stop",
+      finishReason: { unified: "stop" },
     })
   })
 
@@ -382,10 +388,10 @@ describe("doStream", () => {
     const finish = parts.find((p) => p.type === "finish")
     expect(finish).toMatchObject({
       type: "finish",
-      finishReason: "tool-calls",
+      finishReason: { unified: "tool-calls" },
       usage: {
-        inputTokens: 3767,
-        outputTokens: 19,
+        inputTokens: { total: 3767 },
+        outputTokens: { total: 19 },
       },
     })
   })
@@ -443,7 +449,36 @@ describe("doStream", () => {
     const finish = parts.find((p) => p.type === "finish")
     expect(finish).toMatchObject({
       type: "finish",
-      finishReason: "tool-calls",
+      finishReason: { unified: "tool-calls" },
+    })
+  })
+
+  test("should attach reasoning_opaque to tool calls without reasoning_text", async () => {
+    const mockFetch = createMockFetch(FIXTURES.reasoningOpaqueWithToolCallsNoReasoningText)
+    const model = createModel(mockFetch)
+
+    const { stream } = await model.doStream({
+      prompt: TEST_PROMPT,
+      includeRawChunks: false,
+    })
+
+    const parts = await convertReadableStreamToArray(stream)
+    const reasoningParts = parts.filter(
+      (p) => p.type === "reasoning-start" || p.type === "reasoning-delta" || p.type === "reasoning-end",
+    )
+
+    expect(reasoningParts).toHaveLength(0)
+
+    const toolCall = parts.find((p) => p.type === "tool-call" && p.toolCallId === "call_reasoning_only")
+    expect(toolCall).toMatchObject({
+      type: "tool-call",
+      toolCallId: "call_reasoning_only",
+      toolName: "read_file",
+      providerMetadata: {
+        copilot: {
+          reasoningOpaque: "opaque-xyz",
+        },
+      },
     })
   })
 
