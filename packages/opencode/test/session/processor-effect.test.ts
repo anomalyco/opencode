@@ -14,6 +14,7 @@ import { Session } from "../../src/session"
 import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionProcessor } from "../../src/session/processor"
+import { SessionCompactionPolicy } from "../../src/session/compaction-policy"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { Snapshot } from "../../src/snapshot"
@@ -154,6 +155,7 @@ const deps = Layer.mergeAll(
   Config.defaultLayer,
   LLM.defaultLayer,
   Provider.defaultLayer,
+  SessionCompactionPolicy.defaultLayer,
   status,
 ).pipe(Layer.provideMerge(infra))
 const env = Layer.mergeAll(TestLLMServer.layer, SessionProcessor.layer.pipe(Layer.provideMerge(deps)))

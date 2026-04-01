@@ -10,7 +10,7 @@ import { Log } from "@/util/log"
 import { Session } from "."
 import { LLM } from "./llm"
 import { MessageV2 } from "./message-v2"
-import { isOverflow } from "./overflow"
+import { SessionCompactionPolicy } from "./compaction-policy"
 import { PartID } from "./schema"
 import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
@@ -70,6 +70,7 @@ export namespace SessionProcessor {
     | Permission.Service
     | Plugin.Service
     | SessionStatus.Service
+    | SessionCompactionPolicy.Service
   > = Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -82,6 +83,7 @@ export namespace SessionProcessor {
       const permission = yield* Permission.Service
       const plugin = yield* Plugin.Service
       const status = yield* SessionStatus.Service
+      const policy = yield* SessionCompactionPolicy.Service
 
       const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
         // Pre-capture snapshot before the LLM stream starts. The AI SDK
@@ -304,7 +306,11 @@ export namespace SessionProcessor {
               })
               if (
                 !ctx.assistantMessage.summary &&
-                isOverflow({ cfg: yield* config.get(), tokens: usage.tokens, model: ctx.model })
+                (yield* policy.shouldAutoCompact({
+                  sessionID: ctx.sessionID,
+                  tokens: usage.tokens,
+                  model: ctx.model,
+                }))
               ) {
                 ctx.needsCompaction = true
               }
@@ -508,6 +514,7 @@ export namespace SessionProcessor {
   export const defaultLayer = Layer.unwrap(
     Effect.sync(() =>
       layer.pipe(
+        Layer.provide(SessionCompactionPolicy.defaultLayer),
         Layer.provide(Session.defaultLayer),
         Layer.provide(Snapshot.defaultLayer),
         Layer.provide(Agent.defaultLayer),

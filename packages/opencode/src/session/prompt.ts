@@ -11,6 +11,7 @@ import { Provider } from "../provider/provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSchema } from "ai"
 import { SessionCompaction } from "./compaction"
+import { SessionCompactionPolicy } from "./compaction-policy"
 import { Instance } from "../project/instance"
 import { Bus } from "../bus"
 import { ProviderTransform } from "../provider/transform"
@@ -89,6 +90,7 @@ export namespace SessionPrompt {
       const provider = yield* Provider.Service
       const processor = yield* SessionProcessor.Service
       const compaction = yield* SessionCompaction.Service
+      const policy = yield* SessionCompactionPolicy.Service
       const plugin = yield* Plugin.Service
       const commands = yield* Command.Service
       const permission = yield* Permission.Service
@@ -1403,7 +1405,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             if (
               lastFinished &&
               lastFinished.summary !== true &&
-              (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
+              (yield* policy.shouldAutoCompact({ sessionID, tokens: lastFinished.tokens, model }))
             ) {
               yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
               continue
@@ -1531,13 +1533,21 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
                 if (result === "stop") return "break" as const
                 if (result === "compact") {
-                  yield* compaction.create({
-                    sessionID,
-                    agent: lastUser.agent,
-                    model: lastUser.model,
-                    auto: true,
-                    overflow: !handle.message.finish,
-                  })
+                  if (yield* policy.canAutoCompact(sessionID)) {
+                    yield* compaction.create({
+                      sessionID,
+                      agent: lastUser.agent,
+                      model: lastUser.model,
+                      auto: true,
+                      overflow: !handle.message.finish,
+                    })
+                    return "continue" as const
+                  }
+                  handle.message.error = new MessageV2.ContextOverflowError({
+                    message: "Auto-compaction paused after repeated failures. Run /compact manually or start a new session.",
+                  }).toObject()
+                  yield* sessions.updateMessage(handle.message)
+                  return "break" as const
                 }
                 return "continue" as const
               }),
@@ -1702,6 +1712,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   const defaultLayer = Layer.unwrap(
     Effect.sync(() =>
       layer.pipe(
+        Layer.provide(SessionCompactionPolicy.defaultLayer),
         Layer.provide(SessionStatus.layer),
         Layer.provide(SessionCompaction.defaultLayer),
         Layer.provide(SessionProcessor.defaultLayer),

@@ -21,7 +21,9 @@ import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
 import { AppFileSystem } from "../../src/filesystem"
 import { SessionCompaction } from "../../src/session/compaction"
-import { Instruction } from "../../src/session/instruction"
+import { Instruction } from "../../src/instruction"
+import { Session } from "../../src/session"
+import { SessionCompactionPolicy } from "../../src/session/compaction-policy"
 import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
@@ -159,6 +161,7 @@ function makeHttp() {
     lsp,
     mcp,
     AppFileSystem.defaultLayer,
+    SessionCompactionPolicy.defaultLayer,
     status,
   ).pipe(Layer.provideMerge(infra))
   const registry = ToolRegistry.layer.pipe(Layer.provideMerge(deps))

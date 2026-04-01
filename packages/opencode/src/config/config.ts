@@ -959,6 +959,8 @@ export namespace Config {
             .min(0)
             .optional()
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
+          max_failures: z.number().int().min(1).optional()
+            .describe("Max consecutive auto-compaction failures before stopping (default: 3)"),
         })
         .optional(),
       experimental: z

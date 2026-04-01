@@ -19,6 +19,7 @@ import { Effect, Layer, ServiceMap } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 import { InstanceState } from "@/effect/instance-state"
 import { isOverflow as overflow } from "./overflow"
+import { SessionCompactionPolicy } from "./compaction-policy"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -70,6 +71,7 @@ export namespace SessionCompaction {
     | Plugin.Service
     | SessionProcessor.Service
     | Provider.Service
+    | SessionCompactionPolicy.Service
   > = Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -80,6 +82,7 @@ export namespace SessionCompaction {
       const plugin = yield* Plugin.Service
       const processors = yield* SessionProcessor.Service
       const provider = yield* Provider.Service
+      const policy = yield* SessionCompactionPolicy.Service
 
       const isOverflow = Effect.fn("SessionCompaction.isOverflow")(function* (input: {
         tokens: MessageV2.Assistant["tokens"]
@@ -271,6 +274,7 @@ When constructing the summary, try to stick to this template:
           .pipe(Effect.onInterrupt(() => processor.abort()))
 
         if (result === "compact") {
+          if (input.auto) yield* policy.failAutoCompact(input.sessionID)
           processor.message.error = new MessageV2.ContextOverflowError({
             message: replay
               ? "Conversation history too large to compact - exceeds model context limit"
@@ -340,8 +344,14 @@ When constructing the summary, try to stick to this template:
           }
         }
 
-        if (processor.message.error) return "stop"
-        if (result === "continue") yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
+        if (processor.message.error) {
+          if (input.auto) yield* policy.failAutoCompact(input.sessionID)
+          return "stop"
+        }
+        if (result === "continue") {
+          if (input.auto) yield* policy.resetAutoCompact(input.sessionID)
+          yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
+        }
         return result
       })
 
@@ -382,6 +392,7 @@ When constructing the summary, try to stick to this template:
   export const defaultLayer = Layer.unwrap(
     Effect.sync(() =>
       layer.pipe(
+        Layer.provide(SessionCompactionPolicy.defaultLayer),
         Layer.provide(Provider.defaultLayer),
         Layer.provide(Session.defaultLayer),
         Layer.provide(SessionProcessor.defaultLayer),

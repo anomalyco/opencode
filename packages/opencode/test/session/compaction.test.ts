@@ -8,6 +8,7 @@ import { Config } from "../../src/config/config"
 import { Agent } from "../../src/agent/agent"
 import { LLM } from "../../src/session/llm"
 import { SessionCompaction } from "../../src/session/compaction"
+import { SessionCompactionPolicy } from "../../src/session/compaction-policy"
 import { Token } from "../../src/util/token"
 import { Instance } from "../../src/project/instance"
 import { Log } from "../../src/util/log"
@@ -167,7 +168,11 @@ function layer(result: "continue" | "compact") {
 function runtime(result: "continue" | "compact", plugin = Plugin.defaultLayer, provider = ProviderTest.fake()) {
   const bus = Bus.layer
   return ManagedRuntime.make(
-    Layer.mergeAll(SessionCompaction.layer, bus).pipe(
+    Layer.mergeAll(
+      SessionCompaction.layer.pipe(Layer.provide(SessionCompactionPolicy.defaultLayer)),
+      SessionCompactionPolicy.defaultLayer,
+      bus,
+    ).pipe(
       Layer.provide(provider.layer),
       Layer.provide(Session.defaultLayer),
       Layer.provide(layer(result)),
@@ -207,6 +212,7 @@ function liveRuntime(layer: Layer.Layer<LLM.Service>, provider = ProviderTest.fa
   const processor = SessionProcessorModule.SessionProcessor.layer
   return ManagedRuntime.make(
     Layer.mergeAll(SessionCompaction.layer.pipe(Layer.provide(processor)), processor, bus, status).pipe(
+      Layer.provide(SessionCompactionPolicy.defaultLayer),
       Layer.provide(provider.layer),
       Layer.provide(Session.defaultLayer),
       Layer.provide(Snapshot.defaultLayer),
@@ -1208,5 +1214,144 @@ describe("session.getUsage", () => {
     expect(result.tokens.input).toBe(500)
     expect(result.tokens.cache.read).toBe(200)
     expect(result.tokens.cache.write).toBe(300)
+  })
+})
+
+describe("session.compaction.breaker", () => {
+  test("stops auto-compaction after consecutive failures", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const msg = await user(session.id, "hello")
+        const rt = runtime("compact", Plugin.defaultLayer, wide())
+        try {
+          const msgs = await Session.messages({ sessionID: session.id })
+
+          for (let i = 0; i < 3; i++) {
+            const result = await rt.runPromise(
+              SessionCompaction.Service.use((svc) =>
+                svc.process({
+                  parentID: msg.id,
+                  messages: msgs,
+                  sessionID: session.id,
+                  auto: true,
+                }),
+              ),
+            )
+            expect(result).toBe("stop")
+          }
+
+          const canCompact = await rt.runPromise(
+            SessionCompactionPolicy.Service.use((svc) => svc.canAutoCompact(session.id)),
+          )
+          expect(canCompact).toBe(false)
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("resets failure count after success", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const msg = await user(session.id, "hello")
+
+        const rt = runtime("compact", Plugin.defaultLayer, wide())
+        try {
+          const msgs = await Session.messages({ sessionID: session.id })
+          for (let i = 0; i < 2; i++) {
+            await rt.runPromise(
+              SessionCompaction.Service.use((svc) =>
+                svc.process({
+                  parentID: msg.id,
+                  messages: msgs,
+                  sessionID: session.id,
+                  auto: true,
+                }),
+              ),
+            )
+          }
+          await rt.dispose()
+
+          const rt2 = runtime("continue", Plugin.defaultLayer, wide())
+          try {
+            await rt2.runPromise(
+              SessionCompaction.Service.use((svc) =>
+                svc.process({
+                  parentID: msg.id,
+                  messages: msgs,
+                  sessionID: session.id,
+                  auto: true,
+                }),
+              ),
+            )
+            await rt2.dispose()
+
+            // Use a fresh runtime to check the shared InstanceState
+            const rt3 = runtime("continue", Plugin.defaultLayer, wide())
+            try {
+              const canCompact = await rt3.runPromise(
+                SessionCompactionPolicy.Service.use((svc) => svc.canAutoCompact(session.id)),
+              )
+              expect(canCompact).toBe(true)
+            } finally {
+              await rt3.dispose()
+            }
+          } finally {
+            await rt2.dispose()
+          }
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("does not block manual compaction when breaker is open", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const msg = await user(session.id, "hello")
+        const rt = runtime("compact", Plugin.defaultLayer, wide())
+        try {
+          const msgs = await Session.messages({ sessionID: session.id })
+
+          for (let i = 0; i < 3; i++) {
+            await rt.runPromise(
+              SessionCompaction.Service.use((svc) =>
+                svc.process({
+                  parentID: msg.id,
+                  messages: msgs,
+                  sessionID: session.id,
+                  auto: true,
+                }),
+              ),
+            )
+          }
+
+          const result = await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: msg.id,
+                messages: msgs,
+                sessionID: session.id,
+                auto: false,
+              }),
+            ),
+          )
+          expect(result).toBe("stop")
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
   })
 })
