@@ -73,6 +73,9 @@ export namespace SessionRetry {
     if (!json || typeof json !== "object") return undefined
     const code = typeof json.code === "string" ? json.code : ""
 
+    if (json.type === "overloaded_error") {
+      return "Provider is overloaded"
+    }
     if (json.type === "error" && json.error?.type === "too_many_requests") {
       return "Too Many Requests"
     }

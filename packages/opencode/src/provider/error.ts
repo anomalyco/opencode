@@ -112,7 +112,7 @@ export namespace ProviderError {
     | {
         type: "api_error"
         message: string
-        isRetryable: false
+        isRetryable: boolean
         responseBody: string
       }
 
@@ -121,6 +121,18 @@ export namespace ProviderError {
     if (!body) return
 
     const responseBody = JSON.stringify(body)
+
+    // Anthropic returns {"type":"overloaded_error","message":"Overloaded"} when
+    // at capacity — this is retryable and should not terminate the session.
+    if (body.type === "overloaded_error") {
+      return {
+        type: "api_error",
+        message: typeof body.message === "string" ? body.message : "Provider is overloaded",
+        isRetryable: true,
+        responseBody,
+      }
+    }
+
     if (body.type !== "error") return
 
     switch (body?.error?.code) {
