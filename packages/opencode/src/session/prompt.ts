@@ -684,7 +684,7 @@ export namespace SessionPrompt {
         sessionID,
         system,
         messages: [
-          ...MessageV2.toModelMessages(msgs, model),
+          ...finalMessages,
           ...(isLastStep
             ? [
                 {
