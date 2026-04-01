@@ -27,12 +27,12 @@ export namespace PluginLoader {
     mod: Record<string, unknown>
   }
 
-  type Candidate<T> = { item: T; plan: Plan }
-  type Report<T> = {
-    start?: (candidate: Candidate<T>, retry: boolean) => void
-    missing?: (candidate: Candidate<T>, retry: boolean, message: string) => void
+  type Candidate = { origin: Config.PluginOrigin; plan: Plan }
+  type Report = {
+    start?: (candidate: Candidate, retry: boolean) => void
+    missing?: (candidate: Candidate, retry: boolean, message: string) => void
     error?: (
-      candidate: Candidate<T>,
+      candidate: Candidate,
       retry: boolean,
       stage: "install" | "entry" | "compatibility" | "load",
       error: unknown,
@@ -91,12 +91,12 @@ export namespace PluginLoader {
     return { ok: true, value: { ...row, mod } }
   }
 
-  async function attempt<T, R>(
-    candidate: Candidate<T>,
+  async function attempt<R>(
+    candidate: Candidate,
     kind: PluginKind,
     retry: boolean,
-    finish: ((load: Loaded, item: T, retry: boolean) => Promise<R | undefined>) | undefined,
-    report: Report<T> | undefined,
+    finish: ((load: Loaded, origin: Config.PluginOrigin, retry: boolean) => Promise<R | undefined>) | undefined,
+    report: Report | undefined,
   ): Promise<R | undefined> {
     const plan = candidate.plan
     if (plan.deprecated) return
@@ -116,27 +116,19 @@ export namespace PluginLoader {
       return
     }
     if (!finish) return loaded.value as R
-    return finish(loaded.value, candidate.item, retry)
+    return finish(loaded.value, candidate.origin, retry)
   }
 
-  type Input<T, R> = {
-    items: T[]
+  type Input<R> = {
+    items: Config.PluginOrigin[]
     kind: PluginKind
-    pick?: (item: T) => Config.PluginSpec
     wait?: () => Promise<void>
-    finish?: (load: Loaded, item: T, retry: boolean) => Promise<R | undefined>
-    report?: Report<T>
+    finish?: (load: Loaded, origin: Config.PluginOrigin, retry: boolean) => Promise<R | undefined>
+    report?: Report
   }
 
-  export function loadExternal<R = Loaded>(input: Input<Config.PluginSpec, R>): Promise<R[]>
-  export function loadExternal<T, R = Loaded>(
-    input: Input<T, R> & {
-      pick: (item: T) => Config.PluginSpec
-    },
-  ): Promise<R[]>
-  export async function loadExternal<T, R = Loaded>(input: Input<T, R>): Promise<R[]> {
-    const pick = input.pick ?? ((item) => item as Config.PluginSpec)
-    const candidates = input.items.map((item) => ({ item, plan: plan(pick(item)) }))
+  export async function loadExternal<R = Loaded>(input: Input<R>): Promise<R[]> {
+    const candidates = input.items.map((origin) => ({ origin, plan: plan(origin.spec) }))
     const list: Array<Promise<R | undefined>> = []
     for (const candidate of candidates) list.push(attempt(candidate, input.kind, false, input.finish, input.report))
     const out = await Promise.all(list)

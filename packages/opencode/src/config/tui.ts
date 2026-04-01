@@ -17,42 +17,26 @@ export namespace TuiConfig {
 
   export const Info = TuiInfo
 
-  export type PluginMeta = {
-    scope: "global" | "local"
-    source: string
-  }
-
-  export type PluginRecord = {
-    item: Config.PluginSpec
-    scope: PluginMeta["scope"]
-    source: string
-  }
-
-  type PluginEntry = {
-    item: Config.PluginSpec
-    meta: PluginMeta
-  }
-
   type Acc = {
     result: Info
-    entries: PluginEntry[]
+    entries: Config.PluginOrigin[]
   }
 
   export type Info = z.output<typeof Info> & {
     // Internal resolved plugin list used by runtime loading.
-    plugin_records?: PluginRecord[]
+    plugin_origins?: Config.PluginOrigin[]
   }
 
-  function pluginScope(file: string): PluginMeta["scope"] {
+  function pluginScope(file: string): Config.PluginScope {
     if (Instance.containsPath(file)) return "local"
     return "global"
   }
 
-  function dedupePlugins(list: PluginEntry[]) {
+  function dedupePlugins(list: Config.PluginOrigin[]) {
     const seen = new Set<string>()
-    const result: PluginEntry[] = []
+    const result: Config.PluginOrigin[] = []
     for (const item of list.toReversed()) {
-      const spec = Config.pluginSpecifier(item.item)
+      const spec = Config.pluginSpecifier(item.spec)
       const name = spec.startsWith("file://") ? spec : parsePluginSpecifier(spec).pkg
       if (seen.has(name)) continue
       seen.add(name)
@@ -99,15 +83,7 @@ export namespace TuiConfig {
     if (!data.plugin?.length) return
 
     const scope = pluginScope(file)
-    for (const item of data.plugin) {
-      acc.entries.push({
-        item,
-        meta: {
-          scope,
-          source: file,
-        },
-      })
-    }
+    for (const spec of data.plugin) acc.entries.push({ spec, scope, source: file })
   }
 
   const state = Instance.state(async () => {
@@ -156,13 +132,8 @@ export namespace TuiConfig {
 
     const merged = dedupePlugins(acc.entries)
     acc.result.keybinds = Config.Keybinds.parse(acc.result.keybinds ?? {})
-    const list = merged.map((item) => ({
-      item: item.item,
-      scope: item.meta.scope,
-      source: item.meta.source,
-    }))
-    acc.result.plugin = list.map((item) => item.item)
-    acc.result.plugin_records = list.length ? list : undefined
+    acc.result.plugin = merged.map((item) => item.spec)
+    acc.result.plugin_origins = merged.length ? merged : undefined
 
     const deps: Promise<void>[] = []
     if (acc.result.plugin?.length) {

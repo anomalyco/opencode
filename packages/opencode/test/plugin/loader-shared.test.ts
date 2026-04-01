@@ -852,7 +852,11 @@ export default {
     const calls: Array<[string, boolean]> = []
 
     const loaded = await PluginLoader.loadExternal({
-      items: [tmp.extra.aSpec, tmp.extra.bSpec],
+      items: [tmp.extra.aSpec, tmp.extra.bSpec].map((spec) => ({
+        spec,
+        scope: "local" as const,
+        source: tmp.path,
+      })),
       kind: "tui",
       wait: async () => {
         wait += 1
@@ -890,7 +894,13 @@ export default {
     let count = 0
 
     const loaded = await PluginLoader.loadExternal({
-      items: [tmp.extra.spec],
+      items: [
+        {
+          spec: tmp.extra.spec,
+          scope: "local" as const,
+          source: tmp.path,
+        },
+      ],
       kind: "tui",
       wait: async () => {
         wait += 1
@@ -917,7 +927,13 @@ export default {
 
     try {
       const loaded = await PluginLoader.loadExternal({
-        items: ["acme-plugin@1.0.0"],
+        items: [
+          {
+            spec: "acme-plugin@1.0.0",
+            scope: "local" as const,
+            source: "test",
+          },
+        ],
         kind: "tui",
         wait: async () => {
           wait += 1

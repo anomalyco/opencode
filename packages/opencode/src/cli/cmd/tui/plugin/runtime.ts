@@ -39,7 +39,7 @@ type PluginLoad = {
   source: PluginSource | "internal"
   id: string
   module: TuiPluginModule
-  theme_meta: TuiConfig.PluginMeta
+  origin: Config.PluginOrigin
   theme_root: string
 }
 
@@ -67,7 +67,7 @@ type RuntimeState = {
   slots: HostSlots
   plugins: PluginEntry[]
   plugins_by_id: Map<string, PluginEntry>
-  pending: Map<string, TuiConfig.PluginRecord>
+  pending: Map<string, Config.PluginOrigin>
 }
 
 const log = Log.create({ service: "tui.plugin" })
@@ -134,7 +134,7 @@ function resolveRoot(root: string) {
 }
 
 function createThemeInstaller(
-  meta: TuiConfig.PluginMeta,
+  meta: Config.PluginOrigin,
   root: string,
   spec: string,
   plugin: PluginEntry,
@@ -268,7 +268,8 @@ function loadInternalPlugin(item: InternalTuiPlugin): PluginLoad {
     source: "internal",
     id: item.id,
     module: item,
-    theme_meta: {
+    origin: {
+      spec,
       scope: "global",
       source: target,
     },
@@ -473,7 +474,7 @@ function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScop
   }
 
   const theme: TuiPluginApi["theme"] = Object.assign(Object.create(api.theme), {
-    install: createThemeInstaller(load.theme_meta, load.theme_root, load.spec, plugin),
+    install: createThemeInstaller(load.origin, load.theme_root, load.spec, plugin),
   })
 
   const event: TuiPluginApi["event"] = {
@@ -555,17 +556,16 @@ function applyInitialPluginEnabledState(state: RuntimeState, config: TuiConfig.I
   }
 }
 
-async function resolveExternalPlugins(list: TuiConfig.PluginRecord[], wait: () => Promise<void>) {
+async function resolveExternalPlugins(list: Config.PluginOrigin[], wait: () => Promise<void>) {
   return PluginLoader.loadExternal({
     items: list,
-    pick: (item) => item.item,
     kind: "tui",
     wait: async () => {
       await wait().catch((error) => {
         log.warn("failed waiting for tui plugin dependencies", { error })
       })
     },
-    finish: async (loaded, cfg, retry) => {
+    finish: async (loaded, origin, retry) => {
       const mod = await Promise.resolve()
         .then(() => readV1Plugin(loaded.mod as Record<string, unknown>, loaded.spec, "tui") as TuiPluginModule)
         .catch((error) => {
@@ -599,10 +599,7 @@ async function resolveExternalPlugins(list: TuiConfig.PluginRecord[], wait: () =
         source: loaded.source,
         id,
         module: mod,
-        theme_meta: {
-          scope: cfg.scope,
-          source: cfg.source,
-        },
+        origin,
         theme_root: loaded.pkg?.dir ?? resolveRoot(loaded.target),
       }
     },
@@ -684,9 +681,9 @@ async function addExternalPluginEntries(state: RuntimeState, ready: PluginLoad[]
   return { plugins, ok }
 }
 
-function defaultPluginRecord(state: RuntimeState, spec: string): TuiConfig.PluginRecord {
+function defaultPluginOrigin(state: RuntimeState, spec: string): Config.PluginOrigin {
   return {
-    item: spec,
+    spec,
     scope: "local",
     source: state.api.state.path.config || path.join(state.directory, ".opencode", "tui.json"),
   }
@@ -724,8 +721,8 @@ async function addPluginBySpec(state: RuntimeState | undefined, raw: string) {
   const spec = raw.trim()
   if (!spec) return false
 
-  const cfg = state.pending.get(spec) ?? defaultPluginRecord(state, spec)
-  const next = Config.pluginSpecifier(cfg.item)
+  const cfg = state.pending.get(spec) ?? defaultPluginOrigin(state, spec)
+  const next = Config.pluginSpecifier(cfg.spec)
   if (state.plugins.some((plugin) => plugin.load.spec === next)) {
     state.pending.delete(spec)
     return true
@@ -844,9 +841,9 @@ async function installPluginBySpec(
   const tui = manifest.targets.find((item) => item.kind === "tui")
   if (tui) {
     const file = patch.items.find((item) => item.kind === "tui")?.file
-    const item = tui.opts ? ([spec, tui.opts] as Config.PluginSpec) : spec
+    const next = tui.opts ? ([spec, tui.opts] as Config.PluginSpec) : spec
     state.pending.set(spec, {
-      item,
+      spec: next,
       scope: global ? "global" : "local",
       source: (file ?? dir.config) || path.join(patch.dir, "tui.json"),
     })
@@ -931,9 +928,9 @@ export namespace TuiPluginRuntime {
       directory: cwd,
       fn: async () => {
         const config = await TuiConfig.get()
-        const records = Flag.OPENCODE_PURE ? [] : (config.plugin_records ?? [])
-        if (Flag.OPENCODE_PURE && config.plugin_records?.length) {
-          log.info("skipping external tui plugins in pure mode", { count: config.plugin_records.length })
+        const records = Flag.OPENCODE_PURE ? [] : (config.plugin_origins ?? [])
+        if (Flag.OPENCODE_PURE && config.plugin_origins?.length) {
+          log.info("skipping external tui plugins in pure mode", { count: config.plugin_origins.length })
         }
 
         for (const item of INTERNAL_TUI_PLUGINS) {
