@@ -418,6 +418,91 @@ export namespace Provider {
         },
       }
     },
+    requesty: async (input) => {
+      const apiKey = await (async () => {
+        const envKey = Env.get("REQUESTY_API_KEY")
+        if (envKey) return envKey
+
+        const auth = await Auth.get(input.id)
+        if (auth?.type === "api") return auth.key
+        if (auth?.type === "oauth") return auth.access
+
+        const config = await Config.get()
+        return config.provider?.requesty?.options?.apiKey
+      })()
+
+      if (!apiKey) return { autoload: false }
+
+      const approvedModels = new Map<string, any>()
+      const defaultBaseURL = Object.values(input.models)[0]?.api.url ?? "https://router.requesty.ai/v1"
+      const baseURL = String(defaultBaseURL).replace(/\/+$/, "")
+
+      try {
+        const response = await fetch(`${baseURL}/models`, {
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+          },
+        })
+
+        if (response.ok) {
+          const json = (await response.json()) as any
+          const data = Array.isArray(json?.data) ? json.data : []
+          for (const item of data) {
+            if (item && typeof item.id === "string") {
+              approvedModels.set(item.id, item)
+            }
+          }
+        }
+      } catch (error) {
+        log.debug("failed to fetch requesty models", {
+          error,
+        })
+      }
+
+      if (approvedModels.size === 0) return { autoload: false }
+
+      const knownModels = new Set(Object.keys(input.models))
+
+      const newModels: Record<string, Model> = {}
+      for (const [modelID, item] of approvedModels) {
+        if (!knownModels.has(modelID)) {
+          newModels[modelID] = {
+            id: ModelID.make(modelID),
+            providerID: ProviderID.make("requesty"),
+            name: item.id ?? modelID,
+            family: "",
+            api: {
+              id: item.id ?? modelID,
+              url: baseURL,
+              npm: "@ai-sdk/openai-compatible",
+            },
+            status: "active",
+            headers: {},
+            options: {},
+            cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+            limit: { context: 128000, output: 32000 },
+            capabilities: {
+              temperature: true,
+              reasoning: false,
+              attachment: true,
+              toolcall: true,
+              input: { text: true, audio: false, image: true, video: false, pdf: false },
+              output: { text: true, audio: false, image: false, video: false, pdf: false },
+              interleaved: false,
+            },
+            release_date: "",
+            variants: {},
+          }
+        } else {
+          delete input.models[modelID]
+        }
+      }
+
+      return {
+        autoload: false,
+        discoverModels: async () => newModels,
+      }
+    },
     vercel: async () => {
       return {
         autoload: false,
@@ -1233,6 +1318,22 @@ export namespace Provider {
                 }
               } catch (e) {
                 log.warn("state discovery error", { id: "gitlab", error: e })
+              }
+            })
+          }
+
+          const requesty = ProviderID.make("requesty")
+          if (discoveryLoaders[requesty] && providers[requesty]) {
+            yield* Effect.promise(async () => {
+              try {
+                const discovered = await discoveryLoaders[requesty]()
+                for (const [modelID, model] of Object.entries(discovered)) {
+                  if (!providers[requesty].models[modelID]) {
+                    providers[requesty].models[modelID] = model
+                  }
+                }
+              } catch (e) {
+                log.warn("state discovery error", { id: "requesty", error: e })
               }
             })
           }
