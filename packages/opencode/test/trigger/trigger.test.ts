@@ -158,6 +158,94 @@ describe("trigger service", () => {
     })
   })
 
+  test("loads persisted one-shot trigger after instance disposal", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    const at = Date.now() + 5_000
+    const created = await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        return await Trigger.create({
+          schedule: {
+            type: "once",
+            at,
+          },
+        })
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => Instance.dispose(),
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        expect(await Trigger.get(created.id)).toEqual(created)
+      },
+    })
+  })
+
+  test("fires one-shot trigger once when due", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const at = Date.now() + 20
+        const item = await Trigger.create({
+          schedule: {
+            type: "once",
+            at,
+          },
+        })
+
+        await Bun.sleep(80)
+
+        expect(await Trigger.get(item.id)).toMatchObject({
+          id: item.id,
+          schedule: {
+            type: "once",
+            at,
+          },
+          runs: 1,
+          last: {
+            source: "schedule",
+            status: "success",
+            time: expect.any(Number),
+          },
+        })
+      },
+    })
+  })
+
+  test("does not repeat one-shot trigger after firing", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const item = await Trigger.create({
+          schedule: {
+            type: "once",
+            at: Date.now() + 20,
+          },
+        })
+
+        await Bun.sleep(80)
+        const first = await Trigger.get(item.id)
+
+        await Bun.sleep(80)
+        const next = await Trigger.get(item.id)
+
+        expect(first.runs).toBe(1)
+        expect(next.runs).toBe(1)
+        expect(next.last).toEqual(first.last)
+      },
+    })
+  })
+
   test("fires command action for an idle session", async () => {
     await using tmp = await tmpdir({ git: true })
 
