@@ -13,6 +13,7 @@ type TargetInput = {
   continue?: boolean
   sessionID?: string
   fork?: boolean
+  defer?: boolean
   pick?: (items: { id: string; title?: string; parentID?: string }[]) => Promise<string | undefined>
 }
 
@@ -20,6 +21,10 @@ type Target = {
   baseID?: string
   title?: string
   picked?: boolean
+  remoteSessions?: {
+    id: string
+    title?: string
+  }[]
 }
 
 function suffix(dir?: string) {
@@ -68,6 +73,14 @@ export async function resolveRemoteTarget(input: TargetInput): Promise<Target> {
     throw new Error(`Failed to resolve remote continue target${suffix(input.directory)}: ${message(error)}`)
   })
   const items = (result.data ?? []).filter((item) => !item.parentID)
+  if (items.length > 1 && input.defer) {
+    return {
+      remoteSessions: items.map((item) => ({
+        id: item.id,
+        title: item.title,
+      })),
+    }
+  }
   const picked = items.length > 1 && input.pick ? await input.pick(items) : items[0]?.id
   const item = items.find((item) => item.id === picked)
   const baseID = item?.id

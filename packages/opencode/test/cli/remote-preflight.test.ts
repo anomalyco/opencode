@@ -248,6 +248,80 @@ describe("remote preflight", () => {
       expect.stringContaining("sess_123"),
     )
     expect(tui).toHaveBeenCalledTimes(1)
+    expect(tui).toHaveBeenCalledWith(
+      expect.objectContaining({
+        args: expect.objectContaining({
+          continue: true,
+          sessionID: undefined,
+          remoteSessions: undefined,
+        }),
+      }),
+    )
+  })
+
+  test("attach defers multiple remote root sessions to the tui picker", async () => {
+    mockAttach()
+    const list = mock(async () => ({
+      data: [
+        {
+          id: "sess_123",
+          title: "Remote draft",
+          parentID: undefined,
+        },
+        {
+          id: "sess_456",
+          title: "Remote fix",
+          parentID: undefined,
+        },
+      ],
+    }))
+    const tui = spyOn(App, "tui").mockResolvedValue()
+    spyOn(SDK, "createOpencodeClient").mockReturnValue(
+      client({
+        path: {
+          get: mock(async () => ({
+            data: {
+              home: "/home/me",
+              state: "/state",
+              config: "/config",
+              worktree: "/srv/app",
+              directory: "/srv/app",
+            },
+          })),
+        },
+        session: { list },
+      }),
+    )
+
+    await AttachCommand.handler({
+      _: [],
+      $0: "opencode",
+      url: "http://remote.test",
+      dir: "/srv/app",
+      continue: true,
+      session: undefined,
+      fork: false,
+      password: undefined,
+    })
+
+    expect(tui).toHaveBeenCalledWith(
+      expect.objectContaining({
+        args: expect.objectContaining({
+          continue: false,
+          sessionID: undefined,
+          remoteSessions: [
+            {
+              id: "sess_123",
+              title: "Remote draft",
+            },
+            {
+              id: "sess_456",
+              title: "Remote fix",
+            },
+          ],
+        }),
+      }),
+    )
   })
 
   test("resolveRemoteTarget lets attach choose among multiple remote root sessions", async () => {

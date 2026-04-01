@@ -31,6 +31,7 @@ import { DialogModel, useConnected } from "@tui/component/dialog-model"
 import { DialogMcp } from "@tui/component/dialog-mcp"
 import { DialogStatus } from "@tui/component/dialog-status"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
+import { DialogRemoteSessionList, selectRemoteSession } from "@tui/component/dialog-remote-session-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
@@ -122,6 +123,8 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
 
 import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
+
+export { selectRemoteSession }
 
 function rendererConfig(_config: TuiConfig.Info): CliRendererConfig {
   return {
@@ -377,6 +380,11 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
             duration: 3000,
           })
         local.model.set({ providerID, modelID }, { recent: true })
+      }
+      const sessions = args.remoteSessions
+      if (sessions?.length) {
+        dialog.replace(() => <DialogRemoteSessionList sessions={sessions} fork={args.fork} />)
+        return
       }
       // Handle --session without --fork immediately (fork is handled in createEffect below)
       if (args.sessionID && !args.fork) {
