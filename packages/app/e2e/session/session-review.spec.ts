@@ -60,6 +60,13 @@ async function patchWithMock(
     parts: [{ type: "text", text: "Apply the provided patch exactly once." }],
   })
 
+  // Wait for the agent loop to actually start before checking idle.
+  // promptAsync is fire-and-forget — without this, waitSessionIdle can
+  // return immediately because the session status is still undefined.
+  await expect
+    .poll(() => llm.calls().then((c) => c > 0), { timeout: 30_000 })
+    .toBe(true)
+
   await waitSessionIdle(sdk, sessionID, 120_000)
 }
 
