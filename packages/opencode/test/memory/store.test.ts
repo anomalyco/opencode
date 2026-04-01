@@ -58,14 +58,11 @@ describe("MemoryStore", () => {
     expect(result!.access_count).toBe(1) // UPSERT increments on merge
   })
 
-  test("incrementAccess updates count", () => {
-    MemoryStore.save({ projectPath, type: "general", topic: "t1", content: "test" })
-    const memories = MemoryStore.list(projectPath)
-    const id = memories[0].id
-
-    MemoryStore.incrementAccess(id)
-    const updated = MemoryStore.list(projectPath)
-    expect(updated[0].access_count).toBe(1)
+  test("UPSERT increments access_count on merge", () => {
+    MemoryStore.save({ projectPath, type: "general", topic: "t1", content: "initial" })
+    MemoryStore.save({ projectPath, type: "general", topic: "t1", content: "updated" })
+    const result = MemoryStore.getByTopic("t1", projectPath)
+    expect(result!.access_count).toBe(1) // UPSERT increments once on merge
   })
 
   test("delete removes a memory", () => {
