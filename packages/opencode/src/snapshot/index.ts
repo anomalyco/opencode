@@ -331,19 +331,19 @@ export namespace Snapshot {
                   })
 
                   for (const [hash, filesByHash] of groupByHash) {
-                    for (let i = 0; i < filesByHash.length; i += 100) {
+                    for (let i = 0; i < filesByHash.length; i += 100) {  //run git commands in 100 file chunks to prevent ARG_MAX errors
                       const fileChunk = filesByHash.slice(i, i + 100)
                       if (fileChunk.length === 1) {
                         yield* revertSingle(hash, fileChunk[0]!)
                         continue
                       }
 
-                      const chunkPaths = fileChunk.map((file) => ({
+                      const fileChunkPaths = fileChunk.map((file) => ({
                         rel: path.relative(state.worktree, file).replaceAll("\\", "/"),
                         file,
                       }))
                       const tree = yield* git(
-                        [...core, ...args(["ls-tree", "--name-only", hash, "--", ...chunkPaths.map((item) => item.rel)])],
+                        [...core, ...args(["ls-tree", "--name-only", hash, "--", ...fileChunkPaths.map((item) => item.rel)])],
                         {
                           cwd: state.worktree,
                         },
@@ -359,7 +359,7 @@ export namespace Snapshot {
                       const snapshotPaths = new Set(tree.text.trim().split("\n").map((item) => item.trim()).filter(Boolean))
                       const filesToCheckout: string[] = []
                       const missingFiles: string[] = []
-                      for (const item of chunkPaths) {
+                      for (const item of fileChunkPaths) {
                         if (snapshotPaths.has(item.rel)) {
                           filesToCheckout.push(item.file)
                           continue
