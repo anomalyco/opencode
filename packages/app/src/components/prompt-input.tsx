@@ -247,7 +247,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   )
   const working = createMemo(() => status()?.type !== "idle")
   const tip = () => {
-    if (props.reverting) return "Reverting..."
+    if (props.reverting) {
+      return (
+        <div class="flex items-center gap-2">
+          <span>
+            {language.t("common.loading")}
+            {language.t("common.loading.ellipsis")}
+          </span>
+        </div>
+      )
+    }
 
     if (working()) {
       return (
