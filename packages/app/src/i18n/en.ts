@@ -739,6 +739,8 @@ export const dict = {
   "settings.general.row.followup.option.steer": "Steer",
   "settings.general.row.reasoningSummaries.title": "Show reasoning summaries",
   "settings.general.row.reasoningSummaries.description": "Display model reasoning summaries in the timeline",
+  "settings.general.row.todoDock.title": "Show todo dock",
+  "settings.general.row.todoDock.description": "Display the todo popup above the composer when the agent updates tasks",
   "settings.general.row.shellToolPartsExpanded.title": "Expand shell tool parts",
   "settings.general.row.shellToolPartsExpanded.description":
     "Show shell tool parts expanded by default in the timeline",

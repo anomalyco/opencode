@@ -4,6 +4,7 @@ import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { PromptInput } from "@/components/prompt-input"
 import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
+import { useSettings } from "@/context/settings"
 import { getSessionHandoff, setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionKey } from "@/pages/session/session-layout"
 import { SessionPermissionDock } from "@/pages/session/composer/session-permission-dock"
@@ -44,6 +45,7 @@ export function SessionComposerRegion(props: {
 }) {
   const prompt = usePrompt()
   const language = useLanguage()
+  const settings = useSettings()
   const route = useSessionKey()
 
   const handoffPrompt = createMemo(() => getSessionHandoff(route.sessionKey())?.prompt)
@@ -182,7 +184,7 @@ export function SessionComposerRegion(props: {
               </>
             }
           >
-            <Show when={dock()}>
+            <Show when={settings.general.todoDock() && dock()}>
               <div
                 classList={{
                   "overflow-hidden": true,

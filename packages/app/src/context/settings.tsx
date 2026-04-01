@@ -24,6 +24,7 @@ export interface Settings {
     releaseNotes: boolean
     followup: "queue" | "steer"
     showReasoningSummaries: boolean
+    todoDock: boolean
     shellToolPartsExpanded: boolean
     editToolPartsExpanded: boolean
   }
@@ -90,6 +91,7 @@ const defaultSettings: Settings = {
     releaseNotes: true,
     followup: "steer",
     showReasoningSummaries: false,
+    todoDock: true,
     shellToolPartsExpanded: false,
     editToolPartsExpanded: false,
   },
@@ -160,6 +162,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setShowReasoningSummaries(value: boolean) {
           setStore("general", "showReasoningSummaries", value)
+        },
+        todoDock: withFallback(() => store.general?.todoDock, defaultSettings.general.todoDock),
+        setTodoDock(value: boolean) {
+          setStore("general", "todoDock", value)
         },
         shellToolPartsExpanded: withFallback(
           () => store.general?.shellToolPartsExpanded,

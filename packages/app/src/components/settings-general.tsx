@@ -219,6 +219,18 @@ export const SettingsGeneral: Component = () => {
         </SettingsRow>
 
         <SettingsRow
+          title={language.t("settings.general.row.todoDock.title")}
+          description={language.t("settings.general.row.todoDock.description")}
+        >
+          <div data-action="settings-feed-todo-dock">
+            <Switch
+              checked={settings.general.todoDock()}
+              onChange={(checked) => settings.general.setTodoDock(checked)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
           title={language.t("settings.general.row.shellToolPartsExpanded.title")}
           description={language.t("settings.general.row.shellToolPartsExpanded.description")}
         >
