@@ -50,7 +50,7 @@ export namespace BunProc {
     }),
   )
 
-  export async function install(pkg: string, version = "latest") {
+  export async function install(pkg: string, version = "latest", opts?: { ignoreScripts?: boolean }) {
     // Use lock to ensure only one install at a time
     using _ = await Lock.write("bun-install")
 
@@ -82,6 +82,7 @@ export namespace BunProc {
       "add",
       "--force",
       "--exact",
+      ...(opts?.ignoreScripts ? ["--ignore-scripts"] : []),
       // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
       ...(proxied() || process.env.CI ? ["--no-cache"] : []),
       "--cwd",

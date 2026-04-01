@@ -55,8 +55,34 @@ function ctxRoot(dir: string): PlugCtx {
   }
 }
 
-async function plugin(dir: string, kinds?: unknown) {
+async function plugin(
+  dir: string,
+  kinds?: Array<"server" | "tui">,
+  opts?: {
+    server?: Record<string, unknown>
+    tui?: Record<string, unknown>
+  },
+) {
   const p = path.join(dir, "plugin")
+  const server = kinds?.includes("server") ?? false
+  const tui = kinds?.includes("tui") ?? false
+  const exports: Record<string, unknown> = {}
+  if (server) {
+    exports["./server"] = opts?.server
+      ? {
+          import: "./server.js",
+          config: opts.server,
+        }
+      : "./server.js"
+  }
+  if (tui) {
+    exports["./tui"] = opts?.tui
+      ? {
+          import: "./tui.js",
+          config: opts.tui,
+        }
+      : "./tui.js"
+  }
   await fs.mkdir(p, { recursive: true })
   await Bun.write(
     path.join(p, "package.json"),
@@ -64,7 +90,8 @@ async function plugin(dir: string, kinds?: unknown) {
       {
         name: "acme",
         version: "1.0.0",
-        ...(kinds === undefined ? {} : { "oc-plugin": kinds }),
+        ...(server ? { main: "./server.js" } : {}),
+        ...(Object.keys(exports).length ? { exports } : {}),
       },
       null,
       2,
@@ -99,12 +126,12 @@ describe("plugin.install.task", () => {
     expect(tui.plugin).toEqual(["acme@1.2.3"])
   })
 
-  test("writes default options from tuple manifest targets", async () => {
+  test("writes default options from exports config metadata", async () => {
     await using tmp = await tmpdir()
-    const target = await plugin(tmp.path, [
-      ["server", { custom: true, other: false }],
-      ["tui", { compact: true }],
-    ])
+    const target = await plugin(tmp.path, ["server", "tui"], {
+      server: { custom: true, other: false },
+      tui: { compact: true },
+    })
     const run = createPlugTask(
       {
         mod: "acme@1.2.3",
