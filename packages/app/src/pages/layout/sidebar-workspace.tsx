@@ -272,6 +272,7 @@ const WorkspaceSessionList = (props: {
           mobile={props.mobile}
           popover={props.popover}
           children={props.children()}
+          showChild
           sidebarExpanded={props.ctx.sidebarExpanded}
           sidebarHovering={props.ctx.sidebarHovering}
           nav={props.ctx.nav}

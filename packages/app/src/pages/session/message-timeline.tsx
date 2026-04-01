@@ -295,6 +295,13 @@ export function MessageTimeline(props: {
   const shareUrl = createMemo(() => info()?.share?.url)
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
   const parentID = createMemo(() => info()?.parentID)
+  const parent = createMemo(() => {
+    const id = parentID()
+    if (!id) return
+    return sync.session.get(id)
+  })
+  const parentTitle = createMemo(() => sessionTitle(parent()?.title) ?? language.t("command.session.new"))
+  const childTitle = createMemo(() => titleLabel() ?? (parentID() ? language.t("command.session.new") : ""))
   const showHeader = createMemo(() => !!(titleValue() || parentID()))
   const stageCfg = { init: 1, batch: 3 }
   const staging = createTimelineStaging({
@@ -657,16 +664,19 @@ export function MessageTimeline(props: {
               >
                 <div class="h-12 w-full flex items-center justify-between gap-2">
                   <div class="flex items-center gap-1 min-w-0 flex-1 pr-3">
-                    <Show when={parentID()}>
-                      <IconButton
-                        tabIndex={-1}
-                        icon="arrow-left"
-                        variant="ghost"
-                        onClick={navigateParent}
-                        aria-label={language.t("common.goBack")}
-                      />
-                    </Show>
                     <div class="flex items-center min-w-0 grow-1">
+                      <Show when={parentID()}>
+                        <button
+                          type="button"
+                          class="min-w-0 max-w-[40%] truncate text-14-medium text-text-weak transition-colors hover:text-text-base"
+                          onClick={navigateParent}
+                        >
+                          {parentTitle()}
+                        </button>
+                        <span class="px-1.5 text-14-medium text-text-weak" aria-hidden="true">
+                          /
+                        </span>
+                      </Show>
                       <div
                         class="shrink-0 flex items-center justify-center overflow-hidden transition-[width,margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
                         style={{
@@ -684,7 +694,7 @@ export function MessageTimeline(props: {
                           </div>
                         </Show>
                       </div>
-                      <Show when={titleLabel() || title.editing}>
+                      <Show when={childTitle() || title.editing}>
                         <Show
                           when={title.editing}
                           fallback={
@@ -692,7 +702,7 @@ export function MessageTimeline(props: {
                               class="text-14-medium text-text-strong truncate grow-1 min-w-0"
                               onDblClick={openTitleEditor}
                             >
-                              {titleLabel()}
+                              {childTitle()}
                             </h1>
                           }
                         >
