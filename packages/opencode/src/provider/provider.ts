@@ -667,8 +667,6 @@ export namespace Provider {
     },
     "cloudflare-workers-ai": async (input) => {
       const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID")
-      if (!accountId) return { autoload: false }
-
       const apiKey = await iife(async () => {
         const envToken = Env.get("CLOUDFLARE_API_KEY")
         if (envToken) return envToken
@@ -678,25 +676,23 @@ export namespace Provider {
       })
 
       return {
-        autoload: !!apiKey,
+        autoload: !!accountId && !!apiKey,
         options: {
           apiKey,
         },
         async getModel(sdk: any, modelID: string) {
+          if (!accountId)
+            throw new Error("CLOUDFLARE_ACCOUNT_ID is missing. Set it with: export CLOUDFLARE_ACCOUNT_ID=<your-account-id>")
           return sdk.languageModel(modelID)
         },
         vars(_options) {
-          return {
-            CLOUDFLARE_ACCOUNT_ID: accountId,
-          }
+          return accountId ? { CLOUDFLARE_ACCOUNT_ID: accountId } : {}
         },
       }
     },
     "cloudflare-ai-gateway": async (input) => {
       const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID")
       const gateway = Env.get("CLOUDFLARE_GATEWAY_ID")
-
-      if (!accountId || !gateway) return { autoload: false }
 
       // Get API token from env or auth - required for authenticated gateways
       const apiToken = await (async () => {
@@ -707,11 +703,18 @@ export namespace Provider {
         return undefined
       })()
 
-      if (!apiToken) {
-        throw new Error(
-          "CLOUDFLARE_API_TOKEN (or CF_AIG_TOKEN) is required for Cloudflare AI Gateway. " +
-            "Set it via environment variable or run `opencode auth cloudflare-ai-gateway`.",
-        )
+      if (!accountId || !gateway || !apiToken) {
+        const missing = [
+          !accountId && "CLOUDFLARE_ACCOUNT_ID",
+          !gateway && "CLOUDFLARE_GATEWAY_ID",
+          !apiToken && "CLOUDFLARE_API_TOKEN",
+        ].filter(Boolean)
+        return {
+          autoload: false,
+          async getModel() {
+            throw new Error(`${missing.join(" and ")} missing. Set with: ${missing.map((v) => `export ${v}=<value>`).join(" && ")}`)
+          },
+        }
       }
 
       // Use official ai-gateway-provider package (v2.x for AI SDK v5 compatibility)
