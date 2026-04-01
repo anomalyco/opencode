@@ -1284,13 +1284,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         t={(key) => language.t(key as Parameters<typeof language.t>[0])}
       />
       <DockShellForm
-        onSubmit={(event) => {
-          if (props.reverting) {
-            event.preventDefault()
-            return
-          }
-          handleSubmit(event)
-        }}
+        onSubmit={handleSubmit}
         classList={{
           "group/prompt-input": true,
           "focus-within:shadow-xs-border": true,
