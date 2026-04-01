@@ -338,11 +338,12 @@ export namespace Snapshot {
                         continue
                       }
 
-                      const rels = fileChunk.map(
-                        (file) => [path.relative(state.worktree, file).replaceAll("\\", "/"), file] as const,
-                      )
+                      const paths = fileChunk.map((file) => ({
+                        rel: path.relative(state.worktree, file).replaceAll("\\", "/"),
+                        file,
+                      }))
                       const tree = yield* git(
-                        [...core, ...args(["ls-tree", "--name-only", hash, "--", ...rels.map(([rel]) => rel)])],
+                        [...core, ...args(["ls-tree", "--name-only", hash, "--", ...paths.map((item) => item.rel)])],
                         {
                           cwd: state.worktree,
                         },
@@ -355,30 +356,30 @@ export namespace Snapshot {
                         continue
                       }
 
-                      const existing = new Set(tree.text.trim().split("\n").map((item) => item.trim()).filter(Boolean))
-                      const restore: string[] = []
-                      const absent: string[] = []
-                      for (const [rel, file] of rels) {
-                        if (existing.has(rel)) {
-                          restore.push(file)
+                      const snapshotPaths = new Set(tree.text.trim().split("\n").map((item) => item.trim()).filter(Boolean))
+                      const filesToCheckout: string[] = []
+                      const missingFiles: string[] = []
+                      for (const item of paths) {
+                        if (snapshotPaths.has(item.rel)) {
+                          filesToCheckout.push(item.file)
                           continue
                         }
-                        absent.push(file)
+                        missingFiles.push(item.file)
                       }
 
-                      if (restore.length) {
-                        log.info("reverting", { hash, files: restore.length })
-                        const result = yield* git([...core, ...args(["checkout", hash, "--", ...restore])], {
+                      if (filesToCheckout.length) {
+                        log.info("reverting", { hash, files: filesToCheckout.length })
+                        const result = yield* git([...core, ...args(["checkout", hash, "--", ...filesToCheckout])], {
                           cwd: state.worktree,
                         })
                         if (result.code !== 0) {
-                          for (const file of restore) {
+                          for (const file of filesToCheckout) {
                             yield* revertSingle(hash, file)
                           }
                         }
                       }
 
-                      for (const file of absent) {
+                      for (const file of missingFiles) {
                         log.info("file did not exist in snapshot, deleting", { file, hash })
                         yield* remove(file)
                       }
