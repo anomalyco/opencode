@@ -19,6 +19,15 @@ type TabsInput = {
 
 export const getSessionKey = (dir: string | undefined, id: string | undefined) => `${dir ?? ""}${id ? `/${id}` : ""}`
 
+export const nextMobileTab = (input: { current: "session" | "changes"; blocked: boolean; mobile: boolean }) =>
+  input.mobile && input.blocked ? "session" : input.current
+
+export const sessionTabAttention = (input: { current: "session" | "changes"; blocked: boolean; mobile: boolean }) =>
+  input.mobile && input.blocked && input.current !== "session"
+
+export const blockedIndicatorVisible = (input: { current: "session" | "changes"; blocked: boolean; mobile: boolean }) =>
+  input.mobile && input.blocked && input.current === "changes"
+
 export const createSessionTabs = (input: TabsInput) => {
   const review = input.review ?? (() => false)
   const hasReview = input.hasReview ?? (() => false)

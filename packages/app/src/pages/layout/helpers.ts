@@ -1,10 +1,18 @@
 import { getFilename } from "@opencode-ai/util/path"
-import { type Session } from "@opencode-ai/sdk/v2/client"
+import { type PermissionRequest, type QuestionRequest, type Session } from "@opencode-ai/sdk/v2/client"
+import { sessionPermissionRequest, sessionQuestionRequest } from "../session/composer/session-request-tree"
 
 type SessionStore = {
   session?: Session[]
   path: { directory: string }
 }
+
+type AttentionStore = SessionStore & {
+  permission?: Record<string, PermissionRequest[] | undefined>
+  question?: Record<string, QuestionRequest[] | undefined>
+}
+
+export type Attention = "idle" | "working" | "permission" | "question" | "error" | "unseen"
 
 export const workspaceKey = (directory: string) => {
   const value = directory.replaceAll("\\", "/")
@@ -44,6 +52,60 @@ export function hasProjectPermissions<T>(
   include: (item: T) => boolean = () => true,
 ) {
   return Object.values(request ?? {}).some((list) => list?.some(include))
+}
+
+export const projectAttention = (input: {
+  permission: boolean
+  question: boolean
+  error: boolean
+  unseen: boolean
+}) => {
+  if (input.permission) return "permission"
+  if (input.question) return "question"
+  if (input.error) return "error"
+  if (input.unseen) return "unseen"
+  return "idle"
+}
+
+export const sessionAttention = (input: {
+  permission: boolean
+  question: boolean
+  error: boolean
+  unseen: boolean
+  working: boolean
+}): Attention => {
+  if (input.permission) return "permission"
+  if (input.question) return "question"
+  if (input.error) return "error"
+  if (input.unseen) return "unseen"
+  if (input.working) return "working"
+  return "idle"
+}
+
+export type Awaiting = {
+  session: Session
+  reason: "permission" | "question"
+}
+
+export const attentionTitle = (base: string, count: number) => (count > 0 ? `(${count}) ${base}` : base)
+
+export const awaitingSessions = (
+  store: AttentionStore,
+  now: number,
+  include: (item: PermissionRequest) => boolean = () => true,
+): Awaiting[] => {
+  const result: Awaiting[] = []
+  for (const session of sortedRootSessions(store, now)) {
+    const permission = sessionPermissionRequest(store.session ?? [], store.permission ?? {}, session.id, include)
+    if (permission) {
+      result.push({ session, reason: "permission" })
+      continue
+    }
+    const question = sessionQuestionRequest(store.session ?? [], store.question ?? {}, session.id)
+    if (!question) continue
+    result.push({ session, reason: "question" })
+  }
+  return result
 }
 
 export const childMapByParent = (sessions: Session[] | undefined) => {

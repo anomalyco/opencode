@@ -69,6 +69,58 @@ The [`/tui`](#tui) endpoint can be used to drive the TUI through the server. For
 
 ---
 
+### Scheduled triggers
+
+OpenCode can register lightweight triggers on a running instance. Use them when you want OpenCode to do work later, on a schedule, or when another system hits a webhook.
+
+Today, triggers support two scheduling modes:
+
+- `interval` — run repeatedly after a fixed number of milliseconds
+- `once` — run once at a specific Unix millisecond timestamp
+
+And they support two action types:
+
+- `command` — run an OpenCode command in a session
+- `webhook` — send an HTTP request to another service
+
+For example, this can be used to wake up OpenCode every morning, run a recurring command against an existing session, or forward a scheduled event into an external automation system.
+
+If you prefer CLI management instead of raw API calls, see [CLI](/docs/cli#trigger).
+
+---
+
+### Remote control from browser or phone
+
+Because OpenCode uses a client/server architecture, you can keep a server running on one machine and control it from another browser, another computer, or a phone.
+
+Typical setup:
+
+```bash
+export OPENCODE_SERVER_PASSWORD='choose-a-strong-password'
+opencode web --hostname 0.0.0.0 --port 4096
+```
+
+Then:
+
+- open the web UI from another device
+- or attach a TUI from another computer with `opencode attach`
+
+```bash
+opencode attach http://your-host:4096 --dir /srv/app --workspace ws_123 --continue
+```
+
+The current remote-control flow is designed to make blocked sessions easier to recover when you are away from the terminal:
+
+- workspace-aware remote attach
+- session continue and fork flows
+- an awaiting-input inbox in the web app
+- mobile session attention states and blocked-session indicators
+- browser notification, title, and badge attention when OpenCode needs input
+
+This makes it practical to leave OpenCode running on one machine and answer questions later from a browser on your phone or another device.
+
+---
+
 ## Spec
 
 The server publishes an OpenAPI 3.1 spec that can be viewed at:
@@ -186,6 +238,21 @@ The opencode server exposes the following APIs.
 | Method | Path       | Description       | Response                                      |
 | ------ | ---------- | ----------------- | --------------------------------------------- |
 | `GET`  | `/command` | List all commands | <a href={typesUrl}><code>Command[]</code></a> |
+
+---
+
+### Triggers
+
+| Method   | Path                        | Description                                 | Response                                                                 |
+| -------- | --------------------------- | ------------------------------------------- | ------------------------------------------------------------------------ |
+| `GET`    | `/trigger`                  | List triggers for the current instance      | <a href={typesUrl}><code>Trigger[]</code></a>                            |
+| `POST`   | `/trigger`                  | Create a trigger                            | body: trigger input, returns <a href={typesUrl}><code>Trigger</code></a> |
+| `GET`    | `/trigger/:id`              | Get a single trigger                        | <a href={typesUrl}><code>Trigger</code></a>                              |
+| `POST`   | `/trigger/:id/fire`         | Fire a trigger immediately                  | <a href={typesUrl}><code>Trigger</code></a>                              |
+| `POST`   | `/trigger/:id/fire/webhook` | Fire a trigger through its webhook endpoint | <a href={typesUrl}><code>Trigger</code></a>                              |
+| `POST`   | `/trigger/:id/enable`       | Enable a trigger                            | <a href={typesUrl}><code>Trigger</code></a>                              |
+| `POST`   | `/trigger/:id/disable`      | Disable a trigger                           | <a href={typesUrl}><code>Trigger</code></a>                              |
+| `DELETE` | `/trigger/:id`              | Delete a trigger                            | `{ success: true }`                                                      |
 
 ---
 
