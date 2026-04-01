@@ -59,6 +59,7 @@ import { TuiConfigProvider, useTuiConfig } from "./context/tui-config"
 import { TuiConfig } from "@/config/tui"
 import { createTuiApi, TuiPluginRuntime, type RouteMap } from "./plugin"
 import { FormatError, FormatUnknownError } from "@/cli/error"
+import { shouldExit } from "./app-exit"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -324,6 +325,15 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     }
 
     renderer.clearSelection()
+  })
+
+  useKeyboard((evt) => {
+    if (evt.defaultPrevented) return
+    if (!shouldExit(route.data.type)) return
+    if (!keybind.match("app_exit", evt)) return
+    exit()
+    evt.preventDefault()
+    evt.stopPropagation()
   })
 
   // Wire up console copy-to-clipboard via opentui's onCopySelection callback
