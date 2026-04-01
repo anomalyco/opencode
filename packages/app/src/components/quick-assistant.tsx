@@ -18,6 +18,7 @@ import { Identifier } from "@/utils/id"
 import { Persist, persisted } from "@/utils/persist"
 import { working } from "@/pages/session/session-working"
 import { formatServerError } from "@/utils/server-errors"
+import { mergeMessages, render } from "./quick-assistant-helpers"
 
 function errorName(err: unknown) {
   if (!err || typeof err !== "object") return undefined
@@ -127,22 +128,6 @@ function pickModel(provider: ProviderListResponse, connected: Set<string>) {
   }
 }
 
-function render(parts: Part[] | undefined) {
-  if (!parts?.length) return ""
-  return parts
-    .map((part) => {
-      if (part.type === "text") return part.text
-      if (part.type === "reasoning") return part.text
-      if (part.type === "tool") return `[tool] ${part.tool}`
-      if (part.type === "file") return `[file] ${part.filename || part.url}`
-      if (part.type === "agent") return `@${part.name}`
-      return ""
-    })
-    .filter(Boolean)
-    .join("\n")
-    .trim()
-}
-
 function seed(setStore: SetStoreFunction<State>, session: Session) {
   setStore("session", (list: Session[]) => {
     const result = Binary.search(list, session.id, (item) => item.id)
@@ -206,6 +191,7 @@ export function QuickAssistant() {
     loading: false,
   })
   let input!: HTMLTextAreaElement
+  const win = createMemo(() => platform.os === "windows")
 
   const dir = createMemo(() => decode64(params.dir) ?? "")
   const root = createMemo(() => {
@@ -420,8 +406,18 @@ export function QuickAssistant() {
       .then((result) => {
         const items = (result.data ?? []).filter((item) => !!item?.info?.id)
         const message = items.map((item) => item.info).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+        const local = store.message[id] ?? []
+        const next = mergeMessages(local, message)
+        if (local.length > 0 && next.length > message.length) {
+          console.debug("[quick-assistant] preserved optimistic messages during history sync", {
+            sessionID: id,
+            local: local.length,
+            fetched: message.length,
+            merged: next.length,
+          })
+        }
         batch(() => {
-          setStore("message", id, reconcile(message, { key: "id" }))
+          setStore("message", id, reconcile(next, { key: "id" }))
           for (const item of items) {
             setStore("part", item.info.id, item.parts)
           }
@@ -595,7 +591,11 @@ export function QuickAssistant() {
       <Show when={!saved.open && dock()}>
         <button
           type="button"
-          class="fixed right-5 bottom-5 z-40 flex items-center gap-2 rounded-full border border-border-weak-base bg-background-stronger/92 px-3 py-2 shadow-[var(--shadow-lg-border-base)] backdrop-blur-xl"
+          class="fixed right-5 bottom-5 z-40 flex items-center gap-2 rounded-full border border-border-weak-base px-3 py-2 shadow-[var(--shadow-lg-border-base)]"
+          classList={{
+            "bg-background-stronger/92 backdrop-blur-xl": !win(),
+            "bg-surface-raised-stronger-non-alpha": win(),
+          }}
           onClick={() => setSaved("open", true)}
         >
           <Icon name="bubble-5" class="size-4 text-icon-base" />
@@ -607,7 +607,13 @@ export function QuickAssistant() {
       </Show>
 
       <Show when={saved.open}>
-        <div class="fixed right-5 bottom-5 z-40 w-[min(520px,calc(100vw-24px))] rounded-[24px] bg-background-stronger/92 shadow-[var(--shadow-lg-border-base)] backdrop-blur-2xl">
+        <div
+          class="fixed right-5 bottom-5 z-40 w-[min(520px,calc(100vw-24px))] rounded-[24px] shadow-[var(--shadow-lg-border-base)]"
+          classList={{
+            "bg-background-stronger/92 backdrop-blur-2xl": !win(),
+            "bg-surface-raised-stronger-non-alpha": win(),
+          }}
+        >
           <div class="flex flex-col gap-3 p-3">
             <div class="flex items-end gap-3 rounded-[24px] border border-border-weak-base bg-surface-panel px-3 py-3">
               <textarea
