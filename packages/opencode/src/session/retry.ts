@@ -2,6 +2,7 @@ import type { NamedError } from "@opencode-ai/util/error"
 import { Cause, Clock, Duration, Effect, Schedule } from "effect"
 import { MessageV2 } from "./message-v2"
 import { iife } from "@/util/iife"
+import * as ConnectionError from "@/util/connection-error"
 
 export namespace SessionRetry {
   export type Err = ReturnType<NamedError["toObject"]>
@@ -41,15 +42,16 @@ export namespace SessionRetry {
           }
         }
 
-        return cap(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1))
+        const base = RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1)
+        return cap(base + Math.random() * 0.25 * base)
       }
     }
 
-    return cap(Math.min(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1), RETRY_MAX_DELAY_NO_HEADERS))
+    const base = Math.min(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1), RETRY_MAX_DELAY_NO_HEADERS)
+    return cap(base + Math.random() * 0.25 * base)
   }
 
   export function retryable(error: Err) {
-    // context overflow errors should not be retried
     if (MessageV2.ContextOverflowError.isInstance(error)) return undefined
     if (MessageV2.APIError.isInstance(error)) {
       if (!error.data.isRetryable) return undefined
@@ -57,6 +59,9 @@ export namespace SessionRetry {
         return `Free usage exceeded, add credits https://opencode.ai/zen`
       return error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message
     }
+
+    const conn = ConnectionError.extract(error.data)
+    if (conn?.stale) return `Connection reset (${conn.code})`
 
     const json = iife(() => {
       try {

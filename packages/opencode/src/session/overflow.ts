@@ -20,3 +20,16 @@ export function isOverflow(input: { cfg: Config.Info; tokens: MessageV2.Assistan
     : context - ProviderTransform.maxOutputTokens(input.model)
   return count >= usable
 }
+
+// Parses "prompt is too long: 250000 tokens > 200000" style error messages
+// to extract the exact token gap for targeted compaction
+const GAP_PATTERN = /(\d[\d,]*)\s*tokens?\s*>\s*(\d[\d,]*)/i
+
+export function parseTokenGap(msg: string): { actual: number; limit: number; gap: number } | undefined {
+  const match = msg.match(GAP_PATTERN)
+  if (!match) return undefined
+  const actual = parseInt(match[1].replace(/,/g, ""), 10)
+  const limit = parseInt(match[2].replace(/,/g, ""), 10)
+  if (isNaN(actual) || isNaN(limit) || actual <= limit) return undefined
+  return { actual, limit, gap: actual - limit }
+}
