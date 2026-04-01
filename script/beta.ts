@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
+import fs from "fs/promises"
 
 const model = "opencode/gpt-5.3-codex"
 
@@ -57,6 +58,8 @@ function lines(prs: PR[]) {
 }
 
 async function typecheck() {
+  console.log("  Running typecheck...")
+
   try {
     await $`bun typecheck`.cwd("packages/opencode")
     return true
@@ -67,11 +70,27 @@ async function typecheck() {
 }
 
 async function build() {
+  console.log("  Running final build smoke check...")
+
   try {
     await $`./script/build.ts --single`.cwd("packages/opencode")
     return true
   } catch (err) {
     console.log(`Build failed: ${err}`)
+    return false
+  }
+}
+
+async function install() {
+  console.log("  Regenerating bun.lock...")
+
+  try {
+    await fs.rm("bun.lock", { force: true })
+    await $`bun install`
+    await $`git add bun.lock`
+    return true
+  } catch (err) {
+    console.log(`Install failed: ${err}`)
     return false
   }
 }
@@ -85,15 +104,18 @@ async function fix(pr: PR, files: string[], prs: PR[], applied: number[], idx: n
   const prompt = [
     `Resolve the current git merge conflicts while merging PR #${pr.number} into the beta branch.`,
     `PR #${pr.number}: ${pr.title}`,
-    `Only touch these files: ${files.join(", ")}.`,
+    `Start with these conflicted files: ${files.join(", ")}.`,
     `Merged PRs on HEAD:\n${done}`,
     `Pending PRs after this one (context only):\n${next}`,
     "IMPORTANT: The conflict resolution must be consistent with already-merged PRs.",
     "Pending PRs are context only; do not introduce their changes unless they are already present on HEAD.",
     "Prefer already-merged PRs over the base branch when resolving stacked conflicts.",
+    "If bun.lock is conflicted, do not hand-merge it. Delete bun.lock and run bun install after the code conflicts are resolved.",
     "If a PR already deleted a file/directory, do not re-add it, instead apply changes in the new semantic location.",
     "If a PR already changed an import, keep that change.",
     "After resolving the conflicts, run `bun typecheck` in `packages/opencode`.",
+    "If typecheck fails, you may also update any files reported by typecheck.",
+    "Keep any non-conflict edits narrowly scoped to restoring a valid merged state for the current PR batch.",
     "Fix any merge-caused typecheck errors before finishing.",
     "Keep the merge in progress, do not abort the merge, and do not create a commit.",
     "When done, leave the working tree with no unmerged files and a passing typecheck.",
@@ -111,6 +133,8 @@ async function fix(pr: PR, files: string[], prs: PR[], applied: number[], idx: n
     console.log(`  Conflicts remain: ${left.join(", ")}`)
     return false
   }
+
+  if (files.includes("bun.lock") && !(await install())) return false
 
   if (!(await typecheck())) return false
 
@@ -196,7 +220,7 @@ async function main() {
   const failed: FailedPR[] = []
 
   for (const [idx, pr] of prs.entries()) {
-    console.log(`\nProcessing PR #${pr.number}: ${pr.title}`)
+    console.log(`\nProcessing PR ${idx + 1}/${prs.length} #${pr.number}: ${pr.title}`)
 
     console.log("  Fetching PR head...")
     try {
