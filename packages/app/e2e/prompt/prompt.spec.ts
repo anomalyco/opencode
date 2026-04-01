@@ -1,6 +1,6 @@
 import { test, expect } from "../fixtures"
 import { promptSelector } from "../selectors"
-import { sessionIDFromUrl } from "../actions"
+import { assistantText, sessionIDFromUrl } from "../actions"
 import { openaiModel, promptMatch, titleMatch, withMockOpenAI } from "./mock"
 
 test("can send a prompt and receive a reply", async ({ page, llm, backend, withBackendProject }) => {
@@ -41,20 +41,7 @@ test("can send a prompt and receive a reply", async ({ page, llm, backend, withB
             await expect.poll(() => llm.calls()).toBeGreaterThanOrEqual(1)
 
             await expect
-              .poll(
-                async () => {
-                  const messages = await project.sdk.session
-                    .messages({ sessionID, limit: 50 })
-                    .then((r) => r.data ?? [])
-                  return messages
-                    .filter((m) => m.info.role === "assistant")
-                    .flatMap((m) => m.parts)
-                    .filter((p) => p.type === "text")
-                    .map((p) => p.text)
-                    .join("\n")
-                },
-                { timeout: 30_000 },
-              )
+              .poll(() => assistantText(project.sdk, sessionID), { timeout: 30_000 })
               .toContain(token)
           },
           {

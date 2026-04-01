@@ -1023,3 +1023,13 @@ export async function openWorkspaceMenu(page: Page, workspaceSlug: string) {
   await expect(menu).toBeVisible()
   return menu
 }
+
+export async function assistantText(sdk: ReturnType<typeof createSdk>, sessionID: string) {
+  const messages = await sdk.session.messages({ sessionID, limit: 50 }).then((r) => r.data ?? [])
+  return messages
+    .filter((m) => m.info.role === "assistant")
+    .flatMap((m) => m.parts)
+    .filter((p) => p.type === "text")
+    .map((p) => p.text)
+    .join("\n")
+}

@@ -44,6 +44,12 @@ async function waitForHealth(url: string, probe = "/global/health") {
   throw new Error(`Timed out waiting for backend health at ${url}${probe}${last ? ` (${last})` : ""}`)
 }
 
+const LOG_CAP = 100
+
+function cap(input: string[]) {
+  if (input.length > LOG_CAP) input.splice(0, input.length - LOG_CAP)
+}
+
 function tail(input: string[]) {
   return input.slice(-40).join("")
 }
@@ -79,8 +85,8 @@ export async function startBackend(label: string): Promise<Handle> {
       stdio: ["ignore", "pipe", "pipe"],
     },
   )
-  proc.stdout?.on("data", (chunk) => out.push(String(chunk)))
-  proc.stderr?.on("data", (chunk) => err.push(String(chunk)))
+  proc.stdout?.on("data", (chunk) => { out.push(String(chunk)); cap(out) })
+  proc.stderr?.on("data", (chunk) => { err.push(String(chunk)); cap(err) })
 
   const url = `http://127.0.0.1:${port}`
   try {

@@ -1,6 +1,6 @@
 import { test, expect } from "../fixtures"
 import { promptSelector } from "../selectors"
-import { cleanupSession, sessionIDFromUrl, withSession } from "../actions"
+import { assistantText, cleanupSession, sessionIDFromUrl, withSession } from "../actions"
 import { openaiModel, promptMatch, withMockOpenAI } from "./mock"
 
 const text = (value: string | null) => (value ?? "").replace(/\u200B/g, "").trim()
@@ -39,18 +39,7 @@ test("prompt succeeds when sync message endpoint is unreachable", async ({
           await expect.poll(() => llm.calls()).toBeGreaterThanOrEqual(1)
 
           await expect
-            .poll(
-              async () => {
-                const messages = await project.sdk.session.messages({ sessionID, limit: 50 }).then((r) => r.data ?? [])
-                return messages
-                  .filter((m) => m.info.role === "assistant")
-                  .flatMap((m) => m.parts)
-                  .filter((p) => p.type === "text")
-                  .map((p) => p.text)
-                  .join("\n")
-              },
-              { timeout: 90_000 },
-            )
+            .poll(() => assistantText(project.sdk, sessionID), { timeout: 90_000 })
             .toContain(token)
         },
         {
