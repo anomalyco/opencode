@@ -63,7 +63,7 @@ it.live("orgsByAccount groups orgs per account", () =>
         url: "https://one.example.com",
         accessToken: AccessToken.make("at_1"),
         refreshToken: RefreshToken.make("rt_1"),
-        expiry: Date.now() + 60_000,
+        expiry: Date.now() + 10 * 60_000,
         orgID: Option.none(),
       }),
     )
@@ -75,7 +75,7 @@ it.live("orgsByAccount groups orgs per account", () =>
         url: "https://two.example.com",
         accessToken: AccessToken.make("at_2"),
         refreshToken: RefreshToken.make("rt_2"),
-        expiry: Date.now() + 60_000,
+        expiry: Date.now() + 10 * 60_000,
         orgID: Option.none(),
       }),
     )
@@ -145,6 +145,50 @@ it.live("token refresh persists the new token", () =>
     expect(value.access_token).toBe(AccessToken.make("at_new"))
     expect(value.refresh_token).toBe(RefreshToken.make("rt_new"))
     expect(value.token_expiry).toBeGreaterThan(Date.now())
+  }),
+)
+
+it.live("token refreshes before expiry when inside the eager refresh window", () =>
+  Effect.gen(function* () {
+    const id = AccountID.make("user-1")
+
+    yield* AccountRepo.use((r) =>
+      r.persistAccount({
+        id,
+        email: "user@example.com",
+        url: "https://one.example.com",
+        accessToken: AccessToken.make("at_old"),
+        refreshToken: RefreshToken.make("rt_old"),
+        expiry: Date.now() + 60_000,
+        orgID: Option.none(),
+      }),
+    )
+
+    let refreshCalls = 0
+    const client = HttpClient.make((req) =>
+      Effect.promise(async () => {
+        if (req.url === "https://one.example.com/auth/device/token") {
+          refreshCalls += 1
+          return json(req, {
+            access_token: "at_new",
+            refresh_token: "rt_new",
+            expires_in: 60,
+          })
+        }
+
+        return json(req, {}, 404)
+      }),
+    )
+
+    const token = yield* Account.Service.use((s) => s.token(id)).pipe(Effect.provide(live(client)))
+
+    expect(String(Option.getOrThrow(token))).toBe("at_new")
+    expect(refreshCalls).toBe(1)
+
+    const row = yield* AccountRepo.use((r) => r.getRow(id))
+    const value = Option.getOrThrow(row)
+    expect(value.access_token).toBe(AccessToken.make("at_new"))
+    expect(value.refresh_token).toBe(RefreshToken.make("rt_new"))
   }),
 )
 
@@ -223,7 +267,7 @@ it.live("config sends the selected org header", () =>
         url: "https://one.example.com",
         accessToken: AccessToken.make("at_1"),
         refreshToken: RefreshToken.make("rt_1"),
-        expiry: Date.now() + 60_000,
+        expiry: Date.now() + 10 * 60_000,
         orgID: Option.none(),
       }),
     )
