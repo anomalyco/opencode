@@ -808,15 +808,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           nu: { args: ["-c", input.command] },
           fish: { args: ["-c", input.command] },
           zsh: {
-            args: [
-              "-l",
-              "-c",
-              `
-                [[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
-                [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
-                eval ${JSON.stringify(input.command)}
-              `,
-            ],
+            args: ["-l", "-c", input.command],
           },
           bash: {
             args: [
@@ -856,10 +848,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           }),
         )
 
-        let aborted = false
-        let exited = false
-        let finished = false
-
         let output = ""
         const write = () => {
           if (part.state.status !== "running") return
@@ -876,16 +864,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           write()
         })
 
-        const closed = new Promise<void>((resolve) => {
-          const close = () => {
-            exited = true
-            proc.off("close", close)
-            resolve()
-          }
-          proc.once("close", close)
-          if (proc.exitCode !== null || proc.signalCode !== null) close()
-        })
-
+        let aborted = false
+        let exited = false
+        let finished = false
         const kill = Effect.promise(() => Shell.killTree(proc, { exited: () => exited }))
 
         const abortHandler = () => {
@@ -922,7 +903,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         const exit = yield* Effect.promise(() => {
           signal.addEventListener("abort", abortHandler, { once: true })
           if (signal.aborted) abortHandler()
-          return closed
+          return new Promise<void>((resolve) => {
+            const close = () => {
+              exited = true
+              proc.off("close", close)
+              resolve()
+            }
+            proc.once("close", close)
+          })
         }).pipe(
           Effect.onInterrupt(() => Effect.sync(abortHandler)),
           Effect.ensuring(Effect.sync(() => signal.removeEventListener("abort", abortHandler))),
