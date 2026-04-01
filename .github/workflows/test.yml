@@ -96,13 +96,20 @@ jobs:
         working-directory: packages/app
         run: bunx playwright install chromium
 
+      # Use GITHUB_ENV rather than expressions in env: to avoid setting the
+      # model to an empty string for external contributions (forks). Unset
+      # variables fall back to defaults in seed-e2e.ts.
+      - name: Set e2e env (internal)
+        if: ${{ !github.event.pull_request.head.repo.fork }}
+        run: |
+          echo "OPENCODE_E2E_MODEL=opencode/claude-haiku-4-5" >> "$GITHUB_ENV"
+          echo "OPENCODE_E2E_REQUIRE_PAID=true" >> "$GITHUB_ENV"
+
       - name: Run app e2e tests
         run: bun --cwd packages/app test:e2e:local
         env:
           CI: true
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          OPENCODE_E2E_MODEL: opencode/claude-haiku-4-5
-          OPENCODE_E2E_REQUIRE_PAID: "true"
         timeout-minutes: 30
 
       - name: Upload Playwright artifacts
