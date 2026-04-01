@@ -211,12 +211,14 @@ export function resolveConfigProviders(input: {
     enabled_providers?: string[]
   }
   database: Record<string, { name?: string }>
+  existing: Set<string>
 }): Array<{ id: string; name: string }> {
   const disabled = new Set(input.config.disabled_providers ?? [])
   const enabled = input.config.enabled_providers ? new Set(input.config.enabled_providers) : undefined
 
   return Object.entries(input.config.provider ?? {})
     .filter(([id, provider]) => {
+      if (input.existing.has(id)) return false
       if (disabled.has(id)) return false
       if (enabled && !enabled.has(id)) return false
       return typeof provider.options?.apiKey === "string" && provider.options.apiKey.length > 0
@@ -263,6 +265,7 @@ export const ProvidersListCommand = cmd({
         const configured = resolveConfigProviders({
           config,
           database,
+          existing: new Set(results.map(([id]) => id)),
         })
 
         if (configured.length > 0) {

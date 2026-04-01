@@ -145,6 +145,7 @@ describe("resolveConfigProviders", () => {
         openai: { name: "OpenAI" },
         google: { name: "Google" },
       },
+      existing: new Set(),
     })
 
     expect(result).toEqual([
@@ -175,6 +176,33 @@ describe("resolveConfigProviders", () => {
         anthropic: { name: "Anthropic" },
         openai: { name: "OpenAI" },
       },
+      existing: new Set(),
+    })
+
+    expect(result).toEqual([{ id: "openai", name: "OpenAI" }])
+  })
+
+  test("skips providers already present in auth credentials", () => {
+    const result = resolveConfigProviders({
+      config: {
+        provider: {
+          anthropic: {
+            options: {
+              apiKey: "test-key",
+            },
+          },
+          openai: {
+            options: {
+              apiKey: "test-openai-key",
+            },
+          },
+        },
+      },
+      database: {
+        anthropic: { name: "Anthropic" },
+        openai: { name: "OpenAI" },
+      },
+      existing: new Set(["anthropic"]),
     })
 
     expect(result).toEqual([{ id: "openai", name: "OpenAI" }])
