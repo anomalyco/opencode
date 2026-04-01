@@ -75,7 +75,7 @@ export const AttachCommand = cmd({
         UI.error(error instanceof Error ? error.message : String(error))
         process.exit(1)
       })
-      await resolveRemoteTarget({
+      const target = await resolveRemoteTarget({
         sdk,
         directory,
         continue: args.continue,
@@ -85,6 +85,13 @@ export const AttachCommand = cmd({
         UI.error(error instanceof Error ? error.message : String(error))
         process.exit(1)
       })
+      if (args.continue && target.baseID) {
+        UI.println(
+          UI.Style.TEXT_INFO_BOLD + "Continuing remote session" + UI.Style.TEXT_NORMAL,
+          target.title ?? target.baseID,
+          UI.Style.TEXT_DIM + `(${target.baseID})` + UI.Style.TEXT_NORMAL,
+        )
+      }
       const config = await Instance.provide({
         directory: directory && existsSync(directory) ? directory : process.cwd(),
         fn: () => TuiConfig.get(),
