@@ -284,11 +284,21 @@ export namespace Server {
       idleTimeout: 0,
       fetch: (req: Request, server: any) => {
         if (basePath !== "/") {
+          const originalReq = req
           const url = new URL(req.url)
           if (url.pathname.startsWith(basePath)) {
             url.pathname = url.pathname.slice(basePath.length) || "/"
             req = new Request(url.toString(), req)
           }
+          const wrappedServer = new Proxy(server, {
+            get(target, prop) {
+              if (prop === "upgrade") {
+                return (_r: Request, opts?: any) => target.upgrade(originalReq, opts)
+              }
+              return target[prop]
+            },
+          })
+          return controlPlane.fetch(req, wrappedServer)
         }
         return controlPlane.fetch(req, server)
       },
