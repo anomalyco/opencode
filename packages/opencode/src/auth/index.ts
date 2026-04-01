@@ -63,7 +63,6 @@ export namespace Auth {
       const decode = Schema.decodeUnknownOption(Info)
 
       const all = Effect.fn("Auth.all")(function* () {
-      const all = Effect.fn("Auth.all")(function* () {
         const data = (yield* fsys.readJson(file()).pipe(Effect.orElseSucceed(() => ({})))) as Record<string, unknown>
         return Record.filterMap(data, (value) => Result.fromOption(decode(value), () => undefined))
       })
