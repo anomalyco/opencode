@@ -1,6 +1,6 @@
 import { test, expect } from "../fixtures"
 import { promptSelector } from "../selectors"
-import { assistantText, cleanupSession, sessionIDFromUrl, withSession } from "../actions"
+import { assistantText, sessionIDFromUrl, withSession } from "../actions"
 import { openaiModel, promptMatch, withMockOpenAI } from "./mock"
 
 const text = (value: string | null) => (value ?? "").replace(/\u200B/g, "").trim()

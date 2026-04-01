@@ -15,7 +15,7 @@ test("shell mode runs a command in the project directory", async ({ page, withPr
 
   await withProject(async ({ directory, gotoSession, trackSession, sdk }) => {
     const prompt = page.locator(promptSelector)
-    const cmd = process.platform === "win32" ? "dir" : "ls"
+    const cmd = process.platform === "win32" ? "dir" : "command ls"
 
     await gotoSession()
     await prompt.click()

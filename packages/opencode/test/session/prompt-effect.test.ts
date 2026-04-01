@@ -922,16 +922,39 @@ unix("shell lists files from the project directory", () =>
         const result = yield* prompt.shell({
           sessionID: chat.id,
           agent: "build",
-          command: "ls",
+          command: "command ls",
         })
 
         expect(result.info.role).toBe("assistant")
         const tool = completedTool(result.parts)
         if (!tool) return
 
-        expect(tool.state.input.command).toBe("ls")
+        expect(tool.state.input.command).toBe("command ls")
         expect(tool.state.output).toContain("README.md")
         expect(tool.state.metadata.output).toContain("README.md")
+        yield* prompt.assertNotBusy(chat.id)
+      }),
+    { git: true, config: cfg },
+  ),
+)
+
+unix("shell captures stderr from a failing command", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { prompt, chat } = yield* boot()
+        const result = yield* prompt.shell({
+          sessionID: chat.id,
+          agent: "build",
+          command: "command -v __nonexistent_cmd_e2e__ || echo 'not found' >&2; exit 1",
+        })
+
+        expect(result.info.role).toBe("assistant")
+        const tool = completedTool(result.parts)
+        if (!tool) return
+
+        expect(tool.state.output).toContain("not found")
+        expect(tool.state.metadata.output).toContain("not found")
         yield* prompt.assertNotBusy(chat.id)
       }),
     { git: true, config: cfg },
