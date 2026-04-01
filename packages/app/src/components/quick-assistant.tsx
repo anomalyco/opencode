@@ -164,7 +164,8 @@ function notFound(err: unknown) {
 }
 
 function join(root: string, child: string) {
-  return root.replace(/[\\/]+$/, "") + "/" + child
+  const slash = /^[A-Za-z]:\\|\\\\/.test(root) || root.includes("\\") ? "\\" : "/"
+  return root.replace(/[\\/]+$/, "") + slash + child
 }
 
 function native(dir: string, win: boolean) {
@@ -544,25 +545,28 @@ export function QuickAssistant() {
         ],
       })
       .catch((err: unknown) => {
+        const aborted = errorName(err) === "AbortError"
         batch(() => {
           setStore("session_status", id, { type: "idle" })
-          setStore("message", (items) => {
-            const list = items[id] ?? []
-            const result = Binary.search(list, messageID, (item) => item.id)
-            if (!result.found) return items
-            const next = [...list]
-            next.splice(result.index, 1)
-            return {
-              ...items,
-              [id]: next,
-            }
-          })
-          setStore("part", (items: Record<string, Part[] | undefined>) => {
-            if (!(messageID in items)) return items
-            const next = { ...items }
-            delete next[messageID]
-            return next
-          })
+          if (aborted) {
+            setStore("message", (items) => {
+              const list = items[id] ?? []
+              const result = Binary.search(list, messageID, (item) => item.id)
+              if (!result.found) return items
+              const next = [...list]
+              next.splice(result.index, 1)
+              return {
+                ...items,
+                [id]: next,
+              }
+            })
+            setStore("part", (items: Record<string, Part[] | undefined>) => {
+              if (!(messageID in items)) return items
+              const next = { ...items }
+              delete next[messageID]
+              return next
+            })
+          }
         })
         showToast({
           title: "Quick Assistant",

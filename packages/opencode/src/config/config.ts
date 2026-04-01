@@ -80,7 +80,7 @@ export namespace Config {
     const auth = await Auth.all()
 
     if (QuickAssistant.active(Instance.directory)) {
-      let result: Info = {}
+      let result: Info = await global()
       const root = QuickAssistant.root()
       const directories = [root, path.join(root, ".opencode")]
 
