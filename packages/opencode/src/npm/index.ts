@@ -62,7 +62,7 @@ export namespace Npm {
       const first = tree.edgesOut.values().next().value?.to
       if (first) {
         log.info("package already installed", { pkg })
-        return resolveEntryPoint(first.path)
+        return first.path
       }
     }
 
@@ -83,47 +83,7 @@ export namespace Npm {
 
     const first = result.edgesOut.values().next().value?.to
     if (!first) throw new InstallFailedError({ pkg })
-    return resolveEntryPoint(first.path)
-  }
-
-  async function resolveEntryPoint(pkgPath: string): Promise<string> {
-    const pkgJsonPath = path.join(pkgPath, "package.json")
-    const pkgJson = (await Filesystem.readJson(pkgJsonPath).catch(() => null)) as {
-      main?: string
-      module?: string
-      exports?: Record<string, any>
-    } | null
-
-    if (!pkgJson) return pkgPath
-
-    // Try exports first (ESM import path)
-    if (pkgJson.exports) {
-      const mainExport = pkgJson.exports["."]
-      if (mainExport) {
-        if (typeof mainExport === "string") {
-          return path.join(pkgPath, mainExport)
-        }
-        if (mainExport.import && typeof mainExport.import === "string") {
-          return path.join(pkgPath, mainExport.import)
-        }
-        if (mainExport.default && typeof mainExport.default === "string") {
-          return path.join(pkgPath, mainExport.default)
-        }
-      }
-    }
-
-    // Try module field (ESM)
-    if (pkgJson.module) {
-      return path.join(pkgPath, pkgJson.module)
-    }
-
-    // Fall back to main field
-    if (pkgJson.main) {
-      return path.join(pkgPath, pkgJson.main)
-    }
-
-    // Last resort: return directory and hope for the best
-    return pkgPath
+    return first.path
   }
 
   export async function install(dir: string) {
