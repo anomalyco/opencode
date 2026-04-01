@@ -1,22 +1,25 @@
 import { TextAttributes } from "@opentui/core"
+import { fileURLToPath } from "bun"
 import { useTheme } from "../context/theme"
+import { useDialog } from "@tui/ui/dialog"
 import { useSync } from "@tui/context/sync"
 import { For, Match, Switch, Show, createMemo } from "solid-js"
-import { Installation } from "@/installation"
 
 export type DialogStatusProps = {}
 
 export function DialogStatus() {
   const sync = useSync()
   const { theme } = useTheme()
+  const dialog = useDialog()
 
   const enabledFormatters = createMemo(() => sync.data.formatter.filter((f) => f.enabled))
 
   const plugins = createMemo(() => {
     const list = sync.data.config.plugin ?? []
-    const result = list.map((value) => {
+    const result = list.map((item) => {
+      const value = typeof item === "string" ? item : item[0]
       if (value.startsWith("file://")) {
-        const path = value.substring("file://".length)
+        const path = fileURLToPath(value)
         const parts = path.split("/")
         const filename = parts.pop() || path
         if (!filename.includes(".")) return { name: filename }
@@ -43,9 +46,10 @@ export function DialogStatus() {
         <text fg={theme.text} attributes={TextAttributes.BOLD}>
           Status
         </text>
-        <text fg={theme.textMuted}>esc</text>
+        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+          esc
+        </text>
       </box>
-      <text fg={theme.textMuted}>OpenCode v{Installation.VERSION}</text>
       <Show when={Object.keys(sync.data.mcp).length > 0} fallback={<text fg={theme.text}>No MCP Servers</text>}>
         <box>
           <text fg={theme.text}>{Object.keys(sync.data.mcp).length} MCP Servers</text>

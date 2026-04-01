@@ -1,7 +1,9 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
+import { SessionID } from "./schema"
 import z from "zod"
-import { Storage } from "../storage/storage"
+import { Database, eq, asc } from "../storage/db"
+import { TodoTable } from "./session.sql"
 
 export namespace Todo {
   export const Info = z
@@ -9,7 +11,6 @@ export namespace Todo {
       content: z.string().describe("Brief description of the task"),
       status: z.string().describe("Current status of the task: pending, in_progress, completed, cancelled"),
       priority: z.string().describe("Priority level of the task: high, medium, low"),
-      id: z.string().describe("Unique identifier for the todo item"),
     })
     .meta({ ref: "Todo" })
   export type Info = z.infer<typeof Info>
@@ -18,20 +19,39 @@ export namespace Todo {
     Updated: BusEvent.define(
       "todo.updated",
       z.object({
-        sessionID: z.string(),
+        sessionID: SessionID.zod,
         todos: z.array(Info),
       }),
     ),
   }
 
-  export async function update(input: { sessionID: string; todos: Info[] }) {
-    await Storage.write(["todo", input.sessionID], input.todos)
+  export function update(input: { sessionID: SessionID; todos: Info[] }) {
+    Database.transaction((db) => {
+      db.delete(TodoTable).where(eq(TodoTable.session_id, input.sessionID)).run()
+      if (input.todos.length === 0) return
+      db.insert(TodoTable)
+        .values(
+          input.todos.map((todo, position) => ({
+            session_id: input.sessionID,
+            content: todo.content,
+            status: todo.status,
+            priority: todo.priority,
+            position,
+          })),
+        )
+        .run()
+    })
     Bus.publish(Event.Updated, input)
   }
 
-  export async function get(sessionID: string) {
-    return Storage.read<Info[]>(["todo", sessionID])
-      .then((x) => x || [])
-      .catch(() => [])
+  export function get(sessionID: SessionID) {
+    const rows = Database.use((db) =>
+      db.select().from(TodoTable).where(eq(TodoTable.session_id, sessionID)).orderBy(asc(TodoTable.position)).all(),
+    )
+    return rows.map((row) => ({
+      content: row.content,
+      status: row.status,
+      priority: row.priority,
+    }))
   }
 }

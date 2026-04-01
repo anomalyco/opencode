@@ -1,0 +1,150 @@
+/*
+ * TextReveal — mask-position wipe animation
+ *
+ * Instead of sliding text through a fixed mask (odometer style),
+ * the mask itself sweeps across each span to reveal/hide text.
+ *
+ * Direction: top-to-bottom. New text drops in from above, old text exits downward.
+ *
+ * Entering: gradient reveals top-to-bottom (top of text appears first).
+ *   gradient(to bottom, white 33%, transparent 33%+edge)
+ *   pos 0 100% = transparent covers element = hidden
+ *   pos 0 0%   = white covers element       = visible
+ *
+ * Leaving: gradient hides top-to-bottom (top of text disappears first).
+ *   gradient(to top, white 33%, transparent 33%+edge)
+ *   pos 0 100% = white covers element       = visible
+ *   pos 0 0%   = transparent covers element = hidden
+ *
+ * Both transition from 0 100% (swap) → 0 0% (settled).
+ */
+
+[data-component="text-reveal"] {
+  --_edge: var(--text-reveal-edge, 17%);
+  --_dur: var(--text-reveal-duration, 450ms);
+  --_spring: var(--text-reveal-spring, cubic-bezier(0.34, 1.08, 0.64, 1));
+  --_spring-soft: var(--text-reveal-spring-soft, cubic-bezier(0.34, 1, 0.64, 1));
+  --_travel: var(--text-reveal-travel, 0px);
+
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  overflow: visible;
+
+  [data-slot="text-reveal-track"] {
+    display: grid;
+    min-height: 20px;
+    line-height: 20px;
+    justify-items: start;
+    align-items: center;
+    overflow: visible;
+    transition: width var(--_dur) var(--_spring-soft);
+  }
+
+  [data-slot="text-reveal-entering"],
+  [data-slot="text-reveal-leaving"] {
+    grid-area: 1 / 1;
+    line-height: 20px;
+    white-space: nowrap;
+    justify-self: start;
+    text-align: start;
+    mask-size: 100% 300%;
+    -webkit-mask-size: 100% 300%;
+    mask-repeat: no-repeat;
+    -webkit-mask-repeat: no-repeat;
+    transition-duration: var(--_dur);
+    transition-timing-function: var(--_spring);
+  }
+
+  /* ── entering: reveal top-to-bottom ──
+   * Gradient(to top): white at bottom, transparent at top of mask.
+   * Settled pos 0 100% = white covers element   = visible
+   * Swap    pos 0 0%   = transparent covers      = hidden
+   * Slides from above: translateY(-travel) → translateY(0)
+   */
+  [data-slot="text-reveal-entering"] {
+    mask-image: linear-gradient(to top, white 33%, transparent calc(33% + var(--_edge)));
+    -webkit-mask-image: linear-gradient(to top, white 33%, transparent calc(33% + var(--_edge)));
+    mask-position: 0 100%;
+    -webkit-mask-position: 0 100%;
+    transition-property:
+      mask-position,
+      -webkit-mask-position,
+      transform;
+    transform: translateY(0);
+  }
+
+  /* ── leaving: hide top-to-bottom + slide downward ──
+   * Gradient(to bottom): white at top, transparent at bottom of mask.
+   * Swap    pos 0 0%   = white covers element   = visible
+   * Settled pos 0 100% = transparent covers      = hidden
+   * Slides down: translateY(0) → translateY(travel)
+   */
+  [data-slot="text-reveal-leaving"] {
+    mask-image: linear-gradient(to bottom, white 33%, transparent calc(33% + var(--_edge)));
+    -webkit-mask-image: linear-gradient(to bottom, white 33%, transparent calc(33% + var(--_edge)));
+    mask-position: 0 100%;
+    -webkit-mask-position: 0 100%;
+    transition-property:
+      mask-position,
+      -webkit-mask-position,
+      transform;
+    transform: translateY(var(--_travel));
+  }
+
+  /* ── swapping: instant reset ──
+   * Snap entering to hidden (above), leaving to visible (center).
+   */
+  &[data-swapping="true"] [data-slot="text-reveal-entering"] {
+    mask-position: 0 0%;
+    -webkit-mask-position: 0 0%;
+    transform: translateY(calc(var(--_travel) * -1));
+    transition-duration: 0ms !important;
+  }
+
+  &[data-swapping="true"] [data-slot="text-reveal-leaving"] {
+    mask-position: 0 0%;
+    -webkit-mask-position: 0 0%;
+    transform: translateY(0);
+    transition-duration: 0ms !important;
+  }
+
+  /* ── not ready: kill all transitions ── */
+  &[data-ready="false"] [data-slot="text-reveal-track"] {
+    transition-duration: 0ms !important;
+  }
+
+  &[data-ready="false"] [data-slot="text-reveal-entering"],
+  &[data-ready="false"] [data-slot="text-reveal-leaving"] {
+    transition-duration: 0ms !important;
+  }
+
+  &[data-truncate="true"] {
+    width: 100%;
+  }
+
+  &[data-truncate="true"] [data-slot="text-reveal-track"] {
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  &[data-truncate="true"] [data-slot="text-reveal-entering"],
+  &[data-truncate="true"] [data-slot="text-reveal-leaving"] {
+    min-width: 0;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="text-reveal"] [data-slot="text-reveal-track"] {
+    transition-duration: 0ms !important;
+  }
+
+  [data-component="text-reveal"] [data-slot="text-reveal-entering"],
+  [data-component="text-reveal"] [data-slot="text-reveal-leaving"] {
+    transition-duration: 0ms !important;
+  }
+}
