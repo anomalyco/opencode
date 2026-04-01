@@ -2,6 +2,7 @@ import { APICallError } from "ai"
 import { STATUS_CODES } from "http"
 import { iife } from "@/util/iife"
 import type { ProviderID } from "./schema"
+import * as ConnectionError from "@/util/connection-error"
 
 export namespace ProviderError {
   // Adapted from overflow detection patterns in:
@@ -48,6 +49,9 @@ export namespace ProviderError {
 
   function message(providerID: ProviderID, e: APICallError) {
     return iife(() => {
+      const conn = ConnectionError.extract(e)
+      if (conn) return ConnectionError.format(conn)
+
       const msg = e.message
       if (msg === "") {
         if (e.responseBody) return e.responseBody
@@ -71,8 +75,6 @@ export namespace ProviderError {
         }
       } catch {}
 
-      // If responseBody is HTML (e.g. from a gateway or proxy error page),
-      // provide a human-readable message instead of dumping raw markup
       if (/^\s*<!doctype|^\s*<html/i.test(e.responseBody)) {
         if (e.statusCode === 401) {
           return "Unauthorized: request was blocked by a gateway or proxy. Your authentication token may be missing or expired — try running `opencode auth login <your provider URL>` to re-authenticate."
@@ -80,6 +82,8 @@ export namespace ProviderError {
         if (e.statusCode === 403) {
           return "Forbidden: request was blocked by a gateway or proxy. You may not have permission to access this resource — check your account and provider settings."
         }
+        const title = e.responseBody.match(/<title>([^<]+)<\/title>/i)?.[1]?.trim()
+        if (title) return title
         return msg
       }
 

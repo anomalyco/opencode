@@ -1354,6 +1354,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           const ctx = yield* InstanceState.context
           let structured: unknown | undefined
           let step = 0
+          let compactFailures = 0
+          const MAX_COMPACT_FAILURES = 3
           const session = yield* sessions.get(sessionID)
 
           while (true) {
@@ -1411,13 +1413,18 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 auto: task.auto,
                 overflow: task.overflow,
               })
-              if (result === "stop") break
+              if (result === "stop") {
+                if (task.auto) compactFailures++
+                break
+              }
+              if (task.auto) compactFailures = 0
               continue
             }
 
             if (
               lastFinished &&
               lastFinished.summary !== true &&
+              compactFailures < MAX_COMPACT_FAILURES &&
               (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
             ) {
               yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })

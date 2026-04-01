@@ -135,94 +135,98 @@ export const TuiThreadCommand = cmd({
           Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
         ),
       })
-      worker.onerror = (e) => {
-        Log.Default.error(e)
-      }
-
-      const client = Rpc.client<typeof rpc>(worker)
-      const error = (e: unknown) => {
-        Log.Default.error(e)
-      }
-      const reload = () => {
-        client.call("reload", undefined).catch((err) => {
-          Log.Default.warn("worker reload failed", {
-            error: errorMessage(err),
-          })
-        })
-      }
-      process.on("uncaughtException", error)
-      process.on("unhandledRejection", error)
-      process.on("SIGUSR2", reload)
-
-      let stopped = false
-      const stop = async () => {
-        if (stopped) return
-        stopped = true
-        process.off("uncaughtException", error)
-        process.off("unhandledRejection", error)
-        process.off("SIGUSR2", reload)
-        await withTimeout(client.call("shutdown", undefined), 5000).catch((error) => {
-          Log.Default.warn("worker shutdown failed", {
-            error: errorMessage(error),
-          })
-        })
-        worker.terminate()
-      }
-
-      const prompt = await input(args.prompt)
-      const config = await Instance.provide({
-        directory: cwd,
-        fn: () => TuiConfig.get(),
-      })
-
-      const network = await resolveNetworkOptions(args)
-      const external =
-        process.argv.includes("--port") ||
-        process.argv.includes("--hostname") ||
-        process.argv.includes("--mdns") ||
-        network.mdns ||
-        network.port !== 0 ||
-        network.hostname !== "127.0.0.1"
-
-      const transport = external
-        ? {
-            url: (await client.call("server", network)).url,
-            fetch: undefined,
-            events: undefined,
-          }
-        : {
-            url: "http://opencode.internal",
-            fetch: createWorkerFetch(client),
-            events: createEventSource(client),
-          }
-
-      setTimeout(() => {
-        client.call("checkUpgrade", { directory: cwd }).catch(() => {})
-      }, 1000).unref?.()
-
       try {
-        await tui({
-          url: transport.url,
-          async onSnapshot() {
-            const tui = writeHeapSnapshot("tui.heapsnapshot")
-            const server = await client.call("snapshot", undefined)
-            return [tui, server]
-          },
-          config,
+        worker.onerror = (e) => {
+          Log.Default.error(e)
+        }
+
+        const client = Rpc.client<typeof rpc>(worker)
+        const error = (e: unknown) => {
+          Log.Default.error(e)
+        }
+        const reload = () => {
+          client.call("reload", undefined).catch((err) => {
+            Log.Default.warn("worker reload failed", {
+              error: errorMessage(err),
+            })
+          })
+        }
+        process.on("uncaughtException", error)
+        process.on("unhandledRejection", error)
+        process.on("SIGUSR2", reload)
+
+        let stopped = false
+        const stop = async () => {
+          if (stopped) return
+          stopped = true
+          process.off("uncaughtException", error)
+          process.off("unhandledRejection", error)
+          process.off("SIGUSR2", reload)
+          await withTimeout(client.call("shutdown", undefined), 5000).catch((error) => {
+            Log.Default.warn("worker shutdown failed", {
+              error: errorMessage(error),
+            })
+          })
+          worker.terminate()
+        }
+
+        const prompt = await input(args.prompt)
+        const config = await Instance.provide({
           directory: cwd,
-          fetch: transport.fetch,
-          events: transport.events,
-          args: {
-            continue: args.continue,
-            sessionID: args.session,
-            agent: args.agent,
-            model: args.model,
-            prompt,
-            fork: args.fork,
-          },
+          fn: () => TuiConfig.get(),
         })
+
+        const network = await resolveNetworkOptions(args)
+        const external =
+          process.argv.includes("--port") ||
+          process.argv.includes("--hostname") ||
+          process.argv.includes("--mdns") ||
+          network.mdns ||
+          network.port !== 0 ||
+          network.hostname !== "127.0.0.1"
+
+        const transport = external
+          ? {
+              url: (await client.call("server", network)).url,
+              fetch: undefined,
+              events: undefined,
+            }
+          : {
+              url: "http://opencode.internal",
+              fetch: createWorkerFetch(client),
+              events: createEventSource(client),
+            }
+
+        setTimeout(() => {
+          client.call("checkUpgrade", { directory: cwd }).catch(() => {})
+        }, 1000).unref?.()
+
+        try {
+          await tui({
+            url: transport.url,
+            async onSnapshot() {
+              const tui = writeHeapSnapshot("tui.heapsnapshot")
+              const server = await client.call("snapshot", undefined)
+              return [tui, server]
+            },
+            config,
+            directory: cwd,
+            fetch: transport.fetch,
+            events: transport.events,
+            args: {
+              continue: args.continue,
+              sessionID: args.session,
+              agent: args.agent,
+              model: args.model,
+              prompt,
+              fork: args.fork,
+            },
+          })
+        } finally {
+          await stop()
+        }
       } finally {
-        await stop()
+        worker.terminate()
       }
     } finally {
       unguard?.()

@@ -331,19 +331,22 @@ function waitForOAuthCallback(pkce: PkceCodes, state: string): Promise<TokenResp
           pendingOAuth = undefined
           reject(new Error("OAuth callback timeout - authorization took too long"))
         }
+        stopOAuthServer()
       },
       5 * 60 * 1000,
-    ) // 5 minute timeout
+    )
 
     pendingOAuth = {
       pkce,
       state,
       resolve: (tokens) => {
         clearTimeout(timeout)
+        stopOAuthServer()
         resolve(tokens)
       },
       reject: (error) => {
         clearTimeout(timeout)
+        stopOAuthServer()
         reject(error)
       },
     }

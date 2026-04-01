@@ -523,9 +523,17 @@ export namespace MCP {
                     const pid = (client.transport as any)?.pid
                     if (typeof pid === "number") {
                       const pids = yield* descendants(pid)
+                      // Signal escalation: SIGTERM → wait 400ms → SIGKILL
                       for (const dpid of pids) {
                         try {
                           process.kill(dpid, "SIGTERM")
+                        } catch {}
+                      }
+                      yield* Effect.sleep("400 millis")
+                      for (const dpid of pids) {
+                        try {
+                          process.kill(dpid, 0)
+                          process.kill(dpid, "SIGKILL")
                         } catch {}
                       }
                     }

@@ -35,6 +35,11 @@ import { JsonMigration } from "./storage/json-migration"
 import { Database } from "./storage/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
+import { runCleanup } from "./util/cleanup"
+import { Instance } from "./project/instance"
+import { setNonDumpable } from "./util/security"
+
+setNonDumpable()
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -209,9 +214,16 @@ try {
   }
   process.exitCode = 1
 } finally {
-  // Some subprocesses don't react properly to SIGTERM and similar signals.
-  // Most notably, some docker-container-based MCP servers don't handle such signals unless
-  // run using `docker run --init`.
-  // Explicitly exit to avoid any hanging subprocesses.
+  // Multi-phase graceful shutdown:
+  // 1. Run global cleanup registry (2s timeout)
+  // 2. Dispose all instances (2s timeout)
+  // 3. Failsafe: force exit after 5s total
+  const failsafe = setTimeout(() => process.exit(process.exitCode ?? 0), 5000)
+  failsafe.unref?.()
+  try {
+    await runCleanup(2000)
+    await Promise.race([Instance.disposeAll(), new Promise((r) => setTimeout(r, 2000))])
+  } catch {}
+  clearTimeout(failsafe)
   process.exit()
 }
