@@ -1362,6 +1362,12 @@ export default function Layout(props: ParentProps) {
     navigateWithSidebarReset(`/${base64Encode(session.directory)}/session/${session.id}`)
   }
 
+  function fresh(directory: string) {
+    layout.projects.open(directory)
+    server.projects.touch(directory)
+    navigateWithSidebarReset(`/${base64Encode(directory)}/session`)
+  }
+
   function openProject(directory: string, navigate = true) {
     layout.projects.open(directory)
     if (navigate) return navigateToProject(directory)
@@ -1464,12 +1470,12 @@ export default function Layout(props: ParentProps) {
   async function chooseProject() {
     function resolve(result: string | string[] | null) {
       if (Array.isArray(result)) {
-        for (const directory of result) {
+        for (const directory of result.slice(1)) {
           openProject(directory, false)
         }
-        navigateToProject(result[0])
+        if (result[0]) fresh(result[0])
       } else if (result) {
-        openProject(result)
+        fresh(result)
       }
     }
 
@@ -2245,13 +2251,17 @@ export default function Layout(props: ParentProps) {
                       </Button>
                     </div>
                     <div class="flex-1 min-h-0">
-                      <LocalWorkspace
-                        ctx={workspaceSidebarCtx}
-                        project={project()!}
-                        sortNow={sortNow}
-                        mobile={panelProps.mobile}
-                        popover={popover()}
-                      />
+                      <Show when={project()}>
+                        {(item) => (
+                          <LocalWorkspace
+                            ctx={workspaceSidebarCtx}
+                            project={item()}
+                            sortNow={sortNow}
+                            mobile={panelProps.mobile}
+                            popover={popover()}
+                          />
+                        )}
+                      </Show>
                     </div>
                   </>
                 }
@@ -2286,20 +2296,24 @@ export default function Layout(props: ParentProps) {
                         }}
                         class="size-full flex flex-col py-2 gap-4 overflow-y-auto no-scrollbar [overflow-anchor:none]"
                       >
-                        <SortableProvider ids={workspaces()}>
-                          <For each={workspaces()}>
-                            {(directory) => (
-                              <SortableWorkspace
-                                ctx={workspaceSidebarCtx}
-                                directory={directory}
-                                project={project()!}
-                                sortNow={sortNow}
-                                mobile={panelProps.mobile}
-                                popover={popover()}
-                              />
-                            )}
-                          </For>
-                        </SortableProvider>
+                        <Show when={project()}>
+                          {(item) => (
+                            <SortableProvider ids={workspaces()}>
+                              <For each={workspaces()}>
+                                {(directory) => (
+                                  <SortableWorkspace
+                                    ctx={workspaceSidebarCtx}
+                                    directory={directory}
+                                    project={item()}
+                                    sortNow={sortNow}
+                                    mobile={panelProps.mobile}
+                                    popover={popover()}
+                                  />
+                                )}
+                              </For>
+                            </SortableProvider>
+                          )}
+                        </Show>
                       </div>
                       <DragOverlay>
                         <WorkspaceDragOverlay
