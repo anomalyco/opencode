@@ -264,7 +264,7 @@ const env = SessionProcessor.layer.pipe(Layer.provideMerge(deps))
 
 const it = testEffect(env)
 
-it.effect("session.processor effect tests capture llm input cleanly", () => {
+it.live("session.processor effect tests capture llm input cleanly", () => {
   return provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
@@ -316,7 +316,7 @@ it.effect("session.processor effect tests capture llm input cleanly", () => {
   )
 })
 
-it.effect("session.processor effect tests stop after token overflow requests compaction", () => {
+it.live("session.processor effect tests stop after token overflow requests compaction", () => {
   return provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
@@ -376,7 +376,7 @@ it.effect("session.processor effect tests stop after token overflow requests com
   )
 })
 
-it.effect("session.processor effect tests reset reasoning state across retries", () => {
+it.live("session.processor effect tests reset reasoning state across retries", () => {
   return provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
@@ -449,7 +449,7 @@ it.effect("session.processor effect tests reset reasoning state across retries",
   )
 })
 
-it.effect("session.processor effect tests do not retry unknown json errors", () => {
+it.live("session.processor effect tests do not retry unknown json errors", () => {
   return provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
@@ -495,7 +495,7 @@ it.effect("session.processor effect tests do not retry unknown json errors", () 
   )
 })
 
-it.effect("session.processor effect tests retry recognized structured json errors", () => {
+it.live("session.processor effect tests retry recognized structured json errors", () => {
   return provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
@@ -544,7 +544,7 @@ it.effect("session.processor effect tests retry recognized structured json error
   )
 })
 
-it.effect("session.processor effect tests publish retry status updates", () => {
+it.live("session.processor effect tests publish retry status updates", () => {
   return provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
@@ -611,7 +611,7 @@ it.effect("session.processor effect tests publish retry status updates", () => {
   )
 })
 
-it.effect("session.processor effect tests compact on structured context overflow", () => {
+it.live("session.processor effect tests compact on structured context overflow", () => {
   return provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
@@ -656,7 +656,7 @@ it.effect("session.processor effect tests compact on structured context overflow
   )
 })
 
-it.effect("session.processor effect tests mark pending tools as aborted on cleanup", () => {
+it.live("session.processor effect tests mark pending tools as aborted on cleanup", () => {
   return provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
@@ -725,7 +725,7 @@ it.effect("session.processor effect tests mark pending tools as aborted on clean
   )
 })
 
-it.effect("session.processor effect tests record aborted errors and idle state", () => {
+it.live("session.processor effect tests record aborted errors and idle state", () => {
   return provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
@@ -807,7 +807,7 @@ it.effect("session.processor effect tests record aborted errors and idle state",
   )
 })
 
-it.effect("session.processor effect tests mark interruptions aborted without manual abort", () => {
+it.live("session.processor effect tests mark interruptions aborted without manual abort", () => {
   return provideTmpdirInstance(
     (dir) =>
       Effect.gen(function* () {
