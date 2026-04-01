@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
+import { Trigger } from "../../src/trigger"
 import { tmpdir } from "../fixture/fixture"
+
+function auth(password: string, username = "opencode") {
+  return `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`
+}
 
 afterEach(async () => {
   await Instance.disposeAll()
@@ -138,5 +143,60 @@ describe("trigger routes", () => {
         })
       },
     })
+  })
+
+  test("fires trigger from webhook endpoint", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const item = await Instance.provide({
+      directory: tmp.path,
+      fn: () => Trigger.create({ interval: 5_000 }),
+    })
+    const app = Server.ControlPlaneRoutes()
+
+    const fire = await app.request(`/trigger/${item.id}/fire/webhook?directory=${encodeURIComponent(tmp.path)}`, {
+      method: "POST",
+    })
+
+    expect(fire.status).toBe(200)
+    expect(await fire.json()).toMatchObject({
+      id: item.id,
+      runs: 1,
+      time: {
+        created: item.time.created,
+        last: expect.any(Number),
+      },
+    })
+  })
+
+  test("requires server auth for webhook trigger fire", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const item = await Instance.provide({
+      directory: tmp.path,
+      fn: () => Trigger.create({ interval: 5_000 }),
+    })
+    const prev = process.env.OPENCODE_SERVER_PASSWORD
+    delete process.env.OPENCODE_SERVER_USERNAME
+    process.env.OPENCODE_SERVER_PASSWORD = "secret"
+
+    try {
+      const app = Server.ControlPlaneRoutes()
+      const url = `/trigger/${item.id}/fire/webhook?directory=${encodeURIComponent(tmp.path)}`
+
+      const bad = await app.request(url, { method: "POST" })
+      expect(bad.status).toBe(401)
+
+      const good = await app.request(url, {
+        method: "POST",
+        headers: {
+          Authorization: auth("secret"),
+        },
+      })
+
+      expect(good.status).toBe(200)
+      expect(await good.json()).toMatchObject({ id: item.id, runs: 1 })
+    } finally {
+      if (prev === undefined) delete process.env.OPENCODE_SERVER_PASSWORD
+      else process.env.OPENCODE_SERVER_PASSWORD = prev
+    }
   })
 })
