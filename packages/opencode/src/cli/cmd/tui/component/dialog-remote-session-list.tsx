@@ -10,6 +10,18 @@ type Session = {
   title?: string
 }
 
+export function getRemoteBrowse(input: { root: Session; sessions: Session[]; fork?: boolean }) {
+  return {
+    title: input.fork ? "Fork from remote session" : "Continue remote session",
+    options: [input.root, ...input.sessions].map((item, idx) => ({
+      title: item.title ?? item.id,
+      value: item.id,
+      footer: item.id,
+      description: input.fork ? (idx === 0 ? "Fork from root session" : "Fork from child session") : undefined,
+    })),
+  }
+}
+
 type OpenInput = {
   id: string
   fork?: boolean
@@ -92,15 +104,12 @@ function DialogRemoteSessionBrowse(props: { root: Session; sessions: Session[]; 
   const route = useRoute()
   const sdk = useSDK()
   const toast = useToast()
+  const browse = getRemoteBrowse(props)
 
   return (
     <DialogSelect
-      title="Continue remote session"
-      options={[props.root, ...props.sessions].map((item) => ({
-        title: item.title ?? item.id,
-        value: item.id,
-        footer: item.id,
-      }))}
+      title={browse.title}
+      options={browse.options}
       skipFilter={true}
       onSelect={(option) => {
         void openRemoteSession({

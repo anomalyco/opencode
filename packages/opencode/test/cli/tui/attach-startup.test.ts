@@ -5,6 +5,45 @@ afterEach(() => {
 })
 
 describe("attach startup", () => {
+  test("fork browse copy makes the fork target explicit", async () => {
+    const mod: Record<string, unknown> = await import("../../../src/cli/cmd/tui/component/dialog-remote-session-list")
+    const fn = mod["getRemoteBrowse"]
+    expect(fn).toBeTypeOf("function")
+
+    if (typeof fn !== "function") return
+    const result = fn({
+      root: {
+        id: "sess_root",
+        title: "Root draft",
+      },
+      sessions: [
+        {
+          id: "sess_child",
+          title: "Child fix",
+        },
+      ],
+      fork: true,
+    })
+
+    expect(result).toEqual({
+      title: "Fork from remote session",
+      options: [
+        {
+          title: "Root draft",
+          value: "sess_root",
+          footer: "sess_root",
+          description: "Fork from root session",
+        },
+        {
+          title: "Child fix",
+          value: "sess_child",
+          footer: "sess_child",
+          description: "Fork from child session",
+        },
+      ],
+    })
+  })
+
   test("root without children navigates inside the tui flow", async () => {
     const mod: Record<string, unknown> = await import("../../../src/cli/cmd/tui/component/dialog-remote-session-list")
     const fn = mod["selectRemoteSession"]
@@ -157,6 +196,102 @@ describe("attach startup", () => {
     })
     expect(dialog.clear).toHaveBeenCalledTimes(1)
     expect(sdk.client.session.fork).not.toHaveBeenCalled()
+    expect(toast.show).not.toHaveBeenCalled()
+  })
+
+  test("fork mode root selection forks from that root", async () => {
+    const mod: Record<string, unknown> = await import("../../../src/cli/cmd/tui/component/dialog-remote-session-list")
+    const fn = mod["openRemoteSession"]
+    expect(fn).toBeTypeOf("function")
+
+    const route = {
+      navigate: mock(() => {}),
+    }
+    const dialog = {
+      clear: mock(() => {}),
+    }
+    const fork = mock(async () => ({
+      data: {
+        id: "sess_forked_root",
+      },
+    }))
+    const sdk = {
+      client: {
+        session: {
+          fork,
+        },
+      },
+    }
+    const toast = {
+      show: mock(() => {}),
+    }
+
+    if (typeof fn !== "function") return
+    await fn({
+      id: "sess_root",
+      fork: true,
+      route,
+      dialog,
+      sdk,
+      toast,
+    })
+
+    expect(fork).toHaveBeenCalledWith({
+      sessionID: "sess_root",
+    })
+    expect(route.navigate).toHaveBeenCalledWith({
+      type: "session",
+      sessionID: "sess_forked_root",
+    })
+    expect(dialog.clear).toHaveBeenCalledTimes(1)
+    expect(toast.show).not.toHaveBeenCalled()
+  })
+
+  test("fork mode child selection forks from that child", async () => {
+    const mod: Record<string, unknown> = await import("../../../src/cli/cmd/tui/component/dialog-remote-session-list")
+    const fn = mod["openRemoteSession"]
+    expect(fn).toBeTypeOf("function")
+
+    const route = {
+      navigate: mock(() => {}),
+    }
+    const dialog = {
+      clear: mock(() => {}),
+    }
+    const fork = mock(async () => ({
+      data: {
+        id: "sess_forked_child",
+      },
+    }))
+    const sdk = {
+      client: {
+        session: {
+          fork,
+        },
+      },
+    }
+    const toast = {
+      show: mock(() => {}),
+    }
+
+    if (typeof fn !== "function") return
+    await fn({
+      id: "sess_child",
+      fork: true,
+      route,
+      dialog,
+      sdk,
+      toast,
+    })
+
+    expect(fork).toHaveBeenCalledWith({
+      sessionID: "sess_child",
+    })
+    expect(route.navigate).toHaveBeenCalledWith({
+      type: "session",
+      sessionID: "sess_forked_child",
+    })
+    expect(dialog.clear).toHaveBeenCalledTimes(1)
     expect(toast.show).not.toHaveBeenCalled()
   })
 })
