@@ -49,6 +49,7 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
   if (options?.git) {
     await $`git init`.cwd(dirpath).quiet()
     await $`git config core.fsmonitor false`.cwd(dirpath).quiet()
+    await $`git config commit.gpgsign false`.cwd(dirpath).quiet()
     await $`git config user.email "test@opencode.test"`.cwd(dirpath).quiet()
     await $`git config user.name "Test"`.cwd(dirpath).quiet()
     await $`git commit --allow-empty -m "root commit ${dirpath}"`.cwd(dirpath).quiet()
@@ -100,6 +101,7 @@ export function tmpdirScoped(options?: { git?: boolean; config?: Partial<Config.
     if (options?.git) {
       yield* git("init")
       yield* git("config", "core.fsmonitor", "false")
+      yield* git("config", "commit.gpgsign", "false")
       yield* git("config", "user.email", "test@opencode.test")
       yield* git("config", "user.name", "Test")
       yield* git("commit", "--allow-empty", "-m", "root commit")
