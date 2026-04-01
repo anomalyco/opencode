@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 COPY . .
-RUN bun install --frozen-lockfile
+RUN bun install --frozen-lockfile --ignore-scripts
 ENV OPENCODE_CHANNEL=latest OPENCODE_VERSION=0.0.0-enk
 RUN cd packages/opencode && bun run build --single
 
