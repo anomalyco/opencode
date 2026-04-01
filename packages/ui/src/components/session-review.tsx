@@ -23,6 +23,7 @@ import { Dynamic } from "solid-js/web"
 import { mediaKindFromPath } from "../pierre/media"
 import { cloneSelectedLineRange, previewSelectedLines } from "../pierre/selection-bridge"
 import { createLineCommentController } from "./line-comment-annotations"
+import type { LineCommentEditorProps } from "./line-comment"
 
 const MAX_DIFF_CHANGED_LINES = 500
 
@@ -88,6 +89,7 @@ export interface SessionReviewProps {
   diffs: ReviewDiff[]
   onViewFile?: (file: string) => void
   readFile?: (path: string) => Promise<FileContent | undefined>
+  lineCommentMention?: LineCommentEditorProps["mention"]
 }
 
 function ReviewCommentMenu(props: {
@@ -327,6 +329,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                       comments,
                       label: i18n.t("ui.lineComment.submit"),
                       draftKey: () => file,
+                      mention: props.lineCommentMention,
                       state: {
                         opened: () => {
                           const current = opened()
