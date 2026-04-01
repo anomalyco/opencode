@@ -1,6 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { expect, spyOn } from "bun:test"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
+import path from "path"
 import z from "zod"
 import type { Agent } from "../../src/agent/agent"
 import { Agent as AgentSvc } from "../../src/agent/agent"
@@ -881,6 +882,79 @@ unix("shell captures stdout and stderr in completed tool output", () =>
         expect(tool.state.output).toContain("err")
         expect(tool.state.metadata.output).toContain("out")
         expect(tool.state.metadata.output).toContain("err")
+        yield* prompt.assertNotBusy(chat.id)
+      }),
+    { git: true, config: cfg },
+  ),
+)
+
+unix("shell completes a fast command on the preferred shell", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { prompt, chat } = yield* boot()
+        const result = yield* prompt.shell({
+          sessionID: chat.id,
+          agent: "build",
+          command: "pwd",
+        })
+
+        expect(result.info.role).toBe("assistant")
+        const tool = completedTool(result.parts)
+        if (!tool) return
+
+        expect(tool.state.input.command).toBe("pwd")
+        expect(tool.state.output).toContain(dir)
+        expect(tool.state.metadata.output).toContain(dir)
+        yield* prompt.assertNotBusy(chat.id)
+      }),
+    { git: true, config: cfg },
+  ),
+)
+
+unix("shell lists files from the project directory", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { prompt, chat } = yield* boot()
+        yield* Effect.promise(() => Bun.write(path.join(dir, "README.md"), "# e2e\n"))
+
+        const result = yield* prompt.shell({
+          sessionID: chat.id,
+          agent: "build",
+          command: "command ls",
+        })
+
+        expect(result.info.role).toBe("assistant")
+        const tool = completedTool(result.parts)
+        if (!tool) return
+
+        expect(tool.state.input.command).toBe("command ls")
+        expect(tool.state.output).toContain("README.md")
+        expect(tool.state.metadata.output).toContain("README.md")
+        yield* prompt.assertNotBusy(chat.id)
+      }),
+    { git: true, config: cfg },
+  ),
+)
+
+unix("shell captures stderr from a failing command", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { prompt, chat } = yield* boot()
+        const result = yield* prompt.shell({
+          sessionID: chat.id,
+          agent: "build",
+          command: "command -v __nonexistent_cmd_e2e__ || echo 'not found' >&2; exit 1",
+        })
+
+        expect(result.info.role).toBe("assistant")
+        const tool = completedTool(result.parts)
+        if (!tool) return
+
+        expect(tool.state.output).toContain("not found")
+        expect(tool.state.metadata.output).toContain("not found")
         yield* prompt.assertNotBusy(chat.id)
       }),
     { git: true, config: cfg },
