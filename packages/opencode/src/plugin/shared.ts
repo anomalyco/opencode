@@ -106,7 +106,7 @@ async function resolveDirectoryIndex(dir: string) {
 async function resolveTargetDirectory(target: string) {
   const file = targetPath(target)
   if (!file) return
-  const stat = Filesystem.stat(file)
+  const stat = await Filesystem.statAsync(file)
   if (!stat?.isDirectory()) return
   return file
 }
@@ -153,7 +153,7 @@ export function isPathPluginSpec(spec: string) {
 export async function resolvePathPluginTarget(spec: string) {
   const raw = spec.startsWith("file://") ? fileURLToPath(spec) : spec
   const file = path.isAbsolute(raw) || /^[A-Za-z]:[\\/]/.test(raw) ? raw : path.resolve(raw)
-  const stat = Filesystem.stat(file)
+  const stat = await Filesystem.statAsync(file)
   if (!stat?.isDirectory()) {
     if (spec.startsWith("file://")) return spec
     return pathToFileURL(file).href
@@ -190,7 +190,7 @@ export async function resolvePluginTarget(spec: string, parsed = parsePluginSpec
 
 export async function readPluginPackage(target: string): Promise<PluginPackage> {
   const file = target.startsWith("file://") ? fileURLToPath(target) : target
-  const stat = Filesystem.stat(file)
+  const stat = await Filesystem.statAsync(file)
   const dir = stat?.isDirectory() ? file : path.dirname(file)
   const pkg = path.join(dir, "package.json")
   const json = await Filesystem.readJson<Record<string, unknown>>(pkg)
