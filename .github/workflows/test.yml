@@ -100,9 +100,6 @@ jobs:
         run: bun --cwd packages/app test:e2e:local
         env:
           CI: true
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          OPENCODE_E2E_MODEL: opencode/claude-haiku-4-5
-          OPENCODE_E2E_REQUIRE_PAID: "true"
         timeout-minutes: 30
 
       - name: Upload Playwright artifacts
