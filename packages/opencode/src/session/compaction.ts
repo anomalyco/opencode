@@ -28,6 +28,8 @@ import { SessionCompactionPolicy } from "./compaction-policy"
   const PTL_KEEP_RECENT_TURNS = 5
   const COMPACTION_MAX_OUTPUT_TOKENS = 20_000
   const POST_COMPACT_TOKEN_BUDGET = 50_000
+  const POST_COMPACT_MAX_ATTACHMENTS = 5
+  const POST_COMPACT_MAX_FILE_TOKENS = 5_000
 
   // Marks all completed tool parts as compacted and strips attachments.
   // Operates on cloned messages — originals are never mutated.
@@ -56,6 +58,22 @@ import { SessionCompactionPolicy } from "./compaction-policy"
       if (seen >= turns) return msgs.slice(i)
     }
     return msgs
+  }
+
+  const collectAttachments = (msgs: MessageV2.WithParts[]): MessageV2.FilePart[] => {
+    const result: MessageV2.FilePart[] = []
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      for (const part of msgs[i].parts) {
+        if (part.type !== "tool" || part.state.status !== "completed") continue
+        if (part.state.time.compacted) continue
+        for (const att of part.state.attachments ?? []) {
+          if (MessageV2.isMedia(att.mime)) continue
+          if (result.length >= POST_COMPACT_MAX_ATTACHMENTS) return result
+          result.push(att)
+        }
+      }
+    }
+    return result
   }
 
   export const Event = {
@@ -370,6 +388,8 @@ When constructing the summary, try to stick to this template:
         log.info("post-compact budget", { postBudget, summaryTokens, left })
 
         if (finalResult === "continue" && input.auto) {
+          let target: { id: MessageID } | undefined
+
           if (replay) {
             const original = replay.info
             const replayMsg = yield* session.updateMessage({
@@ -397,6 +417,7 @@ When constructing the summary, try to stick to this template:
                 sessionID: input.sessionID,
               })
             }
+            target = replayMsg
           }
 
           if (!replay) {
@@ -425,6 +446,27 @@ When constructing the summary, try to stick to this template:
                 end: Date.now(),
               },
             })
+            target = continueMsg
+          }
+
+          if (target && cfg.compaction?.restore_attachments !== false && left > 0) {
+            const attachments = collectAttachments(messages)
+            let budget = left
+            for (const att of attachments) {
+              const size = Token.estimate(JSON.stringify(att))
+              if (size > budget) break
+              budget -= size
+              yield* session.updatePart({
+                id: PartID.ascending(),
+                messageID: target.id,
+                sessionID: input.sessionID,
+                type: "file",
+                mime: att.mime,
+                filename: att.filename,
+                url: att.url,
+                source: att.source,
+              })
+            }
           }
         }
 

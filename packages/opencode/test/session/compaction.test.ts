@@ -1685,3 +1685,318 @@ describe("session.compaction.retry", () => {
     })
   })
 })
+
+describe("session.compaction.restore", () => {
+  test("restores recent non-media tool attachments within budget", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const u = await user(session.id, "hello")
+        const a = await assistant(session.id, u.id, tmp.path)
+        await Session.updatePart({
+          id: PartID.ascending(),
+          messageID: a.id,
+          sessionID: session.id,
+          type: "tool",
+          callID: crypto.randomUUID(),
+          tool: "file_edit",
+          state: {
+            status: "completed",
+            input: { path: "/src/foo.ts" },
+            output: "edited",
+            title: "done",
+            metadata: {},
+            time: { start: Date.now(), end: Date.now() },
+            attachments: [{
+              id: PartID.ascending(),
+              messageID: a.id,
+              sessionID: session.id,
+              type: "file",
+              mime: "text/plain",
+              filename: "foo.ts",
+              url: "file:///src/foo.ts",
+            }],
+          },
+        })
+        const second = await user(session.id, "second")
+
+        const rt = runtime("continue", Plugin.defaultLayer, wide())
+        try {
+          const msgs = await Session.messages({ sessionID: session.id })
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: second.id,
+                messages: msgs,
+                sessionID: session.id,
+                auto: true,
+              }),
+            ),
+          )
+
+          const all = await Session.messages({ sessionID: session.id })
+          const last = all.at(-1)
+          const fileParts = last?.parts.filter((p) => p.type === "file") ?? []
+          expect(fileParts.length).toBeGreaterThan(0)
+          expect(fileParts[0]).toMatchObject({
+            type: "file",
+            mime: "text/plain",
+            filename: "foo.ts",
+          })
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("does not restore compacted attachments", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const u = await user(session.id, "hello")
+        const a = await assistant(session.id, u.id, tmp.path)
+        await Session.updatePart({
+          id: PartID.ascending(),
+          messageID: a.id,
+          sessionID: session.id,
+          type: "tool",
+          callID: crypto.randomUUID(),
+          tool: "file_edit",
+          state: {
+            status: "completed",
+            input: { path: "/src/foo.ts" },
+            output: "edited",
+            title: "done",
+            metadata: {},
+            time: { start: Date.now(), end: Date.now(), compacted: Date.now() },
+            attachments: [{
+              id: PartID.ascending(),
+              messageID: a.id,
+              sessionID: session.id,
+              type: "file",
+              mime: "text/plain",
+              filename: "foo.ts",
+              url: "file:///src/foo.ts",
+            }],
+          },
+        })
+        const second = await user(session.id, "second")
+
+        const rt = runtime("continue", Plugin.defaultLayer, wide())
+        try {
+          const msgs = await Session.messages({ sessionID: session.id })
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: second.id,
+                messages: msgs,
+                sessionID: session.id,
+                auto: true,
+              }),
+            ),
+          )
+
+          const all = await Session.messages({ sessionID: session.id })
+          const last = all.at(-1)
+          const fileParts = last?.parts.filter((p) => p.type === "file") ?? []
+          expect(fileParts.length).toBe(0)
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("does not restore when restore_attachments is false", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({ compaction: { restore_attachments: false } }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const u = await user(session.id, "hello")
+        const a = await assistant(session.id, u.id, tmp.path)
+        await Session.updatePart({
+          id: PartID.ascending(),
+          messageID: a.id,
+          sessionID: session.id,
+          type: "tool",
+          callID: crypto.randomUUID(),
+          tool: "file_edit",
+          state: {
+            status: "completed",
+            input: { path: "/src/foo.ts" },
+            output: "edited",
+            title: "done",
+            metadata: {},
+            time: { start: Date.now(), end: Date.now() },
+            attachments: [{
+              id: PartID.ascending(),
+              messageID: a.id,
+              sessionID: session.id,
+              type: "file",
+              mime: "text/plain",
+              filename: "foo.ts",
+              url: "file:///src/foo.ts",
+            }],
+          },
+        })
+        const second = await user(session.id, "second")
+
+        const rt = runtime("continue", Plugin.defaultLayer, wide())
+        try {
+          const msgs = await Session.messages({ sessionID: session.id })
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: second.id,
+                messages: msgs,
+                sessionID: session.id,
+                auto: true,
+              }),
+            ),
+          )
+
+          const all = await Session.messages({ sessionID: session.id })
+          const last = all.at(-1)
+          const fileParts = last?.parts.filter((p) => p.type === "file") ?? []
+          expect(fileParts.length).toBe(0)
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("skips media attachments", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const u = await user(session.id, "hello")
+        const a = await assistant(session.id, u.id, tmp.path)
+        await Session.updatePart({
+          id: PartID.ascending(),
+          messageID: a.id,
+          sessionID: session.id,
+          type: "tool",
+          callID: crypto.randomUUID(),
+          tool: "file_edit",
+          state: {
+            status: "completed",
+            input: { path: "/src/img.png" },
+            output: "edited",
+            title: "done",
+            metadata: {},
+            time: { start: Date.now(), end: Date.now() },
+            attachments: [{
+              id: PartID.ascending(),
+              messageID: a.id,
+              sessionID: session.id,
+              type: "file",
+              mime: "image/png",
+              filename: "img.png",
+              url: "file:///src/img.png",
+            }],
+          },
+        })
+        const second = await user(session.id, "second")
+
+        const rt = runtime("continue", Plugin.defaultLayer, wide())
+        try {
+          const msgs = await Session.messages({ sessionID: session.id })
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: second.id,
+                messages: msgs,
+                sessionID: session.id,
+                auto: true,
+              }),
+            ),
+          )
+
+          const all = await Session.messages({ sessionID: session.id })
+          const last = all.at(-1)
+          const fileParts = last?.parts.filter((p) => p.type === "file") ?? []
+          expect(fileParts.length).toBe(0)
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("respects token budget — skips oversized attachments", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const u = await user(session.id, "hello")
+        const a = await assistant(session.id, u.id, tmp.path)
+        const hugeContent = "x".repeat(300_000)
+        await Session.updatePart({
+          id: PartID.ascending(),
+          messageID: a.id,
+          sessionID: session.id,
+          type: "tool",
+          callID: crypto.randomUUID(),
+          tool: "file_edit",
+          state: {
+            status: "completed",
+            input: {},
+            output: "done",
+            title: "done",
+            metadata: {},
+            time: { start: Date.now(), end: Date.now() },
+            attachments: [{
+              id: PartID.ascending(),
+              messageID: a.id,
+              sessionID: session.id,
+              type: "file",
+              mime: "text/plain",
+              filename: "huge.ts",
+              url: `file:///src/${hugeContent}.ts`,
+            }],
+          },
+        })
+        const second = await user(session.id, "second")
+
+        const rt = runtime("continue", Plugin.defaultLayer, wide())
+        try {
+          const msgs = await Session.messages({ sessionID: session.id })
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: second.id,
+                messages: msgs,
+                sessionID: session.id,
+                auto: true,
+              }),
+            ),
+          )
+
+          const all = await Session.messages({ sessionID: session.id })
+          const last = all.at(-1)
+          const fileParts = last?.parts.filter((p) => p.type === "file") ?? []
+          expect(fileParts.length).toBe(0)
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+})
