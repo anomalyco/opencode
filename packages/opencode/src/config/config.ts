@@ -121,7 +121,10 @@ export namespace Config {
     const gitignore = path.join(dir, ".gitignore")
     const ignore = await Filesystem.exists(gitignore)
     if (!ignore) {
-      await Filesystem.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
+      await Filesystem.write(
+        gitignore,
+        ["node_modules", "package.json", "package-lock.json", "bun.lock", ".gitignore"].join("\n"),
+      )
     }
 
     // Bun can race cache writes on Windows when installs run in parallel across dirs.
@@ -1483,7 +1486,8 @@ export namespace Config {
         })
 
         const update = Effect.fn("Config.update")(function* (config: Info) {
-          const file = path.join(Instance.directory, "config.json")
+          const dir = yield* InstanceState.directory
+          const file = path.join(dir, "config.json")
           const existing = yield* loadFile(file)
           yield* fs.writeFileString(file, JSON.stringify(mergeDeep(existing, config), null, 2)).pipe(Effect.orDie)
           yield* Effect.promise(() => Instance.dispose())
