@@ -30,10 +30,6 @@ export namespace TuiConfig {
     return "global"
   }
 
-  function mergeInfo(target: Info, source: Info): Info {
-    return mergeDeep(target, source)
-  }
-
   function customPath() {
     return Flag.OPENCODE_TUI_CONFIG
   }
@@ -60,7 +56,7 @@ export namespace TuiConfig {
 
   async function mergeFile(acc: Acc, file: string) {
     const data = await loadFile(file)
-    acc.result = mergeInfo(acc.result, data)
+    acc.result = mergeDeep(acc.result, data)
     if (!data.plugin?.length) return
 
     const scope = pluginScope(file)
