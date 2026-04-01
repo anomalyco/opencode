@@ -78,9 +78,6 @@ export namespace Config {
   // Custom merge function that concatenates array fields instead of replacing them
   function mergeConfigConcatArrays(target: Info, source: Info): Info {
     const merged = mergeDeep(target, source)
-    if (target.plugin && source.plugin) {
-      merged.plugin = Array.from(new Set([...target.plugin, ...source.plugin]))
-    }
     if (target.instructions && source.instructions) {
       merged.instructions = Array.from(new Set([...target.instructions, ...source.instructions]))
     }

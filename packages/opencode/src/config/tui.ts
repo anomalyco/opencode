@@ -31,11 +31,7 @@ export namespace TuiConfig {
   }
 
   function mergeInfo(target: Info, source: Info): Info {
-    const merged = mergeDeep(target, source)
-    if (target.plugin && source.plugin) {
-      merged.plugin = Array.from(new Set([...target.plugin, ...source.plugin]))
-    }
-    return merged
+    return mergeDeep(target, source)
   }
 
   function customPath() {
