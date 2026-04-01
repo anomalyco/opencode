@@ -27,6 +27,7 @@ test("/share and /unshare update session share state", async ({ page, withBacken
 
   await withBackendProject(async (project) => {
     await withSession(project.sdk, `e2e slash share ${Date.now()}`, async (session) => {
+      project.trackSession(session.id)
       const prompt = page.locator(promptSelector)
 
       await seed(project.sdk, session.id)
