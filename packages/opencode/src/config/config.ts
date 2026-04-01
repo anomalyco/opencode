@@ -1486,7 +1486,8 @@ export namespace Config {
         })
 
         const update = Effect.fn("Config.update")(function* (config: Info) {
-          const file = path.join(Instance.directory, "config.json")
+          const dir = yield* InstanceState.directory
+          const file = path.join(dir, "config.json")
           const existing = yield* loadFile(file)
           yield* fs.writeFileString(file, JSON.stringify(mergeDeep(existing, config), null, 2)).pipe(Effect.orDie)
           yield* Effect.promise(() => Instance.dispose())

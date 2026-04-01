@@ -302,6 +302,9 @@ export function FileTabContent(props: { tab: string }) {
     comments: fileComments,
     label: language.t("ui.lineComment.submit"),
     draftKey: () => path() ?? props.tab,
+    mention: {
+      items: file.searchFilesAndDirectories,
+    },
     state: {
       opened: () => note.openedComment,
       setOpened: (id) => setNote("openedComment", id),
