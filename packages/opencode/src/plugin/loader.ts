@@ -43,7 +43,9 @@ export namespace PluginLoader {
     plan: Plan,
     kind: PluginKind,
   ): Promise<
-    { ok: true; value: Resolved } | { ok: false; stage: "install" | "entry" | "compatibility"; error: unknown }
+    | { ok: true; value: Resolved }
+    | { ok: false; stage: "missing"; message: string }
+    | { ok: false; stage: "install" | "entry" | "compatibility"; error: unknown }
   > {
     let target = ""
     try {
@@ -77,8 +79,8 @@ export namespace PluginLoader {
     if (!base.entry) {
       return {
         ok: false,
-        stage: "entry",
-        error: new Error(`Plugin ${plan.spec} entry is empty`),
+        stage: "missing",
+        message: `Plugin ${plan.spec} does not expose a ${kind} entrypoint`,
       }
     }
 
