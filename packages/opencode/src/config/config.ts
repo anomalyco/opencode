@@ -1,7 +1,6 @@
 import { Log } from "../util/log"
 import path from "path"
 import { pathToFileURL } from "url"
-import { createRequire } from "module"
 import os from "os"
 import z from "zod"
 import { ModelsDev } from "../provider/models"
@@ -122,7 +121,10 @@ export namespace Config {
     const gitignore = path.join(dir, ".gitignore")
     const ignore = await Filesystem.exists(gitignore)
     if (!ignore) {
-      await Filesystem.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
+      await Filesystem.write(
+        gitignore,
+        ["node_modules", "package.json", "package-lock.json", "bun.lock", ".gitignore"].join("\n"),
+      )
     }
 
     // Bun can race cache writes on Windows when installs run in parallel across dirs.
@@ -366,33 +368,18 @@ export namespace Config {
   export async function resolvePluginSpec(plugin: PluginSpec, configFilepath: string): Promise<PluginSpec> {
     const spec = pluginSpecifier(plugin)
     if (!isPathPluginSpec(spec)) return plugin
-    if (spec.startsWith("file://")) {
-      const resolved = await resolvePathPluginTarget(spec).catch(() => spec)
-      if (Array.isArray(plugin)) return [resolved, plugin[1]]
-      return resolved
-    }
-    if (path.isAbsolute(spec) || /^[A-Za-z]:[\\/]/.test(spec)) {
-      const base = pathToFileURL(spec).href
-      const resolved = await resolvePathPluginTarget(base).catch(() => base)
-      if (Array.isArray(plugin)) return [resolved, plugin[1]]
-      return resolved
-    }
-    try {
-      const base = import.meta.resolve!(spec, configFilepath)
-      const resolved = await resolvePathPluginTarget(base).catch(() => base)
-      if (Array.isArray(plugin)) return [resolved, plugin[1]]
-      return resolved
-    } catch {
-      try {
-        const require = createRequire(configFilepath)
-        const base = pathToFileURL(require.resolve(spec)).href
-        const resolved = await resolvePathPluginTarget(base).catch(() => base)
-        if (Array.isArray(plugin)) return [resolved, plugin[1]]
-        return resolved
-      } catch {
-        return plugin
-      }
-    }
+
+    const base = path.dirname(configFilepath)
+    const file = (() => {
+      if (spec.startsWith("file://")) return spec
+      if (path.isAbsolute(spec) || /^[A-Za-z]:[\\/]/.test(spec)) return pathToFileURL(spec).href
+      return pathToFileURL(path.resolve(base, spec)).href
+    })()
+
+    const resolved = await resolvePathPluginTarget(file).catch(() => file)
+
+    if (Array.isArray(plugin)) return [resolved, plugin[1]]
+    return resolved
   }
 
   /**
@@ -1500,7 +1487,8 @@ export namespace Config {
         })
 
         const update = Effect.fn("Config.update")(function* (config: Info) {
-          const file = path.join(Instance.directory, "config.json")
+          const dir = yield* InstanceState.directory
+          const file = path.join(dir, "config.json")
           const existing = yield* loadFile(file)
           yield* fs.writeFileString(file, JSON.stringify(mergeDeep(existing, config), null, 2)).pipe(Effect.orDie)
           yield* Effect.promise(() => Instance.dispose())
@@ -1557,7 +1545,7 @@ export namespace Config {
 
   export const defaultLayer = layer.pipe(
     Layer.provide(AppFileSystem.defaultLayer),
-    Layer.provide(Auth.layer),
+    Layer.provide(Auth.defaultLayer),
     Layer.provide(Account.defaultLayer),
   )
 
