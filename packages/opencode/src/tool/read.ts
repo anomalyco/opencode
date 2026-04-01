@@ -18,6 +18,7 @@ const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
 const MAX_BYTES = 50 * 1024
 const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
 const MAX_DIAGNOSTICS_PER_FILE = 20
+const MAX_DIAGNOSTICS_WAIT = 1500
 
 export const ReadTool = Tool.define("read", {
   description: DESCRIPTION,
@@ -240,13 +241,30 @@ export const ReadTool = Tool.define("read", {
 })
 
 async function getFileDiagnostics(filepath: string) {
-  const hasClients = await LSP.hasClients(filepath).catch(() => false)
+  const end = Date.now() + MAX_DIAGNOSTICS_WAIT
+  const hasClients = await wait(LSP.hasClients(filepath), false, end - Date.now())
   if (!hasClients) return []
 
-  await LSP.touchFile(filepath, true).catch(() => {})
-  const diagnostics = (await LSP.diagnostics().catch(() => ({}))) as Awaited<ReturnType<typeof LSP.diagnostics>>
+  await wait(LSP.touchFile(filepath, true), undefined, end - Date.now())
+  const diagnostics = await wait<Awaited<ReturnType<typeof LSP.diagnostics>>>(LSP.diagnostics(), {}, end - Date.now())
   const issues = diagnostics[Filesystem.normalizePath(filepath)] ?? []
   return issues.filter((item) => item.severity === 1 || item.severity === 2).slice(0, MAX_DIAGNOSTICS_PER_FILE)
+}
+
+function wait<T>(input: Promise<T>, fallback: T, ms: number): Promise<T> {
+  if (ms <= 0) return Promise.resolve(fallback)
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(fallback), ms)
+    input
+      .then((result) => {
+        clearTimeout(timer)
+        resolve(result)
+      })
+      .catch(() => {
+        clearTimeout(timer)
+        resolve(fallback)
+      })
+  })
 }
 
 async function isBinaryFile(filepath: string, fileSize: number): Promise<boolean> {

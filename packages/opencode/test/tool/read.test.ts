@@ -535,6 +535,31 @@ describe("tool.read diagnostics", () => {
       },
     })
   })
+
+  test("does not block file reads on slow diagnostics", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "slow.ts"), "const x = 1\n")
+      },
+    })
+
+    const filepath = path.join(tmp.path, "slow.ts")
+    spies.push(spyOn(LSP, "hasClients").mockResolvedValue(true))
+    spies.push(spyOn(LSP, "touchFile").mockImplementation(() => new Promise(() => {})))
+    spies.push(spyOn(LSP, "diagnostics").mockImplementation(() => new Promise(() => {})))
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const start = Date.now()
+        const result = await read.execute({ filePath: filepath }, ctx)
+        expect(Date.now() - start).toBeLessThan(2000)
+        expect(result.output).toContain("const x = 1")
+        expect(result.output).not.toContain("<diagnostics file=")
+        expect(result.metadata.diagnostics).toEqual([])
+      },
+    })
+  })
 })
 
 describe("tool.read binary detection", () => {

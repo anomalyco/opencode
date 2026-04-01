@@ -5,10 +5,11 @@ import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { Filesystem } from "../../src/util/filesystem"
 import { LSP } from "../../src/lsp"
+import { MessageID, SessionID } from "../../src/session/schema"
 
 const ctx = {
-  sessionID: "test-lsp-session",
-  messageID: "",
+  sessionID: SessionID.make("ses_test"),
+  messageID: MessageID.make(""),
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),
