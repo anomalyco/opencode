@@ -1,15 +1,10 @@
 #!/usr/bin/env bun
 
 
-// TODO: Fix solidPlugin import - currently not available in @opentui/solid
-// import solidPlugin from "../node_modules/@opentui/solid/scripts/solid-plugin"
 import path from "path"
 import fs from "fs"
 import { $ } from "bun"
-import fs from "fs"
-import path from "path"
 import { fileURLToPath } from "url"
-import solidPlugin from "../node_modules/@opentui/solid/scripts/solid-plugin"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -181,7 +176,6 @@ for (const item of targets) {
     compile: {
       autoloadBunfig: false,
       autoloadDotenv: false,
-      autoloadTsconfig: true,
       autoloadPackageJson: true,
       target: name.replace(pkg.name, "bun") as any,
       outfile: `dist/${name}/bin/opencode`,

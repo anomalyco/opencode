@@ -658,7 +658,7 @@ export namespace SessionPrompt {
       }
 
       // Apply TOON transformation if enabled
-      const modelMessages = MessageV2.toModelMessages(sessionMessages, model)
+      const modelMessages = MessageV2.toModelMessages(msgs, model)
       const toonConfig = (await Config.get()).experimental?.toon_format
       let finalMessages = modelMessages
 
