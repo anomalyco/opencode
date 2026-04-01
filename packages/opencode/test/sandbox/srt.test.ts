@@ -247,21 +247,11 @@ describe.skipIf(!isSrtAvailable)("SRT Sandbox Security Boundaries", () => {
 
         // Because 'new.secret' does not exist when the sandbox STARTS, the glob
         // resolver doesn't pick it up, so it is omitted from denyWrite/denyRead.
-        let result = await bash.execute({ command: `echo "injected" > new.secret && ls -la new.secret`, description: "Create new secret" }, ctx) as any
-        
-        console.log("Creation output:", String(result.output))
+        let result = await bash.execute({ command: `echo "injected" > new.secret`, description: "Create new secret" }, ctx) as any
         expect(result.metadata.exit).toBe(0)
         
-        // It can also be read back since it evaded the initial glob scan
+        // ...but attempting to read it back fails with permission denied!
         result = await bash.execute({ command: `cat new.secret 2>&1`, description: "Read new secret" }, ctx) as any
-        
-        if (result.metadata.exit !== 0) {
-          console.log("Unexpected read failure output:", String(result.output))
-          // Also check umask
-          const umaskRes = await bash.execute({ command: "umask", description: "check umask"}, ctx) as any
-          console.log("Current umask:", String(umaskRes.output))
-        }
-        
         expect(result.metadata.exit).toBeGreaterThan(0)
       },
     })
