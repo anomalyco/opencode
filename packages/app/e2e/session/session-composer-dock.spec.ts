@@ -14,6 +14,7 @@ import {
   sessionTodoToggleButtonSelector,
 } from "../selectors"
 import { modKey } from "../utils"
+import { openaiModel, withMockOpenAI } from "../prompt/mock"
 
 type Sdk = Parameters<typeof clearSessionDockSeed>[0]
 type PermissionRule = { permission: string; pattern: string; action: "allow" | "deny" | "ask" }
@@ -291,121 +292,154 @@ test("auto-accept toggle works before first submit", async ({ page, withBackendP
   })
 })
 
-test("blocked question flow unblocks after submit", async ({ page, withBackendProject }) => {
-  await withBackendProject(async (project) => {
-    await withDockSession(
-      project.sdk,
-      "e2e composer dock question",
-      async (session) => {
-        await withDockSeed(project.sdk, session.id, async () => {
-          await project.gotoSession(session.id)
+test("blocked question flow unblocks after submit", async ({ page, llm, backend, withBackendProject }) => {
+  const questions = [
+    {
+      header: "Need input",
+      question: "Pick one option",
+      options: [
+        { label: "Continue", description: "Continue now" },
+        { label: "Stop", description: "Stop here" },
+      ],
+    },
+  ]
+  await withMockOpenAI({
+    serverUrl: backend.url,
+    llmUrl: llm.url,
+    fn: async () => {
+      await withBackendProject(
+        async (project) => {
+          await withDockSession(
+            project.sdk,
+            "e2e composer dock question",
+            async (session) => {
+              await withDockSeed(project.sdk, session.id, async () => {
+                await project.gotoSession(session.id)
 
-          await seedSessionQuestion(project.sdk, {
-            sessionID: session.id,
-            questions: [
-              {
-                header: "Need input",
-                question: "Pick one option",
-                options: [
-                  { label: "Continue", description: "Continue now" },
-                  { label: "Stop", description: "Stop here" },
-                ],
-              },
-            ],
-          })
+                await llm.tool("question", { questions })
+                await seedSessionQuestion(project.sdk, {
+                  sessionID: session.id,
+                  questions,
+                })
 
-          const dock = page.locator(questionDockSelector)
-          await expectQuestionBlocked(page)
+                const dock = page.locator(questionDockSelector)
+                await expectQuestionBlocked(page)
 
-          await dock.locator('[data-slot="question-option"]').first().click()
-          await dock.getByRole("button", { name: /submit/i }).click()
+                await dock.locator('[data-slot="question-option"]').first().click()
+                await dock.getByRole("button", { name: /submit/i }).click()
 
-          await expectQuestionOpen(page)
-        })
-      },
-      { trackSession: project.trackSession },
-    )
+                await expectQuestionOpen(page)
+              })
+            },
+            { trackSession: project.trackSession },
+          )
+        },
+        { model: openaiModel },
+      )
+    },
   })
 })
 
-test("blocked question flow supports keyboard shortcuts", async ({ page, withBackendProject }) => {
-  await withBackendProject(async (project) => {
-    await withDockSession(
-      project.sdk,
-      "e2e composer dock question keyboard",
-      async (session) => {
-        await withDockSeed(project.sdk, session.id, async () => {
-          await project.gotoSession(session.id)
+test("blocked question flow supports keyboard shortcuts", async ({ page, llm, backend, withBackendProject }) => {
+  const questions = [
+    {
+      header: "Need input",
+      question: "Pick one option",
+      options: [
+        { label: "Continue", description: "Continue now" },
+        { label: "Stop", description: "Stop here" },
+      ],
+    },
+  ]
+  await withMockOpenAI({
+    serverUrl: backend.url,
+    llmUrl: llm.url,
+    fn: async () => {
+      await withBackendProject(
+        async (project) => {
+          await withDockSession(
+            project.sdk,
+            "e2e composer dock question keyboard",
+            async (session) => {
+              await withDockSeed(project.sdk, session.id, async () => {
+                await project.gotoSession(session.id)
 
-          await seedSessionQuestion(project.sdk, {
-            sessionID: session.id,
-            questions: [
-              {
-                header: "Need input",
-                question: "Pick one option",
-                options: [
-                  { label: "Continue", description: "Continue now" },
-                  { label: "Stop", description: "Stop here" },
-                ],
-              },
-            ],
-          })
+                await llm.tool("question", { questions })
+                await seedSessionQuestion(project.sdk, {
+                  sessionID: session.id,
+                  questions,
+                })
 
-          const dock = page.locator(questionDockSelector)
-          const first = dock.locator('[data-slot="question-option"]').first()
-          const second = dock.locator('[data-slot="question-option"]').nth(1)
+                const dock = page.locator(questionDockSelector)
+                const first = dock.locator('[data-slot="question-option"]').first()
+                const second = dock.locator('[data-slot="question-option"]').nth(1)
 
-          await expectQuestionBlocked(page)
-          await expect(first).toBeFocused()
+                await expectQuestionBlocked(page)
+                await expect(first).toBeFocused()
 
-          await page.keyboard.press("ArrowDown")
-          await expect(second).toBeFocused()
+                await page.keyboard.press("ArrowDown")
+                await expect(second).toBeFocused()
 
-          await page.keyboard.press("Space")
-          await page.keyboard.press(`${modKey}+Enter`)
-          await expectQuestionOpen(page)
-        })
-      },
-      { trackSession: project.trackSession },
-    )
+                await page.keyboard.press("Space")
+                await page.keyboard.press(`${modKey}+Enter`)
+                await expectQuestionOpen(page)
+              })
+            },
+            { trackSession: project.trackSession },
+          )
+        },
+        { model: openaiModel },
+      )
+    },
   })
 })
 
-test("blocked question flow supports escape dismiss", async ({ page, withBackendProject }) => {
-  await withBackendProject(async (project) => {
-    await withDockSession(
-      project.sdk,
-      "e2e composer dock question escape",
-      async (session) => {
-        await withDockSeed(project.sdk, session.id, async () => {
-          await project.gotoSession(session.id)
+test("blocked question flow supports escape dismiss", async ({ page, llm, backend, withBackendProject }) => {
+  const questions = [
+    {
+      header: "Need input",
+      question: "Pick one option",
+      options: [
+        { label: "Continue", description: "Continue now" },
+        { label: "Stop", description: "Stop here" },
+      ],
+    },
+  ]
+  await withMockOpenAI({
+    serverUrl: backend.url,
+    llmUrl: llm.url,
+    fn: async () => {
+      await withBackendProject(
+        async (project) => {
+          await withDockSession(
+            project.sdk,
+            "e2e composer dock question escape",
+            async (session) => {
+              await withDockSeed(project.sdk, session.id, async () => {
+                await project.gotoSession(session.id)
 
-          await seedSessionQuestion(project.sdk, {
-            sessionID: session.id,
-            questions: [
-              {
-                header: "Need input",
-                question: "Pick one option",
-                options: [
-                  { label: "Continue", description: "Continue now" },
-                  { label: "Stop", description: "Stop here" },
-                ],
-              },
-            ],
-          })
+                await llm.tool("question", { questions })
+                await seedSessionQuestion(project.sdk, {
+                  sessionID: session.id,
+                  questions,
+                })
 
-          const dock = page.locator(questionDockSelector)
-          const first = dock.locator('[data-slot="question-option"]').first()
+                const dock = page.locator(questionDockSelector)
+                const first = dock.locator('[data-slot="question-option"]').first()
 
-          await expectQuestionBlocked(page)
-          await expect(first).toBeFocused()
+                await expectQuestionBlocked(page)
+                await expect(first).toBeFocused()
 
-          await page.keyboard.press("Escape")
-          await expectQuestionOpen(page)
-        })
-      },
-      { trackSession: project.trackSession },
-    )
+                await page.keyboard.press("Escape")
+                await expectQuestionOpen(page)
+              })
+            },
+            { trackSession: project.trackSession },
+          )
+        },
+        { model: openaiModel },
+      )
+    },
   })
 })
 
@@ -512,54 +546,67 @@ test("blocked permission flow supports allow always", async ({ page, withBackend
 
 test("child session question request blocks parent dock and unblocks after submit", async ({
   page,
+  llm,
+  backend,
   withBackendProject,
 }) => {
-  await withBackendProject(async (project) => {
-    await withDockSession(
-      project.sdk,
-      "e2e composer dock child question parent",
-      async (session) => {
-        await project.gotoSession(session.id)
+  const questions = [
+    {
+      header: "Child input",
+      question: "Pick one child option",
+      options: [
+        { label: "Continue", description: "Continue child" },
+        { label: "Stop", description: "Stop child" },
+      ],
+    },
+  ]
+  await withMockOpenAI({
+    serverUrl: backend.url,
+    llmUrl: llm.url,
+    fn: async () => {
+      await withBackendProject(
+        async (project) => {
+          await withDockSession(
+            project.sdk,
+            "e2e composer dock child question parent",
+            async (session) => {
+              await project.gotoSession(session.id)
 
-        const child = await project.sdk.session
-          .create({
-            title: "e2e composer dock child question",
-            parentID: session.id,
-          })
-          .then((r) => r.data)
-        if (!child?.id) throw new Error("Child session create did not return an id")
-        project.trackSession(child.id)
+              const child = await project.sdk.session
+                .create({
+                  title: "e2e composer dock child question",
+                  parentID: session.id,
+                })
+                .then((r) => r.data)
+              if (!child?.id) throw new Error("Child session create did not return an id")
+              project.trackSession(child.id)
 
-        try {
-          await withDockSeed(project.sdk, child.id, async () => {
-            await seedSessionQuestion(project.sdk, {
-              sessionID: child.id,
-              questions: [
-                {
-                  header: "Child input",
-                  question: "Pick one child option",
-                  options: [
-                    { label: "Continue", description: "Continue child" },
-                    { label: "Stop", description: "Stop child" },
-                  ],
-                },
-              ],
-            })
+              try {
+                await withDockSeed(project.sdk, child.id, async () => {
+                  await llm.tool("question", { questions })
+                  await seedSessionQuestion(project.sdk, {
+                    sessionID: child.id,
+                    questions,
+                  })
 
-            const dock = page.locator(questionDockSelector)
-            await expectQuestionBlocked(page)
+                  const dock = page.locator(questionDockSelector)
+                  await expectQuestionBlocked(page)
 
-            await dock.locator('[data-slot="question-option"]').first().click()
-            await dock.getByRole("button", { name: /submit/i }).click()
+                  await dock.locator('[data-slot="question-option"]').first().click()
+                  await dock.getByRole("button", { name: /submit/i }).click()
 
-            await expectQuestionOpen(page)
-          })
-        } finally {
-          await cleanupSession({ sdk: project.sdk, sessionID: child.id })
-        }
-      },
-      { trackSession: project.trackSession },
-    )
+                  await expectQuestionOpen(page)
+                })
+              } finally {
+                await cleanupSession({ sdk: project.sdk, sessionID: child.id })
+              }
+            },
+            { trackSession: project.trackSession },
+          )
+        },
+        { model: openaiModel },
+      )
+    },
   })
 })
 
@@ -652,34 +699,45 @@ test("todo dock transitions and collapse behavior", async ({ page, withBackendPr
   })
 })
 
-test("keyboard focus stays off prompt while blocked", async ({ page, withBackendProject }) => {
-  await withBackendProject(async (project) => {
-    await withDockSession(
-      project.sdk,
-      "e2e composer dock keyboard",
-      async (session) => {
-        await withDockSeed(project.sdk, session.id, async () => {
-          await project.gotoSession(session.id)
+test("keyboard focus stays off prompt while blocked", async ({ page, llm, backend, withBackendProject }) => {
+  const questions = [
+    {
+      header: "Need input",
+      question: "Pick one option",
+      options: [{ label: "Continue", description: "Continue now" }],
+    },
+  ]
+  await withMockOpenAI({
+    serverUrl: backend.url,
+    llmUrl: llm.url,
+    fn: async () => {
+      await withBackendProject(
+        async (project) => {
+          await withDockSession(
+            project.sdk,
+            "e2e composer dock keyboard",
+            async (session) => {
+              await withDockSeed(project.sdk, session.id, async () => {
+                await project.gotoSession(session.id)
 
-          await seedSessionQuestion(project.sdk, {
-            sessionID: session.id,
-            questions: [
-              {
-                header: "Need input",
-                question: "Pick one option",
-                options: [{ label: "Continue", description: "Continue now" }],
-              },
-            ],
-          })
+                await llm.tool("question", { questions })
+                await seedSessionQuestion(project.sdk, {
+                  sessionID: session.id,
+                  questions,
+                })
 
-          await expectQuestionBlocked(page)
+                await expectQuestionBlocked(page)
 
-          await page.locator("main").click({ position: { x: 5, y: 5 } })
-          await page.keyboard.type("abc")
-          await expect(page.locator(promptSelector)).toHaveCount(0)
-        })
-      },
-      { trackSession: project.trackSession },
-    )
+                await page.locator("main").click({ position: { x: 5, y: 5 } })
+                await page.keyboard.type("abc")
+                await expect(page.locator(promptSelector)).toHaveCount(0)
+              })
+            },
+            { trackSession: project.trackSession },
+          )
+        },
+        { model: openaiModel },
+      )
+    },
   })
 })
