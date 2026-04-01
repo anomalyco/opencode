@@ -183,15 +183,11 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
 
       // Use bash tool (always registered) to create a file
       const command = `echo 'snapshot race test content' > ${path.join(dir, "race-test.txt")}`
-      yield* llm.toolMatch(
-        (hit) => JSON.stringify(hit.body).includes("create the file"),
-        "bash",
-        { command, description: "create test file" },
-      )
-      yield* llm.textMatch(
-        (hit) => JSON.stringify(hit.body).includes("bash"),
-        "done",
-      )
+      yield* llm.toolMatch((hit) => JSON.stringify(hit.body).includes("create the file"), "bash", {
+        command,
+        description: "create test file",
+      })
+      yield* llm.textMatch((hit) => JSON.stringify(hit.body).includes("bash"), "done")
 
       // Seed user message
       yield* prompt.prompt({
@@ -208,7 +204,10 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
       // Verify the file was created
       const filePath = path.join(dir, "race-test.txt")
       const fileExists = yield* Effect.promise(() =>
-        fs.access(filePath).then(() => true).catch(() => false),
+        fs
+          .access(filePath)
+          .then(() => true)
+          .catch(() => false),
       )
       expect(fileExists).toBe(true)
 
