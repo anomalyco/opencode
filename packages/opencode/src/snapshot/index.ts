@@ -339,7 +339,7 @@ export namespace Snapshot {
                       }
 
                       const fileChunkPaths = fileChunk.map((file) => ({
-                        rel: path.relative(state.worktree, file).replaceAll("\\", "/"),
+                        rel: path.relative(state.worktree, file).replaceAll("\\", "/"), 
                         file,
                       }))
                       const tree = yield* git(
@@ -350,6 +350,7 @@ export namespace Snapshot {
                       )
 
                       if (tree.code !== 0) {
+                        log.info("batched ls-tree failed, falling back to single-file revert", { hash, files: fileChunk.length })
                         for (const file of fileChunk) {
                           yield* revertSingle(hash, file)
                         }
@@ -373,6 +374,10 @@ export namespace Snapshot {
                           cwd: state.worktree,
                         })
                         if (result.code !== 0) {
+                          log.info("batched checkout failed, falling back to single-file revert", {
+                            hash,
+                            files: filesToCheckout.length,
+                          })
                           for (const file of filesToCheckout) {
                             yield* revertSingle(hash, file)
                           }
