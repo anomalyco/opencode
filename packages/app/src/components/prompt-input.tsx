@@ -624,17 +624,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!cmd) return
     promptProbe.select(cmd.id)
     closePopover()
+    const images = imageAttachments()
 
     if (cmd.type === "custom") {
       const text = `/${cmd.trigger} `
       setEditorText(text)
-      prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
+      prompt.set([{ type: "text", content: text, start: 0, end: text.length }, ...images], text.length)
       focusEditorEnd()
       return
     }
 
     clearEditor()
-    prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
+    prompt.set([...DEFAULT_PROMPT, ...images], 0)
     command.trigger(cmd.id, "slash")
   }
 
@@ -1343,6 +1344,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               autocapitalize={store.mode === "normal" ? "sentences" : "off"}
               autocorrect={store.mode === "normal" ? "on" : "off"}
               spellcheck={store.mode === "normal"}
+              inputMode="text"
+              // @ts-expect-error
+              autocomplete="off"
               onInput={handleInput}
               onPaste={handlePaste}
               onCompositionStart={handleCompositionStart}

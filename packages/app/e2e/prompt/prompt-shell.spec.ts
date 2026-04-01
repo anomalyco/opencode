@@ -2,7 +2,6 @@ import type { ToolPart } from "@opencode-ai/sdk/v2/client"
 import { test, expect } from "../fixtures"
 import { sessionIDFromUrl } from "../actions"
 import { promptSelector } from "../selectors"
-import { createSdk } from "../utils"
 
 const isBash = (part: unknown): part is ToolPart => {
   if (!part || typeof part !== "object") return false
@@ -14,10 +13,9 @@ const isBash = (part: unknown): part is ToolPart => {
 test("shell mode runs a command in the project directory", async ({ page, withProject }) => {
   test.setTimeout(120_000)
 
-  await withProject(async ({ directory, gotoSession, trackSession }) => {
-    const sdk = createSdk(directory)
+  await withProject(async ({ directory, gotoSession, trackSession, sdk }) => {
     const prompt = page.locator(promptSelector)
-    const cmd = process.platform === "win32" ? "dir" : "ls"
+    const cmd = process.platform === "win32" ? "dir" : "command ls"
 
     await gotoSession()
     await prompt.click()

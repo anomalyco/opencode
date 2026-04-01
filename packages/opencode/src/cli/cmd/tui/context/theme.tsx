@@ -183,6 +183,18 @@ export function addTheme(name: string, theme: unknown) {
   return true
 }
 
+export function upsertTheme(name: string, theme: unknown) {
+  if (!name) return false
+  if (!isTheme(theme)) return false
+  if (customThemes[name] !== undefined) {
+    customThemes[name] = theme
+  } else {
+    pluginThemes[name] = theme
+  }
+  syncThemes()
+  return true
+}
+
 export function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
   const defs = theme.defs ?? {}
   function resolveColor(c: ColorValue, chain: string[] = []): RGBA {
