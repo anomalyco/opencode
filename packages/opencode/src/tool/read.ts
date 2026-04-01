@@ -35,6 +35,9 @@ export const ReadTool = Tool.define("read", {
     if (!path.isAbsolute(filepath)) {
       filepath = path.resolve(Instance.directory, filepath)
     }
+    if (process.platform === "win32") {
+      filepath = Filesystem.normalizePath(filepath)
+    }
     const title = path.relative(Instance.worktree, filepath)
 
     const stat = Filesystem.stat(filepath)
@@ -217,7 +220,7 @@ export const ReadTool = Tool.define("read", {
     output += "\n</content>"
 
     const diagnostics = await getFileDiagnostics(filepath)
-    FileTime.read(ctx.sessionID, filepath)
+    await FileTime.read(ctx.sessionID, filepath)
 
     if (instructions.length > 0) {
       output += `\n\n<system-reminder>\n${instructions.map((i) => i.content).join("\n\n")}\n</system-reminder>`

@@ -1,9 +1,12 @@
-import { Component, createMemo, createSignal, Show } from "solid-js"
+import { useMutation } from "@tanstack/solid-query"
+import { Component, createEffect, createMemo, on, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { Switch } from "@opencode-ai/ui/switch"
+import { showToast } from "@opencode-ai/ui/toast"
 import { useLanguage } from "@/context/language"
 
 const statusLabels = {
@@ -17,7 +20,48 @@ export const DialogSelectMcp: Component = () => {
   const sync = useSync()
   const sdk = useSDK()
   const language = useLanguage()
-  const [loading, setLoading] = createSignal<string | null>(null)
+  const [state, setState] = createStore({
+    done: false,
+    loading: false,
+  })
+
+  createEffect(
+    on(
+      () => sync.data.mcp_ready,
+      (ready, prev) => {
+        if (!ready && prev) setState("done", false)
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(() => {
+    if (state.done || state.loading) return
+    if (sync.data.mcp_ready) {
+      setState("done", true)
+      return
+    }
+
+    setState("loading", true)
+    void sdk.client.mcp
+      .status()
+      .then((result) => {
+        sync.set("mcp", result.data ?? {})
+        sync.set("mcp_ready", true)
+        setState("done", true)
+      })
+      .catch((err) => {
+        setState("done", true)
+        showToast({
+          variant: "error",
+          title: language.t("common.requestFailed"),
+          description: err instanceof Error ? err.message : String(err),
+        })
+      })
+      .finally(() => {
+        setState("loading", false)
+      })
+  })
 
   const items = createMemo(() =>
     Object.entries(sync.data.mcp ?? {})
@@ -25,10 +69,8 @@ export const DialogSelectMcp: Component = () => {
       .sort((a, b) => a.name.localeCompare(b.name)),
   )
 
-  const toggle = async (name: string) => {
-    if (loading()) return
-    setLoading(name)
-    try {
+  const toggle = useMutation(() => ({
+    mutationFn: async (name: string) => {
       const status = sync.data.mcp[name]
       if (status?.status === "connected") {
         await sdk.client.mcp.disconnect({ name })
@@ -38,10 +80,8 @@ export const DialogSelectMcp: Component = () => {
 
       const result = await sdk.client.mcp.status()
       if (result.data) sync.set("mcp", result.data)
-    } finally {
-      setLoading(null)
-    }
-  }
+    },
+  }))
 
   const enabledCount = createMemo(() => items().filter((i) => i.status === "connected").length)
   const totalCount = createMemo(() => items().length)
@@ -59,7 +99,8 @@ export const DialogSelectMcp: Component = () => {
         filterKeys={["name", "status"]}
         sortBy={(a, b) => a.name.localeCompare(b.name)}
         onSelect={(x) => {
-          if (x) toggle(x.name)
+          if (!x || toggle.isPending) return
+          toggle.mutate(x.name)
         }}
       >
         {(i) => {
@@ -83,7 +124,7 @@ export const DialogSelectMcp: Component = () => {
                   <Show when={statusLabel()}>
                     <span class="text-11-regular text-text-weaker">{statusLabel()}</span>
                   </Show>
-                  <Show when={loading() === i.name}>
+                  <Show when={toggle.isPending && toggle.variables === i.name}>
                     <span class="text-11-regular text-text-weak">{language.t("common.loading.ellipsis")}</span>
                   </Show>
                 </div>
@@ -92,7 +133,14 @@ export const DialogSelectMcp: Component = () => {
                 </Show>
               </div>
               <div onClick={(e) => e.stopPropagation()}>
-                <Switch checked={enabled()} disabled={loading() === i.name} onChange={() => toggle(i.name)} />
+                <Switch
+                  checked={enabled()}
+                  disabled={toggle.isPending && toggle.variables === i.name}
+                  onChange={() => {
+                    if (toggle.isPending) return
+                    toggle.mutate(i.name)
+                  }}
+                />
               </div>
             </div>
           )

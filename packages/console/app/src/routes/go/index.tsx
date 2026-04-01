@@ -47,7 +47,8 @@ function LimitsGraph(props: { href: string }) {
   const models = [
     { id: "glm", name: "GLM-5", req: 1150, d: "120ms" },
     { id: "kimi", name: "Kimi K2.5", req: 1850, d: "240ms" },
-    { id: "minimax", name: "MiniMax M2.5", req: 20000, d: "360ms" },
+    { id: "minimax-m2.7", name: "MiniMax M2.7", req: 14000, d: "330ms" },
+    { id: "minimax-m2.5", name: "MiniMax M2.5", req: 20000, d: "360ms" },
   ]
 
   const w = 720
@@ -431,10 +432,7 @@ export default function Home() {
                 </Faq>
               </li>
               <li>
-                <Faq question={i18n.t("go.faq.q5")}>
-                  {i18n.t("go.faq.a5.body")} <a href="mailto:contact@anoma.ly">{i18n.t("common.contactUs")}</a>{" "}
-                  {i18n.t("go.faq.a5.contactAfter")}
-                </Faq>
+                <Faq question={i18n.t("go.faq.q5")}>{i18n.t("go.faq.a5.body")}</Faq>
               </li>
               <li>
                 <Faq question={i18n.t("go.faq.q6")}>{i18n.t("go.faq.a6")}</Faq>

@@ -9,23 +9,13 @@ import type {
 } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/util/path"
-import {
-  createContext,
-  getOwner,
-  Match,
-  onCleanup,
-  onMount,
-  type ParentProps,
-  Switch,
-  untrack,
-  useContext,
-} from "solid-js"
+import { createContext, getOwner, onCleanup, onMount, type ParentProps, untrack, useContext } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
 import type { InitError } from "../pages/error"
 import { useGlobalSDK } from "./global-sdk"
-import { bootstrapDirectory, bootstrapGlobal } from "./global-sync/bootstrap"
+import { bootstrapDirectory, bootstrapGlobal, clearProviderRev } from "./global-sync/bootstrap"
 import { createChildStoreManager } from "./global-sync/child-store"
 import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./global-sync/event-reducer"
 import { createRefreshQueue } from "./global-sync/queue"
@@ -80,9 +70,17 @@ function createGlobalSync() {
 
   let active = true
   let projectWritten = false
+  let bootedAt = 0
+  let bootingRoot = false
+  let eventFrame: number | undefined
+  let eventTimer: ReturnType<typeof setTimeout> | undefined
 
   onCleanup(() => {
     active = false
+  })
+  onCleanup(() => {
+    if (eventFrame !== undefined) cancelAnimationFrame(eventFrame)
+    if (eventTimer !== undefined) clearTimeout(eventTimer)
   })
 
   const cacheProjects = () => {
@@ -162,6 +160,7 @@ function createGlobalSync() {
       queue.clear(directory)
       sessionMeta.delete(directory)
       sdkCache.delete(directory)
+      clearProviderRev(directory)
       clearSessionPrefetchDirectory(directory)
     },
     translate: language.t,
@@ -258,6 +257,12 @@ function createGlobalSync() {
       const sdk = sdkFor(directory)
       await bootstrapDirectory({
         directory,
+        global: {
+          config: globalStore.config,
+          path: globalStore.path,
+          project: globalStore.project,
+          provider: globalStore.provider,
+        },
         sdk,
         store: child[0],
         setStore: child[1],
@@ -278,15 +283,20 @@ function createGlobalSync() {
   const unsub = globalSDK.event.listen((e) => {
     const directory = e.name
     const event = e.details
+    const recent = bootingRoot || Date.now() - bootedAt < 1500
 
     if (directory === "global") {
       applyGlobalEvent({
         event,
         project: globalStore.project,
-        refresh: queue.refresh,
+        refresh: () => {
+          if (recent) return
+          queue.refresh()
+        },
         setGlobalProject: setProjects,
       })
       if (event.type === "server.connected" || event.type === "global.disposed") {
+        if (recent) return
         for (const directory of Object.keys(children.children)) {
           queue.push(directory)
         }
@@ -309,7 +319,10 @@ function createGlobalSync() {
       loadLsp: () => {
         sdkFor(directory)
           .lsp.status()
-          .then((x) => setStore("lsp", x.data ?? []))
+          .then((x) => {
+            setStore("lsp", x.data ?? [])
+            setStore("lsp_ready", true)
+          })
       },
     })
   })
@@ -325,20 +338,36 @@ function createGlobalSync() {
   })
 
   async function bootstrap() {
-    await bootstrapGlobal({
-      globalSDK: globalSDK.client,
-      connectErrorTitle: language.t("dialog.server.add.error"),
-      connectErrorDescription: language.t("error.globalSync.connectFailed", {
-        url: globalSDK.url,
-      }),
-      requestFailedTitle: language.t("common.requestFailed"),
-      translate: language.t,
-      formatMoreCount: (count) => language.t("common.moreCountSuffix", { count }),
-      setGlobalStore: setBootStore,
-    })
+    bootingRoot = true
+    try {
+      await bootstrapGlobal({
+        globalSDK: globalSDK.client,
+        requestFailedTitle: language.t("common.requestFailed"),
+        translate: language.t,
+        formatMoreCount: (count) => language.t("common.moreCountSuffix", { count }),
+        setGlobalStore: setBootStore,
+      })
+      bootedAt = Date.now()
+    } finally {
+      bootingRoot = false
+    }
   }
 
   onMount(() => {
+    if (typeof requestAnimationFrame === "function") {
+      eventFrame = requestAnimationFrame(() => {
+        eventFrame = undefined
+        eventTimer = setTimeout(() => {
+          eventTimer = undefined
+          globalSDK.event.start()
+        }, 0)
+      })
+    } else {
+      eventTimer = setTimeout(() => {
+        eventTimer = undefined
+        globalSDK.event.start()
+      }, 0)
+    }
     void bootstrap()
   })
 
@@ -378,6 +407,7 @@ function createGlobalSync() {
       return globalStore.error
     },
     child: children.child,
+    peek: children.peek,
     bootstrap,
     updateConfig,
     project: projectApi,
@@ -391,13 +421,7 @@ const GlobalSyncContext = createContext<ReturnType<typeof createGlobalSync>>()
 
 export function GlobalSyncProvider(props: ParentProps) {
   const value = createGlobalSync()
-  return (
-    <Switch>
-      <Match when={value.ready}>
-        <GlobalSyncContext.Provider value={value}>{props.children}</GlobalSyncContext.Provider>
-      </Match>
-    </Switch>
-  )
+  return <GlobalSyncContext.Provider value={value}>{props.children}</GlobalSyncContext.Provider>
 }
 
 export function useGlobalSync() {

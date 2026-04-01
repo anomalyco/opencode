@@ -1,7 +1,5 @@
 /// <reference path="../env.d.ts" />
 import { tool } from "@opencode-ai/plugin"
-import DESCRIPTION from "./github-triage.txt"
-
 const TEAM = {
   desktop: ["adamdotdevin", "iamdavidhill", "Brendonovich", "nexxeln"],
   zen: ["fwang", "MrMushrooooom"],
@@ -40,7 +38,12 @@ async function githubFetch(endpoint: string, options: RequestInit = {}) {
 }
 
 export default tool({
-  description: DESCRIPTION,
+  description: `Use this tool to assign and/or label a GitHub issue.
+
+Choose labels and assignee using the current triage policy and ownership rules.
+Pick the most fitting labels for the issue and assign one owner.
+
+If unsure, choose the team/section with the most overlap with the issue and assign a member from that team at random.`,
   args: {
     assignee: tool.schema
       .enum(ASSIGNEES as [string, ...string[]])

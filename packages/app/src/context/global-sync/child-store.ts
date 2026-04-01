@@ -160,6 +160,7 @@ export function createChildStoreManager(input: {
             project: "",
             projectMeta: initialMeta,
             icon: initialIcon,
+            provider_ready: false,
             provider: { all: [], connected: [], default: {} },
             config: {},
             path: { state: "", config: "", worktree: "", directory: "", home: "" },
@@ -173,7 +174,9 @@ export function createChildStoreManager(input: {
             todo: {},
             permission: {},
             question: {},
+            mcp_ready: false,
             mcp: {},
+            lsp_ready: false,
             lsp: [],
             vcs: vcsStore.value,
             limit: 5,
@@ -226,6 +229,15 @@ export function createChildStoreManager(input: {
     return childStore
   }
 
+  function peek(directory: string, options: ChildOptions = {}) {
+    const childStore = ensureChild(directory)
+    const shouldBootstrap = options.bootstrap ?? true
+    if (shouldBootstrap && childStore[0].status === "loading") {
+      input.onBootstrap(directory)
+    }
+    return childStore
+  }
+
   function projectMeta(directory: string, patch: ProjectMeta) {
     const [store, setStore] = ensureChild(directory)
     const cached = metaCache.get(directory)
@@ -256,6 +268,7 @@ export function createChildStoreManager(input: {
     children,
     ensureChild,
     child,
+    peek,
     projectMeta,
     projectIcon,
     mark,
