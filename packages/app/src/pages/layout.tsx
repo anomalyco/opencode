@@ -49,21 +49,16 @@ import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { Binary } from "@opencode-ai/util/binary"
 import { retry } from "@opencode-ai/util/retry"
-import { playSound, soundSrc } from "@/utils/sound"
+import { playSoundById } from "@/utils/sound"
 import { createAim } from "@/utils/aim"
 import { setNavigate } from "@/utils/notification-click"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { setSessionHandoff } from "@/pages/session/handoff"
 
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
-import { DialogSelectProvider } from "@/components/dialog-select-provider"
-import { DialogSelectServer } from "@/components/dialog-select-server"
-import { DialogSettings } from "@/components/dialog-settings"
+import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis, getDraggableId } from "@/utils/solid-dnd"
-import { DialogSelectDirectory } from "@/components/dialog-select-directory"
-import { DialogEditProject } from "@/components/dialog-edit-project"
 import { DebugBar } from "@/components/debug-bar"
 import { Titlebar } from "@/components/titlebar"
 import { useServer } from "@/context/server"
@@ -110,6 +105,8 @@ export default function Layout(props: ParentProps) {
   const pageReady = createMemo(() => ready())
 
   let scrollContainerRef: HTMLDivElement | undefined
+  let dialogRun = 0
+  let dialogDead = false
 
   const params = useParams()
   const globalSDK = useGlobalSDK()
@@ -139,7 +136,7 @@ export default function Layout(props: ParentProps) {
       dir: globalSync.peek(dir, { bootstrap: false })[0].path.directory || dir,
     }
   })
-  const availableThemeEntries = createMemo(() => Object.entries(theme.themes()))
+  const availableThemeEntries = createMemo(() => theme.ids().map((id) => [id, theme.themes()[id]] as const))
   const colorSchemeOrder: ColorScheme[] = ["system", "light", "dark"]
   const colorSchemeKey: Record<ColorScheme, "theme.scheme.system" | "theme.scheme.light" | "theme.scheme.dark"> = {
     system: "theme.scheme.system",
@@ -201,6 +198,8 @@ export default function Layout(props: ParentProps) {
   })
 
   onCleanup(() => {
+    dialogDead = true
+    dialogRun += 1
     if (navLeave.current !== undefined) clearTimeout(navLeave.current)
     clearTimeout(sortNowTimeout)
     if (sortNowInterval) clearInterval(sortNowInterval)
@@ -211,13 +210,22 @@ export default function Layout(props: ParentProps) {
 
   onMount(() => {
     const stop = () => setState("sizing", false)
+    const blur = () => reset()
+    const hide = () => {
+      if (document.visibilityState !== "hidden") return
+      reset()
+    }
     window.addEventListener("pointerup", stop)
     window.addEventListener("pointercancel", stop)
     window.addEventListener("blur", stop)
+    window.addEventListener("blur", blur)
+    document.addEventListener("visibilitychange", hide)
     onCleanup(() => {
       window.removeEventListener("pointerup", stop)
       window.removeEventListener("pointercancel", stop)
       window.removeEventListener("blur", stop)
+      window.removeEventListener("blur", blur)
+      document.removeEventListener("visibilitychange", hide)
     })
   })
 
@@ -235,6 +243,12 @@ export default function Layout(props: ParentProps) {
     if (navLeave.current === undefined) return
     clearTimeout(navLeave.current)
     navLeave.current = undefined
+  }
+
+  const reset = () => {
+    disarm()
+    setState("hoverSession", undefined)
+    setHoverProject(undefined)
   }
 
   const arm = () => {
@@ -305,8 +319,7 @@ export default function Layout(props: ParentProps) {
 
   const clearSidebarHoverState = () => {
     if (layout.sidebar.opened()) return
-    setState("hoverSession", undefined)
-    setHoverProject(undefined)
+    reset()
   }
 
   const navigateWithSidebarReset = (href: string) => {
@@ -322,10 +335,9 @@ export default function Layout(props: ParentProps) {
     const nextIndex = currentIndex === -1 ? 0 : (currentIndex + direction + ids.length) % ids.length
     const nextThemeId = ids[nextIndex]
     theme.setTheme(nextThemeId)
-    const nextTheme = theme.themes()[nextThemeId]
     showToast({
       title: language.t("toast.theme.title"),
-      description: nextTheme?.name ?? nextThemeId,
+      description: theme.name(nextThemeId),
     })
   }
 
@@ -480,7 +492,7 @@ export default function Layout(props: ParentProps) {
 
         if (e.details.type === "permission.asked") {
           if (settings.sounds.permissionsEnabled()) {
-            playSound(soundSrc(settings.sounds.permissions()))
+            void playSoundById(settings.sounds.permissions())
           }
           if (settings.notifications.permissions()) {
             void platform.notify(title, description, href)
@@ -953,6 +965,8 @@ export default function Layout(props: ParentProps) {
         : projects[(index + offset + projects.length) % projects.length]
     if (!target) return
 
+    // warm up child store to prevent flicker
+    globalSync.child(target.worktree)
     openProject(target.worktree)
   }
 
@@ -1138,10 +1152,10 @@ export default function Layout(props: ParentProps) {
       },
     ]
 
-    for (const [id, definition] of availableThemeEntries()) {
+    for (const [id] of availableThemeEntries()) {
       commands.push({
         id: `theme.set.${id}`,
-        title: language.t("command.theme.set", { theme: definition.name ?? id }),
+        title: language.t("command.theme.set", { theme: theme.name(id) }),
         category: language.t("command.category.theme"),
         onSelect: () => theme.commitPreview(),
         onHighlight: () => {
@@ -1192,15 +1206,27 @@ export default function Layout(props: ParentProps) {
   })
 
   function connectProvider() {
-    dialog.show(() => <DialogSelectProvider />)
+    const run = ++dialogRun
+    void import("@/components/dialog-select-provider").then((x) => {
+      if (dialogDead || dialogRun !== run) return
+      dialog.show(() => <x.DialogSelectProvider />)
+    })
   }
 
   function openServer() {
-    dialog.show(() => <DialogSelectServer />)
+    const run = ++dialogRun
+    void import("@/components/dialog-select-server").then((x) => {
+      if (dialogDead || dialogRun !== run) return
+      dialog.show(() => <x.DialogSelectServer />)
+    })
   }
 
   function openSettings() {
-    dialog.show(() => <DialogSettings />)
+    const run = ++dialogRun
+    void import("@/components/dialog-settings").then((x) => {
+      if (dialogDead || dialogRun !== run) return
+      dialog.show(() => <x.DialogSettings />)
+    })
   }
 
   function projectRoot(directory: string) {
@@ -1427,7 +1453,13 @@ export default function Layout(props: ParentProps) {
     layout.sidebar.toggleWorkspaces(project.worktree)
   }
 
-  const showEditProjectDialog = (project: LocalProject) => dialog.show(() => <DialogEditProject project={project} />)
+  const showEditProjectDialog = (project: LocalProject) => {
+    const run = ++dialogRun
+    void import("@/components/dialog-edit-project").then((x) => {
+      if (dialogDead || dialogRun !== run) return
+      dialog.show(() => <x.DialogEditProject project={project} />)
+    })
+  }
 
   async function chooseProject() {
     function resolve(result: string | string[] | null) {
@@ -1448,10 +1480,14 @@ export default function Layout(props: ParentProps) {
       })
       resolve(result)
     } else {
-      dialog.show(
-        () => <DialogSelectDirectory multiple={true} onSelect={resolve} />,
-        () => resolve(null),
-      )
+      const run = ++dialogRun
+      void import("@/components/dialog-select-directory").then((x) => {
+        if (dialogDead || dialogRun !== run) return
+        dialog.show(
+          () => <x.DialogSelectDirectory multiple={true} onSelect={resolve} />,
+          () => resolve(null),
+        )
+      })
     }
   }
 
@@ -1784,6 +1820,9 @@ export default function Layout(props: ParentProps) {
     document.documentElement.style.setProperty("--dialog-left-margin", `${sidebarWidth}px`)
   })
 
+  const side = createMemo(() => Math.max(layout.sidebar.width(), 244))
+  const panel = createMemo(() => Math.max(side() - 64, 0))
+
   const loadedSessionDirs = new Set<string>()
 
   createEffect(
@@ -1975,6 +2014,10 @@ export default function Layout(props: ParentProps) {
     onProjectMouseEnter: (worktree, event) => aim.enter(worktree, event),
     onProjectMouseLeave: (worktree) => aim.leave(worktree),
     onProjectFocus: (worktree) => aim.activate(worktree),
+    onHoverOpenChanged: (worktree, hoverOpen) => {
+      if (!hoverOpen && state.hoverProject && state.hoverProject !== worktree) return
+      setState("hoverProject", hoverOpen ? worktree : undefined)
+    },
     navigateToProject,
     openSidebar: () => layout.sidebar.open(),
     closeProject,
@@ -2056,7 +2099,7 @@ export default function Layout(props: ParentProps) {
           "max-w-full overflow-hidden": panelProps.mobile,
         }}
         style={{
-          width: panelProps.mobile ? undefined : `${Math.max(Math.max(layout.sidebar.width(), 244) - 64, 0)}px`,
+          width: panelProps.mobile ? undefined : `${panel()}px`,
         }}
       >
         <Show
@@ -2119,9 +2162,11 @@ export default function Layout(props: ParentProps) {
                     variant="ghost"
                     data-action="project-menu"
                     data-project={slug()}
-                    class="shrink-0 size-6 rounded-md data-[expanded]:bg-surface-base-active"
+                    class="shrink-0 size-6 rounded-md transition-opacity data-[expanded]:bg-surface-base-active"
                     classList={{
-                      "opacity-0 group-hover/project:opacity-100 data-[expanded]:opacity-100": !panelProps.mobile,
+                      "opacity-100": panelProps.mobile || merged(),
+                      "opacity-0 group-hover/project:opacity-100 group-focus-within/project:opacity-100 data-[expanded]:opacity-100":
+                        !panelProps.mobile && !merged(),
                     }}
                     aria-label={language.t("common.moreOptions")}
                   />
@@ -2346,7 +2391,7 @@ export default function Layout(props: ParentProps) {
                 "absolute inset-y-0 left-0": true,
                 "z-10": true,
               }}
-              style={{ width: `${Math.max(layout.sidebar.width(), 244)}px` }}
+              style={{ width: `${side()}px` }}
               ref={(el) => {
                 setState("nav", el)
               }}
@@ -2361,23 +2406,28 @@ export default function Layout(props: ParentProps) {
               }}
             >
               <div class="@container w-full h-full contain-strict">{sidebarContent()}</div>
-              <Show when={layout.sidebar.opened()}>
-                <div onPointerDown={() => setState("sizing", true)}>
-                  <ResizeHandle
-                    direction="horizontal"
-                    size={layout.sidebar.width()}
-                    min={244}
-                    max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
-                    onResize={(w) => {
-                      setState("sizing", true)
-                      if (sizet !== undefined) clearTimeout(sizet)
-                      sizet = window.setTimeout(() => setState("sizing", false), 120)
-                      layout.sidebar.resize(w)
-                    }}
-                  />
-                </div>
-              </Show>
             </nav>
+
+            <Show when={layout.sidebar.opened()}>
+              <div
+                class="hidden xl:block absolute inset-y-0 z-30 w-0 overflow-visible"
+                style={{ left: `${side()}px` }}
+                onPointerDown={() => setState("sizing", true)}
+              >
+                <ResizeHandle
+                  direction="horizontal"
+                  size={layout.sidebar.width()}
+                  min={244}
+                  max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
+                  onResize={(w) => {
+                    setState("sizing", true)
+                    if (sizet !== undefined) clearTimeout(sizet)
+                    sizet = window.setTimeout(() => setState("sizing", false), 120)
+                    layout.sidebar.resize(w)
+                  }}
+                />
+              </div>
+            </Show>
 
             <div
               class="hidden xl:block pointer-events-none absolute top-0 right-0 z-0 border-t border-border-weaker-base"
@@ -2418,7 +2468,7 @@ export default function Layout(props: ParentProps) {
                   !state.sizing,
               }}
               style={{
-                "--main-left": layout.sidebar.opened() ? `${Math.max(layout.sidebar.width(), 244)}px` : "4rem",
+                "--main-left": layout.sidebar.opened() ? `${side()}px` : "4rem",
               }}
             >
               <main
@@ -2465,7 +2515,7 @@ export default function Layout(props: ParentProps) {
                 "duration-180 ease-out": state.peeked && !layout.sidebar.opened(),
                 "duration-120 ease-in": !state.peeked || layout.sidebar.opened(),
               }}
-              style={{ left: `calc(4rem + ${Math.max(Math.max(layout.sidebar.width(), 244) - 64, 0)}px)` }}
+              style={{ left: `calc(4rem + ${panel()}px)` }}
             >
               <div class="h-full w-px" style={{ "box-shadow": "var(--shadow-sidebar-overlay)" }} />
             </div>
