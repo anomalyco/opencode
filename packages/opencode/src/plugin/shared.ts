@@ -155,7 +155,7 @@ async function resolvePluginEntrypoint(spec: string, target: string, kind: Plugi
 }
 
 export function isPathPluginSpec(spec: string) {
-  return spec.startsWith("file://") || spec.startsWith(".") || path.isAbsolute(spec) || /^[A-Za-z]:[\\/]/.test(spec)
+  return spec.startsWith("file://") || spec.startsWith(".") || isAbsolutePath(spec)
 }
 
 export async function resolvePathPluginTarget(spec: string) {

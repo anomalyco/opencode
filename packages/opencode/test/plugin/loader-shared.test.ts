@@ -894,7 +894,7 @@ export default {
       },
     })
 
-    const install = spyOn(BunProc, "install").mockResolvedValue(tmp.extra.mod)
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
     const missing: string[] = []
 
     try {
@@ -963,7 +963,7 @@ export default {
       },
     })
 
-    const install = spyOn(BunProc, "install").mockResolvedValue(tmp.extra.mod)
+    const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
 
     try {
       const loaded = await PluginLoader.loadExternal({
@@ -1102,7 +1102,7 @@ export default {
   })
 
   test("does not wait or retry npm plugin failures", async () => {
-    const install = spyOn(BunProc, "install").mockRejectedValue(new Error("boom"))
+    const install = spyOn(Npm, "add").mockRejectedValue(new Error("boom"))
     let wait = 0
     const errors: Array<[string, boolean]> = []
 

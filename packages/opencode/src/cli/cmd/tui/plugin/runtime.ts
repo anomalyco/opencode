@@ -165,7 +165,7 @@ function createThemeInstaller(
     const stat = await Filesystem.statAsync(src)
     const mtime = stat ? Math.floor(typeof stat.mtimeMs === "bigint" ? Number(stat.mtimeMs) : stat.mtimeMs) : undefined
     const size = stat ? (typeof stat.size === "bigint" ? Number(stat.size) : stat.size) : undefined
-    const row = {
+    const info = {
       src,
       dest,
       mtime,
@@ -173,14 +173,9 @@ function createThemeInstaller(
     }
 
     await Flock.withLock(`tui-theme:${dest}`, async () => {
-      const known = await PluginMeta.list()
-        .then((store) => store[plugin.id]?.themes?.[name])
-        .catch(() => undefined)
-      if (known) plugin.themes[name] = known
-
       const save = async () => {
-        plugin.themes[name] = row
-        await PluginMeta.setTheme(plugin.id, name, row).catch((error) => {
+        plugin.themes[name] = info
+        await PluginMeta.setTheme(plugin.id, name, info).catch((error) => {
           log.warn("failed to track tui plugin theme", {
             path: spec,
             id: plugin.id,
@@ -728,12 +723,12 @@ async function addExternalPluginEntries(state: RuntimeState, ready: PluginLoad[]
       })
     }
 
-    const row = createMeta(entry.source, entry.spec, entry.target, hit, entry.id)
+    const info = createMeta(entry.source, entry.spec, entry.target, hit, entry.id)
     const themes = hit?.entry.themes ? { ...hit.entry.themes } : {}
     const plugin: PluginEntry = {
       id: entry.id,
       load: entry,
-      meta: row,
+      meta: info,
       themes,
       plugin: entry.module.tui,
       enabled: true,
