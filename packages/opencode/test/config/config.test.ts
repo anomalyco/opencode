@@ -169,7 +169,7 @@ test("loads JSONC config file", async () => {
   })
 })
 
-test("merges multiple config files with correct precedence", async () => {
+test("jsonc overrides json in the same directory", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await writeConfig(
@@ -191,7 +191,7 @@ test("merges multiple config files with correct precedence", async () => {
     directory: tmp.path,
     fn: async () => {
       const config = await Config.get()
-      expect(config.model).toBe("override")
+      expect(config.model).toBe("base")
       expect(config.username).toBe("base")
     },
   })
@@ -1595,7 +1595,7 @@ test("project config can override MCP server enabled status", async () => {
     init: async (dir) => {
       // Simulates a base config (like from remote .well-known) with disabled MCP
       await Filesystem.write(
-        path.join(dir, "opencode.jsonc"),
+        path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
           mcp: {
@@ -1614,7 +1614,7 @@ test("project config can override MCP server enabled status", async () => {
       )
       // Project config enables just jira
       await Filesystem.write(
-        path.join(dir, "opencode.json"),
+        path.join(dir, "opencode.jsonc"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
           mcp: {
@@ -1653,7 +1653,7 @@ test("MCP config deep merges preserving base config properties", async () => {
     init: async (dir) => {
       // Base config with full MCP definition
       await Filesystem.write(
-        path.join(dir, "opencode.jsonc"),
+        path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
           mcp: {
@@ -1670,7 +1670,7 @@ test("MCP config deep merges preserving base config properties", async () => {
       )
       // Override just enables it, should preserve other properties
       await Filesystem.write(
-        path.join(dir, "opencode.json"),
+        path.join(dir, "opencode.jsonc"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
           mcp: {

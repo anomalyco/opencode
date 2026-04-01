@@ -1282,7 +1282,7 @@ export namespace Config {
 
           for (const dir of unique(directories)) {
             if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
-              for (const file of ["opencode.jsonc", "opencode.json"]) {
+              for (const file of ["opencode.json", "opencode.jsonc"]) {
                 const source = path.join(dir, file)
                 log.debug(`loading config from ${source}`)
                 merge(source, yield* loadFile(source))
@@ -1350,7 +1350,7 @@ export namespace Config {
           }
 
           if (existsSync(managedDir)) {
-            for (const file of ["opencode.jsonc", "opencode.json"]) {
+            for (const file of ["opencode.json", "opencode.jsonc"]) {
               const source = path.join(managedDir, file)
               merge(source, yield* loadFile(source), "global")
             }
