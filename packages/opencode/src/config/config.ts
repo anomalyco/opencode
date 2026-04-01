@@ -325,6 +325,21 @@ export namespace Config {
     return list.toReversed()
   }
 
+  export const SandboxOptions = z
+    .object({
+      enabled: z.union([z.boolean(), z.literal("auto")]).optional().describe("Enable or enforce sandbox containerization"),
+      provider: z.literal("srt").optional().describe("The sandbox runtime provider to use (default: srt)"),
+      domains: z.array(z.string()).optional().describe("Whitelisted domains for the sandbox proxy. Empty array airgaps the container"),
+      env_whitelist: z.array(z.string()).optional().describe("Whitelist of environment variables passed to the sandboxed shell"),
+      deny_workspace_patterns: z.array(z.string()).optional().describe("Glob patterns to explicitly deny read/write access to in the workspace"),
+      deny_binaries: z.array(z.string()).optional().describe("Absolute or generic executable names to blocklist from the sandbox"),
+    })
+    .meta({
+      ref: "SandboxOptions",
+    })
+
+  export type SandboxOptions = z.infer<typeof SandboxOptions>
+
   export const McpLocal = z
     .object({
       type: z.literal("local").describe("Type of MCP server connection"),
@@ -340,6 +355,8 @@ export namespace Config {
         .positive()
         .optional()
         .describe("Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified."),
+      sandbox: SandboxOptions.optional()
+        .describe("Override sandbox configuration specifically for this MCP server"),
     })
     .strict()
     .meta({
@@ -1032,17 +1049,10 @@ export namespace Config {
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
         })
         .optional(),
-      bash_sandbox: z
-        .object({
-          enabled: z.union([z.boolean(), z.literal("auto")]).optional().describe("Enable or enforce bash sandbox containerization"),
-          provider: z.literal("srt").optional().describe("The sandbox runtime provider to use (default: srt)"),
-          domains: z.array(z.string()).optional().describe("Whitelisted domains for the sandbox proxy. Empty array airgaps the container"),
-          env_whitelist: z.array(z.string()).optional().describe("Whitelist of environment variables passed to the sandboxed shell"),
-          deny_workspace_patterns: z.array(z.string()).optional().describe("Glob patterns to explicitly deny read/write access to in the workspace"),
-          deny_binaries: z.array(z.string()).optional().describe("Absolute or generic executable names to blocklist from the sandbox"),
-        })
-        .optional()
+      bash_sandbox: SandboxOptions.optional()
         .describe("Configuration for executing bash commands within a natively secured sandbox container."),
+      mcp_sandbox: SandboxOptions.optional()
+        .describe("Default sandbox configuration applied to locally running MCP servers."),
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),

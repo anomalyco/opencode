@@ -23,12 +23,47 @@ import { McpAuth } from "./auth"
 import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
+import { getSandboxProvider } from "../sandbox/provider"
 import open from "open"
 import { Effect, Exit, Layer, Option, Context, Stream } from "effect"
 import { EffectLogger } from "@/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
+
+// Union merge arrays so global defaults are combined with local overrides
+const merge = (a?: string[], b?: string[]) => {
+  if (!a && !b) return undefined
+  return Array.from(new Set([...(a ?? []), ...(b ?? [])]))
+}
+
+export const wrapMcpCommand = (
+  command: string[],
+  cwd: string,
+  env: Record<string, string | undefined>,
+  local: Config.SandboxOptions | undefined,
+  global: Config.SandboxOptions | undefined,
+) => {
+  const enabled = Boolean(local?.enabled ?? global?.enabled ?? false)
+  if (!enabled) return { command, env, cleanup: undefined }
+
+  const provider = getSandboxProvider(local?.provider ?? global?.provider ?? "srt")
+
+  const wrapped = provider.wrapCommand(command, {
+    cwd,
+    env: env as NodeJS.ProcessEnv,
+    envWhitelist: merge(global?.env_whitelist, local?.env_whitelist),
+    networkDomains: merge(global?.domains, local?.domains),
+    denyWorkspacePatterns: merge(global?.deny_workspace_patterns, local?.deny_workspace_patterns),
+    denyBinaries: merge(global?.deny_binaries, local?.deny_binaries),
+  })
+
+  return {
+    command: [wrapped.executable, ...wrapped.args],
+    env: (wrapped.env as Record<string, string | undefined>) ?? env,
+    cleanup: wrapped.cleanup,
+  }
+}
 
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
@@ -386,30 +421,52 @@ export namespace MCP {
       })
 
       const connectLocal = Effect.fn("MCP.connectLocal")(function* (key: string, mcp: Config.Mcp & { type: "local" }) {
-        const [cmd, ...args] = mcp.command
         const cwd = Instance.directory
+        const env = {
+          ...process.env,
+          ...(mcp.command[0] === "opencode" ? { BUN_BE_BUN: "1" } : {}),
+          ...mcp.environment,
+        }
+
+        const cfg = yield* cfgSvc.get()
+        let wrapped: ReturnType<typeof wrapMcpCommand>
+        try {
+          wrapped = wrapMcpCommand(mcp.command, cwd, env, mcp.sandbox, cfg.mcp_sandbox)
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          log.error("sandbox setup failed", { key, error: msg })
+          return { client: undefined as MCPClient | undefined, status: { status: "failed", error: msg } as Status }
+        }
+        const cleanup = wrapped.cleanup
+        const [cmd, ...args] = wrapped.command
+        
         const transport = new StdioClientTransport({
           stderr: "pipe",
           command: cmd,
           args,
           cwd,
-          env: {
-            ...process.env,
-            ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
-            ...mcp.environment,
-          },
+          env: wrapped.env as Record<string, string>,
         })
         transport.stderr?.on("data", (chunk: Buffer) => {
           log.info(`mcp stderr: ${chunk.toString()}`, { key })
         })
 
-        const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
-        return yield* connectTransport(transport, connectTimeout).pipe(
-          Effect.map((client): { client: MCPClient | undefined; status: Status } => ({
-            client,
-            status: { status: "connected" },
-          })),
+        const timeout = mcp.timeout ?? DEFAULT_TIMEOUT
+        return yield* connectTransport(transport, timeout).pipe(
+          Effect.map((client): { client: MCPClient | undefined; status: Status } => {
+            if (cleanup) {
+              const close = client.close.bind(client)
+              client.close = async () => {
+                try { await close() } finally { cleanup() }
+              }
+            }
+            return {
+              client,
+              status: { status: "connected" },
+            }
+          }),
           Effect.catch((error): Effect.Effect<{ client: MCPClient | undefined; status: Status }> => {
+            if (cleanup) cleanup()
             const msg = error instanceof Error ? error.message : String(error)
             log.error("local mcp startup failed", { key, command: mcp.command, cwd, error: msg })
             return Effect.succeed({ client: undefined, status: { status: "failed", error: msg } })

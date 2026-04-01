@@ -21,6 +21,11 @@ export abstract class SandboxProvider {
     command: string,
     options: SandboxOptions,
   ): { executable: string; args: string[]; env?: NodeJS.ProcessEnv; cleanup?: () => void }
+
+  abstract wrapCommand(
+    command: string[],
+    options: SandboxOptions,
+  ): { executable: string; args: string[]; env?: NodeJS.ProcessEnv; cleanup?: () => void }
 }
 
 export class SrtProvider extends SandboxProvider {
@@ -31,6 +36,10 @@ export class SrtProvider extends SandboxProvider {
   }
 
   wrap(shell: string, command: string, options: SandboxOptions) {
+    return this.wrapCommand([shell, "-c", command], options)
+  }
+
+  wrapCommand(command: string[], options: SandboxOptions) {
     const id = Math.random().toString(36).substring(2, 10)
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-srt-"))
     const settingsFile = path.join(tmpDir, `srt-settings-${id}.json`)
@@ -66,6 +75,25 @@ export class SrtProvider extends SandboxProvider {
       }
     }
 
+    // Expose common toolchain dirs so interpreters/runners operate correctly
+    const home = os.homedir()
+    const paths = [
+      path.join(home, ".bun"),
+      path.join(home, ".npm"),
+      path.join(home, ".nvm"),
+      path.join(home, ".cache"),
+      path.join(home, ".cargo"),
+      path.join(home, ".local", "share", "pnpm"),
+      path.join(home, ".local", "share", "uv"),
+      path.join(home, ".vscode-server"),
+    ]
+
+    // If the executable originates in the blocked homedir, permit its bin folder
+    const exec = command[0] && !command[0].startsWith("-") ? which(command[0]) : null
+    if (exec && exec.startsWith(home)) {
+      paths.push(path.dirname(exec))
+    }
+
     const config = {
       network: {
         allowedDomains: domains.length === 0 ? ["sandbox.local"] : domains,
@@ -73,17 +101,19 @@ export class SrtProvider extends SandboxProvider {
       },
       filesystem: {
         denyRead,
-        allowRead: [options.cwd, "/tmp"],
+        allowRead: [
+          options.cwd,
+          "/tmp",
+          ...paths.filter(p => fs.existsSync(p))
+        ],
         allowWrite: [options.cwd, "/tmp"],
         denyWrite,
       },
     }
 
     fs.writeFileSync(settingsFile, JSON.stringify(config, null, 2))
-    // Save a copy for debugging
-    try { fs.writeFileSync("/tmp/opencode-last-srt-settings.json", JSON.stringify(config, null, 2)) } catch (_) {}
 
-    const args = ["--settings", settingsFile, shell, "-c", command]
+    const args = ["--settings", settingsFile, ...command]
 
     const safeEnv: NodeJS.ProcessEnv = {}
     const whitelist = options.envWhitelist ?? ["PATH", "HOME", "TERM", "LANG", "USER", "SHELL", "TMPDIR", "TMP", "EDITOR"]

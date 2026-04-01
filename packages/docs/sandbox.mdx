@@ -53,6 +53,47 @@ Here is an example `bash_sandbox` configuration block:
 }
 ```
 
+## MCP Extensions
+
+While `bash_sandbox` secures the agent's interactive shell, you can apply the exact same sandboxing architecture to locally spawned Model Context Protocol (MCP) servers using the `mcp_sandbox` block. This encapsulates community-provided or untrusted MCP servers.
+
+### Global vs Local Constraints
+
+You can define a global `mcp_sandbox` explicitly in `opencode.json` that acts as the default foundation for all locally run tools:
+
+```json
+{
+  "mcp_sandbox": {
+    "enabled": true,
+    "provider": "srt",
+    "domains": ["api.anthropic.com"],
+    "deny_binaries": ["docker", "kubectl"]
+  }
+}
+```
+
+However, because specific tools often require disparate permissions, you can embed a `sandbox` block natively within any `local` MCP configuration.
+
+```json
+{
+  "mcp": {
+    "postgres_tool": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-postgres", "..."],
+      "sandbox": {
+        "deny_workspace_patterns": ["**/*.secret"]
+      }
+    }
+  }
+}
+```
+
+> [!NOTE]
+> **Configuration Inheritance (Union Merging):** When a local `sandbox` block overrides the global default, its arrays are natively union merged (`Array.from(new Set([...global, ...local]))`). This means that local rules purely expand the allowance or restriction base set by the global policy without accidently stripping core security mandates!
+
+> [!WARNING]
+> **CWD Sandbox Constraints**: Every local MCP inherently executes mapping to the active `opencode` instance's project root directory. Therefore, the container's allowable file-system is strictly anchored to the workspace root (`Instance.directory`), preserving host-level isolation!
+
 ## Feature Details
 
 ### Environment Variables
