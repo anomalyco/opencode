@@ -878,7 +878,12 @@ render(() => {
     if (next.phase !== "failed") return undefined
     return next.detail
   }
-  const ready = () => boot() && (!wantsLocal() || !!sidecar()) && init().phase !== "failed"
+  const ready = () => {
+    if (!boot()) return false
+    if (!wantsLocal()) return true
+    if (!sidecar()) return false
+    return init().phase === "done"
+  }
   const failed = () => boot() && wantsLocal() && init().phase === "failed"
   const skipHealth = () => wantsLocal()
 
