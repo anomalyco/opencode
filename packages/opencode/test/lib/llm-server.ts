@@ -119,6 +119,225 @@ function bytes(input: Iterable<unknown>) {
   return Stream.fromIterable([...input].map(line)).pipe(Stream.encodeText)
 }
 
+function created(model: string) {
+  return {
+    type: "response.created",
+    sequence_number: 1,
+    response: {
+      id: "resp_test",
+      created_at: Math.floor(Date.now() / 1000),
+      model,
+      service_tier: null,
+    },
+  }
+}
+
+function completed(input: { seq: number; usage?: Usage }) {
+  return {
+    type: "response.completed",
+    sequence_number: input.seq,
+    response: {
+      incomplete_details: null,
+      service_tier: null,
+      usage: {
+        input_tokens: input.usage?.input ?? 0,
+        input_tokens_details: { cached_tokens: null },
+        output_tokens: input.usage?.output ?? 0,
+        output_tokens_details: { reasoning_tokens: null },
+      },
+    },
+  }
+}
+
+function responses(item: Sse, model: string) {
+  let seq = 1
+  let msg: string | undefined
+  let reason: string | undefined
+  let call:
+    | {
+        id: string
+        item: string
+        name: string
+        args: string
+      }
+    | undefined
+  let usage: Usage | undefined
+  const lines: unknown[] = [created(model)]
+
+  const all = [...item.head, ...item.tail]
+  for (const part of all) {
+    if (!part || typeof part !== "object") continue
+    if (!("choices" in part) || !Array.isArray(part.choices)) continue
+    const choice = part.choices[0]
+    if (!choice || typeof choice !== "object") continue
+    const delta = "delta" in choice && choice.delta && typeof choice.delta === "object" ? choice.delta : undefined
+
+    if (delta && "content" in delta && typeof delta.content === "string") {
+      msg ||= "msg_1"
+      if (
+        !lines.some(
+          (item) =>
+            typeof item === "object" &&
+            item &&
+            "type" in item &&
+            item.type === "response.output_item.added" &&
+            "item" in item &&
+            item.item &&
+            typeof item.item === "object" &&
+            "id" in item.item &&
+            item.item.id === msg,
+        )
+      ) {
+        seq += 1
+        lines.push({
+          type: "response.output_item.added",
+          sequence_number: seq,
+          output_index: 0,
+          item: { type: "message", id: msg },
+        })
+      }
+      seq += 1
+      lines.push({
+        type: "response.output_text.delta",
+        sequence_number: seq,
+        item_id: msg,
+        delta: delta.content,
+        logprobs: null,
+      })
+    }
+
+    if (delta && "reasoning_content" in delta && typeof delta.reasoning_content === "string") {
+      reason ||= "rs_1"
+      if (
+        !lines.some(
+          (item) =>
+            typeof item === "object" &&
+            item &&
+            "type" in item &&
+            item.type === "response.output_item.added" &&
+            "item" in item &&
+            item.item &&
+            typeof item.item === "object" &&
+            "id" in item.item &&
+            item.item.id === reason,
+        )
+      ) {
+        seq += 1
+        lines.push({
+          type: "response.output_item.added",
+          sequence_number: seq,
+          output_index: 0,
+          item: { type: "reasoning", id: reason, encrypted_content: null },
+        })
+        seq += 1
+        lines.push({
+          type: "response.reasoning_summary_part.added",
+          sequence_number: seq,
+          item_id: reason,
+          summary_index: 0,
+        })
+      }
+      seq += 1
+      lines.push({
+        type: "response.reasoning_summary_text.delta",
+        sequence_number: seq,
+        item_id: reason,
+        summary_index: 0,
+        delta: delta.reasoning_content,
+      })
+    }
+
+    if (delta && "tool_calls" in delta && Array.isArray(delta.tool_calls)) {
+      for (const tool of delta.tool_calls) {
+        if (!tool || typeof tool !== "object") continue
+        const fn = "function" in tool && tool.function && typeof tool.function === "object" ? tool.function : undefined
+        const id = "id" in tool && typeof tool.id === "string" ? tool.id : call?.id
+        const name = fn && "name" in fn && typeof fn.name === "string" ? fn.name : call?.name
+        const args = fn && "arguments" in fn && typeof fn.arguments === "string" ? fn.arguments : ""
+        if (!id || !name) continue
+        if (!call) {
+          call = { id, item: "fc_1", name, args: "" }
+          seq += 1
+          lines.push({
+            type: "response.output_item.added",
+            sequence_number: seq,
+            output_index: 0,
+            item: {
+              type: "function_call",
+              id: call.item,
+              call_id: id,
+              name,
+              arguments: "",
+              status: "in_progress",
+            },
+          })
+        }
+        call.args += args
+        if (args) {
+          seq += 1
+          lines.push({
+            type: "response.function_call_arguments.delta",
+            sequence_number: seq,
+            output_index: 0,
+            item_id: call.item,
+            delta: args,
+          })
+        }
+      }
+    }
+
+    if ("usage" in part && part.usage && typeof part.usage === "object") {
+      const raw = part.usage as Record<string, unknown>
+      if (typeof raw.prompt_tokens === "number" && typeof raw.completion_tokens === "number") {
+        usage = { input: raw.prompt_tokens, output: raw.completion_tokens }
+      }
+    }
+  }
+
+  if (msg) {
+    seq += 1
+    lines.push({
+      type: "response.output_item.done",
+      sequence_number: seq,
+      output_index: 0,
+      item: { type: "message", id: msg },
+    })
+  }
+  if (reason) {
+    seq += 1
+    lines.push({
+      type: "response.output_item.done",
+      sequence_number: seq,
+      output_index: 0,
+      item: { type: "reasoning", id: reason, encrypted_content: null },
+    })
+  }
+  if (call && !item.hang && !item.error) {
+    seq += 1
+    lines.push({
+      type: "response.output_item.done",
+      sequence_number: seq,
+      output_index: 0,
+      item: {
+        type: "function_call",
+        id: call.item,
+        call_id: call.id,
+        name: call.name,
+        arguments: call.args,
+        status: "completed",
+      },
+    })
+  }
+  if (!item.hang && !item.error) lines.push(completed({ seq: seq + 1, usage }))
+  return { ...item, head: lines, tail: [] } satisfies Sse
+}
+
+function modelFrom(body: unknown) {
+  if (!body || typeof body !== "object") return "test-model"
+  if (!("model" in body) || typeof body.model !== "string") return "test-model"
+  return body.model
+}
+
 function send(item: Sse) {
   const head = bytes(item.head)
   const tail = bytes([...item.tail, ...(item.hang || item.error ? [] : [done])])
@@ -358,11 +577,35 @@ export class TestLLMServer extends ServiceMap.Service<TestLLMServer, TestLLMServ
             },
           ]
           yield* notify()
+          if (req.originalUrl.endsWith("/v1/responses") && next.type === "sse") {
+            return send(responses(next, modelFrom(body)))
+          }
           if (next.type === "sse" && next.reset) {
             yield* reset(next)
             return HttpServerResponse.empty()
           }
           if (next.type === "sse") return send(next)
+          return fail(next)
+        }),
+      )
+
+      yield* router.add(
+        "POST",
+        "/v1/responses",
+        Effect.gen(function* () {
+          const req = yield* HttpServerRequest.HttpServerRequest
+          const next = pull()
+          if (!next) return HttpServerResponse.text("unexpected request", { status: 500 })
+          const body = yield* req.json.pipe(Effect.orElseSucceed(() => ({})))
+          hits = [
+            ...hits,
+            {
+              url: new URL(req.originalUrl, "http://localhost"),
+              body: body && typeof body === "object" ? (body as Record<string, unknown>) : {},
+            },
+          ]
+          yield* notify()
+          if (next.type === "sse") return send(responses(next, modelFrom(body)))
           return fail(next)
         }),
       )
