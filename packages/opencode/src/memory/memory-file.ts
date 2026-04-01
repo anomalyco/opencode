@@ -43,7 +43,8 @@ export namespace MemoryFile {
       "",
       `> Last updated: ${new Date().toISOString()}`,
       "> This file is automatically maintained by opencode memory.",
-      "> Do not edit manually — changes will be overwritten.",
+      "> You can edit it — your edits are preserved on next extraction.",
+      "> Add to .gitignore if you don't want to track it.",
       "",
     ]
 

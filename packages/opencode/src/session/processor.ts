@@ -430,7 +430,9 @@ export namespace SessionProcessor {
           try {
             const cfg = yield* config.get()
             if (cfg.memory?.enabled !== false && cfg.memory?.auto_extract !== false) {
+              yield* Effect.sync(() => MemoryExtractor.flushPending())
               yield* Effect.promise(() => MemoryFile.updateMemoryFile(Instance.directory))
+              yield* Effect.sync(() => MemoryExtractor.reset())
             }
           } catch {
             // Memory file update is best-effort

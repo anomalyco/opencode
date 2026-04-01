@@ -41,6 +41,9 @@ interface ExtractorState {
 
 export namespace MemoryExtractor {
   let state: ExtractorState | null = null
+  let flushTimer: ReturnType<typeof setTimeout> | null = null
+  const pendingSaves: Array<{ type: MemoryType; topic: string; content: string }> = []
+  const FLUSH_DELAY_MS = 3000
 
   export function init(projectPath: string, sessionId?: string) {
     state = {
@@ -51,10 +54,33 @@ export namespace MemoryExtractor {
       sessionId,
       detectedTopics: new Set(),
     }
+    pendingSaves.length = 0
   }
 
   export function reset() {
+    flushPending()
     state = null
+  }
+
+  /** Flush any buffered memory saves (debounced writes) */
+  export function flushPending() {
+    if (flushTimer) {
+      clearTimeout(flushTimer)
+      flushTimer = null
+    }
+    while (pendingSaves.length > 0) {
+      const item = pendingSaves.shift()!
+      commitSave(item)
+    }
+  }
+
+  function scheduleSave(input: { type: MemoryType; topic: string; content: string }) {
+    pendingSaves.push(input)
+    if (!flushTimer) {
+      flushTimer = setTimeout(() => {
+        flushPending()
+      }, FLUSH_DELAY_MS)
+    }
   }
 
   export function onToolCall(tool: string, input: Record<string, unknown>) {
@@ -156,19 +182,20 @@ export namespace MemoryExtractor {
   export function onUserMessage(text: string) {
     if (!state) return
 
-    // Check for preference patterns
+    // Check for preference patterns — require 2+ matches to reduce false positives
+    let matchCount = 0
     for (const pattern of PREFERENCE_PATTERNS) {
-      if (pattern.test(text)) {
-        const topic = `pref:${text.slice(0, 80).replace(/[^a-zA-Z0-9]/g, "_")}`
-        if (!state.detectedTopics.has(topic)) {
-          state.detectedTopics.add(topic)
-          saveMemory({
-            type: "preference",
-            topic,
-            content: `User preference: ${text.slice(0, 300)}`,
-          })
-        }
-        break
+      if (pattern.test(text)) matchCount++
+    }
+    if (matchCount >= 2) {
+      const topic = `pref:${text.slice(0, 80).replace(/[^a-zA-Z0-9]/g, "_")}`
+      if (!state.detectedTopics.has(topic)) {
+        state.detectedTopics.add(topic)
+        saveMemory({
+          type: "preference",
+          topic,
+          content: `User preference: ${text.slice(0, 300)}`,
+        })
       }
     }
 
@@ -190,6 +217,11 @@ export namespace MemoryExtractor {
 
   function saveMemory(input: { type: MemoryType; topic: string; content: string }) {
     if (!state) return
+    scheduleSave(input)
+  }
+
+  function commitSave(input: { type: MemoryType; topic: string; content: string }) {
+    if (!state) return
     try {
       MemoryStore.save({
         projectPath: state.projectPath,
@@ -205,6 +237,15 @@ export namespace MemoryExtractor {
   }
 
   function normalizeCommand(cmd: string): string {
-    return cmd.trim().split(/\s+/).slice(0, 5).join(" ")
+    // Normalize but keep the first positional arg (package name, file, etc.)
+    const tokens = cmd.trim().split(/\s+/)
+    // Find the end of flags (starts with -) to preserve the first real argument
+    let lastFlagIdx = 0
+    for (let i = 0; i < Math.min(tokens.length, 8); i++) {
+      if (tokens[i].startsWith("-")) lastFlagIdx = i
+      else if (lastFlagIdx > 0) break
+    }
+    // Keep command + flags + first non-flag argument
+    return tokens.slice(0, Math.min(lastFlagIdx + 2, tokens.length, 6)).join(" ")
   }
 }

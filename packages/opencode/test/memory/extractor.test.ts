@@ -23,6 +23,7 @@ describe("MemoryExtractor", () => {
     MemoryExtractor.onToolCall("bash", cmd)
     MemoryExtractor.onToolCall("bash", cmd)
     MemoryExtractor.onToolCall("bash", cmd)
+    MemoryExtractor.flushPending()
 
     const memories = MemoryStore.search("Frequently used command")
     expect(memories.length).toBe(1)
@@ -33,20 +34,36 @@ describe("MemoryExtractor", () => {
     const cmd = { command: "bun run build" }
     MemoryExtractor.onToolCall("bash", cmd)
     MemoryExtractor.onToolCall("bash", cmd)
+    MemoryExtractor.flushPending()
 
     const memories = MemoryStore.search("Frequently used command")
     expect(memories.length).toBe(0)
   })
 
-  test("detects preference pattern in user messages", () => {
+  test("detects preference pattern in user messages (2+ patterns required)", () => {
+    // "No, don't use that. I prefer tabs instead of spaces." matches:
+    // /\bno\b.*\buse\b/i, /\bdon'?t\b/i, /\binstead\b/i, /\bprefer\b/i
     MemoryExtractor.onUserMessage("No, don't use that. I prefer tabs instead of spaces.")
+    MemoryExtractor.flushPending()
+
     const memories = MemoryStore.list(projectPath)
     expect(memories.length).toBe(1)
     expect(memories[0].type).toBe("preference")
   })
 
+  test("does not false positive preference with only 1 pattern match", () => {
+    // "don't worry about it" only matches /\bdon'?t\b/i — not enough
+    MemoryExtractor.onUserMessage("don't worry about it")
+    MemoryExtractor.flushPending()
+
+    const memories = MemoryStore.list(projectPath)
+    expect(memories.length).toBe(0)
+  })
+
   test("detects config-pattern when editing config files", () => {
     MemoryExtractor.onToolCall("write", { file: "/project/package.json", content: "{}" })
+    MemoryExtractor.flushPending()
+
     const memories = MemoryStore.list(projectPath)
     expect(memories.length).toBe(1)
     expect(memories[0].type).toBe("config-pattern")
@@ -57,6 +74,7 @@ describe("MemoryExtractor", () => {
     MemoryExtractor.onToolCall("edit", { file: "/project/b.ts", oldText: "", newText: "" })
     MemoryExtractor.onToolCall("edit", { file: "/project/c.ts", oldText: "", newText: "" })
     MemoryExtractor.onUserMessage("continue")
+    MemoryExtractor.flushPending()
 
     const memories = MemoryStore.list(projectPath)
     expect(memories.some(m => m.type === "decision")).toBe(true)
@@ -66,6 +84,7 @@ describe("MemoryExtractor", () => {
     MemoryExtractor.onToolCall("bash", { command: "npm test" })
     MemoryExtractor.onToolResult("bash", { command: "npm test" }, "Error: test failed", 1)
     MemoryExtractor.onToolCall("edit", { file: "/project/test.ts", oldText: "bad", newText: "good" })
+    MemoryExtractor.flushPending()
 
     const memories = MemoryStore.list(projectPath)
     expect(memories.some(m => m.type === "error-solution")).toBe(true)
@@ -75,9 +94,37 @@ describe("MemoryExtractor", () => {
     MemoryExtractor.onToolCall("bash", { command: "ls" })
     MemoryExtractor.onToolResult("bash", { command: "ls" }, "file1\nfile2", 0)
     MemoryExtractor.onUserMessage("show me the files")
+    MemoryExtractor.flushPending()
 
     const memories = MemoryStore.list(projectPath)
     // Should only have no memories since: bash used once, no preferences, no config edits
     expect(memories.length).toBe(0)
+  })
+
+  test("debounced saves are flushed after timeout", async () => {
+    MemoryExtractor.onToolCall("bash", { command: "npm run build" })
+    MemoryExtractor.onToolCall("bash", { command: "npm run build" })
+    MemoryExtractor.onToolCall("bash", { command: "npm run build" })
+    // Don't flush yet — saves should be buffered
+
+    let memories = MemoryStore.search("Frequently used command")
+    expect(memories.length).toBe(0) // Not flushed yet
+
+    // Wait for flush timer (FLUSH_DELAY_MS = 3000, but we'll call flushPending)
+    await new Promise(r => setTimeout(r, 100))
+    MemoryExtractor.flushPending()
+
+    memories = MemoryStore.search("Frequently used command")
+    expect(memories.length).toBe(1)
+  })
+
+  test("reset flushes pending saves", () => {
+    MemoryExtractor.onToolCall("bash", { command: "npm run build" })
+    MemoryExtractor.onToolCall("bash", { command: "npm run build" })
+    MemoryExtractor.onToolCall("bash", { command: "npm run build" })
+
+    MemoryExtractor.reset() // Should flush pending
+    const memories = MemoryStore.search("Frequently used command")
+    expect(memories.length).toBe(1)
   })
 })

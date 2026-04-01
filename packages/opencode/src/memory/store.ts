@@ -15,15 +15,48 @@ export namespace MemoryStore {
   }) {
     return Database.transaction(() => {
       Database.use((db) => {
-        db.insert(MemoryTable).values({
-          id: crypto.randomUUID(),
-          project_path: input.projectPath,
-          type: input.type,
-          topic: input.topic,
-          content: input.content,
-          session_id: input.sessionId,
-          access_count: 0,
-        }).run()
+        // UPSERT: merge with existing memory on same topic+project to avoid duplicates
+        const existing = db
+          .select()
+          .from(MemoryTable)
+          .where(
+            and(
+              eq(MemoryTable.topic, input.topic),
+              eq(MemoryTable.project_path, input.projectPath),
+            ),
+          )
+          .limit(1)
+          .get()
+
+        if (existing) {
+          // Merge content: append new info if different
+          const mergedContent =
+            existing.content.includes(input.content)
+              ? existing.content
+              : `${existing.content}\n${input.content}`
+          db.update(MemoryTable)
+            .set({
+              content: mergedContent.slice(0, 500),
+              access_count: sql`${MemoryTable.access_count} + 1`,
+              time_updated: Date.now(),
+            })
+            .where(eq(MemoryTable.id, existing.id))
+            .run()
+          log.debug("merged memory", { topic: input.topic, id: existing.id })
+        } else {
+          db.insert(MemoryTable)
+            .values({
+              id: crypto.randomUUID(),
+              project_path: input.projectPath,
+              type: input.type,
+              topic: input.topic,
+              content: input.content,
+              session_id: input.sessionId,
+              access_count: 0,
+            })
+            .run()
+          log.debug("saved memory", { type: input.type, topic: input.topic })
+        }
       })
     })
   }

@@ -44,7 +44,7 @@ describe("MemoryStore", () => {
     expect(results[0].topic).toBe("t1")
   })
 
-  test("getByTopic returns latest memory for topic", async () => {
+  test("getByTopic returns latest memory for topic (UPSERT merges)", async () => {
     MemoryStore.save({ projectPath, type: "general", topic: "shared", content: "first" })
     // Ensure different timestamp
     await new Promise(r => setTimeout(r, 10))
@@ -52,7 +52,10 @@ describe("MemoryStore", () => {
 
     const result = MemoryStore.getByTopic("shared", projectPath)
     expect(result).toBeDefined()
-    expect(result!.content).toBe("second")
+    // UPSERT merges content when topic+project match
+    expect(result!.content).toContain("first")
+    expect(result!.content).toContain("second")
+    expect(result!.access_count).toBe(1) // UPSERT increments on merge
   })
 
   test("incrementAccess updates count", () => {
