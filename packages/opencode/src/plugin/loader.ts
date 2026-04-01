@@ -23,6 +23,12 @@ export namespace PluginLoader {
     entry: string
     pkg?: PluginPackage
   }
+  export type Missing = Plan & {
+    source: PluginSource
+    target: string
+    pkg?: PluginPackage
+    message: string
+  }
   export type Loaded = Resolved & {
     mod: Record<string, unknown>
   }
@@ -30,7 +36,7 @@ export namespace PluginLoader {
   type Candidate = { origin: Config.PluginOrigin; plan: Plan }
   type Report = {
     start?: (candidate: Candidate, retry: boolean) => void
-    missing?: (candidate: Candidate, retry: boolean, message: string) => void
+    missing?: (candidate: Candidate, retry: boolean, message: string, resolved: Missing) => void
     error?: (
       candidate: Candidate,
       retry: boolean,
@@ -50,7 +56,7 @@ export namespace PluginLoader {
     kind: PluginKind,
   ): Promise<
     | { ok: true; value: Resolved }
-    | { ok: false; stage: "missing"; message: string }
+    | { ok: false; stage: "missing"; value: Missing }
     | { ok: false; stage: "install" | "entry" | "compatibility"; error: unknown }
   > {
     let target = ""
@@ -68,7 +74,17 @@ export namespace PluginLoader {
       return { ok: false, stage: "entry", error }
     }
     if (!base.entry)
-      return { ok: false, stage: "missing", message: `Plugin ${plan.spec} does not expose a ${kind} entrypoint` }
+      return {
+        ok: false,
+        stage: "missing",
+        value: {
+          ...plan,
+          source: base.source,
+          target: base.target,
+          pkg: base.pkg,
+          message: `Plugin ${plan.spec} does not expose a ${kind} entrypoint`,
+        },
+      }
 
     if (base.source === "npm") {
       try {
@@ -96,6 +112,7 @@ export namespace PluginLoader {
     kind: PluginKind,
     retry: boolean,
     finish: ((load: Loaded, origin: Config.PluginOrigin, retry: boolean) => Promise<R | undefined>) | undefined,
+    missing: ((value: Missing, origin: Config.PluginOrigin, retry: boolean) => Promise<R | undefined>) | undefined,
     report: Report | undefined,
   ): Promise<R | undefined> {
     const plan = candidate.plan
@@ -104,7 +121,11 @@ export namespace PluginLoader {
     const resolved = await resolve(plan, kind)
     if (!resolved.ok) {
       if (resolved.stage === "missing") {
-        report?.missing?.(candidate, retry, resolved.message)
+        if (missing) {
+          const value = await missing(resolved.value, candidate.origin, retry)
+          if (value !== undefined) return value
+        }
+        report?.missing?.(candidate, retry, resolved.value.message, resolved.value)
         return
       }
       report?.error?.(candidate, retry, resolved.stage, resolved.error)
@@ -124,13 +145,16 @@ export namespace PluginLoader {
     kind: PluginKind
     wait?: () => Promise<void>
     finish?: (load: Loaded, origin: Config.PluginOrigin, retry: boolean) => Promise<R | undefined>
+    missing?: (value: Missing, origin: Config.PluginOrigin, retry: boolean) => Promise<R | undefined>
     report?: Report
   }
 
   export async function loadExternal<R = Loaded>(input: Input<R>): Promise<R[]> {
     const candidates = input.items.map((origin) => ({ origin, plan: plan(origin.spec) }))
     const list: Array<Promise<R | undefined>> = []
-    for (const candidate of candidates) list.push(attempt(candidate, input.kind, false, input.finish, input.report))
+    for (const candidate of candidates) {
+      list.push(attempt(candidate, input.kind, false, input.finish, input.missing, input.report))
+    }
     const out = await Promise.all(list)
     if (input.wait) {
       let deps: Promise<void> | undefined
@@ -140,7 +164,7 @@ export namespace PluginLoader {
         if (!candidate || pluginSource(candidate.plan.spec) !== "file") continue
         deps ??= input.wait()
         await deps
-        out[i] = await attempt(candidate, input.kind, true, input.finish, input.report)
+        out[i] = await attempt(candidate, input.kind, true, input.finish, input.missing, input.report)
       }
     }
     const ready: R[] = []

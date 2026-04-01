@@ -50,6 +50,10 @@ function resolveExportPath(raw: string, dir: string) {
   return path.resolve(dir, raw)
 }
 
+function isAbsolutePath(raw: string) {
+  return path.isAbsolute(raw) || /^[A-Za-z]:[\\/]/.test(raw)
+}
+
 function extractExportValue(value: unknown): string | undefined {
   if (typeof value === "string") return value
   if (!isRecord(value)) return undefined
@@ -68,14 +72,18 @@ function packageMain(pkg: PluginPackage) {
   return next
 }
 
-function resolvePackagePath(spec: string, raw: string, kind: PluginKind, pkg: PluginPackage) {
+function resolvePackageFile(spec: string, raw: string, kind: string, pkg: PluginPackage) {
   const resolved = resolveExportPath(raw, pkg.dir)
   const root = Filesystem.resolve(pkg.dir)
   const next = Filesystem.resolve(resolved)
   if (!Filesystem.contains(root, next)) {
     throw new Error(`Plugin ${spec} resolved ${kind} entry outside plugin directory`)
   }
-  return pathToFileURL(next).href
+  return next
+}
+
+function resolvePackagePath(spec: string, raw: string, kind: PluginKind, pkg: PluginPackage) {
+  return pathToFileURL(resolvePackageFile(spec, raw, kind, pkg)).href
 }
 
 function resolvePackageEntrypoint(spec: string, kind: PluginKind, pkg: PluginPackage) {
@@ -209,6 +217,32 @@ export async function createPluginEntry(spec: string, target: string, kind: Plug
     pkg,
     entry,
   }
+}
+
+export function readPackageThemes(spec: string, pkg: PluginPackage) {
+  const field = pkg.json["oc-themes"]
+  if (field === undefined) return []
+  if (!Array.isArray(field)) {
+    throw new TypeError(`Plugin ${spec} has invalid oc-themes field`)
+  }
+
+  const list = field.map((item) => {
+    if (typeof item !== "string") {
+      throw new TypeError(`Plugin ${spec} has invalid oc-themes entry`)
+    }
+
+    const raw = item.trim()
+    if (!raw) {
+      throw new TypeError(`Plugin ${spec} has empty oc-themes entry`)
+    }
+    if (raw.startsWith("file://") || isAbsolutePath(raw)) {
+      throw new TypeError(`Plugin ${spec} oc-themes entry must be relative: ${item}`)
+    }
+
+    return resolvePackageFile(spec, raw, "oc-themes", pkg)
+  })
+
+  return Array.from(new Set(list))
 }
 
 export function readPluginId(id: unknown, spec: string) {
