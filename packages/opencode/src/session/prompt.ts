@@ -16,6 +16,8 @@ import { Bus } from "../bus"
 import { ProviderTransform } from "../provider/transform"
 import { SystemPrompt } from "./system"
 import { InstructionPrompt } from "./instruction"
+import { MemoryInjector } from "../memory/injector"
+import { Config } from "../config/config"
 import { Plugin } from "../plugin"
 import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
@@ -1504,15 +1506,21 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
                 yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
-                const [skills, env, instructions, modelMsgs] = yield* Effect.promise(() =>
+                const [skills, env, instructions, modelMsgs, memory] = yield* Effect.promise(() =>
                   Promise.all([
                     SystemPrompt.skills(agent),
                     SystemPrompt.environment(model),
                     InstructionPrompt.system(),
                     MessageV2.toModelMessages(msgs, model),
+                    (async () => {
+                      const cfg = await Config.get()
+                      if (cfg.memory?.enabled === false) return [] as string[]
+                      const maxLines = cfg.memory?.max_memory_lines ?? 200
+                      return MemoryInjector.inject(Instance.directory, maxLines)
+                    })(),
                   ]),
                 )
-                const system = [...env, ...(skills ? [skills] : []), ...instructions]
+                const system = [...env, ...(skills ? [skills] : []), ...instructions, ...memory]
                 const format = lastUser.format ?? { type: "text" as const }
                 if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
                 const result = yield* handle.process({

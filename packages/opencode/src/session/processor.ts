@@ -3,6 +3,9 @@ import * as Stream from "effect/Stream"
 import { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
 import { Config } from "@/config/config"
+import { MemoryExtractor } from "@/memory/extractor"
+import { MemoryFile } from "@/memory/memory-file"
+import { Instance } from "@/project/instance"
 import { Permission } from "@/permission"
 import { Plugin } from "@/plugin"
 import { Snapshot } from "@/snapshot"
@@ -180,6 +183,9 @@ export namespace SessionProcessor {
                 metadata: value.providerMetadata,
               } satisfies MessageV2.ToolPart)
 
+              // Feed to memory extractor (fire-and-forget)
+              try { MemoryExtractor.onToolCall(value.toolName, value.input as Record<string, unknown>) } catch (err) { log.debug("memory extraction skipped (onToolCall)", { error: String(err) }) }
+
               const parts = yield* Effect.promise(() => MessageV2.parts(ctx.assistantMessage.id))
               const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
 
@@ -223,6 +229,18 @@ export namespace SessionProcessor {
                   attachments: value.output.attachments,
                 },
               })
+
+              // Feed to memory extractor (fire-and-forget)
+              try {
+                const exitCode = (value.output.metadata as Record<string, unknown>)?.exitCode as number | undefined
+                MemoryExtractor.onToolResult(
+                  match.tool,
+                  (value.input ?? match.state.input) as Record<string, unknown>,
+                  value.output.output,
+                  exitCode,
+                )
+              } catch (err) { log.debug("memory extraction skipped (onToolResult)", { error: String(err) }) }
+
               delete ctx.toolcalls[value.toolCallId]
               return
             }
@@ -407,6 +425,19 @@ export namespace SessionProcessor {
           }
           ctx.assistantMessage.time.completed = Date.now()
           yield* session.updateMessage(ctx.assistantMessage)
+
+          // Update MEMORY.md from extracted memories (best-effort)
+          try {
+            const cfg = yield* config.get()
+            if (cfg.memory?.enabled !== false && cfg.memory?.auto_extract !== false) {
+              yield* Effect.sync(() => MemoryExtractor.flushPending())
+              yield* Effect.promise(() => MemoryFile.updateMemoryFile(Instance.directory))
+              yield* Effect.sync(() => MemoryExtractor.reset())
+            }
+          } catch (err) {
+            // Memory file update is best-effort
+            log.debug("memory file update skipped", { error: String(err) })
+          }
         })
 
         const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {
@@ -442,6 +473,17 @@ export namespace SessionProcessor {
           log.info("process")
           ctx.needsCompaction = false
           ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
+
+          // Initialize memory extractor
+          try {
+            const cfg = yield* config.get()
+            if (cfg.memory?.enabled !== false && cfg.memory?.auto_extract !== false) {
+              MemoryExtractor.init(Instance.directory, ctx.sessionID)
+            }
+          } catch (err) {
+            // Memory extraction is best-effort
+            log.debug("memory extractor init skipped", { error: String(err) })
+          }
 
           return yield* Effect.gen(function* () {
             yield* Effect.gen(function* () {

@@ -1076,6 +1076,14 @@ export namespace Config {
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
         })
         .optional(),
+      memory: z
+        .object({
+          enabled: z.boolean().default(true).describe("Enable auto-memory for cross-session learning"),
+          auto_extract: z.boolean().default(true).describe("Automatically extract memories from session events"),
+          max_memory_lines: z.number().default(200).describe("Maximum lines of memory to inject into system prompt"),
+        })
+        .optional()
+        .describe("Auto-memory configuration for persistent cross-session learning"),
     })
     .strict()
     .meta({
