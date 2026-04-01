@@ -6,7 +6,7 @@ import { it } from "../lib/effect"
 describe("Runner", () => {
   // --- ensureRunning semantics ---
 
-  it.effect(
+  it.live(
     "ensureRunning starts work and returns result",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -18,7 +18,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "ensureRunning propagates work failures",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -29,7 +29,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "concurrent callers share the same run",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -51,7 +51,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "concurrent callers all receive same error",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -71,7 +71,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "ensureRunning can be called again after previous run completes",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -81,7 +81,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "second ensureRunning ignores new work if already running",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -110,7 +110,7 @@ describe("Runner", () => {
 
   // --- cancel semantics ---
 
-  it.effect(
+  it.live(
     "cancel interrupts running work",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -128,7 +128,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "cancel on idle is a no-op",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -138,7 +138,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "cancel with onInterrupt resolves callers gracefully",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -154,7 +154,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "cancel with queued callers resolves all",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -175,7 +175,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "work can be started after cancel",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -245,7 +245,7 @@ describe("Runner", () => {
 
   // --- shell semantics ---
 
-  it.effect(
+  it.live(
     "shell runs exclusively",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -256,7 +256,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "shell rejects when run is active",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -272,7 +272,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "shell rejects when another shell is running",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -292,7 +292,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "shell rejects via busy callback and cancel still stops the first shell",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -323,7 +323,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "cancel interrupts shell that ignores abort signal",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -349,7 +349,7 @@ describe("Runner", () => {
 
   // --- shell→run handoff ---
 
-  it.effect(
+  it.live(
     "ensureRunning queues behind shell then runs after",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -376,7 +376,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "multiple ensureRunning callers share the queued run behind shell",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -407,7 +407,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "cancel during shell_then_run cancels both",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -441,7 +441,7 @@ describe("Runner", () => {
 
   // --- lifecycle callbacks ---
 
-  it.effect(
+  it.live(
     "onIdle fires when returning to idle from running",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -454,7 +454,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "onIdle fires on cancel",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -470,7 +470,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "onBusy fires when shell starts",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -485,7 +485,7 @@ describe("Runner", () => {
 
   // --- busy flag ---
 
-  it.effect(
+  it.live(
     "busy is true during run",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
@@ -502,7 +502,7 @@ describe("Runner", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "busy is true during shell",
     Effect.gen(function* () {
       const s = yield* Scope.Scope
