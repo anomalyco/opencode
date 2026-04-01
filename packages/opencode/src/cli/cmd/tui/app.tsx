@@ -128,7 +128,6 @@ function rendererConfig(_config: TuiConfig.Info): CliRendererConfig {
   const mouseEnabled = !Flag.OPENCODE_DISABLE_MOUSE && (_config.mouse ?? true)
 
   return {
-    externalOutputMode: "passthrough",
     targetFps: 60,
     gatherStats: false,
     exitOnCtrlC: false,
