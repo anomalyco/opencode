@@ -174,7 +174,8 @@ export namespace Snapshot {
             }
 
             const tracked = diff.text.split("\0").filter(Boolean)
-            const all = Array.from(new Set([...tracked, ...other.text.split("\0").filter(Boolean)]))
+            const untracked = other.text.split("\0").filter(Boolean)
+            const all = Array.from(new Set([...tracked, ...untracked]))
             if (!all.length) return
 
             const large = (yield* Effect.all(

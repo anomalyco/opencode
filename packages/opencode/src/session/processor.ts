@@ -104,6 +104,10 @@ export namespace SessionProcessor {
       const status = yield* SessionStatus.Service
 
       const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
+        // Pre-capture snapshot before the LLM stream starts. The AI SDK
+        // may execute tools internally before emitting start-step events,
+        // so capturing inside the event handler can be too late.
+        const initialSnapshot = yield* snapshot.track()
         const ctx: ProcessorContext = {
           assistantMessage: input.assistantMessage,
           sessionID: input.sessionID,
@@ -111,7 +115,7 @@ export namespace SessionProcessor {
           toolcalls: {},
           callIdToTraceID: {},
           shouldBreak: false,
-          snapshot: undefined,
+          snapshot: initialSnapshot,
           blocked: false,
           needsCompaction: false,
           currentText: undefined,
@@ -315,7 +319,7 @@ export namespace SessionProcessor {
               throw value.error
 
             case "start-step":
-              ctx.snapshot = yield* snapshot.track()
+              if (!ctx.snapshot) ctx.snapshot = yield* snapshot.track()
               yield* session.updatePart({
                 id: PartID.ascending(),
                 messageID: ctx.assistantMessage.id,
