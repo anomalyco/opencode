@@ -88,7 +88,7 @@ export namespace MemoryExtractor {
     }
   }
 
-  function scheduleSave(input: { type: MemoryType; topic: string; content: string }) {
+  function scheduleSave(input: { type: MemoryType; topic: string; content: string; sessionId?: string }) {
     pendingSaves.push(input)
     if (!flushTimer) {
       flushTimer = setTimeout(() => {

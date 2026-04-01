@@ -11,12 +11,12 @@ describe("MemoryStore", () => {
 
   beforeEach(() => {
     const db = Database.Client()
-    try { db.run(`DELETE FROM memory`).run() } catch {}
+    try { db.run(`DELETE FROM memory`) } catch {}
   })
 
   afterEach(() => {
     const db = Database.Client()
-    try { db.run(`DELETE FROM memory`).run() } catch {}
+    try { db.run(`DELETE FROM memory`) } catch {}
   })
 
   test("save and retrieve a memory", () => {
@@ -113,7 +113,7 @@ describe("MemoryFile", () => {
   test("updateMemoryFile creates file from store", async () => {
     // We need to insert into the DB first
     const db = Database.Client()
-    try { db.run(`DELETE FROM memory`).run() } catch {}
+    try { db.run(`DELETE FROM memory`) } catch {}
     MemoryStore.save({ projectPath: tmpDir, type: "preference", topic: "t1", content: "use spaces" })
 
     await MemoryFile.updateMemoryFile(tmpDir)
@@ -122,6 +122,6 @@ describe("MemoryFile", () => {
     expect(content).toContain("Preferences")
 
     // Cleanup
-    try { db.run(`DELETE FROM memory`).run() } catch {}
+    try { db.run(`DELETE FROM memory`) } catch {}
   })
 })

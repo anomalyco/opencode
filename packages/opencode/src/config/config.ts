@@ -1082,7 +1082,6 @@ export namespace Config {
           auto_extract: z.boolean().default(true).describe("Automatically extract memories from session events"),
           max_memory_lines: z.number().default(200).describe("Maximum lines of memory to inject into system prompt"),
         })
-        .default({})
         .optional()
         .describe("Auto-memory configuration for persistent cross-session learning"),
     })

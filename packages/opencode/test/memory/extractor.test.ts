@@ -8,13 +8,13 @@ describe("MemoryExtractor", () => {
 
   beforeEach(() => {
     const db = Database.Client()
-    try { db.run(`DELETE FROM memory`).run() } catch {}
+    try { db.run(`DELETE FROM memory`) } catch {}
     MemoryExtractor.init(projectPath, "test-session")
   })
 
   afterEach(() => {
     const db = Database.Client()
-    try { db.run(`DELETE FROM memory`).run() } catch {}
+    try { db.run(`DELETE FROM memory`) } catch {}
     MemoryExtractor.reset()
   })
 
