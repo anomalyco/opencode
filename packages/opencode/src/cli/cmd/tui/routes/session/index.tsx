@@ -77,6 +77,7 @@ import { Global } from "@/global"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
+import { DialogCopyMessages } from "../../ui/dialog-copy-messages"
 import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
@@ -841,12 +842,57 @@ export function Session() {
               thinking: showThinking(),
               toolDetails: showDetails(),
               assistantMetadata: showAssistantMetadata(),
+              includeMetadata: true,
             },
           )
           await Clipboard.copy(transcript)
           toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
         } catch (error) {
           toast.show({ message: "Failed to copy session transcript", variant: "error" })
+        }
+        dialog.clear()
+      },
+    },
+    {
+      title: "Copy selective session messages with options",
+      value: "session.copyWithOptions",
+      category: "Session",
+      slash: {
+        name: "copy-with-options",
+      },
+      onSelect: async (dialog) => {
+        try {
+          const sessionData = session()
+          if (!sessionData) return
+          const sessionMessages = messages()
+
+          const allMessages = sessionMessages.map((msg) => ({
+            info: msg as AssistantMessage | UserMessage,
+            parts: sync.data.part[msg.id] ?? [],
+          }))
+
+          if (allMessages.length === 0) {
+            toast.show({ message: "No messages to copy", variant: "info" })
+            dialog.clear()
+            return
+          }
+
+          const selectedMessages = await DialogCopyMessages.show(dialog, allMessages)
+          if (!selectedMessages || selectedMessages.length === 0) {
+            dialog.clear()
+            return
+          }
+
+          const transcript = formatTranscript(sessionData, selectedMessages, {
+            thinking: true,
+            toolDetails: true,
+            assistantMetadata: true,
+            includeMetadata: false,
+          })
+          await Clipboard.copy(transcript)
+          toast.show({ message: `${selectedMessages.length} message(s) copied to clipboard!`, variant: "success" })
+        } catch (error) {
+          toast.show({ message: "Failed to copy messages", variant: "error" })
         }
         dialog.clear()
       },
@@ -885,6 +931,7 @@ export function Session() {
               thinking: options.thinking,
               toolDetails: options.toolDetails,
               assistantMetadata: options.assistantMetadata,
+              includeMetadata: true,
             },
           )
 
