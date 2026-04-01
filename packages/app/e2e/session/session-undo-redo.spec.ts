@@ -58,6 +58,7 @@ test("slash undo sets revert and restores prior prompt", async ({ page, withBack
     const sdk = project.sdk
 
     await withSession(sdk, `e2e undo ${Date.now()}`, async (session) => {
+      project.trackSession(session.id)
       await project.gotoSession(session.id)
 
       const seeded = await seedConversation({ page, sdk, sessionID: session.id, token })
@@ -90,6 +91,7 @@ test("slash redo clears revert and restores latest state", async ({ page, withBa
     const sdk = project.sdk
 
     await withSession(sdk, `e2e redo ${Date.now()}`, async (session) => {
+      project.trackSession(session.id)
       await project.gotoSession(session.id)
 
       const seeded = await seedConversation({ page, sdk, sessionID: session.id, token })
@@ -138,6 +140,7 @@ test("slash undo/redo traverses multi-step revert stack", async ({ page, withBac
     const sdk = project.sdk
 
     await withSession(sdk, `e2e undo redo stack ${Date.now()}`, async (session) => {
+      project.trackSession(session.id)
       await project.gotoSession(session.id)
 
       const first = await seedConversation({

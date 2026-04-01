@@ -38,6 +38,7 @@ test("session can be renamed via header menu", async ({ page, withBackendProject
 
   await withBackendProject(async (project) => {
     await withSession(project.sdk, originalTitle, async (session) => {
+      project.trackSession(session.id)
       await seedMessage(project.sdk, session.id)
       await project.gotoSession(session.id)
       await expect(page.getByRole("heading", { level: 1 }).first()).toHaveText(originalTitle)
@@ -73,6 +74,7 @@ test("session can be archived via header menu", async ({ page, withBackendProjec
 
   await withBackendProject(async (project) => {
     await withSession(project.sdk, title, async (session) => {
+      project.trackSession(session.id)
       await seedMessage(project.sdk, session.id)
       await project.gotoSession(session.id)
       const menu = await openSessionMoreMenu(page, session.id)
@@ -100,6 +102,7 @@ test("session can be deleted via header menu", async ({ page, withBackendProject
 
   await withBackendProject(async (project) => {
     await withSession(project.sdk, title, async (session) => {
+      project.trackSession(session.id)
       await seedMessage(project.sdk, session.id)
       await project.gotoSession(session.id)
       const menu = await openSessionMoreMenu(page, session.id)
@@ -133,6 +136,7 @@ test("session can be shared and unshared via header button", async ({ page, with
 
   await withBackendProject(async (project) => {
     await withSession(project.sdk, title, async (session) => {
+      project.trackSession(session.id)
       await seedMessage(project.sdk, session.id)
       await project.gotoSession(session.id)
 
