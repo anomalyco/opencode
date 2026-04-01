@@ -1,6 +1,6 @@
 import { createMemo, createSignal, onMount, Show } from "solid-js"
 import { useSync } from "@tui/context/sync"
-import { map, pipe, sortBy } from "remeda"
+import { map, pipe } from "remeda"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
 import { useSDK } from "../context/sdk"
@@ -13,37 +13,51 @@ import { DialogModel } from "./dialog-model"
 import { useKeyboard } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { useToast } from "../ui/toast"
-
-const PROVIDER_PRIORITY: Record<string, number> = {
-  opencode: 0,
-  "opencode-go": 1,
-  openai: 2,
-  "github-copilot": 3,
-  anthropic: 4,
-  google: 5,
-}
+import { providerList } from "./provider-list"
 
 export function createDialogProviderOptions() {
   const sync = useSync()
   const dialog = useDialog()
   const sdk = useSDK()
   const toast = useToast()
+  const { theme } = useTheme()
   const options = createMemo(() => {
     return pipe(
-      sync.data.provider_next.all,
-      sortBy((x) => PROVIDER_PRIORITY[x.id] ?? 99),
+      providerList(sync.data.provider_next.all),
       map((provider) => ({
-        title: provider.name,
-        value: provider.id,
-        description: {
-          opencode: "(Recommended)",
-          anthropic: "(API key)",
-          openai: "(ChatGPT Plus/Pro or API key)",
-          "opencode-go": "Low cost subscription for everyone",
-        }[provider.id],
-        category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
+        ...provider,
         async onSelect() {
-          const methods = sync.data.provider_auth[provider.id] ?? [
+          if (provider.value === "other") {
+            const value = await new Promise<string | null>((resolve) => {
+              dialog.replace(
+                () => (
+                  <DialogPrompt
+                    title="Other"
+                    placeholder="Provider id"
+                    onConfirm={(value) => resolve(value)}
+                    description={() => (
+                      <text fg={theme.textMuted}>
+                        This only stores a credential. Configure the provider in opencode.json to use it.
+                      </text>
+                    )}
+                  />
+                ),
+                () => resolve(null),
+              )
+            })
+            if (!value) return
+            if (!value.match(/^[0-9a-z-]+$/)) {
+              toast.show({
+                variant: "error",
+                message: "Provider ids must use lowercase letters, numbers, and hyphens only",
+              })
+              return
+            }
+            return dialog.replace(() => (
+              <ApiMethod providerID={value.replace(/^@ai-sdk\//, "")} title="Other" custom={true} />
+            ))
+          }
+          const methods = sync.data.provider_auth[provider.value] ?? [
             {
               type: "api",
               label: "API key",
@@ -81,7 +95,7 @@ export function createDialogProviderOptions() {
             }
 
             const result = await sdk.client.provider.oauth.authorize({
-              providerID: provider.id,
+              providerID: provider.value,
               method: index,
               inputs,
             })
@@ -95,17 +109,27 @@ export function createDialogProviderOptions() {
             }
             if (result.data?.method === "code") {
               dialog.replace(() => (
-                <CodeMethod providerID={provider.id} title={method.label} index={index} authorization={result.data!} />
+                <CodeMethod
+                  providerID={provider.value}
+                  title={method.label}
+                  index={index}
+                  authorization={result.data!}
+                />
               ))
             }
             if (result.data?.method === "auto") {
               dialog.replace(() => (
-                <AutoMethod providerID={provider.id} title={method.label} index={index} authorization={result.data!} />
+                <AutoMethod
+                  providerID={provider.value}
+                  title={method.label}
+                  index={index}
+                  authorization={result.data!}
+                />
               ))
             }
           }
           if (method.type === "api") {
-            return dialog.replace(() => <ApiMethod providerID={provider.id} title={method.label} />)
+            return dialog.replace(() => <ApiMethod providerID={provider.value} title={method.label} />)
           }
         },
       })),
@@ -224,11 +248,13 @@ function CodeMethod(props: CodeMethodProps) {
 interface ApiMethodProps {
   providerID: string
   title: string
+  custom?: boolean
 }
 function ApiMethod(props: ApiMethodProps) {
   const dialog = useDialog()
   const sdk = useSDK()
   const sync = useSync()
+  const toast = useToast()
   const { theme } = useTheme()
 
   return (
@@ -272,6 +298,14 @@ function ApiMethod(props: ApiMethodProps) {
         })
         await sdk.client.instance.dispose()
         await sync.bootstrap()
+        if (props.custom && !sync.data.provider.some((item) => item.id === props.providerID)) {
+          toast.show({
+            variant: "info",
+            message: `Saved credential for ${props.providerID}. Configure it in opencode.json to use it.`,
+          })
+          dialog.clear()
+          return
+        }
         dialog.replace(() => <DialogModel providerID={props.providerID} />)
       }}
     />
