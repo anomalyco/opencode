@@ -83,12 +83,15 @@ export function createOverflow() {
       return overflow()
     },
     ref(el: HTMLElement) {
+      const sync = () => {
+        setOverflow(el.scrollHeight > el.clientHeight + 1)
+      }
+
       const ro = new ResizeObserver(() => {
-        if (el.scrollHeight > el.clientHeight + 1) {
-          setOverflow(true)
-        }
-        return
+        sync()
       })
+
+      sync()
       ro.observe(el)
 
       onCleanup(() => {
