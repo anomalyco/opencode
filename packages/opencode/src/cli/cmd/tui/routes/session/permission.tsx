@@ -16,6 +16,7 @@ import { Locale } from "@/util/locale"
 import { Global } from "@/global"
 import { useDialog } from "../../ui/dialog"
 import { useTuiConfig } from "../../context/tui-config"
+import { isEnterKey } from "@/util/keybind"
 
 type PermissionStage = "permission" | "always" | "reject"
 
@@ -482,7 +483,7 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
       props.onCancel()
       return
     }
-    if (evt.name === "return") {
+    if (isEnterKey(evt)) {
       evt.preventDefault()
       props.onConfirm(input.plainText)
     }
@@ -575,7 +576,7 @@ function Prompt<const T extends Record<string, string>>(props: {
       setStore("selected", next)
     }
 
-    if (evt.name === "return") {
+    if (isEnterKey(evt)) {
       evt.preventDefault()
       props.onSelect(store.selected)
     }

@@ -4,6 +4,7 @@ import { useDialog, type DialogContext } from "./dialog"
 import { createStore } from "solid-js/store"
 import { onMount, Show, type JSX } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
+import { isEnterKey } from "@/util/keybind"
 
 export type DialogExportOptionsProps = {
   defaultFilename: string
@@ -34,7 +35,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
   })
 
   useKeyboard((evt) => {
-    if (evt.name === "return") {
+    if (isEnterKey(evt)) {
       props.onConfirm?.({
         filename: textarea.plainText,
         thinking: store.thinking,

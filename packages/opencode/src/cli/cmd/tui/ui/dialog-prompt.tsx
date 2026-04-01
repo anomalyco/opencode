@@ -4,6 +4,7 @@ import { useDialog, type DialogContext } from "./dialog"
 import { Show, createEffect, onMount, type JSX } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
 import { Spinner } from "../component/spinner"
+import { isEnterKey } from "@/util/keybind"
 
 export type DialogPromptProps = {
   title: string
@@ -28,7 +29,7 @@ export function DialogPrompt(props: DialogPromptProps) {
       evt.stopPropagation()
       return
     }
-    if (evt.name === "return") {
+    if (isEnterKey(evt)) {
       props.onConfirm?.(textarea.plainText)
     }
   })

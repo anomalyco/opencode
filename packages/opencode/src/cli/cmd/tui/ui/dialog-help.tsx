@@ -3,6 +3,7 @@ import { useTheme } from "@tui/context/theme"
 import { useDialog } from "./dialog"
 import { useKeyboard } from "@opentui/solid"
 import { useKeybind } from "@tui/context/keybind"
+import { isEnterKey } from "@/util/keybind"
 
 export function DialogHelp() {
   const dialog = useDialog()
@@ -10,7 +11,7 @@ export function DialogHelp() {
   const keybind = useKeybind()
 
   useKeyboard((evt) => {
-    if (evt.name === "return" || evt.name === "escape") {
+    if (isEnterKey(evt) || evt.name === "escape") {
       dialog.clear()
     }
   })

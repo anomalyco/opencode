@@ -2,6 +2,7 @@ import { TextAttributes } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
 import { useKeyboard } from "@opentui/solid"
+import { isEnterKey } from "@/util/keybind"
 
 export type DialogAlertProps = {
   title: string
@@ -14,7 +15,7 @@ export function DialogAlert(props: DialogAlertProps) {
   const { theme } = useTheme()
 
   useKeyboard((evt) => {
-    if (evt.name === "return") {
+    if (isEnterKey(evt)) {
       props.onConfirm?.()
       dialog.clear()
     }

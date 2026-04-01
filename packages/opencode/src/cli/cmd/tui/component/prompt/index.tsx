@@ -898,9 +898,25 @@ export function Prompt(props: PromptProps) {
                   e.preventDefault()
                   return
                 }
-                // Check clipboard for images before terminal-handled paste runs.
-                // This helps terminals that forward Ctrl+V to the app; Windows
-                // Terminal 1.25+ usually handles Ctrl+V before this path.
+                if (/^kp[0-9]$/.test(e.name) && !e.ctrl && !e.meta && !e.shift && !e.super) {
+                  const digit = e.name.charAt(2)
+                  input.insertText(digit)
+                  e.preventDefault()
+                  return
+                }
+                const numpadOperatorMap: Record<string, string> = {
+                  kpdivide: "/",
+                  kpmultiply: "*",
+                  kpminus: "-",
+                  kpplus: "+",
+                  kpdecimal: ".",
+                  kpequal: "=",
+                }
+                if (numpadOperatorMap[e.name] && !e.ctrl && !e.meta && !e.shift && !e.super) {
+                  input.insertText(numpadOperatorMap[e.name])
+                  e.preventDefault()
+                  return
+                }
                 if (keybind.match("input_paste", e)) {
                   const content = await Clipboard.read()
                   if (content?.mime.startsWith("image/")) {

@@ -710,20 +710,20 @@ export namespace Config {
       variant_cycle: z.string().optional().default("ctrl+t").describe("Cycle model variants"),
       input_clear: z.string().optional().default("ctrl+c").describe("Clear input field"),
       input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
-      input_submit: z.string().optional().default("return").describe("Submit input"),
+      input_submit: z.string().optional().default("return,kpenter").describe("Submit input"),
       input_newline: z
         .string()
         .optional()
-        .default("shift+return,ctrl+return,alt+return,ctrl+j")
+        .default("shift+return,ctrl+return,alt+return,ctrl+j,shift+kpenter")
         .describe("Insert newline in input"),
-      input_move_left: z.string().optional().default("left,ctrl+b").describe("Move cursor left in input"),
-      input_move_right: z.string().optional().default("right,ctrl+f").describe("Move cursor right in input"),
-      input_move_up: z.string().optional().default("up").describe("Move cursor up in input"),
-      input_move_down: z.string().optional().default("down").describe("Move cursor down in input"),
-      input_select_left: z.string().optional().default("shift+left").describe("Select left in input"),
-      input_select_right: z.string().optional().default("shift+right").describe("Select right in input"),
-      input_select_up: z.string().optional().default("shift+up").describe("Select up in input"),
-      input_select_down: z.string().optional().default("shift+down").describe("Select down in input"),
+      input_move_left: z.string().optional().default("left,ctrl+b,kp4").describe("Move cursor left in input"),
+      input_move_right: z.string().optional().default("right,ctrl+f,kp6").describe("Move cursor right in input"),
+      input_move_up: z.string().optional().default("up,kp8").describe("Move cursor up in input"),
+      input_move_down: z.string().optional().default("down,kp2").describe("Move cursor down in input"),
+      input_select_left: z.string().optional().default("shift+left,shift+kp4").describe("Select left in input"),
+      input_select_right: z.string().optional().default("shift+right,shift+kp6").describe("Select right in input"),
+      input_select_up: z.string().optional().default("shift+up,shift+kp8").describe("Select up in input"),
+      input_select_down: z.string().optional().default("shift+down,shift+kp2").describe("Select down in input"),
       input_line_home: z.string().optional().default("ctrl+a").describe("Move to start of line in input"),
       input_line_end: z.string().optional().default("ctrl+e").describe("Move to end of line in input"),
       input_select_line_home: z
@@ -744,19 +744,31 @@ export namespace Config {
         .optional()
         .default("alt+shift+e")
         .describe("Select to end of visual line in input"),
-      input_buffer_home: z.string().optional().default("home").describe("Move to start of buffer in input"),
-      input_buffer_end: z.string().optional().default("end").describe("Move to end of buffer in input"),
+      input_buffer_home: z.string().optional().default("home,kp7,kphome").describe("Move to start of buffer in input"),
+      input_buffer_end: z.string().optional().default("end,kp9,kpend").describe("Move to end of buffer in input"),
       input_select_buffer_home: z
         .string()
         .optional()
-        .default("shift+home")
+        .default("shift+home,shift+kp7,shift+kphome")
         .describe("Select to start of buffer in input"),
-      input_select_buffer_end: z.string().optional().default("shift+end").describe("Select to end of buffer in input"),
+      input_select_buffer_end: z
+        .string()
+        .optional()
+        .default("shift+end,shift+kp9,shift+kpend")
+        .describe("Select to end of buffer in input"),
       input_delete_line: z.string().optional().default("ctrl+shift+d").describe("Delete line in input"),
       input_delete_to_line_end: z.string().optional().default("ctrl+k").describe("Delete to end of line in input"),
       input_delete_to_line_start: z.string().optional().default("ctrl+u").describe("Delete to start of line in input"),
-      input_backspace: z.string().optional().default("backspace,shift+backspace").describe("Backspace in input"),
-      input_delete: z.string().optional().default("ctrl+d,delete,shift+delete").describe("Delete character in input"),
+      input_backspace: z
+        .string()
+        .optional()
+        .default("backspace,shift+backspace,kpbackspace")
+        .describe("Backspace in input"),
+      input_delete: z
+        .string()
+        .optional()
+        .default("ctrl+d,delete,shift+delete,kpdelete")
+        .describe("Delete character in input"),
       input_undo: z.string().optional().default("ctrl+-,super+z").describe("Undo in input"),
       input_redo: z.string().optional().default("ctrl+.,super+shift+z").describe("Redo in input"),
       input_word_forward: z
