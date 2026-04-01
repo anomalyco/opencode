@@ -184,7 +184,7 @@ export namespace SessionProcessor {
               } satisfies MessageV2.ToolPart)
 
               // Feed to memory extractor (fire-and-forget)
-              try { MemoryExtractor.onToolCall(value.toolName, value.input as Record<string, unknown>) } catch {}
+              try { MemoryExtractor.onToolCall(value.toolName, value.input as Record<string, unknown>) } catch (err) { log.debug("memory extraction skipped (onToolCall)", { error: String(err) }) }
 
               const parts = yield* Effect.promise(() => MessageV2.parts(ctx.assistantMessage.id))
               const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
@@ -239,7 +239,7 @@ export namespace SessionProcessor {
                   value.output.output,
                   exitCode,
                 )
-              } catch {}
+              } catch (err) { log.debug("memory extraction skipped (onToolResult)", { error: String(err) }) }
 
               delete ctx.toolcalls[value.toolCallId]
               return
@@ -434,8 +434,9 @@ export namespace SessionProcessor {
               yield* Effect.promise(() => MemoryFile.updateMemoryFile(Instance.directory))
               yield* Effect.sync(() => MemoryExtractor.reset())
             }
-          } catch {
+          } catch (err) {
             // Memory file update is best-effort
+            log.debug("memory file update skipped", { error: String(err) })
           }
         })
 
@@ -479,8 +480,9 @@ export namespace SessionProcessor {
             if (cfg.memory?.enabled !== false && cfg.memory?.auto_extract !== false) {
               MemoryExtractor.init(Instance.directory, ctx.sessionID)
             }
-          } catch {
+          } catch (err) {
             // Memory extraction is best-effort
+            log.debug("memory extractor init skipped", { error: String(err) })
           }
 
           return yield* Effect.gen(function* () {
