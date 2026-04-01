@@ -98,7 +98,7 @@ export namespace SessionPrompt {
       const truncate = yield* Truncate.Service
       const scope = yield* Scope.Scope
 
-      const cache = yield* InstanceState.make(
+      const state = yield* InstanceState.make(
         Effect.fn("SessionPrompt.state")(function* () {
           const runners = new Map<string, Runner<MessageV2.WithParts>>()
           yield* Effect.addFinalizer(
@@ -132,14 +132,14 @@ export namespace SessionPrompt {
       const assertNotBusy: (sessionID: SessionID) => Effect.Effect<void, Session.BusyError> = Effect.fn(
         "SessionPrompt.assertNotBusy",
       )(function* (sessionID: SessionID) {
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         const runner = s.runners.get(sessionID)
         if (runner?.busy) throw new Session.BusyError(sessionID)
       })
 
       const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
         log.info("cancel", { sessionID })
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         const runner = s.runners.get(sessionID)
         if (!runner || !runner.busy) {
           yield* status.set(sessionID, { type: "idle" })
@@ -1575,14 +1575,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const loop: (input: z.infer<typeof LoopInput>) => Effect.Effect<MessageV2.WithParts> = Effect.fn(
         "SessionPrompt.loop",
       )(function* (input: z.infer<typeof LoopInput>) {
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         const runner = getRunner(s.runners, input.sessionID)
         return yield* runner.ensureRunning(runLoop(input.sessionID))
       })
 
       const shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.shell")(
         function* (input: ShellInput) {
-          const s = yield* InstanceState.get(cache)
+          const s = yield* InstanceState.get(state)
           const runner = getRunner(s.runners, input.sessionID)
           return yield* runner.startShell((signal) => shellImpl(input, signal))
         },

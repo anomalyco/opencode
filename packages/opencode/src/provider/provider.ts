@@ -967,7 +967,7 @@ export namespace Provider {
       const config = yield* Config.Service
       const auth = yield* Auth.Service
 
-      const cache = yield* InstanceState.make<State>(() =>
+      const state = yield* InstanceState.make<State>(() =>
         Effect.gen(function* () {
           using _ = log.time("state")
           const cfg = yield* config.get()
@@ -1247,7 +1247,7 @@ export namespace Provider {
         }),
       )
 
-      const list = Effect.fn("Provider.list")(() => InstanceState.use(cache, (s) => s.providers))
+      const list = Effect.fn("Provider.list")(() => InstanceState.use(state, (s) => s.providers))
 
       async function resolveSDK(model: Model, s: State) {
         try {
@@ -1385,11 +1385,11 @@ export namespace Provider {
       }
 
       const getProvider = Effect.fn("Provider.getProvider")((providerID: ProviderID) =>
-        InstanceState.use(cache, (s) => s.providers[providerID]),
+        InstanceState.use(state, (s) => s.providers[providerID]),
       )
 
       const getModel = Effect.fn("Provider.getModel")(function* (providerID: ProviderID, modelID: ModelID) {
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         const provider = s.providers[providerID]
         if (!provider) {
           const available = Object.keys(s.providers)
@@ -1407,7 +1407,7 @@ export namespace Provider {
       })
 
       const getLanguage = Effect.fn("Provider.getLanguage")(function* (model: Model) {
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         const key = `${model.providerID}/${model.id}`
         if (s.models.has(key)) return s.models.get(key)!
 
@@ -1439,7 +1439,7 @@ export namespace Provider {
       })
 
       const closest = Effect.fn("Provider.closest")(function* (providerID: ProviderID, query: string[]) {
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         const provider = s.providers[providerID]
         if (!provider) return undefined
         for (const item of query) {
@@ -1458,7 +1458,7 @@ export namespace Provider {
           return yield* getModel(parsed.providerID, parsed.modelID)
         }
 
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         const provider = s.providers[providerID]
         if (!provider) return undefined
 
@@ -1510,7 +1510,7 @@ export namespace Provider {
         const cfg = yield* config.get()
         if (cfg.model) return parseModel(cfg.model)
 
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         const recent = yield* Effect.promise(() =>
           Filesystem.readJson<{
             recent?: { providerID: ProviderID; modelID: ModelID }[]
