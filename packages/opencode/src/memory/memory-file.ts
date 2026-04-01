@@ -31,7 +31,10 @@ export namespace MemoryFile {
   export async function writeMemoryFile(projectDir: string, content: string): Promise<void> {
     const filepath = memoryFilePath(projectDir)
     await fs.mkdir(path.dirname(filepath), { recursive: true })
-    await fs.writeFile(filepath, content, "utf-8")
+    // Write to temp file first, then rename for atomicity
+    const tmpPath = filepath + ".tmp"
+    await fs.writeFile(tmpPath, content, "utf-8")
+    await fs.rename(tmpPath, filepath)
   }
 
   export async function updateMemoryFile(projectDir: string): Promise<void> {
@@ -55,6 +58,21 @@ export namespace MemoryFile {
         lines.push(`- ${m.content}`)
       }
       lines.push("")
+    }
+
+    const filepath = memoryFilePath(projectDir)
+    await fs.mkdir(path.dirname(filepath), { recursive: true })
+
+    // Append .opencode/MEMORY.md to .gitignore if it exists
+    try {
+      const gitignorePath = path.join(projectDir, ".gitignore")
+      const gitignore = await fs.readFile(gitignorePath, "utf-8")
+      const entry = ".opencode/MEMORY.md"
+      if (!gitignore.includes(entry)) {
+        await fs.appendFile(gitignorePath, `\n${entry}\n`, "utf-8")
+      }
+    } catch {
+      // .gitignore doesn't exist — don't create it
     }
 
     await writeMemoryFile(projectDir, lines.join("\n"))
