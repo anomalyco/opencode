@@ -12,6 +12,7 @@ import { LSP } from "../../src/lsp"
 import { MCP } from "../../src/mcp"
 import { Permission } from "../../src/permission"
 import { Plugin } from "../../src/plugin"
+import { Provider as ProviderSvc } from "../../src/provider/provider"
 import type { Provider } from "../../src/provider/provider"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Session } from "../../src/session"
@@ -151,6 +152,7 @@ function makeHttp() {
     Permission.layer,
     Plugin.defaultLayer,
     Config.defaultLayer,
+    ProviderSvc.defaultLayer,
     filetime,
     lsp,
     mcp,
