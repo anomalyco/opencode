@@ -67,6 +67,7 @@ export namespace Trigger {
     create: (input: CreateInput) => Effect.Effect<Info>
     get: (id: string) => Effect.Effect<Info, Err>
     list: () => Effect.Effect<Info[]>
+    fire: (id: string) => Effect.Effect<Info, Err>
     enable: (id: string) => Effect.Effect<Info, Err>
     disable: (id: string) => Effect.Effect<Info, Err>
     delete: (id: string) => Effect.Effect<void, Err>
@@ -76,6 +77,7 @@ export namespace Trigger {
     readonly create: (input: CreateInput) => Effect.Effect<Info>
     readonly get: (id: string) => Effect.Effect<Info, Err>
     readonly list: () => Effect.Effect<Info[]>
+    readonly fire: (id: string) => Effect.Effect<Info, Err>
     readonly enable: (id: string) => Effect.Effect<Info, Err>
     readonly disable: (id: string) => Effect.Effect<Info, Err>
     readonly delete: (id: string) => Effect.Effect<void, Err>
@@ -99,49 +101,50 @@ export namespace Trigger {
             }),
           )
 
-          const tick = Effect.fnUntraced(function* () {
-            const now = Date.now()
-            yield* Effect.forEach(
-              Array.from(data.values()).filter((item) => item.enabled && item.time.next <= now),
-              (item) =>
-                Effect.gen(function* () {
-                  const at = Date.now()
-                  const next = {
-                    ...item,
-                    runs: item.runs + 1,
-                    time: {
-                      ...item.time,
-                      last: at,
-                      next: at + item.schedule.interval,
-                    },
-                  }
-                  data.set(item.id, next)
-                  yield* bus.publish(Event.Fired, {
+          const run = Effect.fnUntraced(function* (item: Info) {
+            const at = Date.now()
+            const next = {
+              ...item,
+              runs: item.runs + 1,
+              time: {
+                ...item.time,
+                last: at,
+                next: at + item.schedule.interval,
+              },
+            }
+            data.set(item.id, next)
+            yield* bus.publish(Event.Fired, {
+              triggerID: item.id,
+              runs: next.runs,
+              at,
+            })
+            const action = item.action
+            if (!action) return next
+            const st = yield* Effect.promise(() => SessionStatus.get(action.sessionID))
+            if (st.type !== "idle") return next
+            yield* Effect.promise(() =>
+              SessionPrompt.command({
+                sessionID: action.sessionID,
+                command: action.command,
+                arguments: action.arguments ?? "",
+              }),
+            ).pipe(
+              Effect.catchCause((cause) =>
+                Effect.sync(() =>
+                  log.error("trigger action failed", {
                     triggerID: item.id,
-                    runs: next.runs,
-                    at,
-                  })
-                  const action = item.action
-                  if (!action) return
-                  const st = yield* Effect.promise(() => SessionStatus.get(action.sessionID))
-                  if (st.type !== "idle") return
-                  yield* Effect.promise(() =>
-                    SessionPrompt.command({
-                      sessionID: action.sessionID,
-                      command: action.command,
-                      arguments: action.arguments ?? "",
-                    }),
-                  ).pipe(
-                    Effect.catchCause((cause) =>
-                      Effect.sync(() =>
-                        log.error("trigger action failed", {
-                          triggerID: item.id,
-                          cause: Cause.pretty(cause),
-                        }),
-                      ),
-                    ),
-                  )
-                }),
+                    cause: Cause.pretty(cause),
+                  }),
+                ),
+              ),
+            )
+            return next
+          })
+
+          const tick = Effect.fnUntraced(function* () {
+            yield* Effect.forEach(
+              Array.from(data.values()).filter((item) => item.enabled && item.time.next <= Date.now()),
+              (item) => run(item),
               { discard: true },
             )
           })
@@ -186,6 +189,10 @@ export namespace Trigger {
             Effect.succeed(Array.from(data.values()).sort((a, b) => a.time.created - b.time.created)),
           )
 
+          const fire = Effect.fn("Trigger.fire")(function* (id: string) {
+            return yield* run(yield* get(id))
+          })
+
           const enable = Effect.fn("Trigger.enable")((id: string) => update(id, true))
 
           const disable = Effect.fn("Trigger.disable")((id: string) => update(id, false))
@@ -195,7 +202,7 @@ export namespace Trigger {
             data.delete(id)
           })
 
-          return { create, get, list, enable, disable, delete: del }
+          return { create, get, list, fire, enable, disable, delete: del }
         }),
       )
 
@@ -208,6 +215,9 @@ export namespace Trigger {
         }),
         list: Effect.fn("Trigger.list")(function* () {
           return yield* InstanceState.useEffect(state, (svc) => svc.list())
+        }),
+        fire: Effect.fn("Trigger.fire")(function* (id: string) {
+          return yield* InstanceState.useEffect(state, (svc) => svc.fire(id))
         }),
         enable: Effect.fn("Trigger.enable")(function* (id: string) {
           return yield* InstanceState.useEffect(state, (svc) => svc.enable(id))
@@ -239,6 +249,10 @@ export namespace Trigger {
 
   export async function enable(id: string) {
     return runPromise((svc) => svc.enable(id))
+  }
+
+  export async function fire(id: string) {
+    return runPromise((svc) => svc.fire(id))
   }
 
   export async function disable(id: string) {

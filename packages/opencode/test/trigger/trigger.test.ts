@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
+import { Bus } from "../../src/bus"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
 import { SessionPrompt } from "../../src/session/prompt"
@@ -151,6 +152,57 @@ describe("trigger service", () => {
         await Bun.sleep(80)
 
         expect(command).not.toHaveBeenCalled()
+      },
+    })
+  })
+
+  test("fires trigger now", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const command = spyOn(SessionPrompt, "command").mockResolvedValue(
+          {} as Awaited<ReturnType<typeof SessionPrompt.command>>,
+        )
+        const events: { triggerID: string; runs: number; at: number }[] = []
+        const off = Bus.subscribe(Trigger.Event.Fired, (evt) => {
+          events.push(evt.properties)
+        })
+        await Bun.sleep(10)
+
+        const item = await Trigger.create({
+          interval: 5_000,
+          action: {
+            type: "command",
+            sessionID: session.id,
+            command: "init",
+            arguments: "--help",
+          },
+        })
+
+        const next = await Trigger.fire(item.id)
+        await Bun.sleep(10)
+        off()
+
+        expect(command).toHaveBeenCalledWith({
+          sessionID: session.id,
+          command: "init",
+          arguments: "--help",
+        })
+        if (next.time.last === undefined) throw new Error("expected fire time")
+        const last = next.time.last
+        expect(next.runs).toBe(1)
+        expect(next.time.last).toBeDefined()
+        expect(next.time.last).toBeGreaterThanOrEqual(item.time.created)
+        expect(events).toEqual([
+          {
+            triggerID: item.id,
+            runs: 1,
+            at: last,
+          },
+        ])
       },
     })
   })

@@ -109,4 +109,34 @@ describe("trigger routes", () => {
       },
     })
   })
+
+  test("fires trigger now and returns updated state", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const app = Server.Default()
+        const create = await app.request("/trigger", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ interval: 5_000 }),
+        })
+        const item = await create.json()
+
+        const fire = await app.request(`/trigger/${item.id}/fire`, {
+          method: "POST",
+        })
+
+        expect(fire.status).toBe(200)
+        expect(await fire.json()).toMatchObject({
+          id: item.id,
+          runs: 1,
+          time: {
+            created: item.time.created,
+            last: expect.any(Number),
+          },
+        })
+      },
+    })
+  })
 })
