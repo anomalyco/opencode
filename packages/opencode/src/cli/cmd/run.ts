@@ -27,6 +27,7 @@ import { SkillTool } from "../../tool/skill"
 import { BashTool } from "../../tool/bash"
 import { TodoWriteTool } from "../../tool/todo"
 import { Locale } from "../../util/locale"
+import { errorMessage } from "../../util/error"
 
 type ToolProps<T extends Tool.Info> = {
   input: Tool.InferParameters<T>
@@ -47,6 +48,21 @@ type Inline = {
   icon: string
   title: string
   description?: string
+}
+
+export function unwrap<T>(res: { data: T; error?: undefined } | { data?: undefined; error: unknown }) {
+  if (res.error !== undefined) {
+    const err = res.error
+    if (err instanceof Error) throw err
+    if (typeof err === "object" && err !== null && "data" in err) {
+      const data = err.data
+      if (typeof data === "object" && data !== null && "message" in data && typeof data.message === "string") {
+        throw new Error(data.message)
+      }
+    }
+    throw new Error(errorMessage(err))
+  }
+  return res.data
 }
 
 function inline(info: Inline) {
@@ -632,23 +648,27 @@ export const RunCommand = cmd({
       })
 
       if (args.command) {
-        await sdk.session.command({
-          sessionID,
-          agent,
-          model: args.model,
-          command: args.command,
-          arguments: message,
-          variant: args.variant,
-        })
+        unwrap(
+          await sdk.session.command({
+            sessionID,
+            agent,
+            model: args.model,
+            command: args.command,
+            arguments: message,
+            variant: args.variant,
+          }),
+        )
       } else {
         const model = args.model ? Provider.parseModel(args.model) : undefined
-        await sdk.session.prompt({
-          sessionID,
-          agent,
-          model,
-          variant: args.variant,
-          parts: [...files, { type: "text", text: message }],
-        })
+        unwrap(
+          await sdk.session.prompt({
+            sessionID,
+            agent,
+            model,
+            variant: args.variant,
+            parts: [...files, { type: "text", text: message }],
+          }),
+        )
       }
     }
 
