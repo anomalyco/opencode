@@ -1,4 +1,4 @@
-import { Clock, Duration, Effect, Layer, Option, Schema, SchemaGetter, ServiceMap } from "effect"
+import { Clock, Deferred, Duration, Effect, Layer, Option, Schema, SchemaGetter, ServiceMap, SynchronizedRef } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 
 import { makeRuntime } from "@/effect/run-service"
@@ -175,9 +175,10 @@ export namespace Account {
           mapAccountServiceError("HTTP request failed"),
         )
 
-      const resolveToken = Effect.fnUntraced(function* (row: AccountRow) {
+      const refreshInFlight = yield* SynchronizedRef.make(new Map<AccountID, Deferred.Deferred<AccessToken, AccountServiceError>>())
+
+      const refreshToken = Effect.fnUntraced(function* (row: AccountRow) {
         const now = yield* Clock.currentTimeMillis
-        if (row.token_expiry && row.token_expiry > now) return row.access_token
 
         const response = yield* executeEffectOk(
           HttpClientRequest.post(`${row.url}/auth/device/token`).pipe(
@@ -206,6 +207,43 @@ export namespace Account {
         })
 
         return parsed.access_token
+      })
+
+      const clearRefreshInFlight = (accountID: AccountID, deferred: Deferred.Deferred<AccessToken, AccountServiceError>) =>
+        SynchronizedRef.update(refreshInFlight, (inFlight) => {
+          if (inFlight.get(accountID) !== deferred) return inFlight
+          const next = new Map(inFlight)
+          next.delete(accountID)
+          return next
+        })
+
+      const resolveToken = Effect.fnUntraced(function* (row: AccountRow) {
+        const now = yield* Clock.currentTimeMillis
+        if (row.token_expiry && row.token_expiry > now) return row.access_token
+
+        return yield* Effect.uninterruptibleMask((restore) =>
+          Effect.gen(function* () {
+            const [deferred, shouldStart] = yield* SynchronizedRef.modify(refreshInFlight, (inFlight) => {
+              const existing = inFlight.get(row.id)
+              if (existing) return [[existing, false] as const, inFlight] as const
+
+              const deferred = Deferred.makeUnsafe<AccessToken, AccountServiceError>()
+              const next = new Map(inFlight)
+              next.set(row.id, deferred)
+              return [[deferred, true] as const, next] as const
+            })
+
+            if (shouldStart) {
+              yield* refreshToken(row).pipe(
+                Effect.onExit((exit) => Deferred.done(deferred, exit).pipe(Effect.asVoid)),
+                Effect.ensuring(clearRefreshInFlight(row.id, deferred)),
+                Effect.forkDetach,
+              )
+            }
+
+            return yield* restore(Deferred.await(deferred))
+          }),
+        )
       })
 
       const resolveAccess = Effect.fnUntraced(function* (accountID: AccountID) {
