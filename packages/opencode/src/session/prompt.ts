@@ -1,4 +1,4 @@
-import path from "path"
+﻿import path from "path"
 import os from "os"
 import z from "zod"
 import { SessionID, MessageID, PartID } from "./schema"
@@ -209,12 +209,30 @@ export namespace SessionPrompt {
         const subtasks = firstUser.parts.filter((p): p is MessageV2.SubtaskPart => p.type === "subtask")
         const onlySubtasks = subtasks.length > 0 && firstUser.parts.every((p) => p.type === "subtask")
 
+        // Truncate the first line of the user's message directly as the title.
+        // This is instant and costs no tokens. Falls through to LLM-based
+        // naming only when a dedicated title agent model is explicitly configured.
         const ag = yield* agents.get("title")
-        if (!ag) return
-        const mdl = ag.model
-          ? yield* provider.getModel(ag.model.providerID, ag.model.modelID)
-          : ((yield* provider.getSmallModel(input.providerID)) ??
-            (yield* provider.getModel(input.providerID, input.modelID)))
+        if (!ag?.model) {
+          const text = firstUser.parts
+            .filter((p): p is MessageV2.TextPart => p.type === "text" && !p.synthetic)
+            .map((p) => p.text)
+            .join(" ")
+            .trim()
+          if (!text) return
+          const firstLine = text.split("\n")[0].trim()
+          const t = firstLine.length > 100 ? firstLine.substring(0, 97) + "..." : firstLine
+          if (!t) return
+          yield* sessions
+            .setTitle({ sessionID: input.session.id, title: t })
+            .pipe(
+              Effect.catchCause((cause) =>
+                Effect.sync(() => log.error("failed to set title from prompt", { error: Cause.squash(cause) })),
+              ),
+            )
+          return
+        }
+        const mdl = yield* provider.getModel(ag.model.providerID, ag.model.modelID)
         const msgs = onlySubtasks
           ? [{ role: "user" as const, content: subtasks.map((p) => p.prompt).join("\n") }]
           : yield* MessageV2.toModelMessagesEffect(context, mdl)
