@@ -1,7 +1,7 @@
 import { test, expect } from "../fixtures"
 import { promptSelector } from "../selectors"
 import { assistantText, sessionIDFromUrl, withSession } from "../actions"
-import { openaiModel, promptMatch, withMockOpenAI } from "./mock"
+import { openaiModel, promptMatch, titleMatch, withMockOpenAI } from "./mock"
 
 const text = (value: string | null) => (value ?? "").replace(/\u200B/g, "").trim()
 
@@ -24,6 +24,7 @@ test("prompt succeeds when sync message endpoint is unreachable", async ({
     llmUrl: llm.url,
     fn: async () => {
       const token = `E2E_ASYNC_${Date.now()}`
+      await llm.textMatch(titleMatch, "E2E Title")
       await llm.textMatch(promptMatch(token), token)
 
       await withBackendProject(
