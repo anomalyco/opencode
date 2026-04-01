@@ -8,7 +8,6 @@ import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
-import { useServer } from "@/context/server"
 import { createPathHelpers } from "./file/path"
 import {
   approxBytes,
@@ -31,7 +30,6 @@ import {
   type FileViewState,
   type SelectedLineRange,
 } from "./file/types"
-import { permissionNotice } from "@/utils/server-errors"
 
 export type { FileSelection, SelectedLineRange, FileViewState, FileState }
 export { selectionFromLines }
@@ -60,7 +58,6 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const params = useParams()
     const language = useLanguage()
     const layout = useLayout()
-    const server = useServer()
 
     const scope = createMemo(() => sdk.directory)
     const path = createPathHelpers(scope)
@@ -77,16 +74,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       scope,
       normalizeDir: path.normalizeDir,
       list: (dir) => sdk.client.file.list({ path: dir }).then((x) => x.data ?? []),
-      onError: (message) => {
-        const openclaw = server.current?.integration === "openclaw"
-        if (openclaw) return
-        if (permissionNotice(message, language.t, "file")) return
-        showToast({
-          variant: "error",
-          title: language.t("toast.file.listFailed.title"),
-          description: message,
-        })
-      },
+      onError: () => {},
     })
 
     const evictContent = (keep?: Set<string>) => {
