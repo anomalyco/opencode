@@ -40,9 +40,8 @@ function edit(file: string, prev: string, next: string) {
   )
 }
 
-function patchMatch(patchText: string) {
-  const escaped = JSON.stringify(patchText).slice(1, -1)
-  return (hit: { body: Record<string, unknown> }) => bodyText(hit).includes(escaped)
+function patchMatch(marker: string) {
+  return (hit: { body: Record<string, unknown> }) => bodyText(hit).includes(marker)
 }
 
 async function patchWithMock(
@@ -50,8 +49,9 @@ async function patchWithMock(
   sdk: Parameters<typeof withSession>[0],
   sessionID: string,
   patchText: string,
+  marker: string,
 ) {
-  await llm.toolMatch(patchMatch(patchText), "apply_patch", { patchText })
+  await llm.toolMatch(patchMatch(marker), "apply_patch", { patchText })
   await sdk.session.promptAsync({
     sessionID,
     agent: "build",
@@ -266,7 +266,7 @@ test("review applies inline comment clicks without horizontal overflow", async (
         async (project) => {
           await withSession(project.sdk, `e2e review comment ${tag}`, async (session) => {
             project.trackSession(session.id)
-            await patchWithMock(llm, project.sdk, session.id, seed([{ file, mark: tag }]))
+            await patchWithMock(llm, project.sdk, session.id, seed([{ file, mark: tag }]), tag)
 
             await expect
               .poll(
@@ -328,7 +328,7 @@ test("review file comments submit on click without clipping actions", async ({
         async (project) => {
           await withSession(project.sdk, `e2e review file comment ${tag}`, async (session) => {
             project.trackSession(session.id)
-            await patchWithMock(llm, project.sdk, session.id, seed([{ file, mark: tag }]))
+            await patchWithMock(llm, project.sdk, session.id, seed([{ file, mark: tag }]), tag)
 
             await expect
               .poll(
@@ -387,7 +387,7 @@ test("review keeps scroll position after a live diff update", async ({ page, llm
         async (project) => {
           await withSession(project.sdk, `e2e review ${tag}`, async (session) => {
             project.trackSession(session.id)
-            await patchWithMock(llm, project.sdk, session.id, seed(list))
+            await patchWithMock(llm, project.sdk, session.id, seed(list), tag)
 
             await expect
               .poll(
@@ -441,7 +441,7 @@ test("review keeps scroll position after a live diff update", async ({ page, llm
             const prev = await spot(page, hit.file)
             if (!prev) throw new Error(`missing review row for ${hit.file}`)
 
-            await patchWithMock(llm, project.sdk, session.id, edit(hit.file, hit.mark, next))
+            await patchWithMock(llm, project.sdk, session.id, edit(hit.file, hit.mark, next), next)
 
             await expect
               .poll(
