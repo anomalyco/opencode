@@ -35,6 +35,7 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { shellAction } from "./shell"
 
 export type PromptProps = {
   sessionID?: string
@@ -939,8 +940,13 @@ export function Prompt(props: PromptProps) {
                   return
                 }
                 if (store.mode === "shell") {
-                  if ((e.name === "backspace" && input.visualCursor.offset === 0) || e.name === "escape") {
+                  const action = shellAction(e.name, input.visualCursor.offset)
+                  if (action === "normal") {
                     setStore("mode", "normal")
+                    e.preventDefault()
+                    return
+                  }
+                  if (action === "consume") {
                     e.preventDefault()
                     return
                   }
