@@ -3,6 +3,7 @@ import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
 type Input = {
   url: string
   directory?: string
+  workspaceID?: string
   headers?: RequestInit["headers"]
   fetch?: typeof globalThis.fetch
 }
@@ -39,6 +40,7 @@ export async function preflightRemote(input: Input): Promise<OpencodeClient> {
   const sdk = createOpencodeClient({
     baseUrl: input.url,
     directory: input.directory,
+    experimental_workspaceID: input.workspaceID,
     headers: input.headers,
     fetch: input.fetch,
   })

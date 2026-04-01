@@ -5,6 +5,7 @@ export interface Args {
   agent?: string
   prompt?: string
   remote?: boolean
+  workspaceID?: string
   continue?: boolean
   sessionID?: string
   fork?: boolean

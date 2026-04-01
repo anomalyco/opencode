@@ -57,6 +57,7 @@ describe("remote preflight", () => {
       $0: "opencode",
       url: "http://remote.test",
       dir: "/srv/app",
+      workspace: undefined,
       continue: false,
       session: undefined,
       fork: false,
@@ -65,6 +66,52 @@ describe("remote preflight", () => {
 
     expect(get).toHaveBeenCalledTimes(1)
     expect(tui).toHaveBeenCalledTimes(1)
+  })
+
+  test("attach scopes the remote client and tui to a workspace", async () => {
+    mockAttach()
+    const get = mock(async () => ({
+      data: {
+        home: "/home/me",
+        state: "/state",
+        config: "/config",
+        worktree: "/srv/app",
+        directory: "/srv/app",
+      },
+    }))
+    const tui = spyOn(App, "tui").mockResolvedValue()
+    const create = spyOn(SDK, "createOpencodeClient").mockReturnValue(
+      client({
+        path: { get },
+      }),
+    )
+
+    await AttachCommand.handler({
+      _: [],
+      $0: "opencode",
+      url: "http://remote.test",
+      dir: "/srv/app",
+      workspace: "ws_123",
+      continue: false,
+      session: undefined,
+      fork: false,
+      password: undefined,
+    })
+
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        baseUrl: "http://remote.test",
+        directory: "/srv/app",
+        experimental_workspaceID: "ws_123",
+      }),
+    )
+    expect(tui).toHaveBeenCalledWith(
+      expect.objectContaining({
+        args: expect.objectContaining({
+          workspaceID: "ws_123",
+        }),
+      }),
+    )
   })
 
   test("attach fails clearly when the remote directory does not match", async () => {
@@ -96,6 +143,7 @@ describe("remote preflight", () => {
           $0: "opencode",
           url: "http://remote.test",
           dir: "/srv/app",
+          workspace: undefined,
           continue: false,
           session: undefined,
           fork: false,
@@ -144,6 +192,7 @@ describe("remote preflight", () => {
           $0: "opencode",
           url: "http://remote.test",
           dir: "/srv/app",
+          workspace: undefined,
           continue: false,
           session: "missing",
           fork: false,
@@ -190,6 +239,7 @@ describe("remote preflight", () => {
       $0: "opencode",
       url: "http://remote.test",
       dir: "/srv/app",
+      workspace: undefined,
       continue: false,
       session: "sess_123",
       fork: false,
@@ -235,6 +285,7 @@ describe("remote preflight", () => {
       $0: "opencode",
       url: "http://remote.test",
       dir: "/srv/app",
+      workspace: undefined,
       continue: true,
       session: undefined,
       fork: false,
@@ -298,6 +349,7 @@ describe("remote preflight", () => {
       $0: "opencode",
       url: "http://remote.test",
       dir: "/srv/app",
+      workspace: undefined,
       continue: true,
       session: undefined,
       fork: false,
@@ -403,6 +455,7 @@ describe("remote preflight", () => {
             attach: "http://remote.test",
             password: undefined,
             dir: undefined,
+            workspace: undefined,
             port: undefined,
             variant: undefined,
             thinking: false,
@@ -477,6 +530,7 @@ describe("remote preflight", () => {
             attach: "http://remote.test",
             password: undefined,
             dir: "/srv/app",
+            workspace: undefined,
             port: undefined,
             variant: undefined,
             thinking: false,
@@ -552,6 +606,7 @@ describe("remote preflight", () => {
             attach: "http://remote.test",
             password: undefined,
             dir: "/srv/app",
+            workspace: undefined,
             port: undefined,
             variant: undefined,
             thinking: false,

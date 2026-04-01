@@ -152,7 +152,7 @@ function DialogRemoteSessionBrowse(props: { root: Session; sessions: Session[]; 
     <DialogSelect
       title={browse.title}
       options={browse.options}
-      skipFilter={true}
+      skipFilter={false}
       onSelect={(option) => {
         void openRemoteSession({
           id: option.value,
@@ -185,7 +185,7 @@ export function DialogRemoteSessionList(props: { sessions: Session[]; fork?: boo
         value: item.id,
         footer: item.id,
       }))}
-      skipFilter={true}
+      skipFilter={false}
       onSelect={(option) => {
         void selectRemoteSession({
           id: option.value,

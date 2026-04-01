@@ -351,6 +351,83 @@ describe("trigger service", () => {
     })
   })
 
+  test("fires webhook action", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    const fetch = globalThis.fetch
+    globalThis.fetch = mock(async () => new Response(null, { status: 204 })) as unknown as typeof fetch
+
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const item = await Trigger.create({
+            interval: 5_000,
+            action: {
+              type: "webhook",
+              url: "https://example.test/hook",
+              method: "POST",
+              headers: {
+                authorization: "Bearer token",
+              },
+              body: '{"ok":true}',
+            },
+          } as unknown as Parameters<typeof Trigger.create>[0])
+
+          const next = await Trigger.fire(item.id)
+
+          expect(globalThis.fetch).toHaveBeenCalledWith("https://example.test/hook", {
+            method: "POST",
+            headers: {
+              authorization: "Bearer token",
+            },
+            body: '{"ok":true}',
+          })
+          expect(next.last).toMatchObject({
+            source: "manual",
+            status: "success",
+            time: expect.any(Number),
+          })
+        },
+      })
+    } finally {
+      globalThis.fetch = fetch
+    }
+  })
+
+  test("records failed webhook status", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    const fetch = globalThis.fetch
+    globalThis.fetch = mock(async () => new Response("denied", { status: 403 })) as unknown as typeof fetch
+
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const item = await Trigger.create({
+            interval: 5_000,
+            action: {
+              type: "webhook",
+              url: "https://example.test/hook",
+            },
+          } as unknown as Parameters<typeof Trigger.create>[0])
+
+          const next = await Trigger.fire(item.id)
+
+          expect(next.last).toMatchObject({
+            source: "manual",
+            status: "failed",
+            error: "HTTP 403: denied",
+            time: expect.any(Number),
+          })
+        },
+      })
+    } finally {
+      globalThis.fetch = fetch
+    }
+  })
+
   test("fires trigger now", async () => {
     await using tmp = await tmpdir({ git: true })
 
