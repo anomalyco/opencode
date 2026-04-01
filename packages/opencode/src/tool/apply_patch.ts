@@ -22,6 +22,14 @@ const PatchParams = z.object({
 export const ApplyPatchTool = Tool.define("apply_patch", {
   description: DESCRIPTION,
   parameters: PatchParams,
+  formatValidationError(error) {
+    // Check if patchText is missing or empty
+    const patchTextIssue = error.errors.find((e) => e.path.includes("patchText"))
+    if (patchTextIssue) {
+      return "apply_patch requires a non-empty patchText. You must provide the full patch text describing all changes to be made. Do not call apply_patch with an empty object or without patchText."
+    }
+    return `apply_patch validation failed: ${error.message}`
+  },
   async execute(params, ctx) {
     if (!params.patchText) {
       throw new Error("patchText is required")
