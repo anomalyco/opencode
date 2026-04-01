@@ -35,6 +35,9 @@ import { JsonMigration } from "./storage/json-migration"
 import { Database } from "./storage/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
+import { CtxVizCommand } from "./cli/cmd/ctx-viz"
+import { MemoryCommand } from "./cli/cmd/memory"
+import { CronCommand } from "./cli/cmd/cron"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -155,6 +158,9 @@ const cli = yargs(hideBin(process.argv))
   .command(SessionCommand)
   .command(PluginCommand)
   .command(DbCommand)
+  .command(MemoryCommand)
+  .command(CtxVizCommand)
+  .command(CronCommand)
   .fail((msg, err) => {
     if (
       msg?.startsWith("Unknown argument") ||

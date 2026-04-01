@@ -16,6 +16,7 @@ import { Flag } from "@/flag/flag"
 import { Shell } from "@/shell/shell"
 
 import { BashArity } from "@/permission/arity"
+import { CommandSemantics } from "../permission/semantics"
 import { Truncate } from "./truncate"
 import { Plugin } from "@/plugin"
 
@@ -259,7 +260,7 @@ function preview(text: string) {
 async function parse(command: string, ps: boolean) {
   const tree = await parser().then((p) => (ps ? p.ps : p.bash).parse(command))
   if (!tree) throw new Error("Failed to parse command")
-  return tree.rootNode
+  return tree.rootNode as any
 }
 
 async function ask(ctx: Tool.Context, scan: Scan) {
@@ -277,11 +278,18 @@ async function ask(ctx: Tool.Context, scan: Scan) {
   }
 
   if (scan.patterns.size === 0) return
+  const cmds = Array.from(scan.patterns)
+  const categories = cmds.map((cmd) => CommandSemantics.classifyCommand(cmd))
   await ctx.ask({
     permission: "bash",
-    patterns: Array.from(scan.patterns),
+    patterns: cmds,
     always: Array.from(scan.always),
-    metadata: {},
+    metadata: {
+      semantics: {
+        category: categories[0] ?? "write",
+        categories: [...new Set(categories)],
+      },
+    },
   })
 }
 
