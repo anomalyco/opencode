@@ -173,6 +173,54 @@ describe("trigger routes", () => {
     })
   })
 
+  test("fires webhook without trigger secret", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const item = await Instance.provide({
+      directory: tmp.path,
+      fn: () => Trigger.create({ interval: 5_000 }),
+    })
+    const app = Server.ControlPlaneRoutes()
+
+    const fire = await app.request(`/trigger/${item.id}/fire/webhook?directory=${encodeURIComponent(tmp.path)}`, {
+      method: "POST",
+    })
+
+    expect(fire.status).toBe(200)
+    expect(await fire.json()).toMatchObject({ id: item.id, runs: 1 })
+  })
+
+  test("rejects webhook without matching trigger secret", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const item = await Instance.provide({
+      directory: tmp.path,
+      fn: () => Trigger.create({ interval: 5_000, webhook_secret: "topsecret" }),
+    })
+    const app = Server.ControlPlaneRoutes()
+    const url = `/trigger/${item.id}/fire/webhook?directory=${encodeURIComponent(tmp.path)}`
+
+    const miss = await app.request(url, {
+      method: "POST",
+    })
+    expect(miss.status).toBe(401)
+
+    const bad = await app.request(url, {
+      method: "POST",
+      headers: {
+        "X-Trigger-Secret": "wrong",
+      },
+    })
+    expect(bad.status).toBe(401)
+
+    const good = await app.request(url, {
+      method: "POST",
+      headers: {
+        "X-Trigger-Secret": "topsecret",
+      },
+    })
+    expect(good.status).toBe(200)
+    expect(await good.json()).toMatchObject({ id: item.id, runs: 1 })
+  })
+
   test("requires server auth for webhook trigger fire", async () => {
     await using tmp = await tmpdir({ git: true })
     const item = await Instance.provide({

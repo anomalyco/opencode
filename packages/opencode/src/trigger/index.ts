@@ -33,6 +33,7 @@ export namespace Trigger {
         interval: z.number().int().positive(),
       }),
       action: Action.optional(),
+      webhook_secret: z.string().min(1).optional(),
       enabled: z.boolean(),
       runs: z.number().int().nonnegative(),
       time: z.object({
@@ -49,6 +50,7 @@ export namespace Trigger {
   export const CreateInput = z.object({
     interval: z.number().int().min(10).max(86_400_000),
     action: Action.optional(),
+    webhook_secret: z.string().min(1).optional(),
   })
   export type CreateInput = z.infer<typeof CreateInput>
 
@@ -92,6 +94,7 @@ export namespace Trigger {
     project_id,
     schedule: item.schedule,
     action: item.action ?? null,
+    webhook_secret: item.webhook_secret ?? null,
     enabled: item.enabled,
     runs: item.runs,
     time_created: item.time.created,
@@ -104,6 +107,7 @@ export namespace Trigger {
     id: row.id,
     schedule: row.schedule,
     ...(row.action ? { action: row.action } : {}),
+    ...(row.webhook_secret ? { webhook_secret: row.webhook_secret } : {}),
     enabled: row.enabled,
     runs: row.runs,
     time: {
@@ -122,6 +126,7 @@ export namespace Trigger {
         project_id text NOT NULL REFERENCES project(id) ON DELETE CASCADE,
         schedule text NOT NULL,
         action text,
+        webhook_secret text,
         enabled integer NOT NULL,
         runs integer NOT NULL,
         time_created integer NOT NULL,
@@ -132,6 +137,10 @@ export namespace Trigger {
     `,
       )
       .run()
+    const cols = Database.Client().$client.query(`PRAGMA table_info(trigger)`).all() as { name: string }[]
+    if (!cols.some((col) => col.name === "webhook_secret")) {
+      Database.Client().$client.query(`ALTER TABLE trigger ADD COLUMN webhook_secret text`).run()
+    }
     Database.Client().$client.query(`CREATE INDEX IF NOT EXISTS trigger_project_idx ON trigger (project_id)`).run()
   })
 
@@ -248,6 +257,7 @@ export namespace Trigger {
                 interval: input.interval,
               },
               action: input.action,
+              webhook_secret: input.webhook_secret,
               enabled: true,
               runs: 0,
               time: {
