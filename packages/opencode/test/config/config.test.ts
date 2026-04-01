@@ -607,6 +607,55 @@ Nested agent prompt`,
   })
 })
 
+test("loads agents from .agents/agents (plural)", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const agentsDir = path.join(dir, ".agents", "agents")
+      await fs.mkdir(path.join(agentsDir, "nested"), { recursive: true })
+
+      await Filesystem.write(
+        path.join(agentsDir, "custom-helper.md"),
+        `---
+model: test/model
+mode: subagent
+description: Custom helper from .agents
+---
+Custom helper agent prompt`,
+      )
+
+      await Filesystem.write(
+        path.join(agentsDir, "nested", "deep-agent.md"),
+        `---
+model: test/model
+mode: subagent
+---
+Nested custom agent prompt`,
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+
+      expect(config.agent?.["custom-helper"]).toMatchObject({
+        name: "custom-helper",
+        model: "test/model",
+        mode: "subagent",
+        prompt: "Custom helper agent prompt",
+      })
+
+      expect(config.agent?.["nested/deep-agent"]).toMatchObject({
+        name: "nested/deep-agent",
+        model: "test/model",
+        mode: "subagent",
+        prompt: "Nested custom agent prompt",
+      })
+    },
+  })
+})
+
 test("loads commands from .opencode/command (singular)", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
