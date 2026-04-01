@@ -2,7 +2,7 @@
 import * as path from "path"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
-import { createTwoFilesPatch } from "diff"
+import { structuredPatch } from "diff"
 import DESCRIPTION from "./write.txt"
 import { Bus } from "../bus"
 import { File } from "../file"
@@ -17,9 +17,6 @@ import { assertExternalDirectory } from "./external-directory"
 const MAX_DIAGNOSTICS_PER_FILE = 20
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
 
-// Skip diff computation for files larger than this threshold (bytes).
-// Myers diff is O(N^2) in the worst case and blocks the event loop on large files.
-const DIFF_SIZE_THRESHOLD = 100 * 1024 // 100 KB
 
 export const WriteTool = Tool.define("write", {
   description: DESCRIPTION,
@@ -35,15 +32,24 @@ export const WriteTool = Tool.define("write", {
     const contentOld = exists ? await Filesystem.readText(filepath) : ""
     if (exists) await FileTime.assert(ctx.sessionID, filepath)
 
-    // Only compute diff for small files to avoid blocking the event loop.
-    // For large files, skip the diff -- the permission prompt still fires but
-    // without a line-level preview.
-    const newSize = Buffer.byteLength(params.content, "utf-8")
-    const oldSize = Buffer.byteLength(contentOld, "utf-8")
-    const diff =
-      newSize <= DIFF_SIZE_THRESHOLD && oldSize <= DIFF_SIZE_THRESHOLD
-        ? trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, params.content))
-        : ""
+    // Use structuredPatch with a 5-second timeout so diff computation never
+    // blocks the event loop on large or complex diffs. New files (oldContent="")
+    // get an empty diff — no meaningful "before" to compare against.
+    const diff = (() => {
+      if (!contentOld) return ""
+      const result = structuredPatch(filepath, filepath, contentOld, params.content, undefined, undefined, { timeout: 5000 })
+      if (!result) return ""
+      return trimDiff([
+        `Index: ${filepath}`,
+        "===================================================================",
+        `--- ${filepath}`,
+        `+++ ${filepath}`,
+        ...result.hunks.map((h) => [
+          `@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@`,
+          ...h.lines,
+        ].join("\n")),
+      ].join("\n"))
+    })()
 
     await ctx.ask({
       permission: "edit",

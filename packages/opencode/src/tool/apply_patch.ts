@@ -6,7 +6,7 @@ import { Bus } from "../bus"
 import { FileWatcher } from "../file/watcher"
 import { Instance } from "../project/instance"
 import { Patch } from "../patch"
-import { createTwoFilesPatch, diffLines } from "diff"
+import { structuredPatch } from "diff"
 import { assertExternalDirectory } from "./external-directory"
 import { trimDiff } from "./edit"
 import { LSP } from "../lsp"
@@ -14,10 +14,6 @@ import { Filesystem } from "../util/filesystem"
 import DESCRIPTION from "./apply_patch.txt"
 import { File } from "../file"
 import { Format } from "../format"
-
-// Skip diff computation for files larger than this threshold (bytes).
-// Myers diff is O(N^2) in the worst case and blocks the event loop on large files.
-const DIFF_SIZE_THRESHOLD = 100 * 1024 // 100 KB
 
 const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),
@@ -71,23 +67,10 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
           const oldContent = ""
           const newContent =
             hunk.contents.length === 0 || hunk.contents.endsWith("\n") ? hunk.contents : `${hunk.contents}\n`
-          const newSize = Buffer.byteLength(newContent, "utf-8")
-          const diff =
-            newSize <= DIFF_SIZE_THRESHOLD
-              ? trimDiff(createTwoFilesPatch(filePath, filePath, oldContent, newContent))
-              : ""
-
-          let additions = 0
-          let deletions = 0
-          if (newSize <= DIFF_SIZE_THRESHOLD) {
-            for (const change of diffLines(oldContent, newContent)) {
-              if (change.added) additions += change.count || 0
-              if (change.removed) deletions += change.count || 0
-            }
-          } else {
-            // Approximate for large files: count lines directly
-            additions = newContent.split("\n").length
-          }
+          // New files have no previous content — diff is always empty.
+          const diff = ""
+          const additions = newContent ? newContent.split("\n").length : 0
+          const deletions = 0
 
           fileChanges.push({
             filePath,
@@ -121,24 +104,25 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
             throw new Error(`apply_patch verification failed: ${error}`)
           }
 
-          const oldSz = Buffer.byteLength(oldContent, "utf-8")
-          const newSz = Buffer.byteLength(newContent, "utf-8")
-          const diff =
-            oldSz <= DIFF_SIZE_THRESHOLD && newSz <= DIFF_SIZE_THRESHOLD
-              ? trimDiff(createTwoFilesPatch(filePath, filePath, oldContent, newContent))
-              : ""
-
+          // Use structuredPatch with 5s timeout; returns "" on timeout.
+          const result = structuredPatch(filePath, filePath, oldContent, newContent, undefined, undefined, { timeout: 5000 })
+          const diff = result ? trimDiff([
+            `Index: ${filePath}`,
+            "===================================================================",
+            `--- ${filePath}`,
+            `+++ ${filePath}`,
+            ...result.hunks.map((h) => [
+              `@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@`,
+              ...h.lines,
+            ].join("\n")),
+          ].join("\n")) : ""
           let additions = 0
           let deletions = 0
-          if (oldSz <= DIFF_SIZE_THRESHOLD && newSz <= DIFF_SIZE_THRESHOLD) {
-            for (const change of diffLines(oldContent, newContent)) {
-              if (change.added) additions += change.count || 0
-              if (change.removed) deletions += change.count || 0
+          if (diff) {
+            for (const line of diff.split("\n")) {
+              if (line.startsWith("+") && !line.startsWith("+++")) additions++
+              if (line.startsWith("-") && !line.startsWith("---")) deletions++
             }
-          } else {
-            // Approximate for large files
-            additions = newContent.split("\n").length
-            deletions = oldContent.split("\n").length
           }
 
           const movePath = hunk.move_path ? path.resolve(Instance.directory, hunk.move_path) : undefined
@@ -163,11 +147,17 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
           const contentToDelete = await fs.readFile(filePath, "utf-8").catch((error) => {
             throw new Error(`apply_patch verification failed: ${error}`)
           })
-          const deleteSize = Buffer.byteLength(contentToDelete, "utf-8")
-          const deleteDiff =
-            deleteSize <= DIFF_SIZE_THRESHOLD
-              ? trimDiff(createTwoFilesPatch(filePath, filePath, contentToDelete, ""))
-              : ""
+          const delResult = structuredPatch(filePath, filePath, contentToDelete, "", undefined, undefined, { timeout: 5000 })
+          const deleteDiff = delResult ? trimDiff([
+            `Index: ${filePath}`,
+            "===================================================================",
+            `--- ${filePath}`,
+            `+++ ${filePath}`,
+            ...delResult.hunks.map((h) => [
+              `@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@`,
+              ...h.lines,
+            ].join("\n")),
+          ].join("\n")) : ""
 
           const deletions = contentToDelete.split("\n").length
 

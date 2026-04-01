@@ -7,7 +7,7 @@ import z from "zod"
 import * as path from "path"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
-import { createTwoFilesPatch, diffLines } from "diff"
+import { structuredPatch } from "diff"
 import DESCRIPTION from "./edit.txt"
 import { File } from "../file"
 import { FileWatcher } from "../file/watcher"
@@ -20,10 +20,6 @@ import { Snapshot } from "@/snapshot"
 import { assertExternalDirectory } from "./external-directory"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
-
-// Skip diff computation for files larger than this threshold (bytes).
-// Myers diff is O(N^2) in the worst case and blocks the event loop on large files.
-const DIFF_SIZE_THRESHOLD = 100 * 1024 // 100 KB
 
 function normalizeLineEndings(text: string): string {
   return text.replaceAll("\r\n", "\n")
@@ -38,6 +34,25 @@ function convertToLineEnding(text: string, ending: "\n" | "\r\n"): string {
   return text.replaceAll("\n", "\r\n")
 }
 
+// Compute a unified diff with a hard 5-second timeout so the Myers diff
+// algorithm never blocks the event loop on large or complex content.
+// Returns an empty string on timeout or when there is no previous content.
+function safeDiff(filePath: string, oldContent: string, newContent: string): string {
+  // structuredPatch with a 5-second timeout so the Myers diff algorithm never
+  // blocks the event loop. Returns "" on timeout.
+  const result = structuredPatch(filePath, filePath, oldContent, newContent, undefined, undefined, { timeout: 5000 })
+  if (!result) return ""
+  return trimDiff([
+    `Index: ${filePath}`,
+    "===================================================================",
+    `--- ${filePath}`,
+    `+++ ${filePath}`,
+    ...result.hunks.map((h) => [
+      `@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@`,
+      ...h.lines,
+    ].join("\n")),
+  ].join("\n"))
+}
 export const EditTool = Tool.define("edit", {
   description: DESCRIPTION,
   parameters: z.object({
@@ -65,12 +80,7 @@ export const EditTool = Tool.define("edit", {
       if (params.oldString === "") {
         const existed = await Filesystem.exists(filePath)
         contentNew = params.newString
-        // Only compute diff for small content to avoid blocking the event loop.
-        const newSize = Buffer.byteLength(contentNew, "utf-8")
-        diff =
-          newSize <= DIFF_SIZE_THRESHOLD
-            ? trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
-            : ""
+        diff = safeDiff(filePath, contentOld, contentNew)
         await ctx.ask({
           permission: "edit",
           patterns: [path.relative(Instance.worktree, filePath)],
@@ -103,14 +113,7 @@ export const EditTool = Tool.define("edit", {
 
       contentNew = replace(contentOld, old, next, params.replaceAll)
 
-      // Only compute diff for small files to avoid blocking the event loop.
-      const oldSize = Buffer.byteLength(contentOld, "utf-8")
-      const newSize = Buffer.byteLength(contentNew, "utf-8")
-      if (oldSize <= DIFF_SIZE_THRESHOLD && newSize <= DIFF_SIZE_THRESHOLD) {
-        diff = trimDiff(
-          createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
-        )
-      }
+      diff = safeDiff(filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew))
 
       await ctx.ask({
         permission: "edit",
@@ -140,18 +143,13 @@ export const EditTool = Tool.define("edit", {
       additions: 0,
       deletions: 0,
     }
-    // Only run diffLines for small files — same O(N^2) concern as createTwoFilesPatch.
-    const oldDiffSize = Buffer.byteLength(contentOld, "utf-8")
-    const newDiffSize = Buffer.byteLength(contentNew, "utf-8")
-    if (oldDiffSize <= DIFF_SIZE_THRESHOLD && newDiffSize <= DIFF_SIZE_THRESHOLD) {
-      for (const change of diffLines(contentOld, contentNew)) {
-        if (change.added) filediff.additions += change.count || 0
-        if (change.removed) filediff.deletions += change.count || 0
+    // Count additions/deletions from the already-computed diff hunks so we
+    // do not run a second O(N*D) pass over the content.
+    if (diff) {
+      for (const line of diff.split("\n")) {
+        if (line.startsWith("+") && !line.startsWith("+++")) filediff.additions++
+        if (line.startsWith("-") && !line.startsWith("---")) filediff.deletions++
       }
-    } else {
-      // Approximate for large files
-      filediff.additions = contentNew.split("\n").length
-      filediff.deletions = contentOld.split("\n").length
     }
 
     ctx.metadata({
