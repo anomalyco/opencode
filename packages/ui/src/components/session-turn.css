@@ -190,9 +190,12 @@
   }
 
   [data-slot="session-turn-diff-filename"] {
-    flex-shrink: 0;
+    min-width: 0;
     color: var(--text-strong);
     font-weight: var(--font-weight-medium);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   [data-slot="session-turn-diff-meta"] {

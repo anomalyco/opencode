@@ -4,6 +4,7 @@ import { batch, createEffect, createMemo, createRoot, on, onCleanup } from "soli
 import { useParams } from "@solidjs/router"
 import { useSDK } from "./sdk"
 import type { Platform } from "./platform"
+import { defaultTitle, titleNumber } from "./terminal-title"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
 
 export type LocalPTY = {
@@ -33,11 +34,7 @@ function num(value: unknown) {
 }
 
 function numberFromTitle(title: string) {
-  const match = title.match(/^Terminal (\d+)$/)
-  if (!match) return
-  const value = Number(match[1])
-  if (!Number.isFinite(value) || value <= 0) return
-  return value
+  return titleNumber(title, MAX_TERMINAL_SESSIONS)
 }
 
 function pty(value: unknown): LocalPTY | undefined {
@@ -202,13 +199,13 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
       const nextNumber = pickNextTerminalNumber()
 
       sdk.client.pty
-        .create({ title: `Terminal ${nextNumber}` })
+        .create({ title: defaultTitle(nextNumber) })
         .then((pty: { data?: { id?: string; title?: string } }) => {
           const id = pty.data?.id
           if (!id) return
           const newTerminal = {
             id,
-            title: pty.data?.title ?? "Terminal",
+            title: pty.data?.title ?? defaultTitle(nextNumber),
             titleNumber: nextNumber,
           }
           setStore("all", store.all.length, newTerminal)

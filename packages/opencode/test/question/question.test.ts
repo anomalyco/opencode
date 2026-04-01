@@ -1,6 +1,7 @@
 import { test, expect } from "bun:test"
 import { Question } from "../../src/question"
 import { Instance } from "../../src/project/instance"
+import { QuestionID } from "../../src/question/schema"
 import { tmpdir } from "../fixture/fixture"
 import { SessionID } from "../../src/session/schema"
 
@@ -131,7 +132,7 @@ test("reply - does nothing for unknown requestID", async () => {
     directory: tmp.path,
     fn: async () => {
       await Question.reply({
-        requestID: "que_unknown",
+        requestID: QuestionID.make("que_unknown"),
         answers: [["Option 1"]],
       })
       // Should not throw
@@ -204,7 +205,7 @@ test("reject - does nothing for unknown requestID", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      await Question.reject("que_unknown")
+      await Question.reject(QuestionID.make("que_unknown"))
       // Should not throw
     },
   })

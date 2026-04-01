@@ -4,6 +4,7 @@ import { Installation } from "../installation"
 import { Auth, OAUTH_DUMMY_KEY } from "../auth"
 import os from "os"
 import { ProviderTransform } from "@/provider/transform"
+import { ModelID, ProviderID } from "@/provider/schema"
 import { setTimeout as sleep } from "node:timers/promises"
 
 const log = Log.create({ service: "plugin.codex" })
@@ -375,8 +376,8 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
 
         if (!provider.models["gpt-5.3-codex"]) {
           const model = {
-            id: "gpt-5.3-codex",
-            providerID: "openai",
+            id: ModelID.make("gpt-5.3-codex"),
+            providerID: ProviderID.openai,
             api: {
               id: "gpt-5.3-codex",
               url: "https://chatgpt.com/backend-api/codex",

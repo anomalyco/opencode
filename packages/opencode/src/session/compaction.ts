@@ -14,6 +14,7 @@ import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 import { ProviderTransform } from "@/provider/transform"
+import { ModelID, ProviderID } from "@/provider/schema"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -298,8 +299,8 @@ When constructing the summary, try to stick to this template:
       sessionID: SessionID.zod,
       agent: z.string(),
       model: z.object({
-        providerID: z.string(),
-        modelID: z.string(),
+        providerID: ProviderID.zod,
+        modelID: ModelID.zod,
       }),
       auto: z.boolean(),
       overflow: z.boolean().optional(),

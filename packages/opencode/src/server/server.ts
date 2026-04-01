@@ -23,6 +23,7 @@ import { Command } from "../command"
 import { Global } from "../global"
 import { WorkspaceContext } from "../control-plane/workspace-context"
 import { WorkspaceID } from "../control-plane/schema"
+import { ProviderID } from "../provider/schema"
 import { WorkspaceRouterMiddleware } from "../control-plane/workspace-router-middleware"
 import { ProjectRoutes } from "./routes/project"
 import { SessionRoutes } from "./routes/session"
@@ -148,7 +149,7 @@ export namespace Server {
         validator(
           "param",
           z.object({
-            providerID: z.string(),
+            providerID: ProviderID.zod,
           }),
         ),
         validator("json", Auth.Info),
@@ -180,7 +181,7 @@ export namespace Server {
         validator(
           "param",
           z.object({
-            providerID: z.string(),
+            providerID: ProviderID.zod,
           }),
         ),
         async (c) => {

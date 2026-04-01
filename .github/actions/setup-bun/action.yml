@@ -3,14 +3,6 @@ description: "Setup Bun with caching and install dependencies"
 runs:
   using: "composite"
   steps:
-    - name: Cache Bun dependencies
-      uses: actions/cache@v4
-      with:
-        path: ~/.bun/install/cache
-        key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
-        restore-keys: |
-          ${{ runner.os }}-bun-
-
     - name: Get baseline download URL
       id: bun-url
       shell: bash
@@ -30,6 +22,19 @@ runs:
       with:
         bun-version-file: ${{ !steps.bun-url.outputs.url && 'package.json' || '' }}
         bun-download-url: ${{ steps.bun-url.outputs.url }}
+
+    - name: Get cache directory
+      id: cache
+      shell: bash
+      run: echo "dir=$(bun pm cache)" >> "$GITHUB_OUTPUT"
+
+    - name: Cache Bun dependencies
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.cache.outputs.dir }}
+        key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-bun-
 
     - name: Install setuptools for distutils compatibility
       run: python3 -m pip install setuptools || pip install setuptools || true

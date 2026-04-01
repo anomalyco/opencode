@@ -38,7 +38,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
 
   const summary = createMemo(() => {
     const n = Math.min(store.tab + 1, total())
-    return `${n} of ${total()} questions`
+    return language.t("session.question.progress", { current: n, total: total() })
   })
 
   const last = createMemo(() => store.tab >= total() - 1)

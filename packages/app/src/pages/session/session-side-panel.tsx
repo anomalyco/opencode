@@ -1,7 +1,6 @@
 import { For, Match, Show, Switch, createEffect, createMemo, onCleanup, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
-import { useParams } from "@solidjs/router"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
@@ -23,9 +22,9 @@ import { useLayout } from "@/context/layout"
 import { useSync } from "@/context/sync"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
-import { createOpenSessionFileTab, getTabReorderIndex, type Sizing } from "@/pages/session/helpers"
-import { StickyAddButton } from "@/pages/session/review-tab"
+import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type Sizing } from "@/pages/session/helpers"
 import { setSessionHandoff } from "@/pages/session/handoff"
+import { useSessionLayout } from "@/pages/session/session-layout"
 
 export function SessionSidePanel(props: {
   reviewPanel: () => JSX.Element
@@ -34,18 +33,15 @@ export function SessionSidePanel(props: {
   reviewSnap: boolean
   size: Sizing
 }) {
-  const params = useParams()
   const layout = useLayout()
   const sync = useSync()
   const file = useFile()
   const language = useLanguage()
   const command = useCommand()
   const dialog = useDialog()
+  const { params, sessionKey, tabs, view } = useSessionLayout()
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
-  const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
-  const tabs = createMemo(() => layout.tabs(sessionKey))
-  const view = createMemo(() => layout.view(sessionKey))
 
   const reviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const fileOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
@@ -135,31 +131,17 @@ export function SessionSidePanel(props: {
     setActive: tabs().setActive,
   })
 
-  const contextOpen = createMemo(() => tabs().active() === "context" || tabs().all().includes("context"))
-  const openedTabs = createMemo(() =>
-    tabs()
-      .all()
-      .filter((tab) => tab !== "context" && tab !== "review"),
-  )
-
-  const activeTab = createMemo(() => {
-    const active = tabs().active()
-    if (active === "context") return "context"
-    if (active === "review" && reviewTab()) return "review"
-    if (active && file.pathFromTab(active)) return normalizeTab(active)
-
-    const first = openedTabs()[0]
-    if (first) return first
-    if (contextOpen()) return "context"
-    if (reviewTab() && hasReview()) return "review"
-    return "empty"
+  const tabState = createSessionTabs({
+    tabs,
+    pathFromTab: file.pathFromTab,
+    normalizeTab,
+    review: reviewTab,
+    hasReview,
   })
-
-  const activeFileTab = createMemo(() => {
-    const active = activeTab()
-    if (!openedTabs().includes(active)) return
-    return active
-  })
+  const contextOpen = tabState.contextOpen
+  const openedTabs = tabState.openedTabs
+  const activeTab = tabState.activeTab
+  const activeFileTab = tabState.activeFileTab
 
   const fileTreeTab = () => layout.fileTree.tab()
 
@@ -300,7 +282,7 @@ export function SessionSidePanel(props: {
                       <SortableProvider ids={openedTabs()}>
                         <For each={openedTabs()}>{(tab) => <SortableTab tab={tab} onTabClose={tabs().close} />}</For>
                       </SortableProvider>
-                      <StickyAddButton>
+                      <div class="bg-background-stronger h-full shrink-0 sticky right-0 z-10 flex items-center justify-center pr-3">
                         <TooltipKeybind
                           title={language.t("command.file.open")}
                           keybind={command.keybind("file.open")}
@@ -317,7 +299,7 @@ export function SessionSidePanel(props: {
                             aria-label={language.t("command.file.open")}
                           />
                         </TooltipKeybind>
-                      </StickyAddButton>
+                      </div>
                     </Tabs.List>
                   </div>
 
@@ -357,10 +339,10 @@ export function SessionSidePanel(props: {
                 <DragOverlay>
                   <Show when={store.activeDraggable} keyed>
                     {(tab) => {
-                      const path = createMemo(() => file.pathFromTab(tab))
+                      const path = file.pathFromTab(tab)
                       return (
                         <div data-component="tabs-drag-preview">
-                          <Show when={path()}>{(p) => <FileVisual active path={p()} />}</Show>
+                          <Show when={path}>{(p) => <FileVisual active path={p()} />}</Show>
                         </div>
                       )
                     }}

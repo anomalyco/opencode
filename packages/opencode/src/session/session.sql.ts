@@ -54,7 +54,7 @@ export const MessageTable = sqliteTable(
     ...Timestamps,
     data: text({ mode: "json" }).notNull().$type<InfoData>(),
   },
-  (table) => [index("message_session_idx").on(table.session_id)],
+  (table) => [index("message_session_time_created_id_idx").on(table.session_id, table.time_created, table.id)],
 )
 
 export const PartTable = sqliteTable(
@@ -69,7 +69,10 @@ export const PartTable = sqliteTable(
     ...Timestamps,
     data: text({ mode: "json" }).notNull().$type<PartData>(),
   },
-  (table) => [index("part_message_idx").on(table.message_id), index("part_session_idx").on(table.session_id)],
+  (table) => [
+    index("part_message_id_id_idx").on(table.message_id, table.id),
+    index("part_session_idx").on(table.session_id),
+  ],
 )
 
 export const TodoTable = sqliteTable(

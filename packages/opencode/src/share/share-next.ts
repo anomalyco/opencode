@@ -2,6 +2,7 @@ import { Bus } from "@/bus"
 import { Account } from "@/account"
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
+import { ProviderID, ModelID } from "@/provider/schema"
 import { Session } from "@/session"
 import type { SessionID } from "@/session/schema"
 import { MessageV2 } from "@/session/message-v2"
@@ -262,7 +263,7 @@ export namespace ShareNext {
             .map((m) => (m.info as SDK.UserMessage).model)
             .map((m) => [`${m.providerID}/${m.modelID}`, m] as const),
         ).values(),
-      ).map((m) => Provider.getModel(m.providerID, m.modelID).then((item) => item)),
+      ).map((m) => Provider.getModel(ProviderID.make(m.providerID), ModelID.make(m.modelID)).then((item) => item)),
     )
     await sync(sessionID, [
       {

@@ -178,7 +178,6 @@ for (const item of targets) {
     conditions: ["browser"],
     tsconfig: "./tsconfig.json",
     plugins: [solidPlugin],
-    sourcemap: "external",
     compile: {
       autoloadBunfig: false,
       autoloadDotenv: false,

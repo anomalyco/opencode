@@ -151,6 +151,11 @@ const MAX_PROMPT_SESSIONS = 20
 
 type PromptSession = ReturnType<typeof createPromptSession>
 
+type Scope = {
+  dir: string
+  id?: string
+}
+
 type PromptCacheEntry = {
   value: PromptSession
   dispose: VoidFunction
@@ -265,6 +270,7 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
     }
 
     const session = createMemo(() => load(params.dir!, params.id))
+    const pick = (scope?: Scope) => (scope ? load(scope.dir, scope.id) : session())
 
     return {
       ready: () => session().ready(),
@@ -280,8 +286,8 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
           session().context.updateComment(path, commentID, next),
         replaceComments: (items: FileContextItem[]) => session().context.replaceComments(items),
       },
-      set: (prompt: Prompt, cursorPosition?: number) => session().set(prompt, cursorPosition),
-      reset: () => session().reset(),
+      set: (prompt: Prompt, cursorPosition?: number, scope?: Scope) => pick(scope).set(prompt, cursorPosition),
+      reset: (scope?: Scope) => pick(scope).reset(),
     }
   },
 })

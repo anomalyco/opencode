@@ -3,7 +3,7 @@ import z from "zod"
 
 import { withStatics } from "@/util/schema"
 
-const projectIdSchema = Schema.String.pipe(Schema.brand("ProjectId"))
+const projectIdSchema = Schema.String.pipe(Schema.brand("ProjectID"))
 
 export type ProjectID = typeof projectIdSchema.Type
 

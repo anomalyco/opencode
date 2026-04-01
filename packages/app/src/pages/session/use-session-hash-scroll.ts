@@ -3,8 +3,6 @@ import { useLocation, useNavigate } from "@solidjs/router"
 import { createEffect, createMemo, onCleanup, onMount } from "solid-js"
 import { messageIdFromHash } from "./message-id-from-hash"
 
-export { messageIdFromHash } from "./message-id-from-hash"
-
 export const useSessionHashScroll = (input: {
   sessionKey: () => string
   sessionID: () => string | undefined

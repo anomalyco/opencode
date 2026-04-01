@@ -43,7 +43,7 @@
       "dompurify": "3.3.1",
       "drizzle-kit": "1.0.0-beta.16-ea816b6",
       "drizzle-orm": "1.0.0-beta.16-ea816b6",
-      "effect": "4.0.0-beta.29",
+      "effect": "4.0.0-beta.31",
       "ai": "5.0.124",
       "hono": "4.10.7",
       "hono-openapi": "1.1.2",

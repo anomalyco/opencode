@@ -3,13 +3,13 @@ import { Schema } from "effect"
 import { withStatics } from "@/util/schema"
 
 export const AccountID = Schema.String.pipe(
-  Schema.brand("AccountId"),
+  Schema.brand("AccountID"),
   withStatics((s) => ({ make: (id: string) => s.makeUnsafe(id) })),
 )
 export type AccountID = Schema.Schema.Type<typeof AccountID>
 
 export const OrgID = Schema.String.pipe(
-  Schema.brand("OrgId"),
+  Schema.brand("OrgID"),
   withStatics((s) => ({ make: (id: string) => s.makeUnsafe(id) })),
 )
 export type OrgID = Schema.Schema.Type<typeof OrgID>

@@ -1,6 +1,7 @@
 import { APICallError } from "ai"
 import { STATUS_CODES } from "http"
 import { iife } from "@/util/iife"
+import type { ProviderID } from "./schema"
 
 export namespace ProviderError {
   // Adapted from overflow detection patterns in:
@@ -40,7 +41,7 @@ export namespace ProviderError {
     return /^4(00|13)\s*(status code)?\s*\(no body\)/i.test(message)
   }
 
-  function message(providerID: string, e: APICallError) {
+  function message(providerID: ProviderID, e: APICallError) {
     return iife(() => {
       const msg = e.message
       if (msg === "") {
@@ -164,7 +165,7 @@ export namespace ProviderError {
         metadata?: Record<string, string>
       }
 
-  export function parseAPICallError(input: { providerID: string; error: APICallError }): ParsedAPICallError {
+  export function parseAPICallError(input: { providerID: ProviderID; error: APICallError }): ParsedAPICallError {
     const m = message(input.providerID, input.error)
     if (isOverflow(m) || input.error.statusCode === 413) {
       return {

@@ -12,7 +12,6 @@ import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
 import { ProjectIcon, SessionItem, type SessionItemProps } from "./sidebar-items"
 import { childMapByParent, displayName, sortedRootSessions } from "./helpers"
-import { projectSelected, projectTileActive } from "./sidebar-project-helpers"
 
 export type ProjectSidebarContext = {
   currentDir: Accessor<string>
@@ -31,7 +30,7 @@ export type ProjectSidebarContext = {
   workspacesEnabled: (project: LocalProject) => boolean
   workspaceIds: (project: LocalProject) => string[]
   workspaceLabel: (directory: string, branch?: string, projectId?: string) => string
-  sessionProps: Omit<SessionItemProps, "session" | "slug" | "children" | "mobile" | "dense" | "popover">
+  sessionProps: Omit<SessionItemProps, "session" | "list" | "slug" | "children" | "mobile" | "dense" | "popover">
   setHoverSession: (id: string | undefined) => void
 }
 
@@ -205,11 +204,12 @@ const ProjectPreviewPanel = (props: {
       <Show
         when={props.workspaceEnabled()}
         fallback={
-          <For each={props.projectSessions()}>
+          <For each={props.projectSessions().slice(0, 2)}>
             {(session) => (
               <SessionItem
                 {...props.ctx.sessionProps}
                 session={session}
+                list={props.projectSessions()}
                 slug={base64Encode(props.project.worktree)}
                 dense
                 mobile={props.mobile}
@@ -232,11 +232,12 @@ const ProjectPreviewPanel = (props: {
                   </div>
                   <span class="truncate text-14-medium text-text-base">{props.label(directory)}</span>
                 </div>
-                <For each={sessions()}>
+                <For each={sessions().slice(0, 2)}>
                   {(session) => (
                     <SessionItem
                       {...props.ctx.sessionProps}
                       session={session}
+                      list={sessions()}
                       slug={base64Encode(directory)}
                       dense
                       mobile={props.mobile}
@@ -277,8 +278,10 @@ export const SortableProject = (props: {
   const globalSync = useGlobalSync()
   const language = useLanguage()
   const sortable = createSortable(props.project.worktree)
-  const selected = createMemo(() =>
-    projectSelected(props.ctx.currentDir(), props.project.worktree, props.project.sandboxes),
+  const selected = createMemo(
+    () =>
+      props.project.worktree === props.ctx.currentDir() ||
+      props.project.sandboxes?.includes(props.ctx.currentDir()) === true,
   )
   const workspaces = createMemo(() => props.ctx.workspaceIds(props.project).slice(0, 2))
   const workspaceEnabled = createMemo(() => props.ctx.workspacesEnabled(props.project))
@@ -291,15 +294,8 @@ export const SortableProject = (props: {
 
   const preview = createMemo(() => !props.mobile && props.ctx.sidebarOpened())
   const overlay = createMemo(() => !props.mobile && !props.ctx.sidebarOpened())
-  const active = createMemo(() =>
-    projectTileActive({
-      menu: state.menu,
-      preview: preview(),
-      open: state.open,
-      overlay: overlay(),
-      hoverProject: props.ctx.hoverProject(),
-      worktree: props.project.worktree,
-    }),
+  const active = createMemo(
+    () => state.menu || (preview() ? state.open : overlay() && props.ctx.hoverProject() === props.project.worktree),
   )
 
   createEffect(() => {
@@ -323,11 +319,11 @@ export const SortableProject = (props: {
   }
 
   const projectStore = createMemo(() => globalSync.child(props.project.worktree, { bootstrap: false })[0])
-  const projectSessions = createMemo(() => sortedRootSessions(projectStore(), props.sortNow()).slice(0, 2))
+  const projectSessions = createMemo(() => sortedRootSessions(projectStore(), props.sortNow()))
   const projectChildren = createMemo(() => childMapByParent(projectStore().session))
   const workspaceSessions = (directory: string) => {
     const [data] = globalSync.child(directory, { bootstrap: false })
-    return sortedRootSessions(data, props.sortNow()).slice(0, 2)
+    return sortedRootSessions(data, props.sortNow())
   }
   const workspaceChildren = (directory: string) => {
     const [data] = globalSync.child(directory, { bootstrap: false })

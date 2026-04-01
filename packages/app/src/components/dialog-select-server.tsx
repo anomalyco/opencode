@@ -14,7 +14,9 @@ import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
-import { checkServerHealth, type ServerHealth } from "@/utils/server-health"
+import { type ServerHealth, useCheckServerHealth } from "@/utils/server-health"
+
+const DEFAULT_USERNAME = "opencode"
 
 interface ServerFormProps {
   value: string
@@ -41,13 +43,15 @@ function showRequestError(language: ReturnType<typeof useLanguage>, err: unknown
   })
 }
 
-function useDefaultServer(platform: ReturnType<typeof usePlatform>, language: ReturnType<typeof useLanguage>) {
-  const [defaultUrl, defaultUrlActions] = createResource(
+function useDefaultServer() {
+  const language = useLanguage()
+  const platform = usePlatform()
+  const [defaultKey, defaultUrlActions] = createResource(
     async () => {
       try {
-        const url = await platform.getDefaultServerUrl?.()
-        if (!url) return null
-        return normalizeServerUrl(url) ?? null
+        const key = await platform.getDefaultServer?.()
+        if (!key) return null
+        return key
       } catch (err) {
         showRequestError(language, err)
         return null
@@ -56,20 +60,22 @@ function useDefaultServer(platform: ReturnType<typeof usePlatform>, language: Re
     { initialValue: null },
   )
 
-  const canDefault = createMemo(() => !!platform.getDefaultServerUrl && !!platform.setDefaultServerUrl)
-  const setDefault = async (url: string | null) => {
+  const canDefault = createMemo(() => !!platform.getDefaultServer && !!platform.setDefaultServer)
+  const setDefault = async (key: ServerConnection.Key | null) => {
     try {
-      await platform.setDefaultServerUrl?.(url)
-      defaultUrlActions.mutate(url)
+      await platform.setDefaultServer?.(key)
+      defaultUrlActions.mutate(key)
     } catch (err) {
       showRequestError(language, err)
     }
   }
 
-  return { defaultUrl, canDefault, setDefault }
+  return { defaultKey, canDefault, setDefault }
 }
 
-function useServerPreview(fetcher: typeof fetch) {
+function useServerPreview() {
+  const checkServerHealth = useCheckServerHealth()
+
   const looksComplete = (value: string) => {
     const normalized = normalizeServerUrl(value)
     if (!normalized) return false
@@ -92,7 +98,7 @@ function useServerPreview(fetcher: typeof fetch) {
     const http: ServerConnection.HttpBase = { url: normalized }
     if (username) http.username = username
     if (password) http.password = password
-    const result = await checkServerHealth(http, fetcher)
+    const result = await checkServerHealth(http)
     setStatus(result.healthy)
   }
 
@@ -115,7 +121,7 @@ function ServerForm(props: ServerFormProps) {
 
   return (
     <div class="px-5">
-      <div class="bg-surface-raised-base rounded-md p-5 flex flex-col gap-3">
+      <div class="bg-surface-base rounded-md p-5 flex flex-col gap-3">
         <div class="flex-1 min-w-0 [&_[data-slot=input-wrapper]]:relative">
           <TextField
             type="text"
@@ -143,7 +149,7 @@ function ServerForm(props: ServerFormProps) {
           <TextField
             type="text"
             label={language.t("dialog.server.add.username")}
-            placeholder="username"
+            placeholder={language.t("dialog.server.add.usernamePlaceholder")}
             value={props.username}
             disabled={props.busy}
             onChange={props.onUsernameChange}
@@ -152,7 +158,7 @@ function ServerForm(props: ServerFormProps) {
           <TextField
             type="password"
             label={language.t("dialog.server.add.password")}
-            placeholder="password"
+            placeholder={language.t("dialog.server.add.passwordPlaceholder")}
             value={props.password}
             disabled={props.busy}
             onChange={props.onPasswordChange}
@@ -170,15 +176,15 @@ export function DialogSelectServer() {
   const server = useServer()
   const platform = usePlatform()
   const language = useLanguage()
-  const fetcher = platform.fetch ?? globalThis.fetch
-  const { defaultUrl, canDefault, setDefault } = useDefaultServer(platform, language)
-  const { previewStatus } = useServerPreview(fetcher)
+  const { defaultKey, canDefault, setDefault } = useDefaultServer()
+  const { previewStatus } = useServerPreview()
+  const checkServerHealth = useCheckServerHealth()
   const [store, setStore] = createStore({
     status: {} as Record<ServerConnection.Key, ServerHealth | undefined>,
     addServer: {
       url: "",
       name: "",
-      username: "",
+      username: DEFAULT_USERNAME,
       password: "",
       adding: false,
       error: "",
@@ -201,7 +207,7 @@ export function DialogSelectServer() {
     setStore("addServer", {
       url: "",
       name: "",
-      username: "",
+      username: DEFAULT_USERNAME,
       password: "",
       adding: false,
       error: "",
@@ -264,7 +270,7 @@ export function DialogSelectServer() {
     const results: Record<ServerConnection.Key, ServerHealth> = {}
     await Promise.all(
       items().map(async (conn) => {
-        results[ServerConnection.key(conn)] = await checkServerHealth(conn.http, fetcher)
+        results[ServerConnection.key(conn)] = await checkServerHealth(conn.http)
       }),
     )
     setStore("status", reconcile(results))
@@ -362,9 +368,9 @@ export function DialogSelectServer() {
       http: { url: normalized },
     }
     if (store.addServer.name.trim()) conn.displayName = store.addServer.name.trim()
-    if (store.addServer.username) conn.http.username = store.addServer.username
     if (store.addServer.password) conn.http.password = store.addServer.password
-    const result = await checkServerHealth(conn.http, fetcher)
+    if (store.addServer.password && store.addServer.username) conn.http.username = store.addServer.username
+    const result = await checkServerHealth(conn.http)
     setStore("addServer", { adding: false })
     if (!result.healthy) {
       setStore("addServer", { error: language.t("dialog.server.add.error") })
@@ -404,7 +410,7 @@ export function DialogSelectServer() {
       displayName: name,
       http: { url: normalized, username, password },
     }
-    const result = await checkServerHealth(conn.http, fetcher)
+    const result = await checkServerHealth(conn.http)
     setStore("editServer", { busy: false })
     if (!result.healthy) {
       setStore("editServer", { error: language.t("dialog.server.add.error") })
@@ -441,7 +447,7 @@ export function DialogSelectServer() {
       showForm: true,
       url: "",
       name: "",
-      username: "",
+      username: DEFAULT_USERNAME,
       password: "",
       error: "",
       status: undefined,
@@ -494,8 +500,8 @@ export function DialogSelectServer() {
 
   async function handleRemove(url: ServerConnection.Key) {
     server.remove(url)
-    if ((await platform.getDefaultServerUrl?.()) === url) {
-      platform.setDefaultServerUrl?.(null)
+    if ((await platform.getDefaultServer?.()) === url) {
+      platform.setDefaultServer?.(null)
     }
   }
 
@@ -536,7 +542,7 @@ export function DialogSelectServer() {
               if (x) select(x)
             }}
             divider={true}
-            class="px-5 [&_[data-slot=list-search-wrapper]]:w-full [&_[data-slot=list-scroll]]h-[300px] [&_[data-slot=list-scroll]]:overflow-y-auto [&_[data-slot=list-items]]:bg-surface-raised-base [&_[data-slot=list-items]]:rounded-md [&_[data-slot=list-item]]:min-h-14 [&_[data-slot=list-item]]:p-3 [&_[data-slot=list-item]]:!bg-transparent"
+            class="px-5 [&_[data-slot=list-search-wrapper]]:w-full [&_[data-slot=list-scroll]]h-[300px] [&_[data-slot=list-scroll]]:overflow-y-auto [&_[data-slot=list-items]]:bg-surface-base [&_[data-slot=list-items]]:rounded-md [&_[data-slot=list-item]]:min-h-14 [&_[data-slot=list-item]]:p-3 [&_[data-slot=list-item]]:!bg-transparent"
           >
             {(i) => {
               const key = ServerConnection.key(i)
@@ -551,7 +557,7 @@ export function DialogSelectServer() {
                     status={store.status[key]}
                     class="flex items-center gap-3 min-w-0 flex-1"
                     badge={
-                      <Show when={defaultUrl() === i.http.url}>
+                      <Show when={defaultKey() === ServerConnection.key(i)}>
                         <span class="text-text-base bg-surface-base text-14-regular px-1.5 rounded-xs">
                           {language.t("dialog.server.status.default")}
                         </span>
@@ -584,14 +590,14 @@ export function DialogSelectServer() {
                             >
                               <DropdownMenu.ItemLabel>{language.t("dialog.server.menu.edit")}</DropdownMenu.ItemLabel>
                             </DropdownMenu.Item>
-                            <Show when={canDefault() && defaultUrl() !== i.http.url}>
-                              <DropdownMenu.Item onSelect={() => setDefault(i.http.url)}>
+                            <Show when={canDefault() && defaultKey() !== key}>
+                              <DropdownMenu.Item onSelect={() => setDefault(key)}>
                                 <DropdownMenu.ItemLabel>
                                   {language.t("dialog.server.menu.default")}
                                 </DropdownMenu.ItemLabel>
                               </DropdownMenu.Item>
                             </Show>
-                            <Show when={canDefault() && defaultUrl() === i.http.url}>
+                            <Show when={canDefault() && defaultKey() === key}>
                               <DropdownMenu.Item onSelect={() => setDefault(null)}>
                                 <DropdownMenu.ItemLabel>
                                   {language.t("dialog.server.menu.defaultRemove")}

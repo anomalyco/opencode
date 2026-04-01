@@ -136,6 +136,11 @@ export async function handler(
             ...createBodyConverter(opts.format, providerInfo.format)(body),
             model: providerInfo.model,
             ...(providerInfo.payloadModifier ?? {}),
+            ...Object.fromEntries(
+              Object.entries(providerInfo.payloadMappings ?? {})
+                .map(([k, v]) => [k, input.request.headers.get(v)])
+                .filter(([_k, v]) => !!v),
+            ),
           },
           authInfo?.workspaceID,
         ),

@@ -1,8 +1,7 @@
 import type { Argv } from "yargs"
 import type { Session as SDKSession, Message, Part } from "@opencode-ai/sdk/v2"
 import { Session } from "../../session"
-import { SessionID, MessageID, PartID } from "../../session/schema"
-import { WorkspaceID } from "../../control-plane/schema"
+import { MessageV2 } from "../../session/message-v2"
 import { cmd } from "./cmd"
 import { bootstrap } from "../bootstrap"
 import { Database } from "../../storage/db"
@@ -154,20 +153,11 @@ export const ImportCommand = cmd({
         return
       }
 
-      const row = Session.toRow({
+      const info = Session.Info.parse({
         ...exportData.info,
-        id: SessionID.make(exportData.info.id),
-        parentID: exportData.info.parentID ? SessionID.make(exportData.info.parentID) : undefined,
-        workspaceID: exportData.info.workspaceID ? WorkspaceID.make(exportData.info.workspaceID) : undefined,
         projectID: Instance.project.id,
-        revert: exportData.info.revert
-          ? {
-              ...exportData.info.revert,
-              messageID: MessageID.make(exportData.info.revert.messageID),
-              partID: exportData.info.revert.partID ? PartID.make(exportData.info.revert.partID) : undefined,
-            }
-          : undefined,
       })
+      const row = Session.toRow(info)
       Database.use((db) =>
         db
           .insert(SessionTable)
@@ -177,14 +167,15 @@ export const ImportCommand = cmd({
       )
 
       for (const msg of exportData.messages) {
-        const { id: _mid, sessionID: _msid, ...msgData } = msg.info
+        const msgInfo = MessageV2.Info.parse(msg.info)
+        const { id, sessionID: _, ...msgData } = msgInfo
         Database.use((db) =>
           db
             .insert(MessageTable)
             .values({
-              id: MessageID.make(msg.info.id),
+              id,
               session_id: row.id,
-              time_created: msg.info.time?.created ?? Date.now(),
+              time_created: msgInfo.time?.created ?? Date.now(),
               data: msgData,
             })
             .onConflictDoNothing()
@@ -192,13 +183,14 @@ export const ImportCommand = cmd({
         )
 
         for (const part of msg.parts) {
-          const { id: _pid, sessionID: _psid, messageID: _pmid, ...partData } = part
+          const partInfo = MessageV2.Part.parse(part)
+          const { id: partId, sessionID: _s, messageID, ...partData } = partInfo
           Database.use((db) =>
             db
               .insert(PartTable)
               .values({
-                id: PartID.make(part.id),
-                message_id: MessageID.make(msg.info.id),
+                id: partId,
+                message_id: messageID,
                 session_id: row.id,
                 data: partData,
               })
