@@ -279,19 +279,9 @@ export namespace Server {
     }
     url = new URL(`http://${opts.hostname}:${opts.port}`)
     const controlPlane = ControlPlaneRoutes({ cors: opts.cors })
-    let app: Hono
-    if (basePath !== "/") {
-      app = new Hono()
-      app.use("*", async (c, next) => {
-        const url = new URL(c.req.url)
-        if (url.pathname.startsWith(basePath)) {
-          url.pathname = url.pathname.slice(basePath.length) || "/"
-        }
-        return controlPlane.fetch(new Request(url.toString(), c.req.raw))
-      })
-    } else {
-      app = controlPlane
-    }
+    const app = basePath !== "/"
+      ? new Hono().route(basePath, controlPlane).route("/", controlPlane)
+      : controlPlane
     const args = {
       hostname: opts.hostname,
       idleTimeout: 0,
