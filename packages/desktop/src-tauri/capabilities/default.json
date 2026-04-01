@@ -47,6 +47,10 @@
       "identifier": "http:default",
       "allow": [{ "url": "http://*" }, { "url": "https://*" }, { "url": "http://*:*/*" }]
     },
-    "clipboard-manager:allow-read-image"
+    "clipboard-manager:allow-read-image",
+    "core:webview:allow-create-webview",
+    "core:webview:allow-webview-close",
+    "core:webview:allow-set-webview-position",
+    "core:webview:allow-set-webview-size"
   ]
 }

@@ -1,5 +1,6 @@
 import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
+import { mkdir } from "node:fs/promises"
 import z from "zod"
 import { ProviderID, ModelID } from "../../provider/schema"
 import { ToolRegistry } from "../../tool/registry"
@@ -15,6 +16,9 @@ import { zodToJsonSchema } from "zod-to-json-schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { WorkspaceRoutes } from "./workspace"
+import { Log } from "../../util/log"
+
+const log = Log.create({ service: "experimental" })
 
 const ConsoleOrgOption = z.object({
   accountID: z.string(),
@@ -36,6 +40,34 @@ const ConsoleSwitchBody = z.object({
 
 export const ExperimentalRoutes = lazy(() =>
   new Hono()
+    .post("/design", validator("json", z.record(z.string(), z.any())), async (c) => {
+      try {
+        const dir = Instance.directory
+        const body = c.req.valid("json")
+        const folder = `${dir}/.opencode`
+        await mkdir(folder, { recursive: true })
+        await Bun.write(`${folder}/.design-state.json`, JSON.stringify(body))
+        return c.json(true)
+      } catch (err) {
+        const msg = err instanceof Error ? (err.stack ?? err.message) : String(err)
+        log.error("POST /design failed", { error: msg })
+        return c.json({ error: msg }, 500)
+      }
+    })
+    .get("/design", async (c) => {
+      try {
+        const dir = Instance.directory
+        const target = `${dir}/.opencode/.design-command.json`
+        const file = Bun.file(target)
+        if (!(await file.exists())) return c.json(null)
+        const data = await file.json().catch(() => null)
+        return c.json(data)
+      } catch (err) {
+        const msg = err instanceof Error ? (err.stack ?? err.message) : String(err)
+        log.error("GET /design failed", { error: msg })
+        return c.json({ error: msg }, 500)
+      }
+    })
     .get(
       "/console",
       describeRoute({

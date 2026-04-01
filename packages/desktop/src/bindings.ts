@@ -19,6 +19,18 @@ export const commands = {
 	wslPath: (path: string, mode: "windows" | "linux" | null) => __TAURI_INVOKE<string>("wsl_path", { path, mode }),
 	resolveAppPath: (appName: string) => __TAURI_INVOKE<string | null>("resolve_app_path", { appName }),
 	openPath: (path: string, appName: string | null) => __TAURI_INVOKE<null>("open_path", { path, appName }),
+	createDesignWebview: (url: string, x: number, y: number, width: number, height: number, script: string | null) => __TAURI_INVOKE<null>("create_design_webview", { url, x, y, width, height, script }),
+	resizeDesignWebview: (x: number, y: number, width: number, height: number) => __TAURI_INVOKE<null>("resize_design_webview", { x, y, width, height }),
+	closeDesignWebview: () => __TAURI_INVOKE<null>("close_design_webview"),
+	evalDesignWebview: (script: string) => __TAURI_INVOKE<null>("eval_design_webview", { script }),
+	designBridge: (event: string, payload: string) => __TAURI_INVOKE<null>("design_bridge", { event, payload }),
+	buildDesignIndex: (root: string) => __TAURI_INVOKE<string[]>("build_design_index", { root }),
+	updateDesignIndex: (root: string, paths: string[]) => __TAURI_INVOKE<string[]>("update_design_index", { root, paths }),
+	queryDesignIndex: (root: string, component: string | null, classes: string[] | null) => __TAURI_INVOKE<{
+	file: string,
+	line: number,
+	confidence: number,
+} | null>("query_design_index", { root, component, classes }),
 };
 
 /** Events */
@@ -33,6 +45,12 @@ export type InitStep = { phase: "server_waiting" } | { phase: "sqlite_waiting" }
 export type LinuxDisplayBackend = "wayland" | "auto";
 
 export type LoadingWindowComplete = null;
+
+export type QueryResult = {
+		file: string,
+		line: number,
+		confidence: number,
+	};
 
 export type ServerReadyData = {
 		url: string,
