@@ -54,7 +54,7 @@ const deviceTokenClient = (body: unknown, status = 400) =>
 const poll = (body: unknown, status = 400) =>
   Account.Service.use((s) => s.poll(login())).pipe(Effect.provide(live(deviceTokenClient(body, status))))
 
-it.effect("orgsByAccount groups orgs per account", () =>
+it.live("orgsByAccount groups orgs per account", () =>
   Effect.gen(function* () {
     yield* AccountRepo.use((r) =>
       r.persistAccount({
@@ -107,7 +107,7 @@ it.effect("orgsByAccount groups orgs per account", () =>
   }),
 )
 
-it.effect("token refresh persists the new token", () =>
+it.live("token refresh persists the new token", () =>
   Effect.gen(function* () {
     const id = AccountID.make("user-1")
 
@@ -148,7 +148,7 @@ it.effect("token refresh persists the new token", () =>
   }),
 )
 
-it.effect("config sends the selected org header", () =>
+it.live("config sends the selected org header", () =>
   Effect.gen(function* () {
     const id = AccountID.make("user-1")
 
@@ -188,7 +188,7 @@ it.effect("config sends the selected org header", () =>
   }),
 )
 
-it.effect("poll stores the account and first org on success", () =>
+it.live("poll stores the account and first org on success", () =>
   Effect.gen(function* () {
     const client = HttpClient.make((req) =>
       Effect.succeed(
@@ -259,7 +259,7 @@ for (const [name, body, expectedTag] of [
     "PollExpired",
   ],
 ] as const) {
-  it.effect(`poll returns ${name} for ${body.error}`, () =>
+  it.live(`poll returns ${name} for ${body.error}`, () =>
     Effect.gen(function* () {
       const result = yield* poll(body)
       expect(result._tag).toBe(expectedTag)
@@ -267,7 +267,7 @@ for (const [name, body, expectedTag] of [
   )
 }
 
-it.effect("poll returns poll error for other OAuth errors", () =>
+it.live("poll returns poll error for other OAuth errors", () =>
   Effect.gen(function* () {
     const result = yield* poll({
       error: "server_error",
