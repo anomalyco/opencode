@@ -1174,6 +1174,7 @@ export namespace Provider {
             if (provider.env) partial.env = provider.env
             if (provider.name) partial.name = provider.name
             if (provider.options) partial.options = provider.options
+            if (typeof provider.options?.apiKey === "string" && provider.options.apiKey) partial.key = provider.options.apiKey
             mergeProvider(providerID, partial)
           }
 

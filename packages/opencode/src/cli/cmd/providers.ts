@@ -196,6 +196,37 @@ export function resolvePluginProviders(input: {
   return result
 }
 
+export function resolveConfigProviders(input: {
+  config: {
+    provider?: Record<
+      string,
+      {
+        name?: string
+        options?: {
+          apiKey?: string
+        }
+      }
+    >
+    disabled_providers?: string[]
+    enabled_providers?: string[]
+  }
+  database: Record<string, { name?: string }>
+}): Array<{ id: string; name: string }> {
+  const disabled = new Set(input.config.disabled_providers ?? [])
+  const enabled = input.config.enabled_providers ? new Set(input.config.enabled_providers) : undefined
+
+  return Object.entries(input.config.provider ?? {})
+    .filter(([id, provider]) => {
+      if (disabled.has(id)) return false
+      if (enabled && !enabled.has(id)) return false
+      return typeof provider.options?.apiKey === "string" && provider.options.apiKey.length > 0
+    })
+    .map(([id, provider]) => ({
+      id,
+      name: provider.name ?? input.database[id]?.name ?? id,
+    }))
+}
+
 export const ProvidersCommand = cmd({
   command: "providers",
   aliases: ["auth"],
@@ -210,44 +241,66 @@ export const ProvidersListCommand = cmd({
   aliases: ["ls"],
   describe: "list providers and credentials",
   async handler(_args) {
-    UI.empty()
-    const authPath = path.join(Global.Path.data, "auth.json")
-    const homedir = os.homedir()
-    const displayPath = authPath.startsWith(homedir) ? authPath.replace(homedir, "~") : authPath
-    prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
-    const results = Object.entries(await Auth.all())
-    const database = await ModelsDev.get()
+    await Instance.provide({
+      directory: process.cwd(),
+      async fn() {
+        UI.empty()
+        const authPath = path.join(Global.Path.data, "auth.json")
+        const homedir = os.homedir()
+        const displayPath = authPath.startsWith(homedir) ? authPath.replace(homedir, "~") : authPath
+        prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
+        const results = Object.entries(await Auth.all())
+        const database = await ModelsDev.get()
 
-    for (const [providerID, result] of results) {
-      const name = database[providerID]?.name || providerID
-      prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}`)
-    }
-
-    prompts.outro(`${results.length} credentials`)
-
-    const activeEnvVars: Array<{ provider: string; envVar: string }> = []
-
-    for (const [providerID, provider] of Object.entries(database)) {
-      for (const envVar of provider.env) {
-        if (process.env[envVar]) {
-          activeEnvVars.push({
-            provider: provider.name || providerID,
-            envVar,
-          })
+        for (const [providerID, result] of results) {
+          const name = database[providerID]?.name || providerID
+          prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}`)
         }
-      }
-    }
 
-    if (activeEnvVars.length > 0) {
-      UI.empty()
-      prompts.intro("Environment")
+        prompts.outro(`${results.length} credentials`)
 
-      for (const { provider, envVar } of activeEnvVars) {
-        prompts.log.info(`${provider} ${UI.Style.TEXT_DIM}${envVar}`)
-      }
+        const config = await Config.get()
+        const configured = resolveConfigProviders({
+          config,
+          database,
+        })
 
-      prompts.outro(`${activeEnvVars.length} environment variable` + (activeEnvVars.length === 1 ? "" : "s"))
-    }
+        if (configured.length > 0) {
+          UI.empty()
+          prompts.intro("Configuration")
+
+          for (const provider of configured) {
+            prompts.log.info(`${provider.name} ${UI.Style.TEXT_DIM}apiKey`)
+          }
+
+          prompts.outro(`${configured.length} configured api key` + (configured.length === 1 ? "" : "s"))
+        }
+
+        const activeEnvVars: Array<{ provider: string; envVar: string }> = []
+
+        for (const [providerID, provider] of Object.entries(database)) {
+          for (const envVar of provider.env) {
+            if (process.env[envVar]) {
+              activeEnvVars.push({
+                provider: provider.name || providerID,
+                envVar,
+              })
+            }
+          }
+        }
+
+        if (activeEnvVars.length > 0) {
+          UI.empty()
+          prompts.intro("Environment")
+
+          for (const { provider, envVar } of activeEnvVars) {
+            prompts.log.info(`${provider} ${UI.Style.TEXT_DIM}${envVar}`)
+          }
+
+          prompts.outro(`${activeEnvVars.length} environment variable` + (activeEnvVars.length === 1 ? "" : "s"))
+        }
+      },
+    })
   },
 })
 

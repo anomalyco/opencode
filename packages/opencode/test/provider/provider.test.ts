@@ -57,6 +57,8 @@ test("provider loaded from config with apiKey option", async () => {
     fn: async () => {
       const providers = await Provider.list()
       expect(providers[ProviderID.anthropic]).toBeDefined()
+      expect(providers[ProviderID.anthropic].source).toBe("config")
+      expect(providers[ProviderID.anthropic].key).toBe("config-api-key")
     },
   })
 })

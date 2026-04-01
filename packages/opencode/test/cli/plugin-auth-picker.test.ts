@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test"
-import { resolvePluginProviders } from "../../src/cli/cmd/providers"
+import { resolveConfigProviders, resolvePluginProviders } from "../../src/cli/cmd/providers"
 import type { Hooks } from "@opencode-ai/plugin"
 
 function hookWithAuth(provider: string): Hooks {
@@ -116,5 +116,67 @@ describe("resolvePluginProviders", () => {
       providerNames: {},
     })
     expect(result).toEqual([])
+  })
+})
+
+describe("resolveConfigProviders", () => {
+  test("returns providers with config api keys", () => {
+    const result = resolveConfigProviders({
+      config: {
+        provider: {
+          anthropic: {
+            options: {
+              apiKey: "test-key",
+            },
+          },
+          openai: {
+            name: "OpenAI Custom",
+            options: {
+              apiKey: "test-openai-key",
+            },
+          },
+          google: {
+            options: {},
+          },
+        },
+      },
+      database: {
+        anthropic: { name: "Anthropic" },
+        openai: { name: "OpenAI" },
+        google: { name: "Google" },
+      },
+    })
+
+    expect(result).toEqual([
+      { id: "anthropic", name: "Anthropic" },
+      { id: "openai", name: "OpenAI Custom" },
+    ])
+  })
+
+  test("respects enabled and disabled providers", () => {
+    const result = resolveConfigProviders({
+      config: {
+        enabled_providers: ["openai"],
+        disabled_providers: ["anthropic"],
+        provider: {
+          anthropic: {
+            options: {
+              apiKey: "test-key",
+            },
+          },
+          openai: {
+            options: {
+              apiKey: "test-openai-key",
+            },
+          },
+        },
+      },
+      database: {
+        anthropic: { name: "Anthropic" },
+        openai: { name: "OpenAI" },
+      },
+    })
+
+    expect(result).toEqual([{ id: "openai", name: "OpenAI" }])
   })
 })
