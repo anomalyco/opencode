@@ -10,7 +10,7 @@ RUN cd packages/opencode && bun run build --single
 
 FROM alpine:3.21 AS dev
 
-RUN apk add --no-cache git ca-certificates libstdc++ libgcc python3 nodejs npm
+RUN apk add --no-cache git ca-certificates libstdc++ libgcc gcompat python3 nodejs npm
 
 COPY --from=build /app/packages/opencode/dist/opencode-linux-x64/bin/opencode /usr/local/bin/opencode
 
