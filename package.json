@@ -15,7 +15,8 @@
     "prepare": "husky",
     "random": "echo 'Random script'",
     "hello": "echo 'Hello World!'",
-    "test": "echo 'do not run tests from root' && exit 1"
+    "test": "echo 'do not run tests from root' && exit 1",
+    "build:electron:win": "bun --cwd packages/desktop-electron build; bun --cwd packages/desktop-electron package:win"
   },
   "workspaces": {
     "packages": [

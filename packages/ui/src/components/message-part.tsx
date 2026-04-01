@@ -53,7 +53,6 @@ import { TextShimmer } from "./text-shimmer"
 import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
 import { animate } from "motion"
-import { useLocation } from "@solidjs/router"
 import { attached, inline, kind } from "./message-file"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
@@ -376,17 +375,6 @@ function urls(text: string | undefined) {
       seen.add(item)
       return true
     })
-}
-
-function sessionLink(id: string | undefined, path: string, href?: (id: string) => string | undefined) {
-  if (!id) return
-
-  const direct = href?.(id)
-  if (direct) return direct
-
-  const idx = path.indexOf("/session")
-  if (idx === -1) return
-  return `${path.slice(0, idx)}/session/${id}`
 }
 
 const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
@@ -1242,16 +1230,17 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
     const value = partMetadata().sessionId
     if (typeof value === "string" && value) return value
   })
-  const taskHref = createMemo(() => {
-    if (part().tool !== "task") return
-    return sessionLink(taskId(), useLocation().pathname, data.sessionHref)
-  })
   const taskSubtitle = createMemo(() => {
     if (part().tool !== "task") return undefined
     const value = input().description
     if (typeof value === "string" && value) return value
     return taskId()
   })
+  const taskJump = () => {
+    const id = taskId()
+    if (!id) return
+    data.navigateToSession?.(id)
+  }
 
   const render = createMemo(() => ToolRegistry.render(part().tool) ?? GenericTool)
 
@@ -1277,7 +1266,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
                   error={error()}
                   defaultOpen={props.defaultOpen}
                   subtitle={taskSubtitle()}
-                  href={taskHref()}
+                  onNavigate={taskJump}
                 />
               )
             }}
@@ -1662,7 +1651,6 @@ ToolRegistry.register({
   render(props) {
     const data = useData()
     const i18n = useI18n()
-    const location = useLocation()
     const childSessionId = () => props.metadata.sessionId as string | undefined
     const type = createMemo(() => {
       const raw = props.input.subagent_type
@@ -1676,8 +1664,20 @@ ToolRegistry.register({
       return childSessionId()
     })
     const running = createMemo(() => props.status === "pending" || props.status === "running")
+    const jumpable = !!data.navigateToSession
 
-    const href = createMemo(() => sessionLink(childSessionId(), location.pathname, data.sessionHref))
+    const jump = () => {
+      const id = childSessionId()
+      if (!id) return
+      data.navigateToSession?.(id)
+    }
+
+    const key = (event: KeyboardEvent) => {
+      if (event.key !== "Enter" && event.key !== " ") return
+      event.preventDefault()
+      event.stopPropagation()
+      jump()
+    }
 
     const titleContent = () => <TextShimmer text={title()} active={running()} />
 
@@ -1688,21 +1688,21 @@ ToolRegistry.register({
             {titleContent()}
           </span>
           <Show when={subtitle()}>
-            <Switch>
-              <Match when={href()}>
-                <a
-                  data-slot="basic-tool-tool-subtitle"
-                  class="clickable subagent-link"
-                  href={href()!}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {subtitle()}
-                </a>
-              </Match>
-              <Match when={true}>
-                <span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>
-              </Match>
-            </Switch>
+            <Show when={jumpable} fallback={<span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>}>
+              <span
+                data-slot="basic-tool-tool-subtitle"
+                class="clickable subagent-link"
+                role="button"
+                tabIndex={0}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  jump()
+                }}
+                onKeyDown={key}
+              >
+                {subtitle()}
+              </span>
+            </Show>
           </Show>
         </div>
       </div>
