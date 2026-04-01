@@ -7,6 +7,7 @@ import { lazy } from "../util/lazy"
 import { Global } from "../global"
 import { Log } from "../util/log"
 import { NamedError } from "@opencode-ai/util/error"
+import { Database as Sqlite } from "bun:sqlite"
 import z from "zod"
 import path from "path"
 import { readFileSync, readdirSync, existsSync } from "fs"
@@ -27,6 +28,8 @@ export const NotFoundError = NamedError.create(
 const log = Log.create({ service: "db" })
 
 export namespace Database {
+  const pattern = /^opencode(?:-[A-Za-z0-9._-]+)?\.db$/
+
   export function getChannelPath() {
     const channel = Installation.CHANNEL
     if (["latest", "beta"].includes(channel) || Flag.OPENCODE_DISABLE_CHANNEL_DB)
@@ -42,6 +45,40 @@ export namespace Database {
     }
     return getChannelPath()
   })
+
+  export function paths() {
+    if (Flag.OPENCODE_DB) return [Path]
+
+    const seen = new Set<string>()
+    const result: string[] = []
+    const push = (file: string) => {
+      if (seen.has(file)) return
+      if (!existsSync(file)) return
+      seen.add(file)
+      result.push(file)
+    }
+
+    push(Path)
+
+    try {
+      for (const item of readdirSync(Global.Path.data, { withFileTypes: true })) {
+        if (!item.isFile()) continue
+        if (!pattern.test(item.name)) continue
+        push(path.join(Global.Path.data, item.name))
+      }
+    } catch {}
+
+    return result.length > 0 ? result : [Path]
+  }
+
+  export function read<T>(file: string, fn: (db: Sqlite) => T) {
+    const db = new Sqlite(file, { readonly: true })
+    try {
+      return fn(db)
+    } finally {
+      db.close()
+    }
+  }
 
   export type Transaction = SQLiteTransaction<"sync", void>
 

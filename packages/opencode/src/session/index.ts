@@ -183,6 +183,125 @@ export namespace Session {
   })
   export type GlobalInfo = z.output<typeof GlobalInfo>
 
+  type GlobalRow = SessionRow & {
+    project_name: string | null
+    project_worktree: string | null
+  }
+
+  function globalRows(
+    file: string,
+    input?: {
+      directory?: string
+      roots?: boolean
+      start?: number
+      cursor?: number
+      search?: string
+      limit?: number
+      archived?: boolean
+    },
+  ) {
+    const where: string[] = []
+    const args: Array<string | number> = []
+
+    if (input?.directory) {
+      where.push("s.directory = ?")
+      args.push(input.directory)
+    }
+    if (input?.roots) where.push("s.parent_id is null")
+    if (input?.start) {
+      where.push("s.time_updated >= ?")
+      args.push(input.start)
+    }
+    if (input?.cursor) {
+      where.push("s.time_updated < ?")
+      args.push(input.cursor)
+    }
+    if (input?.search) {
+      where.push("s.title like ?")
+      args.push(`%${input.search}%`)
+    }
+    if (!input?.archived) where.push("s.time_archived is null")
+
+    const sql = [
+      "select s.*, p.name as project_name, p.worktree as project_worktree",
+      "from session s",
+      "left join project p on p.id = s.project_id",
+      where.length > 0 ? `where ${where.join(" and ")}` : "",
+      "order by s.time_updated desc, s.id desc",
+      "limit ?",
+    ]
+      .filter(Boolean)
+      .join(" ")
+
+    try {
+      return Database.read(file, (db) => db.query(sql).all(...args, input?.limit ?? 100) as GlobalRow[])
+    } catch {
+      return []
+    }
+  }
+
+  function currentRows(input?: {
+    directory?: string
+    roots?: boolean
+    start?: number
+    cursor?: number
+    search?: string
+    limit?: number
+    archived?: boolean
+  }) {
+    const conditions: SQL[] = []
+
+    if (input?.directory) conditions.push(eq(SessionTable.directory, input.directory))
+    if (input?.roots) conditions.push(isNull(SessionTable.parent_id))
+    if (input?.start) conditions.push(gte(SessionTable.time_updated, input.start))
+    if (input?.cursor) conditions.push(lt(SessionTable.time_updated, input.cursor))
+    if (input?.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
+    if (!input?.archived) conditions.push(isNull(SessionTable.time_archived))
+
+    const rows = Database.use((db) => {
+      const query =
+        conditions.length > 0
+          ? db
+              .select()
+              .from(SessionTable)
+              .where(and(...conditions))
+          : db.select().from(SessionTable)
+      return query
+        .orderBy(desc(SessionTable.time_updated), desc(SessionTable.id))
+        .limit(input?.limit ?? 100)
+        .all()
+    })
+
+    const ids = [...new Set(rows.map((row) => row.project_id))]
+    const projects = new Map<string, ProjectInfo>()
+
+    if (ids.length > 0) {
+      const items = Database.use((db) =>
+        db
+          .select({ id: ProjectTable.id, name: ProjectTable.name, worktree: ProjectTable.worktree })
+          .from(ProjectTable)
+          .where(inArray(ProjectTable.id, ids))
+          .all(),
+      )
+      for (const item of items) {
+        projects.set(item.id, {
+          id: item.id,
+          name: item.name ?? undefined,
+          worktree: item.worktree,
+        })
+      }
+    }
+
+    return rows.map((row) => {
+      const project = projects.get(row.project_id)
+      return {
+        ...row,
+        project_name: project?.name ?? null,
+        project_worktree: project?.worktree ?? null,
+      } satisfies GlobalRow
+    })
+  }
+
   export const Event = {
     Created: SyncEvent.define({
       type: "session.created",
@@ -789,63 +908,33 @@ export namespace Session {
     limit?: number
     archived?: boolean
   }) {
-    const conditions: SQL[] = []
-
-    if (input?.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
-    }
-    if (input?.roots) {
-      conditions.push(isNull(SessionTable.parent_id))
-    }
-    if (input?.start) {
-      conditions.push(gte(SessionTable.time_updated, input.start))
-    }
-    if (input?.cursor) {
-      conditions.push(lt(SessionTable.time_updated, input.cursor))
-    }
-    if (input?.search) {
-      conditions.push(like(SessionTable.title, `%${input.search}%`))
-    }
-    if (!input?.archived) {
-      conditions.push(isNull(SessionTable.time_archived))
-    }
-
     const limit = input?.limit ?? 100
 
-    const rows = Database.use((db) => {
-      const query =
-        conditions.length > 0
-          ? db
-              .select()
-              .from(SessionTable)
-              .where(and(...conditions))
-          : db.select().from(SessionTable)
-      return query.orderBy(desc(SessionTable.time_updated), desc(SessionTable.id)).limit(limit).all()
+    const seen = new Set<string>()
+    const rows = [
+      ...currentRows({ ...input, limit }),
+      ...Database.paths()
+        .filter((file) => file !== Database.Path)
+        .flatMap((file) => globalRows(file, { ...input, limit })),
+    ].toSorted((a, b) => {
+      if (a.time_updated !== b.time_updated) return b.time_updated - a.time_updated
+      return b.id.localeCompare(a.id)
     })
 
-    const ids = [...new Set(rows.map((row) => row.project_id))]
-    const projects = new Map<string, ProjectInfo>()
-
-    if (ids.length > 0) {
-      const items = Database.use((db) =>
-        db
-          .select({ id: ProjectTable.id, name: ProjectTable.name, worktree: ProjectTable.worktree })
-          .from(ProjectTable)
-          .where(inArray(ProjectTable.id, ids))
-          .all(),
-      )
-      for (const item of items) {
-        projects.set(item.id, {
-          id: item.id,
-          name: item.name ?? undefined,
-          worktree: item.worktree,
-        })
-      }
-    }
-
     for (const row of rows) {
-      const project = projects.get(row.project_id) ?? null
-      yield { ...fromRow(row), project }
+      if (seen.has(row.id)) continue
+      seen.add(row.id)
+      if (seen.size > limit) break
+      yield {
+        ...fromRow(row),
+        project: row.project_worktree
+          ? {
+              id: row.project_id,
+              name: row.project_name ?? undefined,
+              worktree: row.project_worktree,
+            }
+          : null,
+      }
     }
   }
 
