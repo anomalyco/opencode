@@ -49,6 +49,7 @@ import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
+import { QuickAssistant } from "@/quick-assistant"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1025,6 +1026,11 @@ export namespace SessionPrompt {
           return toolOutput(result)
         },
       })
+    }
+
+    // Quick assistant cannot use MCP tools, so avoid blocking on MCP discovery.
+    if (QuickAssistant.active(Instance.directory)) {
+      return tools
     }
 
     for (const [key, item] of Object.entries(await MCP.tools())) {
