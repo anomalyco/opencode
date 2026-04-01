@@ -6,6 +6,7 @@ import path from "path"
 import { fileURLToPath } from "url"
 import { UI } from "@/cli/ui"
 import { Log } from "@/util/log"
+import { errorMessage } from "@/util/error"
 import { withTimeout } from "@/util/timeout"
 import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
 import { Filesystem } from "@/util/filesystem"
@@ -14,6 +15,7 @@ import type { EventSource } from "./context/sdk"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { TuiConfig } from "@/config/tui"
 import { Instance } from "@/project/instance"
+import { writeHeapSnapshot } from "v8"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -42,6 +44,9 @@ function createWorkerFetch(client: RpcClient): typeof fetch {
 function createEventSource(client: RpcClient): EventSource {
   return {
     on: (handler) => client.on<Event>("event", handler),
+    setWorkspace: (workspaceID) => {
+      void client.call("setWorkspace", { workspaceID })
+    },
   }
 }
 
@@ -110,16 +115,20 @@ export const TuiThreadCommand = cmd({
         return
       }
 
-      // Resolve relative paths against PWD to preserve behavior when using --cwd flag
-      const root = process.env.PWD ?? process.cwd()
-      const cwd = args.project ? path.resolve(root, args.project) : process.cwd()
+      // Resolve relative --project paths from PWD, then use the real cwd after
+      // chdir so the thread and worker share the same directory key.
+      const root = Filesystem.resolve(process.env.PWD ?? process.cwd())
+      const next = args.project
+        ? Filesystem.resolve(path.isAbsolute(args.project) ? args.project : path.join(root, args.project))
+        : Filesystem.resolve(process.cwd())
       const file = await target()
       try {
-        process.chdir(cwd)
+        process.chdir(next)
       } catch {
-        UI.error("Failed to change directory to " + cwd)
+        UI.error("Failed to change directory to " + next)
         return
       }
+      const cwd = Filesystem.resolve(process.cwd())
 
       const worker = new Worker(file, {
         env: Object.fromEntries(
@@ -137,7 +146,7 @@ export const TuiThreadCommand = cmd({
       const reload = () => {
         client.call("reload", undefined).catch((err) => {
           Log.Default.warn("worker reload failed", {
-            error: err instanceof Error ? err.message : String(err),
+            error: errorMessage(err),
           })
         })
       }
@@ -154,7 +163,7 @@ export const TuiThreadCommand = cmd({
         process.off("SIGUSR2", reload)
         await withTimeout(client.call("shutdown", undefined), 5000).catch((error) => {
           Log.Default.warn("worker shutdown failed", {
-            error: error instanceof Error ? error.message : String(error),
+            error: errorMessage(error),
           })
         })
         worker.terminate()
@@ -194,6 +203,11 @@ export const TuiThreadCommand = cmd({
       try {
         await tui({
           url: transport.url,
+          async onSnapshot() {
+            const tui = writeHeapSnapshot("tui.heapsnapshot")
+            const server = await client.call("snapshot", undefined)
+            return [tui, server]
+          },
           config,
           directory: cwd,
           fetch: transport.fetch,
@@ -206,7 +220,6 @@ export const TuiThreadCommand = cmd({
             prompt,
             fork: args.fork,
           },
-          onExit: stop,
         })
       } finally {
         await stop()

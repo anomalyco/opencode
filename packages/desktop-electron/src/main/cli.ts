@@ -35,6 +35,7 @@ export type CommandEvent =
 export type SqliteMigrationProgress = { type: "InProgress"; value: number } | { type: "Done" }
 
 export type CommandChild = {
+  pid: number | undefined
   kill: () => void
 }
 
@@ -107,7 +108,7 @@ export function syncCli() {
 
   let version = ""
   try {
-    version = execFileSync(installPath, ["--version"]).toString().trim()
+    version = execFileSync(installPath, ["--version"], { windowsHide: true }).toString().trim()
   } catch {
     return
   }
@@ -147,7 +148,7 @@ export function spawnCommand(args: string, extraEnv: Record<string, string>) {
   console.log(`[cli] Executing: ${cmd} ${cmdArgs.join(" ")}`)
   const child = spawn(cmd, cmdArgs, {
     env: envs,
-    detached: true,
+    detached: process.platform !== "win32",
     windowsHide: true,
     stdio: ["ignore", "pipe", "pipe"],
   })
@@ -191,7 +192,7 @@ export function spawnCommand(args: string, extraEnv: Record<string, string>) {
     treeKill(child.pid)
   }
 
-  return { events, child: { kill }, exit }
+  return { events, child: { pid: child.pid, kill }, exit }
 }
 
 function handleSqliteProgress(events: EventEmitter, line: string) {

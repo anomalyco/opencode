@@ -1,9 +1,8 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { type Accessor, batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import { usePlatform } from "@/context/platform"
 import { Persist, persisted } from "@/utils/persist"
-import { checkServerHealth } from "@/utils/server-health"
+import { useCheckServerHealth } from "@/utils/server-health"
 
 type StoredProject = { worktree: string; expanded: boolean }
 type StoredServer = string | ServerConnection.HttpBase | ServerConnection.Http
@@ -95,8 +94,12 @@ export namespace ServerConnection {
 
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
   name: "Server",
-  init: (props: { defaultServer: ServerConnection.Key; servers?: Array<ServerConnection.Any> }) => {
-    const platform = usePlatform()
+  init: (props: {
+    defaultServer: ServerConnection.Key
+    disableHealthCheck?: boolean
+    servers?: Array<ServerConnection.Any>
+  }) => {
+    const checkServerHealth = useCheckServerHealth()
 
     const [store, setStore, _, ready] = persisted(
       Persist.global("server", ["server.v3"]),
@@ -197,13 +200,16 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
     const isReady = createMemo(() => ready() && !!state.active)
 
-    const fetcher = platform.fetch ?? globalThis.fetch
-    const check = (conn: ServerConnection.Any) => checkServerHealth(conn.http, fetcher).then((x) => x.healthy)
+    const check = (conn: ServerConnection.Any) => checkServerHealth(conn.http).then((x) => x.healthy)
 
     createEffect(() => {
       const current_ = current()
       if (!current_) return
 
+      if (props.disableHealthCheck) {
+        setState("healthy", true)
+        return
+      }
       setState("healthy", undefined)
       onCleanup(startHealthPolling(current_))
     })

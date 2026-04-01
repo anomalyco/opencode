@@ -4,12 +4,12 @@ import { Tool } from "./tool"
 import { Question } from "../question"
 import { Session } from "../session"
 import { MessageV2 } from "../session/message-v2"
-import { Identifier } from "../id/id"
 import { Provider } from "../provider/provider"
 import { Instance } from "../project/instance"
+import { type SessionID, MessageID, PartID } from "../session/schema"
 import EXIT_DESCRIPTION from "./plan-exit.txt"
 
-async function getLastModel(sessionID: string) {
+async function getLastModel(sessionID: SessionID) {
   for await (const item of MessageV2.stream(sessionID)) {
     if (item.info.role === "user" && item.info.model) return item.info.model
   }
@@ -44,7 +44,7 @@ export const PlanExitTool = Tool.define("plan_exit", {
     const model = await getLastModel(ctx.sessionID)
 
     const userMsg: MessageV2.User = {
-      id: Identifier.ascending("message"),
+      id: MessageID.ascending(),
       sessionID: ctx.sessionID,
       role: "user",
       time: {
@@ -55,7 +55,7 @@ export const PlanExitTool = Tool.define("plan_exit", {
     }
     await Session.updateMessage(userMsg)
     await Session.updatePart({
-      id: Identifier.ascending("part"),
+      id: PartID.ascending(),
       messageID: userMsg.id,
       sessionID: ctx.sessionID,
       type: "text",
@@ -102,7 +102,7 @@ export const PlanEnterTool = Tool.define("plan_enter", {
     const model = await getLastModel(ctx.sessionID)
 
     const userMsg: MessageV2.User = {
-      id: Identifier.ascending("message"),
+      id: MessageID.ascending(),
       sessionID: ctx.sessionID,
       role: "user",
       time: {
@@ -113,7 +113,7 @@ export const PlanEnterTool = Tool.define("plan_enter", {
     }
     await Session.updateMessage(userMsg)
     await Session.updatePart({
-      id: Identifier.ascending("part"),
+      id: PartID.ascending(),
       messageID: userMsg.id,
       sessionID: ctx.sessionID,
       type: "text",

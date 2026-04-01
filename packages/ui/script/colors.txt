@@ -114,6 +114,7 @@
 --border-weak-selected: var(--cobalt-light-alpha-5);
 --border-weak-disabled: var(--smoke-light-alpha-6);
 --border-weak-focus: var(--smoke-light-alpha-7);
+--border-weaker-base: var(--smoke-light-alpha-3);
 --border-interactive-base: var(--cobalt-light-7);
 --border-interactive-hover: var(--cobalt-light-8);
 --border-interactive-active: var(--cobalt-light-9);
@@ -224,11 +225,5 @@
 --markdown-image-text: #318795;
 --markdown-code-block: #1A1A1A;
 --border-color: #FFFFFF;
---border-weaker-base: var(--smoke-light-alpha-3);
---border-weaker-hover: var(--smoke-light-alpha-4);
---border-weaker-active: var(--smoke-light-alpha-6);
---border-weaker-selected: var(--cobalt-light-alpha-4);
---border-weaker-disabled: var(--smoke-light-alpha-2);
---border-weaker-focus: var(--smoke-light-alpha-6);
 --button-ghost-hover: var(--smoke-light-alpha-2);
 --button-ghost-hover2: var(--smoke-light-alpha-3);
