@@ -40,6 +40,7 @@ import { Plugin } from "../../src/plugin"
 import { Provider as ProviderSvc } from "../../src/provider/provider"
 import { SessionCompaction } from "../../src/session/compaction"
 import { Instruction } from "../../src/session/instruction"
+import { SessionCompactionPolicy } from "../../src/session/compaction-policy"
 import { SessionProcessor } from "../../src/session/processor"
 import { SessionStatus } from "../../src/session/status"
 import { Shell } from "../../src/shell/shell"
@@ -118,6 +119,7 @@ function makeHttp() {
     Plugin.defaultLayer,
     Config.defaultLayer,
     ProviderSvc.defaultLayer,
+    SessionCompactionPolicy.defaultLayer,
     filetime,
     lsp,
     mcp,

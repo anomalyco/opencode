@@ -21,8 +21,7 @@ import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
 import { AppFileSystem } from "../../src/filesystem"
 import { SessionCompaction } from "../../src/session/compaction"
-import { Instruction } from "../../src/instruction"
-import { Session } from "../../src/session"
+import { Instruction } from "../../src/session/instruction"
 import { SessionCompactionPolicy } from "../../src/session/compaction-policy"
 import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
@@ -175,7 +174,7 @@ function makeHttp() {
       Layer.provideMerge(proc),
       Layer.provideMerge(registry),
       Layer.provideMerge(trunc),
-      Layer.provide(Instruction.defaultLayer),
+      Layer.provideMerge(Instruction.defaultLayer),
       Layer.provideMerge(deps),
     ),
   )
@@ -231,6 +230,36 @@ function providerCfg(url: string) {
   }
 }
 
+function compactCfg(url: string) {
+  return {
+    ...providerCfg(url),
+    compaction: {
+      max_failures: 3,
+      max_retries: 2,
+      max_output_tokens: 20,
+      post_budget: 100,
+      restore_attachments: true,
+    },
+    provider: {
+      ...cfg.provider,
+      test: {
+        ...cfg.provider.test,
+        options: {
+          ...cfg.provider.test.options,
+          baseURL: url,
+        },
+        models: {
+          ...cfg.provider.test.models,
+          "test-model": {
+            ...cfg.provider.test.models["test-model"],
+            limit: { context: 80, output: 10 },
+          },
+        },
+      },
+    },
+  }
+}
+
 const user = Effect.fn("test.user")(function* (sessionID: SessionID, text: string) {
   const session = yield* Session.Service
   const msg = yield* session.updateMessage({
@@ -278,6 +307,37 @@ const seed = Effect.fn("test.seed")(function* (sessionID: SessionID, opts?: { fi
     text: "hi there",
   })
   return { user: msg, assistant }
+})
+
+const attach = Effect.fn("test.attach")(function* (sessionID: SessionID, messageID: MessageID, url: string) {
+  const session = yield* Session.Service
+  yield* session.updatePart({
+    id: PartID.ascending(),
+    messageID,
+    sessionID,
+    type: "tool",
+    callID: "call-1",
+    tool: "read",
+    state: {
+      status: "completed",
+      input: {},
+      output: "sensitive-old-tool-output",
+      title: "done",
+      metadata: {},
+      time: { start: Date.now(), end: Date.now() },
+      attachments: [
+        {
+          id: PartID.ascending(),
+          messageID,
+          sessionID,
+          type: "file",
+          mime: "application/json",
+          filename: "note.json",
+          url,
+        },
+      ],
+    },
+  })
 })
 
 const addSubtask = (sessionID: SessionID, messageID: MessageID, model = ref) =>
@@ -453,6 +513,57 @@ it.live("loop continues when finish is tool-calls", () =>
       }
     }),
     { git: true, config: providerCfg },
+  ),
+)
+
+it.live("loop auto-compacts through prompt flow and skips unsupported restored attachments", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        title: "Compaction",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      const prev = yield* seed(chat.id, { finish: "stop" })
+      yield* attach(chat.id, prev.assistant.id, "https://example.com/note.json")
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "continue" }],
+      })
+
+      yield* llm.text("too large", { usage: { input: 61, output: 10 } })
+      yield* llm.text("compact summary", { usage: { input: 20, output: 8 } })
+      yield* llm.text("resumed", { usage: { input: 10, output: 3 } })
+
+      const result = yield* prompt.loop({ sessionID: chat.id })
+      expect(yield* llm.calls).toBe(3)
+
+      expect(result.info.role).toBe("assistant")
+      expect(result.parts.some((part) => part.type === "text" && part.text === "resumed")).toBe(true)
+
+      const msgs = yield* sessions.messages({ sessionID: chat.id })
+      const summary = msgs.find((msg) => msg.info.role === "assistant" && msg.info.summary)
+      expect(summary?.parts.some((part) => part.type === "text" && part.text === "compact summary")).toBe(true)
+
+      const next = msgs.findLast(
+        (msg) =>
+          msg.info.role === "user" &&
+          msg.parts.some((part) => part.type === "text" && part.synthetic),
+      )
+      expect(next?.parts.some((part) => part.type === "file")).toBe(false)
+
+      const inputs = yield* llm.inputs
+      expect(inputs).toHaveLength(3)
+      expect(JSON.stringify(inputs[1]?.messages)).toContain("Summarize the conversation")
+      expect(JSON.stringify(inputs[1]?.messages)).toContain("sensitive-old-tool-output")
+      expect(JSON.stringify(inputs[2]?.messages)).toContain("compact summary")
+      expect(JSON.stringify(inputs[2]?.messages)).not.toContain("note.json")
+      expect(JSON.stringify(inputs[2]?.messages)).not.toContain("sensitive-old-tool-output")
+    }),
+    { git: true, config: compactCfg },
   ),
 )
 
