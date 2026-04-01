@@ -852,7 +852,7 @@ export default {
     const calls: Array<[string, boolean]> = []
 
     const loaded = await PluginLoader.loadExternal({
-      rows: [tmp.extra.aSpec, tmp.extra.bSpec].map((item) => ({ item, plan: PluginLoader.plan(item) })),
+      candidates: [tmp.extra.aSpec, tmp.extra.bSpec].map((item) => ({ item, plan: PluginLoader.plan(item) })),
       kind: "tui",
       wait: async () => {
         wait += 1
@@ -860,8 +860,8 @@ export default {
         await Bun.write(path.join(tmp.extra.b, "index.ts"), "export default {}\n")
       },
       report: {
-        start(row, retry) {
-          calls.push([row.plan.spec, retry])
+        start(candidate, retry) {
+          calls.push([candidate.plan.spec, retry])
         },
       },
     })
@@ -890,7 +890,7 @@ export default {
     let count = 0
 
     const loaded = await PluginLoader.loadExternal({
-      rows: [{ item: tmp.extra.spec, plan: PluginLoader.plan(tmp.extra.spec) }],
+      candidates: [{ item: tmp.extra.spec, plan: PluginLoader.plan(tmp.extra.spec) }],
       kind: "tui",
       wait: async () => {
         wait += 1
@@ -917,13 +917,13 @@ export default {
 
     try {
       const loaded = await PluginLoader.loadExternal({
-        rows: [{ item: "acme-plugin@1.0.0", plan: PluginLoader.plan("acme-plugin@1.0.0") }],
+        candidates: [{ item: "acme-plugin@1.0.0", plan: PluginLoader.plan("acme-plugin@1.0.0") }],
         kind: "tui",
         wait: async () => {
           wait += 1
         },
         report: {
-          error(_row, retry, stage) {
+          error(_candidate, retry, stage) {
             errors.push([stage, retry])
           },
         },

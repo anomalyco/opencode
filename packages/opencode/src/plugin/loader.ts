@@ -27,12 +27,12 @@ export namespace PluginLoader {
     mod: Record<string, unknown>
   }
 
-  type Row<T> = { item: T; plan: Plan }
+  type Candidate<T> = { item: T; plan: Plan }
   type Report<T> = {
-    start?: (row: Row<T>, retry: boolean) => void
-    missing?: (row: Row<T>, retry: boolean, message: string) => void
+    start?: (candidate: Candidate<T>, retry: boolean) => void
+    missing?: (candidate: Candidate<T>, retry: boolean, message: string) => void
     error?: (
-      row: Row<T>,
+      candidate: Candidate<T>,
       retry: boolean,
       stage: "install" | "entry" | "compatibility" | "load",
       error: unknown,
@@ -92,52 +92,53 @@ export namespace PluginLoader {
   }
 
   async function attempt<T, R>(
-    row: Row<T>,
+    candidate: Candidate<T>,
     kind: PluginKind,
     retry: boolean,
     finish: ((load: Loaded, item: T, retry: boolean) => Promise<R | undefined>) | undefined,
     report: Report<T> | undefined,
   ): Promise<R | undefined> {
-    const plan = row.plan
+    const plan = candidate.plan
     if (plan.deprecated) return
-    report?.start?.(row, retry)
+    report?.start?.(candidate, retry)
     const resolved = await resolve(plan, kind)
     if (!resolved.ok) {
       if (resolved.stage === "missing") {
-        report?.missing?.(row, retry, resolved.message)
+        report?.missing?.(candidate, retry, resolved.message)
         return
       }
-      report?.error?.(row, retry, resolved.stage, resolved.error)
+      report?.error?.(candidate, retry, resolved.stage, resolved.error)
       return
     }
     const loaded = await load(resolved.value)
     if (!loaded.ok) {
-      report?.error?.(row, retry, "load", loaded.error, resolved.value)
+      report?.error?.(candidate, retry, "load", loaded.error, resolved.value)
       return
     }
     if (!finish) return loaded.value as R
-    return finish(loaded.value, row.item, retry)
+    return finish(loaded.value, candidate.item, retry)
   }
 
   export async function loadExternal<T, R = Loaded>(input: {
-    rows: Row<T>[]
+    candidates: Candidate<T>[]
     kind: PluginKind
     wait?: () => Promise<void>
     finish?: (load: Loaded, item: T, retry: boolean) => Promise<R | undefined>
     report?: Report<T>
   }): Promise<R[]> {
     const list: Array<Promise<R | undefined>> = []
-    for (const row of input.rows) list.push(attempt(row, input.kind, false, input.finish, input.report))
+    for (const candidate of input.candidates)
+      list.push(attempt(candidate, input.kind, false, input.finish, input.report))
     const out = await Promise.all(list)
     if (input.wait) {
       let deps: Promise<void> | undefined
-      for (let i = 0; i < input.rows.length; i++) {
+      for (let i = 0; i < input.candidates.length; i++) {
         if (out[i] !== undefined) continue
-        const row = input.rows[i]
-        if (!row || pluginSource(row.plan.spec) !== "file") continue
+        const candidate = input.candidates[i]
+        if (!candidate || pluginSource(candidate.plan.spec) !== "file") continue
         deps ??= input.wait()
         await deps
-        out[i] = await attempt(row, input.kind, true, input.finish, input.report)
+        out[i] = await attempt(candidate, input.kind, true, input.finish, input.report)
       }
     }
     const ready: R[] = []

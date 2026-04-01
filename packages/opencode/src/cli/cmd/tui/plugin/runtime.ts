@@ -557,7 +557,7 @@ function applyInitialPluginEnabledState(state: RuntimeState, config: TuiConfig.I
 
 async function resolveExternalPlugins(list: TuiConfig.PluginRecord[], wait: () => Promise<void>) {
   return PluginLoader.loadExternal({
-    rows: list.map((item) => ({ item, plan: PluginLoader.plan(item.item) })),
+    candidates: list.map((item) => ({ item, plan: PluginLoader.plan(item.item) })),
     kind: "tui",
     wait: async () => {
       await wait().catch((error) => {
@@ -606,14 +606,14 @@ async function resolveExternalPlugins(list: TuiConfig.PluginRecord[], wait: () =
       }
     },
     report: {
-      start(row, retry) {
-        log.info("loading tui plugin", { path: row.plan.spec, retry })
+      start(candidate, retry) {
+        log.info("loading tui plugin", { path: candidate.plan.spec, retry })
       },
-      missing(row, retry, message) {
-        warn("tui plugin has no entrypoint", { path: row.plan.spec, retry, message })
+      missing(candidate, retry, message) {
+        warn("tui plugin has no entrypoint", { path: candidate.plan.spec, retry, message })
       },
-      error(row, retry, stage, error, resolved) {
-        const spec = row.plan.spec
+      error(candidate, retry, stage, error, resolved) {
+        const spec = candidate.plan.spec
         if (stage === "install") {
           fail("failed to resolve tui plugin", { path: spec, retry, error })
           return

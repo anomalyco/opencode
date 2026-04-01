@@ -144,17 +144,17 @@ export namespace Plugin {
 
           const loaded = yield* Effect.promise(() =>
             PluginLoader.loadExternal({
-              rows: plugins.map((item) => ({ item, plan: PluginLoader.plan(item) })),
+              candidates: plugins.map((item) => ({ item, plan: PluginLoader.plan(item) })),
               kind: "server",
               report: {
-                start(row) {
-                  log.info("loading plugin", { path: row.plan.spec })
+                start(candidate) {
+                  log.info("loading plugin", { path: candidate.plan.spec })
                 },
-                missing(row, _retry, message) {
-                  log.warn("plugin has no server entrypoint", { path: row.plan.spec, message })
+                missing(candidate, _retry, message) {
+                  log.warn("plugin has no server entrypoint", { path: candidate.plan.spec, message })
                 },
-                error(row, _retry, stage, error, resolved) {
-                  const spec = row.plan.spec
+                error(candidate, _retry, stage, error, resolved) {
+                  const spec = candidate.plan.spec
                   const cause = error instanceof Error ? (error.cause ?? error) : error
                   const message = stage === "load" ? errorMessage(error) : errorMessage(cause)
 
