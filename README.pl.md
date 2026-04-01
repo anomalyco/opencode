@@ -138,4 +138,4 @@ Jest bardzo podobne do Claude Code pod względem możliwości. Oto kluczowe ró�
 
 ---
 
-**Dołącz do naszej społeczności** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+**Dołącz do naszej społeczności** [Discord](https://opencode.ai/discord) | [X.com](https://x.com/opencode)

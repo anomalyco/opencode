@@ -139,4 +139,4 @@ OpenCode містить два вбудовані агенти, між яким�
 
 ---
 
-**Приєднуйтеся до нашої спільноти** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+**Приєднуйтеся до нашої спільноти** [Discord](https://opencode.ai/discord) | [X.com](https://x.com/opencode)

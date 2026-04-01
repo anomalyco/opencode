@@ -138,4 +138,4 @@ In Bezug auf die Fähigkeiten ist es Claude Code sehr ähnlich. Hier sind die wi
 
 ---
 
-**Tritt unserer Community bei** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+**Tritt unserer Community bei** [Discord](https://opencode.ai/discord) | [X.com](https://x.com/opencode)

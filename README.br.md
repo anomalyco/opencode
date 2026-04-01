@@ -138,4 +138,4 @@ Se você estiver trabalhando em um projeto relacionado ao OpenCode e estiver usa
 
 ---
 
-**Junte-se à nossa comunidade** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+**Junte-se à nossa comunidade** [Discord](https://opencode.ai/discord) | [X.com](https://x.com/opencode)

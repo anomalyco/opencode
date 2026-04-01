@@ -138,4 +138,4 @@ Về mặt tính năng, nó rất giống Claude Code. Dưới đây là những
 
 ---
 
-**Tham gia cộng đồng của chúng tôi** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+**Tham gia cộng đồng của chúng tôi** [Discord](https://opencode.ai/discord) | [X.com](https://x.com/opencode)

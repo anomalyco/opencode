@@ -138,4 +138,4 @@ OpenCode รวมเอเจนต์ในตัวสองตัวที�
 
 ---
 
-**ร่วมชุมชนของเรา** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+**ร่วมชุมชนของเรา** [Discord](https://opencode.ai/discord) | [X.com](https://x.com/opencode)

@@ -138,4 +138,4 @@ Yetenekler açısından Claude Code'a çok benzer. İşte temel farklar:
 
 ---
 
-**Topluluğumuza katılın** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+**Topluluğumuza katılın** [Discord](https://opencode.ai/discord) | [X.com](https://x.com/opencode)

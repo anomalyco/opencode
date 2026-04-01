@@ -138,4 +138,4 @@ Es muy similar a Claude Code en cuanto a capacidades. Estas son las diferencias 
 
 ---
 
-**Únete a nuestra comunidad** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+**Únete a nuestra comunidad** [Discord](https://opencode.ai/discord) | [X.com](https://x.com/opencode)

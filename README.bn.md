@@ -138,4 +138,4 @@ OpenCode এ দুটি বিল্ট-ইন এজেন্ট রয়ে
 
 ---
 
-**আমাদের কমিউনিটিতে যুক্ত হোন** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+**আমাদের কমিউনিটিতে যুক্ত হোন** [Discord](https://opencode.ai/discord) | [X.com](https://x.com/opencode)

@@ -138,4 +138,4 @@ C'est très similaire à Claude Code en termes de capacités. Voici les principa
 
 ---
 
-**Rejoignez notre communauté** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+**Rejoignez notre communauté** [Discord](https://opencode.ai/discord) | [X.com](https://x.com/opencode)

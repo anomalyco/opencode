@@ -138,4 +138,4 @@ Det er veldig likt Claude Code når det gjelder funksjonalitet. Her er de viktig
 
 ---
 
-**Bli med i fellesskapet** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+**Bli med i fellesskapet** [Discord](https://opencode.ai/discord) | [X.com](https://x.com/opencode)

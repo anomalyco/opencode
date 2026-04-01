@@ -138,4 +138,4 @@ OpenCode に関連するプロジェクトで、名前に "opencode"（例: "ope
 
 ---
 
-**コミュニティに参加** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+**コミュニティに参加** [Discord](https://opencode.ai/discord) | [X.com](https://x.com/opencode)
