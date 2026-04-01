@@ -181,10 +181,17 @@ describe("trigger service", () => {
 
         await Bun.sleep(80)
 
+        const next = (await Trigger.list())[0]
+
         expect(command).toHaveBeenCalledWith({
           sessionID: session.id,
           command: "init",
           arguments: "--help",
+        })
+        expect(next?.last).toMatchObject({
+          source: "schedule",
+          status: "success",
+          time: expect.any(Number),
         })
       },
     })
@@ -214,7 +221,44 @@ describe("trigger service", () => {
 
         await Bun.sleep(80)
 
+        const next = (await Trigger.list())[0]
         expect(command).not.toHaveBeenCalled()
+        expect(next?.last).toMatchObject({
+          source: "schedule",
+          status: "skipped",
+          time: expect.any(Number),
+        })
+      },
+    })
+  })
+
+  test("records failed action error", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const err = new Error("boom")
+        spyOn(SessionPrompt, "command").mockRejectedValue(err)
+
+        const item = await Trigger.create({
+          interval: 5_000,
+          action: {
+            type: "command",
+            sessionID: session.id,
+            command: "init",
+          },
+        })
+
+        const next = await Trigger.fire(item.id)
+
+        expect(next.last).toMatchObject({
+          source: "manual",
+          status: "failed",
+          error: "boom",
+          time: expect.any(Number),
+        })
       },
     })
   })
@@ -266,6 +310,11 @@ describe("trigger service", () => {
             at: last,
           },
         ])
+        expect(next.last).toMatchObject({
+          source: "manual",
+          status: "success",
+          time: expect.any(Number),
+        })
       },
     })
   })

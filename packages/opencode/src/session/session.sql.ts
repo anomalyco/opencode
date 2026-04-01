@@ -11,6 +11,7 @@ import { Timestamps } from "../storage/schema.sql"
 
 type PartData = Omit<MessageV2.Part, "id" | "sessionID" | "messageID">
 type InfoData = Omit<MessageV2.Info, "id" | "sessionID">
+type TriggerLast = NonNullable<Trigger.Info["last"]>
 
 export const SessionTable = sqliteTable(
   "session",
@@ -117,6 +118,9 @@ export const TriggerTable = sqliteTable(
     enabled: integer({ mode: "boolean" }).notNull(),
     runs: integer().notNull(),
     ...Timestamps,
+    last_source: text().$type<TriggerLast["source"]>(),
+    last_status: text().$type<TriggerLast["status"]>(),
+    last_error: text(),
     time_last: integer(),
     time_next: integer().notNull(),
   },
