@@ -1,4 +1,4 @@
-import z from "zod"
+﻿import z from "zod"
 import * as path from "path"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
@@ -17,6 +17,10 @@ import { assertExternalDirectory } from "./external-directory"
 const MAX_DIAGNOSTICS_PER_FILE = 20
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
 
+// Skip diff computation for files larger than this threshold (bytes).
+// Myers diff is O(N^2) in the worst case and blocks the event loop on large files.
+const DIFF_SIZE_THRESHOLD = 100 * 1024 // 100 KB
+
 export const WriteTool = Tool.define("write", {
   description: DESCRIPTION,
   parameters: z.object({
@@ -31,7 +35,16 @@ export const WriteTool = Tool.define("write", {
     const contentOld = exists ? await Filesystem.readText(filepath) : ""
     if (exists) await FileTime.assert(ctx.sessionID, filepath)
 
-    const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, params.content))
+    // Only compute diff for small files to avoid blocking the event loop.
+    // For large files, skip the diff -- the permission prompt still fires but
+    // without a line-level preview.
+    const newSize = Buffer.byteLength(params.content, "utf-8")
+    const oldSize = Buffer.byteLength(contentOld, "utf-8")
+    const diff =
+      newSize <= DIFF_SIZE_THRESHOLD && oldSize <= DIFF_SIZE_THRESHOLD
+        ? trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, params.content))
+        : ""
+
     await ctx.ask({
       permission: "edit",
       patterns: [path.relative(Instance.worktree, filepath)],
@@ -52,7 +65,8 @@ export const WriteTool = Tool.define("write", {
     await FileTime.read(ctx.sessionID, filepath)
 
     let output = "Wrote file successfully."
-    await LSP.touchFile(filepath, true)
+    // Notify LSP asynchronously so it does not block the write response.
+    LSP.touchFile(filepath, true).catch(() => {})
     const diagnostics = await LSP.diagnostics()
     const normalizedFilepath = Filesystem.normalizePath(filepath)
     let projectDiagnosticsCount = 0

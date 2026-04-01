@@ -1,4 +1,4 @@
-import z from "zod"
+﻿import z from "zod"
 import os from "os"
 import { spawn } from "child_process"
 import { Tool } from "./tool"
@@ -336,14 +336,27 @@ async function run(
     },
   })
 
-  const append = (chunk: Buffer) => {
-    output += chunk.toString()
+  // Throttle metadata updates to at most once every 100 ms to avoid flooding the
+  // event loop when a command produces a very high volume of small chunks
+  // (e.g. compiler output, npm install). The final metadata is always flushed
+  // explicitly after the process closes.
+  const METADATA_THROTTLE_MS = 100
+  let lastMetadataTs = 0
+  const flushMetadata = () => {
     ctx.metadata({
       metadata: {
         output: preview(output),
         description: input.description,
       },
     })
+  }
+  const append = (chunk: Buffer) => {
+    output += chunk.toString()
+    const now = Date.now()
+    if (now - lastMetadataTs >= METADATA_THROTTLE_MS) {
+      lastMetadataTs = now
+      flushMetadata()
+    }
   }
 
   proc.stdout?.on("data", append)
@@ -384,6 +397,8 @@ async function run(
     proc.once("close", () => {
       exited = true
       cleanup()
+      // Flush any buffered metadata that was skipped due to throttling.
+      flushMetadata()
       resolve()
     })
 

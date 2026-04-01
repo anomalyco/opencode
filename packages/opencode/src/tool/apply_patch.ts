@@ -1,4 +1,4 @@
-import z from "zod"
+﻿import z from "zod"
 import * as path from "path"
 import * as fs from "fs/promises"
 import { Tool } from "./tool"
@@ -14,6 +14,10 @@ import { Filesystem } from "../util/filesystem"
 import DESCRIPTION from "./apply_patch.txt"
 import { File } from "../file"
 import { Format } from "../format"
+
+// Skip diff computation for files larger than this threshold (bytes).
+// Myers diff is O(N^2) in the worst case and blocks the event loop on large files.
+const DIFF_SIZE_THRESHOLD = 100 * 1024 // 100 KB
 
 const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),
@@ -67,13 +71,22 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
           const oldContent = ""
           const newContent =
             hunk.contents.length === 0 || hunk.contents.endsWith("\n") ? hunk.contents : `${hunk.contents}\n`
-          const diff = trimDiff(createTwoFilesPatch(filePath, filePath, oldContent, newContent))
+          const newSize = Buffer.byteLength(newContent, "utf-8")
+          const diff =
+            newSize <= DIFF_SIZE_THRESHOLD
+              ? trimDiff(createTwoFilesPatch(filePath, filePath, oldContent, newContent))
+              : ""
 
           let additions = 0
           let deletions = 0
-          for (const change of diffLines(oldContent, newContent)) {
-            if (change.added) additions += change.count || 0
-            if (change.removed) deletions += change.count || 0
+          if (newSize <= DIFF_SIZE_THRESHOLD) {
+            for (const change of diffLines(oldContent, newContent)) {
+              if (change.added) additions += change.count || 0
+              if (change.removed) deletions += change.count || 0
+            }
+          } else {
+            // Approximate for large files: count lines directly
+            additions = newContent.split("\n").length
           }
 
           fileChanges.push({
@@ -108,13 +121,24 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
             throw new Error(`apply_patch verification failed: ${error}`)
           }
 
-          const diff = trimDiff(createTwoFilesPatch(filePath, filePath, oldContent, newContent))
+          const oldSz = Buffer.byteLength(oldContent, "utf-8")
+          const newSz = Buffer.byteLength(newContent, "utf-8")
+          const diff =
+            oldSz <= DIFF_SIZE_THRESHOLD && newSz <= DIFF_SIZE_THRESHOLD
+              ? trimDiff(createTwoFilesPatch(filePath, filePath, oldContent, newContent))
+              : ""
 
           let additions = 0
           let deletions = 0
-          for (const change of diffLines(oldContent, newContent)) {
-            if (change.added) additions += change.count || 0
-            if (change.removed) deletions += change.count || 0
+          if (oldSz <= DIFF_SIZE_THRESHOLD && newSz <= DIFF_SIZE_THRESHOLD) {
+            for (const change of diffLines(oldContent, newContent)) {
+              if (change.added) additions += change.count || 0
+              if (change.removed) deletions += change.count || 0
+            }
+          } else {
+            // Approximate for large files
+            additions = newContent.split("\n").length
+            deletions = oldContent.split("\n").length
           }
 
           const movePath = hunk.move_path ? path.resolve(Instance.directory, hunk.move_path) : undefined
@@ -139,7 +163,11 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
           const contentToDelete = await fs.readFile(filePath, "utf-8").catch((error) => {
             throw new Error(`apply_patch verification failed: ${error}`)
           })
-          const deleteDiff = trimDiff(createTwoFilesPatch(filePath, filePath, contentToDelete, ""))
+          const deleteSize = Buffer.byteLength(contentToDelete, "utf-8")
+          const deleteDiff =
+            deleteSize <= DIFF_SIZE_THRESHOLD
+              ? trimDiff(createTwoFilesPatch(filePath, filePath, contentToDelete, ""))
+              : ""
 
           const deletions = contentToDelete.split("\n").length
 
@@ -192,8 +220,11 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
       const edited = change.type === "delete" ? undefined : (change.movePath ?? change.filePath)
       switch (change.type) {
         case "add":
-          // Create parent directories (recursive: true is safe on existing/root dirs)
-          await fs.mkdir(path.dirname(change.filePath), { recursive: true })
+          // Create parent directories. Ignore EEXIST because Bun on Windows can
+          // throw it even with recursive:true when the directory already exists.
+          await fs.mkdir(path.dirname(change.filePath), { recursive: true }).catch((e: any) => {
+            if (e?.code !== "EEXIST") throw e
+          })
           await fs.writeFile(change.filePath, change.newContent, "utf-8")
           updates.push({ file: change.filePath, event: "add" })
           break
@@ -205,8 +236,10 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
 
         case "move":
           if (change.movePath) {
-            // Create parent directories (recursive: true is safe on existing/root dirs)
-            await fs.mkdir(path.dirname(change.movePath), { recursive: true })
+            // Create parent directories. Ignore EEXIST (same Bun/Windows quirk).
+            await fs.mkdir(path.dirname(change.movePath), { recursive: true }).catch((e: any) => {
+              if (e?.code !== "EEXIST") throw e
+            })
             await fs.writeFile(change.movePath, change.newContent, "utf-8")
             await fs.unlink(change.filePath)
             updates.push({ file: change.filePath, event: "unlink" })
