@@ -13,6 +13,7 @@ import { DialogModel } from "./dialog-model"
 import { useKeyboard } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { useToast } from "../ui/toast"
+import open from "open"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -21,6 +22,9 @@ const PROVIDER_PRIORITY: Record<string, number> = {
   "github-copilot": 3,
   anthropic: 4,
   google: 5,
+}
+function shouldOpen(provider: string, label: string) {
+  return provider === "anthropic" && label === "Create an API Key"
 }
 
 export function createDialogProviderOptions() {
@@ -43,12 +47,13 @@ export function createDialogProviderOptions() {
         }[provider.id],
         category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
         async onSelect() {
-          const methods = sync.data.provider_auth[provider.id] ?? [
+          const fallback: ProviderAuthMethod[] = [
             {
               type: "api",
               label: "API key",
             },
           ]
+          const methods = sync.data.provider_auth[provider.id] ?? fallback
           let index: number | null = 0
           if (methods.length > 1) {
             index = await new Promise<number | null>((resolve) => {
@@ -92,6 +97,9 @@ export function createDialogProviderOptions() {
               })
               dialog.clear()
               return
+            }
+            if (result.data?.url && shouldOpen(provider.id, method.label)) {
+              open(result.data.url).catch(() => {})
             }
             if (result.data?.method === "code") {
               dialog.replace(() => (

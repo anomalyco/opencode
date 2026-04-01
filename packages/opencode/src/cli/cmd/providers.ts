@@ -13,8 +13,13 @@ import { Instance } from "../../project/instance"
 import type { Hooks } from "@opencode-ai/plugin"
 import { Process } from "../../util/process"
 import { text } from "node:stream/consumers"
+import open from "open"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
+
+function shouldOpen(provider: string, label: string) {
+  return provider === "anthropic" && label === "Create an API Key"
+}
 
 async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, methodName?: string): Promise<boolean> {
   let index = 0
@@ -77,6 +82,7 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
 
     if (authorize.url) {
       prompts.log.info("Go to: " + authorize.url)
+      if (shouldOpen(provider, method.label)) await open(authorize.url).catch(() => {})
     }
 
     if (authorize.method === "auto") {
