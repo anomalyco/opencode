@@ -896,6 +896,40 @@ describe("tool.bash permissions", () => {
   })
 })
 
+describe("tool.bash abort", () => {
+  test("preserves output when aborted", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const controller = new AbortController()
+        const collected: string[] = []
+        const result = bash.execute(
+          {
+            command: `echo before && sleep 30`,
+            description: "Long running command",
+          },
+          {
+            ...ctx,
+            abort: controller.signal,
+            metadata: (input) => {
+              const output = (input.metadata as { output?: string })?.output
+              if (output && output.includes("before") && !controller.signal.aborted) {
+                collected.push(output)
+                controller.abort()
+              }
+            },
+          },
+        )
+        const res = await result
+        expect(res.output).toContain("before")
+        expect(res.output).toContain("User aborted the command")
+        expect(collected.length).toBeGreaterThan(0)
+      },
+    })
+  }, 15_000)
+})
+
 describe("tool.bash truncation", () => {
   test("truncates output exceeding line limit", async () => {
     await Instance.provide({
