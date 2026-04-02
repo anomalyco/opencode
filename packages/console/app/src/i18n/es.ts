@@ -338,8 +338,7 @@ export const dict = {
   "go.faq.a4.p3": "Cancela en cualquier momento.",
   "go.faq.q5": "¿Qué pasa con los datos y la privacidad?",
   "go.faq.a5.body":
-    "El plan está diseñado principalmente para usuarios internacionales, con modelos alojados en EE. UU., UE y Singapur para un acceso global estable.",
-  "go.faq.a5.contactAfter": "si tienes alguna pregunta.",
+    "El plan está diseñado principalmente para usuarios internacionales, con modelos alojados en EE. UU., UE y Singapur para un acceso global estable. Nuestros proveedores siguen una política de retención cero y no utilizan tus datos para el entrenamiento de modelos.",
   "go.faq.a5.beforeExceptions":
     "Los modelos de Go están alojados en EE. UU. Los proveedores siguen una política de retención cero y no utilizan tus datos para el entrenamiento de modelos, con las",
   "go.faq.a5.exceptionsLink": "siguientes excepciones",
@@ -372,6 +371,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "Has alcanzado tu límite de gasto mensual de ${{amount}}. Gestiona tus límites aquí: {{membersUrl}}",
   "zen.api.error.modelDisabled": "El modelo está deshabilitado",
+  "zen.api.error.trialEnded":
+    "La promoción gratuita de {{model}} ha finalizado. Puedes seguir usando el modelo suscribiéndote a OpenCode Go - {{link}}",
 
   "black.meta.title": "OpenCode Black | Accede a los mejores modelos de codificación del mundo",
   "black.meta.description": "Obtén acceso a Claude, GPT, Gemini y más con los planes de suscripción de OpenCode Black.",

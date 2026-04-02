@@ -331,8 +331,7 @@ export const dict = {
   "go.faq.a4.p3": "언제든지 취소할 수 있습니다.",
   "go.faq.q5": "데이터와 프라이버시는 어떤가요?",
   "go.faq.a5.body":
-    "이 플랜은 주로 글로벌 사용자를 위해 설계되었으며, 안정적인 글로벌 액세스를 위해 미국, EU, 싱가포르에 모델이 호스팅되어 있습니다.",
-  "go.faq.a5.contactAfter": "질문이 있으시면 언제든지 문의해 주세요.",
+    "이 플랜은 주로 글로벌 사용자를 위해 설계되었으며, 안정적인 글로벌 액세스를 위해 미국, EU, 싱가포르에 모델이 호스팅되어 있습니다. 당사의 제공자들은 데이터 보존 금지 정책을 따르며 모델 학습에 데이터를 사용하지 않습니다.",
   "go.faq.a5.beforeExceptions":
     "Go 모델은 미국에서 호스팅됩니다. 제공자들은 데이터 보존 금지 정책을 따르며 모델 학습에 데이터를 사용하지 않습니다. 단,",
   "go.faq.a5.exceptionsLink": "다음 예외",
@@ -364,6 +363,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "월간 지출 한도인 ${{amount}}에 도달했습니다. 한도 관리를 여기서 하세요: {{membersUrl}}",
   "zen.api.error.modelDisabled": "모델이 비활성화되었습니다",
+  "zen.api.error.trialEnded":
+    "{{model}}의 무료 프로모션이 종료되었습니다. OpenCode Go를 구독하면 모델을 계속 사용할 수 있습니다 - {{link}}",
 
   "black.meta.title": "OpenCode Black | 세계 최고의 코딩 모델에 액세스하세요",
   "black.meta.description": "OpenCode Black 구독 플랜으로 Claude, GPT, Gemini 등에 액세스하세요.",

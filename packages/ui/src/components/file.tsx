@@ -16,6 +16,7 @@ import {
 } from "@pierre/diffs"
 import { type PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { createMediaQuery } from "@solid-primitives/media"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { ComponentProps, createEffect, createMemo, createSignal, onCleanup, onMount, Show, splitProps } from "solid-js"
 import { createDefaultOptions, styleVariables } from "../pierre"
 import { markCommentedDiffLines, markCommentedFileLines } from "../pierre/commented-lines"
@@ -286,17 +287,10 @@ function useFileViewer(config: ViewerConfig) {
   createEffect(() => {
     if (!config.enableLineSelection()) return
 
-    container.addEventListener("mousedown", handleMouseDown)
-    container.addEventListener("mousemove", handleMouseMove)
-    window.addEventListener("mouseup", handleMouseUp)
-    document.addEventListener("selectionchange", handleSelectionChange)
-
-    onCleanup(() => {
-      container.removeEventListener("mousedown", handleMouseDown)
-      container.removeEventListener("mousemove", handleMouseMove)
-      window.removeEventListener("mouseup", handleMouseUp)
-      document.removeEventListener("selectionchange", handleSelectionChange)
-    })
+    makeEventListener(container, "mousedown", handleMouseDown)
+    makeEventListener(container, "mousemove", handleMouseMove)
+    makeEventListener(window, "mouseup", handleMouseUp)
+    makeEventListener(document, "selectionchange", handleSelectionChange)
   })
 
   onCleanup(() => {

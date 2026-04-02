@@ -319,8 +319,8 @@ export const dict = {
   "go.faq.a4.p2.accountLink": "帳戶",
   "go.faq.a4.p3": "中管理訂閱。隨時取消。",
   "go.faq.q5": "資料與隱私怎麼辦？",
-  "go.faq.a5.body": "該方案主要面向國際用戶設計，模型託管在美國、歐盟和新加坡，以確保全球穩定存取。",
-  "go.faq.a5.contactAfter": "如果你有任何問題。",
+  "go.faq.a5.body":
+    "該方案主要面向國際用戶設計，模型託管在美國、歐盟和新加坡，以確保全球穩定存取。我們的供應商遵循零留存政策，不會將你的資料用於模型訓練。",
   "go.faq.a5.beforeExceptions": "Go 模型託管在美國。供應商遵循零留存政策，不會將你的資料用於模型訓練，但有",
   "go.faq.a5.exceptionsLink": "以下例外",
   "go.faq.q6": "我可以儲值額度嗎？",
@@ -349,6 +349,7 @@ export const dict = {
     "你的工作區已達到每月支出限額 ${{amount}}。請在此處管理你的限額：{{billingUrl}}",
   "zen.api.error.userMonthlyLimitReached": "你已達到每月支出限額 ${{amount}}。請在此處管理你的限額：{{membersUrl}}",
   "zen.api.error.modelDisabled": "模型已停用",
+  "zen.api.error.trialEnded": "{{model}} 的限免活动已結束。您可以訂閱 OpenCode Go 繼續使用該模型 - {{link}}",
 
   "black.meta.title": "OpenCode Black | 存取全球最佳編碼模型",
   "black.meta.description": "透過 OpenCode Black 訂閱方案存取 Claude、GPT、Gemini 等模型。",

@@ -425,13 +425,60 @@ const TOOL_SAMPLES = {
 // Fake data generators
 // ---------------------------------------------------------------------------
 const SESSION_ID = "playground-session"
+const DEFAULT_SESSION = { id: SESSION_ID, title: "Timeline Playground" }
 
-function mkUser(text: string, extra: Part[] = []): { message: UserMessage; parts: Part[] } {
+function record(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value)
+}
+
+function normalize(raw: unknown) {
+  if (Array.isArray(raw)) {
+    const info = raw.find((row) => record(row) && row.type === "session" && record(row.data))?.data
+    if (!record(info) || typeof info.id !== "string") {
+      throw new Error("No session found in JSON")
+    }
+
+    const part = new Map<string, Part[]>()
+    const messages = raw.flatMap((row) => {
+      if (!record(row) || !record(row.data)) return []
+      if (row.type === "part" && typeof row.data.messageID === "string") {
+        const list = part.get(row.data.messageID) ?? []
+        list.push(row.data as Part)
+        part.set(row.data.messageID, list)
+        return []
+      }
+      if (row.type !== "message" || typeof row.data.id !== "string") return []
+      return [{ info: row.data as Message, parts: [] as Part[] }]
+    })
+
+    return {
+      info,
+      messages: messages.map((msg) => ({
+        info: msg.info,
+        parts: part.get(msg.info.id) ?? [],
+      })),
+    }
+  }
+
+  if (!record(raw) || !record(raw.info) || typeof raw.info.id !== "string" || !Array.isArray(raw.messages)) {
+    throw new Error("Expected an `opencode export` JSON file")
+  }
+
+  return {
+    info: raw.info,
+    messages: raw.messages.flatMap((row) => {
+      if (!record(row) || !record(row.info) || typeof row.info.id !== "string") return []
+      return [{ info: row.info as Message, parts: Array.isArray(row.parts) ? (row.parts as Part[]) : [] }]
+    }),
+  }
+}
+
+function mkUser(text: string, extra: Part[] = [], sessionID = SESSION_ID): { message: UserMessage; parts: Part[] } {
   const id = uid()
   return {
     message: {
       id,
-      sessionID: SESSION_ID,
+      sessionID,
       role: "user",
       time: { created: Date.now() },
       agent: "code",
@@ -445,10 +492,10 @@ function mkUser(text: string, extra: Part[] = []): { message: UserMessage; parts
   }
 }
 
-function mkAssistant(parentID: string): AssistantMessage {
+function mkAssistant(parentID: string, sessionID = SESSION_ID): AssistantMessage {
   return {
     id: uid(),
-    sessionID: SESSION_ID,
+    sessionID,
     role: "assistant",
     time: { created: Date.now(), completed: Date.now() + 3000 },
     parentID,
@@ -520,6 +567,7 @@ function compactionPart(): CompactionPart {
 const MD = "markdown.css"
 const MP = "message-part.css"
 const ST = "session-turn.css"
+const CL = "collapsible.css"
 
 /**
  * Source mapping for a CSS control.
@@ -933,6 +981,20 @@ const CSS_CONTROLS: CSSControl[] = [
 
   // --- Reasoning part ---
   {
+    key: "reasoning-md-font-size",
+    label: "Reasoning font size",
+    group: "Reasoning Part",
+    type: "range",
+    initial: "14",
+    selector: '[data-component="reasoning-part"] [data-component="markdown"]',
+    property: "font-size",
+    min: "10",
+    max: "22",
+    step: "1",
+    unit: "px",
+    source: { file: MP, anchor: '[data-component="reasoning-part"]', prop: "font-size", format: px },
+  },
+  {
     key: "reasoning-md-margin-top",
     label: "Reasoning markdown margin-top",
     group: "Reasoning Part",
@@ -979,6 +1041,48 @@ const CSS_CONTROLS: CSSControl[] = [
 
   // --- Tool parts ---
   {
+    key: "tool-content-gap",
+    label: "Trigger/content gap",
+    group: "Tool Parts",
+    type: "range",
+    initial: "8",
+    selector: '[data-component="collapsible"].tool-collapsible',
+    property: "--tool-content-gap",
+    min: "0",
+    max: "24",
+    step: "1",
+    unit: "px",
+    source: { file: CL, anchor: "&.tool-collapsible {", prop: "--tool-content-gap", format: px },
+  },
+  {
+    key: "context-tool-gap",
+    label: "Explored tool gap",
+    group: "Explored Group",
+    type: "range",
+    initial: "14",
+    selector: '[data-component="context-tool-group-list"]',
+    property: "gap",
+    min: "0",
+    max: "40",
+    step: "1",
+    unit: "px",
+    source: { file: MP, anchor: '[data-component="context-tool-group-list"]', prop: "gap", format: px },
+  },
+  {
+    key: "context-tool-indent",
+    label: "Explored indent",
+    group: "Explored Group",
+    type: "range",
+    initial: "0",
+    selector: '[data-component="context-tool-group-list"]',
+    property: "padding-left",
+    min: "0",
+    max: "48",
+    step: "1",
+    unit: "px",
+    source: { file: MP, anchor: '[data-component="context-tool-group-list"]', prop: "padding-left", format: px },
+  },
+  {
     key: "bash-max-height",
     label: "Shell output max-height",
     group: "Tool Parts",
@@ -1010,12 +1114,24 @@ function Playground() {
     messages: [],
     parts: {},
   })
+  const [session, setSession] = createSignal({ ...DEFAULT_SESSION })
+  const [loaded, setLoaded] = createSignal("")
+  const [issue, setIssue] = createSignal("")
 
   // ---- CSS overrides ----
   const [css, setCss] = createStore<Record<string, string>>({})
   const [defaults, setDefaults] = createStore<Record<string, string>>({})
   let styleEl: HTMLStyleElement | undefined
   let previewRef: HTMLDivElement | undefined
+  let pick: HTMLInputElement | undefined
+
+  const sample = (ctrl: CSSControl) => {
+    if (!ctrl.group.startsWith("Markdown")) return ctrl.selector
+    return ctrl.selector.replace(
+      '[data-component="markdown"]',
+      '[data-component="text-part"] [data-component="markdown"]',
+    )
+  }
 
   /** Read computed styles from the DOM to seed slider defaults */
   const readDefaults = () => {
@@ -1023,11 +1139,12 @@ function Playground() {
     if (!root) return
     const next: Record<string, string> = {}
     for (const ctrl of CSS_CONTROLS) {
-      const el = root.querySelector(ctrl.selector) as HTMLElement | null
+      const el = (root.querySelector(sample(ctrl)) ?? root.querySelector(ctrl.selector)) as HTMLElement | null
       if (!el) continue
       const styles = getComputedStyle(el)
-      // Use bracket access — getPropertyValue doesn't resolve shorthands
-      const raw = (styles as any)[ctrl.property] as string
+      const raw = ctrl.property.startsWith("--")
+        ? styles.getPropertyValue(ctrl.property).trim()
+        : ((styles as any)[ctrl.property] as string)
       if (!raw) continue
       // Shorthands may return "24px 0px" — take the first value
       const num = parseFloat(raw.split(" ")[0])
@@ -1074,10 +1191,10 @@ function Playground() {
   const userMessages = createMemo(() => state.messages.filter((m): m is UserMessage => m.role === "user"))
 
   const data = createMemo(() => ({
-    session: [{ id: SESSION_ID }],
+    session: [session()],
     session_status: {},
     session_diff: {},
-    message: { [SESSION_ID]: state.messages },
+    message: { [session().id]: state.messages },
     part: state.parts,
     provider: {
       all: [{ id: "anthropic", models: { "claude-sonnet-4-20250514": { name: "Claude Sonnet" } } }],
@@ -1109,8 +1226,8 @@ function Playground() {
     const id = lastAssistantID()
     if (id) return id
     // Create a minimal placeholder turn
-    const user = mkUser("...")
-    const asst = mkAssistant(user.message.id)
+    const user = mkUser("...", [], session().id)
+    const asst = mkAssistant(user.message.id, session().id)
     setState(
       produce((draft) => {
         draft.messages.push(user.message)
@@ -1136,8 +1253,8 @@ function Playground() {
   // ---- User message helpers ----
   const addUser = (variant: keyof typeof USER_VARIANTS) => {
     const v = USER_VARIANTS[variant]
-    const user = mkUser(v.text, v.parts)
-    const asst = mkAssistant(user.message.id)
+    const user = mkUser(v.text, v.parts, session().id)
+    const asst = mkAssistant(user.message.id, session().id)
     setState(
       produce((draft) => {
         draft.messages.push(user.message)
@@ -1164,8 +1281,8 @@ function Playground() {
 
   // ---- Composite helpers (create full turns with user + assistant) ----
   const addFullTurn = (userText: string, parts: Part[]) => {
-    const user = mkUser(userText)
-    const asst = mkAssistant(user.message.id)
+    const user = mkUser(userText, [], session().id)
+    const asst = mkAssistant(user.message.id, session().id)
     setState(
       produce((draft) => {
         draft.messages.push(user.message)
@@ -1222,9 +1339,91 @@ function Playground() {
     addReasoningFullTurn()
   }
 
+  const interrupt = () => {
+    const user = userMessages().at(-1)
+    if (!user) return
+    const now = Date.now()
+
+    setState(
+      produce((draft) => {
+        const msg = draft.messages.findLast(
+          (item): item is AssistantMessage => item.role === "assistant" && item.parentID === user.id,
+        )
+
+        if (msg) {
+          const time = msg.time ?? { created: now }
+          msg.time = { ...time, completed: time.completed ?? now }
+          msg.error = { name: "MessageAbortedError", message: "Interrupted" }
+          return
+        }
+
+        const asst = mkAssistant(user.id, session().id)
+        asst.time = { created: now, completed: now }
+        asst.error = { name: "MessageAbortedError", message: "Interrupted" }
+        draft.messages.push(asst)
+        draft.parts[asst.id] = []
+      }),
+    )
+  }
+
+  const load = (raw: unknown, name: string) => {
+    const next = normalize(raw)
+    const id = typeof next.info.id === "string" && next.info.id ? next.info.id : SESSION_ID
+    const messages = next.messages.map((msg) => ({
+      ...msg.info,
+      sessionID: typeof msg.info.sessionID === "string" ? msg.info.sessionID : id,
+    }))
+    const parts = Object.fromEntries(
+      next.messages.map((msg, idx) => {
+        const info = messages[idx]
+        return [
+          info.id,
+          msg.parts.map((part) => ({
+            ...part,
+            messageID: typeof part.messageID === "string" ? part.messageID : info.id,
+            sessionID: typeof part.sessionID === "string" ? part.sessionID : info.sessionID,
+          })),
+        ]
+      }),
+    )
+
+    batch(() => {
+      setSession({
+        ...DEFAULT_SESSION,
+        ...next.info,
+        id,
+        title: typeof next.info.title === "string" && next.info.title ? next.info.title : name,
+      })
+      setState({ messages, parts })
+      setLoaded(name)
+      setIssue("")
+    })
+  }
+
+  const importFile = async (event: Event) => {
+    const input = event.currentTarget as HTMLInputElement
+    const file = input.files?.[0]
+    if (!file) return
+
+    setIssue("")
+
+    try {
+      load(JSON.parse(await file.text()), file.name)
+    } catch (err) {
+      setIssue(err instanceof Error ? err.message : String(err))
+    } finally {
+      input.value = ""
+    }
+  }
+
   const clearAll = () => {
-    setState({ messages: [], parts: {} })
-    seq = 0
+    batch(() => {
+      setState({ messages: [], parts: {} })
+      setSession({ ...DEFAULT_SESSION })
+      setLoaded("")
+      setIssue("")
+      seq = 0
+    })
   }
 
   // ---- CSS export ----
@@ -1292,9 +1491,14 @@ function Playground() {
       }
       setApplyResult(lines.join("\n"))
 
-      if (ok > 0) {
-        // Clear overrides — values are now in source CSS, Vite will HMR.
-        resetCss()
+      if (ok === edits.length) {
+        batch(() => {
+          for (const ctrl of controls) {
+            setDefaults(ctrl.key, css[ctrl.key]!)
+            setCss(ctrl.key, undefined as any)
+          }
+        })
+        updateStyle()
         // Wait for Vite HMR then re-read computed defaults
         setTimeout(readDefaults, 500)
       }
@@ -1393,6 +1597,35 @@ function Playground() {
           </button>
           <Show when={panels.generators}>
             <div style={{ padding: "0 12px 12px", display: "flex", "flex-direction": "column", gap: "6px" }}>
+              {/* ---- Session import ---- */}
+              <div style={sectionLabel}>Import session</div>
+              <div style={{ "font-size": "10px", color: "var(--text-weaker)", "margin-bottom": "2px" }}>
+                Replaces the current timeline with an `opencode export` JSON file
+              </div>
+              <div style={{ display: "flex", "flex-wrap": "wrap", gap: "4px" }}>
+                <button style={btnAccent} onClick={() => pick?.click()}>
+                  Import session
+                </button>
+                <input
+                  ref={pick!}
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={importFile}
+                  style={{ display: "none" }}
+                />
+              </div>
+              <Show when={loaded()}>
+                <div style={{ "font-size": "10px", color: "var(--text-weaker)", "line-height": "1.4" }}>
+                  {loaded()} • {session().title || session().id} • {state.messages.length} message
+                  {state.messages.length === 1 ? "" : "s"}
+                </div>
+              </Show>
+              <Show when={issue()}>
+                <div style={{ "font-size": "10px", color: "var(--text-on-critical-base)", "line-height": "1.4" }}>
+                  {issue()}
+                </div>
+              </Show>
+
               {/* ---- User messages ---- */}
               <div style={sectionLabel}>User messages</div>
               <div style={{ "font-size": "10px", color: "var(--text-weaker)", "margin-bottom": "2px" }}>
@@ -1406,6 +1639,19 @@ function Playground() {
                     </button>
                   )}
                 </For>
+              </div>
+              <div style={{ display: "flex", "flex-wrap": "wrap", gap: "4px" }}>
+                <button
+                  style={{
+                    ...btnDanger,
+                    opacity: userMessages().length === 0 ? "0.5" : "1",
+                    cursor: userMessages().length === 0 ? "not-allowed" : "pointer",
+                  }}
+                  disabled={userMessages().length === 0}
+                  onClick={interrupt}
+                >
+                  Interrupt last
+                </button>
               </div>
 
               {/* ---- Text and reasoning blocks ---- */}
@@ -1716,7 +1962,7 @@ function Playground() {
                       "font-size": "14px",
                     }}
                   >
-                    Click a generator button to add messages
+                    Click a generator button or import a session
                   </div>
                 }
               >
@@ -1729,7 +1975,7 @@ function Playground() {
                     {(msg) => (
                       <div style={{ width: "100%" }}>
                         <SessionTurn
-                          sessionID={SESSION_ID}
+                          sessionID={session().id}
                           messageID={msg.id}
                           messages={state.messages}
                           active={false}
