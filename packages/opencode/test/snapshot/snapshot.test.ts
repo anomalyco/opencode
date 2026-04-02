@@ -2,8 +2,11 @@ import { afterEach, test, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
+import { Global } from "../../src/global"
+import { Project } from "../../src/project/project"
 import { Snapshot } from "../../src/snapshot"
 import { Instance } from "../../src/project/instance"
+import { Hash } from "../../src/util/hash"
 import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 
@@ -1044,6 +1047,50 @@ test("diffFull with a large interleaved mixed diff", async () => {
         expect(b!.deletions).toBe(0)
         expect(b!.status).toBe("modified")
       }
+    },
+  })
+})
+
+test("diffFull preserves git diff order", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await $`mkdir -p ${tmp.path}/order`.quiet()
+      await Promise.all([
+        Filesystem.write(`${tmp.path}/order/02-mod.txt`, "before-02"),
+        Filesystem.write(`${tmp.path}/order/04-del.txt`, "before-04"),
+        Filesystem.write(`${tmp.path}/order/06-bin.bin`, new Uint8Array([0, 1, 2, 3])),
+        Filesystem.write(`${tmp.path}/order/08-mod.txt`, "before-08"),
+      ])
+
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      await Promise.all([
+        Filesystem.write(`${tmp.path}/order/01-add.txt`, "after-01"),
+        Filesystem.write(`${tmp.path}/order/02-mod.txt`, "after-02"),
+        fs.rm(`${tmp.path}/order/04-del.txt`),
+        Filesystem.write(`${tmp.path}/order/05-add.txt`, "after-05"),
+        Filesystem.write(`${tmp.path}/order/06-bin.bin`, new Uint8Array([9, 8, 7, 6])),
+        Filesystem.write(`${tmp.path}/order/08-mod.txt`, "after-08"),
+      ])
+
+      const after = await Snapshot.track()
+      expect(after).toBeTruthy()
+
+      const expected = (
+        await $`git --git-dir=${path.join(Global.Path.data, "snapshot", (await Project.fromDirectory(tmp.path)).project.id, Hash.fast(tmp.path))} --work-tree=${tmp.path} -c core.autocrlf=false -c core.longpaths=true -c core.symlinks=true -c core.quotepath=false diff --no-ext-diff --no-renames --numstat ${before!} ${after!} -- .`
+          .cwd(tmp.path)
+          .text()
+      )
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => line.split("\t")[2]!)
+
+      const diffs = await Snapshot.diffFull(before!, after!)
+      expect(diffs.map((item) => item.file)).toEqual(expected)
     },
   })
 })
