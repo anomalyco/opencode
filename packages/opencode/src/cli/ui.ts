@@ -124,12 +124,7 @@ export namespace UI {
     return F5_LOGO_LINES.map((line) => (pad ?? "") + renderF5Line(line)).join(EOL)
   }
 
-  export function f5exitBox(opts: {
-    version: string
-    sessionTitle: string
-    sessionId: string
-    directory?: string
-  }) {
+  export function f5exitBox(opts: { version: string; sessionTitle: string; sessionId: string; directory?: string }) {
     const red = (s: string) => ANSI_RED + s + ANSI_RESET
     const white = (s: string) => ANSI_BOLD_WHITE + s + ANSI_RESET
 
