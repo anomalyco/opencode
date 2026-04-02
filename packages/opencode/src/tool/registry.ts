@@ -33,6 +33,7 @@ import { Effect, Layer, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { ContextUsageTool } from "./context"
+import { NewSessionTool } from "./new-session"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -115,6 +116,7 @@ export namespace ToolRegistry {
       const all = Effect.fn("ToolRegistry.all")(function* (custom: Tool.Info[]) {
         const cfg = yield* config.get()
         const question = ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
+        const tui = ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT)
 
         return [
           InvalidTool,
@@ -129,6 +131,7 @@ export namespace ToolRegistry {
           WebFetchTool,
           TodoWriteTool,
           ContextUsageTool,
+          ...(tui ? [NewSessionTool] : []),
           WebSearchTool,
           CodeSearchTool,
           SkillTool,

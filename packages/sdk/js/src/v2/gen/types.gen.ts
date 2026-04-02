@@ -896,6 +896,20 @@ export type EventMessagePartRemoved = {
   }
 }
 
+export type EventTuiSessionNew = {
+  type: "tui.session.new"
+  properties: {
+    /**
+     * Initial message to send in the new session
+     */
+    message: string
+    /**
+     * Session ID of the current session to abort
+     */
+    sessionID: string
+  }
+}
+
 export type PermissionAction = "allow" | "deny" | "ask"
 
 export type PermissionRule = {
@@ -988,6 +1002,7 @@ export type Event =
   | EventTuiCommandExecute
   | EventTuiToastShow
   | EventTuiSessionSelect
+  | EventTuiSessionNew
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
   | EventCommandExecuted
@@ -4902,7 +4917,7 @@ export type TuiShowToastResponses = {
 export type TuiShowToastResponse = TuiShowToastResponses[keyof TuiShowToastResponses]
 
 export type TuiPublishData = {
-  body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect
+  body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect | EventTuiSessionNew
   path?: never
   query?: {
     directory?: string

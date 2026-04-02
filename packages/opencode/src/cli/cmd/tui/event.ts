@@ -46,4 +46,11 @@ export const TuiEvent = {
       sessionID: SessionID.zod.describe("Session ID to navigate to"),
     }),
   ),
+  SessionNew: BusEvent.define(
+    "tui.session.new",
+    z.object({
+      message: z.string().describe("Initial message to send in the new session"),
+      sessionID: SessionID.zod.describe("Session ID of the current session to abort"),
+    }),
+  ),
 }
