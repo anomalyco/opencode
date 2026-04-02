@@ -48,7 +48,19 @@ process.on("uncaughtException", (e) => {
   })
 })
 
-const cli = yargs(hideBin(process.argv))
+const args = hideBin(process.argv)
+
+function show(out: string) {
+  const text = out.trimStart()
+  if (!text.startsWith("opencode ")) {
+    process.stderr.write(UI.logo() + EOL + EOL)
+    process.stderr.write(text)
+    return
+  }
+  process.stderr.write(out)
+}
+
+const cli = yargs(args)
   .parserConfiguration({ "populate--": true })
   .scriptName("opencode")
   .wrap(100)
@@ -130,7 +142,7 @@ const cli = yargs(hideBin(process.argv))
       process.stderr.write("Database migration complete." + EOL)
     }
   })
-  .usage("\n" + UI.logo())
+  .usage("")
   .completion("completion", "generate shell completion script")
   .command(AcpCommand)
   .command(McpCommand)
@@ -162,7 +174,7 @@ const cli = yargs(hideBin(process.argv))
       msg?.startsWith("Invalid values:")
     ) {
       if (err) throw err
-      cli.showHelp("log")
+      cli.showHelp(show)
     }
     if (err) throw err
     process.exit(1)
@@ -170,7 +182,15 @@ const cli = yargs(hideBin(process.argv))
   .strict()
 
 try {
-  await cli.parse()
+  if (args.includes("-h") || args.includes("--help")) {
+    await cli.parse(args, (err: Error | undefined, _argv: unknown, out: string) => {
+      if (err) throw err
+      if (!out) return
+      show(out)
+    })
+  } else {
+    await cli.parse()
+  }
 } catch (e) {
   let data: Record<string, any> = {}
   if (e instanceof NamedError) {
