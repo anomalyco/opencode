@@ -47,7 +47,7 @@ export function pluginSource(spec: string): PluginSource {
 function resolveExportPath(raw: string, dir: string) {
   if (raw.startsWith("./") || raw.startsWith("../")) return path.resolve(dir, raw)
   if (raw.startsWith("file://")) return fileURLToPath(raw)
-  return raw
+  return path.resolve(dir, raw)
 }
 
 function extractExportValue(value: unknown): string | undefined {
