@@ -54,7 +54,10 @@ export namespace ZenData {
 
   const ModelsSchema = z.object({
     models: z.record(z.string(), z.union([ModelSchema, z.array(ModelSchema.extend({ formatFilter: FormatSchema }))])),
-    liteModels: z.record(z.string(), ModelSchema),
+    liteModels: z.record(
+      z.string(),
+      z.union([ModelSchema, z.array(ModelSchema.extend({ formatFilter: FormatSchema }))]),
+    ),
     providers: z.record(z.string(), ProviderSchema),
   })
 
