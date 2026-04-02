@@ -491,6 +491,9 @@ function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScop
     trigger(value) {
       api.command.trigger(value)
     },
+    show() {
+      api.command.show()
+    },
   }
 
   const route: TuiPluginApi["route"] = {

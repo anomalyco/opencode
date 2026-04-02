@@ -68,6 +68,7 @@ export function Home() {
                 promptRef.set(r)
               }}
               workspaceID={route.workspaceID}
+              right={<TuiPluginRuntime.Slot name="home_prompt_right" workspace_id={route.workspaceID} />}
               placeholders={placeholder}
             />
           </TuiPluginRuntime.Slot>
