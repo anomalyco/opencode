@@ -1,5 +1,6 @@
 import type { AssistantMessage, Part, Provider, UserMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "@/util/locale"
+import * as Model from "./model"
 
 export type TranscriptOptions = {
   thinking: boolean
@@ -27,6 +28,7 @@ export function formatTranscript(
   messages: MessageWithParts[],
   options: TranscriptOptions,
 ): string {
+  const providers = Model.index(options.providers)
   let transcript = `# ${session.title}\n\n`
   transcript += `**Session ID:** ${session.id}\n`
   transcript += `**Created:** ${new Date(session.time.created).toLocaleString()}\n`
@@ -34,20 +36,25 @@ export function formatTranscript(
   transcript += `---\n\n`
 
   for (const msg of messages) {
-    transcript += formatMessage(msg.info, msg.parts, options)
+    transcript += formatMessage(msg.info, msg.parts, options, providers)
     transcript += `---\n\n`
   }
 
   return transcript
 }
 
-export function formatMessage(msg: UserMessage | AssistantMessage, parts: Part[], options: TranscriptOptions): string {
+export function formatMessage(
+  msg: UserMessage | AssistantMessage,
+  parts: Part[],
+  options: TranscriptOptions,
+  providers?: Provider[] | ReadonlyMap<string, Provider>,
+): string {
   let result = ""
 
   if (msg.role === "user") {
     result += `## User\n\n`
   } else {
-    result += formatAssistantHeader(msg, options.assistantMetadata, options.providers)
+    result += formatAssistantHeader(msg, options.assistantMetadata, providers ?? options.providers)
   }
 
   for (const part of parts) {
@@ -57,7 +64,11 @@ export function formatMessage(msg: UserMessage | AssistantMessage, parts: Part[]
   return result
 }
 
-export function formatAssistantHeader(msg: AssistantMessage, includeMetadata: boolean, providers?: Provider[]): string {
+export function formatAssistantHeader(
+  msg: AssistantMessage,
+  includeMetadata: boolean,
+  providers?: Provider[] | ReadonlyMap<string, Provider>,
+): string {
   if (!includeMetadata) {
     return `## Assistant\n\n`
   }
@@ -65,8 +76,7 @@ export function formatAssistantHeader(msg: AssistantMessage, includeMetadata: bo
   const duration =
     msg.time.completed && msg.time.created ? ((msg.time.completed - msg.time.created) / 1000).toFixed(1) + "s" : ""
 
-  const provider = providers?.find((x) => x.id === msg.providerID)
-  const modelName = provider?.models[msg.modelID]?.name ?? msg.modelID
+  const modelName = Model.name(providers, msg.providerID, msg.modelID)
 
   return `## Assistant (${Locale.titlecase(msg.agent)} · ${modelName}${duration ? ` · ${duration}` : ""})\n\n`
 }
