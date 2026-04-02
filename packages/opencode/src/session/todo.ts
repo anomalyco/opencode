@@ -1,6 +1,8 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
+import { makeRuntime } from "@/effect/run-service"
 import { SessionID } from "./schema"
+import { Effect, Layer, ServiceMap } from "effect"
 import z from "zod"
 import { Database, eq, asc } from "../storage/db"
 import { TodoTable } from "./session.sql"
@@ -25,33 +27,83 @@ export namespace Todo {
     ),
   }
 
-  export function update(input: { sessionID: SessionID; todos: Info[] }) {
-    Database.transaction((db) => {
-      db.delete(TodoTable).where(eq(TodoTable.session_id, input.sessionID)).run()
-      if (input.todos.length === 0) return
-      db.insert(TodoTable)
-        .values(
-          input.todos.map((todo, position) => ({
-            session_id: input.sessionID,
-            content: todo.content,
-            status: todo.status,
-            priority: todo.priority,
-            position,
-          })),
-        )
-        .run()
-    })
-    Bus.publish(Event.Updated, input)
+  export interface Interface {
+    readonly update: (input: { sessionID: SessionID; todos: Info[] }) => Effect.Effect<void>
+    readonly get: (sessionID: SessionID) => Effect.Effect<Info[]>
   }
 
-  export function get(sessionID: SessionID) {
-    const rows = Database.use((db) =>
-      db.select().from(TodoTable).where(eq(TodoTable.session_id, sessionID)).orderBy(asc(TodoTable.position)).all(),
-    )
-    return rows.map((row) => ({
-      content: row.content,
-      status: row.status,
-      priority: row.priority,
-    }))
+  const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
+    Effect.sync(() => Database.use(fn))
+
+  export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/SessionTodo") {}
+
+  export const layer = Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+
+      const list = Effect.fnUntraced(function* (sessionID: SessionID) {
+        const rows = yield* db((db) =>
+          db.select().from(TodoTable).where(eq(TodoTable.session_id, sessionID)).orderBy(asc(TodoTable.position)).all(),
+        )
+        return rows.map((row) => ({
+          content: row.content,
+          status: row.status,
+          priority: row.priority,
+        }))
+      })
+
+      const update = Effect.fn("Todo.update")(function* (input: { sessionID: SessionID; todos: Info[] }) {
+        const prev = yield* list(input.sessionID)
+        if (
+          prev.length === input.todos.length &&
+          prev.every(
+            (item, i) =>
+              item.content === input.todos[i]?.content &&
+              item.status === input.todos[i]?.status &&
+              item.priority === input.todos[i]?.priority,
+          )
+        ) {
+          return
+        }
+
+        yield* Effect.sync(() =>
+          Database.transaction((db) => {
+            db.delete(TodoTable).where(eq(TodoTable.session_id, input.sessionID)).run()
+            if (input.todos.length === 0) return
+            db.insert(TodoTable)
+              .values(
+                input.todos.map((todo, position) => ({
+                  session_id: input.sessionID,
+                  content: todo.content,
+                  status: todo.status,
+                  priority: todo.priority,
+                  position,
+                })),
+              )
+              .run()
+          }),
+        )
+        yield* bus.publish(Event.Updated, input)
+      })
+
+      const get = Effect.fn("Todo.get")(function* (sessionID: SessionID) {
+        return yield* list(sessionID)
+      })
+
+      return Service.of({ update, get })
+    }),
+  )
+
+  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
+
+  const { runPromise } = makeRuntime(Service, defaultLayer)
+
+  export async function update(input: { sessionID: SessionID; todos: Info[] }) {
+    return runPromise((svc) => svc.update(input))
+  }
+
+  export async function get(sessionID: SessionID) {
+    return runPromise((svc) => svc.get(sessionID))
   }
 }
