@@ -8,6 +8,8 @@ import { showToast } from "@opencode-ai/ui/toast"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
+import { makeEventListener } from "@solid-primitives/event-listener"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 
 const cache = new Map<string, { tab: number; answers: QuestionAnswer[]; custom: string[]; customOn: boolean[] }>()
 
@@ -29,16 +31,20 @@ function Option(props: {
   label: string
   description?: string
   disabled: boolean
+  ref?: (el: HTMLButtonElement) => void
+  onFocus?: VoidFunction
   onClick: VoidFunction
 }) {
   return (
     <button
       type="button"
+      ref={props.ref}
       data-slot="question-option"
       data-picked={props.picked}
       role={props.multi ? "checkbox" : "radio"}
       aria-checked={props.picked}
       disabled={props.disabled}
+      onFocus={props.onFocus}
       onClick={props.onClick}
     >
       <Mark multi={props.multi} picked={props.picked} />
@@ -66,16 +72,21 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     custom: cached?.custom ?? ([] as string[]),
     customOn: cached?.customOn ?? ([] as boolean[]),
     editing: false,
+    focus: 0,
   })
 
   let root: HTMLDivElement | undefined
+  let customRef: HTMLButtonElement | undefined
+  let optsRef: HTMLButtonElement[] = []
   let replied = false
+  let focusFrame: number | undefined
 
   const question = createMemo(() => questions()[store.tab])
   const options = createMemo(() => question()?.options ?? [])
   const input = createMemo(() => store.custom[store.tab] ?? "")
   const on = createMemo(() => store.customOn[store.tab] === true)
   const multi = createMemo(() => question()?.multiple === true)
+  const count = createMemo(() => options().length + 1)
 
   const summary = createMemo(() => {
     const n = Math.min(store.tab + 1, total())
@@ -129,6 +140,29 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     root.style.setProperty("--question-prompt-max-height", `${max}px`)
   }
 
+  const clamp = (i: number) => Math.max(0, Math.min(count() - 1, i))
+
+  const pickFocus = (tab: number = store.tab) => {
+    const list = questions()[tab]?.options ?? []
+    if (store.customOn[tab] === true) return list.length
+    return Math.max(
+      0,
+      list.findIndex((item) => store.answers[tab]?.includes(item.label) ?? false),
+    )
+  }
+
+  const focus = (i: number) => {
+    const next = clamp(i)
+    setStore("focus", next)
+    if (store.editing) return
+    if (focusFrame !== undefined) cancelAnimationFrame(focusFrame)
+    focusFrame = requestAnimationFrame(() => {
+      focusFrame = undefined
+      const el = next === options().length ? customRef : optsRef[next]
+      el?.focus()
+    })
+  }
+
   onMount(() => {
     let raf: number | undefined
     const update = () => {
@@ -140,22 +174,22 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     }
 
     update()
-    window.addEventListener("resize", update)
+
+    makeEventListener(window, "resize", update)
 
     const dock = root?.closest('[data-component="session-prompt-dock"]')
     const scroller = document.querySelector(".scroll-view__viewport")
-    const observer = new ResizeObserver(update)
-    if (dock instanceof HTMLElement) observer.observe(dock)
-    if (scroller instanceof HTMLElement) observer.observe(scroller)
+    createResizeObserver([dock, scroller], update)
 
     onCleanup(() => {
-      window.removeEventListener("resize", update)
-      observer.disconnect()
       if (raf !== undefined) cancelAnimationFrame(raf)
     })
+
+    focus(pickFocus())
   })
 
   onCleanup(() => {
+    if (focusFrame !== undefined) cancelAnimationFrame(focusFrame)
     if (replied) return
     cache.set(props.request.id, {
       tab: store.tab,
@@ -231,6 +265,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
 
   const customToggle = () => {
     if (sending()) return
+    setStore("focus", options().length)
 
     if (!multi()) {
       setStore("customOn", store.tab, true)
@@ -250,13 +285,66 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     const value = input().trim()
     if (value) setStore("answers", store.tab, (current = []) => current.filter((item) => item.trim() !== value))
     setStore("editing", false)
+    focus(options().length)
   }
 
   const customOpen = () => {
     if (sending()) return
+    setStore("focus", options().length)
     if (!on()) setStore("customOn", store.tab, true)
     setStore("editing", true)
     customUpdate(input(), true)
+  }
+
+  const move = (step: number) => {
+    if (store.editing || sending()) return
+    focus(store.focus + step)
+  }
+
+  const nav = (event: KeyboardEvent) => {
+    if (event.defaultPrevented) return
+
+    if (event.key === "Escape") {
+      event.preventDefault()
+      void reject()
+      return
+    }
+
+    const mod = (event.metaKey || event.ctrlKey) && !event.altKey
+    if (mod && event.key === "Enter") {
+      if (event.repeat) return
+      event.preventDefault()
+      next()
+      return
+    }
+
+    const target =
+      event.target instanceof HTMLElement ? event.target.closest('[data-slot="question-options"]') : undefined
+    if (store.editing) return
+    if (!(target instanceof HTMLElement)) return
+    if (event.altKey || event.ctrlKey || event.metaKey) return
+
+    if (event.key === "ArrowDown" || event.key === "ArrowRight") {
+      event.preventDefault()
+      move(1)
+      return
+    }
+
+    if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
+      event.preventDefault()
+      move(-1)
+      return
+    }
+
+    if (event.key === "Home") {
+      event.preventDefault()
+      focus(0)
+      return
+    }
+
+    if (event.key !== "End") return
+    event.preventDefault()
+    focus(count() - 1)
   }
 
   const selectOption = (optIndex: number) => {
@@ -270,6 +358,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     const opt = options()[optIndex]
     if (!opt) return
     if (multi()) {
+      setStore("editing", false)
       toggle(opt.label)
       return
     }
@@ -279,6 +368,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   const commitCustom = () => {
     setStore("editing", false)
     customUpdate(input())
+    focus(options().length)
   }
 
   const resizeInput = (el: HTMLTextAreaElement) => {
@@ -308,27 +398,33 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
       return
     }
 
-    setStore("tab", store.tab + 1)
+    const tab = store.tab + 1
+    setStore("tab", tab)
     setStore("editing", false)
+    focus(pickFocus(tab))
   }
 
   const back = () => {
     if (sending()) return
     if (store.tab <= 0) return
-    setStore("tab", store.tab - 1)
+    const tab = store.tab - 1
+    setStore("tab", tab)
     setStore("editing", false)
+    focus(pickFocus(tab))
   }
 
   const jump = (tab: number) => {
     if (sending()) return
     setStore("tab", tab)
     setStore("editing", false)
+    focus(pickFocus(tab))
   }
 
   return (
     <DockPrompt
       kind="question"
       ref={(el) => (root = el)}
+      onKeyDown={nav}
       header={
         <>
           <div data-slot="question-header-title">{summary()}</div>
@@ -351,7 +447,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
       }
       footer={
         <>
-          <Button variant="ghost" size="large" disabled={sending()} onClick={reject}>
+          <Button variant="ghost" size="large" disabled={sending()} onClick={reject} aria-keyshortcuts="Escape">
             {language.t("ui.common.dismiss")}
           </Button>
           <div data-slot="question-footer-actions">
@@ -360,7 +456,13 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                 {language.t("ui.common.back")}
               </Button>
             </Show>
-            <Button variant={last() ? "primary" : "secondary"} size="large" disabled={sending()} onClick={next}>
+            <Button
+              variant={last() ? "primary" : "secondary"}
+              size="large"
+              disabled={sending()}
+              onClick={next}
+              aria-keyshortcuts="Meta+Enter Control+Enter"
+            >
               {last() ? language.t("ui.common.submit") : language.t("ui.common.next")}
             </Button>
           </div>
@@ -380,6 +482,8 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
               label={opt.label}
               description={opt.description}
               disabled={sending()}
+              ref={(el) => (optsRef[i()] = el)}
+              onFocus={() => setStore("focus", i())}
               onClick={() => selectOption(i())}
             />
           )}
@@ -390,12 +494,14 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
           fallback={
             <button
               type="button"
+              ref={customRef}
               data-slot="question-option"
               data-custom="true"
               data-picked={on()}
               role={multi() ? "checkbox" : "radio"}
               aria-checked={on()}
               disabled={sending()}
+              onFocus={() => setStore("focus", options().length)}
               onClick={customOpen}
             >
               <Mark multi={multi()} picked={on()} onClick={toggleCustomMark} />
@@ -440,8 +546,10 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                   if (e.key === "Escape") {
                     e.preventDefault()
                     setStore("editing", false)
+                    focus(options().length)
                     return
                   }
+                  if ((e.metaKey || e.ctrlKey) && !e.altKey) return
                   if (e.key !== "Enter" || e.shiftKey) return
                   e.preventDefault()
                   commitCustom()
