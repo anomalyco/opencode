@@ -1,4 +1,5 @@
 import { createEffect, onCleanup, onMount } from "solid-js"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createStore } from "solid-js/store"
 
 export type FindHost = {
@@ -429,12 +430,10 @@ export function createFileFind(opts: CreateFileFindOptions) {
     const wrapper = opts.wrapper()
     if (!wrapper) return
     const root = scrollParent(wrapper) ?? wrapper
-    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(() => update())
-    observer?.observe(root)
+    createResizeObserver(root, update)
 
     onCleanup(() => {
       window.removeEventListener("resize", update)
-      observer?.disconnect()
     })
   })
 

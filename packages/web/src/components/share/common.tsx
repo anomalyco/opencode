@@ -1,5 +1,6 @@
-import { createContext, createSignal, onCleanup, splitProps, useContext } from "solid-js"
+import { createContext, createSignal, splitProps, useContext } from "solid-js"
 import type { JSX } from "solid-js/jsx-runtime"
+import { makeResizeObserver } from "@solid-primitives/resize-observer"
 import { IconCheckCircle, IconHashtag } from "../icons"
 
 export type ShareMessages = { locale: string } & Record<string, string>
@@ -87,16 +88,10 @@ export function createOverflow() {
         setOverflow(el.scrollHeight > el.clientHeight + 1)
       }
 
-      const ro = new ResizeObserver(() => {
-        sync()
-      })
+      const obs = makeResizeObserver(sync)
+      obs.observe(el)
 
       sync()
-      ro.observe(el)
-
-      onCleanup(() => {
-        ro.disconnect()
-      })
     },
   }
 }
