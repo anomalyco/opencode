@@ -896,6 +896,121 @@ describe("tool.bash permissions", () => {
   })
 })
 
+describe("tool.bash abort", () => {
+  test("preserves output when aborted", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const controller = new AbortController()
+        const collected: string[] = []
+        const result = bash.execute(
+          {
+            command: `echo before && sleep 30`,
+            description: "Long running command",
+          },
+          {
+            ...ctx,
+            abort: controller.signal,
+            metadata: (input) => {
+              const output = (input.metadata as { output?: string })?.output
+              if (output && output.includes("before") && !controller.signal.aborted) {
+                collected.push(output)
+                controller.abort()
+              }
+            },
+          },
+        )
+        const res = await result
+        expect(res.output).toContain("before")
+        expect(res.output).toContain("User aborted the command")
+        expect(collected.length).toBeGreaterThan(0)
+      },
+    })
+  }, 15_000)
+
+  test("terminates command on timeout", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          {
+            command: `echo started && sleep 60`,
+            description: "Timeout test",
+            timeout: 500,
+          },
+          ctx,
+        )
+        expect(result.output).toContain("started")
+        expect(result.output).toContain("bash tool terminated command after exceeding timeout")
+      },
+    })
+  }, 15_000)
+
+  test.skipIf(process.platform === "win32")("captures stderr in output", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          {
+            command: `echo stdout_msg && echo stderr_msg >&2`,
+            description: "Stderr test",
+          },
+          ctx,
+        )
+        expect(result.output).toContain("stdout_msg")
+        expect(result.output).toContain("stderr_msg")
+        expect(result.metadata.exit).toBe(0)
+      },
+    })
+  })
+
+  test("returns non-zero exit code", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          {
+            command: `exit 42`,
+            description: "Non-zero exit",
+          },
+          ctx,
+        )
+        expect(result.metadata.exit).toBe(42)
+      },
+    })
+  })
+
+  test("streams metadata updates progressively", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const updates: string[] = []
+        const result = await bash.execute(
+          {
+            command: `echo first && sleep 0.1 && echo second`,
+            description: "Streaming test",
+          },
+          {
+            ...ctx,
+            metadata: (input) => {
+              const output = (input.metadata as { output?: string })?.output
+              if (output) updates.push(output)
+            },
+          },
+        )
+        expect(result.output).toContain("first")
+        expect(result.output).toContain("second")
+        expect(updates.length).toBeGreaterThan(1)
+      },
+    })
+  })
+})
+
 describe("tool.bash truncation", () => {
   test("truncates output exceeding line limit", async () => {
     await Instance.provide({

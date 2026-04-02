@@ -449,6 +449,19 @@ export namespace ACP {
                 return
             }
           }
+          if (part.type !== "text" && part.type !== "file") return
+          const msg = await this.sdk.session
+            .message(
+              { sessionID: part.sessionID, messageID: part.messageID, directory: session.cwd },
+              { throwOnError: true },
+            )
+            .then((x) => x.data)
+            .catch((err) => {
+              log.error("failed to fetch message for user chunk", { error: err })
+              return undefined
+            })
+          if (!msg || msg.info.role !== "user") return
+          await this.processMessage({ info: msg.info, parts: [part] })
           return
         }
 
@@ -484,6 +497,7 @@ export namespace ACP {
                 sessionId,
                 update: {
                   sessionUpdate: "agent_message_chunk",
+                  messageId: props.messageID,
                   content: {
                     type: "text",
                     text: props.delta,
@@ -502,6 +516,7 @@ export namespace ACP {
                 sessionId,
                 update: {
                   sessionUpdate: "agent_thought_chunk",
+                  messageId: props.messageID,
                   content: {
                     type: "text",
                     text: props.delta,
@@ -666,7 +681,7 @@ export namespace ACP {
       }
     }
 
-    async unstable_listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
+    async listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
       try {
         const cursor = params.cursor ? Number(params.cursor) : undefined
         const limit = 100
@@ -970,6 +985,7 @@ export namespace ACP {
                 sessionId,
                 update: {
                   sessionUpdate: message.info.role === "user" ? "user_message_chunk" : "agent_message_chunk",
+                  messageId: message.info.id,
                   content: {
                     type: "text",
                     text: part.text,
@@ -1001,6 +1017,7 @@ export namespace ACP {
                 sessionId,
                 update: {
                   sessionUpdate: messageChunk,
+                  messageId: message.info.id,
                   content: { type: "resource_link", uri: url, name: filename, mimeType: mime },
                 },
               })
@@ -1022,6 +1039,7 @@ export namespace ACP {
                   sessionId,
                   update: {
                     sessionUpdate: messageChunk,
+                    messageId: message.info.id,
                     content: {
                       type: "image",
                       mimeType: effectiveMime,
@@ -1050,6 +1068,7 @@ export namespace ACP {
                   sessionId,
                   update: {
                     sessionUpdate: messageChunk,
+                    messageId: message.info.id,
                     content: { type: "resource", resource },
                   },
                 })
@@ -1066,6 +1085,7 @@ export namespace ACP {
                 sessionId,
                 update: {
                   sessionUpdate: "agent_thought_chunk",
+                  messageId: message.info.id,
                   content: {
                     type: "text",
                     text: part.text,

@@ -11,6 +11,7 @@ adamdotdevin
 -agusbasari29 AI PR slop
 ariane-emory
 -atharvau AI review spamming literally every PR
+-borealbytes
 -danieljoshuanazareth
 -danieljoshuanazareth
 edemaine
