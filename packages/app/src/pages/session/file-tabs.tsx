@@ -14,6 +14,7 @@ import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { showToast } from "@opencode-ai/ui/toast"
 import { MarkdownMdx } from "@opencode-ai/ui/markdown-mdx"
 import { useLayout } from "@/context/layout"
+import { useSDK } from "@/context/sdk"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
@@ -57,6 +58,7 @@ function FileCommentMenu(props: {
 export function FileTabContent(props: { tab: string }) {
   const params = useParams()
   const layout = useLayout()
+  const sdk = useSDK()
   const file = useFile()
   const comments = useComments()
   const language = useLanguage()
@@ -88,6 +90,23 @@ export function FileTabContent(props: { tab: string }) {
     const p = path()
     if (!p) return
     return file.get(p)
+  })
+
+  const spreadsheetUnit = createMemo(() => {
+    if (!spreadsheet() || !state()?.loaded) return
+    const p = path()
+    if (!p) return
+    const c = state()?.content
+    if (!c || typeof c !== "object") return
+    const o = c as Record<string, unknown>
+    if (typeof o.unitId !== "string" || !o.unitId) return
+    const k = o.unitKind
+    const unitType = k === "doc" ? (1 as const) : k === "slide" ? (3 as const) : (2 as const)
+    const pending = o.unitId.startsWith("pending-")
+    const base64 = typeof o.content === "string" ? o.content : undefined
+    const mimeType = typeof o.mimeType === "string" ? o.mimeType : undefined
+    const pendingImport = pending && base64 ? { base64, mimeType } : undefined
+    return { unitId: o.unitId, unitType, officePath: p, pendingImport }
   })
   const contents = createMemo(() => state()?.content?.content ?? "")
   const cacheKey = createMemo(() => sampledChecksum(contents()))
@@ -489,12 +508,32 @@ export function FileTabContent(props: { tab: string }) {
       class="relative mt-3 flex min-h-0 flex-1 flex-col overflow-hidden"
     >
       <Switch>
-        <Match when={spreadsheet() && state()?.loaded && path()}>
-          {(p) => (
-            <div class="flex min-h-0 flex-1 flex-col px-6 py-4">
-              <SpreadsheetViewer filePath={p()} />
-            </div>
-          )}
+        <Match when={spreadsheet() && state()?.loaded && Boolean(path())}>
+          <div class="flex min-h-0 flex-1 flex-col px-6 py-4">
+            <Show
+              when={spreadsheetUnit()}
+              fallback={
+                <div class="text-text-weak text-sm">
+                  Spreadsheet has no Univer unit (missing unitId). Open the file from the workspace tree after USIP sync,
+                  or check veritly-usip /v1/files/content for this path.
+                </div>
+              }
+            >
+              {(u) => (
+                <SpreadsheetViewer
+                  unitId={u().unitId}
+                  unitType={u().unitType}
+                  officePath={u().officePath}
+                  pendingImport={u().pendingImport}
+                  projectId={sdk.directory || "default"}
+                  onUnitRegistered={() => {
+                    const p = path()
+                    if (p) void file.load(p, { force: true })
+                  }}
+                />
+              )}
+            </Show>
+          </div>
         </Match>
         <Match when={true}>
           <ScrollView

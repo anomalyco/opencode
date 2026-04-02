@@ -1,196 +1,179 @@
-import type { FileContent } from "@opencode-ai/sdk/v2"
-import LuckyExcel from "@mertdeveci55/univer-import-export"
-import { UniverInstanceType } from "@univerjs/core"
-import { UniverSheetsCorePreset } from "@univerjs/preset-sheets-core"
-import UniverPresetSheetsCoreEnUS from "@univerjs/preset-sheets-core/locales/en-US"
-import { createUniver, LocaleType, mergeLocales } from "@univerjs/presets"
 import { Show, createEffect, createSignal, on, onCleanup } from "solid-js"
-import "@univerjs/preset-sheets-core/lib/index.css"
 import { useTheme } from "@opencode-ai/ui/theme"
-import { useSDK } from "@/context/sdk"
+import {
+  createUniver,
+  defaultTheme,
+  LocaleType,
+  LogLevel,
+  mergeLocales,
+} from "@univerjs/presets"
+import { UniverSheetsCorePreset } from "@univerjs/presets/preset-sheets-core"
+import sheetsCoreEnUs from "@univerjs/presets/preset-sheets-core/locales/en-US"
+import "@univerjs/presets/lib/styles/preset-sheets-core.css"
+import { UniverSheetsDrawingPreset } from "@univerjs/presets/preset-sheets-drawing"
+import sheetsDrawingEnUs from "@univerjs/presets/preset-sheets-drawing/locales/en-US"
+import "@univerjs/presets/lib/styles/preset-sheets-drawing.css"
+import { UniverSheetsAdvancedPreset } from "@univerjs/presets/preset-sheets-advanced"
+import sheetsAdvancedEnUs from "@univerjs/presets/preset-sheets-advanced/locales/en-US"
+import "@univerjs/presets/lib/styles/preset-sheets-advanced.css"
+import { UniverSheetsCollaborationPreset } from "@univerjs/presets/preset-sheets-collaboration"
+import sheetsCollaborationEnUs from "@univerjs/presets/preset-sheets-collaboration/locales/en-US"
+import "@univerjs/presets/lib/styles/preset-sheets-collaboration.css"
+import { registerOfficeUnit } from "@/lib/veritly-univer-files"
+
+type PendingImport = { base64: string; mimeType?: string }
+
+type UniverApiWithExchange = {
+  importXLSXToUnitIdAsync(file: File): Promise<string | undefined>
+  loadServerUnit(unitId: string, unitType: number): void
+  toggleDarkMode(on: boolean): void
+}
 
 type Props = {
-	filePath?: string
+  unitId?: string
+  unitType?: 1 | 2 | 3
+  officePath?: string
+  pendingImport?: PendingImport
+  projectId?: string
+  onUnitRegistered?: () => void
 }
 
-function base64ToArrayBuffer(base64: string): ArrayBuffer {
-	const binary = atob(base64)
-	const bytes = new Uint8Array(binary.length)
-	for (let i = 0; i < binary.length; i++) {
-		bytes[i] = binary.charCodeAt(i)
-	}
-	return bytes.buffer
-}
+const UNIVERSER_BASE = import.meta.env.VITE_UNIVERSER_URL?.trim() || "http://127.0.0.1:8000"
+const UNIVER_LICENSE = import.meta.env.VITE_UNIVER_LICENSE?.trim() ?? ""
 
-function fileNameFromPath(p: string): string {
-	const normalized = p.replace(/\\/g, "/")
-	const i = normalized.lastIndexOf("/")
-	return i >= 0 ? normalized.slice(i + 1) : normalized
-}
-
-function fileContentToArrayBuffer(content: FileContent): ArrayBuffer {
-	if (content.type === "binary") {
-		if (content.encoding !== "base64") {
-			throw new Error("Cannot read binary file without base64 encoding")
-		}
-		return base64ToArrayBuffer(content.content)
-	}
-	const encoded = new TextEncoder().encode(content.content)
-	return encoded.buffer.slice(encoded.byteOffset, encoded.byteOffset + encoded.byteLength)
-}
-
-function isCsvPath(p: string): boolean {
-	return /\.csv$/i.test(p)
+function base64ToFile(base64: string, name: string, mimeType?: string): File {
+  const bin = atob(base64)
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+  return new File([bytes], name, { type: mimeType || "application/octet-stream" })
 }
 
 export function SpreadsheetViewer(props: Props) {
-	const sdk = useSDK()
-	const theme = useTheme()
-	const [host, setHost] = createSignal<HTMLDivElement | undefined>()
-	const [error, setError] = createSignal<string | null>(null)
-	const [loading, setLoading] = createSignal(false)
+  const theme = useTheme()
+  const [host, setHost] = createSignal<HTMLDivElement | undefined>()
+  const [error, setError] = createSignal<string | null>(null)
+  const [loading, setLoading] = createSignal(false)
 
-	let runtime: ReturnType<typeof createUniver> | null = null
-	let activeUnitId: string | null = null
-	let loadSeq = 0
+  let runtime: ReturnType<typeof createUniver> | null = null
+  let seq = 0
 
-	createEffect(() => {
-		const el = host()
-		if (!el || typeof window === "undefined") return
+  createEffect(() => {
+    const el = host()
+    if (!el || typeof window === "undefined") return
 
-		const instance = createUniver({
-			locale: LocaleType.EN_US,
-			locales: { [LocaleType.EN_US]: mergeLocales(UniverPresetSheetsCoreEnUS) },
-			presets: [
-				UniverSheetsCorePreset({
-					container: el,
-					header: true,
-					toolbar: true,
-					ribbonType: "classic",
-					formulaBar: true,
-					// @ts-expect-error sheets-ui types omit boolean `true`; matches Univer examples / user config
-					footer: true,
-				}),
-			],
-		})
-		runtime = instance
+    const instance = createUniver({
+      locale: LocaleType.EN_US,
+      locales: {
+        [LocaleType.EN_US]: mergeLocales(
+          sheetsCoreEnUs,
+          sheetsDrawingEnUs,
+          sheetsAdvancedEnUs,
+          sheetsCollaborationEnUs,
+        ),
+      },
+      collaboration: true,
+      logLevel: LogLevel.WARN,
+      theme: defaultTheme,
+      presets: [
+        UniverSheetsCorePreset({
+          container: el,
+          header: true,
+          toolbar: true,
+          ribbonType: "classic",
+          formulaBar: true,
+          // @ts-expect-error sheets-ui types omit boolean `true`; valid runtime option
+          footer: true,
+        }),
+        UniverSheetsDrawingPreset({ collaboration: true }),
+        UniverSheetsAdvancedPreset({
+          universerEndpoint: UNIVERSER_BASE,
+          license: UNIVER_LICENSE,
+        }),
+        UniverSheetsCollaborationPreset({
+          universerEndpoint: UNIVERSER_BASE,
+          univerContainerId: "univer",
+        }),
+      ],
+    })
 
-		onCleanup(() => {
-			activeUnitId = null
-			instance.univer.dispose()
-			runtime = null
-		})
-	})
+    runtime = instance
 
-	createEffect(() => {
-		const el = host()
-		if (!el || typeof window === "undefined") return
-		const current = runtime
-		if (!current) return
-		const dark = theme.mode() === "dark"
-		current.univerAPI.toggleDarkMode(dark)
-	})
+    onCleanup(() => {
+      runtime = null
+      instance.univer.dispose()
+    })
+  })
 
-	createEffect(
-		on(
-			[() => host(), () => props.filePath],
-			async ([el, path]) => {
-				if (!el || !path) return
-				const current = runtime
-				if (!current) return
+  createEffect(() => {
+    const cur = runtime
+    if (!cur) return
+    cur.univerAPI.toggleDarkMode(theme.mode() === "dark")
+  })
 
-				setLoading(true)
-				setError(null)
+  createEffect(
+    on(
+      () =>
+        [
+          props.unitId,
+          props.unitType ?? 2,
+          props.officePath,
+          props.pendingImport?.base64,
+          props.pendingImport?.mimeType,
+          props.projectId,
+        ] as const,
+      async ([unitId, unitType, officePath, pendingB64, pendingMime, projectId]) => {
+        if (!unitId) return
+        const cur = runtime
+        if (!cur) return
 
-				const seq = ++loadSeq
-				const stale = () => seq !== loadSeq || runtime !== current
+        setLoading(true)
+        setError(null)
 
-				try {
-					const response = await sdk.client.file.read({ path })
-					if (stale()) return
+        const id = ++seq
+        const stale = () => id !== seq || runtime !== cur
 
-					if (response.error) {
-						setError(String(response.error))
-						return
-					}
+        const api = cur.univerAPI as unknown as UniverApiWithExchange
 
-					const content = response.data
-					if (!content) {
-						setError("Failed to load file")
-						return
-					}
+        try {
+          if (stale()) return
 
-					const name = fileNameFromPath(path)
-					const { univer, univerAPI } = current
+          if (unitId.startsWith("pending-")) {
+            if (!officePath || !pendingB64) {
+              setError("Spreadsheet is not imported yet (missing file payload). Reload the file or re-upload.")
+              return
+            }
+            const name = officePath.split("/").pop() || "workbook.xlsx"
+            const file = base64ToFile(pendingB64, name, pendingMime)
+            const realId = await api.importXLSXToUnitIdAsync(file)
+            if (stale()) return
+            if (!realId) {
+              setError("Univer import returned no unit id")
+              return
+            }
+            await registerOfficeUnit(officePath, realId, { projectId })
+            if (stale()) return
+            props.onUnitRegistered?.()
+            return
+          }
 
-					if (activeUnitId) {
-						univerAPI.disposeUnit(activeUnitId)
-						activeUnitId = null
-					}
+          api.loadServerUnit(unitId, unitType)
+        } catch (e) {
+          if (stale()) return
+          setError(e instanceof Error ? e.message : "Failed to load sheet")
+        } finally {
+          if (!stale()) setLoading(false)
+        }
+      },
+    ),
+  )
 
-					const applyWorkbook = (data: { id: string }) => {
-						if (stale()) return
-						activeUnitId = data.id
-						univer.createUnit(UniverInstanceType.UNIVER_SHEET, data)
-					}
-
-					if (isCsvPath(path)) {
-						const buf = fileContentToArrayBuffer(content)
-						const file = new File([buf], name, { type: "text/csv;charset=utf-8" })
-						await new Promise<void>((resolve) => {
-							LuckyExcel.transformCsvToUniver(
-								file,
-								(univerData) => {
-									applyWorkbook(univerData)
-									resolve()
-								},
-								(err) => {
-									console.error("CSV import error:", err)
-									setError(err.message)
-									resolve()
-								},
-							)
-						})
-					} else {
-						if (content.type === "binary" && content.encoding !== "base64") {
-							setError("Cannot read binary file")
-							return
-						}
-						const buf = fileContentToArrayBuffer(content)
-						const file = new File([buf], name, {
-							type:
-								content.mimeType ??
-								"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-						})
-						await LuckyExcel.transformExcelToUniver(
-							file,
-							(univerData) => applyWorkbook(univerData),
-							(err) => {
-								console.error("Import error:", err)
-								setError(err.message)
-							},
-						)
-					}
-
-				} catch (e) {
-					if (stale()) return
-					setError(e instanceof Error ? e.message : "Failed to load spreadsheet")
-				} finally {
-					if (!stale()) setLoading(false)
-				}
-			},
-		),
-	)
-
-	return (
-		<div class="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col gap-2">
-			<Show when={loading()}>
-				<div class="text-muted-foreground shrink-0 text-sm">Loading spreadsheet…</div>
-			</Show>
-			<Show when={error()}>
-				{(err) => <div class="text-destructive shrink-0 text-sm">{err()}</div>}
-			</Show>
-			<div ref={setHost} class="min-h-[min(480px,70dvh)] w-full min-w-0 flex-1" />
-		</div>
-	)
+  return (
+    <div class="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col gap-2">
+      <Show when={loading()}>
+        <div class="text-muted-foreground shrink-0 text-sm">Loading spreadsheet…</div>
+      </Show>
+      <Show when={error()}>{(err) => <div class="text-destructive shrink-0 text-sm">{err()}</div>}</Show>
+      <div id="univer" ref={setHost} class="min-h-[min(480px,70dvh)] w-full min-w-0 flex-1" />
+    </div>
+  )
 }

@@ -9,6 +9,7 @@ import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
+import { isUniverOfficePath, listOfficeFiles, readOfficeFile, uploadOfficeFile } from "@/lib/veritly-univer-files"
 import { createPathHelpers } from "./file/path"
 import {
   approxBytes,
@@ -61,6 +62,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const layout = useLayout()
 
     const scope = createMemo(() => sdk.directory)
+    const univerProjectId = createMemo(() => sdk.directory || "default")
     const path = createPathHelpers(scope)
     const tabs = layout.tabs(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
 
@@ -74,7 +76,19 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const tree = createFileTreeStore({
       scope,
       normalizeDir: path.normalizeDir,
-      list: (dir) => sdk.client.file.list({ path: dir }).then((x) => x.data ?? []),
+      list: async (dir) => {
+        const [opencodeNodes, officeNodes] = await Promise.all([
+          sdk.client.file.list({ path: dir }).then((x) => x.data ?? []),
+          listOfficeFiles(dir, { projectId: univerProjectId() }).catch(() => []),
+        ])
+        const byPath = new Map<string, (typeof opencodeNodes)[number]>()
+        for (const n of opencodeNodes) byPath.set(n.path, n)
+        for (const n of officeNodes) {
+          if (byPath.has(n.path)) continue
+          byPath.set(n.path, n as (typeof opencodeNodes)[number])
+        }
+        return [...byPath.values()]
+      },
       onError: (message) => {
         showToast({
           variant: "error",
@@ -172,11 +186,12 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
       setLoading(file)
 
-      const promise = sdk.client.file
-        .read({ path: file })
+      const promise = (isUniverOfficePath(file)
+        ? readOfficeFile(file, { projectId: univerProjectId() })
+        : sdk.client.file.read({ path: file }))
         .then((x) => {
           if (scope() !== directory) return
-          const content = x.data
+          const content = ("data" in x ? x.data : x)
           setLoaded(file, content)
 
           if (!content) return
@@ -204,7 +219,9 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const upload = async (filepath: string, content: Uint8Array) => {
       const normalized = path.normalize(filepath)
       const base64 = base64FromBytes(content)
-      const result = await sdk.client.file.upload({ path: normalized, content: base64 })
+      const result = isUniverOfficePath(normalized)
+        ? { data: await uploadOfficeFile(normalized, base64, undefined, { projectId: univerProjectId() }), error: undefined }
+        : await sdk.client.file.upload({ path: normalized, content: base64 })
       if (result.error) throw new Error("Upload failed")
       void tree.listDir(path.dirname(normalized), { force: true })
       return result.data

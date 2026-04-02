@@ -42,9 +42,7 @@ const content = [
 
 await writeFile(managedInstructionsPath, content, "utf8");
 
-if (!process.env.OPENCODE_PROJECTS_ROOT) {
-	process.env.OPENCODE_PROJECTS_ROOT = path.join(repoRoot, ".veritly", "projects");
-}
+process.env.OPENCODE_PROJECTS_ROOT = path.join(repoRoot, ".veritly", "projects");
 
 process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
 	instructions: [managedInstructionsPath],
