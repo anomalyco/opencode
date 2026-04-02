@@ -237,16 +237,7 @@ export function Autocomplete(props: {
 
       // Add file options
       if (!result.error && result.data) {
-        const sortedFiles = result.data.sort((a, b) => {
-          const aScore = frecency.getFrecency(a)
-          const bScore = frecency.getFrecency(b)
-          if (aScore !== bScore) return bScore - aScore
-          const aDepth = a.split("/").length
-          const bDepth = b.split("/").length
-          if (aDepth !== bDepth) return aDepth - bDepth
-          return a.localeCompare(b)
-        })
-
+        // fff already returns results ranked by relevance + frecency
         const width = props.anchor().width - 4
         options.push(
           ...sortedFiles.map((item): AutocompleteOption => {
@@ -401,6 +392,12 @@ export function Autocomplete(props: {
 
     if (files.loading && prev && prev.length > 0) {
       return prev
+    }
+
+    // fff already returns frecency-ranked fuzzy results, so for file search
+    // just pass them through directly instead of re-ranking with fuzzysort
+    if (store.visible === "@" && filesValue && filesValue.length > 0) {
+      return filesValue
     }
 
     const result = fuzzysort.go(removeLineRange(searchValue), mixed, {

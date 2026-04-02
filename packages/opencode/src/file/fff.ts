@@ -7,7 +7,7 @@ import {
   type GrepMatch,
   type GrepMode,
   type SearchResult,
-} from "@ff-labs/fff-node"
+} from "@ff-labs/fff-bun"
 import z from "zod"
 import { Global } from "../global"
 import { Instance } from "../project/instance"
@@ -50,24 +50,12 @@ export namespace Fff {
 
   const root = path.join(Global.Path.cache, "fff")
 
-  function key(dir: string) {
-    return Buffer.from(dir).toString("base64url")
-  }
-
-  async function db(dir: string) {
+  async function db() {
     await fs.mkdir(root, { recursive: true })
-    const id = key(dir)
+    // fff databases are global across the file system
     return {
-      frecency: path.join(root, `${id}.frecency.mdb`),
-      history: path.join(root, `${id}.history.mdb`),
-    }
-  }
-
-  function refresh(pick: FileFinder) {
-    const git = pick.refreshGitStatus()
-    if (!git.ok) {
-      log.warn("git refresh failed", { error: git.error })
-      return
+      frecency: path.join(root, "frecency.mdb"),
+      history: path.join(root, "history.mdb"),
     }
   }
 
@@ -81,7 +69,7 @@ export namespace Fff {
     if (wait) return wait
 
     const next = (async () => {
-      const files = await db(dir)
+      const files = await db()
       const made = FileFinder.create({
         basePath: dir,
         frecencyDbPath: files.frecency,
@@ -89,16 +77,11 @@ export namespace Fff {
         aiMode: true,
       })
       if (!made.ok) throw new Error(made.error)
-
+      // we do not syncrhnously wait for the results here to not block anything
+      // fff will do the indexing in the background and will automatically
+      // become available
       const pick = made.value
-      const done = await pick.waitForScan(5000)
-      if (!done.ok) {
-        pick.destroy()
-        throw new Error(done.error)
-      }
-
       memo.map.set(dir, pick)
-      refresh(pick)
       return pick
     })()
 
@@ -170,11 +153,13 @@ export namespace Fff {
 
   export async function tree(input: { cwd: string; limit?: number; signal?: AbortSignal }) {
     input.signal?.throwIfAborted()
-    const files = (await Glob.scan("**/*", {
-      cwd: input.cwd,
-      include: "file",
-      dot: true,
-    }))
+    const files = (
+      await Glob.scan("**/*", {
+        cwd: input.cwd,
+        include: "file",
+        dot: true,
+      })
+    )
       .map((row) => norm(row))
       .filter((row) => allowed({ rel: row, hidden: true }))
       .toSorted((a, b) => a.localeCompare(b))
