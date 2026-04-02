@@ -849,7 +849,13 @@ export namespace Session {
   }
 
   export const children = fn(SessionID.zod, (id) => runPromise((svc) => svc.children(id)))
-  export const remove = fn(SessionID.zod, (id) => runPromise((svc) => svc.remove(id)))
+  export const remove = fn(SessionID.zod, async (sessionID) => {
+    log.info("removing session", { sessionID, promptState: SessionPrompt.stateSize() })
+    const result = await runPromise((svc) => svc.remove(sessionID))
+    await SessionPrompt.cancel(sessionID).catch(() => {})
+    log.info("session removed", { sessionID, promptState: SessionPrompt.stateSize() })
+    return result
+  })
   export async function updateMessage<T extends MessageV2.Info>(msg: T): Promise<T> {
     MessageV2.Info.parse(msg)
     return runPromise((svc) => svc.updateMessage(msg))

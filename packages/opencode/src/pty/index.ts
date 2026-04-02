@@ -128,6 +128,7 @@ export namespace Pty {
           } catch {}
         }
         session.subscribers.clear()
+        session.buffer = ""
       }
 
       const state = yield* InstanceState.make<State>(

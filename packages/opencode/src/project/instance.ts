@@ -172,4 +172,9 @@ export const Instance = {
 
     return disposal.all
   },
+
+  /** Diagnostic: return list of active instance directories */
+  directories() {
+    return [...cache.keys()]
+  },
 }

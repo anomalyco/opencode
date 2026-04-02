@@ -15,6 +15,7 @@ import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 import { NotFoundError } from "@/storage/db"
 import { ModelID, ProviderID } from "@/provider/schema"
+import { track } from "@/telemetry/tracker"
 import { Effect, Layer, ServiceMap } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 import { InstanceState } from "@/effect/instance-state"
@@ -95,9 +96,12 @@ export namespace SessionCompaction {
         if (cfg.compaction?.prune === false) return
         log.info("pruning")
 
-        const msgs = yield* session
-          .messages({ sessionID: input.sessionID })
-          .pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed(undefined)))
+        const msgs = yield* Effect.promise(() =>
+          track("compaction.messages", Session.messages({ sessionID: input.sessionID })).catch((err) => {
+            if (NotFoundError.isInstance(err)) return undefined
+            throw err
+          }),
+        )
         if (!msgs) return
 
         let total = 0
@@ -131,6 +135,8 @@ export namespace SessionCompaction {
           for (const part of toPrune) {
             if (part.state.status === "completed") {
               part.state.time.compacted = Date.now()
+              part.state.output = ""
+              part.state.attachments = undefined
               yield* session.updatePart(part)
             }
           }

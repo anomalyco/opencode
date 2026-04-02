@@ -14,6 +14,7 @@ import { isOverflow } from "./overflow"
 import { PartID } from "./schema"
 import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
+import { fire } from "@/telemetry/tracker"
 import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
 import type { Provider } from "@/provider/provider"
@@ -298,10 +299,15 @@ export namespace SessionProcessor {
                 }
                 ctx.snapshot = undefined
               }
-              SessionSummary.summarize({
-                sessionID: ctx.sessionID,
-                messageID: ctx.assistantMessage.parentID,
-              })
+              yield* Effect.sync(() =>
+                fire(
+                  "processor.summarize",
+                  SessionSummary.summarize({
+                    sessionID: ctx.sessionID,
+                    messageID: ctx.assistantMessage.parentID,
+                  }),
+                ),
+              )
               if (
                 !ctx.assistantMessage.summary &&
                 isOverflow({ cfg: yield* config.get(), tokens: usage.tokens, model: ctx.model })

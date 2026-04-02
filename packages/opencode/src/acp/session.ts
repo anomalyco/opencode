@@ -7,6 +7,7 @@ const log = Log.create({ service: "acp-session-manager" })
 
 export class ACPSessionManager {
   private sessions = new Map<string, ACPSessionState>()
+  get size() { return this.sessions.size }
   private sdk: OpencodeClient
 
   constructor(sdk: OpencodeClient) {

@@ -7,6 +7,7 @@ import { Storage } from "@/storage/storage"
 import { Session } from "."
 import { MessageV2 } from "./message-v2"
 import { SessionID, MessageID } from "./schema"
+import { trackEffect } from "@/telemetry/tracker"
 
 export namespace SessionSummary {
   function unquoteGitPath(input: string) {
@@ -107,7 +108,7 @@ export namespace SessionSummary {
         sessionID: SessionID
         messageID: MessageID
       }) {
-        const all = yield* sessions.messages({ sessionID: input.sessionID })
+        const all = yield* trackEffect("summary.messages", sessions.messages({ sessionID: input.sessionID }))
         if (!all.length) return
 
         const diffs = yield* computeDiff({ messages: all })
@@ -163,8 +164,9 @@ export namespace SessionSummary {
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
-  export const summarize = (input: { sessionID: SessionID; messageID: MessageID }) =>
-    void runPromise((svc) => svc.summarize(input)).catch(() => {})
+  export function summarize(input: { sessionID: SessionID; messageID: MessageID }) {
+    return runPromise((svc) => svc.summarize(input)).catch(() => {})
+  }
 
   export const DiffInput = z.object({
     sessionID: SessionID.zod,

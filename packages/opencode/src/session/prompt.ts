@@ -47,6 +47,7 @@ import { AppFileSystem } from "@/filesystem"
 import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
+import { fire, trackEffect } from "@/telemetry/tracker"
 import { Cause, Effect, Exit, Layer, Option, Scope, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
@@ -70,6 +71,7 @@ export namespace SessionPrompt {
   export interface Interface {
     readonly assertNotBusy: (sessionID: SessionID) => Effect.Effect<void, Session.BusyError>
     readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
+    readonly stateSize: () => Effect.Effect<{ sessions: number; ids: string[]; pending: number }>
     readonly prompt: (input: PromptInput) => Effect.Effect<MessageV2.WithParts>
     readonly loop: (input: z.infer<typeof LoopInput>) => Effect.Effect<MessageV2.WithParts>
     readonly shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts>
@@ -151,6 +153,13 @@ export namespace SessionPrompt {
         }
         yield* runner.cancel
       })
+
+      const stateSize: Interface["stateSize"] = () =>
+        InstanceState.use(state, (s) => ({
+          sessions: s.runners.size,
+          ids: [...s.runners.keys()],
+          pending: [...s.runners.values()].filter((r) => r.busy).length,
+        }))
 
       const resolvePromptParts = Effect.fn("SessionPrompt.resolvePromptParts")(function* (template: string) {
         const ctx = yield* InstanceState.context
@@ -1345,7 +1354,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             yield* status.set(sessionID, { type: "busy" })
             log.info("loop", { step, sessionID })
 
-            let msgs = yield* MessageV2.filterCompactedEffect(sessionID)
+            let msgs = yield* trackEffect("prompt.messages", MessageV2.filterCompactedEffect(sessionID))
 
             let lastUser: MessageV2.User | undefined
             let lastAssistant: MessageV2.Assistant | undefined
@@ -1476,7 +1485,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   })
                 }
 
-                if (step === 1) SessionSummary.summarize({ sessionID, messageID: lastUser.id })
+                if (step === 1) {
+                  yield* Effect.sync(() =>
+                    fire("prompt.summarize", SessionSummary.summarize({ sessionID, messageID: lastUser.id })),
+                  )
+                }
 
                 if (step > 1 && lastFinished) {
                   for (const m of msgs) {
@@ -1699,6 +1712,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       return Service.of({
         assertNotBusy,
         cancel,
+        stateSize,
         prompt,
         loop,
         shell,
@@ -1708,7 +1722,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     }),
   )
 
-  const defaultLayer = Layer.unwrap(
+  const baseLayer: unknown = Layer.unwrap(
     Effect.sync(() =>
       layer.pipe(
         Layer.provide(SessionStatus.layer),
@@ -1732,7 +1746,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       ),
     ),
   )
-  const { runPromise } = makeRuntime(Service, defaultLayer)
+  const defaultLayer = baseLayer as unknown as Layer.Layer<Service>
+  const { runPromise, runSync } = makeRuntime(Service, defaultLayer)
 
   export async function assertNotBusy(sessionID: SessionID) {
     return runPromise((svc) => svc.assertNotBusy(SessionID.zod.parse(sessionID)))
@@ -1815,6 +1830,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
   export async function cancel(sessionID: SessionID) {
     return runPromise((svc) => svc.cancel(SessionID.zod.parse(sessionID)))
+  }
+
+  export function stateSize() {
+    return runSync((svc) => svc.stateSize())
   }
 
   export const LoopInput = z.object({

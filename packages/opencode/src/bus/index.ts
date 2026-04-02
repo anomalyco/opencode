@@ -9,6 +9,7 @@ import { makeRuntime } from "@/effect/run-service"
 
 export namespace Bus {
   const log = Log.create({ service: "bus" })
+  const stats = { subscriptions: 0, unsubscriptions: 0 }
 
   export const InstanceDisposed = BusEvent.define(
     "server.instance.disposed",
@@ -99,6 +100,7 @@ export namespace Bus {
       }
 
       function subscribe<D extends BusEvent.Definition>(def: D): Stream.Stream<Payload<D>> {
+        stats.subscriptions++
         log.info("subscribing", { type: def.type })
         return Stream.unwrap(
           Effect.gen(function* () {
@@ -106,21 +108,23 @@ export namespace Bus {
             const ps = yield* getOrCreate(s, def)
             return Stream.fromPubSub(ps)
           }),
-        ).pipe(Stream.ensuring(Effect.sync(() => log.info("unsubscribing", { type: def.type }))))
+        ).pipe(Stream.ensuring(Effect.sync(() => { stats.unsubscriptions++; log.info("unsubscribing", { type: def.type }) })))
       }
 
       function subscribeAll(): Stream.Stream<Payload> {
+        stats.subscriptions++
         log.info("subscribing", { type: "*" })
         return Stream.unwrap(
           Effect.gen(function* () {
             const s = yield* InstanceState.get(state)
             return Stream.fromPubSub(s.wildcard)
           }),
-        ).pipe(Stream.ensuring(Effect.sync(() => log.info("unsubscribing", { type: "*" }))))
+        ).pipe(Stream.ensuring(Effect.sync(() => { stats.unsubscriptions++; log.info("unsubscribing", { type: "*" }) })))
       }
 
       function on<T>(pubsub: PubSub.PubSub<T>, type: string, callback: (event: T) => unknown) {
         return Effect.gen(function* () {
+          stats.subscriptions++
           log.info("subscribing", { type })
           const scope = yield* Scope.make()
           const subscription = yield* Scope.provide(scope)(PubSub.subscribe(pubsub))
@@ -140,6 +144,7 @@ export namespace Bus {
           )
 
           return () => {
+            stats.unsubscriptions++
             log.info("unsubscribing", { type })
             Effect.runFork(Scope.close(scope, Exit.void))
           }
@@ -181,5 +186,9 @@ export namespace Bus {
 
   export function subscribeAll(callback: (event: any) => unknown) {
     return runSync((svc) => svc.subscribeAllCallback(callback))
+  }
+
+  export function diagnostics() {
+    return { ...stats, active: stats.subscriptions - stats.unsubscriptions }
   }
 }

@@ -4,6 +4,7 @@ import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
 import { ProviderID, ModelID } from "@/provider/schema"
 import { Session } from "@/session"
+import { track } from "@/telemetry/tracker"
 import type { SessionID } from "@/session/schema"
 import { MessageV2 } from "@/session/message-v2"
 import { Database, eq } from "@/storage/db"
@@ -253,7 +254,7 @@ export namespace ShareNext {
     log.info("full sync", { sessionID })
     const session = await Session.get(sessionID)
     const diffs = await Session.diff(sessionID)
-    const messages = await Array.fromAsync(MessageV2.stream(sessionID))
+    const messages = await track("share.messages", Array.fromAsync(MessageV2.stream(sessionID)))
     const models = await Promise.all(
       Array.from(
         new Map(

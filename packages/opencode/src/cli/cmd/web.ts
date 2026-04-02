@@ -5,6 +5,7 @@ import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { Flag } from "../../flag/flag"
 import open from "open"
 import { networkInterfaces } from "os"
+import { registerSignals, start as startMemoryTelemetry } from "@/telemetry/memory"
 
 function getNetworkIPs() {
   const nets = networkInterfaces()
@@ -38,6 +39,8 @@ export const WebCommand = cmd({
     }
     const opts = await resolveNetworkOptions(args)
     const server = Server.listen(opts)
+    registerSignals()
+    startMemoryTelemetry()
     UI.empty()
     UI.println(UI.logo("  "))
     UI.empty()
