@@ -2,7 +2,6 @@ import semver from "semver"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
 import { Global } from "../global"
-import { Lock } from "../util/lock"
 import { Log } from "../util/log"
 import path from "path"
 import { readdir, rm } from "fs/promises"
@@ -57,11 +56,11 @@ export namespace Npm {
   }
 
   export async function add(pkg: string) {
-    using _ = await Lock.write(`npm-install:${pkg}`)
+    const dir = directory(pkg)
+    await using _ = await Flock.acquire(`npm-install:${Filesystem.resolve(dir)}`)
     log.info("installing package", {
       pkg,
     })
-    const dir = directory(pkg)
 
     const arborist = new Arborist({
       path: dir,

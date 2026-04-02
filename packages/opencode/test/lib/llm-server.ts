@@ -584,6 +584,30 @@ function hit(url: string, body: unknown) {
   } satisfies Hit
 }
 
+/** Auto-acknowledging tool-result follow-ups avoids requiring tests to queue two responses per tool call. */
+function isToolResultFollowUp(body: unknown): boolean {
+  if (!body || typeof body !== "object") return false
+  // OpenAI chat format: last message has role "tool"
+  if ("messages" in body && Array.isArray(body.messages)) {
+    const last = body.messages[body.messages.length - 1]
+    return last?.role === "tool"
+  }
+  // Responses API: input contains function_call_output
+  if ("input" in body && Array.isArray(body.input)) {
+    return body.input.some((item: Record<string, unknown>) => item?.type === "function_call_output")
+  }
+  return false
+}
+
+function requestSummary(body: unknown): string {
+  if (!body || typeof body !== "object") return "empty body"
+  if ("messages" in body && Array.isArray(body.messages)) {
+    const roles = body.messages.map((m: Record<string, unknown>) => m.role).join(",")
+    return `messages=[${roles}]`
+  }
+  return `keys=[${Object.keys(body).join(",")}]`
+}
+
 namespace TestLLMServer {
   export interface Service {
     readonly url: string
@@ -604,6 +628,7 @@ namespace TestLLMServer {
     readonly wait: (count: number) => Effect.Effect<void>
     readonly inputs: Effect.Effect<Record<string, unknown>[]>
     readonly pending: Effect.Effect<number>
+    readonly misses: Effect.Effect<Hit[]>
   }
 }
 
@@ -617,6 +642,7 @@ export class TestLLMServer extends ServiceMap.Service<TestLLMServer, TestLLMServ
       let hits: Hit[] = []
       let list: Queue[] = []
       let waits: Wait[] = []
+      let misses: Hit[] = []
 
       const queue = (...input: (Item | Reply)[]) => {
         list = [...list, ...input.map((value) => ({ item: item(value) }))]
@@ -646,7 +672,21 @@ export class TestLLMServer extends ServiceMap.Service<TestLLMServer, TestLLMServ
         const body = yield* req.json.pipe(Effect.orElseSucceed(() => ({})))
         const current = hit(req.originalUrl, body)
         const next = pull(current)
-        if (!next) return HttpServerResponse.text("unexpected request", { status: 500 })
+        if (!next) {
+          // Auto-acknowledge tool-result follow-ups so tests only need to
+          // queue one response per tool call instead of two.
+          if (isToolResultFollowUp(body)) {
+            hits = [...hits, current]
+            yield* notify()
+            const auto: Sse = { type: "sse", head: [role()], tail: [textLine("ok"), finishLine("stop")] }
+            if (mode === "responses") return send(responses(auto, modelFrom(body)))
+            return send(auto)
+          }
+          misses = [...misses, current]
+          const summary = requestSummary(body)
+          console.warn(`[TestLLMServer] unmatched request: ${req.originalUrl} (${summary}, pending=${list.length})`)
+          return HttpServerResponse.text(`unexpected request: ${summary}`, { status: 500 })
+        }
         hits = [...hits, current]
         yield* notify()
         if (next.type !== "sse") return fail(next)
@@ -725,6 +765,7 @@ export class TestLLMServer extends ServiceMap.Service<TestLLMServer, TestLLMServ
         }),
         inputs: Effect.sync(() => hits.map((hit) => hit.body)),
         pending: Effect.sync(() => list.length),
+        misses: Effect.sync(() => [...misses]),
       })
     }),
   ).pipe(Layer.provide(HttpRouter.layer), Layer.provide(NodeHttpServer.layer(() => Http.createServer(), { port: 0 })))
