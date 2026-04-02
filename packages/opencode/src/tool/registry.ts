@@ -47,6 +47,7 @@ import { Agent } from "../agent/agent"
 import { Skill } from "../skill"
 import { Permission } from "@/permission"
 import { ContextUsageTool } from "./context"
+import { NewSessionTool } from "./new-session"
 
 const log = Log.create({ service: "tool.registry" })
 
@@ -184,6 +185,7 @@ export const layer: Layer.Layer<
         yield* config.get()
         const questionEnabled =
           ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
+        const tui = ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT)
 
         const tool = yield* Effect.all({
           invalid: Tool.init(invalid),
@@ -203,6 +205,7 @@ export const layer: Layer.Layer<
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
           context: Tool.init(ContextUsageTool),
+          session: Tool.init(NewSessionTool),
         })
 
         return {
@@ -220,6 +223,7 @@ export const layer: Layer.Layer<
             tool.fetch,
             tool.todo,
             tool.context,
+            ...(tui ? [tool.session] : []),
             tool.search,
             tool.skill,
             tool.patch,

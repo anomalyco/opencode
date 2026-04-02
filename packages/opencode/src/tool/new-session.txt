@@ -1,0 +1,5 @@
+Stop the current session and start a new one with the given initial message. Use this when you need to start fresh in a new session, for example after completing a large task and the user wants to move on to something unrelated, or when context is getting too large and you want to continue work in a clean session.
+
+The current session will be aborted immediately and a new session will be created with the initial_message sent as the first user message. The new session will begin processing automatically.
+
+IMPORTANT: After calling this tool, do not call any other tools or generate further output - the current session is being terminated.

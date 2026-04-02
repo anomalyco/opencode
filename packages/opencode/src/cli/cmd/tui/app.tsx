@@ -52,6 +52,7 @@ import { ToastProvider, useToast } from "./ui/toast"
 import { ExitProvider, useExit } from "./context/exit"
 import { Session as SessionApi } from "@/session/session"
 import { TuiEvent } from "./event"
+import { MessageID, PartID } from "@/session/schema"
 import { KVProvider, useKV } from "./context/kv"
 import { Provider } from "@/provider/provider"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
@@ -794,6 +795,39 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       type: "session",
       sessionID: evt.properties.sessionID,
     })
+  })
+
+  event.on(TuiEvent.SessionNew.type, async (evt) => {
+    const model = local.model.current()
+    if (!model) return
+
+    // Abort the old session
+    await sdk.client.session.abort({ sessionID: evt.properties.sessionID }).catch(() => {})
+
+    // Create and navigate to the new session
+    const res = await sdk.client.session.create({})
+    if (res.error) return
+    const id = res.data.id
+
+    route.navigate({ type: "session", sessionID: id })
+
+    // Auto-send the initial message
+    sdk.client.session
+      .prompt({
+        sessionID: id,
+        ...model,
+        messageID: MessageID.ascending(),
+        agent: local.agent.current().name,
+        model,
+        parts: [
+          {
+            id: PartID.ascending(),
+            type: "text" as const,
+            text: evt.properties.message,
+          },
+        ],
+      })
+      .catch(() => {})
   })
 
   event.on("session.deleted", (evt) => {
