@@ -106,6 +106,7 @@ OpenCode includes two built-in agents you can switch between with the `Tab` key.
   - Denies file edits by default
   - Asks permission before running bash commands
   - Ideal for exploring unfamiliar codebases or planning changes
+- [skill-taxonomy](https://github.com/SeeleAI/skill-taxonomy) - Structured taxonomy for AI agent skills: discovery, classification and routing across multi-agent workflows.
 
 Also included is a **general** subagent for complex searches and multistep tasks.
 This is used internally and can be invoked using `@general` in messages.
