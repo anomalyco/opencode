@@ -25,7 +25,7 @@ import { WebSearchTool } from "../../tool/websearch"
 import { TaskTool } from "../../tool/task"
 import { SkillTool } from "../../tool/skill"
 import { BashTool } from "../../tool/bash"
-import { TodoWriteTool } from "../../tool/todo"
+import { TodoWriteTool, TodoReadTool } from "../../tool/todo"
 import { Locale } from "../../util/locale"
 
 type ToolProps<T extends Tool.Info> = {
@@ -202,14 +202,26 @@ function bash(info: ToolProps<typeof BashTool>) {
   )
 }
 
-function todo(info: ToolProps<typeof TodoWriteTool>) {
+function todo(todos: Array<{ status: string; content: string }>) {
+  const output =
+    todos.length > 0
+      ? todos.map((item) => `${item.status === "completed" ? "[x]" : "[ ]"} ${item.content}`).join("\n")
+      : "No todos"
   block(
     {
       icon: "#",
       title: "Todos",
     },
-    info.input.todos.map((item) => `${item.status === "completed" ? "[x]" : "[ ]"} ${item.content}`).join("\n"),
+    output,
   )
+}
+
+function todowrite(info: ToolProps<typeof TodoWriteTool>) {
+  todo(info.input.todos)
+}
+
+function todoread(info: ToolProps<typeof TodoReadTool>) {
+  todo(info.metadata.todos || [])
 }
 
 function normalizePath(input?: string) {
@@ -422,7 +434,8 @@ export const RunCommand = cmd({
           if (part.tool === "codesearch") return codesearch(props<typeof CodeSearchTool>(part))
           if (part.tool === "websearch") return websearch(props<typeof WebSearchTool>(part))
           if (part.tool === "task") return task(props<typeof TaskTool>(part))
-          if (part.tool === "todowrite") return todo(props<typeof TodoWriteTool>(part))
+          if (part.tool === "todowrite") return todowrite(props<typeof TodoWriteTool>(part))
+          if (part.tool === "todoread") return todoread(props<typeof TodoReadTool>(part))
           if (part.tool === "skill") return skill(props<typeof SkillTool>(part))
           return fallback(part)
         } catch {
