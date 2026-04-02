@@ -168,3 +168,18 @@ describe("InstructionPrompt.systemPaths OPENCODE_CONFIG_DIR", () => {
     }
   })
 })
+
+test("loads .opencode/rules/project-rule.md as a system path", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, ".opencode", "rules", "project-rule.md"), "# Project Rule\nDo not break things.")
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const paths = await InstructionPrompt.systemPaths()
+      expect(paths.has(path.join(tmp.path, ".opencode", "rules", "project-rule.md"))).toBe(true)
+    },
+  })
+})

@@ -92,6 +92,13 @@ export namespace InstructionPrompt {
       }
     }
 
+    const rules = await Glob.scan(".opencode/rules/*.{md,mdc}", {
+      cwd: Instance.directory,
+      absolute: true,
+      include: "file",
+    }).catch(() => [])
+    rules.forEach((p) => paths.add(path.resolve(p)))
+
     if (config.instructions) {
       for (let instruction of config.instructions) {
         if (instruction.startsWith("https://") || instruction.startsWith("http://")) continue
