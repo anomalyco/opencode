@@ -4167,22 +4167,10 @@ export type ProviderListResponses = {
             input: Array<"text" | "audio" | "image" | "video" | "pdf">
             output: Array<"text" | "audio" | "image" | "video" | "pdf">
           }
-          experimental?: boolean
           status?: "alpha" | "beta" | "deprecated"
-          options: {
-            [key: string]: unknown
-          }
-          headers?: {
-            [key: string]: string
-          }
           provider?: {
             npm?: string
             api?: string
-          }
-          variants?: {
-            [key: string]: {
-              [key: string]: unknown
-            }
           }
         }
       }

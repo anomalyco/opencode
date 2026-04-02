@@ -4740,28 +4740,9 @@
                                   },
                                   "required": ["input", "output"]
                                 },
-                                "experimental": {
-                                  "type": "boolean"
-                                },
                                 "status": {
                                   "type": "string",
                                   "enum": ["alpha", "beta", "deprecated"]
-                                },
-                                "options": {
-                                  "type": "object",
-                                  "propertyNames": {
-                                    "type": "string"
-                                  },
-                                  "additionalProperties": {}
-                                },
-                                "headers": {
-                                  "type": "object",
-                                  "propertyNames": {
-                                    "type": "string"
-                                  },
-                                  "additionalProperties": {
-                                    "type": "string"
-                                  }
                                 },
                                 "provider": {
                                   "type": "object",
@@ -4773,19 +4754,6 @@
                                       "type": "string"
                                     }
                                   }
-                                },
-                                "variants": {
-                                  "type": "object",
-                                  "propertyNames": {
-                                    "type": "string"
-                                  },
-                                  "additionalProperties": {
-                                    "type": "object",
-                                    "propertyNames": {
-                                      "type": "string"
-                                    },
-                                    "additionalProperties": {}
-                                  }
                                 }
                               },
                               "required": [
@@ -4796,8 +4764,7 @@
                                 "reasoning",
                                 "temperature",
                                 "tool_call",
-                                "limit",
-                                "options"
+                                "limit"
                               ]
                             }
                           }
