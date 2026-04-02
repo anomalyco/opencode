@@ -20,10 +20,7 @@ export namespace Global {
     data,
     bin: path.join(cache, "bin"),
     log: path.join(data, "log"),
-    // Allow override via OPENCODE_TEST_CACHE for test isolation
-    get cache() {
-      return process.env.OPENCODE_TEST_CACHE || cache
-    },
+    cache,
     config,
     state,
   }
