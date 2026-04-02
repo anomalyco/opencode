@@ -363,6 +363,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "월간 지출 한도인 ${{amount}}에 도달했습니다. 한도 관리를 여기서 하세요: {{membersUrl}}",
   "zen.api.error.modelDisabled": "모델이 비활성화되었습니다",
+  "zen.api.error.trialEnded":
+    "{{model}}의 무료 프로모션이 종료되었습니다. OpenCode Go를 구독하면 모델을 계속 사용할 수 있습니다 - {{link}}",
 
   "black.meta.title": "OpenCode Black | 세계 최고의 코딩 모델에 액세스하세요",
   "black.meta.description": "OpenCode Black 구독 플랜으로 Claude, GPT, Gemini 등에 액세스하세요.",

@@ -5,7 +5,7 @@ import { pathToFileURL } from "url"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
 import { TuiConfig } from "../../../src/config/tui"
-import { BunProc } from "../../../src/bun"
+import { Npm } from "../../../src/npm"
 
 const { TuiPluginRuntime } = await import("../../../src/cli/cmd/tui/plugin/runtime")
 
@@ -46,9 +46,9 @@ test("loads npm tui plugin from package ./tui export", async () => {
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
   const get = spyOn(TuiConfig, "get").mockResolvedValue({
     plugin: [[tmp.extra.spec, { marker: tmp.extra.marker }]],
-    plugin_records: [
+    plugin_origins: [
       {
-        item: [tmp.extra.spec, { marker: tmp.extra.marker }],
+        spec: [tmp.extra.spec, { marker: tmp.extra.marker }],
         scope: "local",
         source: path.join(tmp.path, "tui.json"),
       },
@@ -56,7 +56,7 @@ test("loads npm tui plugin from package ./tui export", async () => {
   })
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
-  const install = spyOn(BunProc, "install").mockResolvedValue(tmp.extra.mod)
+  const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
 
   try {
     await TuiPluginRuntime.init(createTuiPluginApi())
@@ -108,9 +108,9 @@ test("does not use npm package exports dot for tui entry", async () => {
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
   const get = spyOn(TuiConfig, "get").mockResolvedValue({
     plugin: [tmp.extra.spec],
-    plugin_records: [
+    plugin_origins: [
       {
-        item: tmp.extra.spec,
+        spec: tmp.extra.spec,
         scope: "local",
         source: path.join(tmp.path, "tui.json"),
       },
@@ -118,7 +118,7 @@ test("does not use npm package exports dot for tui entry", async () => {
   })
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
-  const install = spyOn(BunProc, "install").mockResolvedValue(tmp.extra.mod)
+  const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
 
   try {
     await TuiPluginRuntime.init(createTuiPluginApi())
@@ -171,9 +171,9 @@ test("rejects npm tui export that resolves outside plugin directory", async () =
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
   const get = spyOn(TuiConfig, "get").mockResolvedValue({
     plugin: [tmp.extra.spec],
-    plugin_records: [
+    plugin_origins: [
       {
-        item: tmp.extra.spec,
+        spec: tmp.extra.spec,
         scope: "local",
         source: path.join(tmp.path, "tui.json"),
       },
@@ -181,7 +181,7 @@ test("rejects npm tui export that resolves outside plugin directory", async () =
   })
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
-  const install = spyOn(BunProc, "install").mockResolvedValue(tmp.extra.mod)
+  const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
 
   try {
     await TuiPluginRuntime.init(createTuiPluginApi())
@@ -234,9 +234,9 @@ test("rejects npm tui plugin that exports server and tui together", async () => 
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
   const get = spyOn(TuiConfig, "get").mockResolvedValue({
     plugin: [tmp.extra.spec],
-    plugin_records: [
+    plugin_origins: [
       {
-        item: tmp.extra.spec,
+        spec: tmp.extra.spec,
         scope: "local",
         source: path.join(tmp.path, "tui.json"),
       },
@@ -244,7 +244,7 @@ test("rejects npm tui plugin that exports server and tui together", async () => 
   })
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
-  const install = spyOn(BunProc, "install").mockResolvedValue(tmp.extra.mod)
+  const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
 
   try {
     await TuiPluginRuntime.init(createTuiPluginApi())
@@ -293,9 +293,9 @@ test("does not use npm package main for tui entry", async () => {
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
   const get = spyOn(TuiConfig, "get").mockResolvedValue({
     plugin: [tmp.extra.spec],
-    plugin_records: [
+    plugin_origins: [
       {
-        item: tmp.extra.spec,
+        spec: tmp.extra.spec,
         scope: "local",
         source: path.join(tmp.path, "tui.json"),
       },
@@ -303,7 +303,7 @@ test("does not use npm package main for tui entry", async () => {
   })
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
-  const install = spyOn(BunProc, "install").mockResolvedValue(tmp.extra.mod)
+  const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
   const warn = spyOn(console, "warn").mockImplementation(() => {})
   const error = spyOn(console, "error").mockImplementation(() => {})
 
@@ -359,9 +359,9 @@ test("does not use directory package main for tui entry", async () => {
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
   const get = spyOn(TuiConfig, "get").mockResolvedValue({
     plugin: [tmp.extra.spec],
-    plugin_records: [
+    plugin_origins: [
       {
-        item: tmp.extra.spec,
+        spec: tmp.extra.spec,
         scope: "local",
         source: path.join(tmp.path, "tui.json"),
       },
@@ -407,9 +407,9 @@ test("uses directory index fallback for tui when package.json is missing", async
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
   const get = spyOn(TuiConfig, "get").mockResolvedValue({
     plugin: [tmp.extra.spec],
-    plugin_records: [
+    plugin_origins: [
       {
-        item: tmp.extra.spec,
+        spec: tmp.extra.spec,
         scope: "local",
         source: path.join(tmp.path, "tui.json"),
       },
@@ -465,9 +465,9 @@ test("uses npm package name when tui plugin id is omitted", async () => {
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
   const get = spyOn(TuiConfig, "get").mockResolvedValue({
     plugin: [[tmp.extra.spec, { marker: tmp.extra.marker }]],
-    plugin_records: [
+    plugin_origins: [
       {
-        item: [tmp.extra.spec, { marker: tmp.extra.marker }],
+        spec: [tmp.extra.spec, { marker: tmp.extra.marker }],
         scope: "local",
         source: path.join(tmp.path, "tui.json"),
       },
@@ -475,7 +475,7 @@ test("uses npm package name when tui plugin id is omitted", async () => {
   })
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
-  const install = spyOn(BunProc, "install").mockResolvedValue(tmp.extra.mod)
+  const install = spyOn(Npm, "add").mockResolvedValue({ directory: tmp.extra.mod, entrypoint: tmp.extra.mod })
 
   try {
     await TuiPluginRuntime.init(createTuiPluginApi())

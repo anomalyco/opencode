@@ -367,6 +367,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "Hai raggiunto il tuo limite di spesa mensile di ${{amount}}. Gestisci i tuoi limiti qui: {{membersUrl}}",
   "zen.api.error.modelDisabled": "Il modello è disabilitato",
+  "zen.api.error.trialEnded":
+    "La promozione gratuita di {{model}} è terminata. Puoi continuare a usare il modello abbonandoti a OpenCode Go - {{link}}",
 
   "black.meta.title": "OpenCode Black | Accedi ai migliori modelli di coding al mondo",
   "black.meta.description":
