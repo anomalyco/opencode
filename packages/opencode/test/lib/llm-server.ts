@@ -8,9 +8,23 @@ export type Usage = { input: number; output: number }
 
 type Line = Record<string, unknown>
 
+type Flow =
+  | { type: "text"; text: string }
+  | { type: "reason"; text: string }
+  | { type: "tool-start"; id: string; name: string }
+  | { type: "tool-args"; text: string }
+  | { type: "usage"; usage: Usage }
+
 type Hit = {
   url: URL
   body: Record<string, unknown>
+}
+
+type Match = (hit: Hit) => boolean
+
+type Queue = {
+  item: Item
+  match?: Match
 }
 
 type Wait = {
@@ -119,6 +133,276 @@ function bytes(input: Iterable<unknown>) {
   return Stream.fromIterable([...input].map(line)).pipe(Stream.encodeText)
 }
 
+function responseCreated(model: string) {
+  return {
+    type: "response.created",
+    sequence_number: 1,
+    response: {
+      id: "resp_test",
+      created_at: Math.floor(Date.now() / 1000),
+      model,
+      service_tier: null,
+    },
+  }
+}
+
+function responseCompleted(input: { seq: number; usage?: Usage }) {
+  return {
+    type: "response.completed",
+    sequence_number: input.seq,
+    response: {
+      incomplete_details: null,
+      service_tier: null,
+      usage: {
+        input_tokens: input.usage?.input ?? 0,
+        input_tokens_details: { cached_tokens: null },
+        output_tokens: input.usage?.output ?? 0,
+        output_tokens_details: { reasoning_tokens: null },
+      },
+    },
+  }
+}
+
+function responseMessage(id: string, seq: number) {
+  return {
+    type: "response.output_item.added",
+    sequence_number: seq,
+    output_index: 0,
+    item: { type: "message", id },
+  }
+}
+
+function responseText(id: string, text: string, seq: number) {
+  return {
+    type: "response.output_text.delta",
+    sequence_number: seq,
+    item_id: id,
+    delta: text,
+    logprobs: null,
+  }
+}
+
+function responseMessageDone(id: string, seq: number) {
+  return {
+    type: "response.output_item.done",
+    sequence_number: seq,
+    output_index: 0,
+    item: { type: "message", id },
+  }
+}
+
+function responseReason(id: string, seq: number) {
+  return {
+    type: "response.output_item.added",
+    sequence_number: seq,
+    output_index: 0,
+    item: { type: "reasoning", id, encrypted_content: null },
+  }
+}
+
+function responseReasonPart(id: string, seq: number) {
+  return {
+    type: "response.reasoning_summary_part.added",
+    sequence_number: seq,
+    item_id: id,
+    summary_index: 0,
+  }
+}
+
+function responseReasonText(id: string, text: string, seq: number) {
+  return {
+    type: "response.reasoning_summary_text.delta",
+    sequence_number: seq,
+    item_id: id,
+    summary_index: 0,
+    delta: text,
+  }
+}
+
+function responseReasonDone(id: string, seq: number) {
+  return {
+    type: "response.output_item.done",
+    sequence_number: seq,
+    output_index: 0,
+    item: { type: "reasoning", id, encrypted_content: null },
+  }
+}
+
+function responseTool(id: string, item: string, name: string, seq: number) {
+  return {
+    type: "response.output_item.added",
+    sequence_number: seq,
+    output_index: 0,
+    item: {
+      type: "function_call",
+      id: item,
+      call_id: id,
+      name,
+      arguments: "",
+      status: "in_progress",
+    },
+  }
+}
+
+function responseToolArgs(id: string, text: string, seq: number) {
+  return {
+    type: "response.function_call_arguments.delta",
+    sequence_number: seq,
+    output_index: 0,
+    item_id: id,
+    delta: text,
+  }
+}
+
+function responseToolDone(tool: { id: string; item: string; name: string; args: string }, seq: number) {
+  return {
+    type: "response.output_item.done",
+    sequence_number: seq,
+    output_index: 0,
+    item: {
+      type: "function_call",
+      id: tool.item,
+      call_id: tool.id,
+      name: tool.name,
+      arguments: tool.args,
+      status: "completed",
+    },
+  }
+}
+
+function choices(part: unknown) {
+  if (!part || typeof part !== "object") return
+  if (!("choices" in part) || !Array.isArray(part.choices)) return
+  const choice = part.choices[0]
+  if (!choice || typeof choice !== "object") return
+  return choice
+}
+
+function flow(item: Sse) {
+  const out: Flow[] = []
+  for (const part of [...item.head, ...item.tail]) {
+    const choice = choices(part)
+    const delta =
+      choice && "delta" in choice && choice.delta && typeof choice.delta === "object" ? choice.delta : undefined
+
+    if (delta && "content" in delta && typeof delta.content === "string") {
+      out.push({ type: "text", text: delta.content })
+    }
+
+    if (delta && "reasoning_content" in delta && typeof delta.reasoning_content === "string") {
+      out.push({ type: "reason", text: delta.reasoning_content })
+    }
+
+    if (delta && "tool_calls" in delta && Array.isArray(delta.tool_calls)) {
+      for (const tool of delta.tool_calls) {
+        if (!tool || typeof tool !== "object") continue
+        const fn = "function" in tool && tool.function && typeof tool.function === "object" ? tool.function : undefined
+        if ("id" in tool && typeof tool.id === "string" && fn && "name" in fn && typeof fn.name === "string") {
+          out.push({ type: "tool-start", id: tool.id, name: fn.name })
+        }
+        if (fn && "arguments" in fn && typeof fn.arguments === "string" && fn.arguments) {
+          out.push({ type: "tool-args", text: fn.arguments })
+        }
+      }
+    }
+
+    if (part && typeof part === "object" && "usage" in part && part.usage && typeof part.usage === "object") {
+      const raw = part.usage as Record<string, unknown>
+      if (typeof raw.prompt_tokens === "number" && typeof raw.completion_tokens === "number") {
+        out.push({
+          type: "usage",
+          usage: { input: raw.prompt_tokens, output: raw.completion_tokens },
+        })
+      }
+    }
+  }
+  return out
+}
+
+function responses(item: Sse, model: string) {
+  let seq = 1
+  let msg: string | undefined
+  let reason: string | undefined
+  let hasMsg = false
+  let hasReason = false
+  let call:
+    | {
+        id: string
+        item: string
+        name: string
+        args: string
+      }
+    | undefined
+  let usage: Usage | undefined
+  const lines: unknown[] = [responseCreated(model)]
+
+  for (const part of flow(item)) {
+    if (part.type === "text") {
+      msg ??= "msg_1"
+      if (!hasMsg) {
+        hasMsg = true
+        seq += 1
+        lines.push(responseMessage(msg, seq))
+      }
+      seq += 1
+      lines.push(responseText(msg, part.text, seq))
+      continue
+    }
+
+    if (part.type === "reason") {
+      reason ||= "rs_1"
+      if (!hasReason) {
+        hasReason = true
+        seq += 1
+        lines.push(responseReason(reason, seq))
+        seq += 1
+        lines.push(responseReasonPart(reason, seq))
+      }
+      seq += 1
+      lines.push(responseReasonText(reason, part.text, seq))
+      continue
+    }
+
+    if (part.type === "tool-start") {
+      call ||= { id: part.id, item: "fc_1", name: part.name, args: "" }
+      seq += 1
+      lines.push(responseTool(call.id, call.item, call.name, seq))
+      continue
+    }
+
+    if (part.type === "tool-args") {
+      if (!call) continue
+      call.args += part.text
+      seq += 1
+      lines.push(responseToolArgs(call.item, part.text, seq))
+      continue
+    }
+
+    usage = part.usage
+  }
+
+  if (msg) {
+    seq += 1
+    lines.push(responseMessageDone(msg, seq))
+  }
+  if (reason) {
+    seq += 1
+    lines.push(responseReasonDone(reason, seq))
+  }
+  if (call && !item.hang && !item.error) {
+    seq += 1
+    lines.push(responseToolDone(call, seq))
+  }
+  if (!item.hang && !item.error) lines.push(responseCompleted({ seq: seq + 1, usage }))
+  return { ...item, head: lines, tail: [] } satisfies Sse
+}
+
+function modelFrom(body: unknown) {
+  if (!body || typeof body !== "object") return "test-model"
+  if (!("model" in body) || typeof body.model !== "string") return "test-model"
+  return body.model
+}
+
 function send(item: Sse) {
   const head = bytes(item.head)
   const tail = bytes([...item.tail, ...(item.hang || item.error ? [] : [done])])
@@ -143,7 +427,7 @@ const reset = Effect.fn("TestLLMServer.reset")(function* (item: Sse) {
     for (const part of item.tail) res.write(line(part))
     res.destroy(new Error("connection reset"))
   })
-  yield* Effect.never
+  return yield* Effect.never
 })
 
 function fail(item: HttpError) {
@@ -293,10 +577,44 @@ function item(input: Item | Reply) {
   return input instanceof Reply ? input.item() : input
 }
 
+function hit(url: string, body: unknown) {
+  return {
+    url: new URL(url, "http://localhost"),
+    body: body && typeof body === "object" ? (body as Record<string, unknown>) : {},
+  } satisfies Hit
+}
+
+/** Auto-acknowledging tool-result follow-ups avoids requiring tests to queue two responses per tool call. */
+function isToolResultFollowUp(body: unknown): boolean {
+  if (!body || typeof body !== "object") return false
+  // OpenAI chat format: last message has role "tool"
+  if ("messages" in body && Array.isArray(body.messages)) {
+    const last = body.messages[body.messages.length - 1]
+    return last?.role === "tool"
+  }
+  // Responses API: input contains function_call_output
+  if ("input" in body && Array.isArray(body.input)) {
+    return body.input.some((item: Record<string, unknown>) => item?.type === "function_call_output")
+  }
+  return false
+}
+
+function requestSummary(body: unknown): string {
+  if (!body || typeof body !== "object") return "empty body"
+  if ("messages" in body && Array.isArray(body.messages)) {
+    const roles = body.messages.map((m: Record<string, unknown>) => m.role).join(",")
+    return `messages=[${roles}]`
+  }
+  return `keys=[${Object.keys(body).join(",")}]`
+}
+
 namespace TestLLMServer {
   export interface Service {
     readonly url: string
     readonly push: (...input: (Item | Reply)[]) => Effect.Effect<void>
+    readonly pushMatch: (match: Match, ...input: (Item | Reply)[]) => Effect.Effect<void>
+    readonly textMatch: (match: Match, value: string, opts?: { usage?: Usage }) => Effect.Effect<void>
+    readonly toolMatch: (match: Match, name: string, input: unknown) => Effect.Effect<void>
     readonly text: (value: string, opts?: { usage?: Usage }) => Effect.Effect<void>
     readonly tool: (name: string, input: unknown) => Effect.Effect<void>
     readonly toolHang: (name: string, input: unknown) => Effect.Effect<void>
@@ -310,6 +628,7 @@ namespace TestLLMServer {
     readonly wait: (count: number) => Effect.Effect<void>
     readonly inputs: Effect.Effect<Record<string, unknown>[]>
     readonly pending: Effect.Effect<number>
+    readonly misses: Effect.Effect<Hit[]>
   }
 }
 
@@ -321,11 +640,16 @@ export class TestLLMServer extends ServiceMap.Service<TestLLMServer, TestLLMServ
       const router = yield* HttpRouter.HttpRouter
 
       let hits: Hit[] = []
-      let list: Item[] = []
+      let list: Queue[] = []
       let waits: Wait[] = []
+      let misses: Hit[] = []
 
       const queue = (...input: (Item | Reply)[]) => {
-        list = [...list, ...input.map(item)]
+        list = [...list, ...input.map((value) => ({ item: item(value) }))]
+      }
+
+      const queueMatch = (match: Match, ...input: (Item | Reply)[]) => {
+        list = [...list, ...input.map((value) => ({ item: item(value), match }))]
       }
 
       const notify = Effect.fnUntraced(function* () {
@@ -335,37 +659,47 @@ export class TestLLMServer extends ServiceMap.Service<TestLLMServer, TestLLMServ
         yield* Effect.forEach(ready, (item) => Deferred.succeed(item.ready, void 0))
       })
 
-      const pull = () => {
-        const first = list[0]
-        if (!first) return
-        list = list.slice(1)
-        return first
+      const pull = (hit: Hit) => {
+        const index = list.findIndex((entry) => !entry.match || entry.match(hit))
+        if (index === -1) return
+        const first = list[index]
+        list = [...list.slice(0, index), ...list.slice(index + 1)]
+        return first.item
       }
 
-      yield* router.add(
-        "POST",
-        "/v1/chat/completions",
-        Effect.gen(function* () {
-          const req = yield* HttpServerRequest.HttpServerRequest
-          const next = pull()
-          if (!next) return HttpServerResponse.text("unexpected request", { status: 500 })
-          const body = yield* req.json.pipe(Effect.orElseSucceed(() => ({})))
-          hits = [
-            ...hits,
-            {
-              url: new URL(req.originalUrl, "http://localhost"),
-              body: body && typeof body === "object" ? (body as Record<string, unknown>) : {},
-            },
-          ]
-          yield* notify()
-          if (next.type === "sse" && next.reset) {
-            yield* reset(next)
-            return HttpServerResponse.empty()
+      const handle = Effect.fn("TestLLMServer.handle")(function* (mode: "chat" | "responses") {
+        const req = yield* HttpServerRequest.HttpServerRequest
+        const body = yield* req.json.pipe(Effect.orElseSucceed(() => ({})))
+        const current = hit(req.originalUrl, body)
+        const next = pull(current)
+        if (!next) {
+          // Auto-acknowledge tool-result follow-ups so tests only need to
+          // queue one response per tool call instead of two.
+          if (isToolResultFollowUp(body)) {
+            hits = [...hits, current]
+            yield* notify()
+            const auto: Sse = { type: "sse", head: [role()], tail: [textLine("ok"), finishLine("stop")] }
+            if (mode === "responses") return send(responses(auto, modelFrom(body)))
+            return send(auto)
           }
-          if (next.type === "sse") return send(next)
-          return fail(next)
-        }),
-      )
+          misses = [...misses, current]
+          const summary = requestSummary(body)
+          console.warn(`[TestLLMServer] unmatched request: ${req.originalUrl} (${summary}, pending=${list.length})`)
+          return HttpServerResponse.text(`unexpected request: ${summary}`, { status: 500 })
+        }
+        hits = [...hits, current]
+        yield* notify()
+        if (next.type !== "sse") return fail(next)
+        if (mode === "responses") return send(responses(next, modelFrom(body)))
+        if (next.reset) {
+          yield* reset(next)
+          return HttpServerResponse.empty()
+        }
+        return send(next)
+      })
+
+      yield* router.add("POST", "/v1/chat/completions", handle("chat"))
+      yield* router.add("POST", "/v1/responses", handle("responses"))
 
       yield* server.serve(router.asHttpEffect())
 
@@ -376,6 +710,21 @@ export class TestLLMServer extends ServiceMap.Service<TestLLMServer, TestLLMServ
             : `unix://${server.address.path}/v1`,
         push: Effect.fn("TestLLMServer.push")(function* (...input: (Item | Reply)[]) {
           queue(...input)
+        }),
+        pushMatch: Effect.fn("TestLLMServer.pushMatch")(function* (match: Match, ...input: (Item | Reply)[]) {
+          queueMatch(match, ...input)
+        }),
+        textMatch: Effect.fn("TestLLMServer.textMatch")(function* (
+          match: Match,
+          value: string,
+          opts?: { usage?: Usage },
+        ) {
+          const out = reply().text(value)
+          if (opts?.usage) out.usage(opts.usage)
+          queueMatch(match, out.stop().item())
+        }),
+        toolMatch: Effect.fn("TestLLMServer.toolMatch")(function* (match: Match, name: string, input: unknown) {
+          queueMatch(match, reply().tool(name, input).item())
         }),
         text: Effect.fn("TestLLMServer.text")(function* (value: string, opts?: { usage?: Usage }) {
           const out = reply().text(value)
@@ -416,6 +765,7 @@ export class TestLLMServer extends ServiceMap.Service<TestLLMServer, TestLLMServ
         }),
         inputs: Effect.sync(() => hits.map((hit) => hit.body)),
         pending: Effect.sync(() => list.length),
+        misses: Effect.sync(() => [...misses]),
       })
     }),
   ).pipe(Layer.provide(HttpRouter.layer), Layer.provide(NodeHttpServer.layer(() => Http.createServer(), { port: 0 })))
