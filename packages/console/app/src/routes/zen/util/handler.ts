@@ -404,6 +404,14 @@ export async function handler(
         }),
       )
 
+    if (modelData.trialEnded)
+      throw new ModelError(
+        `${t("zen.api.error.trialEnded", {
+          model: modelData.name,
+          link: "https://opencode.ai/go",
+        })}`,
+      )
+
     logger.metric({ model: modelId })
 
     return { id: modelId, ...modelData }

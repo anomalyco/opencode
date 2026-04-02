@@ -343,14 +343,12 @@ export function SessionTurn(
   })
   const assistantDerived = createMemo(() => {
     let visible = 0
-    let tail: "text" | "other" | undefined
     let reason: string | undefined
     const show = showReasoningSummaries()
     for (const message of assistantMessages()) {
       for (const part of list(data.store.part?.[message.id], emptyParts)) {
         if (partState(part, show) === "visible") {
           visible++
-          tail = part.type === "text" ? "text" : "other"
         }
         if (part.type === "reasoning" && part.text) {
           const h = heading(part.text)
@@ -358,10 +356,9 @@ export function SessionTurn(
         }
       }
     }
-    return { visible, tail, reason }
+    return { visible, reason }
   })
   const assistantVisible = createMemo(() => assistantDerived().visible)
-  const assistantTailVisible = createMemo(() => assistantDerived().tail)
   const reasoningHeading = createMemo(() => assistantDerived().reason)
   const showThinking = createMemo(() => {
     if (!working() || !!error()) return false
