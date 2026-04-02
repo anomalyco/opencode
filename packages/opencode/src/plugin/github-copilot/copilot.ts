@@ -23,8 +23,82 @@ function getUrls(domain: string) {
   }
 }
 
+const DEFAULT_COPILOT_API_URL = "https://api.githubcopilot.com"
+
+// Cache for the dynamically discovered Copilot API endpoint from the token
+// exchange response. Keyed by OAuth token prefix to support multiple accounts.
+let copilotEndpointCache:
+  | {
+      tokenPrefix: string
+      apiEndpoint: string
+      expiresAt: number
+    }
+  | undefined
+
+/**
+ * Discover the correct Copilot API endpoint for the authenticated user by
+ * exchanging their OAuth token via `copilot_internal/v2/token`. GitHub returns
+ * plan-specific endpoints (e.g. `api.business.githubcopilot.com` for Business
+ * users, `api.individual.githubcopilot.com` for Individual). The legacy unified
+ * endpoint `api.githubcopilot.com` is being deprecated (HTTP 466).
+ *
+ * The result is cached until the token's `expires_at` timestamp.
+ */
+async function getCopilotApiEndpoint(oauthToken: string, enterpriseDomain?: string): Promise<string> {
+  // Enterprise Server users have their own endpoint pattern
+  if (enterpriseDomain) {
+    return `https://copilot-api.${normalizeDomain(enterpriseDomain)}`
+  }
+
+  // Return cached endpoint if still valid
+  const prefix = oauthToken.slice(0, 8)
+  if (copilotEndpointCache && copilotEndpointCache.tokenPrefix === prefix && Date.now() < copilotEndpointCache.expiresAt) {
+    return copilotEndpointCache.apiEndpoint
+  }
+
+  try {
+    const response = await fetch("https://api.github.com/copilot_internal/v2/token", {
+      headers: {
+        Authorization: `token ${oauthToken}`,
+        Accept: "application/json",
+        "User-Agent": `opencode/${Installation.VERSION}`,
+      },
+      signal: AbortSignal.timeout(5_000),
+    })
+
+    if (response.ok) {
+      const data = (await response.json()) as {
+        token: string
+        expires_at?: number
+        endpoints?: {
+          api?: string
+          proxy?: string
+          telemetry?: string
+          "origin-tracker"?: string
+        }
+      }
+
+      if (data.endpoints?.api) {
+        copilotEndpointCache = {
+          tokenPrefix: prefix,
+          apiEndpoint: data.endpoints.api,
+          expiresAt: data.expires_at ? data.expires_at * 1000 : Date.now() + 25 * 60 * 1000,
+        }
+        log.info("discovered copilot api endpoint", {
+          endpoint: data.endpoints.api,
+        })
+        return data.endpoints.api
+      }
+    }
+  } catch (error) {
+    log.warn("failed to discover copilot api endpoint, using default", { error })
+  }
+
+  return DEFAULT_COPILOT_API_URL
+}
+
 function base(enterpriseUrl?: string) {
-  return enterpriseUrl ? `https://copilot-api.${normalizeDomain(enterpriseUrl)}` : "https://api.githubcopilot.com"
+  return enterpriseUrl ? `https://copilot-api.${normalizeDomain(enterpriseUrl)}` : DEFAULT_COPILOT_API_URL
 }
 
 function fix(model: Model, url: string): Model {
@@ -49,9 +123,10 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
         }
 
         const auth = ctx.auth
+        const apiEndpoint = await getCopilotApiEndpoint(auth.refresh, auth.enterpriseUrl)
 
         return CopilotModels.get(
-          base(auth.enterpriseUrl),
+          apiEndpoint,
           {
             Authorization: `Bearer ${auth.refresh}`,
             "User-Agent": `opencode/${Installation.VERSION}`,
@@ -60,7 +135,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
         ).catch((error) => {
           log.error("failed to fetch copilot models", { error })
           return Object.fromEntries(
-            Object.entries(provider.models).map(([id, model]) => [id, fix(model, base(auth.enterpriseUrl))]),
+            Object.entries(provider.models).map(([id, model]) => [id, fix(model, apiEndpoint)]),
           )
         })
       },
@@ -70,6 +145,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
       async loader(getAuth) {
         const info = await getAuth()
         if (!info || info.type !== "oauth") return {}
+
 
         return {
           apiKey: "",
