@@ -42,7 +42,7 @@ export interface SessionReviewTabProps {
 }
 
 export function SessionReviewTab(props: SessionReviewTabProps) {
-  const [scroll, setScroll] = createSignal<HTMLDivElement>()
+  let scroll: HTMLDivElement | undefined
   let restoreFrame: number | undefined
   let userInteracted = false
   let restored: { x: number; y: number } | undefined
@@ -71,7 +71,7 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
 
   const doRestore = () => {
     restoreFrame = undefined
-    const el = scroll()
+    const el = scroll
     if (!el || !layout.ready() || userInteracted) return
     if (el.clientHeight === 0 || el.clientWidth === 0) return
 
@@ -122,17 +122,6 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
     queueRestore()
   })
 
-  createEffect(() => {
-    const el = scroll()
-    if (!el) return
-
-    makeEventListener(el, "wheel", handleInteraction, { passive: true, capture: true })
-    makeEventListener(el, "mousewheel", handleInteraction, { passive: true, capture: true })
-    makeEventListener(el, "pointerdown", handleInteraction, { passive: true, capture: true })
-    makeEventListener(el, "touchstart", handleInteraction, { passive: true, capture: true })
-    makeEventListener(el, "keydown", handleInteraction, { capture: true })
-  })
-
   onCleanup(() => {
     if (restoreFrame !== undefined) cancelAnimationFrame(restoreFrame)
   })
@@ -142,7 +131,12 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
       title={props.title}
       empty={props.empty}
       scrollRef={(el) => {
-        setScroll(el)
+        scroll = el
+        makeEventListener(el, "wheel", handleInteraction, { passive: true, capture: true })
+        makeEventListener(el, "mousewheel", handleInteraction, { passive: true, capture: true })
+        makeEventListener(el, "pointerdown", handleInteraction, { passive: true, capture: true })
+        makeEventListener(el, "touchstart", handleInteraction, { passive: true, capture: true })
+        makeEventListener(el, "keydown", handleInteraction, { capture: true })
         props.onScrollRef?.(el)
         queueRestore()
       }}
