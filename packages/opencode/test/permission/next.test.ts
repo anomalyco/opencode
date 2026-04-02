@@ -1,13 +1,24 @@
-import { afterEach, test, expect } from "bun:test"
+import { afterEach, beforeEach, test, expect, spyOn } from "bun:test"
+import type { Mock } from "bun:test"
 import os from "os"
 import { Bus } from "../../src/bus"
 import { Permission } from "../../src/permission"
 import { PermissionID } from "../../src/permission/schema"
+import { Plugin } from "../../src/plugin"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { MessageID, SessionID } from "../../src/session/schema"
 
+let triggerSpy: Mock<typeof Plugin.trigger>
+
+beforeEach(() => {
+  triggerSpy = spyOn(Plugin, "trigger").mockImplementation(
+    async (_name: any, _input: any, output: any) => output,
+  )
+})
+
 afterEach(async () => {
+  triggerSpy.mockRestore()
   await Instance.disposeAll()
 })
 
