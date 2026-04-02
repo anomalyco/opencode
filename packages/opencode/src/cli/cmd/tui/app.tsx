@@ -195,14 +195,21 @@ export function tui(input: {
     // Handle external SIGTSTP (e.g., code-server terminal management, job control)
     // to properly disable mouse tracking before suspension. Without this, the shell
     // receives mouse events as garbled escape sequences.
+    // Guard resume() with a flag to prevent duplicate stdin listeners when SIGCONT
+    // arrives without a prior SIGTSTP through our handler (e.g., terminal refocus).
+    let suspendedBySigtstp = false
     const sigtstpHandler = () => {
+      suspendedBySigtstp = true
       renderer.suspend()
       process.removeListener("SIGTSTP", sigtstpHandler)
       process.kill(process.pid, "SIGTSTP")
     }
     const sigcontHandler = () => {
       process.on("SIGTSTP", sigtstpHandler)
-      renderer.resume()
+      if (suspendedBySigtstp) {
+        suspendedBySigtstp = false
+        renderer.resume()
+      }
     }
     process.on("SIGTSTP", sigtstpHandler)
     process.on("SIGCONT", sigcontHandler)
