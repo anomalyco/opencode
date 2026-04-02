@@ -13,7 +13,7 @@ import { Filesystem } from "@/util/filesystem"
 import { Flock } from "@/util/flock"
 import { isRecord } from "@/util/record"
 
-import { parsePluginSpecifier, readPluginPackage, resolvePluginTarget } from "./shared"
+import { parsePluginSpecifier, readPackageThemes, readPluginPackage, resolvePluginTarget } from "./shared"
 
 type Mode = "noop" | "add" | "replace"
 type Kind = "server" | "tui"
@@ -142,19 +142,26 @@ function hasMainTarget(pkg: Record<string, unknown>) {
   return Boolean(main.trim())
 }
 
-function packageTargets(pkg: Record<string, unknown>) {
+function packageTargets(pkg: { json: Record<string, unknown>; dir: string; pkg: string }) {
+  const spec =
+    typeof pkg.json.name === "string" && pkg.json.name.trim().length > 0 ? pkg.json.name.trim() : path.basename(pkg.dir)
   const targets: Target[] = []
-  const server = exportTarget(pkg, "server")
+  const server = exportTarget(pkg.json, "server")
   if (server) {
     targets.push({ kind: "server", opts: server.opts })
-  } else if (hasMainTarget(pkg)) {
+  } else if (hasMainTarget(pkg.json)) {
     targets.push({ kind: "server" })
   }
 
-  const tui = exportTarget(pkg, "tui")
+  const tui = exportTarget(pkg.json, "tui")
   if (tui) {
     targets.push({ kind: "tui", opts: tui.opts })
   }
+
+  if (!targets.some((item) => item.kind === "tui") && readPackageThemes(spec, pkg).length) {
+    targets.push({ kind: "tui" })
+  }
+
   return targets
 }
 
@@ -293,8 +300,23 @@ export async function readPluginManifest(target: string): Promise<ManifestResult
     }
   }
 
-  const targets = packageTargets(pkg.item.json)
-  if (!targets.length) {
+  const targets = await Promise.resolve()
+    .then(() => packageTargets(pkg.item))
+    .then(
+      (item) => ({ ok: true as const, item }),
+      (error: unknown) => ({ ok: false as const, error }),
+    )
+
+  if (!targets.ok) {
+    return {
+      ok: false,
+      code: "manifest_read_failed",
+      file: pkg.item.pkg,
+      error: targets.error,
+    }
+  }
+
+  if (!targets.item.length) {
     return {
       ok: false,
       code: "manifest_no_targets",
@@ -304,7 +326,7 @@ export async function readPluginManifest(target: string): Promise<ManifestResult
 
   return {
     ok: true,
-    targets,
+    targets: targets.item,
   }
 }
 

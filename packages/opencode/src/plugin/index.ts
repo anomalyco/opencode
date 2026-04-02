@@ -24,10 +24,6 @@ export namespace Plugin {
     hooks: Hooks[]
   }
 
-  type Loaded = {
-    row: PluginLoader.Loaded
-  }
-
   // Hook names that follow the (input, output) => Promise<void> trigger pattern
   type TriggerName = {
     [K in keyof Hooks]-?: NonNullable<Hooks[K]> extends (input: any, output: any) => Promise<void> ? K : never
@@ -78,22 +74,20 @@ export namespace Plugin {
     return result
   }
 
-  async function applyPlugin(load: Loaded, input: PluginInput, hooks: Hooks[]) {
-    const plugin = readV1Plugin(load.row.mod, load.row.spec, "server", "detect")
+  function publishPluginError(message: string) {
+    Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+  }
+
+  async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, hooks: Hooks[]) {
+    const plugin = readV1Plugin(load.mod, load.spec, "server", "detect")
     if (plugin) {
-      await resolvePluginId(
-        load.row.source,
-        load.row.spec,
-        load.row.target,
-        readPluginId(plugin.id, load.row.spec),
-        load.row.pkg,
-      )
-      hooks.push(await (plugin as PluginModule).server(input, load.row.options))
+      await resolvePluginId(load.source, load.spec, load.target, readPluginId(plugin.id, load.spec), load.pkg)
+      hooks.push(await (plugin as PluginModule).server(input, load.options))
       return
     }
 
-    for (const server of getLegacyPlugins(load.row.mod)) {
-      hooks.push(await server(input, load.row.options))
+    for (const server of getLegacyPlugins(load.mod)) {
+      hooks.push(await server(input, load.options))
     }
   }
 
@@ -142,87 +136,52 @@ export namespace Plugin {
             if (init._tag === "Some") hooks.push(init.value)
           }
 
-          const plugins = Flag.OPENCODE_PURE ? [] : (cfg.plugin ?? [])
-          if (Flag.OPENCODE_PURE && cfg.plugin?.length) {
-            log.info("skipping external plugins in pure mode", { count: cfg.plugin.length })
+          const plugins = Flag.OPENCODE_PURE ? [] : (cfg.plugin_origins ?? [])
+          if (Flag.OPENCODE_PURE && cfg.plugin_origins?.length) {
+            log.info("skipping external plugins in pure mode", { count: cfg.plugin_origins.length })
           }
           if (plugins.length) yield* config.waitForDependencies()
 
           const loaded = yield* Effect.promise(() =>
-            Promise.all(
-              plugins.map(async (item) => {
-                const plan = PluginLoader.plan(item)
-                if (plan.deprecated) return
-                log.info("loading plugin", { path: plan.spec })
+            PluginLoader.loadExternal({
+              items: plugins,
+              kind: "server",
+              report: {
+                start(candidate) {
+                  log.info("loading plugin", { path: candidate.plan.spec })
+                },
+                missing(candidate, _retry, message) {
+                  log.warn("plugin has no server entrypoint", { path: candidate.plan.spec, message })
+                },
+                error(candidate, _retry, stage, error, resolved) {
+                  const spec = candidate.plan.spec
+                  const cause = error instanceof Error ? (error.cause ?? error) : error
+                  const message = stage === "load" ? errorMessage(error) : errorMessage(cause)
 
-                const resolved = await PluginLoader.resolve(plan, "server")
-                if (!resolved.ok) {
-                  if (resolved.stage === "missing") {
-                    log.warn("plugin has no server entrypoint", {
-                      path: plan.spec,
-                      message: resolved.message,
-                    })
+                  if (stage === "install") {
+                    const parsed = parsePluginSpecifier(spec)
+                    log.error("failed to install plugin", { pkg: parsed.pkg, version: parsed.version, error: message })
+                    publishPluginError(`Failed to install plugin ${parsed.pkg}@${parsed.version}: ${message}`)
                     return
                   }
 
-                  const cause =
-                    resolved.error instanceof Error ? (resolved.error.cause ?? resolved.error) : resolved.error
-                  const message = errorMessage(cause)
-
-                  if (resolved.stage === "install") {
-                    const parsed = parsePluginSpecifier(plan.spec)
-                    log.error("failed to install plugin", {
-                      pkg: parsed.pkg,
-                      version: parsed.version,
-                      error: message,
-                    })
-                    Bus.publish(Session.Event.Error, {
-                      error: new NamedError.Unknown({
-                        message: `Failed to install plugin ${parsed.pkg}@${parsed.version}: ${message}`,
-                      }).toObject(),
-                    })
+                  if (stage === "compatibility") {
+                    log.warn("plugin incompatible", { path: spec, error: message })
+                    publishPluginError(`Plugin ${spec} skipped: ${message}`)
                     return
                   }
 
-                  if (resolved.stage === "compatibility") {
-                    log.warn("plugin incompatible", { path: plan.spec, error: message })
-                    Bus.publish(Session.Event.Error, {
-                      error: new NamedError.Unknown({
-                        message: `Plugin ${plan.spec} skipped: ${message}`,
-                      }).toObject(),
-                    })
+                  if (stage === "entry") {
+                    log.error("failed to resolve plugin server entry", { path: spec, error: message })
+                    publishPluginError(`Failed to load plugin ${spec}: ${message}`)
                     return
                   }
 
-                  log.error("failed to resolve plugin server entry", {
-                    path: plan.spec,
-                    error: message,
-                  })
-                  Bus.publish(Session.Event.Error, {
-                    error: new NamedError.Unknown({
-                      message: `Failed to load plugin ${plan.spec}: ${message}`,
-                    }).toObject(),
-                  })
-                  return
-                }
-
-                const mod = await PluginLoader.load(resolved.value)
-                if (!mod.ok) {
-                  const message = errorMessage(mod.error)
-                  log.error("failed to load plugin", { path: plan.spec, target: resolved.value.entry, error: message })
-                  Bus.publish(Session.Event.Error, {
-                    error: new NamedError.Unknown({
-                      message: `Failed to load plugin ${plan.spec}: ${message}`,
-                    }).toObject(),
-                  })
-                  return
-                }
-
-                return {
-                  row: mod.value,
-                }
-              }),
-            ),
+                  log.error("failed to load plugin", { path: spec, target: resolved?.entry, error: message })
+                  publishPluginError(`Failed to load plugin ${spec}: ${message}`)
+                },
+              },
+            }),
           )
           for (const load of loaded) {
             if (!load) continue
@@ -233,14 +192,14 @@ export namespace Plugin {
               try: () => applyPlugin(load, input, hooks),
               catch: (err) => {
                 const message = errorMessage(err)
-                log.error("failed to load plugin", { path: load.row.spec, error: message })
+                log.error("failed to load plugin", { path: load.spec, error: message })
                 return message
               },
             }).pipe(
               Effect.catch((message) =>
                 bus.publish(Session.Event.Error, {
                   error: new NamedError.Unknown({
-                    message: `Failed to load plugin ${load.row.spec}: ${message}`,
+                    message: `Failed to load plugin ${load.spec}: ${message}`,
                   }).toObject(),
                 }),
               ),

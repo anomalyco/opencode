@@ -39,9 +39,9 @@ test("skips external tui plugins in pure mode", async () => {
 
   const get = spyOn(TuiConfig, "get").mockResolvedValue({
     plugin: [[tmp.extra.spec, { marker: tmp.extra.marker }]],
-    plugin_records: [
+    plugin_origins: [
       {
-        item: [tmp.extra.spec, { marker: tmp.extra.marker }],
+        spec: [tmp.extra.spec, { marker: tmp.extra.marker }],
         scope: "local",
         source: path.join(tmp.path, "tui.json"),
       },

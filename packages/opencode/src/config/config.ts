@@ -47,6 +47,12 @@ export namespace Config {
 
   export type PluginOptions = z.infer<typeof PluginOptions>
   export type PluginSpec = z.infer<typeof PluginSpec>
+  export type PluginScope = "global" | "local"
+  export type PluginOrigin = {
+    spec: PluginSpec
+    source: string
+    scope: PluginScope
+  }
 
   const log = Log.create({ service: "config" })
 
@@ -72,9 +78,6 @@ export namespace Config {
   // Custom merge function that concatenates array fields instead of replacing them
   function mergeConfigConcatArrays(target: Info, source: Info): Info {
     const merged = mergeDeep(target, source)
-    if (target.plugin && source.plugin) {
-      merged.plugin = Array.from(new Set([...target.plugin, ...source.plugin]))
-    }
     if (target.instructions && source.instructions) {
       merged.instructions = Array.from(new Set([...target.instructions, ...source.instructions]))
     }
@@ -297,31 +300,19 @@ export namespace Config {
     return resolved
   }
 
-  /**
-   * Deduplicates plugins by name, with later entries (higher priority) winning.
-   * Priority order (highest to lowest):
-   * 1. Local plugin/ directory
-   * 2. Local opencode.json
-   * 3. Global plugin/ directory
-   * 4. Global opencode.json
-   *
-   * Since plugins are added in low-to-high priority order,
-   * we reverse, deduplicate (keeping first occurrence), then restore order.
-   */
-  export function deduplicatePlugins(plugins: PluginSpec[]): PluginSpec[] {
-    const seenNames = new Set<string>()
-    const uniqueSpecifiers: PluginSpec[] = []
+  export function deduplicatePluginOrigins(plugins: PluginOrigin[]): PluginOrigin[] {
+    const seen = new Set<string>()
+    const list: PluginOrigin[] = []
 
-    for (const specifier of plugins.toReversed()) {
-      const spec = pluginSpecifier(specifier)
+    for (const plugin of plugins.toReversed()) {
+      const spec = pluginSpecifier(plugin.spec)
       const name = spec.startsWith("file://") ? spec : parsePluginSpecifier(spec).pkg
-      if (!seenNames.has(name)) {
-        seenNames.add(name)
-        uniqueSpecifiers.push(specifier)
-      }
+      if (seen.has(name)) continue
+      seen.add(name)
+      list.push(plugin)
     }
 
-    return uniqueSpecifiers.toReversed()
+    return list.toReversed()
   }
 
   export const McpLocal = z
@@ -997,7 +988,9 @@ export namespace Config {
       ref: "Config",
     })
 
-  export type Info = z.output<typeof Info>
+  export type Info = z.output<typeof Info> & {
+    plugin_origins?: PluginOrigin[]
+  }
 
   type State = {
     config: Info
@@ -1042,6 +1035,11 @@ export namespace Config {
       if (value === undefined) return result
       return patchJsonc(result, value, [...path, key])
     }, input)
+  }
+
+  function writable(info: Info) {
+    const { plugin_origins, ...next } = info
+    return next
   }
 
   function parseConfig(text: string, filepath: string): Info {
@@ -1208,6 +1206,30 @@ export namespace Config {
           const auth = yield* authSvc.all().pipe(Effect.orDie)
 
           let result: Info = {}
+
+          const scope = (source: string): PluginScope => {
+            if (source.startsWith("http://") || source.startsWith("https://")) return "global"
+            if (source === "OPENCODE_CONFIG_CONTENT") return "local"
+            if (Instance.containsPath(source)) return "local"
+            return "global"
+          }
+
+          const track = (source: string, list: PluginSpec[] | undefined, kind?: PluginScope) => {
+            if (!list?.length) return
+            const hit = kind ?? scope(source)
+            const plugins = deduplicatePluginOrigins([
+              ...(result.plugin_origins ?? []),
+              ...list.map((spec) => ({ spec, source, scope: hit })),
+            ])
+            result.plugin = plugins.map((item) => item.spec)
+            result.plugin_origins = plugins
+          }
+
+          const merge = (source: string, next: Info, kind?: PluginScope) => {
+            result = mergeConfigConcatArrays(result, next)
+            track(source, next.plugin, kind)
+          }
+
           for (const [key, value] of Object.entries(auth)) {
             if (value.type === "wellknown") {
               const url = key.replace(/\/+$/, "")
@@ -1220,21 +1242,21 @@ export namespace Config {
               const wellknown = (yield* Effect.promise(() => response.json())) as any
               const remoteConfig = wellknown.config ?? {}
               if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
-              result = mergeConfigConcatArrays(
-                result,
-                yield* loadConfig(JSON.stringify(remoteConfig), {
-                  dir: path.dirname(`${url}/.well-known/opencode`),
-                  source: `${url}/.well-known/opencode`,
-                }),
-              )
+              const source = `${url}/.well-known/opencode`
+              const next = yield* loadConfig(JSON.stringify(remoteConfig), {
+                dir: path.dirname(source),
+                source,
+              })
+              merge(source, next, "global")
               log.debug("loaded remote config from well-known", { url })
             }
           }
 
-          result = mergeConfigConcatArrays(result, yield* getGlobal())
+          const global = yield* getGlobal()
+          merge(Global.Path.config, global, "global")
 
           if (Flag.OPENCODE_CONFIG) {
-            result = mergeConfigConcatArrays(result, yield* loadFile(Flag.OPENCODE_CONFIG))
+            merge(Flag.OPENCODE_CONFIG, yield* loadFile(Flag.OPENCODE_CONFIG))
             log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
           }
 
@@ -1242,7 +1264,7 @@ export namespace Config {
             for (const file of yield* Effect.promise(() =>
               ConfigPaths.projectFiles("opencode", ctx.directory, ctx.worktree),
             )) {
-              result = mergeConfigConcatArrays(result, yield* loadFile(file))
+              merge(file, yield* loadFile(file), "local")
             }
           }
 
@@ -1260,9 +1282,10 @@ export namespace Config {
 
           for (const dir of unique(directories)) {
             if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
-              for (const file of ["opencode.jsonc", "opencode.json"]) {
-                log.debug(`loading config from ${path.join(dir, file)}`)
-                result = mergeConfigConcatArrays(result, yield* loadFile(path.join(dir, file)))
+              for (const file of ["opencode.json", "opencode.jsonc"]) {
+                const source = path.join(dir, file)
+                log.debug(`loading config from ${source}`)
+                merge(source, yield* loadFile(source))
                 result.agent ??= {}
                 result.mode ??= {}
                 result.plugin ??= []
@@ -1280,17 +1303,17 @@ export namespace Config {
             result.command = mergeDeep(result.command ?? {}, yield* Effect.promise(() => loadCommand(dir)))
             result.agent = mergeDeep(result.agent, yield* Effect.promise(() => loadAgent(dir)))
             result.agent = mergeDeep(result.agent, yield* Effect.promise(() => loadMode(dir)))
-            result.plugin.push(...(yield* Effect.promise(() => loadPlugin(dir))))
+            const list = yield* Effect.promise(() => loadPlugin(dir))
+            track(dir, list)
           }
 
           if (process.env.OPENCODE_CONFIG_CONTENT) {
-            result = mergeConfigConcatArrays(
-              result,
-              yield* loadConfig(process.env.OPENCODE_CONFIG_CONTENT, {
-                dir: ctx.directory,
-                source: "OPENCODE_CONFIG_CONTENT",
-              }),
-            )
+            const source = "OPENCODE_CONFIG_CONTENT"
+            const next = yield* loadConfig(process.env.OPENCODE_CONFIG_CONTENT, {
+              dir: ctx.directory,
+              source,
+            })
+            merge(source, next, "local")
             log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
           }
 
@@ -1309,13 +1332,12 @@ export namespace Config {
 
               const config = Option.getOrUndefined(configOpt)
               if (config) {
-                result = mergeConfigConcatArrays(
-                  result,
-                  yield* loadConfig(JSON.stringify(config), {
-                    dir: path.dirname(`${active.url}/api/config`),
-                    source: `${active.url}/api/config`,
-                  }),
-                )
+                const source = `${active.url}/api/config`
+                const next = yield* loadConfig(JSON.stringify(config), {
+                  dir: path.dirname(source),
+                  source,
+                })
+                merge(source, next, "global")
               }
             }).pipe(
               Effect.catch((err) => {
@@ -1328,8 +1350,9 @@ export namespace Config {
           }
 
           if (existsSync(managedDir)) {
-            for (const file of ["opencode.jsonc", "opencode.json"]) {
-              result = mergeConfigConcatArrays(result, yield* loadFile(path.join(managedDir, file)))
+            for (const file of ["opencode.json", "opencode.jsonc"]) {
+              const source = path.join(managedDir, file)
+              merge(source, yield* loadFile(source), "global")
             }
           }
 
@@ -1372,8 +1395,6 @@ export namespace Config {
             result.compaction = { ...result.compaction, prune: false }
           }
 
-          result.plugin = deduplicatePlugins(result.plugin ?? [])
-
           return {
             config: result,
             directories,
@@ -1403,7 +1424,9 @@ export namespace Config {
           const dir = yield* InstanceState.directory
           const file = path.join(dir, "config.json")
           const existing = yield* loadFile(file)
-          yield* fs.writeFileString(file, JSON.stringify(mergeDeep(existing, config), null, 2)).pipe(Effect.orDie)
+          yield* fs
+            .writeFileString(file, JSON.stringify(mergeDeep(writable(existing), writable(config)), null, 2))
+            .pipe(Effect.orDie)
           yield* Effect.promise(() => Instance.dispose())
         })
 
@@ -1427,15 +1450,16 @@ export namespace Config {
         const updateGlobal = Effect.fn("Config.updateGlobal")(function* (config: Info) {
           const file = globalConfigFile()
           const before = (yield* readConfigFile(file)) ?? "{}"
+          const input = writable(config)
 
           let next: Info
           if (!file.endsWith(".jsonc")) {
             const existing = parseConfig(before, file)
-            const merged = mergeDeep(existing, config)
+            const merged = mergeDeep(writable(existing), input)
             yield* fs.writeFileString(file, JSON.stringify(merged, null, 2)).pipe(Effect.orDie)
             next = merged
           } else {
-            const updated = patchJsonc(before, config)
+            const updated = patchJsonc(before, input)
             next = parseConfig(updated, file)
             yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
           }
