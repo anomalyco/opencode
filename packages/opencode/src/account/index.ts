@@ -120,6 +120,10 @@ class TokenRefreshRequest extends Schema.Class<TokenRefreshRequest>("TokenRefres
 
 const clientId = "opencode-cli"
 const eagerRefreshThreshold = Duration.minutes(5)
+const eagerRefreshThresholdMs = Duration.toMillis(eagerRefreshThreshold)
+
+const isTokenFresh = (tokenExpiry: number | null, now: number) =>
+  tokenExpiry != null && tokenExpiry > now + eagerRefreshThresholdMs
 
 const mapAccountServiceError =
   (message = "Account service operation failed") =>
@@ -219,7 +223,7 @@ export namespace Account {
 
           const account = maybeAccount.value
           const now = yield* Clock.currentTimeMillis
-          if (account.token_expiry && account.token_expiry > now + Duration.toMillis(eagerRefreshThreshold)) {
+          if (isTokenFresh(account.token_expiry, now)) {
             return account.access_token
           }
 
@@ -229,7 +233,7 @@ export namespace Account {
 
       const resolveToken = Effect.fnUntraced(function* (row: AccountRow) {
         const now = yield* Clock.currentTimeMillis
-        if (row.token_expiry && row.token_expiry > now + Duration.toMillis(eagerRefreshThreshold)) {
+        if (isTokenFresh(row.token_expiry, now)) {
           return row.access_token
         }
 
