@@ -59,6 +59,10 @@ import { TuiConfigProvider, useTuiConfig } from "./context/tui-config"
 import { TuiConfig } from "@/config/tui"
 import { createTuiApi, TuiPluginRuntime, type RouteMap } from "./plugin"
 import { FormatError, FormatUnknownError } from "@/cli/error"
+import { InputBuffer } from "@tui/util/input-buffer"
+import { Log } from "@/util/log"
+
+const log = Log.create({ service: "tui-app" })
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -125,6 +129,7 @@ import { DialogVariant } from "./component/dialog-variant"
 
 function rendererConfig(_config: TuiConfig.Info): CliRendererConfig {
   return {
+    stdin: process.stdin,
     externalOutputMode: "passthrough",
     targetFps: 60,
     gatherStats: false,
@@ -174,6 +179,9 @@ export function tui(input: {
   return new Promise<void>(async (resolve) => {
     const unguard = win32InstallCtrlCGuard()
     win32DisableProcessedInput()
+    // Idempotent: the preload already called install(), but this is a safety
+    // net for cases where the preload was skipped (e.g. direct function call).
+    InputBuffer.install()
 
     const mode = await getTerminalBackgroundColor()
 
@@ -182,11 +190,13 @@ export function tui(input: {
     win32DisableProcessedInput()
 
     const onExit = async () => {
+      InputBuffer.uninstall()
       unguard?.()
       resolve()
     }
 
     const onBeforeExit = async () => {
+      InputBuffer.uninstall()
       await TuiPluginRuntime.dispose()
     }
 
@@ -289,6 +299,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     api.dispose()
   })
   const [ready, setReady] = createSignal(false)
+  let flushed = false
   TuiPluginRuntime.init(api)
     .catch((error) => {
       console.error("Failed to load TUI plugins", error)
@@ -330,6 +341,16 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     }
 
     renderer.clearSelection()
+  })
+
+  // Replay startup bytes only after the prompt exists so the normal prompt
+  // handlers consume them through the same stdin path as live input.
+  createEffect(() => {
+    if (flushed || !promptRef.current) return
+    flushed = true
+    const bytes = InputBuffer.pending()
+    if (bytes > 0) log.info("Flushing", { bytes })
+    InputBuffer.flush()
   })
 
   // Wire up console copy-to-clipboard via opentui's onCopySelection callback
