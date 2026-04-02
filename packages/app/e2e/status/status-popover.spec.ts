@@ -70,6 +70,9 @@ test("status popover can switch to plugins tab", async ({ page, gotoSession }) =
 
   const pluginsContent = popoverBody.locator('[role="tabpanel"]:visible').first()
   await expect(pluginsContent).toBeVisible()
+
+  const manage = pluginsContent.getByRole("button", { name: /manage plugins/i })
+  await expect(manage).toBeVisible()
 })
 
 test("status popover closes on escape", async ({ page, gotoSession }) => {

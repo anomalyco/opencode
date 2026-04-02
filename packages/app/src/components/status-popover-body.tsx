@@ -436,6 +436,19 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                   )}
                 </For>
               </Show>
+              <Button
+                variant="secondary"
+                class="mt-3 self-start h-8 px-3 py-1.5"
+                onClick={() => {
+                  const run = ++dialogRun
+                  void import("./dialog-manage-plugins").then((x) => {
+                    if (dialogDead || dialogRun !== run) return
+                    dialog.show(() => <x.DialogManagePlugins />)
+                  })
+                }}
+              >
+                {language.t("status.popover.action.managePlugins")}
+              </Button>
             </div>
           </div>
         </Tabs.Content>

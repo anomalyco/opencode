@@ -16,6 +16,7 @@ export const dict = {
   "command.category.permissions": "Permissions",
   "command.category.workspace": "Workspace",
   "command.category.settings": "Settings",
+  "command.category.window": "Window",
 
   "theme.scheme.system": "System",
   "theme.scheme.light": "Light",
@@ -602,6 +603,18 @@ export const dict = {
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "Plugins",
   "status.popover.action.manageServers": "Manage servers",
+  "status.popover.action.managePlugins": "Manage plugins",
+  "dialog.plugins.manage.title": "Manage plugins",
+  "dialog.plugins.specLabel": "Plugin spec",
+  "dialog.plugins.specPlaceholder": "@scope/plugin@version or file://...",
+  "dialog.plugins.add": "Add plugin",
+  "dialog.plugins.added": "Plugin added",
+  "dialog.plugins.removed": "Plugin removed",
+  "dialog.plugins.exists": "Plugin already exists",
+  "dialog.plugins.specRequired": "Plugin spec is required",
+  "dialog.plugins.specInvalid": "Plugin spec must not contain spaces",
+  "dialog.plugins.listTitle": "Configured plugins",
+  "dialog.plugins.restartHint": "Some plugin changes may require reconnect/restart to fully apply.",
 
   "session.share.popover.title": "Publish on web",
   "session.share.popover.description.shared":
