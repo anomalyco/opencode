@@ -218,11 +218,11 @@ test("changing new session keybind works", async ({ page, sdk, gotoSession }) =>
       const raw = localStorage.getItem("settings.v3")
       return raw ? JSON.parse(raw) : null
     })
-    expect(stored?.keybinds?.["session.new"]).toBe("mod+shift+n")
+    expect(stored?.keybinds?.["session.new"]).toBe("mod+shift+y")
 
     await closeDialog(page, dialog)
 
-    await page.keyboard.press(`${modKey}+Shift+N`)
+    await page.keyboard.press(`${modKey}+Shift+Y`)
     await page.waitForTimeout(200)
 
     const newUrl = page.url()
