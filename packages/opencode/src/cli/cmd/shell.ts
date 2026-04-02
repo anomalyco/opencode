@@ -36,7 +36,7 @@ function getShellName(): string {
 const osName = getOsName()
 const shellName = getShellName()
 
-const SHELL_PROMPT = `You are a ${shellName} shell command generator. Output ONLY the command.
+const SHELL_PROMPT = `You are a ${shellName} shell command generator for ${osName}. Output ONLY the command.
 
 NEVER output ls, find, or cat to "check" things first. The user knows their files. Just give the command.
 
