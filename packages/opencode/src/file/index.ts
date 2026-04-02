@@ -5,7 +5,6 @@ import { AppFileSystem } from "@/filesystem"
 import { git } from "@/util/git"
 import { Effect, Layer, ServiceMap } from "effect"
 import { formatPatch, structuredPatch } from "diff"
-import fs from "fs"
 import fuzzysort from "fuzzysort"
 import ignore from "ignore"
 import path from "path"
@@ -359,49 +358,46 @@ export namespace File {
         const isGlobalHome = Instance.directory === Global.Path.home && Instance.project.id === "global"
         const next: Entry = { files: [], dirs: [] }
 
-        yield* Effect.promise(async () => {
-          if (isGlobalHome) {
-            const dirs = new Set<string>()
-            const protectedNames = Protected.names()
-            const ignoreNested = new Set(["node_modules", "dist", "build", "target", "vendor"])
-            const shouldIgnoreName = (name: string) => name.startsWith(".") || protectedNames.has(name)
-            const shouldIgnoreNested = (name: string) => name.startsWith(".") || ignoreNested.has(name)
-            const top = await fs.promises
-              .readdir(Instance.directory, { withFileTypes: true })
-              .catch(() => [] as fs.Dirent[])
+        if (isGlobalHome) {
+          const dirs = new Set<string>()
+          const protectedNames = Protected.names()
+          const ignoreNested = new Set(["node_modules", "dist", "build", "target", "vendor"])
+          const shouldIgnoreName = (name: string) => name.startsWith(".") || protectedNames.has(name)
+          const shouldIgnoreNested = (name: string) => name.startsWith(".") || ignoreNested.has(name)
+          const top = yield* appFs.readDirectoryEntries(Instance.directory).pipe(Effect.orElseSucceed(() => []))
 
-            for (const entry of top) {
-              if (!entry.isDirectory()) continue
-              if (shouldIgnoreName(entry.name)) continue
-              dirs.add(entry.name + "/")
+          for (const entry of top) {
+            if (entry.type !== "directory") continue
+            if (shouldIgnoreName(entry.name)) continue
+            dirs.add(entry.name + "/")
 
-              const base = path.join(Instance.directory, entry.name)
-              const children = await fs.promises.readdir(base, { withFileTypes: true }).catch(() => [] as fs.Dirent[])
-              for (const child of children) {
-                if (!child.isDirectory()) continue
-                if (shouldIgnoreNested(child.name)) continue
-                dirs.add(entry.name + "/" + child.name + "/")
-              }
-            }
-
-            next.dirs = Array.from(dirs).toSorted()
-          } else {
-            const seen = new Set<string>()
-            for await (const file of Ripgrep.files({ cwd: Instance.directory })) {
-              next.files.push(file)
-              let current = file
-              while (true) {
-                const dir = path.dirname(current)
-                if (dir === ".") break
-                if (dir === current) break
-                current = dir
-                if (seen.has(dir)) continue
-                seen.add(dir)
-                next.dirs.push(dir + "/")
-              }
+            const base = path.join(Instance.directory, entry.name)
+            const children = yield* appFs.readDirectoryEntries(base).pipe(Effect.orElseSucceed(() => []))
+            for (const child of children) {
+              if (child.type !== "directory") continue
+              if (shouldIgnoreNested(child.name)) continue
+              dirs.add(entry.name + "/" + child.name + "/")
             }
           }
-        })
+
+          next.dirs = Array.from(dirs).toSorted()
+        } else {
+          const files = yield* Effect.promise(() => Array.fromAsync(Ripgrep.files({ cwd: Instance.directory })))
+          const seen = new Set<string>()
+          for (const file of files) {
+            next.files.push(file)
+            let current = file
+            while (true) {
+              const dir = path.dirname(current)
+              if (dir === ".") break
+              if (dir === current) break
+              current = dir
+              if (seen.has(dir)) continue
+              seen.add(dir)
+              next.dirs.push(dir + "/")
+            }
+          }
+        }
 
         const s = yield* InstanceState.get(state)
         s.cache = next
@@ -636,30 +632,27 @@ export namespace File {
         yield* ensure()
         const { cache } = yield* InstanceState.get(state)
 
-        return yield* Effect.promise(async () => {
-          const query = input.query.trim()
-          const limit = input.limit ?? 100
-          const kind = input.type ?? (input.dirs === false ? "file" : "all")
-          log.info("search", { query, kind })
+        const query = input.query.trim()
+        const limit = input.limit ?? 100
+        const kind = input.type ?? (input.dirs === false ? "file" : "all")
+        log.info("search", { query, kind })
 
-          const result = cache
-          const preferHidden = query.startsWith(".") || query.includes("/.")
+        const preferHidden = query.startsWith(".") || query.includes("/.")
 
-          if (!query) {
-            if (kind === "file") return result.files.slice(0, limit)
-            return sortHiddenLast(result.dirs.toSorted(), preferHidden).slice(0, limit)
-          }
+        if (!query) {
+          if (kind === "file") return cache.files.slice(0, limit)
+          return sortHiddenLast(cache.dirs.toSorted(), preferHidden).slice(0, limit)
+        }
 
-          const items =
-            kind === "file" ? result.files : kind === "directory" ? result.dirs : [...result.files, ...result.dirs]
+        const items =
+          kind === "file" ? cache.files : kind === "directory" ? cache.dirs : [...cache.files, ...cache.dirs]
 
-          const searchLimit = kind === "directory" && !preferHidden ? limit * 20 : limit
-          const sorted = fuzzysort.go(query, items, { limit: searchLimit }).map((item) => item.target)
-          const output = kind === "directory" ? sortHiddenLast(sorted, preferHidden).slice(0, limit) : sorted
+        const searchLimit = kind === "directory" && !preferHidden ? limit * 20 : limit
+        const sorted = fuzzysort.go(query, items, { limit: searchLimit }).map((item) => item.target)
+        const output = kind === "directory" ? sortHiddenLast(sorted, preferHidden).slice(0, limit) : sorted
 
-          log.info("search", { query, kind, results: output.length })
-          return output
-        })
+        log.info("search", { query, kind, results: output.length })
+        return output
       })
 
       log.info("init")

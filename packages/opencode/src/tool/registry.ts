@@ -57,7 +57,7 @@ export namespace ToolRegistry {
       const config = yield* Config.Service
       const plugin = yield* Plugin.Service
 
-      const cache = yield* InstanceState.make<State>(
+      const state = yield* InstanceState.make<State>(
         Effect.fn("ToolRegistry.state")(function* (ctx) {
           const custom: Tool.Info[] = []
 
@@ -139,18 +139,18 @@ export namespace ToolRegistry {
       })
 
       const register = Effect.fn("ToolRegistry.register")(function* (tool: Tool.Info) {
-        const state = yield* InstanceState.get(cache)
-        const idx = state.custom.findIndex((t) => t.id === tool.id)
+        const s = yield* InstanceState.get(state)
+        const idx = s.custom.findIndex((t) => t.id === tool.id)
         if (idx >= 0) {
-          state.custom.splice(idx, 1, tool)
+          s.custom.splice(idx, 1, tool)
           return
         }
-        state.custom.push(tool)
+        s.custom.push(tool)
       })
 
       const ids = Effect.fn("ToolRegistry.ids")(function* () {
-        const state = yield* InstanceState.get(cache)
-        const tools = yield* all(state.custom)
+        const s = yield* InstanceState.get(state)
+        const tools = yield* all(s.custom)
         return tools.map((t) => t.id)
       })
 
@@ -158,8 +158,8 @@ export namespace ToolRegistry {
         model: { providerID: ProviderID; modelID: ModelID },
         agent?: Agent.Info,
       ) {
-        const state = yield* InstanceState.get(cache)
-        const allTools = yield* all(state.custom)
+        const s = yield* InstanceState.get(state)
+        const allTools = yield* all(s.custom)
         const filtered = allTools.filter((tool) => {
           if (tool.id === "codesearch" || tool.id === "websearch") {
             return model.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
