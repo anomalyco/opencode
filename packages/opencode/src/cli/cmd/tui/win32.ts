@@ -24,7 +24,7 @@ export async function win32Init() {
       GetConsoleMode: { args: ["ptr", "ptr"], returns: "i32" },
       SetConsoleMode: { args: ["ptr", "u32"], returns: "i32" },
       FlushConsoleInputBuffer: { args: ["ptr"], returns: "i32" },
-    }).symbols as unknown as K32
+    }).symbols as unknown as K32)
     ready = true
     return true
   } catch {
