@@ -442,8 +442,15 @@ export function Prompt(props: PromptProps) {
   })
 
   createEffect(() => {
-    if (props.visible !== false) input?.focus()
-    if (props.visible === false) input?.blur()
+    if (!input || input.isDestroyed) return
+    if (props.visible === false || dialog.stack.length > 0) {
+      input.blur()
+      return
+    }
+
+    // Slot/plugin updates can remount the background prompt while a dialog is open.
+    // Keep focus with the dialog and let the prompt reclaim it after the dialog closes.
+    input.focus()
   })
 
   createEffect(() => {
