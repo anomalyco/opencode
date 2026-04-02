@@ -11,7 +11,7 @@ export interface AutoScrollOptions {
 }
 
 export function createAutoScroll(options: AutoScrollOptions) {
-  const [scroll, setScroll] = createSignal<HTMLElement>()
+  let scroll: HTMLElement | undefined
   let settling = false
   let settleTimer: ReturnType<typeof setTimeout> | undefined
   let autoTimer: ReturnType<typeof setTimeout> | undefined
@@ -64,7 +64,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
   }
 
   const scrollToBottomNow = (behavior: ScrollBehavior) => {
-    const el = scroll()
+    const el = scroll
     if (!el) return
     markAuto(el)
     if (behavior === "smooth") {
@@ -81,7 +81,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
     if (force && store.userScrolled) setStore("userScrolled", false)
 
-    const el = scroll()
+    const el = scroll
     if (!el) return
 
     if (!force && store.userScrolled) return
@@ -98,7 +98,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
   }
 
   const stop = () => {
-    const el = scroll()
+    const el = scroll
     if (!el) return
     if (!canScroll(el)) {
       if (store.userScrolled) setStore("userScrolled", false)
@@ -115,7 +115,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
     // If the user is scrolling within a nested scrollable region (tool output,
     // code block, etc), don't treat it as leaving the "follow bottom" mode.
     // Those regions opt in via `data-scrollable`.
-    const el = scroll()
+    const el = scroll
     const target = e.target instanceof Element ? e.target : undefined
     const nested = target?.closest("[data-scrollable]")
     if (el && nested && nested !== el) return
@@ -123,7 +123,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
   }
 
   const handleScroll = () => {
-    const el = scroll()
+    const el = scroll
     if (!el) return
 
     if (!canScroll(el)) {
@@ -172,7 +172,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
   createResizeObserver(
     () => store.contentRef,
     () => {
-      const el = scroll()
+      const el = scroll
       if (el && !canScroll(el)) {
         if (store.userScrolled) setStore("userScrolled", false)
         return
@@ -208,15 +208,9 @@ export function createAutoScroll(options: AutoScrollOptions) {
     // Track `userScrolled` even before `scrollRef` is attached, so we can
     // update overflow anchoring once the element exists.
     store.userScrolled
-    const el = scroll()
+    const el = scroll
     if (!el) return
     updateOverflowAnchor(el)
-  })
-
-  createEffect(() => {
-    const el = scroll()
-    if (!el) return
-    makeEventListener(el, "wheel", handleWheel, { passive: true })
   })
 
   onCleanup(() => {
@@ -226,11 +220,10 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
   return {
     scrollRef: (el: HTMLElement | undefined) => {
-      setScroll(el)
-
       if (!el) return
 
       updateOverflowAnchor(el)
+      makeEventListener(el, "wheel", handleWheel, { passive: true })
     },
     contentRef: (el: HTMLElement | undefined) => setStore("contentRef", el),
     handleScroll,
