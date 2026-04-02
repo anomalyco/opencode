@@ -1,0 +1,52 @@
+name: Build OpenCode (patched fork)
+
+on:
+  push:
+    branches:
+      - fix/copilot-business-endpoint-routing
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: CustomRun
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build binary (linux-x64 only)
+        run: bun run script/build.ts --single
+        working-directory: packages/opencode
+        env:
+          OPENCODE_VERSION: "1.3.13-copilot-fix"
+
+      - name: Verify binary exists
+        run: |
+          ls -lh packages/opencode/dist/opencode-linux-x64/bin/opencode
+          file packages/opencode/dist/opencode-linux-x64/bin/opencode
+
+      - name: Smoke test — version
+        run: |
+          VERSION=$(packages/opencode/dist/opencode-linux-x64/bin/opencode --version 2>/dev/null || echo "FAILED")
+          echo "Version: $VERSION"
+          if [ "$VERSION" = "FAILED" ]; then
+            echo "ERROR: binary --version failed"
+            exit 1
+          fi
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-linux-x64-patched
+          path: packages/opencode/dist/opencode-linux-x64/bin/opencode
+          retention-days: 30
