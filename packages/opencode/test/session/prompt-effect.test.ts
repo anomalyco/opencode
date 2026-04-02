@@ -470,7 +470,7 @@ it.live("failed subtask preserves metadata on error tool state", () =>
       expect(result.info.role).toBe("assistant")
       expect(yield* llm.calls).toBe(2)
 
-      const msgs = yield* Effect.promise(() => MessageV2.filterCompacted(MessageV2.stream(chat.id)))
+      const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
       const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
       expect(taskMsg?.info.role).toBe("assistant")
       if (!taskMsg || taskMsg.info.role !== "assistant") return
@@ -629,7 +629,7 @@ it.live(
           const exit = yield* Fiber.await(fiber)
           expect(Exit.isSuccess(exit)).toBe(true)
 
-          const msgs = yield* Effect.promise(() => MessageV2.filterCompacted(MessageV2.stream(chat.id)))
+          const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
           const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
           expect(taskMsg?.info.role).toBe("assistant")
           if (!taskMsg || taskMsg.info.role !== "assistant") return
