@@ -103,10 +103,15 @@ export function SidekickChat(props: { parentID: string }) {
 
   async function reset() {
     try {
-      await (sdk.fetch ?? fetch)(`${base()}/sidekick`, {
+      const res = await (sdk.fetch ?? fetch)(`${base()}/sidekick`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
       })
+      if (!res.ok) {
+        const msg = await res.text().catch(() => res.statusText)
+        setError(msg || `Failed to reset sidekick (${res.status})`)
+        return
+      }
       setSidekickID(undefined)
       setError(undefined)
       await ensure()

@@ -36,7 +36,14 @@ export namespace Sidekick {
         )
         .get(),
     )
-    if (existing) return Session.fromRow(existing)
+    if (existing) {
+      // Verify the session still exists — reset() may have deleted it (TOCTOU)
+      try {
+        return await Session.get(existing.id as SessionID)
+      } catch {
+        // Session was deleted between our select and here; fall through to create
+      }
+    }
 
     try {
       return await Session.create({
