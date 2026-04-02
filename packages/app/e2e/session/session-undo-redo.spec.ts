@@ -45,19 +45,20 @@ async function seedConversation(input: {
     .toBe(true)
 
   if (!userMessageID) throw new Error("Expected a user message id")
-  await expect(input.page.locator(`[data-message-id="${userMessageID}"]`).first()).toBeVisible({ timeout: 30_000 })
+  await expect(input.page.locator(`[data-message-id="${userMessageID}"]`)).toHaveCount(1, { timeout: 30_000 })
   return { prompt, userMessageID }
 }
 
-test("slash undo sets revert and restores prior prompt", async ({ page, withProject }) => {
+test("slash undo sets revert and restores prior prompt", async ({ page, withBackendProject }) => {
   test.setTimeout(120_000)
 
   const token = `undo_${Date.now()}`
 
-  await withProject(async (project) => {
-    const sdk = createSdk(project.directory)
+  await withBackendProject(async (project) => {
+    const sdk = project.sdk
 
     await withSession(sdk, `e2e undo ${Date.now()}`, async (session) => {
+      project.trackSession(session.id)
       await project.gotoSession(session.id)
 
       const seeded = await seedConversation({ page, sdk, sessionID: session.id, token })
@@ -81,15 +82,16 @@ test("slash undo sets revert and restores prior prompt", async ({ page, withProj
   })
 })
 
-test("slash redo clears revert and restores latest state", async ({ page, withProject }) => {
+test("slash redo clears revert and restores latest state", async ({ page, withBackendProject }) => {
   test.setTimeout(120_000)
 
   const token = `redo_${Date.now()}`
 
-  await withProject(async (project) => {
-    const sdk = createSdk(project.directory)
+  await withBackendProject(async (project) => {
+    const sdk = project.sdk
 
     await withSession(sdk, `e2e redo ${Date.now()}`, async (session) => {
+      project.trackSession(session.id)
       await project.gotoSession(session.id)
 
       const seeded = await seedConversation({ page, sdk, sessionID: session.id, token })
@@ -123,21 +125,22 @@ test("slash redo clears revert and restores latest state", async ({ page, withPr
         .toBeUndefined()
 
       await expect(seeded.prompt).not.toContainText(token)
-      await expect(page.locator(`[data-message-id="${seeded.userMessageID}"]`).first()).toBeVisible()
+      await expect(page.locator(`[data-message-id="${seeded.userMessageID}"]`)).toHaveCount(1)
     })
   })
 })
 
-test("slash undo/redo traverses multi-step revert stack", async ({ page, withProject }) => {
+test("slash undo/redo traverses multi-step revert stack", async ({ page, withBackendProject }) => {
   test.setTimeout(120_000)
 
   const firstToken = `undo_redo_first_${Date.now()}`
   const secondToken = `undo_redo_second_${Date.now()}`
 
-  await withProject(async (project) => {
-    const sdk = createSdk(project.directory)
+  await withBackendProject(async (project) => {
+    const sdk = project.sdk
 
     await withSession(sdk, `e2e undo redo stack ${Date.now()}`, async (session) => {
+      project.trackSession(session.id)
       await project.gotoSession(session.id)
 
       const first = await seedConversation({
@@ -158,8 +161,8 @@ test("slash undo/redo traverses multi-step revert stack", async ({ page, withPro
       const firstMessage = page.locator(`[data-message-id="${first.userMessageID}"]`)
       const secondMessage = page.locator(`[data-message-id="${second.userMessageID}"]`)
 
-      await expect(firstMessage.first()).toBeVisible()
-      await expect(secondMessage.first()).toBeVisible()
+      await expect(firstMessage).toHaveCount(1)
+      await expect(secondMessage).toHaveCount(1)
 
       await second.prompt.click()
       await page.keyboard.press(`${modKey}+A`)
@@ -176,7 +179,7 @@ test("slash undo/redo traverses multi-step revert stack", async ({ page, withPro
         })
         .toBe(second.userMessageID)
 
-      await expect(firstMessage.first()).toBeVisible()
+      await expect(firstMessage).toHaveCount(1)
       await expect(secondMessage).toHaveCount(0)
 
       await second.prompt.click()
@@ -210,7 +213,7 @@ test("slash undo/redo traverses multi-step revert stack", async ({ page, withPro
         })
         .toBe(second.userMessageID)
 
-      await expect(firstMessage.first()).toBeVisible()
+      await expect(firstMessage).toHaveCount(1)
       await expect(secondMessage).toHaveCount(0)
 
       await second.prompt.click()
@@ -226,8 +229,8 @@ test("slash undo/redo traverses multi-step revert stack", async ({ page, withPro
         })
         .toBeUndefined()
 
-      await expect(firstMessage.first()).toBeVisible()
-      await expect(secondMessage.first()).toBeVisible()
+      await expect(firstMessage).toHaveCount(1)
+      await expect(secondMessage).toHaveCount(1)
     })
   })
 })

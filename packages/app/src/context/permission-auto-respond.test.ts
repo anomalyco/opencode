@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { PermissionRequest, Session } from "@opencode-ai/sdk/v2/client"
 import { base64Encode } from "@opencode-ai/util/encode"
-import { autoRespondsPermission } from "./permission-auto-respond"
+import { autoRespondsPermission, isDirectoryAutoAccepting } from "./permission-auto-respond"
 
 const session = (input: { id: string; parentID?: string }) =>
   ({
@@ -59,5 +59,44 @@ describe("autoRespondsPermission", () => {
     }
 
     expect(autoRespondsPermission(autoAccept, sessions, permission("child"), directory)).toBe(true)
+  })
+
+  test("falls back to directory-level auto-accept", () => {
+    const directory = "/tmp/project"
+    const sessions = [session({ id: "root" })]
+    const autoAccept = {
+      [`${base64Encode(directory)}/*`]: true,
+    }
+
+    expect(autoRespondsPermission(autoAccept, sessions, permission("root"), directory)).toBe(true)
+  })
+
+  test("session-level override takes precedence over directory-level", () => {
+    const directory = "/tmp/project"
+    const sessions = [session({ id: "root" })]
+    const autoAccept = {
+      [`${base64Encode(directory)}/*`]: true,
+      [`${base64Encode(directory)}/root`]: false,
+    }
+
+    expect(autoRespondsPermission(autoAccept, sessions, permission("root"), directory)).toBe(false)
+  })
+})
+
+describe("isDirectoryAutoAccepting", () => {
+  test("returns true when directory key is set", () => {
+    const directory = "/tmp/project"
+    const autoAccept = { [`${base64Encode(directory)}/*`]: true }
+    expect(isDirectoryAutoAccepting(autoAccept, directory)).toBe(true)
+  })
+
+  test("returns false when directory key is not set", () => {
+    expect(isDirectoryAutoAccepting({}, "/tmp/project")).toBe(false)
+  })
+
+  test("returns false when directory key is explicitly false", () => {
+    const directory = "/tmp/project"
+    const autoAccept = { [`${base64Encode(directory)}/*`]: false }
+    expect(isDirectoryAutoAccepting(autoAccept, directory)).toBe(false)
   })
 })

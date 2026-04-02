@@ -7,7 +7,7 @@ import config from "../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Go is a low cost **$10/month** subscription that gives you reliable access to popular open coding models.
+OpenCode Go is a low cost subscription — **$5 for your first month**, then **$10/month** — that gives you reliable access to popular open coding models.
 
 :::note
 OpenCode Go is currently in beta.
@@ -43,7 +43,7 @@ To fix this, we did a couple of things:
 3. Finally, we benchmarked the combination of the model/provider and came up
    with a list that we feel good recommending.
 
-OpenCode Go gives you access to these models for **$10/month**.
+OpenCode Go gives you access to these models for **$5 for your first month**, then **$10/month**.
 
 ---
 
@@ -66,6 +66,7 @@ The current list of models includes:
 - **GLM-5**
 - **Kimi K2.5**
 - **MiniMax M2.5**
+- **MiniMax M2.7**
 
 The list of models may change as we test and add new ones.
 
@@ -83,17 +84,17 @@ Limits are defined in dollar value. This means your actual request count depends
 
 The table below provides an estimated request count based on typical Go usage patterns:
 
-|                     | GLM-5 | Kimi K2.5 | MiniMax M2.5 |
-| ------------------- | ----- | --------- | ------------ |
-| requests per 5 hour | 1,150 | 1,850     | 20,000       |
-| requests per week   | 2,880 | 4,630     | 50,000       |
-| requests per month  | 5,750 | 9,250     | 100,000      |
+|                     | GLM-5 | Kimi K2.5 | MiniMax M2.7 | MiniMax M2.5 |
+| ------------------- | ----- | --------- | ------------ | ------------ |
+| requests per 5 hour | 1,150 | 1,850     | 14,000       | 20,000       |
+| requests per week   | 2,880 | 4,630     | 35,000       | 50,000       |
+| requests per month  | 5,750 | 9,250     | 70,000       | 100,000      |
 
 Estimates are based on observed average request patterns:
 
 - GLM-5 — 700 input, 52,000 cached, 150 output tokens per request
 - Kimi K2.5 — 870 input, 55,000 cached, 200 output tokens per request
-- MiniMax M2.5 — 300 input, 55,000 cached, 125 output tokens per request
+- MiniMax M2.7/M2.5 — 300 input, 55,000 cached, 125 output tokens per request
 
 You can track your current usage in the **<a href={console}>console</a>**.
 
@@ -121,6 +122,7 @@ You can also access Go models through the following API endpoints.
 | ------------ | ------------ | ------------------------------------------------ | --------------------------- |
 | GLM-5        | glm-5        | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.5    | kimi-k2.5    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiniMax M2.7 | minimax-m2.7 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5 | minimax-m2.5 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
 The [model id](/docs/config/#models) in your OpenCode config
@@ -131,9 +133,7 @@ use `opencode-go/kimi-k2.5` in your config.
 
 ## Privacy
 
-The plan is designed primarily for international users, with models hosted in the US, EU, and Singapore for stable global access.
-
-<a href={email}>Contact us</a> if you have any questions.
+The plan is designed primarily for international users, with models hosted in the US, EU, and Singapore for stable global access. Our providers follow a zero-retention policy and do not use your data for model training.
 
 ---
 

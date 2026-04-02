@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test"
+import { afterEach, test, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
@@ -11,6 +11,10 @@ import { tmpdir } from "../fixture/fixture"
 // with path.join (which produces \ on Windows) then normalizes back to /.
 // This helper does the same for expected values so assertions match cross-platform.
 const fwd = (...parts: string[]) => path.join(...parts).replaceAll("\\", "/")
+
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 async function bootstrap() {
   return tmpdir({
@@ -177,7 +181,7 @@ test("symlink handling", async () => {
   })
 })
 
-test("large file handling", async () => {
+test("file under size limit handling", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
     directory: tmp.path,
@@ -188,6 +192,23 @@ test("large file handling", async () => {
       await Filesystem.write(`${tmp.path}/large.txt`, "x".repeat(1024 * 1024))
 
       expect((await Snapshot.patch(before!)).files).toContain(fwd(tmp.path, "large.txt"))
+    },
+  })
+})
+
+test("large added files are skipped", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      await Filesystem.write(`${tmp.path}/huge.txt`, new Uint8Array(2 * 1024 * 1024 + 1))
+
+      expect((await Snapshot.patch(before!)).files).toEqual([])
+      expect(await Snapshot.diff(before!)).toBe("")
+      expect(await Snapshot.track()).toBe(before)
     },
   })
 })
@@ -1175,6 +1196,117 @@ test("diffFull with whitespace changes", async () => {
       const whitespaceDiff = diffs[0]
       expect(whitespaceDiff.file).toBe("whitespace.txt")
       expect(whitespaceDiff.additions).toBeGreaterThan(0)
+    },
+  })
+})
+
+test("revert with overlapping files across patches uses first patch hash", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      // Write initial content and snapshot
+      await Filesystem.write(`${tmp.path}/shared.txt`, "v1")
+      const snap1 = await Snapshot.track()
+      expect(snap1).toBeTruthy()
+
+      // Modify and snapshot again
+      await Filesystem.write(`${tmp.path}/shared.txt`, "v2")
+      const snap2 = await Snapshot.track()
+      expect(snap2).toBeTruthy()
+
+      // Modify once more so both patches include shared.txt
+      await Filesystem.write(`${tmp.path}/shared.txt`, "v3")
+
+      const patch1 = await Snapshot.patch(snap1!)
+      const patch2 = await Snapshot.patch(snap2!)
+
+      // Both patches should include shared.txt
+      expect(patch1.files).toContain(fwd(tmp.path, "shared.txt"))
+      expect(patch2.files).toContain(fwd(tmp.path, "shared.txt"))
+
+      // Revert with patch1 first — should use snap1's hash (restoring "v1")
+      await Snapshot.revert([patch1, patch2])
+
+      const content = await fs.readFile(`${tmp.path}/shared.txt`, "utf-8")
+      expect(content).toBe("v1")
+    },
+  })
+})
+
+test("revert preserves patch order when the same hash appears again", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await $`mkdir -p ${tmp.path}/foo`.quiet()
+      await Filesystem.write(`${tmp.path}/foo/bar`, "v1")
+      await Filesystem.write(`${tmp.path}/a.txt`, "v1")
+
+      const snap1 = await Snapshot.track()
+      expect(snap1).toBeTruthy()
+
+      await $`rm -rf ${tmp.path}/foo`.quiet()
+      await Filesystem.write(`${tmp.path}/foo`, "v2")
+      await Filesystem.write(`${tmp.path}/a.txt`, "v2")
+
+      const snap2 = await Snapshot.track()
+      expect(snap2).toBeTruthy()
+
+      await $`rm -rf ${tmp.path}/foo`.quiet()
+      await Filesystem.write(`${tmp.path}/a.txt`, "v3")
+
+      await Snapshot.revert([
+        { hash: snap1!, files: [fwd(tmp.path, "a.txt")] },
+        { hash: snap2!, files: [fwd(tmp.path, "foo")] },
+        { hash: snap1!, files: [fwd(tmp.path, "foo", "bar")] },
+      ])
+
+      expect(await fs.readFile(`${tmp.path}/a.txt`, "utf-8")).toBe("v1")
+      expect((await fs.stat(`${tmp.path}/foo`)).isDirectory()).toBe(true)
+      expect(await fs.readFile(`${tmp.path}/foo/bar`, "utf-8")).toBe("v1")
+    },
+  })
+})
+
+test("revert handles large mixed batches across chunk boundaries", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const base = Array.from({ length: 140 }, (_, i) => fwd(tmp.path, "batch", `${i}.txt`))
+      const fresh = Array.from({ length: 140 }, (_, i) => fwd(tmp.path, "fresh", `${i}.txt`))
+
+      await $`mkdir -p ${tmp.path}/batch ${tmp.path}/fresh`.quiet()
+      await Promise.all(base.map((file, i) => Filesystem.write(file, `base-${i}`)))
+
+      const snap = await Snapshot.track()
+      expect(snap).toBeTruthy()
+
+      await Promise.all(base.map((file, i) => Filesystem.write(file, `next-${i}`)))
+      await Promise.all(fresh.map((file, i) => Filesystem.write(file, `fresh-${i}`)))
+
+      const patch = await Snapshot.patch(snap!)
+      expect(patch.files.length).toBe(base.length + fresh.length)
+
+      await Snapshot.revert([patch])
+
+      await Promise.all(
+        base.map(async (file, i) => {
+          expect(await fs.readFile(file, "utf-8")).toBe(`base-${i}`)
+        }),
+      )
+
+      await Promise.all(
+        fresh.map(async (file) => {
+          expect(
+            await fs
+              .access(file)
+              .then(() => true)
+              .catch(() => false),
+          ).toBe(false)
+        }),
+      )
     },
   })
 })

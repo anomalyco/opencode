@@ -1,5 +1,6 @@
 // @ts-nocheck
-import { createSignal, onCleanup } from "solid-js"
+import { onCleanup } from "solid-js"
+import { createStore } from "solid-js/store"
 import { TextReveal } from "./text-reveal"
 
 export default {
@@ -87,33 +88,42 @@ const headingSlot = {
 
 export const Playground = {
   render: () => {
-    const [index, setIndex] = createSignal(0)
-    const [cycling, setCycling] = createSignal(false)
-    const [growOnly, setGrowOnly] = createSignal(true)
-
-    const [duration, setDuration] = createSignal(600)
-    const [bounce, setBounce] = createSignal(1.0)
-    const [bounceSoft, setBounceSoft] = createSignal(1.0)
-
-    const [hybridTravel, setHybridTravel] = createSignal(25)
-    const [hybridEdge, setHybridEdge] = createSignal(17)
-
-    const [edge, setEdge] = createSignal(17)
-    const [revealTravel, setRevealTravel] = createSignal(0)
+    const [state, setState] = createStore({
+      index: 0,
+      cycling: false,
+      growOnly: true,
+      duration: 600,
+      bounce: 1.0,
+      bounceSoft: 1.0,
+      hybridTravel: 25,
+      hybridEdge: 17,
+      edge: 17,
+      revealTravel: 0,
+    })
+    const index = () => state.index
+    const cycling = () => state.cycling
+    const growOnly = () => state.growOnly
+    const duration = () => state.duration
+    const bounce = () => state.bounce
+    const bounceSoft = () => state.bounceSoft
+    const hybridTravel = () => state.hybridTravel
+    const hybridEdge = () => state.hybridEdge
+    const edge = () => state.edge
+    const revealTravel = () => state.revealTravel
 
     let timer: number | undefined
     const text = () => TEXTS[index()]
-    const next = () => setIndex((i) => (i + 1) % TEXTS.length)
-    const prev = () => setIndex((i) => (i - 1 + TEXTS.length) % TEXTS.length)
+    const next = () => setState("index", (value) => (value + 1) % TEXTS.length)
+    const prev = () => setState("index", (value) => (value - 1 + TEXTS.length) % TEXTS.length)
 
     const toggleCycle = () => {
       if (cycling()) {
         if (timer) clearTimeout(timer)
         timer = undefined
-        setCycling(false)
+        setState("cycling", false)
         return
       }
-      setCycling(true)
+      setState("cycling", true)
       const tick = () => {
         next()
         timer = window.setTimeout(tick, 700 + Math.floor(Math.random() * 600))
@@ -172,7 +182,7 @@ export const Playground = {
 
         <div style={{ display: "flex", gap: "6px", "flex-wrap": "wrap" }}>
           {TEXTS.map((t, i) => (
-            <button onClick={() => setIndex(i)} style={btn(index() === i)}>
+            <button onClick={() => setState("index", i)} style={btn(index() === i)}>
               {t ?? "(none)"}
             </button>
           ))}
@@ -188,7 +198,7 @@ export const Playground = {
           <button onClick={toggleCycle} style={btn(cycling())}>
             {cycling() ? "Stop cycle" : "Auto cycle"}
           </button>
-          <button onClick={() => setGrowOnly((v) => !v)} style={btn(growOnly())}>
+          <button onClick={() => setState("growOnly", (value) => !value)} style={btn(growOnly())}>
             {growOnly() ? "growOnly: on" : "growOnly: off"}
           </button>
         </div>
@@ -204,7 +214,7 @@ export const Playground = {
               max="40"
               step="1"
               value={hybridEdge()}
-              onInput={(e) => setHybridEdge(e.currentTarget.valueAsNumber)}
+              onInput={(e) => setState("hybridEdge", e.currentTarget.valueAsNumber)}
               style={{ flex: 1 }}
             />
             <span style={{ width: "60px", "text-align": "right", "font-size": "12px" }}>{hybridEdge()}%</span>
@@ -218,7 +228,7 @@ export const Playground = {
               max="40"
               step="1"
               value={hybridTravel()}
-              onInput={(e) => setHybridTravel(e.currentTarget.valueAsNumber)}
+              onInput={(e) => setState("hybridTravel", e.currentTarget.valueAsNumber)}
               style={{ flex: 1 }}
             />
             <span style={{ width: "60px", "text-align": "right", "font-size": "12px" }}>{hybridTravel()}px</span>
@@ -234,7 +244,7 @@ export const Playground = {
               max="1400"
               step="10"
               value={duration()}
-              onInput={(e) => setDuration(e.currentTarget.valueAsNumber)}
+              onInput={(e) => setState("duration", e.currentTarget.valueAsNumber)}
               style={{ flex: 1 }}
             />
             <span style={{ width: "60px", "text-align": "right", "font-size": "12px" }}>{duration()}ms</span>
@@ -248,7 +258,7 @@ export const Playground = {
               max="2"
               step="0.01"
               value={bounce()}
-              onInput={(e) => setBounce(e.currentTarget.valueAsNumber)}
+              onInput={(e) => setState("bounce", e.currentTarget.valueAsNumber)}
               style={{ flex: 1 }}
             />
             <span style={{ width: "60px", "text-align": "right", "font-size": "12px" }}>{bounce().toFixed(2)}</span>
@@ -262,7 +272,7 @@ export const Playground = {
               max="1.5"
               step="0.01"
               value={bounceSoft()}
-              onInput={(e) => setBounceSoft(e.currentTarget.valueAsNumber)}
+              onInput={(e) => setState("bounceSoft", e.currentTarget.valueAsNumber)}
               style={{ flex: 1 }}
             />
             <span style={{ width: "60px", "text-align": "right", "font-size": "12px" }}>{bounceSoft().toFixed(2)}</span>
@@ -280,7 +290,7 @@ export const Playground = {
               max="40"
               step="1"
               value={edge()}
-              onInput={(e) => setEdge(e.currentTarget.valueAsNumber)}
+              onInput={(e) => setState("edge", e.currentTarget.valueAsNumber)}
               style={{ flex: 1 }}
             />
             <span style={{ width: "60px", "text-align": "right", "font-size": "12px" }}>{edge()}%</span>
@@ -294,7 +304,7 @@ export const Playground = {
               max="16"
               step="1"
               value={revealTravel()}
-              onInput={(e) => setRevealTravel(e.currentTarget.valueAsNumber)}
+              onInput={(e) => setState("revealTravel", e.currentTarget.valueAsNumber)}
               style={{ flex: 1 }}
             />
             <span style={{ width: "60px", "text-align": "right", "font-size": "12px" }}>{revealTravel()}px</span>

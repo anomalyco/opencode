@@ -30,19 +30,14 @@ export interface SessionReviewTabProps {
   onFocusedCommentChange?: (focus: { file: string; id: string } | null) => void
   focusedFile?: string
   onScrollRef?: (el: HTMLDivElement) => void
+  commentMentions?: {
+    items: (query: string) => string[] | Promise<string[]>
+  }
   classes?: {
     root?: string
     header?: string
     container?: string
   }
-}
-
-export function StickyAddButton(props: { children: JSX.Element }) {
-  return (
-    <div class="bg-background-stronger h-full shrink-0 sticky right-0 z-10 flex items-center justify-center pr-3">
-      {props.children}
-    </div>
-  )
 }
 
 export function SessionReviewTab(props: SessionReviewTabProps) {
@@ -170,6 +165,7 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
       onLineCommentUpdate={props.onLineCommentUpdate}
       onLineCommentDelete={props.onLineCommentDelete}
       lineCommentActions={props.lineCommentActions}
+      lineCommentMention={props.commentMentions}
       comments={props.comments}
       focusedComment={props.focusedComment}
       onFocusedCommentChange={props.onFocusedCommentChange}

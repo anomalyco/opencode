@@ -3,7 +3,8 @@ import { hideBin } from "yargs/helpers"
 import { RunCommand } from "./cli/cmd/run"
 import { GenerateCommand } from "./cli/cmd/generate"
 import { Log } from "./util/log"
-import { AuthCommand } from "./cli/cmd/auth"
+import { ConsoleCommand } from "./cli/cmd/account"
+import { ProvidersCommand } from "./cli/cmd/providers"
 import { AgentCommand } from "./cli/cmd/agent"
 import { UpgradeCommand } from "./cli/cmd/upgrade"
 import { UninstallCommand } from "./cli/cmd/uninstall"
@@ -13,7 +14,6 @@ import { Installation } from "./installation"
 import { NamedError } from "@opencode-ai/util/error"
 import { FormatError } from "./cli/error"
 import { ServeCommand } from "./cli/cmd/serve"
-import { WorkspaceServeCommand } from "./cli/cmd/workspace-serve"
 import { Filesystem } from "./util/filesystem"
 import { DebugCommand } from "./cli/cmd/debug"
 import { StatsCommand } from "./cli/cmd/stats"
@@ -33,20 +33,22 @@ import path from "path"
 import { Global } from "./global"
 import { JsonMigration } from "./storage/json-migration"
 import { Database } from "./storage/db"
+import { errorMessage } from "./util/error"
+import { PluginCommand } from "./cli/cmd/plug"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
-    e: e instanceof Error ? e.message : e,
+    e: errorMessage(e),
   })
 })
 
 process.on("uncaughtException", (e) => {
   Log.Default.error("exception", {
-    e: e instanceof Error ? e.message : e,
+    e: errorMessage(e),
   })
 })
 
-let cli = yargs(hideBin(process.argv))
+const cli = yargs(hideBin(process.argv))
   .parserConfiguration({ "populate--": true })
   .scriptName("opencode")
   .wrap(100)
@@ -63,7 +65,15 @@ let cli = yargs(hideBin(process.argv))
     type: "string",
     choices: ["DEBUG", "INFO", "WARN", "ERROR"],
   })
+  .option("pure", {
+    describe: "run without external plugins",
+    type: "boolean",
+  })
   .middleware(async (opts) => {
+    if (opts.pure) {
+      process.env.OPENCODE_PURE = "1"
+    }
+
     await Log.init({
       print: process.argv.includes("--print-logs"),
       dev: Installation.isLocal(),
@@ -129,7 +139,8 @@ let cli = yargs(hideBin(process.argv))
   .command(RunCommand)
   .command(GenerateCommand)
   .command(DebugCommand)
-  .command(AuthCommand)
+  .command(ConsoleCommand)
+  .command(ProvidersCommand)
   .command(AgentCommand)
   .command(UpgradeCommand)
   .command(UninstallCommand)
@@ -142,13 +153,8 @@ let cli = yargs(hideBin(process.argv))
   .command(GithubCommand)
   .command(PrCommand)
   .command(SessionCommand)
+  .command(PluginCommand)
   .command(DbCommand)
-
-if (Installation.isLocal()) {
-  cli = cli.command(WorkspaceServeCommand)
-}
-
-cli = cli
   .fail((msg, err) => {
     if (
       msg?.startsWith("Unknown argument") ||
@@ -199,7 +205,7 @@ try {
   if (formatted) UI.error(formatted)
   if (formatted === undefined) {
     UI.error("Unexpected error, check log file at " + Log.file() + " for more details" + EOL)
-    process.stderr.write((e instanceof Error ? e.message : String(e)) + EOL)
+    process.stderr.write(errorMessage(e) + EOL)
   }
   process.exitCode = 1
 } finally {
