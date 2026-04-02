@@ -27,6 +27,7 @@ export namespace ZenData {
     byokProvider: z.enum(["openai", "anthropic", "google"]).optional(),
     stickyProvider: z.enum(["strict", "prefer"]).optional(),
     trialProviders: z.array(z.string()).optional(),
+    trialEnded: z.boolean().optional(),
     fallbackProvider: z.string().optional(),
     rateLimit: z.number().optional(),
     providers: z.array(

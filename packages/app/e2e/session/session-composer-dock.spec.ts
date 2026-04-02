@@ -14,6 +14,7 @@ import {
   sessionTodoToggleButtonSelector,
 } from "../selectors"
 import { modKey } from "../utils"
+import { inputMatch } from "../prompt/mock"
 
 type Sdk = Parameters<typeof clearSessionDockSeed>[0]
 type PermissionRule = { permission: string; pattern: string; action: "allow" | "deny" | "ask" }
@@ -35,6 +36,17 @@ async function withDockSession<T>(
     await cleanupSession({ sdk, sessionID: session.id })
   }
 }
+
+const defaultQuestions = [
+  {
+    header: "Need input",
+    question: "Pick one option",
+    options: [
+      { label: "Continue", description: "Continue now" },
+      { label: "Stop", description: "Stop here" },
+    ],
+  },
+]
 
 test.setTimeout(120_000)
 
@@ -291,8 +303,8 @@ test("auto-accept toggle works before first submit", async ({ page, withBackendP
   })
 })
 
-test("blocked question flow unblocks after submit", async ({ page, withBackendProject }) => {
-  await withBackendProject(async (project) => {
+test("blocked question flow unblocks after submit", async ({ page, llm, withMockProject }) => {
+  await withMockProject(async (project) => {
     await withDockSession(
       project.sdk,
       "e2e composer dock question",
@@ -300,18 +312,10 @@ test("blocked question flow unblocks after submit", async ({ page, withBackendPr
         await withDockSeed(project.sdk, session.id, async () => {
           await project.gotoSession(session.id)
 
+          await llm.toolMatch(inputMatch({ questions: defaultQuestions }), "question", { questions: defaultQuestions })
           await seedSessionQuestion(project.sdk, {
             sessionID: session.id,
-            questions: [
-              {
-                header: "Need input",
-                question: "Pick one option",
-                options: [
-                  { label: "Continue", description: "Continue now" },
-                  { label: "Stop", description: "Stop here" },
-                ],
-              },
-            ],
+            questions: defaultQuestions,
           })
 
           const dock = page.locator(questionDockSelector)
@@ -328,8 +332,8 @@ test("blocked question flow unblocks after submit", async ({ page, withBackendPr
   })
 })
 
-test("blocked question flow supports keyboard shortcuts", async ({ page, withBackendProject }) => {
-  await withBackendProject(async (project) => {
+test("blocked question flow supports keyboard shortcuts", async ({ page, llm, withMockProject }) => {
+  await withMockProject(async (project) => {
     await withDockSession(
       project.sdk,
       "e2e composer dock question keyboard",
@@ -337,18 +341,10 @@ test("blocked question flow supports keyboard shortcuts", async ({ page, withBac
         await withDockSeed(project.sdk, session.id, async () => {
           await project.gotoSession(session.id)
 
+          await llm.toolMatch(inputMatch({ questions: defaultQuestions }), "question", { questions: defaultQuestions })
           await seedSessionQuestion(project.sdk, {
             sessionID: session.id,
-            questions: [
-              {
-                header: "Need input",
-                question: "Pick one option",
-                options: [
-                  { label: "Continue", description: "Continue now" },
-                  { label: "Stop", description: "Stop here" },
-                ],
-              },
-            ],
+            questions: defaultQuestions,
           })
 
           const dock = page.locator(questionDockSelector)
@@ -371,8 +367,8 @@ test("blocked question flow supports keyboard shortcuts", async ({ page, withBac
   })
 })
 
-test("blocked question flow supports escape dismiss", async ({ page, withBackendProject }) => {
-  await withBackendProject(async (project) => {
+test("blocked question flow supports escape dismiss", async ({ page, llm, withMockProject }) => {
+  await withMockProject(async (project) => {
     await withDockSession(
       project.sdk,
       "e2e composer dock question escape",
@@ -380,18 +376,10 @@ test("blocked question flow supports escape dismiss", async ({ page, withBackend
         await withDockSeed(project.sdk, session.id, async () => {
           await project.gotoSession(session.id)
 
+          await llm.toolMatch(inputMatch({ questions: defaultQuestions }), "question", { questions: defaultQuestions })
           await seedSessionQuestion(project.sdk, {
             sessionID: session.id,
-            questions: [
-              {
-                header: "Need input",
-                question: "Pick one option",
-                options: [
-                  { label: "Continue", description: "Continue now" },
-                  { label: "Stop", description: "Stop here" },
-                ],
-              },
-            ],
+            questions: defaultQuestions,
           })
 
           const dock = page.locator(questionDockSelector)
@@ -512,9 +500,20 @@ test("blocked permission flow supports allow always", async ({ page, withBackend
 
 test("child session question request blocks parent dock and unblocks after submit", async ({
   page,
-  withBackendProject,
+  llm,
+  withMockProject,
 }) => {
-  await withBackendProject(async (project) => {
+  const questions = [
+    {
+      header: "Child input",
+      question: "Pick one child option",
+      options: [
+        { label: "Continue", description: "Continue child" },
+        { label: "Stop", description: "Stop child" },
+      ],
+    },
+  ]
+  await withMockProject(async (project) => {
     await withDockSession(
       project.sdk,
       "e2e composer dock child question parent",
@@ -532,18 +531,10 @@ test("child session question request blocks parent dock and unblocks after submi
 
         try {
           await withDockSeed(project.sdk, child.id, async () => {
+            await llm.toolMatch(inputMatch({ questions }), "question", { questions })
             await seedSessionQuestion(project.sdk, {
               sessionID: child.id,
-              questions: [
-                {
-                  header: "Child input",
-                  question: "Pick one child option",
-                  options: [
-                    { label: "Continue", description: "Continue child" },
-                    { label: "Stop", description: "Stop child" },
-                  ],
-                },
-              ],
+              questions,
             })
 
             const dock = page.locator(questionDockSelector)
@@ -652,8 +643,15 @@ test("todo dock transitions and collapse behavior", async ({ page, withBackendPr
   })
 })
 
-test("keyboard focus stays off prompt while blocked", async ({ page, withBackendProject }) => {
-  await withBackendProject(async (project) => {
+test("keyboard focus stays off prompt while blocked", async ({ page, llm, withMockProject }) => {
+  const questions = [
+    {
+      header: "Need input",
+      question: "Pick one option",
+      options: [{ label: "Continue", description: "Continue now" }],
+    },
+  ]
+  await withMockProject(async (project) => {
     await withDockSession(
       project.sdk,
       "e2e composer dock keyboard",
@@ -661,15 +659,10 @@ test("keyboard focus stays off prompt while blocked", async ({ page, withBackend
         await withDockSeed(project.sdk, session.id, async () => {
           await project.gotoSession(session.id)
 
+          await llm.toolMatch(inputMatch({ questions }), "question", { questions })
           await seedSessionQuestion(project.sdk, {
             sessionID: session.id,
-            questions: [
-              {
-                header: "Need input",
-                question: "Pick one option",
-                options: [{ label: "Continue", description: "Continue now" }],
-              },
-            ],
+            questions,
           })
 
           await expectQuestionBlocked(page)

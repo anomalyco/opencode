@@ -10,6 +10,7 @@ import {
   waitSession,
   waitSessionSaved,
   waitSlug,
+  withNoReplyPrompt,
 } from "../actions"
 import { projectSwitchSelector, promptSelector, workspaceItemSelector, workspaceNewSessionSelector } from "../selectors"
 import { dirSlug, resolveDirectory } from "../utils"
@@ -81,8 +82,10 @@ test("switching back to a project opens the latest workspace session", async ({ 
         // Create a session by sending a prompt
         const prompt = page.locator(promptSelector)
         await expect(prompt).toBeVisible()
-        await prompt.fill("test")
-        await page.keyboard.press("Enter")
+        await withNoReplyPrompt(page, async () => {
+          await prompt.fill("test")
+          await page.keyboard.press("Enter")
+        })
 
         // Wait for the URL to update with the new session ID
         await expect.poll(() => sessionIDFromUrl(page.url()) ?? "", { timeout: 15_000 }).not.toBe("")
