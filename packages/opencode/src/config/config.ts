@@ -1064,6 +1064,24 @@ export namespace Config {
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Config") {}
 
+  async function localConfigFile(directory: string, worktree: string) {
+    for await (const file of Filesystem.up({
+      targets: [".opencode/opencode.jsonc", ".opencode/opencode.json", "opencode.jsonc", "opencode.json"],
+      start: directory,
+      stop: worktree,
+    })) {
+      return file
+    }
+
+    if (Flag.OPENCODE_CONFIG_DIR) {
+      for (const file of ConfigPaths.fileInDirectory(Flag.OPENCODE_CONFIG_DIR, "opencode")) {
+        if (existsSync(file)) return file
+      }
+    }
+
+    return path.join(directory, "opencode.json")
+  }
+
   function globalConfigFile() {
     const candidates = ["opencode.jsonc", "opencode.json", "config.json"].map((file) =>
       path.join(Global.Path.config, file),
@@ -1478,12 +1496,21 @@ export namespace Config {
         })
 
         const update = Effect.fn("Config.update")(function* (config: Info) {
-          const dir = yield* InstanceState.directory
-          const file = path.join(dir, "config.json")
-          const existing = yield* loadFile(file)
-          yield* fs
-            .writeFileString(file, JSON.stringify(mergeDeep(writable(existing), writable(config)), null, 2))
-            .pipe(Effect.orDie)
+          const { directory: dir, worktree } = yield* InstanceState.context
+          const file = yield* Effect.promise(() => localConfigFile(dir, worktree))
+          const before = (yield* readConfigFile(file)) ?? "{}"
+          const input = writable(config)
+
+          if (!file.endsWith(".jsonc")) {
+            const existing = parseConfig(before, file)
+            const merged = mergeDeep(writable(existing), input)
+            yield* fs.writeFileString(file, JSON.stringify(merged, null, 2)).pipe(Effect.orDie)
+            yield* Effect.promise(() => Instance.dispose())
+            return
+          }
+
+          const updated = patchJsonc(before, input)
+          yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
           yield* Effect.promise(() => Instance.dispose())
         })
 
