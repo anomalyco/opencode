@@ -335,8 +335,7 @@ export const dict = {
   "go.faq.a4.p3": "いつでもキャンセル可能です。",
   "go.faq.q5": "データとプライバシーは？",
   "go.faq.a5.body":
-    "このプランは主に海外ユーザー向けに設計されており、米国、EU、シンガポールでホストされたモデルにより安定したグローバルアクセスを提供します。",
-  "go.faq.a5.contactAfter": "ご質問がございましたら。",
+    "このプランは主に海外ユーザー向けに設計されており、米国、EU、シンガポールでホストされたモデルにより安定したグローバルアクセスを提供します。プロバイダーはゼロ保持ポリシーに従い、お客様のデータをモデルのトレーニングに使用しません。",
   "go.faq.a5.beforeExceptions":
     "Goのモデルは米国でホストされています。プロバイダーはゼロ保持ポリシーに従い、モデルのトレーニングにデータを使用しません（",
   "go.faq.a5.exceptionsLink": "以下の例外",
@@ -370,6 +369,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "月額の利用上限 ${{amount}} に達しました。こちらから上限を管理してください: {{membersUrl}}",
   "zen.api.error.modelDisabled": "モデルが無効です",
+  "zen.api.error.trialEnded":
+    "{{model}} の無料プロモーションは終了しました。OpenCode Go を購読するとモデルを引き続き使用できます - {{link}}",
 
   "black.meta.title": "OpenCode Black | 世界最高峰のコーディングモデルすべてにアクセス",
   "black.meta.description": "OpenCode Black サブスクリプションプランで、Claude、GPT、Gemini などにアクセス。",

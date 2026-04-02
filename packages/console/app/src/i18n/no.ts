@@ -335,8 +335,7 @@ export const dict = {
   "go.faq.a4.p3": "Avslutt når som helst.",
   "go.faq.q5": "Hva med data og personvern?",
   "go.faq.a5.body":
-    "Planen er primært designet for internasjonale brukere, med modeller driftet i USA, EU og Singapore for stabil global tilgang.",
-  "go.faq.a5.contactAfter": "hvis du har spørsmål.",
+    "Planen er primært designet for internasjonale brukere, med modeller driftet i USA, EU og Singapore for stabil global tilgang. Våre leverandører følger en policy om null oppbevaring og bruker ikke dataene dine til modelltrening.",
   "go.faq.a5.beforeExceptions":
     "Go-modeller hostes i USA. Leverandører følger en policy om null oppbevaring og bruker ikke dataene dine til modelltrening, med",
   "go.faq.a5.exceptionsLink": "følgende unntak",
@@ -369,6 +368,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "Du har nådd din månedlige utgiftsgrense på ${{amount}}. Administrer grensene dine her: {{membersUrl}}",
   "zen.api.error.modelDisabled": "Modellen er deaktivert",
+  "zen.api.error.trialEnded":
+    "Den gratis kampanjen for {{model}} er avsluttet. Du kan fortsette å bruke modellen ved å abonnere på OpenCode Go - {{link}}",
 
   "black.meta.title": "OpenCode Black | Få tilgang til verdens beste kodemodeller",
   "black.meta.description": "Få tilgang til Claude, GPT, Gemini og mer med OpenCode Black-abonnementer.",

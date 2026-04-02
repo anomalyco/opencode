@@ -331,8 +331,8 @@ export const dict = {
   "go.faq.a4.p3": "Cancel any time.",
   "go.faq.q5": "What about data and privacy?",
   "go.faq.a5.body":
-    "The plan is designed primarily for international users, with models hosted in the US, EU, and Singapore for stable global access.",
-  "go.faq.a5.contactAfter": "if you have any questions.",
+    "The plan is designed primarily for international users, with models hosted in the US, EU, and Singapore for stable global access. Our providers follow a zero-retention policy and do not use your data for model training.",
+
   "go.faq.a5.beforeExceptions":
     "Go models are hosted in the US. Providers follow a zero-retention policy and do not use your data for model training, with the",
   "go.faq.a5.exceptionsLink": "following exceptions",
@@ -364,6 +364,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "You have reached your monthly spending limit of ${{amount}}. Manage your limits here: {{membersUrl}}",
   "zen.api.error.modelDisabled": "Model is disabled",
+  "zen.api.error.trialEnded":
+    "Free promotion has ended for {{model}}. You can continue using the model by subscribing to OpenCode Go - {{link}}",
 
   "black.meta.title": "OpenCode Black | Access all the world's best coding models",
   "black.meta.description": "Get access to Claude, GPT, Gemini and more with OpenCode Black subscription plans.",
