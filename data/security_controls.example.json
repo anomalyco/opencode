@@ -1,0 +1,26 @@
+[
+  {
+    "id": "ISO-AC-01",
+    "title": "Access control policy",
+    "text": "Define and enforce least-privilege access controls for users, services, and automation credentials.",
+    "tags": ["access", "iam", "least-privilege"]
+  },
+  {
+    "id": "ISO-CM-02",
+    "title": "Secure configuration baseline",
+    "text": "Maintain and review secure configuration baselines for infrastructure and application components.",
+    "tags": ["configuration", "hardening", "baseline"]
+  },
+  {
+    "id": "ISO-LOG-03",
+    "title": "Audit logging and monitoring",
+    "text": "Enable tamper-evident logging for security-relevant events and monitor anomalies continuously.",
+    "tags": ["logging", "monitoring", "detection"]
+  },
+  {
+    "id": "ISO-NET-04",
+    "title": "Network segmentation",
+    "text": "Segment networks by trust boundary and restrict traffic between segments to required flows only.",
+    "tags": ["network", "segmentation", "boundary"]
+  }
+]

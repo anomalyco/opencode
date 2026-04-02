@@ -116,6 +116,63 @@ Learn more about [agents](https://opencode.ai/docs/agents).
 
 For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
 
+### Security Audit Research Prototype
+
+OpenCode includes an experimental local security-audit workflow with three modes:
+
+- `direct` - plain single-pass prompt with file content (no retrieval, minimal flow)
+- `baseline` - standard OpenCode agentic session behavior (no retrieval)
+- `rag` - OpenCode behavior plus local control retrieval from a JSON corpus
+
+Run from your project:
+
+```bash
+opencode analyze --file sample.yaml --mode rag --controls data/security_controls.json --topk 3
+```
+
+Available flags:
+
+- `--file` input file to audit (required)
+- `--mode` one of `direct|baseline|rag` (default `baseline`)
+- `--controls` controls corpus path for RAG (default `data/security_controls.json`)
+- `--topk` number of controls to retrieve (default `3`)
+- `--out` output directory for experiment logs (default `outputs/runs`)
+- `--prompt`, `--model`, `--agent`, `--session` for optional control
+
+API support is also available on the session router:
+
+- `POST /session/:sessionID/analyze`
+
+Expected body:
+
+```json
+{
+  "file": "sample.yaml",
+  "mode": "rag",
+  "controls": "data/security_controls.json",
+  "topk": 3
+}
+```
+
+Each run writes reproducible artifacts under `outputs/runs/<timestamp>_<mode>_<filename>/`:
+
+- `input.txt`
+- `retrieved_controls.json`
+- `report.md`
+- `verification.json`
+- `verification_summary.txt`
+- `metadata.json`
+- `manual_score.json`
+
+Verification is heuristic (not formal security correctness). It checks:
+
+- report structure completeness
+- finding evidence presence
+- control grounding plausibility in `rag` mode
+- basic consistency and generic/empty output detection
+
+Use `data/security_controls.example.json` as a starter corpus template.
+
 ### Contributing
 
 If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.

@@ -21,6 +21,8 @@ import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { Bus } from "../../bus"
 import { NamedError } from "@opencode-ai/util/error"
+import { analyze } from "@/security/analyze"
+import { SecurityMode } from "@/security/schema"
 
 const log = Log.create({ service: "server" })
 
@@ -778,6 +780,83 @@ export const SessionRoutes = lazy(() =>
         }
         const part = await Session.updatePart(body)
         return c.json(part)
+      },
+    )
+    .post(
+      "/:sessionID/analyze",
+      describeRoute({
+        summary: "Analyze file for security audit",
+        description: "Run direct, baseline, or rag security audit analysis and return structured report artifacts.",
+        operationId: "session.analyze",
+        responses: {
+          200: {
+            description: "Security analysis result",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    mode: SecurityMode,
+                    sessionID: z.string(),
+                    prompt: z.string(),
+                    report: z.string(),
+                    retrieved_controls: z.array(
+                      z.object({
+                        id: z.string(),
+                        title: z.string(),
+                        text: z.string(),
+                        tags: z.array(z.string()).optional(),
+                        score: z.number(),
+                      }),
+                    ),
+                    verification: z.object({
+                      passed: z.boolean(),
+                      checks: z.array(
+                        z.object({
+                          name: z.string(),
+                          passed: z.boolean(),
+                          detail: z.string(),
+                        }),
+                      ),
+                      warnings: z.array(z.string()),
+                      score: z.number(),
+                    }),
+                    run_dir: z.string(),
+                    metadata: z.record(z.string(), z.any()),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      validator(
+        "json",
+        z.object({
+          file: z.string(),
+          mode: SecurityMode.default("baseline"),
+          controls: z.string().optional(),
+          topk: z.coerce.number().int().positive().default(3),
+          out: z.string().optional(),
+          prompt: z.string().optional(),
+          model: z.string().optional(),
+          agent: z.string().optional(),
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const body = c.req.valid("json")
+        const result = await analyze({
+          ...body,
+          sessionID,
+        })
+        return c.json(result)
       },
     )
     .post(
