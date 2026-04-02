@@ -3,7 +3,6 @@ import { expect, spyOn } from "bun:test"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import path from "path"
 import z from "zod"
-import type { Agent } from "../../src/agent/agent"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { Bus } from "../../src/bus"
 import { Command } from "../../src/command"
@@ -36,7 +35,7 @@ import { Log } from "../../src/util/log"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { provideTmpdirInstance, provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-import { TestLLMServer } from "../lib/llm-server"
+import { reply, TestLLMServer } from "../lib/llm-server"
 
 Log.init({ print: false })
 
@@ -516,6 +515,36 @@ it.live("loop continues when finish is tool-calls", () =>
   ),
 )
 
+it.live("loop continues when finish is stop but assistant has tool parts", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({
+        title: "Pinned",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+      yield* llm.push(reply().tool("first", { value: "first" }).stop())
+      yield* llm.text("second")
+
+      const result = yield* prompt.loop({ sessionID: session.id })
+      expect(yield* llm.calls).toBe(2)
+      expect(result.info.role).toBe("assistant")
+      if (result.info.role === "assistant") {
+        expect(result.parts.some((part) => part.type === "text" && part.text === "second")).toBe(true)
+        expect(result.info.finish).toBe("stop")
+      }
+    }),
+    { git: true, config: providerCfg },
+  ),
+)
+
 it.live("loop auto-compacts through prompt flow and skips unsupported restored attachments", () =>
   provideTmpdirServer(
     Effect.fnUntraced(function* ({ llm }) {
@@ -557,7 +586,7 @@ it.live("loop auto-compacts through prompt flow and skips unsupported restored a
 
       const inputs = yield* llm.inputs
       expect(inputs).toHaveLength(3)
-      expect(JSON.stringify(inputs[1]?.messages)).toContain("Summarize the conversation")
+      expect(JSON.stringify(inputs[1]?.messages)).toContain("Provide a detailed prompt for continuing our conversation")
       expect(JSON.stringify(inputs[1]?.messages)).toContain("sensitive-old-tool-output")
       expect(JSON.stringify(inputs[2]?.messages)).toContain("compact summary")
       expect(JSON.stringify(inputs[2]?.messages)).not.toContain("note.json")

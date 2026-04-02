@@ -18,6 +18,9 @@ const truncate = Layer.effectDiscard(
 
 const it = testEffect(Layer.merge(AccountRepo.layer, truncate))
 
+const insideEagerRefreshWindow = Duration.toMillis(Duration.minutes(1))
+const outsideEagerRefreshWindow = Duration.toMillis(Duration.minutes(10))
+
 const live = (client: HttpClient.HttpClient) =>
   Account.layer.pipe(Layer.provide(Layer.succeed(HttpClient.HttpClient, client)))
 
@@ -63,7 +66,7 @@ it.live("orgsByAccount groups orgs per account", () =>
         url: "https://one.example.com",
         accessToken: AccessToken.make("at_1"),
         refreshToken: RefreshToken.make("rt_1"),
-        expiry: Date.now() + 10 * 60_000,
+        expiry: Date.now() + outsideEagerRefreshWindow,
         orgID: Option.none(),
       }),
     )
@@ -75,7 +78,7 @@ it.live("orgsByAccount groups orgs per account", () =>
         url: "https://two.example.com",
         accessToken: AccessToken.make("at_2"),
         refreshToken: RefreshToken.make("rt_2"),
-        expiry: Date.now() + 10 * 60_000,
+        expiry: Date.now() + outsideEagerRefreshWindow,
         orgID: Option.none(),
       }),
     )
@@ -159,7 +162,7 @@ it.live("token refreshes before expiry when inside the eager refresh window", ()
         url: "https://one.example.com",
         accessToken: AccessToken.make("at_old"),
         refreshToken: RefreshToken.make("rt_old"),
-        expiry: Date.now() + 60_000,
+        expiry: Date.now() + insideEagerRefreshWindow,
         orgID: Option.none(),
       }),
     )
@@ -267,7 +270,7 @@ it.live("config sends the selected org header", () =>
         url: "https://one.example.com",
         accessToken: AccessToken.make("at_1"),
         refreshToken: RefreshToken.make("rt_1"),
-        expiry: Date.now() + 10 * 60_000,
+        expiry: Date.now() + outsideEagerRefreshWindow,
         orgID: Option.none(),
       }),
     )
