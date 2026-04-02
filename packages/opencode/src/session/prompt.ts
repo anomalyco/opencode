@@ -15,7 +15,7 @@ import { Instance } from "../project/instance"
 import { Bus } from "../bus"
 import { ProviderTransform } from "../provider/transform"
 import { SystemPrompt } from "./system"
-import { InstructionPrompt } from "./instruction"
+import { Instruction } from "./instruction"
 import { Plugin } from "../plugin"
 import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
@@ -979,7 +979,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           variant,
         }
 
-        yield* Effect.addFinalizer(() => InstanceState.withALS(() => InstructionPrompt.clear(info.id)))
+        yield* Effect.addFinalizer(() => InstanceState.withALS(() => Instruction.clear(info.id)))
 
         type Draft<T> = T extends MessageV2.Part ? Omit<T, "id"> & { id?: string } : never
         const assign = (part: Draft<MessageV2.Part>): MessageV2.Part => ({
@@ -1490,7 +1490,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   Promise.all([
                     SystemPrompt.skills(agent),
                     SystemPrompt.environment(model),
-                    InstructionPrompt.system(),
+                    Instruction.system(),
                     MessageV2.toModelMessages(msgs, model),
                   ]),
                 )
@@ -1542,7 +1542,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               }),
               Effect.fnUntraced(function* (exit) {
                 if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) yield* handle.abort()
-                yield* InstanceState.withALS(() => InstructionPrompt.clear(handle.message.id))
+                yield* InstanceState.withALS(() => Instruction.clear(handle.message.id))
               }),
             )
             if (outcome === "break") break
