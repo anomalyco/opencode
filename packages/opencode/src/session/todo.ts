@@ -40,8 +40,6 @@ export namespace Todo {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const bus = yield* Bus.Service
-
       const list = Effect.fnUntraced(function* (sessionID: SessionID) {
         const rows = yield* db((db) =>
           db.select().from(TodoTable).where(eq(TodoTable.session_id, sessionID)).orderBy(asc(TodoTable.position)).all(),
@@ -71,7 +69,9 @@ export namespace Todo {
               .run()
           }),
         )
-        yield* bus.publish(Event.Updated, input).pipe(Effect.forkDaemon)
+        yield* Effect.sync(() => {
+          void Bus.publish(Event.Updated, input)
+        })
       })
 
       const get = Effect.fn("Todo.get")(function* (sessionID: SessionID) {
@@ -82,9 +82,7 @@ export namespace Todo {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
+  const { runPromise } = makeRuntime(Service, layer)
 
   export async function update(input: { sessionID: SessionID; todos: Info[] }) {
     return runPromise((svc) => svc.update(input))
