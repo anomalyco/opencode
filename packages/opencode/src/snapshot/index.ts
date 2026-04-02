@@ -101,7 +101,10 @@ export namespace Snapshot {
               })
               const handle = yield* spawner.spawn(proc)
               const [text, stderr] = yield* Effect.all(
-                [Stream.mkString(Stream.decodeText(handle.stdout)), Stream.mkString(Stream.decodeText(handle.stderr))],
+                [
+                  Stream.mkString(Stream.decodeText(handle.stdout)),
+                  Stream.mkString(Stream.decodeText(handle.stderr)),
+                ],
                 { concurrency: 2 },
               )
               const code = yield* handle.exitCode
@@ -437,6 +440,68 @@ export namespace Snapshot {
           const diffFull = Effect.fnUntraced(function* (from: string, to: string) {
             return yield* locked(
               Effect.gen(function* () {
+                const catFile = Effect.fnUntraced(
+                  function* (refs: string[]) {
+                    if (!refs.length) return new Map<string, string>()
+
+                    const proc = ChildProcess.make("git", [...cfg, ...args(["cat-file", "--batch"])], {
+                      cwd: state.directory,
+                      extendEnv: true,
+                      stdin: Stream.make(new TextEncoder().encode(refs.join("\n") + "\n")),
+                    })
+                    const handle = yield* spawner.spawn(proc)
+                    const [stdout, stderr] = yield* Effect.all(
+                      [
+                        Stream.runFold(handle.stdout, () => new Uint8Array(), (all, chunk) => {
+                          const next = new Uint8Array(all.length + chunk.length)
+                          next.set(all)
+                          next.set(chunk, all.length)
+                          return next
+                        }),
+                        Stream.mkString(Stream.decodeText(handle.stderr)),
+                      ],
+                      { concurrency: 2 },
+                    )
+                    const code = yield* handle.exitCode
+                    if (code !== 0) {
+                      log.info("git cat-file --batch failed during snapshot diff, falling back to per-file git show", {
+                        stderr,
+                        refs: refs.length,
+                      })
+                      return
+                    }
+
+                    const out = new Map<string, string>()
+                    const dec = new TextDecoder()
+                    let i = 0
+                    for (const ref of refs) {
+                      let end = i
+                      // 10 is "\n".
+                      while (stdout[end] !== 10) end++
+                      const head = dec.decode(stdout.slice(i, end))
+                      i = end + 1
+                      if (head.endsWith(" missing")) {
+                        out.set(ref, "")
+                        continue
+                      }
+                      const match = head.match(/^[0-9a-f]+ blob (\d+)$/)
+                      if (!match) {
+                        log.info("git cat-file --batch returned an unexpected header during snapshot diff, falling back to per-file git show", {
+                          head,
+                          refs: refs.length,
+                        })
+                        return
+                      }
+                      const size = parseInt(match[1]!)
+                      out.set(ref, dec.decode(stdout.slice(i, i + size)))
+                      i += size + 1
+                    }
+                    return out
+                  },
+                  Effect.scoped,
+                  Effect.catch(() => Effect.succeed<Map<string, string> | undefined>(undefined)),
+                )
+
                 const result: Snapshot.FileDiff[] = []
                 const status = new Map<string, "added" | "deleted" | "modified">()
 
@@ -459,20 +524,34 @@ export namespace Snapshot {
                   },
                 )
 
-                for (const line of numstat.text.trim().split("\n")) {
+                const lines = numstat.text.trim().split("\n")
+                const refs: string[] = []
+                for (const line of lines) {
+                  if (!line) continue
+                  const [adds, dels, file] = line.split("\t")
+                  if (!file || (adds === "-" && dels === "-")) continue
+                  refs.push(`${from}:${file}`, `${to}:${file}`)
+                }
+
+                const text = yield* catFile(refs).pipe(
+                )
+
+                for (const line of lines) {
                   if (!line) continue
                   const [adds, dels, file] = line.split("\t")
                   if (!file) continue
                   const binary = adds === "-" && dels === "-"
                   const [before, after] = binary
                     ? ["", ""]
-                    : yield* Effect.all(
-                        [
-                          git([...cfg, ...args(["show", `${from}:${file}`])]).pipe(Effect.map((item) => item.text)),
-                          git([...cfg, ...args(["show", `${to}:${file}`])]).pipe(Effect.map((item) => item.text)),
-                        ],
-                        { concurrency: 2 },
-                      )
+                    : text
+                      ? [text.get(`${from}:${file}`) ?? "", text.get(`${to}:${file}`) ?? ""]
+                      : yield* Effect.all(
+                          [
+                            git([...cfg, ...args(["show", `${from}:${file}`])]).pipe(Effect.map((item) => item.text)),
+                            git([...cfg, ...args(["show", `${to}:${file}`])]).pipe(Effect.map((item) => item.text)),
+                          ],
+                          { concurrency: 2 },
+                        )
                   const additions = binary ? 0 : parseInt(adds)
                   const deletions = binary ? 0 : parseInt(dels)
                   result.push({
