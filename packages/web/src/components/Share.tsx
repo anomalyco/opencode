@@ -366,21 +366,13 @@ export default function Share(props: {
                         <Suspense>
                           <For each={filteredParts()}>
                             {(part, partIndex) => {
-                              const last = createMemo(
-                                () =>
-                                  data().messages.length === msgIndex() + 1 &&
-                                  filteredParts().length === partIndex() + 1,
-                              )
+                              const last = () =>
+                                data().messages.length === msgIndex() + 1 && filteredParts().length === partIndex() + 1
 
                               onMount(() => {
                                 const hash = window.location.hash.slice(1)
                                 // Wait till all parts are loaded
-                                if (
-                                  hash !== "" &&
-                                  !hasScrolledToAnchor &&
-                                  filteredParts().length === partIndex() + 1 &&
-                                  data().messages.length === msgIndex() + 1
-                                ) {
+                                if (hash !== "" && !hasScrolledToAnchor && last()) {
                                   hasScrolledToAnchor = true
                                   scrollToAnchor(hash)
                                 }

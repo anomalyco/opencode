@@ -8,11 +8,11 @@ import {
   waitSession,
   waitSessionIdle,
   waitSlug,
+  withNoReplyPrompt,
 } from "../actions"
 import {
   promptAgentSelector,
   promptModelSelector,
-  promptSelector,
   promptVariantSelector,
   workspaceItemSelector,
   workspaceNewSessionSelector,
@@ -231,11 +231,14 @@ async function goto(page: Page, directory: string, sessionID?: string) {
 }
 
 async function submit(page: Page, value: string) {
-  const prompt = page.locator(promptSelector)
+  const prompt = page.locator('[data-component="prompt-input"]')
   await expect(prompt).toBeVisible()
-  await prompt.click()
-  await prompt.fill(value)
-  await prompt.press("Enter")
+
+  await withNoReplyPrompt(page, async () => {
+    await prompt.click()
+    await prompt.fill(value)
+    await prompt.press("Enter")
+  })
 
   await expect.poll(() => sessionIDFromUrl(page.url()) ?? "", { timeout: 30_000 }).not.toBe("")
   const id = sessionIDFromUrl(page.url())
