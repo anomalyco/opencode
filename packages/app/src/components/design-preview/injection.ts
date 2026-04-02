@@ -240,6 +240,10 @@ export function createInjectionScript(): string {
     var resolvedSources = {};
     var unresolvedNames = {};
     var mapBuilt = false;
+    var mapDirty = true;
+    var mapTimer = 0;
+    var mapIdle = 0;
+    var mapSync = false;
 
     function fiberKey(el) {
       var keys = Object.keys(el);
@@ -318,7 +322,7 @@ export function createInjectionScript(): string {
     }
 
     function buildComponentMap() {
-      if (!componentMap) return;
+      if (!componentMap || !document.body) return;
       unresolvedNames = {};
       var count = 0;
       var walker = document.createTreeWalker(document.body, 1);
@@ -403,6 +407,42 @@ export function createInjectionScript(): string {
         console.log('[Design] Requesting resolution for', names.length, 'components without source');
         post('component-list', { names: names });
       }
+    }
+
+    function runMap() {
+      mapTimer = 0;
+      mapIdle = 0;
+      if (!mapDirty || !componentMap || !document.body) return;
+      if (!inspectMode && mapBuilt) return;
+      mapDirty = false;
+      buildComponentMap();
+      if (!currentEl) {
+        mapSync = false;
+        return;
+      }
+      currentInfo = info(currentEl);
+      if (!mapSync) return;
+      mapSync = false;
+      post('element-select', currentInfo);
+    }
+
+    function queueMap(delay) {
+      if (!componentMap) return;
+      mapDirty = true;
+      if (!inspectMode && mapBuilt) return;
+      if (mapTimer) clearTimeout(mapTimer);
+      if (mapIdle && window.cancelIdleCallback) {
+        window.cancelIdleCallback(mapIdle);
+        mapIdle = 0;
+      }
+      mapTimer = setTimeout(function() {
+        mapTimer = 0;
+        if (window.requestIdleCallback) {
+          mapIdle = window.requestIdleCallback(runMap, { timeout: 500 });
+          return;
+        }
+        runMap();
+      }, delay || 0);
     }
 
     function mapLookup(el) {
@@ -868,6 +908,7 @@ export function createInjectionScript(): string {
         document.body.style.cursor = '';
       } else {
         document.body.style.cursor = 'crosshair';
+        if (mapDirty || !mapBuilt) queueMap();
         if (currentEl) {
           showOverlay(currentEl, selected);
           positionCommentBtn(currentEl);
@@ -893,13 +934,13 @@ export function createInjectionScript(): string {
       if (!names || !names.length) {
         userComponents = null;
         console.log('[Design] User component whitelist cleared');
-        buildComponentMap();
+        queueMap();
         return;
       }
       userComponents = {};
       for (var i = 0; i < names.length; i++) userComponents[names[i]] = 1;
       console.log('[Design] User component whitelist set:', names.length, 'components');
-      buildComponentMap();
+      queueMap();
     };
 
     window.__opencode_resolve_sources = function(map) {
@@ -914,14 +955,14 @@ export function createInjectionScript(): string {
     };
 
     window.__opencode_rebuild_map = function() {
-      buildComponentMap();
-      if (currentEl) currentInfo = info(currentEl);
+      mapSync = true;
+      queueMap();
     };
 
     window.__opencode_sync = function() {
       if (!inspectMode) return;
       if (currentEl) {
-        currentInfo = info(currentEl);
+        currentInfo = readInfo(currentEl);
         showOverlay(currentEl, selected);
         positionCommentBtn(currentEl);
         if (commentBox.style.display === 'block') positionCommentBox(currentEl);
@@ -933,19 +974,17 @@ export function createInjectionScript(): string {
     };
 
 
-    var mapTimer;
     var mapObserver = new MutationObserver(function(mutations) {
       var dominated = false;
       for (var i = 0; i < mutations.length; i++) {
         if (mutations[i].addedNodes.length || mutations[i].removedNodes.length) { dominated = true; break; }
       }
       if (!dominated) return;
-      clearTimeout(mapTimer);
-      mapTimer = setTimeout(buildComponentMap, 1500);
+      queueMap(1500);
     });
     mapObserver.observe(document.body, { childList: true, subtree: true });
 
-    setTimeout(buildComponentMap, 1500);
+    queueMap(1500);
 
     function showOverlay(el, target) {
       var rect = el.getBoundingClientRect();

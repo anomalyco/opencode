@@ -1,5 +1,6 @@
+use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use regex::Regex;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
@@ -87,18 +88,50 @@ fn has_ext(path: &Path) -> bool {
         .is_some_and(|e| EXTENSIONS.contains(&e))
 }
 
-fn scan_dir(dir: &Path, files: &mut Vec<PathBuf>) {
+fn matcher(root: &Path) -> Option<Gitignore> {
+    let mut builder = GitignoreBuilder::new(root);
+    for name in [".gitignore", ".ignore"] {
+        let path = root.join(name);
+        if path.is_file() {
+            builder.add(path);
+        }
+    }
+    builder.build().ok()
+}
+
+fn blocked(root: &Path, path: &Path, dir: bool, ignore: Option<&Gitignore>) -> bool {
+    let rel = rel(path, root);
+    skip(&rel)
+        || ignore.is_some_and(|ignore| ignore.matched(&rel, dir).is_ignore())
+}
+
+fn scan_dir(dir: &Path, root: &Path, ignore: Option<&Gitignore>, files: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
     for entry in entries.flatten() {
-        if should_skip(&entry) {
+        let Ok(kind) = entry.file_type() else {
+            continue;
+        };
+        let path = entry.path();
+        if should_skip(&entry) || blocked(root, &path, kind.is_dir(), ignore) {
             continue;
         }
-        let path = entry.path();
-        if path.is_dir() {
-            scan_dir(&path, files);
-        } else if has_ext(&path) {
+        if kind.is_symlink() {
+            let Ok(meta) = fs::metadata(&path) else {
+                continue;
+            };
+            if meta.is_dir() {
+                continue;
+            }
+            if meta.is_file() && has_ext(&path) && !blocked(root, &path, false, ignore) {
+                files.push(path);
+            }
+            continue;
+        }
+        if kind.is_dir() {
+            scan_dir(&path, root, ignore, files);
+        } else if kind.is_file() && has_ext(&path) {
             files.push(path);
         }
     }
@@ -141,9 +174,6 @@ fn resolve(root: &Path, input: &str) -> Option<(PathBuf, String)> {
         return None;
     }
     let rel = rel(&abs, root);
-    if skip(&rel) {
-        return None;
-    }
     Some((abs, rel))
 }
 
@@ -157,9 +187,6 @@ fn push_component(idx: &mut Index, rel: &str, name: &str, line: u32) {
         line: Some(line),
         component: Some(name.to_string()),
     });
-    if !idx.names.contains(&name.to_string()) {
-        idx.names.push(name.to_string());
-    }
 }
 
 fn trim(idx: &mut Index, rel: &str) {
@@ -178,6 +205,16 @@ fn sync(idx: &mut Index) {
     idx.names.sort();
 }
 
+fn lines(content: &str) -> Vec<usize> {
+    let mut out = vec![0];
+    out.extend(content.match_indices('\n').map(|(i, _)| i + 1));
+    out
+}
+
+fn line(lines: &[usize], offset: usize) -> u32 {
+    lines.partition_point(|start| *start <= offset) as u32
+}
+
 fn parse(path: &Path, root: &Path, idx: &mut Index) {
     let Ok(content) = fs::read_to_string(path) else {
         return;
@@ -188,6 +225,7 @@ fn parse(path: &Path, root: &Path, idx: &mut Index) {
         .nth(12000)
         .map(|(i, _)| &content[..i])
         .unwrap_or(&content);
+    let lines = lines(&content);
     let mut comp = None;
 
     // Extract exported component names
@@ -196,7 +234,7 @@ fn parse(path: &Path, root: &Path, idx: &mut Index) {
         if comp.is_none() {
             comp = Some(name.clone());
         }
-        let line = content[..cap.get(0).unwrap().start()].matches('\n').count() as u32 + 1;
+        let line = line(&lines, cap.get(0).unwrap().start());
         push_component(idx, &rel, &name, line);
     }
 
@@ -205,7 +243,7 @@ fn parse(path: &Path, root: &Path, idx: &mut Index) {
         if comp.is_none() {
             comp = Some(name.clone());
         }
-        let line = content[..cap.get(0).unwrap().start()].matches('\n').count() as u32 + 1;
+        let line = line(&lines, cap.get(0).unwrap().start());
         push_component(idx, &rel, &name, line);
     }
 
@@ -214,7 +252,7 @@ fn parse(path: &Path, root: &Path, idx: &mut Index) {
         if comp.is_none() {
             comp = Some(name.clone());
         }
-        let line = content[..cap.get(0).unwrap().start()].matches('\n').count() as u32 + 1;
+        let line = line(&lines, cap.get(0).unwrap().start());
         push_component(idx, &rel, &name, line);
     }
 
@@ -246,33 +284,39 @@ fn parse(path: &Path, root: &Path, idx: &mut Index) {
     };
 
     for cap in class_re().captures_iter(slice) {
-        let line = content[..cap.get(0).unwrap().start()].matches('\n').count() as u32 + 1;
+        let line = line(&lines, cap.get(0).unwrap().start());
         add(&cap[1], line);
     }
 
     for cap in class_expr_re().captures_iter(slice) {
-        let line = content[..cap.get(0).unwrap().start()].matches('\n').count() as u32 + 1;
+        let line = line(&lines, cap.get(0).unwrap().start());
         add(&cap[1], line);
     }
 }
 
 fn build(root: &Path) -> Index {
     let mut files = Vec::new();
-    scan_dir(root, &mut files);
+    let ignore = matcher(root);
+    scan_dir(root, root, ignore.as_ref(), &mut files);
 
     let mut idx = Index::default();
     for file in &files {
         parse(file, root, &mut idx);
     }
+    sync(&mut idx);
     idx
 }
 
 fn apply(idx: &mut Index, root: &Path, paths: &[String]) {
+    let ignore = matcher(root);
     for raw in paths {
         let Some((path, rel)) = resolve(root, raw) else {
             continue;
         };
         trim(idx, &rel);
+        if blocked(root, &path, path.is_dir(), ignore.as_ref()) {
+            continue;
+        }
         if path.is_file() && has_ext(&path) {
             parse(&path, root, idx);
         }
@@ -280,10 +324,90 @@ fn apply(idx: &mut Index, root: &Path, paths: &[String]) {
     sync(idx);
 }
 
+fn score_classes(
+    idx: &Index,
+    classes: &[String],
+    allow: Option<&HashMap<String, u32>>,
+) -> Option<QueryResult> {
+    let mut seen = HashSet::new();
+    let names = classes
+        .iter()
+        .filter_map(|name| seen.insert(name.as_str()).then_some(name.as_str()))
+        .collect::<Vec<_>>();
+
+    let mut scores: HashMap<String, (u32, u32)> = HashMap::new();
+    for name in names.iter().copied() {
+        let Some(entries) = idx.classes.get(name) else {
+            continue;
+        };
+        let mut files = HashSet::new();
+        for entry in entries {
+            if !files.insert(entry.file.as_str()) {
+                continue;
+            }
+            if let Some(allow) = allow {
+                let Some(line) = allow.get(&entry.file).copied() else {
+                    continue;
+                };
+                let score = scores.entry(entry.file.clone()).or_insert((0, line));
+                score.0 += 1;
+                continue;
+            }
+            let score = scores
+                .entry(entry.file.clone())
+                .or_insert((0, entry.line.unwrap_or(1)));
+            score.0 += 1;
+        }
+    }
+
+    let total = names.len().max(1) as f32;
+    let (file, (score, line)) = scores.into_iter().max_by(|(a, (sa, _)), (b, (sb, _))| {
+        sa.cmp(sb).then_with(|| b.cmp(a))
+    })?;
+    Some(QueryResult {
+        file,
+        line,
+        confidence: (score as f32 / total).min(1.0),
+    })
+}
+
+fn query(idx: &Index, component: Option<&str>, classes: Option<&[String]>) -> Option<QueryResult> {
+    if let Some(name) = component {
+        if let Some(entries) = idx.components.get(name) {
+            if entries.len() > 1 {
+                if let Some(classes) = classes {
+                    let allow = entries
+                        .iter()
+                        .map(|entry| (entry.file.clone(), entry.line.unwrap_or(1)))
+                        .collect::<HashMap<_, _>>();
+                    return score_classes(idx, classes, Some(&allow));
+                }
+                return None;
+            }
+            if let Some(best) = entries.first() {
+                return Some(QueryResult {
+                    file: best.file.clone(),
+                    line: best.line.unwrap_or(1),
+                    confidence: 1.0,
+                });
+            }
+        }
+    }
+
+    if let Some(classes) = classes {
+        return score_classes(idx, classes, None);
+    }
+
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use uuid::Uuid;
+
+    #[cfg(unix)]
+    use std::os::unix::fs::symlink;
 
     fn temp() -> PathBuf {
         std::env::temp_dir().join(format!("opencode-design-index-{}", Uuid::new_v4()))
@@ -337,6 +461,22 @@ mod tests {
     }
 
     #[test]
+    fn parse_keeps_line_numbers() {
+        let root = temp();
+        write(
+            &root,
+            "src/components/Hero.tsx",
+            "\n\nexport default function Hero() {\n  return <div className=\"hero\" />\n}\n",
+        );
+
+        let idx = build(&root);
+        fs::remove_dir_all(&root).unwrap();
+
+        assert_eq!(idx.components.get("Hero").unwrap()[0].line, Some(3));
+        assert_eq!(idx.classes.get("hero").unwrap()[0].line, Some(4));
+    }
+
+    #[test]
     fn apply_replaces_file_entries() {
         let root = temp();
         write(
@@ -377,6 +517,97 @@ mod tests {
         assert!(idx.components.get("Hero").is_none());
         assert!(idx.classes.get("hero").is_none());
         assert!(idx.names.is_empty());
+    }
+
+    #[test]
+    fn query_dedupes_class_hits_per_file() {
+        let root = temp();
+        write(
+            &root,
+            "src/components/A.tsx",
+            "export default function A() { return <div className=\"foo foo foo\" /> }\n",
+        );
+        write(
+            &root,
+            "src/components/B.tsx",
+            "export default function B() { return <div className=\"foo bar\" /> }\n",
+        );
+
+        let idx = build(&root);
+        let result = query(&idx, None, Some(&["foo".to_string(), "bar".to_string()])).unwrap();
+        fs::remove_dir_all(&root).unwrap();
+
+        assert_eq!(result.file, "src/components/B.tsx");
+        assert_eq!(result.confidence, 1.0);
+    }
+
+    #[test]
+    fn query_breaks_ties_by_file_name() {
+        let root = temp();
+        write(
+            &root,
+            "src/components/Beta.tsx",
+            "export default function Beta() { return <div className=\"foo bar\" /> }\n",
+        );
+        write(
+            &root,
+            "src/components/Alpha.tsx",
+            "export default function Alpha() { return <div className=\"foo bar\" /> }\n",
+        );
+
+        let idx = build(&root);
+        let result = query(&idx, None, Some(&["foo".to_string(), "bar".to_string()])).unwrap();
+        fs::remove_dir_all(&root).unwrap();
+
+        assert_eq!(result.file, "src/components/Alpha.tsx");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn build_skips_symlink_dirs() {
+        let root = temp();
+        let other = temp();
+        write(
+            &root,
+            "src/components/Hero.tsx",
+            "export default function Hero() { return null }\n",
+        );
+        write(
+            &other,
+            "linked/Leak.tsx",
+            "export default function Leak() { return null }\n",
+        );
+        fs::create_dir_all(root.join("src")).unwrap();
+        symlink(other.join("linked"), root.join("src/linked")).unwrap();
+
+        let idx = build(&root);
+        fs::remove_dir_all(&root).unwrap();
+        fs::remove_dir_all(&other).unwrap();
+
+        assert!(idx.components.get("Hero").is_some());
+        assert!(idx.components.get("Leak").is_none());
+    }
+
+    #[test]
+    fn build_respects_gitignore() {
+        let root = temp();
+        write(&root, ".gitignore", "src/ignored/\n");
+        write(
+            &root,
+            "src/components/Hero.tsx",
+            "export default function Hero() { return null }\n",
+        );
+        write(
+            &root,
+            "src/ignored/Leak.tsx",
+            "export default function Leak() { return null }\n",
+        );
+
+        let idx = build(&root);
+        fs::remove_dir_all(&root).unwrap();
+
+        assert!(idx.components.get("Hero").is_some());
+        assert!(idx.components.get("Leak").is_none());
     }
 }
 
@@ -490,70 +721,5 @@ pub fn query_design_index(
         return Ok(None);
     };
 
-    // 1. Try component name lookup
-    if let Some(name) = &component {
-        if let Some(entries) = idx.components.get(name) {
-            if entries.len() > 1 {
-                if let Some(cls) = &classes {
-                    let mut scores: HashMap<String, (u32, u32)> = HashMap::new();
-                    for entry in entries {
-                        scores.insert(entry.file.clone(), (0, entry.line.unwrap_or(1)));
-                    }
-                    for c in cls {
-                        if let Some(matches) = idx.classes.get(c.as_str()) {
-                            for entry in matches {
-                                if let Some(score) = scores.get_mut(&entry.file) {
-                                    score.0 += 1;
-                                }
-                            }
-                        }
-                    }
-                    if let Some((file, (score, line))) =
-                        scores.into_iter().max_by_key(|(_, (s, _))| *s)
-                    {
-                        if score > 0 {
-                            return Ok(Some(QueryResult {
-                                file,
-                                line,
-                                confidence: 1.0,
-                            }));
-                        }
-                    }
-                }
-                return Ok(None);
-            }
-            if let Some(best) = entries.first() {
-                return Ok(Some(QueryResult {
-                    file: best.file.clone(),
-                    line: best.line.unwrap_or(1),
-                    confidence: 1.0,
-                }));
-            }
-        }
-    }
-
-    // 2. Try class combination lookup
-    if let Some(cls) = &classes {
-        let mut scores: HashMap<String, (u32, u32)> = HashMap::new();
-        for c in cls {
-            if let Some(entries) = idx.classes.get(c.as_str()) {
-                for e in entries {
-                    let entry = scores
-                        .entry(e.file.clone())
-                        .or_insert((0, e.line.unwrap_or(1)));
-                    entry.0 += 1;
-                }
-            }
-        }
-        if let Some((file, (score, line))) = scores.into_iter().max_by_key(|(_, (s, _))| *s) {
-            let total = cls.len().max(1) as f32;
-            return Ok(Some(QueryResult {
-                file,
-                line,
-                confidence: score as f32 / total,
-            }));
-        }
-    }
-
-    Ok(None)
+    Ok(query(idx, component.as_deref(), classes.as_deref()))
 }

@@ -57,10 +57,14 @@ export const ExperimentalRoutes = lazy(() =>
     .get("/design", async (c) => {
       try {
         const dir = Instance.directory
+        const since = Number(c.req.query("since") ?? 0)
         const target = `${dir}/.opencode/.design-command.json`
         const file = Bun.file(target)
         if (!(await file.exists())) return c.json(null)
         const data = await file.json().catch(() => null)
+        if (Number.isFinite(since) && since > 0 && typeof data?.timestamp === "number" && data.timestamp <= since) {
+          return c.json(null)
+        }
         return c.json(data)
       } catch (err) {
         const msg = err instanceof Error ? (err.stack ?? err.message) : String(err)

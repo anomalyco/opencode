@@ -10,6 +10,8 @@ import { useSDK } from "@/context/sdk"
 import { usePlatform } from "@/context/platform"
 import { detectDevUrl } from "@/utils/detect-port"
 import { createInjectionScript } from "@/components/design-preview/injection"
+import { pickClasses } from "@/components/design-preview/pick-classes"
+import { createResolver, type Hit } from "@/components/design-preview/resolve"
 
 const INJECT = createInjectionScript()
 
@@ -37,6 +39,20 @@ const VIEWPORTS: Record<Viewport, { width: number; height: number; label: string
   mobile: { width: 375, height: 812, label: "Mobile" },
 }
 
+const cfg = {
+  gap: 8,
+  follow: 250,
+  ready: 500,
+  timeout: 3000,
+  sync: { delay: 700, retry: 400, tries: 2, reopen: 1500 },
+  reindex: 250,
+  save: 200,
+  saveRetry: 1000,
+  health: 5000,
+  poll: 2000,
+  minConfidence: 0.3,
+}
+
 export type DesignPreviewProps = {
   onOpenFile?: (path: string, line: number) => void
   onElementSelect?: (info: DesignElementInfo | undefined) => void
@@ -55,12 +71,6 @@ type Note = {
   }
 }
 
-type Hit = {
-  file: string
-  line: number
-  comp?: string
-}
-
 export function DesignPreview(props: DesignPreviewProps) {
   const files = useFile()
   const layout = useLayout()
@@ -71,10 +81,13 @@ export function DesignPreview(props: DesignPreviewProps) {
   let placeholder: HTMLDivElement | undefined
   let health: ReturnType<typeof setInterval> | undefined
   let poller: ReturnType<typeof setInterval> | undefined
+  let follow: ReturnType<typeof setInterval> | undefined
   let observer: ResizeObserver | undefined
   let lastCmd = 0
   let webviewOpen = false
   let raf = 0
+  let rev = 0
+  let last: { x: number; y: number; width: number; height: number } | undefined
   let picked = 0
   const changed = new Set<string>()
   let change: ReturnType<typeof setTimeout> | undefined
@@ -83,6 +96,10 @@ export function DesignPreview(props: DesignPreviewProps) {
   let reopen: ReturnType<typeof setTimeout> | undefined
   let listed = ""
   let sent = ""
+  let checkRun = false
+  let pollRun = false
+  let saveRun = false
+  let saveNext = false
 
   const [store, setStore] = createStore({
     viewport: "desktop" as Viewport,
@@ -101,40 +118,66 @@ export function DesignPreview(props: DesignPreviewProps) {
   const active = createMemo(() => !!store.size || store.viewport !== "desktop")
   const preset = createMemo(() => store.size ?? VIEWPORTS[store.viewport])
   const supported = createMemo(() => !!platform.createDesignWebview)
+  const bump = () => ++rev
+  const script = (name: string, arg?: string) => {
+    return arg === undefined ? `window.${name} && window.${name}()` : `window.${name} && window.${name}(${arg})`
+  }
+  const run = (input: string) => platform.evalDesignWebview?.(input)
+  const lookup = createResolver(files, sdk.client)
 
   const syncInspect = () => {
     if (!webviewOpen) return
-    platform.evalDesignWebview?.(
-      `window.__opencode_set_inspect_mode && window.__opencode_set_inspect_mode(${store.inspect})`,
-    )
+    run(script("__opencode_set_inspect_mode", JSON.stringify(store.inspect)))
   }
 
   const getRect = () => {
     if (!placeholder) return { x: 0, y: 0, width: 0, height: 0 }
     const rect = placeholder.getBoundingClientRect()
-    return { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+    return {
+      x: Math.round(rect.x),
+      y: Math.round(rect.y),
+      width: Math.max(0, Math.round(rect.width - cfg.gap)),
+      height: Math.max(0, Math.round(rect.height)),
+    }
   }
 
-  const GAP = 8
+  const same = (next: { x: number; y: number; width: number; height: number }) => {
+    return !!last && next.x === last.x && next.y === last.y && next.width === last.width && next.height === last.height
+  }
+
+  const startFollow = () => {
+    if (follow) return
+    follow = setInterval(syncSize, cfg.follow)
+  }
+
+  const stopFollow = () => {
+    if (!follow) return
+    clearInterval(follow)
+    follow = undefined
+  }
 
   const openWebview = async (target: string) => {
     if (!platform.createDesignWebview) return
     const r = getRect()
     if (r.width <= 0 || r.height <= 0) return
-    await platform.createDesignWebview(target, r.x, r.y, r.width - GAP, r.height, INJECT)
+    await platform.createDesignWebview(target, r.x, r.y, r.width, r.height, INJECT)
     webviewOpen = true
+    last = r
     listed = ""
     setStore("status", "connected")
+    startFollow()
     syncSize()
     setTimeout(() => {
       sendWhitelist()
       syncInspect()
-    }, 500)
+    }, cfg.ready)
   }
 
   const closeWebview = async () => {
     if (!webviewOpen) return
     webviewOpen = false
+    last = undefined
+    stopFollow()
     await platform.closeDesignWebview?.()
   }
 
@@ -143,7 +186,9 @@ export function DesignPreview(props: DesignPreviewProps) {
     if (!webviewOpen || !platform.resizeDesignWebview) return
     const r = getRect()
     if (r.width <= 0 || r.height <= 0) return
-    platform.resizeDesignWebview(r.x, r.y, r.width - GAP, r.height)
+    if (same(r)) return
+    last = r
+    platform.resizeDesignWebview(r.x, r.y, r.width, r.height)
   }
 
   const syncSize = () => {
@@ -153,6 +198,8 @@ export function DesignPreview(props: DesignPreviewProps) {
 
   const load = async (target: string) => {
     if (!target) return
+    bump()
+    lastCmd = 0
     changed.clear()
     if (poke) clearTimeout(poke)
     if (reopen) clearTimeout(reopen)
@@ -169,6 +216,8 @@ export function DesignPreview(props: DesignPreviewProps) {
   const refresh = async () => {
     const target = url()
     if (!target) return
+    bump()
+    lastCmd = 0
     changed.clear()
     if (poke) clearTimeout(poke)
     if (reopen) clearTimeout(reopen)
@@ -177,6 +226,8 @@ export function DesignPreview(props: DesignPreviewProps) {
   }
 
   const disconnect = async () => {
+    bump()
+    lastCmd = 0
     changed.clear()
     if (poke) clearTimeout(poke)
     if (reopen) clearTimeout(reopen)
@@ -199,8 +250,13 @@ export function DesignPreview(props: DesignPreviewProps) {
   }
 
   const detect = async () => {
+    const stamp = rev
     setStore("detecting", true)
     const result = await detectDevUrl(sdk.directory, sdk.client).catch(() => null)
+    if (stamp !== rev) {
+      setStore("detecting", false)
+      return
+    }
     setStore("detecting", false)
     if (!result) return
     setStore("framework", result.framework)
@@ -209,16 +265,23 @@ export function DesignPreview(props: DesignPreviewProps) {
   }
 
   const check = async () => {
+    if (checkRun) return
     const target = url()
     if (!target) {
       setStore("status", "disconnected")
       return
     }
+    checkRun = true
+    const stamp = rev
     try {
-      await fetch(target, { method: "HEAD", mode: "no-cors" })
+      await fetch(target, { method: "HEAD", mode: "no-cors", signal: AbortSignal.timeout(cfg.timeout) })
+      if (stamp !== rev || target !== url()) return
       if (store.status === "disconnected") setStore("status", "connected")
     } catch {
+      if (stamp !== rev || target !== url()) return
       setStore("status", "disconnected")
+    } finally {
+      checkRun = false
     }
   }
 
@@ -240,251 +303,11 @@ export function DesignPreview(props: DesignPreviewProps) {
       tagName: info.tag,
       className: info.classes,
       domPath: info.path,
-      sourceFile: info.source?.file ? normalizePath(info.source.file) : undefined,
+      sourceFile: info.source?.file ? lookup.normalizePath(info.source.file) : undefined,
       sourceLine: info.source?.line,
       boundingRect: info.rect,
     },
   })
-
-  const GENERIC_CLASSES = new Set([
-    "flex",
-    "flex-1",
-    "flex-col",
-    "flex-row",
-    "flex-wrap",
-    "flex-none",
-    "flex-auto",
-    "grid",
-    "block",
-    "inline",
-    "inline-flex",
-    "inline-block",
-    "hidden",
-    "contents",
-    "relative",
-    "absolute",
-    "fixed",
-    "sticky",
-    "w-full",
-    "w-auto",
-    "h-full",
-    "h-auto",
-    "w-screen",
-    "h-screen",
-    "p-0",
-    "p-1",
-    "p-2",
-    "p-3",
-    "p-4",
-    "p-5",
-    "p-6",
-    "p-8",
-    "p-10",
-    "p-12",
-    "p-16",
-    "px-0",
-    "px-1",
-    "px-2",
-    "px-3",
-    "px-4",
-    "px-5",
-    "px-6",
-    "px-8",
-    "py-0",
-    "py-1",
-    "py-2",
-    "py-3",
-    "py-4",
-    "py-5",
-    "py-6",
-    "py-8",
-    "pt-0",
-    "pb-0",
-    "pl-0",
-    "pr-0",
-    "m-0",
-    "m-1",
-    "m-2",
-    "m-3",
-    "m-4",
-    "m-auto",
-    "mx-0",
-    "mx-auto",
-    "my-0",
-    "my-auto",
-    "mt-0",
-    "mb-0",
-    "ml-0",
-    "mr-0",
-    "text-xs",
-    "text-sm",
-    "text-base",
-    "text-lg",
-    "text-xl",
-    "text-2xl",
-    "text-3xl",
-    "text-4xl",
-    "font-normal",
-    "font-medium",
-    "font-semibold",
-    "font-bold",
-    "text-left",
-    "text-center",
-    "text-right",
-    "rounded",
-    "rounded-sm",
-    "rounded-md",
-    "rounded-lg",
-    "rounded-xl",
-    "rounded-full",
-    "rounded-none",
-    "border",
-    "border-0",
-    "border-t",
-    "border-b",
-    "border-l",
-    "border-r",
-    "shadow",
-    "shadow-sm",
-    "shadow-md",
-    "shadow-lg",
-    "shadow-none",
-    "overflow-hidden",
-    "overflow-auto",
-    "overflow-scroll",
-    "overflow-visible",
-    "items-start",
-    "items-center",
-    "items-end",
-    "items-stretch",
-    "justify-start",
-    "justify-center",
-    "justify-end",
-    "justify-between",
-    "justify-around",
-    "gap-0",
-    "gap-1",
-    "gap-2",
-    "gap-3",
-    "gap-4",
-    "gap-5",
-    "gap-6",
-    "gap-8",
-    "cursor-pointer",
-    "cursor-default",
-    "cursor-not-allowed",
-    "opacity-0",
-    "opacity-50",
-    "opacity-100",
-    "transition",
-    "duration-150",
-    "duration-200",
-    "duration-300",
-    "ease-in",
-    "ease-out",
-    "container",
-    "group",
-    "peer",
-    "sr-only",
-    "not-sr-only",
-    "min-w-0",
-    "min-h-0",
-    "max-w-full",
-    "max-h-full",
-    "z-0",
-    "z-10",
-    "z-20",
-    "z-50",
-    "z-auto",
-    "top-0",
-    "bottom-0",
-    "left-0",
-    "right-0",
-    "inset-0",
-    "truncate",
-    "whitespace-nowrap",
-    "whitespace-pre",
-    "list-none",
-    "list-disc",
-    "list-decimal",
-    "pointer-events-none",
-    "pointer-events-auto",
-    "select-none",
-    "select-text",
-    "select-all",
-    "appearance-none",
-    "outline-none",
-    "ring-0",
-    "disabled",
-    "active",
-    "hover",
-    "focus",
-    "dark",
-  ])
-
-  const pickClasses = (classes: string | undefined): string[] => {
-    if (!classes) return []
-    const parts = classes
-      .trim()
-      .split(/\s+/)
-      .filter((c) => {
-        if (!c || c.length < 3) return false
-        if (GENERIC_CLASSES.has(c)) return false
-        // Skip pure color/sizing utilities
-        if (/^(bg|text|border|ring|fill|stroke)-(transparent|current|inherit|white|black)$/.test(c)) return false
-        if (/^(w|h|min-w|min-h|max-w|max-h)-\d/.test(c)) return false
-        if (
-          /^(text|bg|border)-(gray|red|blue|green|yellow|purple|pink|indigo|orange|teal|cyan|emerald|violet|rose|lime|sky|amber|fuchsia|slate|zinc|neutral|stone)-\d+$/.test(
-            c,
-          )
-        )
-          return false
-        if (/^(p|m)[trblxy]?-\d+$/.test(c)) return false
-        if (/^gap-\d+$/.test(c)) return false
-        return true
-      })
-    // Prefer longer/more-specific class names
-    return parts.sort((a, b) => b.length - a.length).slice(0, 3)
-  }
-
-  const normalizePath = (file: string): string => {
-    return files.normalize(
-      file
-        .replace(/^https?:\/\/[^/]+\//, "")
-        .replace(/^turbopack:\/\/\[project\]\//, "")
-        .replace(/^webpack-internal:\/\/\/\.?\//, "")
-        .replace(/^webpack:\/\/\/\.?\//, "")
-        .replace(/^webpack:\/\/[^/]*\/\.?\//, "")
-        .replace(/^\(.*?\)\/\.?\//, "")
-        .replace(/^\/@fs/, "")
-        .replace(/^\/@(id|vite)\//, "")
-        .replace(/\\/g, "/"),
-    )
-  }
-
-  const isSourceFile = (path: string): boolean => {
-    const name = path.split("/").pop() ?? ""
-    if (path.includes("node_modules/") || path.includes("node_modules\\")) return false
-    if (path.includes(".vite/deps/") || path.includes(".vite/chunks/")) return false
-    if (path.includes(".pnpm/") || path.includes(".yarn/cache")) return false
-    if (/^[0-9a-f]{4,}\.(js|mjs)$/.test(name)) return false
-    if (/\.[0-9a-f]{6,}\.(js|mjs)$/.test(name)) return false
-    if (/^(main|app|vendor|framework|commons|webpack|polyfills?)-[0-9a-f]+\.(js|mjs)$/.test(name)) return false
-    if (path.includes("static/chunks/") || path.includes("_next/") || path.includes(".next/")) return false
-    if (path.includes("/build/static/")) return false
-    if (/\.(tsx?|jsx?|vue|svelte|astro|html)$/.test(name)) return true
-    if (/\.(js|mjs)$/.test(name) && (path.includes("/dist/") || path.includes("/build/"))) return false
-    return true
-  }
-
-  const isUserFile = (path: string) =>
-    !path.includes("node_modules/") &&
-    !path.includes("node_modules\\") &&
-    !path.includes(".vite/deps/") &&
-    !path.includes(".vite/chunks/") &&
-    !path.includes(".pnpm/") &&
-    !path.includes(".yarn/cache") &&
-    /\.(tsx|jsx|ts|js|vue|svelte|html)$/.test(path)
 
   let rustNames: string[] = []
 
@@ -493,9 +316,7 @@ export function DesignPreview(props: DesignPreviewProps) {
     const json = JSON.stringify(rustNames)
     if (json === listed) return
     listed = json
-    platform.evalDesignWebview?.(
-      `window.__opencode_set_user_components && window.__opencode_set_user_components(${json})`,
-    )
+    run(script("__opencode_set_user_components", json))
   }
 
   const applyNames = (names: string[] | null | undefined, label: string) => {
@@ -533,10 +354,6 @@ export function DesignPreview(props: DesignPreviewProps) {
 
   const idxCache = new Map<string, Hit | null>()
   const idxRun = new Map<string, Promise<Hit | null>>()
-  const textCache = new Map<string, Hit | null>()
-  const textRun = new Map<string, Promise<Hit | null>>()
-  const defRun = new Map<string, Promise<Hit | null>>()
-  const useRun = new Map<string, Promise<Hit | null>>()
   let cache = 0
 
   const queryIndex = async (comp: string | null | undefined, classes: string | undefined): Promise<Hit | null> => {
@@ -554,7 +371,7 @@ export function DesignPreview(props: DesignPreviewProps) {
       .then(
         (result) => {
           if (ver !== cache) return null
-          if (result && result.confidence > 0.3) {
+          if (result && result.confidence > cfg.minConfidence) {
             console.log("[Design] Rust index hit:", result.file, "line:", result.line, "confidence:", result.confidence)
             const hit = { file: result.file, line: result.line, comp: comp ?? undefined }
             idxCache.set(key, hit)
@@ -609,50 +426,38 @@ export function DesignPreview(props: DesignPreviewProps) {
     for (const name of chain) {
       const next = await queryIndex(name, undefined)
       if (next) return next
-      const def = await findDefinition(name)
+      const def = await lookup.findDefinition(name)
       if (def) return def
     }
-    return grepFallback(info)
+    return lookup.grepFallback(info)
   }
 
   const openComp = async (name: string) => {
     const idx = await queryIndex(name, undefined)
     if (idx) return openHit(idx)
-    const def = await findDefinition(name)
+    const def = await lookup.findDefinition(name)
     if (def) return openHit(def)
-    const use = await findUsage(name)
+    const use = await lookup.findUsage(name)
     if (use) return openHit(use)
     return false
   }
-
-  const defCache = new Map<string, Hit | null>()
-  const usageCache = new Map<string, Hit | null>()
 
   const resetCache = () => {
     cache++
     idxCache.clear()
     idxRun.clear()
-    defCache.clear()
-    defRun.clear()
-    usageCache.clear()
-    useRun.clear()
-    textCache.clear()
-    textRun.clear()
+    lookup.reset()
   }
 
   const syncPreview = () => {
     if (!webviewOpen || !platform.evalDesignWebview) return Promise.resolve(false)
-    return platform
-      .evalDesignWebview(
-        `window.__opencode_rebuild_map && window.__opencode_rebuild_map(); window.__opencode_sync && window.__opencode_sync();`,
-      )
-      .then(
-        () => true,
-        () => false,
-      )
+    return platform.evalDesignWebview(`${script("__opencode_rebuild_map")}; ${script("__opencode_sync")};`).then(
+      () => true,
+      () => false,
+    )
   }
 
-  const queueSync = (delay = 700, tries = 2) => {
+  const queueSync = (delay = cfg.sync.delay, tries = cfg.sync.tries) => {
     if (poke) clearTimeout(poke)
     poke = setTimeout(() => {
       poke = undefined
@@ -663,7 +468,7 @@ export function DesignPreview(props: DesignPreviewProps) {
           return
         }
         if (tries > 0) {
-          queueSync(400, tries - 1)
+          queueSync(cfg.sync.retry, tries - 1)
           return
         }
         if (!url()) return
@@ -672,7 +477,7 @@ export function DesignPreview(props: DesignPreviewProps) {
           reopen = undefined
           if (!url()) return
           void refresh()
-        }, 1500)
+        }, cfg.sync.reopen)
       })
     }, delay)
   }
@@ -694,193 +499,7 @@ export function DesignPreview(props: DesignPreviewProps) {
       void run.finally(() => {
         queueSync()
       })
-    }, 250)
-  }
-
-  // Check if a source file likely *defines* the component (vs just rendering it)
-  const fileDefinesComponent = (file: string, comp: string): boolean => {
-    if (!comp) return true
-    const name = (file.split("/").pop() ?? "").replace(/\.(tsx?|jsx?|vue|svelte)$/, "")
-    const lower = comp.toLowerCase()
-    // header.tsx defines Header, use-header.ts defines Header hook, etc.
-    if (name.toLowerCase() === lower) return true
-    if (name.toLowerCase().replace(/[-_]/g, "") === lower) return true
-    // index.tsx could define anything — accept it
-    if (name === "index") return true
-    // page.tsx, layout.tsx in Next.js are definitions
-    if (["page", "layout", "template", "loading", "error", "not-found"].includes(name)) return true
-    return false
-  }
-
-  // Search for the file where a component is defined (in user code, not node_modules)
-  const findDefinition = async (comp: string): Promise<Hit | null> => {
-    if (defCache.has(comp)) {
-      return defCache.get(comp) ?? null
-    }
-    const pending = defRun.get(comp)
-    if (pending) return pending
-    const patterns = [`function ${comp}`, `const ${comp}`, `export default function ${comp}`, `export function ${comp}`]
-    const ver = cache
-    const run = (async () => {
-      for (const pattern of patterns) {
-        const res = await sdk.client.find.text({ pattern }).catch(() => null)
-        if (ver !== cache) return null
-        const hits = res?.data ?? []
-        if (!hits.length) continue
-
-        const user = hits.filter((m) => isUserFile(m.path.text))
-        const exact = user.find((m) => {
-          const fname = (m.path.text.split("/").pop() ?? "").replace(/\.(tsx?|jsx?|vue|svelte)$/, "")
-          return (
-            fname.toLowerCase() === comp.toLowerCase() ||
-            fname.toLowerCase().replace(/[-_]/g, "") === comp.toLowerCase()
-          )
-        })
-        const match = exact ?? user[0]
-        if (match?.path.text) {
-          const line = match.line_number ?? 1
-          const hit = { file: match.path.text, line, comp }
-          defCache.set(comp, hit)
-          console.log("[Design] Found definition of", comp, "at:", match.path.text, "line:", line, "via:", pattern)
-          return hit
-        }
-      }
-      defCache.set(comp, null)
-      return null
-    })().finally(() => {
-      defRun.delete(comp)
-    })
-    defRun.set(comp, run)
-    return run
-  }
-
-  // Search for where a component is *used* in JSX (for library components like icons)
-  const findUsage = async (comp: string): Promise<Hit | null> => {
-    if (usageCache.has(comp)) {
-      return usageCache.get(comp) ?? null
-    }
-    const pending = useRun.get(comp)
-    if (pending) return pending
-    const ver = cache
-    const run = sdk.client.find
-      .text({ pattern: `<${comp}` })
-      .then(
-        (res) => {
-          if (ver !== cache) return null
-          const hits = res.data ?? []
-          const user = hits.filter((m) => isUserFile(m.path.text))
-          const match = user[0]
-          if (match?.path.text) {
-            const line = match.line_number ?? 1
-            const hit = { file: match.path.text, line, comp }
-            usageCache.set(comp, hit)
-            console.log("[Design] Found usage of <" + comp + "> at:", match.path.text, "line:", line)
-            return hit
-          }
-          usageCache.set(comp, null)
-          return null
-        },
-        () => {
-          if (ver !== cache) return null
-          usageCache.set(comp, null)
-          return null
-        },
-      )
-      .finally(() => {
-        useRun.delete(comp)
-      })
-    useRun.set(comp, run)
-    return run
-  }
-
-  // Search by text content in user source files
-  const findByText = async (text: string): Promise<Hit | null> => {
-    if (!text || text.length < 4) return null
-    if (textCache.has(text)) return textCache.get(text) ?? null
-    const pending = textRun.get(text)
-    if (pending) return pending
-    const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-    const ver = cache
-    const run = sdk.client.find
-      .text({ pattern: escaped })
-      .then(
-        (res) => {
-          if (ver !== cache) return null
-          const hits = res.data ?? []
-          if (!hits.length) {
-            textCache.set(text, null)
-            return null
-          }
-
-          const match = hits.find((m) => isUserFile(m.path.text))
-          if (match?.path.text) {
-            console.log("[Design] Found by text content:", match.path.text, "line:", match.line_number)
-            const hit = { file: match.path.text, line: match.line_number ?? 1 }
-            textCache.set(text, hit)
-            return hit
-          }
-          textCache.set(text, null)
-          return null
-        },
-        () => {
-          if (ver !== cache) return null
-          textCache.set(text, null)
-          return null
-        },
-      )
-      .finally(() => {
-        textRun.delete(text)
-      })
-    textRun.set(text, run)
-    return run
-  }
-
-  const grepFallback = async (info: DesignElementInfo): Promise<Hit | null> => {
-    const comp = info.component ?? info.source?.component
-
-    // 1. Try component definition search in user code
-    if (comp) {
-      const def = await findDefinition(comp)
-      if (def) return def
-    }
-
-    // 2. Try JSX usage search (for library components: icons, UI libs)
-    if (comp) {
-      const use = await findUsage(comp)
-      if (use) return use
-    }
-
-    // 3. Try text content search
-    if (info.textContent) {
-      const text = await findByText(info.textContent)
-      if (text) return text
-    }
-
-    // 4. Fall back to search hints and CSS classes
-    const terms: string[] = []
-    const hints = info.searchHint ?? []
-    for (const h of hints) {
-      if (h.startsWith("#")) continue
-      if (h.length > 2 && !terms.includes(h)) terms.push(h)
-    }
-    const classes = pickClasses(info.classes)
-    for (const c of classes) {
-      if (!terms.includes(c)) terms.push(c)
-    }
-    if (!terms.length) return null
-
-    for (const term of terms) {
-      const res = await sdk.client.find.text({ pattern: term }).catch(() => null)
-      const hits = res?.data ?? []
-      if (!hits.length) continue
-
-      const match = hits.find((m) => isUserFile(m.path.text))
-      if (match?.path.text) {
-        console.log("[Design] grep fallback found:", match.path.text, "via term:", term)
-        return { file: match.path.text, line: match.line_number ?? 1 }
-      }
-    }
-    return null
+    }, cfg.reindex)
   }
 
   const handleDesignEvent = (e: { payload: string | DesignElementInfo }) => {
@@ -897,14 +516,14 @@ export function DesignPreview(props: DesignPreviewProps) {
     props.onElementSelect?.(info)
 
     const comp = info.component ?? src?.component
-    const file = src?.file ? normalizePath(src.file) : undefined
+    const file = src?.file ? lookup.normalizePath(src.file) : undefined
     const direct = (hit: Hit) => {
       if (token !== picked) return false
       return openResolved(info, hit)
     }
 
     // Library/node_modules source — strip it and find user code instead
-    if (file && !isSourceFile(file)) {
+    if (file && !lookup.isSourceFile(file)) {
       console.log("[Design] Source is library/bundled:", file, "for", comp, "— using index/grep to find user code")
       info.source = undefined
       setStore("selected", { ...info })
@@ -915,7 +534,7 @@ export function DesignPreview(props: DesignPreviewProps) {
     }
 
     // User source file, but it's the call site (e.g. home-client.tsx for <Header />), not the definition
-    if (comp && file && isSourceFile(file) && !fileDefinesComponent(file, comp)) {
+    if (comp && file && lookup.isSourceFile(file) && !lookup.fileDefinesComponent(file, comp)) {
       console.log("[Design] Source", file, "is call site for", comp, "— checking index then searching")
       locate(info).then((hit) => {
         if (hit) {
@@ -928,7 +547,7 @@ export function DesignPreview(props: DesignPreviewProps) {
       return
     }
 
-    if (file && isSourceFile(file)) {
+    if (file && lookup.isSourceFile(file)) {
       console.log("[Design] Opening file:", file, "line:", src?.line, "component:", comp)
       direct({ file, line: src?.line ?? 1, comp })
       return
@@ -974,65 +593,94 @@ export function DesignPreview(props: DesignPreviewProps) {
     const state = snap()
     const json = JSON.stringify(state)
     if (json === sent) return
+    if (saveRun) {
+      saveNext = true
+      return
+    }
+    saveRun = true
+    saveNext = false
+    const stamp = rev
+    let failed = false
     fetch(`${base}/experimental/design`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(cfg.timeout),
       body: JSON.stringify({ ...state, timestamp: Date.now() }),
     })
       .then(() => {
+        if (stamp !== rev) return
         sent = json
       })
-      .catch(() => {})
+      .catch(() => {
+        failed = stamp === rev
+      })
+      .finally(() => {
+        saveRun = false
+        if (saveNext) {
+          push = setTimeout(save, cfg.save)
+          return
+        }
+        if (!failed || stamp !== rev) return
+        push = setTimeout(save, cfg.saveRetry)
+      })
   }
 
   const flush = () => {
     if (push) clearTimeout(push)
-    push = setTimeout(save, 200)
+    push = setTimeout(save, cfg.save)
   }
 
   const poll = async () => {
+    if (pollRun) return
     if (!url()) return
+    pollRun = true
+    const stamp = rev
     const base = sdk.url
-    const res = await fetch(`${base}/experimental/design`).catch(() => null)
-    if (!res?.ok) return
-    const data = await res.json().catch(() => null)
-    if (!data || !data.timestamp || data.timestamp <= lastCmd) return
-    lastCmd = data.timestamp
+    const path = lastCmd ? `${base}/experimental/design?since=${lastCmd}` : `${base}/experimental/design`
+    try {
+      const res = await fetch(path, { signal: AbortSignal.timeout(cfg.timeout) }).catch(() => null)
+      if (!res?.ok) return
+      const data = await res.json().catch(() => null)
+      if (stamp !== rev || !data || !data.timestamp || data.timestamp <= lastCmd) return
+      lastCmd = data.timestamp
 
-    if (data.type === "update-styles" && data.styles && webviewOpen) {
-      const s = JSON.stringify(data.styles)
-      platform.evalDesignWebview?.(`window.__opencode_apply_styles && window.__opencode_apply_styles(${s})`)
-    }
-    if (data.type === "select" && data.selector && webviewOpen) {
-      const sel = JSON.stringify(data.selector)
-      platform.evalDesignWebview?.(`window.__opencode_select_element && window.__opencode_select_element(${sel})`)
-    }
-    if (data.type === "set-viewport" && data.width) {
-      const p = data.preset as Viewport | undefined
-      if (p === "desktop") {
-        setStore("viewport", "desktop")
+      if (data.type === "update-styles" && data.styles && webviewOpen) {
+        const s = JSON.stringify(data.styles)
+        run(script("__opencode_apply_styles", s))
+      }
+      if (data.type === "select" && data.selector && webviewOpen) {
+        const sel = JSON.stringify(data.selector)
+        run(script("__opencode_select_element", sel))
+      }
+      if (data.type === "set-viewport" && data.width) {
+        const p = data.preset as Viewport | undefined
+        if (p === "desktop") {
+          setStore("viewport", "desktop")
+          setStore("size", undefined)
+          return
+        }
+        const base = p && VIEWPORTS[p] !== undefined ? VIEWPORTS[p] : null
+        const next = base && p ? p : "desktop"
+        setStore("viewport", next)
+        if (!data.height) {
+          setStore("size", undefined)
+          return
+        }
+        if (!base || base.width !== data.width || base.height !== data.height) {
+          setStore("size", {
+            width: data.width,
+            height: data.height,
+            label: base?.label ?? "Custom",
+          })
+          return
+        }
         setStore("size", undefined)
-        return
       }
-      const base = p && VIEWPORTS[p] !== undefined ? VIEWPORTS[p] : null
-      const next = base && p ? p : "desktop"
-      setStore("viewport", next)
-      if (!data.height) {
-        setStore("size", undefined)
-        return
+      if (data.type === "file-changed") {
+        queueReindex(typeof data.filePath === "string" ? data.filePath : undefined)
       }
-      if (!base || base.width !== data.width || base.height !== data.height) {
-        setStore("size", {
-          width: data.width,
-          height: data.height,
-          label: base?.label ?? "Custom",
-        })
-        return
-      }
-      setStore("size", undefined)
-    }
-    if (data.type === "file-changed") {
-      queueReindex(typeof data.filePath === "string" ? data.filePath : undefined)
+    } finally {
+      pollRun = false
     }
   }
 
@@ -1043,8 +691,8 @@ export function DesignPreview(props: DesignPreviewProps) {
   let unlisten: (() => void) | undefined
 
   onMount(async () => {
-    health = setInterval(check, 5000)
-    poller = setInterval(poll, 2000)
+    health = setInterval(check, cfg.health)
+    poller = setInterval(poll, cfg.poll)
 
     type Listener = (name: string, cb: (e: { payload: string }) => void | Promise<void>) => Promise<() => void>
     const tauri = (globalThis as unknown as { __TAURI__?: { event?: { listen: Listener } } }).__TAURI__
@@ -1071,7 +719,7 @@ export function DesignPreview(props: DesignPreviewProps) {
           const resolved: Record<string, { file: string; line: number }> = {}
           const hits = await Promise.all(
             names.map(async (name) => {
-              const hit = (await queryIndex(name, undefined)) ?? (await findDefinition(name))
+              const hit = (await queryIndex(name, undefined)) ?? (await lookup.findDefinition(name))
               if (!hit) return
               return [name, { file: hit.file, line: hit.line }] as const
             }),
@@ -1083,9 +731,7 @@ export function DesignPreview(props: DesignPreviewProps) {
           const count = Object.keys(resolved).length
           if (count > 0) {
             console.log("[Design] Resolved", count, "sources, sending to child webview")
-            platform.evalDesignWebview?.(
-              `window.__opencode_resolve_sources && window.__opencode_resolve_sources(${JSON.stringify(resolved)})`,
-            )
+            run(script("__opencode_resolve_sources", JSON.stringify(resolved)))
           }
         } catch (err) {
           console.log("[Design] component-list error:", err)
@@ -1105,16 +751,16 @@ export function DesignPreview(props: DesignPreviewProps) {
                   source: store.selected.source ?? raw.source,
                 }
               : raw
-          const file = info.source?.file ? normalizePath(info.source.file) : undefined
+          const file = info.source?.file ? lookup.normalizePath(info.source.file) : undefined
           const comp = info.component ?? info.source?.component
           const hit =
-            !file || !isSourceFile(file) || (comp ? !fileDefinesComponent(file, comp) : false)
+            !file || !lookup.isSourceFile(file) || (comp ? !lookup.fileDefinesComponent(file, comp) : false)
               ? await locate(info)
               : null
           const next = hit ? setResolved(info, hit) : info
           setStore("notes", (prev) => [...prev, note(next, text)])
 
-          const path = next.source?.file ? normalizePath(next.source.file) : undefined
+          const path = next.source?.file ? lookup.normalizePath(next.source.file) : undefined
           if (!path) return
           props.onComment?.({
             file: path,
@@ -1148,6 +794,7 @@ export function DesignPreview(props: DesignPreviewProps) {
     observer?.disconnect()
     if (raf) cancelAnimationFrame(raf)
     if (change) clearTimeout(change)
+    stopFollow()
     if (health) clearInterval(health)
     if (poller) clearInterval(poller)
     if (poke) clearTimeout(poke)
@@ -1166,6 +813,10 @@ export function DesignPreview(props: DesignPreviewProps) {
     on(
       () => sdk.directory,
       () => {
+        bump()
+        lastCmd = 0
+        sent = ""
+        saveNext = false
         changed.clear()
         rustNames = []
         resetCache()
@@ -1210,7 +861,7 @@ export function DesignPreview(props: DesignPreviewProps) {
       () => store.selected,
       (sel) => {
         if (!webviewOpen || sel) return
-        platform.evalDesignWebview?.(`window.__opencode_clear_selection && window.__opencode_clear_selection()`)
+        run(script("__opencode_clear_selection"))
       },
       { defer: true },
     ),
@@ -1437,8 +1088,8 @@ export function DesignPreview(props: DesignPreviewProps) {
                 {(file) => {
                   const src = el().source!
                   const comp = el().component ?? src.component
-                  const norm = normalizePath(file())
-                  const isDef = !comp || fileDefinesComponent(norm, comp)
+                  const norm = lookup.normalizePath(file())
+                  const isDef = !comp || lookup.fileDefinesComponent(norm, comp)
                   return (
                     <button
                       class="text-text-weak hover:text-text-strong underline shrink-0"

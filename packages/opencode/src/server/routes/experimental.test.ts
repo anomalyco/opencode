@@ -76,4 +76,23 @@ describe("ExperimentalRoutes", () => {
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual(body)
   })
+
+  test("GET /design returns null when command is not newer than since", async () => {
+    const app = ExperimentalRoutes()
+    const body = {
+      type: "select",
+      selector: ".hero",
+      timestamp: 456,
+    }
+
+    await Bun.write(path.join(dir, ".opencode", ".design-command.json"), JSON.stringify(body))
+
+    const res = await Instance.provide({
+      directory: dir,
+      fn: () => app.request("http://localhost/design?since=456"),
+    })
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toBeNull()
+  })
 })

@@ -72,7 +72,6 @@ const serverEnv = {
   OPENCODE_E2E_PROJECT_DIR: repoDir,
   OPENCODE_E2E_SESSION_TITLE: "E2E Session",
   OPENCODE_E2E_MESSAGE: "Seeded for UI e2e",
-<<<<<<< HEAD
   OPENCODE_E2E_MODEL: paid ? (process.env.OPENCODE_E2E_MODEL ?? "opencode/gpt-5-nano") : "opencode/gpt-5-nano",
   OPENCODE_E2E_REQUIRE_PAID: paid ? "true" : "false",
   OPENCODE_CLIENT: "app",
