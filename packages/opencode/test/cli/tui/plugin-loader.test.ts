@@ -468,14 +468,14 @@ test("continues loading when a plugin is missing config metadata", async () => {
       [tmp.extra.goodSpec, { marker: tmp.extra.goodMarker }],
       tmp.extra.bareSpec,
     ],
-    plugin_records: [
+    plugin_origins: [
       {
-        item: [tmp.extra.goodSpec, { marker: tmp.extra.goodMarker }],
+        spec: [tmp.extra.goodSpec, { marker: tmp.extra.goodMarker }],
         scope: "local",
         source: path.join(tmp.path, "tui.json"),
       },
       {
-        item: tmp.extra.bareSpec,
+        spec: tmp.extra.bareSpec,
         scope: "local",
         source: path.join(tmp.path, "tui.json"),
       },

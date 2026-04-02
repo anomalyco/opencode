@@ -57,6 +57,13 @@ function renderF5Line(line: string): string {
 }
 
 export namespace UI {
+  const wordmark = [
+    `⠀                                ▄     `,
+    `█▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█`,
+    `█  █ █  █ █▀▀▀ █  █ █    █  █ █  █ █▀▀▀`,
+    `▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀`,
+  ]
+
   export const CancelledError = NamedError.create("UICancelledError", z.void())
 
   export const Style = {
@@ -98,6 +105,16 @@ export namespace UI {
   }
 
   export function logo(pad?: string) {
+    if (!process.stdout.isTTY && !process.stderr.isTTY) {
+      const result = []
+      for (const row of wordmark) {
+        if (pad) result.push(pad)
+        result.push(row)
+        result.push(EOL)
+      }
+      return result.join("").trimEnd()
+    }
+
     const result: string[] = []
     const reset = "\x1b[0m"
     const left = {
