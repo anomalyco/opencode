@@ -1,6 +1,7 @@
 import type { Argv } from "yargs"
 import { cmd } from "./cmd"
 import { Session } from "../../session"
+import { SessionID } from "../../session/schema"
 import { bootstrap } from "../bootstrap"
 import { UI } from "../ui"
 import { Locale } from "../../util/locale"
@@ -57,13 +58,14 @@ export const SessionDeleteCommand = cmd({
   },
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
+      const sessionID = SessionID.make(args.sessionID)
       try {
-        await Session.get(args.sessionID)
+        await Session.get(sessionID)
       } catch {
         UI.error(`Session not found: ${args.sessionID}`)
         process.exit(1)
       }
-      await Session.remove(args.sessionID)
+      await Session.remove(sessionID)
       UI.println(UI.Style.TEXT_SUCCESS_BOLD + `Session ${args.sessionID} deleted` + UI.Style.TEXT_NORMAL)
     })
   },

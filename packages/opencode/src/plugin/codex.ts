@@ -4,6 +4,7 @@ import { Installation } from "../installation"
 import { Auth, OAUTH_DUMMY_KEY } from "../auth"
 import os from "os"
 import { ProviderTransform } from "@/provider/transform"
+import { ModelID, ProviderID } from "@/provider/schema"
 import { setTimeout as sleep } from "node:timers/promises"
 
 const log = Log.create({ service: "plugin.codex" })
@@ -359,50 +360,19 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
 
         // Filter models to only allowed Codex models for OAuth
         const allowedModels = new Set([
+          "gpt-5.1-codex",
           "gpt-5.1-codex-max",
           "gpt-5.1-codex-mini",
           "gpt-5.2",
-          "gpt-5.4",
           "gpt-5.2-codex",
           "gpt-5.3-codex",
-          "gpt-5.1-codex",
+          "gpt-5.4",
+          "gpt-5.4-mini",
         ])
         for (const modelId of Object.keys(provider.models)) {
           if (modelId.includes("codex")) continue
           if (allowedModels.has(modelId)) continue
           delete provider.models[modelId]
-        }
-
-        if (!provider.models["gpt-5.3-codex"]) {
-          const model = {
-            id: "gpt-5.3-codex",
-            providerID: "openai",
-            api: {
-              id: "gpt-5.3-codex",
-              url: "https://chatgpt.com/backend-api/codex",
-              npm: "@ai-sdk/openai",
-            },
-            name: "GPT-5.3 Codex",
-            capabilities: {
-              temperature: false,
-              reasoning: true,
-              attachment: true,
-              toolcall: true,
-              input: { text: true, audio: false, image: true, video: false, pdf: false },
-              output: { text: true, audio: false, image: false, video: false, pdf: false },
-              interleaved: false,
-            },
-            cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-            limit: { context: 400_000, input: 272_000, output: 128_000 },
-            status: "active" as const,
-            options: {},
-            headers: {},
-            release_date: "2026-02-05",
-            variants: {} as Record<string, Record<string, any>>,
-            family: "gpt-codex",
-          }
-          model.variants = ProviderTransform.variants(model)
-          provider.models["gpt-5.3-codex"] = model
         }
 
         // Zero out costs for Codex (included with ChatGPT subscription)

@@ -1,16 +1,74 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test"
 import path from "path"
 import { Session } from "../../src/session"
+import { ModelID, ProviderID } from "../../src/provider/schema"
 import { SessionRevert } from "../../src/session/revert"
 import { SessionCompaction } from "../../src/session/compaction"
 import { MessageV2 } from "../../src/session/message-v2"
 import { Log } from "../../src/util/log"
 import { Instance } from "../../src/project/instance"
-import { Identifier } from "../../src/id/id"
+import { MessageID, PartID } from "../../src/session/schema"
 import { tmpdir } from "../fixture/fixture"
 
-const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
+
+function user(sessionID: string, agent = "default") {
+  return Session.updateMessage({
+    id: MessageID.ascending(),
+    role: "user" as const,
+    sessionID: sessionID as any,
+    agent,
+    model: { providerID: ProviderID.make("openai"), modelID: ModelID.make("gpt-4") },
+    time: { created: Date.now() },
+  })
+}
+
+function assistant(sessionID: string, parentID: string, dir: string) {
+  return Session.updateMessage({
+    id: MessageID.ascending(),
+    role: "assistant" as const,
+    sessionID: sessionID as any,
+    mode: "default",
+    agent: "default",
+    path: { cwd: dir, root: dir },
+    cost: 0,
+    tokens: { output: 0, input: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    modelID: ModelID.make("gpt-4"),
+    providerID: ProviderID.make("openai"),
+    parentID: parentID as any,
+    time: { created: Date.now() },
+    finish: "end_turn",
+  })
+}
+
+function text(sessionID: string, messageID: string, content: string) {
+  return Session.updatePart({
+    id: PartID.ascending(),
+    messageID: messageID as any,
+    sessionID: sessionID as any,
+    type: "text" as const,
+    text: content,
+  })
+}
+
+function tool(sessionID: string, messageID: string) {
+  return Session.updatePart({
+    id: PartID.ascending(),
+    messageID: messageID as any,
+    sessionID: sessionID as any,
+    type: "tool" as const,
+    tool: "bash",
+    callID: "call-1",
+    state: {
+      status: "completed" as const,
+      input: {},
+      output: "done",
+      title: "",
+      metadata: {},
+      time: { start: 0, end: 1 },
+    },
+  })
+}
 
 describe("revert + compact workflow", () => {
   test("should properly handle compact command after revert", async () => {
@@ -24,13 +82,13 @@ describe("revert + compact workflow", () => {
 
         // Create a user message
         const userMsg1 = await Session.updateMessage({
-          id: Identifier.ascending("message"),
+          id: MessageID.ascending(),
           role: "user",
           sessionID,
           agent: "default",
           model: {
-            providerID: "openai",
-            modelID: "gpt-4",
+            providerID: ProviderID.make("openai"),
+            modelID: ModelID.make("gpt-4"),
           },
           time: {
             created: Date.now(),
@@ -39,7 +97,7 @@ describe("revert + compact workflow", () => {
 
         // Add a text part to the user message
         await Session.updatePart({
-          id: Identifier.ascending("part"),
+          id: PartID.ascending(),
           messageID: userMsg1.id,
           sessionID,
           type: "text",
@@ -48,7 +106,7 @@ describe("revert + compact workflow", () => {
 
         // Create an assistant response message
         const assistantMsg1: MessageV2.Assistant = {
-          id: Identifier.ascending("message"),
+          id: MessageID.ascending(),
           role: "assistant",
           sessionID,
           mode: "default",
@@ -64,8 +122,8 @@ describe("revert + compact workflow", () => {
             reasoning: 0,
             cache: { read: 0, write: 0 },
           },
-          modelID: "gpt-4",
-          providerID: "openai",
+          modelID: ModelID.make("gpt-4"),
+          providerID: ProviderID.make("openai"),
           parentID: userMsg1.id,
           time: {
             created: Date.now(),
@@ -76,7 +134,7 @@ describe("revert + compact workflow", () => {
 
         // Add a text part to the assistant message
         await Session.updatePart({
-          id: Identifier.ascending("part"),
+          id: PartID.ascending(),
           messageID: assistantMsg1.id,
           sessionID,
           type: "text",
@@ -85,13 +143,13 @@ describe("revert + compact workflow", () => {
 
         // Create another user message
         const userMsg2 = await Session.updateMessage({
-          id: Identifier.ascending("message"),
+          id: MessageID.ascending(),
           role: "user",
           sessionID,
           agent: "default",
           model: {
-            providerID: "openai",
-            modelID: "gpt-4",
+            providerID: ProviderID.make("openai"),
+            modelID: ModelID.make("gpt-4"),
           },
           time: {
             created: Date.now(),
@@ -99,7 +157,7 @@ describe("revert + compact workflow", () => {
         })
 
         await Session.updatePart({
-          id: Identifier.ascending("part"),
+          id: PartID.ascending(),
           messageID: userMsg2.id,
           sessionID,
           type: "text",
@@ -108,7 +166,7 @@ describe("revert + compact workflow", () => {
 
         // Create another assistant response
         const assistantMsg2: MessageV2.Assistant = {
-          id: Identifier.ascending("message"),
+          id: MessageID.ascending(),
           role: "assistant",
           sessionID,
           mode: "default",
@@ -124,8 +182,8 @@ describe("revert + compact workflow", () => {
             reasoning: 0,
             cache: { read: 0, write: 0 },
           },
-          modelID: "gpt-4",
-          providerID: "openai",
+          modelID: ModelID.make("gpt-4"),
+          providerID: ProviderID.make("openai"),
           parentID: userMsg2.id,
           time: {
             created: Date.now(),
@@ -135,7 +193,7 @@ describe("revert + compact workflow", () => {
         await Session.updateMessage(assistantMsg2)
 
         await Session.updatePart({
-          id: Identifier.ascending("part"),
+          id: PartID.ascending(),
           messageID: assistantMsg2.id,
           sessionID,
           type: "text",
@@ -200,13 +258,13 @@ describe("revert + compact workflow", () => {
 
         // Create initial messages
         const userMsg = await Session.updateMessage({
-          id: Identifier.ascending("message"),
+          id: MessageID.ascending(),
           role: "user",
           sessionID,
           agent: "default",
           model: {
-            providerID: "openai",
-            modelID: "gpt-4",
+            providerID: ProviderID.make("openai"),
+            modelID: ModelID.make("gpt-4"),
           },
           time: {
             created: Date.now(),
@@ -214,7 +272,7 @@ describe("revert + compact workflow", () => {
         })
 
         await Session.updatePart({
-          id: Identifier.ascending("part"),
+          id: PartID.ascending(),
           messageID: userMsg.id,
           sessionID,
           type: "text",
@@ -222,7 +280,7 @@ describe("revert + compact workflow", () => {
         })
 
         const assistantMsg: MessageV2.Assistant = {
-          id: Identifier.ascending("message"),
+          id: MessageID.ascending(),
           role: "assistant",
           sessionID,
           mode: "default",
@@ -238,8 +296,8 @@ describe("revert + compact workflow", () => {
             reasoning: 0,
             cache: { read: 0, write: 0 },
           },
-          modelID: "gpt-4",
-          providerID: "openai",
+          modelID: ModelID.make("gpt-4"),
+          providerID: ProviderID.make("openai"),
           parentID: userMsg.id,
           time: {
             created: Date.now(),
@@ -249,7 +307,7 @@ describe("revert + compact workflow", () => {
         await Session.updateMessage(assistantMsg)
 
         await Session.updatePart({
-          id: Identifier.ascending("part"),
+          id: PartID.ascending(),
           messageID: assistantMsg.id,
           sessionID,
           type: "text",
@@ -279,6 +337,100 @@ describe("revert + compact workflow", () => {
 
         // Clean up
         await Session.remove(sessionID)
+      },
+    })
+  })
+
+  test("cleanup with partID removes parts from the revert point onward", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const sid = session.id
+
+        const u1 = await user(sid)
+        const p1 = await text(sid, u1.id, "first part")
+        const p2 = await tool(sid, u1.id)
+        const p3 = await text(sid, u1.id, "third part")
+
+        // Set revert state pointing at a specific part
+        await Session.setRevert({
+          sessionID: sid,
+          revert: { messageID: u1.id, partID: p2.id },
+          summary: { additions: 0, deletions: 0, files: 0 },
+        })
+
+        const info = await Session.get(sid)
+        await SessionRevert.cleanup(info)
+
+        const msgs = await Session.messages({ sessionID: sid })
+        expect(msgs.length).toBe(1)
+        // Only the first part should remain (before the revert partID)
+        expect(msgs[0].parts.length).toBe(1)
+        expect(msgs[0].parts[0].id).toBe(p1.id)
+
+        const cleared = await Session.get(sid)
+        expect(cleared.revert).toBeUndefined()
+      },
+    })
+  })
+
+  test("cleanup removes messages after revert point but keeps earlier ones", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const sid = session.id
+
+        const u1 = await user(sid)
+        await text(sid, u1.id, "hello")
+        const a1 = await assistant(sid, u1.id, tmp.path)
+        await text(sid, a1.id, "hi back")
+
+        const u2 = await user(sid)
+        await text(sid, u2.id, "second question")
+        const a2 = await assistant(sid, u2.id, tmp.path)
+        await text(sid, a2.id, "second answer")
+
+        // Revert from u2 onward
+        await Session.setRevert({
+          sessionID: sid,
+          revert: { messageID: u2.id },
+          summary: { additions: 0, deletions: 0, files: 0 },
+        })
+
+        const info = await Session.get(sid)
+        await SessionRevert.cleanup(info)
+
+        const msgs = await Session.messages({ sessionID: sid })
+        const ids = msgs.map((m) => m.info.id)
+        expect(ids).toContain(u1.id)
+        expect(ids).toContain(a1.id)
+        expect(ids).not.toContain(u2.id)
+        expect(ids).not.toContain(a2.id)
+      },
+    })
+  })
+
+  test("cleanup is a no-op when session has no revert state", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const sid = session.id
+
+        const u1 = await user(sid)
+        await text(sid, u1.id, "hello")
+
+        const info = await Session.get(sid)
+        expect(info.revert).toBeUndefined()
+        await SessionRevert.cleanup(info)
+
+        const msgs = await Session.messages({ sessionID: sid })
+        expect(msgs.length).toBe(1)
       },
     })
   })

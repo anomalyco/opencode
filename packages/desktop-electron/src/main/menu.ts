@@ -1,6 +1,7 @@
 import { BrowserWindow, Menu, shell } from "electron"
 
 import { UPDATER_ENABLED } from "./constants"
+import { createMainWindow } from "./windows"
 
 type Deps = {
   trigger: (id: string) => void
@@ -48,6 +49,11 @@ export function createMenu(deps: Deps) {
       submenu: [
         { label: "New Session", accelerator: "Shift+Cmd+S", click: () => deps.trigger("session.new") },
         { label: "Open Project...", accelerator: "Cmd+O", click: () => deps.trigger("project.open") },
+        {
+          label: "New Window",
+          accelerator: "Cmd+Shift+N",
+          click: () => createMainWindow({ updaterEnabled: UPDATER_ENABLED }),
+        },
         { type: "separator" },
         { role: "close" },
       ],

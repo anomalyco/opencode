@@ -1,17 +1,22 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import path from "path"
 import { ReadTool } from "../../src/tool/read"
 import { Instance } from "../../src/project/instance"
 import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
-import { PermissionNext } from "../../src/permission/next"
+import { Permission } from "../../src/permission"
 import { Agent } from "../../src/agent/agent"
+import { SessionID, MessageID } from "../../src/session/schema"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 
+afterEach(async () => {
+  await Instance.disposeAll()
+})
+
 const ctx = {
-  sessionID: "test",
-  messageID: "",
+  sessionID: SessionID.make("ses_test"),
+  messageID: MessageID.make(""),
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),
@@ -19,6 +24,10 @@ const ctx = {
   metadata: () => {},
   ask: async () => {},
 }
+
+const full = (p: string) => (process.platform === "win32" ? Filesystem.normalizePath(p) : p)
+const glob = (p: string) =>
+  process.platform === "win32" ? Filesystem.normalizePathPattern(p) : p.replaceAll("\\", "/")
 
 describe("tool.read external_directory permission", () => {
   test("allows reading absolute path inside project directory", async () => {
@@ -64,20 +73,53 @@ describe("tool.read external_directory permission", () => {
       directory: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
-        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
         const testCtx = {
           ...ctx,
-          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+          ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
           },
         }
         await read.execute({ filePath: path.join(outerTmp.path, "secret.txt") }, testCtx)
         const extDirReq = requests.find((r) => r.permission === "external_directory")
         expect(extDirReq).toBeDefined()
-        expect(extDirReq!.patterns.some((p) => p.includes(outerTmp.path.replaceAll("\\", "/")))).toBe(true)
+        expect(extDirReq!.patterns).toContain(glob(path.join(outerTmp.path, "*")))
       },
     })
   })
+
+  if (process.platform === "win32") {
+    test("normalizes read permission paths on Windows", async () => {
+      await using tmp = await tmpdir({
+        git: true,
+        init: async (dir) => {
+          await Bun.write(path.join(dir, "test.txt"), "hello world")
+        },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const read = await ReadTool.init()
+          const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+          const testCtx = {
+            ...ctx,
+            ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
+              requests.push(req)
+            },
+          }
+          const target = path.join(tmp.path, "test.txt")
+          const alt = target
+            .replace(/^[A-Za-z]:/, "")
+            .replaceAll("\\", "/")
+            .toLowerCase()
+          await read.execute({ filePath: alt }, testCtx)
+          const readReq = requests.find((r) => r.permission === "read")
+          expect(readReq).toBeDefined()
+          expect(readReq!.patterns).toEqual([full(target)])
+        },
+      })
+    })
+  }
 
   test("asks for directory-scoped external_directory permission when reading external directory", async () => {
     await using outerTmp = await tmpdir({
@@ -90,17 +132,17 @@ describe("tool.read external_directory permission", () => {
       directory: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
-        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
         const testCtx = {
           ...ctx,
-          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+          ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
           },
         }
         await read.execute({ filePath: path.join(outerTmp.path, "external") }, testCtx)
         const extDirReq = requests.find((r) => r.permission === "external_directory")
         expect(extDirReq).toBeDefined()
-        expect(extDirReq!.patterns).toContain(path.join(outerTmp.path, "external", "*").replaceAll("\\", "/"))
+        expect(extDirReq!.patterns).toContain(glob(path.join(outerTmp.path, "external", "*")))
       },
     })
   })
@@ -111,10 +153,10 @@ describe("tool.read external_directory permission", () => {
       directory: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
-        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
         const testCtx = {
           ...ctx,
-          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+          ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
           },
         }
@@ -137,10 +179,10 @@ describe("tool.read external_directory permission", () => {
       directory: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
-        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
         const testCtx = {
           ...ctx,
-          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+          ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
           },
         }
@@ -175,14 +217,14 @@ describe("tool.read env file permissions", () => {
           let askedForEnv = false
           const ctxWithPermissions = {
             ...ctx,
-            ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+            ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
               for (const pattern of req.patterns) {
-                const rule = PermissionNext.evaluate(req.permission, pattern, agent.permission)
+                const rule = Permission.evaluate(req.permission, pattern, agent.permission)
                 if (rule.action === "ask" && req.permission === "read") {
                   askedForEnv = true
                 }
                 if (rule.action === "deny") {
-                  throw new PermissionNext.DeniedError(agent.permission)
+                  throw new Permission.DeniedError({ ruleset: agent.permission })
                 }
               }
             },

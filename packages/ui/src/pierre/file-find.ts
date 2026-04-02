@@ -1,4 +1,7 @@
 import { createEffect, createSignal, onCleanup, onMount } from "solid-js"
+import { makeEventListener } from "@solid-primitives/event-listener"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
+import { createStore } from "solid-js/store"
 
 export type FindHost = {
   element: () => HTMLElement | undefined
@@ -103,19 +106,25 @@ type CreateFileFindOptions = {
 export function createFileFind(opts: CreateFileFindOptions) {
   let input: HTMLInputElement | undefined
   let overlayFrame: number | undefined
-  let overlayScroll: HTMLElement[] = []
   let mode: "highlights" | "overlay" = "overlay"
   let hits: Range[] = []
+  const [overlayScroll, setOverlayScroll] = createSignal<HTMLElement[]>([])
 
-  const [open, setOpen] = createSignal(false)
-  const [query, setQuery] = createSignal("")
-  const [index, setIndex] = createSignal(0)
-  const [count, setCount] = createSignal(0)
-  const [pos, setPos] = createSignal({ top: 8, right: 8 })
+  const [state, setState] = createStore({
+    open: false,
+    query: "",
+    index: 0,
+    count: 0,
+    pos: { top: 8, right: 8 },
+  })
+  const open = () => state.open
+  const query = () => state.query
+  const index = () => state.index
+  const count = () => state.count
+  const pos = () => state.pos
 
   const clearOverlayScroll = () => {
-    for (const el of overlayScroll) el.removeEventListener("scroll", scheduleOverlay)
-    overlayScroll = []
+    setOverlayScroll([])
   }
 
   const clearOverlay = () => {
@@ -188,11 +197,11 @@ export function createFileFind(opts: CreateFileFindOptions) {
           (node): node is HTMLElement => node instanceof HTMLElement,
         )
       : []
-    if (next.length === overlayScroll.length && next.every((el, i) => el === overlayScroll[i])) return
+    const current = overlayScroll()
+    if (next.length === current.length && next.every((el, i) => el === current[i])) return
 
     clearOverlayScroll()
-    overlayScroll = next
-    for (const el of overlayScroll) el.addEventListener("scroll", scheduleOverlay, { passive: true })
+    setOverlayScroll(next)
   }
 
   const clearFind = () => {
@@ -200,8 +209,8 @@ export function createFileFind(opts: CreateFileFindOptions) {
     clearOverlay()
     clearOverlayScroll()
     hits = []
-    setCount(0)
-    setIndex(0)
+    setState("count", 0)
+    setState("index", 0)
   }
 
   const positionBar = () => {
@@ -214,7 +223,7 @@ export function createFileFind(opts: CreateFileFindOptions) {
     const title = parseFloat(getComputedStyle(root).getPropertyValue("--session-title-height"))
     const header = Number.isNaN(title) ? 0 : title
 
-    setPos({
+    setState("pos", {
       top: Math.round(rect.top) + header - 4,
       right: Math.round(window.innerWidth - rect.right) + 8,
     })
@@ -318,8 +327,8 @@ export function createFileFind(opts: CreateFileFindOptions) {
     const currentIndex = total ? Math.min(desired, total - 1) : 0
 
     hits = ranges
-    setCount(total)
-    setIndex(currentIndex)
+    setState("count", total)
+    setState("index", currentIndex)
 
     const active = ranges[currentIndex]
     if (mode === "highlights") {
@@ -342,8 +351,8 @@ export function createFileFind(opts: CreateFileFindOptions) {
   }
 
   const close = () => {
-    setOpen(false)
-    setQuery("")
+    setState("open", false)
+    setState("query", "")
     clearFind()
     if (current === host) current = undefined
   }
@@ -352,7 +361,7 @@ export function createFileFind(opts: CreateFileFindOptions) {
     if (current && current !== host) current.close()
     current = host
     target = host
-    if (!open()) setOpen(true)
+    if (!open()) setState("open", true)
     requestAnimationFrame(() => {
       apply({ scroll: true })
       input?.focus()
@@ -366,7 +375,7 @@ export function createFileFind(opts: CreateFileFindOptions) {
     if (total <= 0) return
 
     const currentIndex = (index() + dir + total) % total
-    setIndex(currentIndex)
+    setState("index", currentIndex)
 
     const active = hits[currentIndex]
     if (!active) return
@@ -395,6 +404,10 @@ export function createFileFind(opts: CreateFileFindOptions) {
     close,
   }
 
+  createEffect(() => {
+    for (const el of overlayScroll()) makeEventListener(el, "scroll", scheduleOverlay, { passive: true })
+  })
+
   onMount(() => {
     mode = supportsHighlights() ? "highlights" : "overlay"
     installShortcuts()
@@ -416,18 +429,12 @@ export function createFileFind(opts: CreateFileFindOptions) {
 
     const update = () => positionBar()
     requestAnimationFrame(update)
-    window.addEventListener("resize", update, { passive: true })
+    makeEventListener(window, "resize", update, { passive: true })
 
     const wrapper = opts.wrapper()
     if (!wrapper) return
     const root = scrollParent(wrapper) ?? wrapper
-    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(() => update())
-    observer?.observe(root)
-
-    onCleanup(() => {
-      window.removeEventListener("resize", update)
-      observer?.disconnect()
-    })
+    createResizeObserver(root, update)
   })
 
   onCleanup(() => {
@@ -449,8 +456,8 @@ export function createFileFind(opts: CreateFileFindOptions) {
       input = el
     },
     setQuery: (value: string) => {
-      setQuery(value)
-      setIndex(0)
+      setState("query", value)
+      setState("index", 0)
       apply({ reset: true, scroll: true })
     },
     focus,
