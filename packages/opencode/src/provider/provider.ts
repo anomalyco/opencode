@@ -5,7 +5,7 @@ import { Config } from "../config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
 import { Log } from "../util/log"
-import { BunProc } from "../bun"
+import { Npm } from "../npm"
 import { Hash } from "../util/hash"
 import { Plugin } from "../plugin"
 import { NamedError } from "@opencode-ai/util/error"
@@ -44,6 +44,7 @@ import { createGateway } from "@ai-sdk/gateway"
 import { createTogetherAI } from "@ai-sdk/togetherai"
 import { createPerplexity } from "@ai-sdk/perplexity"
 import { createVercel } from "@ai-sdk/vercel"
+import { createVenice } from "venice-ai-sdk-provider"
 import {
   createGitLab,
   VERSION as GITLAB_PROVIDER_VERSION,
@@ -139,6 +140,7 @@ export namespace Provider {
     "@ai-sdk/vercel": createVercel,
     "gitlab-ai-provider": createGitLab,
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
+    "venice-ai-sdk-provider": createVenice,
   }
 
   type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
@@ -681,6 +683,9 @@ export namespace Provider {
         autoload: !!apiKey,
         options: {
           apiKey,
+          headers: {
+            "User-Agent": `opencode/${Installation.VERSION} cloudflare-workers-ai (${os.platform()} ${os.release()}; ${os.arch()})`,
+          },
         },
         async getModel(sdk: any, modelID: string) {
           return sdk.languageModel(modelID)
@@ -732,6 +737,9 @@ export namespace Provider {
         cacheKey: input.options?.cacheKey,
         skipCache: input.options?.skipCache,
         collectLog: input.options?.collectLog,
+        headers: {
+          "User-Agent": `opencode/${Installation.VERSION} cloudflare-ai-gateway (${os.platform()} ${os.release()}; ${os.arch()})`,
+        },
       }
 
       const aigateway = createAiGateway({
@@ -961,13 +969,14 @@ export namespace Provider {
     }
   }
 
-  const layer: Layer.Layer<Service, never, Config.Service | Auth.Service> = Layer.effect(
+  const layer: Layer.Layer<Service, never, Config.Service | Auth.Service | Plugin.Service> = Layer.effect(
     Service,
     Effect.gen(function* () {
       const config = yield* Config.Service
       const auth = yield* Auth.Service
+      const plugin = yield* Plugin.Service
 
-      const cache = yield* InstanceState.make<State>(() =>
+      const state = yield* InstanceState.make<State>(() =>
         Effect.gen(function* () {
           using _ = log.time("state")
           const cfg = yield* config.get()
@@ -1128,7 +1137,7 @@ export namespace Provider {
             }
           }
 
-          const plugins = yield* Effect.promise(() => Plugin.list())
+          const plugins = yield* plugin.list()
           for (const plugin of plugins) {
             if (!plugin.auth) continue
             const providerID = ProviderID.make(plugin.auth.provider)
@@ -1177,6 +1186,49 @@ export namespace Provider {
             mergeProvider(providerID, partial)
           }
 
+          const gitlab = ProviderID.make("gitlab")
+          if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
+            yield* Effect.promise(async () => {
+              try {
+                const discovered = await discoveryLoaders[gitlab]()
+                for (const [modelID, model] of Object.entries(discovered)) {
+                  if (!providers[gitlab].models[modelID]) {
+                    providers[gitlab].models[modelID] = model
+                  }
+                }
+              } catch (e) {
+                log.warn("state discovery error", { id: "gitlab", error: e })
+              }
+            })
+          }
+
+          for (const hook of plugins) {
+            const p = hook.provider
+            const models = p?.models
+            if (!p || !models) continue
+
+            const providerID = ProviderID.make(p.id)
+            if (disabled.has(providerID)) continue
+
+            const provider = providers[providerID]
+            if (!provider) continue
+            const pluginAuth = yield* auth.get(providerID).pipe(Effect.orDie)
+
+            provider.models = yield* Effect.promise(async () => {
+              const next = await models(provider, { auth: pluginAuth })
+              return Object.fromEntries(
+                Object.entries(next).map(([id, model]) => [
+                  id,
+                  {
+                    ...model,
+                    id: ModelID.make(id),
+                    providerID,
+                  },
+                ]),
+              )
+            })
+          }
+
           for (const [id, provider] of Object.entries(providers)) {
             const providerID = ProviderID.make(id)
             if (!isProviderAllowed(providerID)) {
@@ -1221,22 +1273,6 @@ export namespace Provider {
             log.info("found", { providerID })
           }
 
-          const gitlab = ProviderID.make("gitlab")
-          if (discoveryLoaders[gitlab] && providers[gitlab]) {
-            yield* Effect.promise(async () => {
-              try {
-                const discovered = await discoveryLoaders[gitlab]()
-                for (const [modelID, model] of Object.entries(discovered)) {
-                  if (!providers[gitlab].models[modelID]) {
-                    providers[gitlab].models[modelID] = model
-                  }
-                }
-              } catch (e) {
-                log.warn("state discovery error", { id: "gitlab", error: e })
-              }
-            })
-          }
-
           return {
             models: languages,
             providers,
@@ -1247,7 +1283,7 @@ export namespace Provider {
         }),
       )
 
-      const list = Effect.fn("Provider.list")(() => InstanceState.use(cache, (s) => s.providers))
+      const list = Effect.fn("Provider.list")(() => InstanceState.use(state, (s) => s.providers))
 
       async function resolveSDK(model: Model, s: State) {
         try {
@@ -1364,7 +1400,9 @@ export namespace Provider {
 
           let installedPath: string
           if (!model.api.npm.startsWith("file://")) {
-            installedPath = await BunProc.install(model.api.npm, "latest")
+            const item = await Npm.add(model.api.npm)
+            if (!item.entrypoint) throw new Error(`Package ${model.api.npm} has no import entrypoint`)
+            installedPath = item.entrypoint
           } else {
             log.info("loading local provider", { pkg: model.api.npm })
             installedPath = model.api.npm
@@ -1385,11 +1423,11 @@ export namespace Provider {
       }
 
       const getProvider = Effect.fn("Provider.getProvider")((providerID: ProviderID) =>
-        InstanceState.use(cache, (s) => s.providers[providerID]),
+        InstanceState.use(state, (s) => s.providers[providerID]),
       )
 
       const getModel = Effect.fn("Provider.getModel")(function* (providerID: ProviderID, modelID: ModelID) {
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         const provider = s.providers[providerID]
         if (!provider) {
           const available = Object.keys(s.providers)
@@ -1407,7 +1445,7 @@ export namespace Provider {
       })
 
       const getLanguage = Effect.fn("Provider.getLanguage")(function* (model: Model) {
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         const key = `${model.providerID}/${model.id}`
         if (s.models.has(key)) return s.models.get(key)!
 
@@ -1439,7 +1477,7 @@ export namespace Provider {
       })
 
       const closest = Effect.fn("Provider.closest")(function* (providerID: ProviderID, query: string[]) {
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         const provider = s.providers[providerID]
         if (!provider) return undefined
         for (const item of query) {
@@ -1458,7 +1496,7 @@ export namespace Provider {
           return yield* getModel(parsed.providerID, parsed.modelID)
         }
 
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         const provider = s.providers[providerID]
         if (!provider) return undefined
 
@@ -1510,7 +1548,7 @@ export namespace Provider {
         const cfg = yield* config.get()
         if (cfg.model) return parseModel(cfg.model)
 
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         const recent = yield* Effect.promise(() =>
           Filesystem.readJson<{
             recent?: { providerID: ProviderID; modelID: ModelID }[]
@@ -1541,7 +1579,13 @@ export namespace Provider {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(Auth.defaultLayer))
+  export const defaultLayer = Layer.suspend(() =>
+    layer.pipe(
+      Layer.provide(Config.defaultLayer),
+      Layer.provide(Auth.defaultLayer),
+      Layer.provide(Plugin.defaultLayer),
+    ),
+  )
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 

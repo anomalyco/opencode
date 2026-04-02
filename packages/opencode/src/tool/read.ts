@@ -9,7 +9,7 @@ import { FileTime } from "../file/time"
 import DESCRIPTION from "./read.txt"
 import { Instance } from "../project/instance"
 import { assertExternalDirectory } from "./external-directory"
-import { InstructionPrompt } from "../session/instruction"
+import { Instruction } from "../session/instruction"
 import { Filesystem } from "../util/filesystem"
 import { assertSafePath } from "./path-guard"
 import { renderNotebook } from "./notebook"
@@ -132,7 +132,7 @@ export const ReadTool = Tool.define("read", {
       }
     }
 
-    const instructions = await InstructionPrompt.resolve(ctx.messages, filepath, ctx.messageID)
+    const instructions = await Instruction.resolve(ctx.messages, filepath, ctx.messageID)
 
     // Deduplication: if this exact file was already read this session and hasn't changed, skip re-reading
     if (!params.offset && !params.limit) {

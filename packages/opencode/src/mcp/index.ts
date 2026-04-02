@@ -477,7 +477,7 @@ export namespace MCP {
         })
       }
 
-      const cache = yield* InstanceState.make<State>(
+      const state = yield* InstanceState.make<State>(
         Effect.fn("MCP.state")(function* () {
           const cfg = yield* cfgSvc.get()
           // 18.4: merge MCP servers contributed by plugin manifests (enabled manifests only)
@@ -560,7 +560,7 @@ export namespace MCP {
       }
 
       const status = Effect.fn("MCP.status")(function* () {
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
 
         const cfg = yield* cfgSvc.get()
         const config = cfg.mcp ?? {}
@@ -575,12 +575,12 @@ export namespace MCP {
       })
 
       const clients = Effect.fn("MCP.clients")(function* () {
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         return s.clients
       })
 
       const createAndStore = Effect.fn("MCP.createAndStore")(function* (name: string, mcp: Config.Mcp) {
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         const result = yield* create(name, mcp)
 
         s.status[name] = result.status
@@ -599,7 +599,7 @@ export namespace MCP {
 
       const add = Effect.fn("MCP.add")(function* (name: string, mcp: Config.Mcp) {
         yield* createAndStore(name, mcp)
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         return { status: s.status }
       })
 
@@ -613,7 +613,7 @@ export namespace MCP {
       })
 
       const disconnect = Effect.fn("MCP.disconnect")(function* (name: string) {
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         yield* closeClient(s, name)
         delete s.clients[name]
         s.status[name] = { status: "disabled" }
@@ -621,7 +621,7 @@ export namespace MCP {
 
       const tools = Effect.fn("MCP.tools")(function* () {
         const result: Record<string, Tool> = {}
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
 
         const cfg = yield* cfgSvc.get()
         const config = cfg.mcp ?? {}
@@ -668,12 +668,12 @@ export namespace MCP {
       }
 
       const prompts = Effect.fn("MCP.prompts")(function* () {
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         return yield* collectFromConnected(s, (c) => c.listPrompts().then((r) => r.prompts), "prompts")
       })
 
       const resources = Effect.fn("MCP.resources")(function* () {
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         return yield* collectFromConnected(s, (c) => c.listResources().then((r) => r.resources), "resources")
       })
 
@@ -683,7 +683,7 @@ export namespace MCP {
         label: string,
         meta?: Record<string, unknown>,
       ) {
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         const client = s.clients[clientName]
         if (!client) {
           log.warn(`client not found for ${label}`, { clientName })
