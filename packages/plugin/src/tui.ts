@@ -11,6 +11,7 @@ import type {
   Provider,
   PermissionRequest,
   QuestionRequest,
+  Session,
   SessionStatus,
   TextPart,
   Workspace,
@@ -278,6 +279,8 @@ export type TuiState = {
   }
   session: {
     count: () => number
+    list: () => ReadonlyArray<Session>
+    get: (sessionID: string) => Session | undefined
     diff: (sessionID: string) => ReadonlyArray<TuiSidebarFileItem>
     todo: (sessionID: string) => ReadonlyArray<TuiSidebarTodoItem>
     messages: (sessionID: string) => ReadonlyArray<Message>

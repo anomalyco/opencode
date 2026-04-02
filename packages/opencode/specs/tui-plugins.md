@@ -261,6 +261,9 @@ Command behavior:
 
 ### KV, state, client, events
 
+- `api.state.session.list()` returns the loaded session list.
+- `api.state.session.get(sessionID)` returns a loaded session by id when available.
+
 - `api.kv` is the shared app KV store backed by `state/kv.json`. It is not plugin-namespaced.
 - `api.kv` exposes `ready`.
 - `api.tuiConfig` and `api.state` are live host objects/getters, not frozen snapshots.
