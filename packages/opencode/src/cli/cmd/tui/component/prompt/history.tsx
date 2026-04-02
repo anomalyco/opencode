@@ -28,10 +28,6 @@ export type PromptInfo = {
 
 const MAX_HISTORY_ENTRIES = 50
 
-function scope(value?: string) {
-  return value ?? "global"
-}
-
 export const { use: usePromptHistory, provider: PromptHistoryProvider } = createSimpleContext({
   name: "PromptHistory",
   init: () => {
@@ -60,23 +56,26 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
       }
     })
 
-    const [store, setStore] = createStore({
+    const [store, setStore] = createStore<{
+      index: number
+      scope?: string
+      history: PromptInfo[]
+    }>({
       index: 0,
-      scope: "global",
-      history: [] as PromptInfo[],
+      scope: undefined,
+      history: [],
     })
 
     return {
-      move(direction: 1 | -1, input: string, currentScope?: string) {
-        const nextScope = scope(currentScope)
-        const changed = store.scope !== nextScope
+      move(direction: 1 | -1, input: string, scope?: string) {
+        const changed = store.scope !== scope
         const index = changed ? 0 : store.index
         if (changed) {
-          setStore("scope", nextScope)
+          setStore("scope", scope)
           setStore("index", 0)
         }
 
-        const list = store.history.filter((item) => scope(item.scope) === nextScope)
+        const list = scope === undefined ? store.history : store.history.filter((item) => item.scope === scope)
         if (!list.length) return undefined
         const current = list.at(index)
         if (!current) return undefined
@@ -85,7 +84,7 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
         if (Math.abs(next) > list.length) return undefined
         if (next > 0) return undefined
 
-        setStore("scope", nextScope)
+        setStore("scope", scope)
         setStore("index", next)
 
         if (next === 0)
@@ -95,11 +94,8 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
           }
         return list.at(next)
       },
-      append(item: PromptInfo, currentScope?: string) {
-        const entry = {
-          ...structuredClone(unwrap(item)),
-          scope: scope(currentScope),
-        } satisfies PromptInfo
+      append(item: PromptInfo, scope?: string) {
+        const entry = { ...structuredClone(unwrap(item)), scope } satisfies PromptInfo
         let trimmed = false
         setStore(
           produce((draft) => {
@@ -108,7 +104,7 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
               draft.history = draft.history.slice(-MAX_HISTORY_ENTRIES)
               trimmed = true
             }
-            draft.scope = entry.scope
+            draft.scope = scope
             draft.index = 0
           }),
         )
