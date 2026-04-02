@@ -238,9 +238,9 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       }
     }
 
-    if (typeof window === "object") makeEventListener(window, "storage", onStorage)
-
     onMount(() => {
+      makeEventListener(window, "storage", onStorage)
+
       const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
       const onMedia = () => {
         if (store.colorScheme !== "system") return
