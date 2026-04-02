@@ -230,12 +230,15 @@ function createPacedValue(getValue: () => string, live?: () => boolean) {
   return value
 }
 
-function PacedMarkdown(props: { text: () => string; cacheKey: string; streaming: () => boolean }) {
-  const value = createPacedValue(props.text, props.streaming)
+function PacedMarkdown(props: { text: string; cacheKey: string; streaming: boolean }) {
+  const value = createPacedValue(
+    () => props.text,
+    () => props.streaming,
+  )
 
   return (
     <Show when={value()}>
-      <Markdown text={value()} cacheKey={props.cacheKey} streaming={props.streaming()} />
+      <Markdown text={value()} cacheKey={props.cacheKey} streaming={props.streaming} />
     </Show>
   )
 }
@@ -1411,7 +1414,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
       <div data-component="text-part">
         <div data-slot="text-part-body">
           <Show when={streaming()} fallback={<Markdown text={text()} cacheKey={part().id} streaming={false} />}>
-            <PacedMarkdown text={text} cacheKey={part().id} streaming={streaming} />
+            <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
           </Show>
         </div>
         <Show when={showCopy()}>
@@ -1453,7 +1456,7 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
     <Show when={text()}>
       <div data-component="reasoning-part">
         <Show when={streaming()} fallback={<Markdown text={text()} cacheKey={part().id} streaming={false} />}>
-          <PacedMarkdown text={text} cacheKey={part().id} streaming={streaming} />
+          <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
         </Show>
       </div>
     </Show>
