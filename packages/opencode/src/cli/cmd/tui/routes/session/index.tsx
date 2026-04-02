@@ -238,17 +238,15 @@ export function Session() {
 
   createEffect(() => {
     const title = Locale.truncate(session()?.title ?? "", 50)
-    const pad = (text: string) => text.padEnd(10, " ")
-    const weak = (text: string) => UI.Style.TEXT_DIM + pad(text) + UI.Style.TEXT_NORMAL
-    const logo = UI.f5logo("  ")
+    const sessionId = session()?.id ?? ""
+    const directory = session()?.directory
     return exit.message.set(
-      [
-        logo,
-        ``,
-        `  ${weak("Session")}${UI.Style.TEXT_NORMAL_BOLD}${title}${UI.Style.TEXT_NORMAL}`,
-        `  ${weak("Continue")}${UI.Style.TEXT_NORMAL_BOLD}opencode -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
-        ``,
-      ].join("\n"),
+      UI.f5exitBox({
+        version: Installation.VERSION,
+        sessionTitle: title,
+        sessionId: sessionId,
+        directory: directory,
+      }),
     )
   })
 

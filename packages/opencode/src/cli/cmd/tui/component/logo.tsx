@@ -1,9 +1,7 @@
 import { RGBA } from "@opentui/core"
 import { For, type JSX } from "solid-js"
-import { useTheme } from "@tui/context/theme"
 
 const F5_LOGO = [
-  "         ──────────────────────────",
   "                   ________",
   "              (▒▒▒▒▓▓▓▓▓▓▓▓▒▒▒▒)",
   "         (▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒)",
@@ -23,16 +21,13 @@ const F5_LOGO = [
   "      (▒▓▓▒▒▒▒▒▒▒▒▒▒▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▓▒)",
   "         (▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒)",
   "              (▒▒▒▒▓▓▓▓▓▓▓▓▒▒▒▒)",
-  "         ──────────────────────────",
 ]
 
-const RED = RGBA.fromHex("#e4002b")
-const RED_DIM = RGBA.fromHex("#a70020")
-const RED_OUTLINE = RGBA.fromHex("#5a1020")
+// Match xcsh branding colors exactly
+const RED = RGBA.fromHex("#ca260a")
+const BOLD_WHITE = RGBA.fromHex("#ffffff")
 
 export function Logo() {
-  const { theme } = useTheme()
-
   const renderLine = (line: string): JSX.Element[] => {
     const spans: JSX.Element[] = []
     let i = 0
@@ -42,13 +37,17 @@ export function Logo() {
       while (j < line.length && line[j] === ch) j++
       const len = j - i
       if (ch === "▓") {
+        // Dark shade → solid block in red
         spans.push(<span style={{ fg: RED }}>{"█".repeat(len)}</span>)
       } else if (ch === "█") {
-        spans.push(<span style={{ fg: theme.text }}>{"█".repeat(len)}</span>)
+        // Full block → bold white F5 text
+        spans.push(<span style={{ fg: BOLD_WHITE, bold: true }}>{"█".repeat(len)}</span>)
       } else if (ch === "▒") {
-        spans.push(<span style={{ fg: RED_DIM }}>{"█".repeat(len)}</span>)
-      } else if ("()|_─".includes(ch)) {
-        spans.push(<span style={{ fg: RED_OUTLINE }}>{line.slice(i, j)}</span>)
+        // Medium shade → keep as ▒ in same red
+        spans.push(<span style={{ fg: RED }}>{"▒".repeat(len)}</span>)
+      } else if ("()|_".includes(ch)) {
+        // Outline chars → same red
+        spans.push(<span style={{ fg: RED }}>{line.slice(i, j)}</span>)
       } else {
         spans.push(<span>{line.slice(i, j)}</span>)
       }

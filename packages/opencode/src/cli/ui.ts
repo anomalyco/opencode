@@ -4,7 +4,6 @@ import { NamedError } from "@opencode-ai/util/error"
 import { logo as glyphs } from "./logo"
 
 const F5_LOGO_LINES = [
-  "         ──────────────────────────",
   "                   ________",
   "              (▒▒▒▒▓▓▓▓▓▓▓▓▒▒▒▒)",
   "         (▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒)",
@@ -24,36 +23,57 @@ const F5_LOGO_LINES = [
   "      (▒▓▓▒▒▒▒▒▒▒▒▒▒▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▓▒)",
   "         (▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒▒▒)",
   "              (▒▒▒▒▓▓▓▓▓▓▓▓▒▒▒▒)",
-  "         ──────────────────────────",
 ]
 
-const ANSI_RED = "\x1b[38;2;228;0;43m"
-const ANSI_RED_DIM = "\x1b[38;2;167;0;32m"
-const ANSI_RED_OUTLINE = "\x1b[38;2;90;16;32m"
+// Match xcsh branding colors exactly
+const ANSI_RED = "\x1b[38;2;202;38;10m"
+const ANSI_BOLD_WHITE = "\x1b[1;97m"
 const ANSI_RESET = "\x1b[0m"
 
 function renderF5Line(line: string): string {
-  const parts: string[] = []
-  let i = 0
-  while (i < line.length) {
-    const ch = line[i]!
-    let j = i + 1
-    while (j < line.length && line[j] === ch) j++
-    const len = j - i
-    if (ch === "▓") {
-      parts.push(ANSI_RED + "█".repeat(len) + ANSI_RESET)
-    } else if (ch === "█") {
-      parts.push("█".repeat(len))
-    } else if (ch === "▒") {
-      parts.push(ANSI_RED_DIM + "█".repeat(len) + ANSI_RESET)
-    } else if ("()|_─".includes(ch)) {
-      parts.push(ANSI_RED_OUTLINE + line.slice(i, j) + ANSI_RESET)
-    } else {
-      parts.push(line.slice(i, j))
+  let result = ""
+  let currentColor: "red" | "white" | "none" = "none"
+
+  for (const char of line) {
+    let newColor: "red" | "white" | "none"
+
+    switch (char) {
+      case "\u2593": // ▓ - red circle background
+      case "\u2592": // ▒ - red outline elements
+      case "(":
+      case ")":
+      case "|":
+      case "_":
+        newColor = "red"
+        break
+      case "\u2588": // █ - white F5 text
+        newColor = "white"
+        break
+      default:
+        newColor = "none"
     }
-    i = j
+
+    if (newColor !== currentColor) {
+      if (currentColor !== "none") {
+        result += ANSI_RESET
+      }
+      if (newColor === "red") {
+        result += ANSI_RED
+      } else if (newColor === "white") {
+        result += ANSI_BOLD_WHITE
+      }
+      currentColor = newColor
+    }
+
+    // Render dark shade as solid block for consistency
+    result += char === "\u2593" ? "\u2588" : char
   }
-  return parts.join("")
+
+  if (currentColor !== "none") {
+    result += ANSI_RESET
+  }
+
+  return result
 }
 
 export namespace UI {
@@ -102,6 +122,83 @@ export namespace UI {
 
   export function f5logo(pad?: string) {
     return F5_LOGO_LINES.map((line) => (pad ?? "") + renderF5Line(line)).join(EOL)
+  }
+
+  export function f5exitBox(opts: {
+    version: string
+    sessionTitle: string
+    sessionId: string
+    directory?: string
+  }) {
+    const red = (s: string) => ANSI_RED + s + ANSI_RESET
+    const white = (s: string) => ANSI_BOLD_WHITE + s + ANSI_RESET
+
+    const BOX_TL = "\u256D"
+    const BOX_TR = "\u256E"
+    const BOX_BL = "\u2570"
+    const BOX_BR = "\u256F"
+    const BOX_H = "\u2500"
+    const BOX_V = "\u2502"
+
+    const logoWidth = Math.max(...F5_LOGO_LINES.map((l) => [...l].length))
+
+    // Visible length of info lines (without ANSI codes)
+    const infoVisible = [
+      `Session   ${opts.sessionTitle}`,
+      ...(opts.directory ? [`Directory ${opts.directory}`] : []),
+      `Continue  opencode -s ${opts.sessionId}`,
+    ]
+    const maxInfoWidth = Math.max(...infoVisible.map((l) => l.length))
+
+    // Dynamic width: fit logo + 1 space + info content + 2 padding, minimum 80
+    const TOTAL_WIDTH = Math.max(80, logoWidth + 1 + maxInfoWidth + 2 + 2)
+    const INNER_WIDTH = TOTAL_WIDTH - 2
+
+    const helpColumnWidth = INNER_WIDTH - logoWidth - 1
+    const HELP_START_ROW = 8
+
+    const title = ` opencode ${opts.version} `
+    const leftDashes = 3
+    const rightDashes = Math.max(0, TOTAL_WIDTH - 1 - leftDashes - title.length - 1)
+
+    // Build info lines for right column
+    const dim = Style.TEXT_DIM
+    const bold = Style.TEXT_NORMAL_BOLD
+    const normal = Style.TEXT_NORMAL
+    const infoLines = [
+      `${dim}Session   ${normal}${bold}${opts.sessionTitle}${normal}`,
+      ...(opts.directory ? [`${dim}Directory ${normal}${bold}${opts.directory}${normal}`] : []),
+      `${dim}Continue  ${normal}${bold}opencode -s ${opts.sessionId}${normal}`,
+    ]
+
+    const output: string[] = []
+
+    // Top border with title
+    output.push(red(BOX_TL + BOX_H.repeat(leftDashes)) + white(title) + red(BOX_H.repeat(rightDashes) + BOX_TR))
+
+    // Logo lines with info overlay
+    for (let i = 0; i < F5_LOGO_LINES.length; i++) {
+      const logoLine = F5_LOGO_LINES[i] ?? ""
+      const paddedLogo = logoLine.padEnd(logoWidth)
+      const coloredLogo = renderF5Line(paddedLogo)
+
+      const helpIndex = i - HELP_START_ROW
+      let paddedHelp: string
+      if (helpIndex >= 0 && helpIndex < infoLines.length) {
+        const visLen = infoVisible[helpIndex]?.length ?? 0
+        const padding = Math.max(0, helpColumnWidth - visLen)
+        paddedHelp = (infoLines[helpIndex] ?? "") + " ".repeat(padding)
+      } else {
+        paddedHelp = " ".repeat(helpColumnWidth)
+      }
+
+      output.push(red(BOX_V) + coloredLogo + " " + paddedHelp + red(BOX_V))
+    }
+
+    // Bottom border
+    output.push(red(BOX_BL + BOX_H.repeat(INNER_WIDTH) + BOX_BR))
+
+    return EOL + output.join(EOL) + EOL
   }
 
   export function logo(pad?: string) {
