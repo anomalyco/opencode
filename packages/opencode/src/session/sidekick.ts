@@ -7,7 +7,7 @@ import { Permission } from "@/permission"
 import { fn } from "@/util/fn"
 import { ProviderID } from "@/provider/schema"
 import { ModelID } from "@/provider/schema"
-import { Database, eq, and } from "../storage/db"
+import { Database, NotFoundError, eq, and } from "../storage/db"
 import { SessionTable } from "./session.sql"
 import { Instance } from "../project/instance"
 import z from "zod"
@@ -40,7 +40,8 @@ export namespace Sidekick {
       // Verify the session still exists — reset() may have deleted it (TOCTOU)
       try {
         return await Session.get(existing.id as SessionID)
-      } catch {
+      } catch (err) {
+        if (!(err instanceof NotFoundError)) throw err
         // Session was deleted between our select and here; fall through to create
       }
     }
@@ -69,7 +70,7 @@ export namespace Sidekick {
           )
           .get(),
       )
-      if (retry) return Session.fromRow(retry)
+      if (retry) return await Session.get(retry.id as SessionID)
       throw err
     }
   })
