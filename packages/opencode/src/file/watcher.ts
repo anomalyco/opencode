@@ -22,7 +22,7 @@ declare const OPENCODE_LIBC: string | undefined
 
 export namespace FileWatcher {
   const log = Log.create({ service: "file.watcher" })
-  const SUBSCRIBE_TIMEOUT_MS = 10_000
+  const SUBSCRIBE_TIMEOUT_MS = 60_000
 
   export const Event = {
     Updated: BusEvent.define(
