@@ -1,6 +1,7 @@
 import z from "zod"
 import os from "os"
 import { spawn } from "child_process"
+import { appendFile, mkdir, writeFile } from "fs/promises"
 import { Tool } from "./tool"
 import path from "path"
 import DESCRIPTION from "./bash.txt"
@@ -17,9 +18,11 @@ import { Shell } from "@/shell/shell"
 
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncate"
+import { ToolID } from "./schema"
 import { Plugin } from "@/plugin"
 
 const MAX_METADATA_LENGTH = 30_000
+const MAX_OUTPUT_BYTES = 2 * 1024 * 1024
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
 const PS = new Set(["powershell", "pwsh"])
 const CWD = new Set(["cd", "push-location", "set-location"])
@@ -256,6 +259,10 @@ function preview(text: string) {
   return text.slice(0, MAX_METADATA_LENGTH) + "\n\n..."
 }
 
+function hint(file: string) {
+  return `The tool call succeeded but the output was truncated. Full output saved to: ${file}\nUse Grep to search the full content or Read with offset/limit to view specific sections.`
+}
+
 async function parse(command: string, ps: boolean) {
   const tree = await parser().then((p) => (ps ? p.ps : p.bash).parse(command))
   if (!tree) throw new Error("Failed to parse command")
@@ -328,6 +335,18 @@ async function run(
 ) {
   const proc = launch(input.shell, input.name, input.command, input.cwd, input.env)
   let output = ""
+  let size = 0
+  let file = ""
+  let writes = Promise.resolve()
+
+  const flush = (chunk: string, next: string) => {
+    file = next
+    writes = writes.then(async () => {
+      await mkdir(Truncate.DIR, { recursive: true })
+      await writeFile(file, output + chunk)
+    })
+    output += `\n\n... output truncated at ${MAX_OUTPUT_BYTES} bytes`
+  }
 
   ctx.metadata({
     metadata: {
@@ -337,7 +356,15 @@ async function run(
   })
 
   const append = (chunk: Buffer) => {
-    output += chunk.toString()
+    const text = chunk.toString()
+    if (file) {
+      writes = writes.then(() => appendFile(file, text))
+    } else if (size + chunk.length > MAX_OUTPUT_BYTES) {
+      flush(text, path.join(Truncate.DIR, ToolID.ascending()))
+    } else {
+      output += text
+      size += chunk.length
+    }
     ctx.metadata({
       metadata: {
         output: preview(output),
@@ -394,21 +421,30 @@ async function run(
     })
   })
 
+  await writes
+
   const metadata: string[] = []
   if (expired) metadata.push(`bash tool terminated command after exceeding timeout ${input.timeout} ms`)
   if (aborted) metadata.push("User aborted the command")
   if (metadata.length > 0) {
     output += "\n\n<bash_metadata>\n" + metadata.join("\n") + "\n</bash_metadata>"
+    if (file)
+      writes = writes.then(() => appendFile(file, "\n\n<bash_metadata>\n" + metadata.join("\n") + "\n</bash_metadata>"))
   }
+
+  await writes
+
+  const final = file ? `${output}\n\n${hint(file)}` : output
 
   return {
     title: input.description,
     metadata: {
-      output: preview(output),
+      output: preview(final),
       exit: proc.exitCode,
       description: input.description,
+      ...(file && { truncated: true, outputPath: file }),
     },
-    output,
+    output: final,
   }
 }
 

@@ -982,3 +982,66 @@ describe("tool.bash truncation", () => {
     })
   })
 })
+
+describe("tool.bash large-output spill-to-file", () => {
+  // bash.ts has its own MAX_OUTPUT_BYTES = 2 MiB streaming buffer.
+  // Once exceeded, full output is written to a file under Truncate.DIR.
+  const OVER_2MIB = 2_100_000 // 2.1 MB — safely above the 2 MiB threshold
+
+  test("sets truncated and outputPath when output exceeds 2 MiB", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          { command: fill("bytes", OVER_2MIB), description: "Generate bytes exceeding 2 MiB" },
+          ctx,
+        )
+
+        expect(result.metadata.truncated).toBe(true)
+        expect(result.metadata.outputPath).toMatch(/\//)
+      },
+    })
+  })
+
+  test("returned output includes truncation hint with file path", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          { command: fill("bytes", OVER_2MIB), description: "Generate bytes for hint check" },
+          ctx,
+        )
+        const file = result.metadata.outputPath
+        if (!file) throw new Error("missing outputPath")
+
+        expect(result.output).toContain("output was truncated")
+        expect(result.output).toContain("Full output saved to:")
+        expect(result.output).toContain(file)
+      },
+    })
+  })
+
+  test("saved file contains full output beyond the preview cap", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          { command: fill("bytes", OVER_2MIB), description: "Generate bytes for full-file check" },
+          ctx,
+        )
+        mustTruncate(result)
+        const file = result.metadata.outputPath
+        if (!file) throw new Error("missing outputPath")
+
+        const saved = await Filesystem.readText(file)
+        // The saved file must contain the full generated output (may include stderr)
+        expect(saved.length).toBeGreaterThanOrEqual(OVER_2MIB)
+        // The returned output (preview + hint) must be significantly shorter
+        expect(result.output.length).toBeLessThan(OVER_2MIB)
+      },
+    })
+  })
+})

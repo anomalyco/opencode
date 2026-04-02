@@ -19,7 +19,7 @@ export const GlobalDisposedEvent = BusEvent.define("global.disposed", z.object({
 
 async function streamEvents(c: Context, subscribe: (q: AsyncQueue<string | null>) => () => void) {
   return streamSSE(c, async (stream) => {
-    const q = new AsyncQueue<string | null>()
+    const q = new AsyncQueue<string | null>({ capacity: 512, sentinel: null })
     let done = false
 
     q.push(
@@ -48,7 +48,7 @@ async function streamEvents(c: Context, subscribe: (q: AsyncQueue<string | null>
       done = true
       clearInterval(heartbeat)
       unsub()
-      q.push(null)
+      q.close({ clear: true })
       log.info("global event disconnected")
     }
 

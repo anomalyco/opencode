@@ -49,6 +49,8 @@ import { Cause, Effect, Exit, Layer, Option, Scope, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 
+const MAX_OUTPUT_BYTES = 2 * 1024 * 1024
+
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
 
@@ -857,6 +859,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         )
 
         let output = ""
+        let outputTruncated = false
         const write = () => {
           if (part.state.status !== "running") return
           part.state.metadata = { output, description: "" }
@@ -864,11 +867,21 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         }
 
         proc.stdout?.on("data", (chunk) => {
+          if (outputTruncated) return
           output += chunk.toString()
+          if (output.length > MAX_OUTPUT_BYTES) {
+            output = output.slice(0, MAX_OUTPUT_BYTES) + `\n\n... output truncated at ${MAX_OUTPUT_BYTES} bytes`
+            outputTruncated = true
+          }
           write()
         })
         proc.stderr?.on("data", (chunk) => {
+          if (outputTruncated) return
           output += chunk.toString()
+          if (output.length > MAX_OUTPUT_BYTES) {
+            output = output.slice(0, MAX_OUTPUT_BYTES) + `\n\n... output truncated at ${MAX_OUTPUT_BYTES} bytes`
+            outputTruncated = true
+          }
           write()
         })
 
