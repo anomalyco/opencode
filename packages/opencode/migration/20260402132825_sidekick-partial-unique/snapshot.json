@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "e93b8d36-d490-49b7-997d-c70be182f7d8",
+  "id": "6130b202-8f9b-4ca0-9cdf-1c8462973995",
   "prevIds": [
     "c0da2fa0-28e6-416c-94fa-1841d6fc21f2"
   ],
@@ -1354,7 +1354,7 @@
         }
       ],
       "isUnique": true,
-      "where": null,
+      "where": "kind = 'sidekick'",
       "origin": "manual",
       "name": "session_parent_kind_uniq",
       "entityType": "indexes",

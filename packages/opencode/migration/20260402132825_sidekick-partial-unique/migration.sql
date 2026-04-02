@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `session_parent_kind_uniq` ON `session` (`parent_id`,`kind`) WHERE kind = 'sidekick';

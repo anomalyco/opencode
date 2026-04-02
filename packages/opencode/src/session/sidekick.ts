@@ -22,14 +22,22 @@ export namespace Sidekick {
     const existing = children.find((c) => c.kind === "sidekick")
     if (existing) return existing
 
-    return Session.create({
-      parentID,
-      kind: "sidekick",
-      title: "Sidekick",
-      permission: Permission.fromConfig({
-        "*": "deny",
-      }),
-    })
+    try {
+      return await Session.create({
+        parentID,
+        kind: "sidekick",
+        title: "Sidekick",
+        permission: Permission.fromConfig({
+          "*": "deny",
+        }),
+      })
+    } catch (err) {
+      // TOCTOU: another concurrent ensure() may have created it
+      const retry = await Session.children(parentID)
+      const found = retry.find((c) => c.kind === "sidekick")
+      if (found) return found
+      throw err
+    }
   })
 
   /**
@@ -124,7 +132,7 @@ export namespace Sidekick {
   )
 
   /**
-   * Inject a sidekick message into the parent conversation as a synthetic user message.
+   * Inject a sidekick message into the parent conversation as a user message.
    * Retrieves the last user message's agent/model to maintain consistency.
    */
   export const inject = fn(

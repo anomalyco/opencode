@@ -1073,7 +1073,7 @@ export const SessionRoutes = lazy(() =>
       "/:sessionID/sidekick/inject",
       describeRoute({
         summary: "Inject sidekick message",
-        description: "Inject a sidekick conclusion into the parent conversation as a synthetic user message.",
+        description: "Inject a sidekick conclusion into the parent conversation as a user message.",
         operationId: "session.sidekick.inject",
         responses: {
           200: {

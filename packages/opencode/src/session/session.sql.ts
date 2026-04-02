@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm"
 import { sqliteTable, text, integer, index, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core"
 import { ProjectTable } from "../project/project.sql"
 import type { MessageV2 } from "./message-v2"
@@ -42,7 +43,9 @@ export const SessionTable = sqliteTable(
     index("session_workspace_idx").on(table.workspace_id),
     index("session_parent_idx").on(table.parent_id),
     index("session_kind_idx").on(table.kind),
-    uniqueIndex("session_parent_kind_uniq").on(table.parent_id, table.kind),
+    uniqueIndex("session_parent_kind_uniq")
+      .on(table.parent_id, table.kind)
+      .where(sql`kind = 'sidekick'`),
   ],
 )
 

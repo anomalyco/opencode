@@ -248,6 +248,10 @@ export namespace Session {
       .optional(),
     async (input) => {
       if (input?.kind === "sidekick" && !input?.parentID) throw new Error("Sidekick sessions require a parentID")
+      if (input?.kind === "sidekick" && input?.parentID) {
+        const parent = await get(input.parentID)
+        if (parent.kind === "sidekick") throw new Error("Cannot create a sidekick of a sidekick session")
+      }
 
       return createNext({
         parentID: input?.parentID,

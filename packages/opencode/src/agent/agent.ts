@@ -273,11 +273,13 @@ export namespace Agent {
             item.name = value.name ?? item.name
             item.steps = value.steps ?? item.steps
             item.options = mergeDeep(item.options, value.options ?? {})
-            item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
+            if (key !== "sidekick")
+              item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
           }
 
           // Ensure Truncate.GLOB is allowed unless explicitly configured
           for (const name in agents) {
+            if (name === "sidekick") continue
             const agent = agents[name]
             const explicit = agent.permission.some((r) => {
               if (r.permission !== "external_directory") return false
