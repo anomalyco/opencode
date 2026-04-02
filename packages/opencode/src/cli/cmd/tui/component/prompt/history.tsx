@@ -26,7 +26,7 @@ export type PromptInfo = {
   )[]
 }
 
-const MAX_HISTORY_ENTRIES = 50
+const MAX_HISTORY_ENTRIES = 1000
 
 export const { use: usePromptHistory, provider: PromptHistoryProvider } = createSimpleContext({
   name: "PromptHistory",
