@@ -282,3 +282,49 @@ describe("sidekick isolation guards", () => {
     })
   })
 })
+
+describe("sidekick project isolation", () => {
+  test("inject rejects cross-project parentID", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const session = await Session.create({})
+
+        // Add a user message so inject can work normally
+        const userMsgID = MessageID.ascending()
+        await Session.updateMessage({
+          id: userMsgID,
+          sessionID: session.id,
+          role: "user",
+          time: { created: Date.now() },
+          agent: "build",
+          model: { providerID: "test", modelID: "test" },
+          tools: {},
+          mode: "",
+        } as unknown as MessageV2.Info)
+
+        // Normal inject should work
+        const msg = await Sidekick.inject({ parentID: session.id, text: "ok" })
+        expect(msg.role).toBe("user")
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("inject rejects sidekick as target", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const session = await Session.create({})
+        const sidekick = await Sidekick.ensure(session.id)
+
+        await expect(Sidekick.inject({ parentID: sidekick.id, text: "test" })).rejects.toThrow(
+          "Cannot inject into a sidekick session",
+        )
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+})

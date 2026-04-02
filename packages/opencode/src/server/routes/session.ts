@@ -287,6 +287,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
+        await rejectSidekick(sessionID)
         const updates = c.req.valid("json")
 
         if (updates.title !== undefined) {
@@ -494,6 +495,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
+        await rejectSidekick(sessionID)
         await Session.unshare(sessionID)
         const session = await Session.get(sessionID)
         return c.json(session)
@@ -713,6 +715,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const params = c.req.valid("param")
+        await rejectSidekick(params.sessionID)
         SessionPrompt.assertNotBusy(params.sessionID)
         await Session.removeMessage({
           sessionID: params.sessionID,
@@ -748,6 +751,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const params = c.req.valid("param")
+        await rejectSidekick(params.sessionID)
         await Session.removePart({
           sessionID: params.sessionID,
           messageID: params.messageID,
@@ -784,6 +788,7 @@ export const SessionRoutes = lazy(() =>
       validator("json", MessageV2.Part),
       async (c) => {
         const params = c.req.valid("param")
+        await rejectSidekick(params.sessionID)
         const body = c.req.valid("json")
         if (body.id !== params.partID || body.messageID !== params.messageID || body.sessionID !== params.sessionID) {
           throw new Error(
@@ -972,6 +977,7 @@ export const SessionRoutes = lazy(() =>
       validator("json", SessionRevert.RevertInput.omit({ sessionID: true })),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
+        await rejectSidekick(sessionID)
         log.info("revert", c.req.valid("json"))
         const session = await SessionRevert.revert({
           sessionID,
@@ -1006,6 +1012,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
+        await rejectSidekick(sessionID)
         const session = await SessionRevert.unrevert({ sessionID })
         return c.json(session)
       },
@@ -1151,6 +1158,7 @@ export const SessionRoutes = lazy(() =>
       validator("json", z.object({ response: Permission.Reply })),
       async (c) => {
         const params = c.req.valid("param")
+        await rejectSidekick(params.sessionID)
         Permission.reply({
           requestID: params.permissionID,
           reply: c.req.valid("json").response,

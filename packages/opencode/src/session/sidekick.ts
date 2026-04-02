@@ -20,6 +20,7 @@ export namespace Sidekick {
   export const ensure = fn(SessionID.zod, async (parentID) => {
     const parent = await Session.get(parentID)
     if (parent.kind === "sidekick") throw new Error("Cannot create a sidekick of a sidekick session")
+    if (parent.projectID !== Instance.project.id) throw new Error("Parent session belongs to a different project")
 
     const project = Instance.project
     const existing = Database.use((db) =>
@@ -76,6 +77,8 @@ export namespace Sidekick {
       limit: z.number().default(30),
     }),
     async (input) => {
+      const parent = await Session.get(input.parentID)
+      if (parent.projectID !== Instance.project.id) throw new Error("Parent session belongs to a different project")
       const msgs = await Session.messages({ sessionID: input.parentID, limit: input.limit })
       if (msgs.length === 0) return ""
 
@@ -181,6 +184,7 @@ export namespace Sidekick {
     async (input) => {
       const parent = await Session.get(input.parentID)
       if (parent.kind === "sidekick") throw new Error("Cannot inject into a sidekick session")
+      if (parent.projectID !== Instance.project.id) throw new Error("Parent session belongs to a different project")
 
       // Get last user message to reuse agent + model
       const msgs = await Session.messages({ sessionID: input.parentID, limit: 10 })

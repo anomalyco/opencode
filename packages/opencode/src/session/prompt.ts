@@ -349,7 +349,7 @@ export namespace SessionPrompt {
         }
         throw e
       })
-      const task = tasks.pop()
+      const task = session.kind === "sidekick" ? undefined : tasks.pop()
 
       // pending subtask
       // TODO: centralize "invoke tool" logic
@@ -553,8 +553,9 @@ export namespace SessionPrompt {
         continue
       }
 
-      // context overflow, needs compaction
+      // context overflow, needs compaction (sidekick sessions never compact)
       if (
+        session.kind !== "sidekick" &&
         lastFinished &&
         lastFinished.summary !== true &&
         (await SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model }))
@@ -644,7 +645,7 @@ export namespace SessionPrompt {
         })
       }
 
-      if (step === 1) {
+      if (step === 1 && session.kind !== "sidekick") {
         SessionSummary.summarize({
           sessionID: sessionID,
           messageID: lastUser.id,
@@ -732,7 +733,7 @@ export namespace SessionPrompt {
       }
 
       if (result === "stop") break
-      if (result === "compact") {
+      if (result === "compact" && session.kind !== "sidekick") {
         await SessionCompaction.create({
           sessionID,
           agent: lastUser.agent,
@@ -743,7 +744,7 @@ export namespace SessionPrompt {
       }
       continue
     }
-    SessionCompaction.prune({ sessionID })
+    if (session.kind !== "sidekick") SessionCompaction.prune({ sessionID })
     for await (const item of MessageV2.stream(sessionID)) {
       if (item.info.role === "user") continue
       const queued = state()[sessionID]?.callbacks ?? []
