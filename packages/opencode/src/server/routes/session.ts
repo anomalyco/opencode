@@ -17,6 +17,7 @@ import { Log } from "../../util/log"
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
 import { ModelID, ProviderID } from "@/provider/schema"
+import { Sidekick } from "../../session/sidekick"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { Bus } from "../../bus"
@@ -990,6 +991,118 @@ export const SessionRoutes = lazy(() =>
         const sessionID = c.req.valid("param").sessionID
         const session = await SessionRevert.unrevert({ sessionID })
         return c.json(session)
+      },
+    )
+    .get(
+      "/:sessionID/sidekick",
+      describeRoute({
+        summary: "Get sidekick session",
+        description: "Get the sidekick session associated with a parent session. Creates one if it does not exist.",
+        operationId: "session.sidekick.get",
+        responses: {
+          200: {
+            description: "Sidekick session",
+            content: {
+              "application/json": {
+                schema: resolver(Session.Info),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      async (c) => {
+        const session = await Sidekick.ensure(c.req.valid("param").sessionID)
+        return c.json(session)
+      },
+    )
+    .post(
+      "/:sessionID/sidekick",
+      describeRoute({
+        summary: "Send sidekick message",
+        description: "Send a message to the sidekick session. Automatically injects parent conversation context.",
+        operationId: "session.sidekick.prompt",
+        responses: {
+          204: {
+            description: "Sidekick prompt accepted",
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      validator(
+        "json",
+        z.object({
+          text: z.string(),
+          model: z
+            .object({
+              providerID: ProviderID.zod,
+              modelID: ModelID.zod,
+            })
+            .optional(),
+        }),
+      ),
+      async (c) => {
+        c.status(204)
+        c.header("Content-Type", "application/json")
+        return stream(c, async () => {
+          const parentID = c.req.valid("param").sessionID
+          const body = c.req.valid("json")
+          Sidekick.prompt({ parentID, text: body.text, model: body.model }).catch((err) => {
+            log.error("sidekick prompt failed", { parentID, error: err })
+            Bus.publish(Session.Event.Error, {
+              sessionID: parentID,
+              error: new NamedError.Unknown({ message: err instanceof Error ? err.message : String(err) }).toObject(),
+            })
+          })
+        })
+      },
+    )
+    .post(
+      "/:sessionID/sidekick/inject",
+      describeRoute({
+        summary: "Inject sidekick message",
+        description: "Inject a sidekick conclusion into the parent conversation as a synthetic user message.",
+        operationId: "session.sidekick.inject",
+        responses: {
+          200: {
+            description: "Injected message",
+            content: {
+              "application/json": {
+                schema: resolver(MessageV2.Info),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      validator(
+        "json",
+        z.object({
+          text: z.string(),
+        }),
+      ),
+      async (c) => {
+        const parentID = c.req.valid("param").sessionID
+        const msg = await Sidekick.inject({ parentID, text: c.req.valid("json").text })
+        return c.json(msg)
       },
     )
     .post(
