@@ -641,6 +641,7 @@ export type SubtaskPart = {
   prompt: string
   description: string
   agent: string
+  variant?: string
   model?: {
     providerID: string
     modelID: string
@@ -1872,6 +1873,7 @@ export type SubtaskPartInput = {
   prompt: string
   description: string
   agent: string
+  variant?: string
   model?: {
     providerID: string
     modelID: string

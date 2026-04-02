@@ -586,6 +586,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               prompt: task.prompt,
               description: task.description,
               subagent_type: task.agent,
+              variant: task.variant,
               command: task.command,
             },
             time: { start: Date.now() },
@@ -595,6 +596,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           prompt: task.prompt,
           description: task.description,
           subagent_type: task.agent,
+          variant: task.variant,
           command: task.command,
         }
         yield* plugin.trigger("tool.execute.before", { tool: "task", sessionID, callID: part.id }, { args: taskArgs })
@@ -1668,6 +1670,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 agent: agent.name,
                 description: cmd.description ?? "",
                 command: input.command,
+                variant: input.variant,
                 model: { providerID: taskModel.providerID, modelID: taskModel.modelID },
                 prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
               },

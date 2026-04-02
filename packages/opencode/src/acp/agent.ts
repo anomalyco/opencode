@@ -1432,6 +1432,7 @@ export namespace ACP {
           command: command.name,
           arguments: cmd.args,
           model: model.providerID + "/" + model.modelID,
+          variant: this.sessionManager.getVariant(sessionID),
           agent,
           directory,
         })
