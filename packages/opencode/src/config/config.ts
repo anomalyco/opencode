@@ -781,6 +781,14 @@ export namespace Config {
             .describe(
               "Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.",
             ),
+          stripHeaders: z
+            .record(z.string(), z.array(z.string()))
+            .optional()
+            .describe(
+              "Strip specific values from comma-separated request headers before sending. " +
+                "Keys are header names, values are arrays of header values to remove. " +
+                'For example, {"anthropic-beta": ["structured-outputs-2025-11-13"]} removes that beta flag from the anthropic-beta header.',
+            ),
         })
         .catchall(z.any())
         .optional(),
