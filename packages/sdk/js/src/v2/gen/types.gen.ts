@@ -913,6 +913,7 @@ export type Session = {
   workspaceID?: string
   directory: string
   parentID?: string
+  kind?: "default" | "sidekick"
   summary?: {
     additions: number
     deletions: number
@@ -1074,6 +1075,7 @@ export type SyncEventSessionUpdated = {
       workspaceID: string | null
       directory: string | null
       parentID: string | null
+      kind: "default" | "sidekick" | null
       summary: {
         additions: number
         deletions: number
@@ -1796,6 +1798,7 @@ export type GlobalSession = {
   workspaceID?: string
   directory: string
   parentID?: string
+  kind?: "default" | "sidekick"
   summary?: {
     additions: number
     deletions: number
@@ -2962,6 +2965,7 @@ export type SessionListResponse = SessionListResponses[keyof SessionListResponse
 export type SessionCreateData = {
   body?: {
     parentID?: string
+    kind?: "default" | "sidekick"
     title?: string
     permission?: PermissionRuleset
     workspaceID?: string
@@ -3877,6 +3881,116 @@ export type SessionUnrevertResponses = {
 }
 
 export type SessionUnrevertResponse = SessionUnrevertResponses[keyof SessionUnrevertResponses]
+
+export type SessionSidekickGetData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/sidekick"
+}
+
+export type SessionSidekickGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionSidekickGetError = SessionSidekickGetErrors[keyof SessionSidekickGetErrors]
+
+export type SessionSidekickGetResponses = {
+  /**
+   * Sidekick session
+   */
+  200: Session
+}
+
+export type SessionSidekickGetResponse = SessionSidekickGetResponses[keyof SessionSidekickGetResponses]
+
+export type SessionSidekickPromptData = {
+  body?: {
+    text: string
+    model?: {
+      providerID: string
+      modelID: string
+    }
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/sidekick"
+}
+
+export type SessionSidekickPromptErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionSidekickPromptError = SessionSidekickPromptErrors[keyof SessionSidekickPromptErrors]
+
+export type SessionSidekickPromptResponses = {
+  /**
+   * Sidekick prompt accepted
+   */
+  204: void
+}
+
+export type SessionSidekickPromptResponse = SessionSidekickPromptResponses[keyof SessionSidekickPromptResponses]
+
+export type SessionSidekickInjectData = {
+  body?: {
+    text: string
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/sidekick/inject"
+}
+
+export type SessionSidekickInjectErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionSidekickInjectError = SessionSidekickInjectErrors[keyof SessionSidekickInjectErrors]
+
+export type SessionSidekickInjectResponses = {
+  /**
+   * Injected message
+   */
+  200: Message
+}
+
+export type SessionSidekickInjectResponse = SessionSidekickInjectResponses[keyof SessionSidekickInjectResponses]
 
 export type PermissionRespondData = {
   body?: {

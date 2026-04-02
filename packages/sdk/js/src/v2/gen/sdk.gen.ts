@@ -140,6 +140,12 @@ import type {
   SessionShareResponses,
   SessionShellErrors,
   SessionShellResponses,
+  SessionSidekickGetErrors,
+  SessionSidekickGetResponses,
+  SessionSidekickInjectErrors,
+  SessionSidekickInjectResponses,
+  SessionSidekickPromptErrors,
+  SessionSidekickPromptResponses,
   SessionStatusErrors,
   SessionStatusResponses,
   SessionSummarizeErrors,
@@ -1290,6 +1296,131 @@ export class Worktree extends HeyApiClient {
   }
 }
 
+export class Sidekick extends HeyApiClient {
+  /**
+   * Get sidekick session
+   *
+   * Get the sidekick session associated with a parent session. Creates one if it does not exist.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionSidekickGetResponses, SessionSidekickGetErrors, ThrowOnError>({
+      url: "/session/{sessionID}/sidekick",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Send sidekick message
+   *
+   * Send a message to the sidekick session. Automatically injects parent conversation context.
+   */
+  public prompt<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      text?: string
+      model?: {
+        providerID: string
+        modelID: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "text" },
+            { in: "body", key: "model" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionSidekickPromptResponses,
+      SessionSidekickPromptErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/sidekick",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Inject sidekick message
+   *
+   * Inject a sidekick conclusion into the parent conversation as a synthetic user message.
+   */
+  public inject<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      text?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "text" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionSidekickInjectResponses,
+      SessionSidekickInjectErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/sidekick/inject",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Session2 extends HeyApiClient {
   /**
    * List sessions
@@ -1339,6 +1470,7 @@ export class Session2 extends HeyApiClient {
       directory?: string
       workspace?: string
       parentID?: string
+      kind?: "default" | "sidekick"
       title?: string
       permission?: PermissionRuleset
       workspaceID?: string
@@ -1353,6 +1485,7 @@ export class Session2 extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "parentID" },
+            { in: "body", key: "kind" },
             { in: "body", key: "title" },
             { in: "body", key: "permission" },
             { in: "body", key: "workspaceID" },
@@ -2231,6 +2364,11 @@ export class Session2 extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _sidekick?: Sidekick
+  get sidekick(): Sidekick {
+    return (this._sidekick ??= new Sidekick({ client: this.client }))
   }
 }
 
