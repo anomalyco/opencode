@@ -1,7 +1,6 @@
 import { seedSessionTask, withSession } from "../actions"
 import { test, expect } from "../fixtures"
 import { inputMatch } from "../prompt/mock"
-import { promptSelector } from "../selectors"
 
 test("task tool child-session link does not trigger stale show errors", async ({ page, llm, project }) => {
   test.setTimeout(120_000)
@@ -30,15 +29,16 @@ test("task tool child-session link does not trigger stale show errors", async ({
 
       await project.gotoSession(session.id)
 
-      const link = page
-        .locator("a.subagent-link")
+      const card = page
+        .locator('[data-component="task-tool-card"]')
         .filter({ hasText: /open child session/i })
         .first()
-      await expect(link).toBeVisible({ timeout: 30_000 })
-      await link.click()
+      await expect(card).toBeVisible({ timeout: 30_000 })
+      await card.click()
 
       await expect(page).toHaveURL(new RegExp(`/session/${child.sessionID}(?:[/?#]|$)`), { timeout: 30_000 })
-      await expect(page.locator(promptSelector)).toBeVisible({ timeout: 30_000 })
+      await expect(page.getByText("Subagent sessions cannot be prompted.")).toBeVisible({ timeout: 30_000 })
+      await expect(page.getByRole("button", { name: "Back to main session." })).toBeVisible({ timeout: 30_000 })
       await expect.poll(() => errs, { timeout: 5_000 }).toEqual([])
     })
   } finally {
