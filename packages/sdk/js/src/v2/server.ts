@@ -1,4 +1,5 @@
-import { spawn } from "node:child_process"
+import { Buffer } from "node:buffer"
+import spawn from "cross-spawn"
 import { type Config } from "./gen/types.gen.js"
 
 export type ServerOptions = {
@@ -44,7 +45,7 @@ export async function createOpencodeServer(options?: ServerOptions) {
       reject(new Error(`Timeout waiting for server to start after ${options.timeout}ms`))
     }, options.timeout)
     let output = ""
-    proc.stdout?.on("data", (chunk) => {
+    proc.stdout?.on("data", (chunk: Buffer) => {
       output += chunk.toString()
       const lines = output.split("\n")
       for (const line of lines) {
@@ -59,10 +60,10 @@ export async function createOpencodeServer(options?: ServerOptions) {
         }
       }
     })
-    proc.stderr?.on("data", (chunk) => {
+    proc.stderr?.on("data", (chunk: Buffer) => {
       output += chunk.toString()
     })
-    proc.on("exit", (code) => {
+    proc.on("exit", (code: number | null) => {
       clearTimeout(id)
       let msg = `Server exited with code ${code}`
       if (output.trim()) {
@@ -70,7 +71,7 @@ export async function createOpencodeServer(options?: ServerOptions) {
       }
       reject(new Error(msg))
     })
-    proc.on("error", (error) => {
+    proc.on("error", (error: Error) => {
       clearTimeout(id)
       reject(error)
     })

@@ -463,9 +463,13 @@
     "packages/sdk/js": {
       "name": "@opencode-ai/sdk",
       "version": "1.3.13",
+      "dependencies": {
+        "cross-spawn": "7.0.6",
+      },
       "devDependencies": {
         "@hey-api/openapi-ts": "0.90.10",
         "@tsconfig/node22": "catalog:",
+        "@types/cross-spawn": "6.0.6",
         "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:",
         "typescript": "catalog:",
