@@ -49,6 +49,10 @@ export namespace Npm {
       return false
     }
 
+    if (cachedVersion === "latest") {
+      return false
+    }
+
     const range = /[\s^~*xX<>|=]/.test(cachedVersion)
     if (range) return !semver.satisfies(latestVersion, cachedVersion)
 
