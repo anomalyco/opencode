@@ -1096,6 +1096,37 @@ export const SessionRoutes = lazy(() =>
         })
       },
     )
+    .delete(
+      "/:sessionID/sidekick",
+      describeRoute({
+        summary: "Reset sidekick session",
+        description:
+          "Delete the existing sidekick session for a parent, allowing a fresh one to be created on the next request.",
+        operationId: "session.sidekick.reset",
+        responses: {
+          200: {
+            description: "Sidekick reset result",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      async (c) => {
+        const parentID = c.req.valid("param").sessionID
+        const deleted = await Sidekick.reset(parentID)
+        return c.json(deleted)
+      },
+    )
     .post(
       "/:sessionID/sidekick/inject",
       describeRoute({

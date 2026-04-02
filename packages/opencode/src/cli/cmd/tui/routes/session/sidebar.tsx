@@ -27,20 +27,24 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
         position={props.overlay ? "absolute" : "relative"}
       >
         <box flexShrink={0} flexDirection="row" gap={2} paddingBottom={1}>
-          <text fg={sidebarTab() === "plugins" ? theme.text : theme.textMuted}>
-            <Show when={sidebarTab() === "plugins"} fallback={<b>Plugins</b>}>
-              <b>
-                <u>Plugins</u>
-              </b>
-            </Show>
-          </text>
-          <text fg={sidebarTab() === "sidekick" ? theme.text : theme.textMuted}>
-            <Show when={sidebarTab() === "sidekick"} fallback={<b>Sidekick</b>}>
-              <b>
-                <u>Sidekick</u>
-              </b>
-            </Show>
-          </text>
+          <box onMouseUp={() => setSidebarTab("plugins")}>
+            <text fg={sidebarTab() === "plugins" ? theme.text : theme.textMuted}>
+              <Show when={sidebarTab() === "plugins"} fallback={<b>Plugins</b>}>
+                <b>
+                  <u>Plugins</u>
+                </b>
+              </Show>
+            </text>
+          </box>
+          <box onMouseUp={() => setSidebarTab("sidekick")}>
+            <text fg={sidebarTab() === "sidekick" ? theme.text : theme.textMuted}>
+              <Show when={sidebarTab() === "sidekick"} fallback={<b>Sidekick</b>}>
+                <b>
+                  <u>Sidekick</u>
+                </b>
+              </Show>
+            </text>
+          </box>
         </box>
 
         <Switch>

@@ -146,6 +146,8 @@ import type {
   SessionSidekickInjectResponses,
   SessionSidekickPromptErrors,
   SessionSidekickPromptResponses,
+  SessionSidekickResetErrors,
+  SessionSidekickResetResponses,
   SessionStatusErrors,
   SessionStatusResponses,
   SessionSummarizeErrors,
@@ -1297,6 +1299,42 @@ export class Worktree extends HeyApiClient {
 }
 
 export class Sidekick extends HeyApiClient {
+  /**
+   * Reset sidekick session
+   *
+   * Delete the existing sidekick session for a parent, allowing a fresh one to be created on the next request.
+   */
+  public reset<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      SessionSidekickResetResponses,
+      SessionSidekickResetErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/sidekick",
+      ...options,
+      ...params,
+    })
+  }
+
   /**
    * Get sidekick session
    *

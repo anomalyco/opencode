@@ -3882,6 +3882,40 @@ export type SessionUnrevertResponses = {
 
 export type SessionUnrevertResponse = SessionUnrevertResponses[keyof SessionUnrevertResponses]
 
+export type SessionSidekickResetData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/sidekick"
+}
+
+export type SessionSidekickResetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionSidekickResetError = SessionSidekickResetErrors[keyof SessionSidekickResetErrors]
+
+export type SessionSidekickResetResponses = {
+  /**
+   * Sidekick reset result
+   */
+  200: boolean
+}
+
+export type SessionSidekickResetResponse = SessionSidekickResetResponses[keyof SessionSidekickResetResponses]
+
 export type SessionSidekickGetData = {
   body?: never
   path: {

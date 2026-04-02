@@ -172,6 +172,35 @@ export namespace Sidekick {
   )
 
   /**
+   * Delete the existing sidekick session for the given parent, allowing
+   * ensure() to create a fresh one on the next call.
+   * Returns true if a sidekick was found and deleted, false otherwise.
+   */
+  export const reset = fn(SessionID.zod, async (parentID) => {
+    const parent = await Session.get(parentID)
+    if (parent.kind === "sidekick") throw new Error("Cannot reset a sidekick of a sidekick session")
+    if (parent.projectID !== Instance.project.id) throw new Error("Parent session belongs to a different project")
+
+    const project = Instance.project
+    const existing = Database.use((db) =>
+      db
+        .select()
+        .from(SessionTable)
+        .where(
+          and(
+            eq(SessionTable.project_id, project.id),
+            eq(SessionTable.parent_id, parentID),
+            eq(SessionTable.kind, "sidekick"),
+          ),
+        )
+        .get(),
+    )
+    if (!existing) return false
+    await Session.remove(existing.id as SessionID)
+    return true
+  })
+
+  /**
    * Inject a sidekick conclusion into the parent conversation as a user message.
    * This is context-only: the injected message does NOT trigger the parent
    * session's processing loop. The user must send a follow-up prompt to

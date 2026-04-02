@@ -737,7 +737,7 @@ export namespace SessionPrompt {
         if (session.kind === "sidekick") {
           // Sidekick sessions cannot compact — stop with an error
           processor.message.error = new NamedError.Unknown({
-            message: "Sidekick conversation is too long. Please start a new sidekick session.",
+            message: "Sidekick conversation is too long. Use the reset button to start fresh.",
           }).toObject()
           processor.message.finish = processor.message.finish ?? "stop"
           await Session.updateMessage(processor.message)

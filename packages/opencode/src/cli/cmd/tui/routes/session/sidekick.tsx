@@ -43,6 +43,13 @@ export function SidekickChat(props: { parentID: string }) {
     ensure()
   })
 
+  const busy = createMemo(() => {
+    const id = sidekickID()
+    if (!id) return false
+    const status = sync.data.session_status[id]
+    return status?.type === "busy" || status?.type === "retry"
+  })
+
   const messages = createMemo<Message[]>(() => {
     const id = sidekickID()
     if (!id) return []
@@ -56,7 +63,7 @@ export function SidekickChat(props: { parentID: string }) {
   async function send() {
     if (!ref) return
     const text = ref.plainText.trim()
-    if (!text || sending()) return
+    if (!text || sending() || busy()) return
     setSending(true)
     setError(undefined)
     ref.setText("")
@@ -94,6 +101,20 @@ export function SidekickChat(props: { parentID: string }) {
     }
   }
 
+  async function reset() {
+    try {
+      await (sdk.fetch ?? fetch)(`${base()}/sidekick`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+      })
+      setSidekickID(undefined)
+      setError(undefined)
+      await ensure()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to reset sidekick")
+    }
+  }
+
   async function inject(text: string) {
     await (sdk.fetch ?? fetch)(`${base()}/sidekick/inject`, {
       method: "POST",
@@ -104,10 +125,15 @@ export function SidekickChat(props: { parentID: string }) {
 
   return (
     <box flexDirection="column" height="100%" gap={1}>
-      <box flexShrink={0}>
+      <box flexShrink={0} flexDirection="row" justifyContent="space-between">
         <text fg={theme.text}>
           <b>Sidekick</b>
         </text>
+        <box onMouseUp={() => reset()}>
+          <text fg={theme.textMuted}>
+            <u>[reset]</u>
+          </text>
+        </box>
       </box>
 
       <scrollbox
@@ -169,7 +195,7 @@ export function SidekickChat(props: { parentID: string }) {
               )
             }}
           </For>
-          <Show when={sending()}>
+          <Show when={busy()}>
             <text fg={theme.textMuted}>Thinking...</text>
           </Show>
           <Show when={error()}>
