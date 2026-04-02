@@ -182,7 +182,11 @@ export namespace MCP {
     return Effect.tryPromise({
       try: () => listFn(client),
       catch: (e: any) => {
-        log.error(`failed to get ${label}`, { clientName, error: e.message })
+        if (e?.code === -32601) {
+          log.info(`${label} not supported`, { clientName })
+        } else {
+          log.error(`failed to get ${label}`, { clientName, error: e.message })
+        }
         return e
       },
     }).pipe(
@@ -681,7 +685,11 @@ export namespace MCP {
         return yield* Effect.tryPromise({
           try: () => fn(client),
           catch: (e: any) => {
-            log.error(`failed to ${label}`, { clientName, ...meta, error: e?.message })
+            if (e?.code === -32601) {
+              log.info(`${label} not supported`, { clientName, ...meta })
+            } else {
+              log.error(`failed to ${label}`, { clientName, ...meta, error: e?.message })
+            }
             return e
           },
         }).pipe(Effect.orElseSucceed(() => undefined))
