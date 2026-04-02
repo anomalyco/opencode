@@ -283,6 +283,40 @@ describe("sidekick isolation guards", () => {
   })
 })
 
+describe("sidekick cascade lifecycle", () => {
+  test("Session.remove deletes sidekick child", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const parent = await Session.create({})
+        const sidekick = await Sidekick.ensure(parent.id)
+
+        await Session.remove(parent.id)
+
+        await expect(Session.get(sidekick.id)).rejects.toThrow()
+      },
+    })
+  })
+})
+
+describe("sidekick context guards", () => {
+  test("context rejects sidekick as parent", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const session = await Session.create({})
+        const sidekick = await Sidekick.ensure(session.id)
+
+        await expect(Sidekick.context({ parentID: sidekick.id, limit: 30 })).rejects.toThrow(
+          "Cannot build sidekick context from a sidekick session",
+        )
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+})
+
 describe("sidekick project isolation", () => {
   test("inject rejects cross-project parentID", async () => {
     await Instance.provide({

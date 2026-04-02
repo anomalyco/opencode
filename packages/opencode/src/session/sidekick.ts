@@ -78,6 +78,7 @@ export namespace Sidekick {
     }),
     async (input) => {
       const parent = await Session.get(input.parentID)
+      if (parent.kind === "sidekick") throw new Error("Cannot build sidekick context from a sidekick session")
       if (parent.projectID !== Instance.project.id) throw new Error("Parent session belongs to a different project")
       const msgs = await Session.messages({ sessionID: input.parentID, limit: input.limit })
       if (msgs.length === 0) return ""
@@ -186,8 +187,8 @@ export namespace Sidekick {
       if (parent.kind === "sidekick") throw new Error("Cannot inject into a sidekick session")
       if (parent.projectID !== Instance.project.id) throw new Error("Parent session belongs to a different project")
 
-      // Get last user message to reuse agent + model
-      const msgs = await Session.messages({ sessionID: input.parentID, limit: 10 })
+      // Get last user message to reuse agent + model — scan all messages (no limit)
+      const msgs = await Session.messages({ sessionID: input.parentID })
       let agent = "build"
       let model = await Provider.defaultModel()
       for (let i = msgs.length - 1; i >= 0; i--) {

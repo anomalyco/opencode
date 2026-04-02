@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm"
-import { sqliteTable, text, integer, index, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core"
+import { sqliteTable, text, integer, index, primaryKey, uniqueIndex, check } from "drizzle-orm/sqlite-core"
 import { ProjectTable } from "../project/project.sql"
 import type { MessageV2 } from "./message-v2"
 import type { Snapshot } from "../snapshot"
@@ -46,6 +46,7 @@ export const SessionTable = sqliteTable(
     uniqueIndex("session_parent_kind_uniq")
       .on(table.parent_id, table.kind)
       .where(sql`kind = 'sidekick'`),
+    check("session_sidekick_parent_chk", sql`kind <> 'sidekick' OR parent_id IS NOT NULL`),
   ],
 )
 
