@@ -3,7 +3,6 @@ import { expect, spyOn } from "bun:test"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import path from "path"
 import z from "zod"
-import type { Agent } from "../../src/agent/agent"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { Bus } from "../../src/bus"
 import { Command } from "../../src/command"
@@ -21,6 +20,7 @@ import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
 import { AppFileSystem } from "../../src/filesystem"
 import { SessionCompaction } from "../../src/session/compaction"
+import { Instruction } from "../../src/session/instruction"
 import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
@@ -34,7 +34,7 @@ import { Log } from "../../src/util/log"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { provideTmpdirInstance, provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-import { TestLLMServer } from "../lib/llm-server"
+import { reply, TestLLMServer } from "../lib/llm-server"
 
 Log.init({ print: false })
 
@@ -171,6 +171,7 @@ function makeHttp() {
       Layer.provideMerge(proc),
       Layer.provideMerge(registry),
       Layer.provideMerge(trunc),
+      Layer.provide(Instruction.defaultLayer),
       Layer.provideMerge(deps),
     ),
   )
@@ -451,6 +452,36 @@ it.live("loop continues when finish is tool-calls", () =>
   ),
 )
 
+it.live("loop continues when finish is stop but assistant has tool parts", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({
+        title: "Pinned",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+      yield* llm.push(reply().tool("first", { value: "first" }).stop())
+      yield* llm.text("second")
+
+      const result = yield* prompt.loop({ sessionID: session.id })
+      expect(yield* llm.calls).toBe(2)
+      expect(result.info.role).toBe("assistant")
+      if (result.info.role === "assistant") {
+        expect(result.parts.some((part) => part.type === "text" && part.text === "second")).toBe(true)
+        expect(result.info.finish).toBe("stop")
+      }
+    }),
+    { git: true, config: providerCfg },
+  ),
+)
+
 it.live("failed subtask preserves metadata on error tool state", () =>
   provideTmpdirServer(
     Effect.fnUntraced(function* ({ llm }) {
@@ -470,7 +501,7 @@ it.live("failed subtask preserves metadata on error tool state", () =>
       expect(result.info.role).toBe("assistant")
       expect(yield* llm.calls).toBe(2)
 
-      const msgs = yield* Effect.promise(() => MessageV2.filterCompacted(MessageV2.stream(chat.id)))
+      const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
       const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
       expect(taskMsg?.info.role).toBe("assistant")
       if (!taskMsg || taskMsg.info.role !== "assistant") return
@@ -629,7 +660,7 @@ it.live(
           const exit = yield* Fiber.await(fiber)
           expect(Exit.isSuccess(exit)).toBe(true)
 
-          const msgs = yield* Effect.promise(() => MessageV2.filterCompacted(MessageV2.stream(chat.id)))
+          const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
           const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
           expect(taskMsg?.info.role).toBe("assistant")
           if (!taskMsg || taskMsg.info.role !== "assistant") return
