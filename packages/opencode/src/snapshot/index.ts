@@ -101,10 +101,7 @@ export namespace Snapshot {
               })
               const handle = yield* spawner.spawn(proc)
               const [text, stderr] = yield* Effect.all(
-                [
-                  Stream.mkString(Stream.decodeText(handle.stdout)),
-                  Stream.mkString(Stream.decodeText(handle.stderr)),
-                ],
+                [Stream.mkString(Stream.decodeText(handle.stdout)), Stream.mkString(Stream.decodeText(handle.stderr))],
                 { concurrency: 2 },
               )
               const code = yield* handle.exitCode
