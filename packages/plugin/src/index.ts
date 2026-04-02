@@ -54,6 +54,13 @@ export type WorkspaceAdaptor = {
   target(config: WorkspaceInfo): WorkspaceTarget | Promise<WorkspaceTarget>
 }
 
+export type SkillInfo = {
+  name: string
+  description: string
+  location: string
+  content: string
+}
+
 export type PluginInput = {
   client: ReturnType<typeof createOpencodeClient>
   project: Project
@@ -64,6 +71,11 @@ export type PluginInput = {
   }
   serverUrl: URL
   $: BunShell
+  skills: {
+    all(): Promise<SkillInfo[]>
+    get(name: string): Promise<SkillInfo | undefined>
+    dirs(): Promise<string[]>
+  }
 }
 
 export type PluginOptions = Record<string, unknown>

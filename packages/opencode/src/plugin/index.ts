@@ -25,6 +25,7 @@ import { PluginLoader } from "./loader"
 import { parsePluginSpecifier, readPluginId, readV1Plugin, resolvePluginId } from "./shared"
 import { registerAdaptor } from "@/control-plane/adaptors"
 import type { WorkspaceAdaptor } from "@/control-plane/types"
+import { Skill } from "../skill"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -53,6 +54,28 @@ export namespace Plugin {
   }
 
   export class Service extends Context.Service<Service, Interface>()("@opencode/Plugin") {}
+
+  // Extract package name from a plugin specifier for dedup.
+  // "github:owner/repo#branch" → "repo"
+  // "@scope/pkg@version" → "@scope/pkg"
+  // "pkg@version" → "pkg"
+  export function pluginRepo(plugin: Config.PluginOrigin | Config.PluginSpec): string {
+    const spec = Config.pluginSpecifier(typeof plugin === "string" || Array.isArray(plugin) ? plugin : plugin.spec)
+    if (spec.startsWith("github:")) {
+      const repo = spec.replace(/^github:/, "").split("#")[0]
+      return repo.split("/").pop()!
+    }
+    const last = spec.lastIndexOf("@")
+    if (last > 0) return spec.substring(0, last)
+    return spec
+  }
+
+  // Merge BUILTIN and user plugins, dropping any BUILTIN whose
+  // package name is already provided by a user plugin.
+  export function dedup(builtin: Config.PluginOrigin[], user: Config.PluginOrigin[]): Config.PluginOrigin[] {
+    const names = new Set(user.map(pluginRepo))
+    return [...builtin.filter((b) => !names.has(pluginRepo(b))), ...user]
+  }
 
   // Built-in plugins that are directly imported (not installed from npm)
   const INTERNAL_PLUGINS: PluginInstance[] = [
@@ -146,6 +169,11 @@ export namespace Plugin {
             },
             // @ts-expect-error
             $: typeof Bun === "undefined" ? undefined : Bun.$,
+            skills: {
+              all: () => bridge.promise(Skill.Service.use((svc) => svc.all()).pipe(Effect.orDie)),
+              get: (name: string) => bridge.promise(Skill.Service.use((svc) => svc.get(name)).pipe(Effect.orDie)),
+              dirs: () => bridge.promise(Skill.Service.use((svc) => svc.dirs()).pipe(Effect.orDie)),
+            },
           }
 
           for (const plugin of INTERNAL_PLUGINS) {
@@ -159,7 +187,7 @@ export namespace Plugin {
             if (init._tag === "Some") hooks.push(init.value)
           }
 
-          const plugins = Flag.OPENCODE_PURE ? [] : (cfg.plugin_origins ?? [])
+          const plugins: Config.PluginOrigin[] = Flag.OPENCODE_PURE ? [] : dedup([], cfg.plugin_origins ?? [])
           if (Flag.OPENCODE_PURE && cfg.plugin_origins?.length) {
             log.info("skipping external plugins in pure mode", { count: cfg.plugin_origins.length })
           }
