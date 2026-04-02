@@ -15,93 +15,10 @@ import { tmpdir } from "../fixture/fixture"
 import type { Agent } from "../../src/agent/agent"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { SessionID, MessageID } from "../../src/session/schema"
-
-describe("session.llm.hasToolCalls", () => {
-  test("returns false for empty messages array", () => {
-    expect(LLM.hasToolCalls([])).toBe(false)
-  })
-
-  test("returns false for messages with only text content", () => {
-    const messages: ModelMessage[] = [
-      {
-        role: "user",
-        content: [{ type: "text", text: "Hello" }],
-      },
-      {
-        role: "assistant",
-        content: [{ type: "text", text: "Hi there" }],
-      },
-    ]
-    expect(LLM.hasToolCalls(messages)).toBe(false)
-  })
-
-  test("returns true when messages contain tool-call", () => {
-    const messages = [
-      {
-        role: "user",
-        content: [{ type: "text", text: "Run a command" }],
-      },
-      {
-        role: "assistant",
-        content: [
-          {
-            type: "tool-call",
-            toolCallId: "call-123",
-            toolName: "bash",
-          },
-        ],
-      },
-    ] as ModelMessage[]
-    expect(LLM.hasToolCalls(messages)).toBe(true)
-  })
-
-  test("returns true when messages contain tool-result", () => {
-    const messages = [
-      {
-        role: "tool",
-        content: [
-          {
-            type: "tool-result",
-            toolCallId: "call-123",
-            toolName: "bash",
-          },
-        ],
-      },
-    ] as ModelMessage[]
-    expect(LLM.hasToolCalls(messages)).toBe(true)
-  })
-
-  test("returns false for messages with string content", () => {
-    const messages: ModelMessage[] = [
-      {
-        role: "user",
-        content: "Hello world",
-      },
-      {
-        role: "assistant",
-        content: "Hi there",
-      },
-    ]
-    expect(LLM.hasToolCalls(messages)).toBe(false)
-  })
-
-  test("returns true when tool-call is mixed with text content", () => {
-    const messages = [
-      {
-        role: "assistant",
-        content: [
-          { type: "text", text: "Let me run that command" },
-          {
-            type: "tool-call",
-            toolCallId: "call-456",
-            toolName: "read",
-          },
-        ],
-      },
-    ] as ModelMessage[]
-    expect(LLM.hasToolCalls(messages)).toBe(true)
-  })
-})
+import { Auth } from "../../src/auth"
+import { Config } from "../../src/config/config"
+import { Plugin } from "../../src/plugin"
+import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 
 type Capture = {
   url: URL
@@ -283,6 +200,96 @@ function createEventResponse(chunks: unknown[], includeDone = false) {
 }
 
 describe("session.llm.stream", () => {
+  test("keeps messy workflow tool args internal to streaming path", async () => {
+    const exec = async (argsJson: string) => {
+      const calls: unknown[] = []
+      const model = {
+        providerID: ProviderID.make("test"),
+        id: ModelID.make("test-model"),
+        api: { id: "test-model" },
+      } as Provider.Model
+      const user = {
+        id: MessageID.make("user-workflow"),
+        sessionID: SessionID.make("session-workflow"),
+        role: "user",
+        time: { created: Date.now() },
+        agent: "test",
+        model: { providerID: ProviderID.make("test"), modelID: ModelID.make("test-model") },
+      } satisfies MessageV2.User
+      const agent = {
+        name: "test",
+        mode: "primary",
+        options: {},
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      } satisfies Agent.Info
+
+      const workflow = {
+        systemPrompt: "",
+        toolExecutor: undefined as
+          | ((name: string, args: string, id: string) => Promise<{ result: string; error?: string }>)
+          | undefined,
+      } as GitLabWorkflowLanguageModel
+
+      const orig = {
+        getLanguage: Provider.getLanguage,
+        getProvider: Provider.getProvider,
+        getAuth: Auth.get,
+        getConfig: Config.get,
+        trigger: Plugin.trigger,
+      }
+
+      Provider.getLanguage = async () => workflow
+      Provider.getProvider = async () => ({ id: "test", options: {} }) as Awaited<ReturnType<typeof Provider.getProvider>>
+      Auth.get = async () => undefined
+      Config.get = async () => ({ experimental: {} }) as Awaited<ReturnType<typeof Config.get>>
+      Plugin.trigger = async (_name: string, _ctx: unknown, value: any) => value
+
+      try {
+        await LLM.stream({
+          user,
+          sessionID: user.sessionID,
+          model,
+          agent,
+          system: [],
+          abort: new AbortController().signal,
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {
+            bash: tool({
+              description: "Run bash",
+              inputSchema: z.object({ cmd: z.string(), nested: z.object({ ok: z.boolean() }).optional() }),
+              execute: async (input) => {
+                calls.push(input)
+                return { output: "ok" }
+              },
+            }),
+          },
+        })
+
+        const result = await workflow.toolExecutor?.("bash", argsJson, "req-1")
+        return { result, calls }
+      } finally {
+        Provider.getLanguage = orig.getLanguage
+        Provider.getProvider = orig.getProvider
+        Auth.get = orig.getAuth
+        Config.get = orig.getConfig
+        Plugin.trigger = orig.trigger
+      }
+    }
+
+    await expect(exec('{"cmd":"ls"}').then((x) => x.calls[0])).resolves.toEqual({ cmd: "ls" })
+    await expect(exec('```json\n{"cmd":"ls"}\n```').then((x) => x.calls[0])).resolves.toEqual({ cmd: "ls" })
+    await expect(exec('Use these args: {"cmd":"ls","nested":{"ok":true}} thanks').then((x) => x.calls[0])).resolves.toEqual({
+      cmd: "ls",
+      nested: { ok: true },
+    })
+    await expect(exec('{"cmd":"unterminated}').then((x) => x.result)).resolves.toMatchObject({
+      error: "Invalid tool arguments JSON",
+    })
+    await expect(exec('["ls"]').then((x) => x.result)).resolves.toMatchObject({
+      error: "Invalid tool arguments JSON",
+    })
+  })
+
   test("sends temperature, tokens, and reasoning options for openai-compatible models", async () => {
     const server = state.server
     if (!server) {

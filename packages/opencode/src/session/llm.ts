@@ -76,6 +76,64 @@ export namespace LLM {
 
   export const defaultLayer = layer
 
+  function parseToolArgs(input: string) {
+    const parse = (text: string) => {
+      try {
+        const value = JSON.parse(text)
+        return value && typeof value === "object" && !Array.isArray(value) ? value : undefined
+      } catch {
+        return undefined
+      }
+    }
+
+    const direct = parse(input)
+    if (direct !== undefined) return direct
+
+    const trimmed = input.trim()
+    const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)?.[1]
+    if (fenced) {
+      const obj = parse(fenced.trim())
+      if (obj !== undefined) return obj
+    }
+
+    const start = trimmed.indexOf("{")
+    if (start !== -1) {
+      let depth = 0
+      let quote = false
+      let esc = false
+      for (let i = start; i < trimmed.length; i++) {
+        const char = trimmed[i]
+        if (quote) {
+          if (esc) {
+            esc = false
+            continue
+          }
+          if (char === "\\") {
+            esc = true
+            continue
+          }
+          if (char === '"') quote = false
+          continue
+        }
+        if (char === '"') {
+          quote = true
+          continue
+        }
+        if (char === "{") depth++
+        if (char === "}") {
+          depth--
+          if (depth === 0) {
+            const obj = parse(trimmed.slice(start, i + 1))
+            if (obj !== undefined) return obj
+            break
+          }
+        }
+      }
+    }
+
+    throw new Error("Invalid tool arguments JSON")
+  }
+
   export async function stream(input: StreamRequest) {
     const l = log
       .clone()
@@ -239,7 +297,7 @@ export namespace LLM {
           return { result: "", error: `Unknown tool: ${toolName}` }
         }
         try {
-          const result = await t.execute!(JSON.parse(argsJson), {
+          const result = await t.execute!(parseToolArgs(argsJson), {
             toolCallId: _requestID,
             messages: input.messages,
             abortSignal: input.abort,
@@ -343,7 +401,7 @@ export namespace LLM {
 
   // Check if messages contain any tool-call content
   // Used to determine if a dummy tool should be added for LiteLLM proxy compatibility
-  export function hasToolCalls(messages: ModelMessage[]): boolean {
+  function hasToolCalls(messages: ModelMessage[]): boolean {
     for (const msg of messages) {
       if (!Array.isArray(msg.content)) continue
       for (const part of msg.content) {
