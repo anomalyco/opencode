@@ -29,6 +29,9 @@ export function Home() {
     if (route.initialPrompt) {
       prompt.set(route.initialPrompt)
       once = true
+    } else if (args.command) {
+      once = true
+      prompt.command(args.command, args.prompt ?? '')
     } else if (args.prompt) {
       prompt.set({ input: args.prompt, parts: [] })
       once = true
