@@ -8,7 +8,7 @@ import z from "zod"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRunPromise } from "@/effect/run-service"
+import { makeRuntime } from "@/effect/run-service"
 import { Flag } from "@/flag/flag"
 import { Instance } from "@/project/instance"
 import { git } from "@/util/git"
@@ -70,6 +70,8 @@ export namespace FileWatcher {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
+      const config = yield* Config.Service
+
       const state = yield* InstanceState.make(
         Effect.fn("FileWatcher.state")(
           function* () {
@@ -117,7 +119,7 @@ export namespace FileWatcher {
               )
             }
 
-            const cfg = yield* Effect.promise(() => Config.get())
+            const cfg = yield* config.get()
             const cfgIgnores = cfg.watcher?.ignore ?? []
 
             if (yield* Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
@@ -159,7 +161,9 @@ export namespace FileWatcher {
     }),
   )
 
-  const runPromise = makeRunPromise(Service, layer)
+  export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer))
+
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export function init() {
     return runPromise((svc) => svc.init())
