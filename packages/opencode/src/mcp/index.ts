@@ -20,6 +20,7 @@ import { AppFileSystem } from "@/filesystem"
 import { McpOAuthProvider } from "./oauth-provider"
 import { McpOAuthCallback } from "./oauth-callback"
 import { McpAuth } from "./auth"
+import { stripUnknownFormats } from "./schema"
 import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
@@ -143,7 +144,7 @@ export namespace MCP {
 
     return dynamicTool({
       description: mcpTool.description ?? "",
-      inputSchema: jsonSchema(schema),
+      inputSchema: jsonSchema(stripUnknownFormats(schema) as JSONSchema7),
       execute: async (args: unknown) => {
         return client.callTool(
           {
