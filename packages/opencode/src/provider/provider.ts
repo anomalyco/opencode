@@ -44,6 +44,7 @@ import { createGateway } from "@ai-sdk/gateway"
 import { createTogetherAI } from "@ai-sdk/togetherai"
 import { createPerplexity } from "@ai-sdk/perplexity"
 import { createVercel } from "@ai-sdk/vercel"
+import { createVenice } from "venice-ai-sdk-provider"
 import {
   createGitLab,
   VERSION as GITLAB_PROVIDER_VERSION,
@@ -139,6 +140,7 @@ export namespace Provider {
     "@ai-sdk/vercel": createVercel,
     "gitlab-ai-provider": createGitLab,
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
+    "venice-ai-sdk-provider": createVenice
   }
 
   type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
