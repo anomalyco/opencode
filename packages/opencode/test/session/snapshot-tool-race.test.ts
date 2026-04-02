@@ -212,7 +212,7 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
       expect(fileExists).toBe(true)
 
       // Verify the tool call completed (in the first assistant message)
-      const allMsgs = yield* Effect.promise(() => MessageV2.filterCompacted(MessageV2.stream(session.id)))
+      const allMsgs = yield* MessageV2.filterCompactedEffect(session.id)
       const tool = allMsgs
         .flatMap((m) => m.parts)
         .find((p): p is MessageV2.ToolPart => p.type === "tool" && p.tool === "bash")
