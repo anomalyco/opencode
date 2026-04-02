@@ -7,7 +7,7 @@ import {
   type GrepMatch,
   type GrepMode,
   type SearchResult,
-} from "@ff-labs/fff-node"
+} from "@ff-labs/fff-bun"
 import z from "zod"
 import { Global } from "../global"
 import { Instance } from "../project/instance"
@@ -63,14 +63,6 @@ export namespace Fff {
     }
   }
 
-  function refresh(pick: FileFinder) {
-    const git = pick.refreshGitStatus()
-    if (!git.ok) {
-      log.warn("git refresh failed", { error: git.error })
-      return
-    }
-  }
-
   export async function picker(cwd: string) {
     const dir = Filesystem.resolve(cwd)
     const memo = await state()
@@ -89,16 +81,11 @@ export namespace Fff {
         aiMode: true,
       })
       if (!made.ok) throw new Error(made.error)
-
+      // we do not syncrhnously wait for the results here to not block anything
+      // fff will do the indexing in the background and will automatically
+      // become available
       const pick = made.value
-      const done = await pick.waitForScan(5000)
-      if (!done.ok) {
-        pick.destroy()
-        throw new Error(done.error)
-      }
-
       memo.map.set(dir, pick)
-      refresh(pick)
       return pick
     })()
 
@@ -170,11 +157,13 @@ export namespace Fff {
 
   export async function tree(input: { cwd: string; limit?: number; signal?: AbortSignal }) {
     input.signal?.throwIfAborted()
-    const files = (await Glob.scan("**/*", {
-      cwd: input.cwd,
-      include: "file",
-      dot: true,
-    }))
+    const files = (
+      await Glob.scan("**/*", {
+        cwd: input.cwd,
+        include: "file",
+        dot: true,
+      })
+    )
       .map((row) => norm(row))
       .filter((row) => allowed({ rel: row, hidden: true }))
       .toSorted((a, b) => a.localeCompare(b))

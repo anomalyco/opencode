@@ -90,7 +90,7 @@
     "@aws-sdk/credential-providers": "3.993.0",
     "@clack/prompts": "1.0.0-alpha.1",
     "@effect/platform-node": "catalog:",
-    "@ff-labs/fff-node": "0.4.2",
+    "@ff-labs/fff-bun": "0.5.1",
     "@hono/standard-validator": "0.1.5",
     "@hono/zod-validator": "catalog:",
     "@modelcontextprotocol/sdk": "1.27.1",

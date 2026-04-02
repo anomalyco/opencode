@@ -1,7 +1,7 @@
 import z from "zod"
 import { Tool } from "./tool"
 import { Fff } from "../file/fff"
-import type { GrepMode } from "@ff-labs/fff-node"
+import type { GrepMode } from "@ff-labs/fff-bun"
 
 import DESCRIPTION from "./grep.txt"
 import { Instance } from "../project/instance"
