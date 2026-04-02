@@ -733,7 +733,16 @@ export namespace SessionPrompt {
       }
 
       if (result === "stop") break
-      if (result === "compact" && session.kind !== "sidekick") {
+      if (result === "compact") {
+        if (session.kind === "sidekick") {
+          // Sidekick sessions cannot compact — stop with an error
+          processor.message.error = new NamedError.Unknown({
+            message: "Sidekick conversation is too long. Please start a new sidekick session.",
+          }).toObject()
+          processor.message.finish = processor.message.finish ?? "stop"
+          await Session.updateMessage(processor.message)
+          break
+        }
         await SessionCompaction.create({
           sessionID,
           agent: lastUser.agent,

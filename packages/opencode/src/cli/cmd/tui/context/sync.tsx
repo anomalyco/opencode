@@ -480,8 +480,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           setStore(
             produce((draft) => {
               const match = Binary.search(draft.session, sessionID, (s) => s.id)
+              // Don't insert sidekick sessions into the global session list
+              const skip = !match.found && (session.data as { kind?: string }).kind === "sidekick"
               if (match.found) draft.session[match.index] = session.data!
-              if (!match.found) draft.session.splice(match.index, 0, session.data!)
+              if (!match.found && !skip) draft.session.splice(match.index, 0, session.data!)
               draft.todo[sessionID] = todo.data ?? []
               draft.message[sessionID] = messages.data!.map((x) => x.info)
               for (const message of messages.data!) {

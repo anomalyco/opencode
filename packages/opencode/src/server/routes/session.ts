@@ -1083,10 +1083,13 @@ export const SessionRoutes = lazy(() =>
         return stream(c, async () => {
           const parentID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
+          // Resolve the sidekick session ID before firing the async prompt
+          // so errors are attributed to the sidekick, not the parent
+          const sidekick = await Sidekick.ensure(parentID)
           Sidekick.prompt({ parentID, text: body.text, model: body.model }).catch((err) => {
-            log.error("sidekick prompt failed", { parentID, error: err })
+            log.error("sidekick prompt failed", { sessionID: sidekick.id, error: err })
             Bus.publish(Session.Event.Error, {
-              sessionID: parentID,
+              sessionID: sidekick.id,
               error: new NamedError.Unknown({ message: err instanceof Error ? err.message : String(err) }).toObject(),
             })
           })
