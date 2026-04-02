@@ -825,7 +825,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     const sessionID = evt.properties.info?.id
     const session = sessionID ? sync.data.session?.[sessionID] : undefined
     const title = session?.title ?? sessionID ?? "Session"
-    Notification.show("opencode", `${title} completed`)
+    Notification.show("opencode", `${title} completed`).catch(() => {})
   })
 
   sdk.event.on("session.error", (evt) => {

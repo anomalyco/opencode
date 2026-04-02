@@ -16,7 +16,13 @@ const TERMINAL_APPS = [
   "wave",
   "tmux",
   "zellij",
+  "vscode",
+  "code",
 ]
+
+function escapeForOsascript(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
+}
 
 export namespace Notification {
   export async function terminalIsFocused(): Promise<boolean> {
@@ -38,8 +44,8 @@ export namespace Notification {
     const os = platform()
 
     if (os === "darwin") {
-      const escaped = message.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/'/g, "'\"'\"'")
-      const titleEscaped = title.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/'/g, "'\"'\"'")
+      const escaped = escapeForOsascript(message)
+      const titleEscaped = escapeForOsascript(title)
       await Process.run(
         [
           "osascript",
