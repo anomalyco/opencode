@@ -1175,11 +1175,15 @@ describe("session.compaction.overflow-pruning", () => {
           expect(captured.length).toBeGreaterThanOrEqual(1)
           const modelMsgs = captured[0].messages
           const allText = JSON.stringify(modelMsgs)
-          // Should NOT contain the very first messages (trimmed away)
-          expect(allText).not.toContain("msg-000")
-          expect(allText).not.toContain("msg-001")
-          expect(allText).not.toContain("msg-008")
-          // Should still contain recent messages that survived the trim
+          // With 50 messages before the compaction parent and OVERFLOW_MAX_MESSAGES = 40,
+          // the overflow replay logic pulls msg-049 out as the replay turn, leaving
+          // 49 messages (indices 0–48).  slice(-40) then drops the first 9 (indices 0–8).
+          for (let i = 0; i <= 8; i++) {
+            expect(allText).not.toContain(`msg-${String(i).padStart(3, "0")}`)
+          }
+          // msg-009 should be the first surviving message
+          expect(allText).toContain("msg-009")
+          // Recent messages should survive the trim
           expect(allText).toContain("msg-048")
         } finally {
           await rt.dispose()
