@@ -26,21 +26,21 @@ export const serverNamePattern = new RegExp(`(?:${serverNames.map(escape).join("
 export const modKey = process.platform === "darwin" ? "Meta" : "Control"
 export const terminalToggleKey = "Control+Backquote"
 
-export function createSdk(directory?: string) {
-  return createOpencodeClient({ baseUrl: serverUrl, directory, throwOnError: true })
+export function createSdk(directory?: string, baseUrl = serverUrl) {
+  return createOpencodeClient({ baseUrl, directory, throwOnError: true })
 }
 
-export async function resolveDirectory(directory: string) {
-  return createSdk(directory)
+export async function resolveDirectory(directory: string, baseUrl = serverUrl) {
+  return createSdk(directory, baseUrl)
     .path.get()
     .then((x) => x.data?.directory ?? directory)
 }
 
-export async function getWorktree() {
-  const sdk = createSdk()
+export async function getWorktree(baseUrl = serverUrl) {
+  const sdk = createSdk(undefined, baseUrl)
   const result = await sdk.path.get()
   const data = result.data
-  if (!data?.worktree) throw new Error(`Failed to resolve a worktree from ${serverUrl}/path`)
+  if (!data?.worktree) throw new Error(`Failed to resolve a worktree from ${baseUrl}/path`)
   return data.worktree
 }
 
