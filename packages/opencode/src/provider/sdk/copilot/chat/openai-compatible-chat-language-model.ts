@@ -50,6 +50,29 @@ export type OpenAICompatibleChatConfig = {
   supportedUrls?: () => LanguageModelV3["supportedUrls"]
 }
 
+function hasToolCalls(toolCalls: unknown): toolCalls is Array<{ function: { name: string; arguments: string } }> {
+  return Array.isArray(toolCalls) && toolCalls.length > 0
+}
+
+function normalizeFinishReason(
+  finishReason: string | null | undefined,
+  sawToolCalls: boolean,
+): {
+  unified: ReturnType<typeof mapOpenAICompatibleFinishReason>
+  raw: string | undefined
+} {
+  if ((finishReason === "tool_calls" || finishReason === "function_call") && !sawToolCalls) {
+    return {
+      unified: "stop",
+      raw: finishReason ?? undefined,
+    }
+  }
+  return {
+    unified: mapOpenAICompatibleFinishReason(finishReason),
+    raw: finishReason ?? undefined,
+  }
+}
+
 export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
   readonly specificationVersion = "v3"
 
@@ -240,8 +263,10 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
     }
 
     // tool calls:
-    if (choice.message.tool_calls != null) {
-      for (const toolCall of choice.message.tool_calls) {
+    const toolCalls = choice.message.tool_calls ?? []
+    const sawToolCalls = hasToolCalls(toolCalls)
+    if (sawToolCalls) {
+      for (const toolCall of toolCalls) {
         content.push({
           type: "tool-call",
           toolCallId: toolCall.id ?? generateId(),
@@ -273,10 +298,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
 
     return {
       content,
-      finishReason: {
-        unified: mapOpenAICompatibleFinishReason(choice.finish_reason),
-        raw: choice.finish_reason ?? undefined,
-      },
+      finishReason: normalizeFinishReason(choice.finish_reason, sawToolCalls),
       usage: {
         inputTokens: {
           total: responseBody.usage?.prompt_tokens ?? undefined,
@@ -375,6 +397,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
     let isActiveReasoning = false
     let isActiveText = false
     let reasoningOpaque: string | undefined
+    let sawToolCalls = false
 
     return {
       stream: response.pipeThrough(
@@ -452,14 +475,10 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
 
             const choice = value.choices[0]
 
-            if (choice?.finish_reason != null) {
-              finishReason = {
-                unified: mapOpenAICompatibleFinishReason(choice.finish_reason),
-                raw: choice.finish_reason ?? undefined,
-              }
-            }
-
             if (choice?.delta == null) {
+              if (choice?.finish_reason != null) {
+                finishReason = normalizeFinishReason(choice.finish_reason, sawToolCalls)
+              }
               return
             }
 
@@ -523,7 +542,8 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
               })
             }
 
-            if (delta.tool_calls != null) {
+            if (delta.tool_calls != null && delta.tool_calls.length > 0) {
+              sawToolCalls = true
               // If reasoning was active and we're starting tool calls, end reasoning first
               // This handles the case where reasoning goes directly to tool calls with no content
               if (isActiveReasoning) {
@@ -641,6 +661,10 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
                   toolCall.hasFinished = true
                 }
               }
+            }
+
+            if (choice?.finish_reason != null) {
+              finishReason = normalizeFinishReason(choice.finish_reason, sawToolCalls)
             }
           },
 

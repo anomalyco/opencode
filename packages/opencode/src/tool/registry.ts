@@ -186,6 +186,7 @@ export namespace ToolRegistry {
               id: tool.id,
               description: output.description,
               parameters: output.parameters,
+              normalizeInput: next.normalizeInput,
               execute: next.execute,
               formatValidationError: next.formatValidationError,
             }

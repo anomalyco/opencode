@@ -258,6 +258,13 @@ function preview(text: string) {
   return text.slice(0, MAX_METADATA_LENGTH) + "\n\n..."
 }
 
+function defaultDescription(command: string) {
+  const cleaned = command.replace(/\s+/g, " ").trim()
+  if (!cleaned) return "Run shell command"
+  if (cleaned.length <= 80) return cleaned
+  return cleaned.slice(0, 77).trimEnd() + "..."
+}
+
 async function parse(command: string, ps: boolean) {
   const tree = await parser().then((p) => (ps ? p.ps : p.bash).parse(command))
   if (!tree) throw new Error("Failed to parse command")
@@ -452,6 +459,15 @@ export const BashTool = Tool.define("bash", async () => {
       .replaceAll("${chaining}", chain)
       .replaceAll("${maxLines}", String(Truncate.MAX_LINES))
       .replaceAll("${maxBytes}", String(Truncate.MAX_BYTES)),
+    normalizeInput(input) {
+      if (!input || typeof input !== "object" || Array.isArray(input)) return input
+      const next = { ...input } as Record<string, unknown>
+      if (typeof next.command !== "string") return next
+      if (typeof next.description !== "string" || !next.description.trim()) {
+        next.description = defaultDescription(next.command)
+      }
+      return next
+    },
     parameters: z.object({
       command: z.string().describe("The command to execute"),
       timeout: z.number().describe("Optional timeout in milliseconds").optional(),
@@ -465,9 +481,11 @@ export const BashTool = Tool.define("bash", async () => {
         .string()
         .describe(
           "Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'",
-        ),
+        )
+        .optional(),
     }),
     async execute(params, ctx) {
+      const description = params.description ?? defaultDescription(params.command)
       const cwd = params.workdir ? await resolvePath(params.workdir, Instance.directory, shell) : Instance.directory
       if (params.timeout !== undefined && params.timeout < 0) {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
@@ -487,7 +505,7 @@ export const BashTool = Tool.define("bash", async () => {
           cwd,
           env: await shellEnv(ctx, cwd),
           timeout,
-          description: params.description,
+          description,
         },
         ctx,
       )

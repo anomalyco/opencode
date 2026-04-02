@@ -71,6 +71,12 @@ const FIXTURES = {
     `data: {"choices":[{"finish_reason":"tool_calls","index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"function":{"arguments":"{}","name":"read_file"},"id":"call_reasoning_only_2","index":1,"type":"function"}]}}],"created":1769917420,"id":"opaque-only","usage":{"completion_tokens":12,"prompt_tokens":123,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":135,"reasoning_tokens":0},"model":"gemini-3-flash-preview"}`,
     `data: [DONE]`,
   ],
+
+  emptyToolCalls: [
+    `data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"Done"},"finish_reason":null}],"created":1769917421,"id":"empty-tool-calls","usage":{"completion_tokens":0,"prompt_tokens":0,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":0,"reasoning_tokens":0},"model":"qwen-local"}`,
+    `data: {"choices":[{"finish_reason":"tool_calls","index":0,"delta":{"role":"assistant","tool_calls":[]}}],"created":1769917421,"id":"empty-tool-calls","usage":{"completion_tokens":8,"prompt_tokens":21,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":29,"reasoning_tokens":0},"model":"qwen-local"}`,
+    `data: [DONE]`,
+  ],
 }
 
 function createMockFetch(chunks: string[]) {
@@ -89,6 +95,15 @@ function createMockFetch(chunks: string[]) {
       headers: { "Content-Type": "text/event-stream" },
     })
   })
+}
+
+function createJsonFetch(body: unknown) {
+  return mock(async () =>
+    new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }),
+  )
 }
 
 function createModel(fetchFn: ReturnType<typeof mock>) {
@@ -532,6 +547,56 @@ describe("doStream", () => {
 
     const rawChunks = parts.filter((p) => p.type === "raw")
     expect(rawChunks.length).toBeGreaterThan(0)
+  })
+
+  test("should treat empty tool_calls as stop in streams", async () => {
+    const mockFetch = createMockFetch(FIXTURES.emptyToolCalls)
+    const model = createModel(mockFetch)
+
+    const { stream } = await model.doStream({
+      prompt: TEST_PROMPT,
+      includeRawChunks: false,
+    })
+
+    const parts = await convertReadableStreamToArray(stream)
+    const finish = parts.find((p) => p.type === "finish")
+    expect(finish).toMatchObject({
+      type: "finish",
+      finishReason: { unified: "stop", raw: "tool_calls" },
+    })
+    expect(parts.some((p) => p.type === "tool-call")).toBe(false)
+  })
+})
+
+describe("doGenerate", () => {
+  test("should treat empty tool_calls as stop in json responses", async () => {
+    const mockFetch = createJsonFetch({
+      id: "empty-tool-calls-json",
+      model: "qwen-local",
+      choices: [
+        {
+          message: {
+            role: "assistant",
+            content: "Done",
+            tool_calls: [],
+          },
+          finish_reason: "tool_calls",
+        },
+      ],
+      usage: {
+        prompt_tokens: 21,
+        completion_tokens: 8,
+        total_tokens: 29,
+      },
+    })
+    const model = createModel(mockFetch)
+
+    const result = await model.doGenerate({
+      prompt: TEST_PROMPT,
+    })
+
+    expect(result.finishReason).toEqual({ unified: "stop", raw: "tool_calls" })
+    expect(result.content).toEqual([{ type: "text", text: "Done", providerMetadata: undefined }])
   })
 })
 

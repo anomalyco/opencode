@@ -28,6 +28,7 @@ export namespace Tool {
   export interface Def<Parameters extends z.ZodType = z.ZodType, M extends Metadata = Metadata> {
     description: string
     parameters: Parameters
+    normalizeInput?(args: unknown): unknown
     execute(
       args: z.infer<Parameters>,
       ctx: Context,
@@ -58,8 +59,9 @@ export namespace Tool {
         const toolInfo = init instanceof Function ? await init(initCtx) : init
         const execute = toolInfo.execute
         toolInfo.execute = async (args, ctx) => {
+          const normalized = toolInfo.normalizeInput ? toolInfo.normalizeInput(args) : args
           try {
-            toolInfo.parameters.parse(args)
+            toolInfo.parameters.parse(normalized)
           } catch (error) {
             if (error instanceof z.ZodError && toolInfo.formatValidationError) {
               throw new Error(toolInfo.formatValidationError(error), { cause: error })
@@ -69,7 +71,7 @@ export namespace Tool {
               { cause: error },
             )
           }
-          const result = await execute(args, ctx)
+          const result = await execute(normalized as z.infer<Parameters>, ctx)
           // skip truncation for tools that handle it themselves
           if (result.metadata.truncated !== undefined) {
             return result

@@ -443,15 +443,16 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             description: item.description,
             inputSchema: jsonSchema(schema as any),
             execute(args, options) {
+              const normalizedArgs = item.normalizeInput ? item.normalizeInput(args) : args
               return Effect.runPromise(
                 Effect.gen(function* () {
-                  const ctx = context(args, options)
+                  const ctx = context(normalizedArgs, options)
                   yield* plugin.trigger(
                     "tool.execute.before",
                     { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
-                    { args },
+                    { args: normalizedArgs },
                   )
-                  const result = yield* Effect.promise(() => item.execute(args, ctx))
+                  const result = yield* Effect.promise(() => item.execute(normalizedArgs, ctx))
                   const output = {
                     ...result,
                     attachments: result.attachments?.map((attachment) => ({
@@ -463,7 +464,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   }
                   yield* plugin.trigger(
                     "tool.execute.after",
-                    { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args },
+                    { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args: normalizedArgs },
                     output,
                   )
                   return output

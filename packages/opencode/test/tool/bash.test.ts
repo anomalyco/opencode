@@ -131,6 +131,24 @@ describe("tool.bash", () => {
       },
     })
   })
+
+  each("fills missing description from command", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          {
+            command: "echo fallback description",
+          } as any,
+          ctx,
+        )
+        expect(result.metadata.exit).toBe(0)
+        expect(result.metadata.description).toBe("echo fallback description")
+        expect(result.title).toBe("echo fallback description")
+      },
+    })
+  })
 })
 
 describe("tool.bash permissions", () => {
