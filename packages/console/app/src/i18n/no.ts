@@ -368,6 +368,8 @@ export const dict = {
   "zen.api.error.userMonthlyLimitReached":
     "Du har nådd din månedlige utgiftsgrense på ${{amount}}. Administrer grensene dine her: {{membersUrl}}",
   "zen.api.error.modelDisabled": "Modellen er deaktivert",
+  "zen.api.error.trialEnded":
+    "Den gratis kampanjen for {{model}} er avsluttet. Du kan fortsette å bruke modellen ved å abonnere på OpenCode Go - {{link}}",
 
   "black.meta.title": "OpenCode Black | Få tilgang til verdens beste kodemodeller",
   "black.meta.description": "Få tilgang til Claude, GPT, Gemini og mer med OpenCode Black-abonnementer.",
