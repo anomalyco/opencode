@@ -92,6 +92,7 @@ export function Prompt(props: PromptProps) {
   const kv = useKV()
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
+  const scope = (id?: string) => id ?? props.workspaceID ?? "global"
 
   function promptModelWarning() {
     toast.show({
@@ -695,10 +696,13 @@ export function Prompt(props: PromptProps) {
         })
         .catch(() => {})
     }
-    history.append({
-      ...store.prompt,
-      mode: currentMode,
-    })
+    history.append(
+      {
+        ...store.prompt,
+        mode: currentMode,
+      },
+      scope(sessionID),
+    )
     input.extmarks.clear()
     setStore("prompt", {
       input: "",
@@ -952,7 +956,7 @@ export function Prompt(props: PromptProps) {
                     (keybind.match("history_next", e) && input.cursorOffset === input.plainText.length)
                   ) {
                     const direction = keybind.match("history_previous", e) ? -1 : 1
-                    const item = history.move(direction, input.plainText)
+                    const item = history.move(direction, input.plainText, scope(props.sessionID))
 
                     if (item) {
                       input.setText(item.input)

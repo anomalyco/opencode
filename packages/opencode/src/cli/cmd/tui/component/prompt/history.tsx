@@ -10,6 +10,7 @@ import type { AgentPart, FilePart, TextPart } from "@opencode-ai/sdk/v2"
 export type PromptInfo = {
   input: string
   mode?: "normal" | "shell"
+  scope?: string
   parts: (
     | Omit<FilePart, "id" | "messageID" | "sessionID">
     | Omit<AgentPart, "id" | "messageID" | "sessionID">
@@ -26,6 +27,10 @@ export type PromptInfo = {
 }
 
 const MAX_HISTORY_ENTRIES = 50
+
+function scope(value?: string) {
+  return value ?? "global"
+}
 
 export const { use: usePromptHistory, provider: PromptHistoryProvider } = createSimpleContext({
   name: "PromptHistory",
@@ -57,32 +62,44 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
 
     const [store, setStore] = createStore({
       index: 0,
+      scope: "global",
       history: [] as PromptInfo[],
     })
 
     return {
-      move(direction: 1 | -1, input: string) {
-        if (!store.history.length) return undefined
-        const current = store.history.at(store.index)
+      move(direction: 1 | -1, input: string, currentScope?: string) {
+        const nextScope = scope(currentScope)
+        const changed = store.scope !== nextScope
+        const index = changed ? 0 : store.index
+        if (changed) {
+          setStore("scope", nextScope)
+          setStore("index", 0)
+        }
+
+        const list = store.history.filter((item) => scope(item.scope) === nextScope)
+        if (!list.length) return undefined
+        const current = list.at(index)
         if (!current) return undefined
         if (current.input !== input && input.length) return
-        setStore(
-          produce((draft) => {
-            const next = store.index + direction
-            if (Math.abs(next) > store.history.length) return
-            if (next > 0) return
-            draft.index = next
-          }),
-        )
-        if (store.index === 0)
+        const next = index + direction
+        if (Math.abs(next) > list.length) return undefined
+        if (next > 0) return undefined
+
+        setStore("scope", nextScope)
+        setStore("index", next)
+
+        if (next === 0)
           return {
             input: "",
             parts: [],
           }
-        return store.history.at(store.index)
+        return list.at(next)
       },
-      append(item: PromptInfo) {
-        const entry = structuredClone(unwrap(item))
+      append(item: PromptInfo, currentScope?: string) {
+        const entry = {
+          ...structuredClone(unwrap(item)),
+          scope: scope(currentScope),
+        } satisfies PromptInfo
         let trimmed = false
         setStore(
           produce((draft) => {
@@ -91,6 +108,7 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
               draft.history = draft.history.slice(-MAX_HISTORY_ENTRIES)
               trimmed = true
             }
+            draft.scope = entry.scope
             draft.index = 0
           }),
         )
