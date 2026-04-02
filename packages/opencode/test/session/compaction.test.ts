@@ -990,6 +990,244 @@ describe("session.compaction.process", () => {
   })
 })
 
+describe("session.compaction.overflow-pruning", () => {
+  // Helper: create a processor layer that captures the messages sent to the
+  // compaction model, so we can assert they were pruned correctly.
+  function capturingLayer() {
+    const captured: { messages: import("ai").ModelMessage[] }[] = []
+    const processorLayer = Layer.succeed(
+      SessionProcessorModule.SessionProcessor.Service,
+      SessionProcessorModule.SessionProcessor.Service.of({
+        create: Effect.fn("CapturingProcessor.create")((input) => {
+          const msg = input.assistantMessage
+          return Effect.succeed({
+            get message() {
+              return msg
+            },
+            abort: Effect.fn("CapturingProcessor.abort")(() => Effect.void),
+            partFromToolCall() {
+              return {
+                id: PartID.ascending(),
+                messageID: msg.id,
+                sessionID: msg.sessionID,
+                type: "tool",
+                callID: "fake",
+                tool: "fake",
+                state: { status: "pending", input: {}, raw: "" },
+              }
+            },
+            process: Effect.fn("CapturingProcessor.process")((streamInput: import("../../src/session/llm").LLM.StreamInput) => {
+              captured.push({ messages: streamInput.messages })
+              return Effect.succeed("continue" as const)
+            }),
+          } satisfies SessionProcessorModule.SessionProcessor.Handle)
+        }),
+      }),
+    )
+    return { captured, processorLayer }
+  }
+
+  function capturingRuntime(processorLayer: Layer.Layer<SessionProcessorModule.SessionProcessor.Service>, provider = ProviderTest.fake()) {
+    const bus = Bus.layer
+    return ManagedRuntime.make(
+      Layer.mergeAll(SessionCompaction.layer, bus).pipe(
+        Layer.provide(provider.layer),
+        Layer.provide(Session.defaultLayer),
+        Layer.provide(processorLayer),
+        Layer.provide(Agent.defaultLayer),
+        Layer.provide(Plugin.defaultLayer),
+        Layer.provide(bus),
+        Layer.provide(Config.defaultLayer),
+      ),
+    )
+  }
+
+  test("overflow compaction truncates large tool outputs before sending to model", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        // Build a conversation with a very large tool output
+        const u1 = await user(session.id, "first message")
+        const a1 = await assistant(session.id, u1.id, tmp.path)
+        const hugeOutput = "x".repeat(50_000)
+        await tool(session.id, a1.id, "bash", hugeOutput)
+        const u2 = await user(session.id, "second message")
+        // The compaction parent — this triggers overflow compaction
+        const compactionParent = await user(session.id, "compact me")
+
+        const { captured, processorLayer } = capturingLayer()
+        const rt = capturingRuntime(processorLayer, wide())
+        try {
+          const msgs = await Session.messages({ sessionID: session.id })
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: compactionParent.id,
+                messages: msgs,
+                sessionID: session.id,
+                auto: true,
+                overflow: true,
+              }),
+            ),
+          )
+
+          // The captured messages should NOT contain the full 50k output
+          expect(captured.length).toBeGreaterThanOrEqual(1)
+          const allText = JSON.stringify(captured[0].messages)
+          expect(allText).not.toContain("x".repeat(1000))
+          expect(allText).toContain("truncated")
+
+          // Verify original DB messages are NOT modified
+          const dbMsgs = await Session.messages({ sessionID: session.id })
+          const dbToolPart = dbMsgs.flatMap((m) => m.parts).find((p) => p.type === "tool" && p.state.status === "completed")
+          expect(dbToolPart?.type).toBe("tool")
+          if (dbToolPart?.type === "tool" && dbToolPart.state.status === "completed") {
+            expect(dbToolPart.state.output).toBe(hugeOutput)
+          }
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("overflow compaction truncates large synthetic text parts", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const u1 = await user(session.id, "first message")
+        // Add a large synthetic text part (like a file read via @)
+        await Session.updatePart({
+          id: PartID.ascending(),
+          messageID: u1.id,
+          sessionID: session.id,
+          type: "text",
+          synthetic: true,
+          text: "y".repeat(10_000),
+        })
+        const compactionParent = await user(session.id, "compact me")
+
+        const { captured, processorLayer } = capturingLayer()
+        const rt = capturingRuntime(processorLayer, wide())
+        try {
+          const msgs = await Session.messages({ sessionID: session.id })
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: compactionParent.id,
+                messages: msgs,
+                sessionID: session.id,
+                auto: true,
+                overflow: true,
+              }),
+            ),
+          )
+
+          expect(captured.length).toBeGreaterThanOrEqual(1)
+          const allText = JSON.stringify(captured[0].messages)
+          // Should not contain the full 10k of y's
+          expect(allText).not.toContain("y".repeat(3000))
+          expect(allText).toContain("truncated")
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("overflow compaction trims old messages when conversation is very long", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        // Create 50 user messages — more than the OVERFLOW_MAX_MESSAGES limit of 40
+        for (let i = 0; i < 50; i++) {
+          await user(session.id, `msg-${String(i).padStart(3, "0")}`)
+        }
+        const compactionParent = await user(session.id, "compact me")
+
+        const { captured, processorLayer } = capturingLayer()
+        const rt = capturingRuntime(processorLayer, wide())
+        try {
+          const msgs = await Session.messages({ sessionID: session.id })
+          expect(msgs.length).toBeGreaterThan(40)
+
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: compactionParent.id,
+                messages: msgs,
+                sessionID: session.id,
+                auto: true,
+                overflow: true,
+              }),
+            ),
+          )
+
+          // The model should receive fewer messages than the full conversation.
+          // The overflow replay logic slices off the last user turn first, then
+          // our trimming drops old messages from the beginning.
+          expect(captured.length).toBeGreaterThanOrEqual(1)
+          const modelMsgs = captured[0].messages
+          const allText = JSON.stringify(modelMsgs)
+          // Should NOT contain the very first messages (trimmed away)
+          expect(allText).not.toContain("msg-000")
+          expect(allText).not.toContain("msg-001")
+          expect(allText).not.toContain("msg-008")
+          // Should still contain recent messages that survived the trim
+          expect(allText).toContain("msg-048")
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("non-overflow compaction does NOT prune tool outputs", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const u1 = await user(session.id, "first message")
+        const a1 = await assistant(session.id, u1.id, tmp.path)
+        const largeOutput = "z".repeat(5_000)
+        await tool(session.id, a1.id, "bash", largeOutput)
+        const compactionParent = await user(session.id, "compact me")
+
+        const { captured, processorLayer } = capturingLayer()
+        const rt = capturingRuntime(processorLayer, wide())
+        try {
+          const msgs = await Session.messages({ sessionID: session.id })
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: compactionParent.id,
+                messages: msgs,
+                sessionID: session.id,
+                auto: false,
+                // overflow is NOT set — normal compaction
+              }),
+            ),
+          )
+
+          expect(captured.length).toBeGreaterThanOrEqual(1)
+          const allText = JSON.stringify(captured[0].messages)
+          // Normal compaction should preserve the full output
+          expect(allText).not.toContain("truncated")
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+})
+
 describe("util.token.estimate", () => {
   test("estimates tokens from text (4 chars per token)", () => {
     const text = "x".repeat(4000)
