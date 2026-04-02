@@ -1380,7 +1380,7 @@ export class Sidekick extends HeyApiClient {
   /**
    * Inject sidekick message
    *
-   * Inject a sidekick conclusion into the parent conversation as a synthetic user message.
+   * Inject a sidekick conclusion into the parent conversation as a user message.
    */
   public inject<ThrowOnError extends boolean = false>(
     parameters: {

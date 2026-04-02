@@ -805,7 +805,10 @@ export namespace SessionPrompt {
           ...req,
           sessionID: input.session.id,
           tool: { messageID: input.processor.message.id, callID: options.toolCallId },
-          ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
+          ruleset:
+            input.agent.name === "sidekick"
+              ? input.agent.permission
+              : Permission.merge(input.agent.permission, input.session.permission ?? []),
         })
       },
     })

@@ -4,7 +4,7 @@ import { useSync } from "@tui/context/sync"
 import { useSDK } from "@tui/context/sdk"
 import { useTheme } from "../../context/theme"
 import { useLocal } from "@tui/context/local"
-import type { Message, Part } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Message, Part } from "@opencode-ai/sdk/v2"
 
 export function SidekickChat(props: { parentID: string }) {
   const sdk = useSDK()
@@ -14,6 +14,7 @@ export function SidekickChat(props: { parentID: string }) {
   let ref: TextareaRenderable | undefined
   const [sidekickID, setSidekickID] = createSignal<string | undefined>()
   const [sending, setSending] = createSignal(false)
+  const [error, setError] = createSignal<string | undefined>()
 
   const base = () => `${sdk.url}/session/${props.parentID}`
 
@@ -47,28 +48,39 @@ export function SidekickChat(props: { parentID: string }) {
     const text = ref.plainText.trim()
     if (!text || sending()) return
     setSending(true)
+    setError(undefined)
     ref.setText("")
 
-    const id = sidekickID() ?? (await ensure())
+    try {
+      const id = sidekickID() ?? (await ensure())
 
-    const model = local.model.current()
-    const body: Record<string, unknown> = { text }
-    if (model) {
-      body.model = {
-        providerID: model.providerID,
-        modelID: model.modelID,
+      const model = local.model.current()
+      const body: Record<string, unknown> = { text }
+      if (model) {
+        body.model = {
+          providerID: model.providerID,
+          modelID: model.modelID,
+        }
       }
+
+      const res = await (sdk.fetch ?? fetch)(`${sdk.url}/session/${props.parentID}/sidekick`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+
+      if (!res.ok) {
+        const msg = await res.text().catch(() => res.statusText)
+        setError(msg || `Request failed (${res.status})`)
+      }
+
+      // Sync to pick up the new messages
+      await sync.session.sync(id)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to send message")
+    } finally {
+      setSending(false)
     }
-
-    await (sdk.fetch ?? fetch)(`${sdk.url}/session/${props.parentID}/sidekick`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    })
-
-    // Sync to pick up the new messages
-    await sync.session.sync(id)
-    setSending(false)
   }
 
   async function inject(text: string) {
@@ -113,6 +125,12 @@ export function SidekickChat(props: { parentID: string }) {
                   .map((p) => (p as unknown as { text: string }).text)
                   .join("\n"),
               )
+              const err = createMemo(() => {
+                if (msg.role !== "assistant") return undefined
+                const e = (msg as AssistantMessage).error
+                if (!e) return undefined
+                return (e.data as { message?: string }).message ?? e.name
+              })
               return (
                 <box>
                   <Show when={msg.role === "user"}>
@@ -124,6 +142,9 @@ export function SidekickChat(props: { parentID: string }) {
                   <Show when={msg.role === "assistant"}>
                     <box>
                       <text fg={theme.text}>{text()}</text>
+                      <Show when={err()}>
+                        <text fg={theme.error}>{err()}</text>
+                      </Show>
                       <Show when={text()}>
                         <box onMouseUp={() => inject(text())}>
                           <text fg={theme.textMuted}>
@@ -139,6 +160,9 @@ export function SidekickChat(props: { parentID: string }) {
           </For>
           <Show when={sending()}>
             <text fg={theme.textMuted}>Thinking...</text>
+          </Show>
+          <Show when={error()}>
+            <text fg={theme.error}>{error()}</text>
           </Show>
         </box>
       </scrollbox>

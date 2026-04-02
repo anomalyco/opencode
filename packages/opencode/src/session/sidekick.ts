@@ -7,6 +7,9 @@ import { Permission } from "@/permission"
 import { fn } from "@/util/fn"
 import { ProviderID } from "@/provider/schema"
 import { ModelID } from "@/provider/schema"
+import { Database, eq, and } from "../storage/db"
+import { SessionTable } from "./session.sql"
+import { Instance } from "../project/instance"
 import z from "zod"
 
 export namespace Sidekick {
@@ -18,9 +21,21 @@ export namespace Sidekick {
     const parent = await Session.get(parentID)
     if (parent.kind === "sidekick") throw new Error("Cannot create a sidekick of a sidekick session")
 
-    const children = await Session.children(parentID)
-    const existing = children.find((c) => c.kind === "sidekick")
-    if (existing) return existing
+    const project = Instance.project
+    const existing = Database.use((db) =>
+      db
+        .select()
+        .from(SessionTable)
+        .where(
+          and(
+            eq(SessionTable.project_id, project.id),
+            eq(SessionTable.parent_id, parentID),
+            eq(SessionTable.kind, "sidekick"),
+          ),
+        )
+        .get(),
+    )
+    if (existing) return Session.fromRow(existing)
 
     try {
       return await Session.create({
@@ -33,9 +48,20 @@ export namespace Sidekick {
       })
     } catch (err) {
       // TOCTOU: another concurrent ensure() may have created it
-      const retry = await Session.children(parentID)
-      const found = retry.find((c) => c.kind === "sidekick")
-      if (found) return found
+      const retry = Database.use((db) =>
+        db
+          .select()
+          .from(SessionTable)
+          .where(
+            and(
+              eq(SessionTable.project_id, project.id),
+              eq(SessionTable.parent_id, parentID),
+              eq(SessionTable.kind, "sidekick"),
+            ),
+          )
+          .get(),
+      )
+      if (retry) return Session.fromRow(retry)
       throw err
     }
   })
@@ -102,6 +128,16 @@ export namespace Sidekick {
       const session = await ensure(input.parentID)
       const snapshot = await context({ parentID: input.parentID, limit: 30 })
 
+      // Mark previous synthetic snapshot parts as ignored to prevent duplication
+      const prev = await Session.messages({ sessionID: session.id })
+      for (const msg of prev) {
+        for (const part of msg.parts) {
+          if (part.type === "text" && part.synthetic && !part.ignored) {
+            await Session.updatePart({ ...part, ignored: true })
+          }
+        }
+      }
+
       const parts: SessionPrompt.PromptInput["parts"] = []
 
       if (snapshot) {
@@ -132,8 +168,10 @@ export namespace Sidekick {
   )
 
   /**
-   * Inject a sidekick message into the parent conversation as a user message.
-   * Retrieves the last user message's agent/model to maintain consistency.
+   * Inject a sidekick conclusion into the parent conversation as a user message.
+   * This is context-only: the injected message does NOT trigger the parent
+   * session's processing loop. The user must send a follow-up prompt to
+   * incorporate the injected context into the assistant's next response.
    */
   export const inject = fn(
     z.object({

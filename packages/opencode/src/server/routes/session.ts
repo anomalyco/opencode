@@ -25,6 +25,12 @@ import { NamedError } from "@opencode-ai/util/error"
 
 const log = Log.create({ service: "server" })
 
+async function rejectSidekick(sessionID: SessionID) {
+  const session = await Session.get(sessionID)
+  if (session.kind === "sidekick")
+    throw new Error("Sidekick sessions cannot be prompted through generic routes. Use the /sidekick endpoint instead.")
+}
+
 export const SessionRoutes = lazy(() =>
   new Hono()
     .get(
@@ -209,7 +215,8 @@ export const SessionRoutes = lazy(() =>
       validator("json", Session.create.schema.optional()),
       async (c) => {
         const body = c.req.valid("json") ?? {}
-        const session = await Session.create(body)
+        // Prevent external clients from creating sidekick sessions via public API
+        const session = await Session.create({ ...body, kind: "default" })
         return c.json(session)
       },
     )
@@ -816,6 +823,7 @@ export const SessionRoutes = lazy(() =>
         c.header("Content-Type", "application/json")
         return stream(c, async (stream) => {
           const sessionID = c.req.valid("param").sessionID
+          await rejectSidekick(sessionID)
           const body = c.req.valid("json")
           const msg = await SessionPrompt.prompt({ ...body, sessionID })
           stream.write(JSON.stringify(msg))
@@ -848,6 +856,7 @@ export const SessionRoutes = lazy(() =>
         c.header("Content-Type", "application/json")
         return stream(c, async () => {
           const sessionID = c.req.valid("param").sessionID
+          await rejectSidekick(sessionID)
           const body = c.req.valid("json")
           SessionPrompt.prompt({ ...body, sessionID }).catch((err) => {
             log.error("prompt_async failed", { sessionID, error: err })
@@ -891,6 +900,7 @@ export const SessionRoutes = lazy(() =>
       validator("json", SessionPrompt.CommandInput.omit({ sessionID: true })),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
+        await rejectSidekick(sessionID)
         const body = c.req.valid("json")
         const msg = await SessionPrompt.command({ ...body, sessionID })
         return c.json(msg)
@@ -923,6 +933,7 @@ export const SessionRoutes = lazy(() =>
       validator("json", SessionPrompt.ShellInput.omit({ sessionID: true })),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
+        await rejectSidekick(sessionID)
         const body = c.req.valid("json")
         const msg = await SessionPrompt.shell({ ...body, sessionID })
         return c.json(msg)

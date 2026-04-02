@@ -618,7 +618,13 @@ export namespace Session {
       db
         .select()
         .from(SessionTable)
-        .where(and(eq(SessionTable.project_id, project.id), eq(SessionTable.parent_id, parentID)))
+        .where(
+          and(
+            eq(SessionTable.project_id, project.id),
+            eq(SessionTable.parent_id, parentID),
+            eq(SessionTable.kind, "default"),
+          ),
+        )
         .all(),
     )
     return rows.map(fromRow)
