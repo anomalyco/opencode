@@ -45,6 +45,9 @@ function skip(file: string) {
 
 function ext(file: string) {
   const low = file.toLowerCase()
+  const base = path.basename(low)
+  if (base === "readme" || base === "license" || base === "dockerfile" || base === "makefile") return ".txt"
+  if (base === ".gitignore" || base === ".dockerignore" || base === ".editorconfig") return ".txt"
   if (low.endsWith("dockerfile")) return ".dockerfile"
   return path.extname(low)
 }

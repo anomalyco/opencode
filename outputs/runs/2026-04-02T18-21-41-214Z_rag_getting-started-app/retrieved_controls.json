@@ -1,0 +1,57 @@
+[
+  {
+    "id": "ISO-ISO27001pdf-020",
+    "title": "ISO27001.pdf snippet 20",
+    "text": "sage integrity.......................................................................................................................... 79 12.2.4 Output data validation.................................................................................................................. 79 12.3 CRYPTOGRAPHIC CONTROLS ................................................................................................................. 80 12.3.1 Policy on the use of cryptographic controls ................................................................................. 80 12.3.2 Key management........................................................................................................................... 81 12.4 S ECURITY OF SYSTEM FILES ................................................................................................................... 83 12.4.1 Control of operational software ................................................................................................... 83 12.4.2 Protection of system test data ....................................................................................................... 84 -- 7 of 128 -- ISO/IEC FDIS 17799:2005(E) © ISO/IEC 2005 – All rights reserved vii 12.4.3 Access control to program source code........................................................................................ 84 12.5 S ECURITY IN DEVELOPMEN",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ],
+    "score": 0.18942390382289886
+  },
+  {
+    "id": "ISO-ISOIEC270012022e-008",
+    "title": "ISO_IEC-270012022-ed.3.pdf snippet 8",
+    "text": "........................................................................................................... 10 Annex A (normative) Information security controls reference...........................................................................................11 Bibliography.............................................................................................................................................................................................................................19 iii © ISO/IEC 2022 – All rights reserved Contents Page SNV / licensed to 14955111 - Schweiz. Vereinigung für Qualitäts- und Management-Systeme (SQS) / S105748 / 2022-10-31_12:56 / ISO/IEC 27001:2022 -- 3 of 26 -- ISO/IEC 27001:2022(E) Foreword ISO (the International Organization for Standardization) and IEC (the International Electrotechnical Commission) form the specialized system for worldwide standardization. National bodies that are members of ISO or IEC participate in the development of International Standards through technical committees established by the respective organization to deal with particular fields of technical activity. ISO and IEC technical committees collaborate in fields of mutual interest. Other international organizations, governmental and non-governmental, in liaison with ISO and IEC, also take part in the work. The procedures used to develop this document and th",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ],
+    "score": 0.17825981974601746
+  },
+  {
+    "id": "ISO-NQAISO27001Imple-001",
+    "title": "NQA-ISO-27001-Implementation-Guide.pdf snippet 1",
+    "text": "ISO 27001:2022INFORMATION SECURITY IMPLEMENTATION GUIDE 53,000 GLOBALLY CERTIFICATES 100 TRANSPARENT -- 1 of 34 -- ISO 27001:2022 IMPLEMENTATION GUIDE 2 > ISO 27001:2022 IMPLEMENTATION GUIDE *UK and Ireland only -- 2 of 34 -- ISO 27001:2022 IMPLEMENTATION GUIDE 3 Contents Introduction to the standard P04 Benefits of implementation P05 Key principles and terminology P06 PDCA cycle P07 Risk based thinking / audits P08 Process based thinking / audit P09 Annex SL P10 SECTION 1: Scope P11 SECTION 2: Normative references P12 SECTION 3: Terms and definitions P13 SECTION 4: Context of the organisation P14 SECTION 5: Leadership P16 SECTION 6: Planning P18 SECTION 7: Support P22 SECTION 8: Operation P24 SECTION 9: Performance evaluation P26 SECTION 10: Improvement P28 Get the most from your management P30 Next steps once implemented P31 Information Security Management Training P32 -- 3 of 34 -- ISO 27001:2022 IMPLEMENTATION GUIDE 4 INTRODUCTION TO THE STANDARD ISO 27001:2022 IMPLEMENTATION GUIDE 4 The 27000 Family The 27000 series of standards started life in 1995 as BS 7799 and was written by the UK’s Department of Trade and Industry (DTI). The standards correctly go by the title “ISO/ IEC” because they are developed and maintained jointly by two international standards bodies: ISO (the International Organisation for Standardisation) and the IEC (the International Electrotechnical Commi",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ],
+    "score": 0.16845527291297913
+  },
+  {
+    "id": "ISO-ISOIEC270012022e-001",
+    "title": "ISO_IEC-270012022-ed.3.pdf snippet 1",
+    "text": "Information security, cybersecurity and privacy protection — Information security management systems — Requirements Sécurité de l'information, cybersécurité et protection de la vie privée — Systèmes de management de la sécurité de l'information — Exigences INTERNATIONAL STANDARD ISO/IEC 27001 Third edition 2022-10 Reference number ISO/IEC 27001:2022(E) © ISO/IEC 2022 SNV / licensed to 14955111 - Schweiz. Vereinigung für Qualitäts- und Management-Systeme (SQS) / S105748 / 2022-10-31_12:56 / ISO/IEC 27001:2022 -- 1 of 26 -- ii ISO/IEC 27001:2022(E) COPYRIGHT PROTECTED DOCUMENT © ISO/IEC 2022 All rights reserved. Unless otherwise specified, or required in the context of its implementation, no part of this publication may be reproduced or utilized otherwise in any form or by any means, electronic or mechanical, including photocopying, or posting on the internet or an intranet, without prior written permission. Permission can be requested from either ISO at the address below or ISO’s member body in the country of the requester. ISO copyright office CP 401 • Ch. de Blandonnet 8 CH-1214 Vernier, Geneva Phone: +41 22 749 01 11 Email: copyright@iso.org Website: www.iso.org Published in Switzerland © ISO/IEC 2022 – All rights reserved SNV / licensed to 14955111 - Schweiz. Vereinigung für Qualitäts- und Management-Systeme (SQS) / S105748 / 2022-10-31_12:56 / ISO/IEC 27001:2022 -- 2 of 26",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ],
+    "score": 0.16486993432044983
+  },
+  {
+    "id": "ISO-ISO27001pdf-003",
+    "title": "ISO27001.pdf snippet 3",
+    "text": "IONALE Information technology — Security techniques — Code of practice for information security management TECHNICAL CORRIGENDUM 1 Technologies de l'information — Techniques de sécurité — Code de bonne pratique pour la gestion de la sécurité de l'information RECTIFICATIF TECHNIQUE 1 Technical Corrigendum 1 to ISO/IEC 17799:2005 was prepared by Joint Technical Committee ISO/IEC JTC 1, Information technology, Subcommittee SC 27, IT Security techniques. Throughout the document: Replace “17799” with “27002”. -- 3 of 128 -- Please see the administrative notes on page iii RECIPIENTS OF THIS DRAFT ARE INVITED TO SUBMIT, WITH THEIR COMMENTS, NOTIFICATION OF ANY RELEVANT PATENT RIGHTS OF WHICH THEY ARE AWARE AND TO PROVIDE SUPPORT- ING DOCUMENTATION. IN ADDITION TO THEIR EVALUATION AS BEING ACCEPTABLE FOR INDUSTRIAL, TECHNO- LOGICAL, COMMERCIAL AND USER PURPOSES, DRAFT INTERNATIONAL STANDARDS MAY ON OCCASION HAVE TO BE CONSIDERED IN THE LIGHT OF THEIR POTENTIAL TO BECOME STAN- DARDS TO WHICH REFERENCE MAY BE MADE IN NATIONAL REGULATIONS. Reference number ISO/IEC FDIS 17799:2005(E) © ISO/IEC 2005 FINAL DRAFT ISO/IEC JTC 1 Secretariat: ANSI Voting begins on: 2005-02-11 Voting terminates on: 2005-04-11 INTERNATIONAL STANDARD ISO/IEC FDIS 17799 Information technology — Security techniques — Code of practice for information security management Technologies de l'information — Techniques de sé",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ],
+    "score": 0.16432178020477295
+  }
+]

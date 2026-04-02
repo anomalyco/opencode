@@ -1,0 +1,722 @@
+[
+  {
+    "id": "ISO-NQAISO27001Imple-001",
+    "title": "NQA-ISO-27001-Implementation-Guide.pdf snippet 1",
+    "text": "ISO 27001:2022INFORMATION SECURITY IMPLEMENTATION GUIDE 53,000 GLOBALLY CERTIFICATES 100 TRANSPARENT -- 1 of 34 -- ISO 27001:2022 IMPLEMENTATION GUIDE 2 > ISO 27001:2022 IMPLEMENTATION GUIDE *UK and Ireland only -- 2 of 34 -- ISO 27001:2022 IMPLEMENTATION GUIDE 3 Contents Introduction to the standard P04 Benefits of implementation P05 Key principles and terminology P06 PDCA cycle P07 Risk based thinking / audits P08 Process based thinking / audit P09 Annex SL P10 SECTION 1: Scope P11 SECTION 2: Normative references P12 SECTION 3: Terms and definitions P13 SECTION 4: Context of the organisation P14 SECTION 5: Leadership P16 SECTION 6: Planning P18 SECTION 7: Support P22 SECTION 8: Operation P24 SECTION 9: Performance evaluation P26 SECTION 10: Improvement P28 Get the most from your management P30 Next steps once implemented P31 Information Security Management Training P32 -- 3 of 34 -- ISO 27001:2022 IMPLEMENTATION GUIDE 4 INTRODUCTION TO THE STANDARD ISO 27001:2022 IMPLEMENTATION GUIDE 4 The 27000 Family The 27000 series of standards started life in 1995 as BS 7799 and was written by the UK’s Department of Trade and Industry (DTI). The standards correctly go by the title “ISO/ IEC” because they are developed and maintained jointly by two international standards bodies: ISO (the International Organisation for Standardisation) and the IEC (the International Electrotechnical Commi",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-NQAISO27001Imple-002",
+    "title": "NQA-ISO-27001-Implementation-Guide.pdf snippet 2",
+    "text": "ssion). However, for simplicity, in everyday usage the “IEC” part is often dropped. There are currently 45 published standards in the ISO 27000 series. Of these, ISO 27001 is the only standard intended for certification. The other standards all provide guidance on best practice implementation. Some provide guidance on how to develop ISMS for particular industries; others give guidance on how to implement key information security risk management processes and controls. Regular reviews and updates ISO standards are subject to review every five years to assess whether an update is required. The most recent update to the ISO 27001 standard was in 2022 and brought about significant restructure of Annex SL, as well as a number of new controls. Most businesses hold or have access to valuable or sensitive information. Failure to provide appropriate protection to such information can have serious operational, financial and legal consequences. In some instances, these can lead to a total business failure. The challenge that most businesses struggle with is how to provide appropriate protection. In particular, how do they ensure that they have identified all the risks they are exposed to and how can they manage them in a way that is proportionate, sustainable and cost effective? ISO 27001 is the internationally-recognised standard for Information Security Management Systems (ISMS). It pro",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-NQAISO27001Imple-003",
+    "title": "NQA-ISO-27001-Implementation-Guide.pdf snippet 3",
+    "text": "vides a robust framework to protect information that can be adapted to all types and sizes of organisation. Organisations that have significant exposure to information-security related risks are increasingly choosing to implement an ISMS that complies with ISO 27001. Three of the standards are particularly helpful to all types of organisations when implementing an ISMS. These are: • ISO 27000 Information Technology – Overview and vocabulary • ISO 27002 Information technology – Security techniques – Code of practice for information security controls. This is the most commonly referenced, relating to the design and implementation of the 93 controls specified in Annex A of ISO 27001:2022. • ISO 27005 Information Technology – Security techniques – Information security management. -- 4 of 34 -- ISO 27001:2022 IMPLEMENTATION GUIDE 5 BENEFITS OF IMPLEMENTATION COMMERCIAL Having independent third-party endorsement of an ISMS can provide an organisation with a competitive advantage against its competitors. Customers exposed to significant information security risks are now making certification to ISO 27001 a requirement in tender submissions. Where the customer is also certified to ISO 27001, they will only choose to work with suppliers whose information security controls match their own contractual requirements. For organisations that want to work with this type of customer, having an",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-NQAISO27001Imple-004",
+    "title": "NQA-ISO-27001-Implementation-Guide.pdf snippet 4",
+    "text": "ISO 27001 certified ISMS is a key requirement for sustaining and increasing their commercial revenues. OPERATIONAL Obtaining ISO 27001 supports an internal culture that is constantly aware of information security risks, and has a consistent approach to dealing with them. This leads to controls that are more robust in dealing with threats. The cost of implementing and maintaining them is also minimised, and in the event of these controls failing, the consequences will be reduced and more effectively mitigated. PEACE OF MIND Many organisations have information that is mission-critical to their operations, vital to sustaining their competitive advantage or an inherent part of their financial value. Having a robust and effective ISMS enables business owners and managers to sleep easier at night, knowing that they are less exposed to a risk of heavy fines, major business disruption or a significant hit to their reputation. ISO 27001 is an internationally recognised framework for a best practice ISMS and compliance where it can be independently verified to both boost an organisation’s image and give confidence to its customers. Information security is now fundamentally important to organisations, and the adoption of ISO 27001 more common. It’s no longer a question of if they will be affected by a security breach, it’s a question of when, and how they will respond. Implementing an Inf",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-NQAISO27001Imple-005",
+    "title": "NQA-ISO-27001-Implementation-Guide.pdf snippet 5",
+    "text": "ormation Security Management System (ISMS) and achieving certification to ISO 27001 is a significant undertaking. However, if done effectively, there are significant benefits for those organisations that need to protect valuable or sensitive information. These benefits typically fall into three areas: ISO 27001:2022 IMPLEMENTATION GUIDE 5 -- 5 of 34 -- ISO 27001:2022 IMPLEMENTATION GUIDE 6 KEY PRINCIPLES AND TERMINOLOGY The core purpose of an ISMS is to provide protection for sensitive or valuable information. Sensitive information typically includes information about employees, customers and suppliers. Valuable information may include intellectual property, financial data, legal records, commercial data and operational data. ISO 27001:2022 IMPLEMENTATION GUIDE 6 These information security risk types form what is commonly referred to as the CIA triad. Risks in information security typically arise from the presence of threats and vulnerabilities to assets that process, store, hold, protect or control access to information that can lead to incidents. Assets in the context of ISO 27001 typically include information, people, equipment, systems or infrastructure. Information is the data set(s) that an organisation wants to protect such as employee records, customer records, financial records, design data, test data etc. Incidents are unwanted events that result in a loss of confiden",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-NQAISO27001Imple-006",
+    "title": "NQA-ISO-27001-Implementation-Guide.pdf snippet 6",
+    "text": "tiality (e.g. a data breach,) integrity (e.g. corruption of data,) or availability (e.g. system failure). Threats are what cause incidents to occur and may be malicious (e.g. a cyber-attack,) accidental (e.g. accidental sharing of information to the wrong party,) or a force majeure (e.g. a flood). Vulnerabilities such as open office windows, source code misconfigurations, or the location of buildings next to rivers, increase the likelihood that the presence of a threat will result in an unwanted and costly incident. In information security, risk is managed through the design, implementation and maintenance of controls such as locked windows, software testing, correct configurations, software patching or siting vulnerable equipment above ground level. An ISMS that complies with ISO 27001 has an interrelated set of best practice processes that support the design, implementation and maintenance of controls, specific to that business. The processes that form part of an ISMS are usually a combination of existing core business processes (e.g. recruitment, induction, training, purchasing, product design, equipment maintenance, service delivery,) and those specific to maintaining and improving information security (e.g. change management, configuration management, access control, incident management, threat intelligence). Confidentiality where one or more people gain unauthorised acces",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-NQAISO27001Imple-007",
+    "title": "NQA-ISO-27001-Implementation-Guide.pdf snippet 7",
+    "text": "s to information. Integrity where the content of the information is changed so that it is no longer accurate or complete. Availability where access to the information is lost or hampered. The types of risks that sensitive and valuable information are subject to can generally be grouped into three categories: THE TYPES OF RISK THAT SENSITIVE AND VALUABLE INFORMATION ARE SUBJECT TO CAN GENERALLY BE GROUPED INTO THREE CATEGORIES: -- 6 of 34 -- ISO 27001:2022 IMPLEMENTATION GUIDE 7 PDCA CYCLE Plan-Do-Check-Act is an example of a closed-loop system. This ensures the learning from the ‘do’ and ‘check’ stages are used to inform the ‘act’ and subsequent ‘plan’ stages. In theory this is cyclical, however it’s more of an upward spiral as the learning moves you on each time you go through the process. PDCA model ISO 27001 Plan: Establish objectives, resources required, customer and stakeholder requirements, organisational policies and identify risks and opportunities. Do: Implement what was planned. Check: Monitor and measure processes to establish performance against policies, objectives, requirements and planned activities and report the results. Act: Take action to improve performance, as necessary. ISO 27001 is based on the Plan-Do-Check-Act (PDCA) cycle, also known as the Deming wheel or Shewhart cycle. The PDCA cycle can be applied not only to the management system as a whole, but a",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-NQAISO27001Imple-008",
+    "title": "NQA-ISO-27001-Implementation-Guide.pdf snippet 8",
+    "text": "lso to each individual element to provide an ongoing focus on continuous improvement. ESTABLISH ISMS MONITOR AND REVIEW THE ISMS MAINTAIN AND IMPROVE THE ISMS IMPLEMENT AND OPERATE THE ISMS Plan Do Act Check INFORMATION SECURITY MANAGEMENT SYSTEM (4) INTERESTED PARTIES INFORMATION SECURITY REQUIREMENTS AND EXPECTATIONS In brief: INTERESTED PARTIES MANAGED INFORMATION SECURITY -- 7 of 34 -- ISO 27001:2022 IMPLEMENTATION GUIDE 8 RISK BASED THINKING/AUDITS First Party Audits – Internal Audits Internal audits are a great opportunity for learning within your organisation. They provide time to focus on a particular process or department to truly assess its performance. The purpose of an internal audit is to ensure adherence to policies, procedures and processes as determined by you, the organisation, and to confirm compliance with the requirements of ISO 27001. Audit Planning Devising an audit schedule can sound like a complicated exercise. Depending on the scale and complexity of your operations, you may schedule internal audits anywhere from every month to once a year. There’s more detail on this in Section 9 – Performance Evaluation. Risk-based Thinking The best way to consider frequency of audits is to look at the risks involved in the process or business that’s being audited. Any process that is high risk, either because it has a high potential to go wrong or because the consequ",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-NQAISO27001Imple-009",
+    "title": "NQA-ISO-27001-Implementation-Guide.pdf snippet 9",
+    "text": "ences would be severe if it did go wrong, should be audited more frequently than a low risk process. How you assess risk is entirely up to you. ISO 27001 doesn’t dictate any particular method of risk assessment or risk management. Organisations must implement a risk assessment methodology and treatment plan with appropriate risk acceptance criteria and the criteria required to conduct a risk assessment in the first place. This process must be fully integrated into their management system. Risks must be prioritised for treatment and treated appropriately. To treat the risk, organisations may select and implement applicable controls from Annex A, as well as implement any other controls outside of this to manage their risks to an acceptable level. As a result, a Statement of Applicability must be produced and each control from the Annex A must be justified whether implemented or not. Risk management is core to an ISMS and just as important after asset identification and valuation. Second Party – External Audits Second party audits are usually carried out by customers or by others on their behalf, or you may carry them out with your external providers. Second party audits can also be carried out by regulators or any other external party that has a formal interest in an organisation. You may have little control over the timing and frequency of these audits, however establishing your",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-NQAISO27001Imple-010",
+    "title": "NQA-ISO-27001-Implementation-Guide.pdf snippet 10",
+    "text": "own ISMS will ensure you are well prepared when they do happen. Third Party – Certification Audits Third party audits are carried out by UKAS-accredited external certification bodies such as NQA. The certification body will assess conformance to the ISO 27001:2022 standard, where a representative visits the organisation and assesses the relevant system and its processes. Maintaining certification also involves periodic reassessments. Certification demonstrates to customers that you have a commitment to quality, safety and the increasing threats to businesses in this digital world. Audits are a systematic, evidence-based, process approach to evaluation of your Information Security Management System. They are undertaken internally and externally to verify the effectiveness of the ISMS. Audits are a brilliant example of how risk-based thinking is adopted within Information Security Management. • Regular assessment to continually monitor and improve processes. • Credibility that the system can achieve its intended outcomes. • Reduced risk and uncertainty and increase market opportunities. • Consistency in the outputs designed to meet stakeholder expectations. CERTIFICATION ASSURES: -- 8 of 34 -- ISO 27001:2022 IMPLEMENTATION GUIDE 9 PROCESS BASED THINKING/AUDIT A process is the transformation of inputs to outputs, which takes place as a series of steps and result in the planned ob",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-NQAISO27001Imple-011",
+    "title": "NQA-ISO-27001-Implementation-Guide.pdf snippet 11",
+    "text": "jective(s). Often the output of one process becomes an input to another subsequent process. Very few processes operate in isolation from any other. Even an audit has a process approach. It begins with identifying the scope and criteria, establishes a clear course of action to achieve the outcome and has a defined output (the audit report). Using the process approach to auditing also ensures the correct time and skills are allocated to the audit. This makes it an effective evaluation of the performance of the ISMS. “Consistent and predictable results are achieved more effectively and efficiently when activities are understood and managed as interrelated processes that function as a coherent system.” ISO 27001:2022 Fundamentals and Vocabulary Understanding how processes interrelate and produce results can help you to identify opportunities for improvement and optimise overall performance. This also applies where processes, or parts of processes, are outsourced. Understanding how this affects, or could affect the outcome, and communicating this clearly to the business providing the outsourced service, ensures clarity and accountability in the process. The final process step is to review the outcome of the audit and ensure the information obtained is put to good use. A formal management review is the opportunity to reflect on the performance of the ISMS and to make decisions on how",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-NQAISO27001Imple-012",
+    "title": "NQA-ISO-27001-Implementation-Guide.pdf snippet 12",
+    "text": "and where to improve. The management review process is covered in more depth in Section 9 – Performance Evaluation. A process is the transformation of inputs to outputs, which takes place as a series of steps or activities which result in the planned objective(s). Often the output of one process becomes an input to another subsequent process. Very few processes operate in isolation from any other. “Process: set of interrelated or interacting activities that uses or transforms inputs to deliver a result.” ISO 27001:2022 Fundamentals and Vocabulary £ £ -- 9 of 34 -- ISO 27001:2022 IMPLEMENTATION GUIDE 10 ANNEX SL Prior to the adoption of Annex SL there were many differences between the clause structures, requirements and terms and definitions used across the various management system standards. This made it difficult for organisations to integrate the implementation and management of multiple standards; Environment, Quality, Health and Safety and Information Security being among the most common. ISO 27001 has adopted Annex SL, and this structure is also used for ISO 14001 (Environmental Management System Standard) and ISO 45001 (Health and Safety Management System Standard). High Level Structure Annex SL consists of 10 core clauses: 1. Scope 2. Normative references 3. Terms and definitions 4. Context of the organisation 5. Leadership 6. Planning 7. Support 8. Operation 9. Perfor",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-NQAISO27001Imple-013",
+    "title": "NQA-ISO-27001-Implementation-Guide.pdf snippet 13",
+    "text": "mance evaluation 10. Improvement Of these clauses, the common terms and core definitions cannot be changed. Requirements may not be removed or altered, however discipline-specific requirements and recommendations may be added. All management systems require a consideration of the context of the organisation (more on this in section 4); a set of objectives relevant to the discipline, in this case quality, and aligned with the strategic direction of the organisation; a documented policy to support the management system and its aims; internal audits and management review. Where multiple management systems are in place, many of these elements can be combined to address more than one standard. -- 10 of 34 -- ISO 27001:2022 IMPLEMENTATION GUIDE 11 SECTION 1: SCOPE The Scope section of ISO 27001 sets out: • The purpose of the standard. • The types of organisations it is designed to apply to; and • The sections of the standard (called Clauses) that contain requirements that an organisation needs to comply with for the organisation to be certified as “conforming” to it (i.e. being compliant). ISO 27001 is designed to be applicable to any type of organisation. Regardless of size, complexity, industry sector, purpose or maturity, your organisation can implement and maintain an ISMS that complies with ISO 27001. ISO 27001:2022 IMPLEMENTATION GUIDE 11 ISO 27001 is made of up 10 sections kno",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-NQAISO27001Imple-014",
+    "title": "NQA-ISO-27001-Implementation-Guide.pdf snippet 14",
+    "text": "wn as Clauses. As with most other ISO management system standards, the requirements of ISO 27001 that need to be satisfied are specified in Clauses 4.0 – 10.0. Unlike most other ISO management system standards, an organisation must comply with all of the requirements in Clauses 4.0 – 10.0. They cannot declare one or more clauses as being not applicable to them. In ISO 27001, in addition to Clauses 4.0 - 10.0, there is a further set of requirements detailed in a section called Annex A, which is referenced in Clause 6.0. Annex A contains 93 information security controls. Each of these 93 controls need to be considered. To be compliant with ISO 27001, the organisation must implement these controls, or an acceptable justification must be given for not implementing a particular control. The following parts of this guide provide an overview of each clause, highlight the evidence an auditor would expect to see to confirm that you comply, and give tips on effective ways to comply with the requirements. THE 10 CLAUSES OF ISO 27001:2022 CONTROLS CONTINUAL IMPROVEMENT MONITOR INTERESTED PARTIES THREATS CONTROL ACCESS ASSETS VULNERABILITIES RISKS INFORMATION CONFIDENTIALITY INTEGRITY AVAILABILITY USE REGULATE VALUE -- 11 of 34 -- ISO 27001:2022 IMPLEMENTATION GUIDE 12 SECTION 2: NORMATIVE REFERENCES Some of the terms and requirements detailed in ISO 27001 are explained further in ISO 27000",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-NQAISO27001Imple-015",
+    "title": "NQA-ISO-27001-Implementation-Guide.pdf snippet 15",
+    "text": ". Reference to ISO 27000 is very useful in understanding a requirement better or identifying the best way to comply with it. TIP – External auditors will expect you to have taken the information contained in ISO 27000 into account in the development and implementation of your ISMS. In ISO standards, the Normative References section lists any other standards that contain additional information that is relevant to determining whether an organisation complies with the standard in question. In ISO 27001, only one document is listed: ISO 27000 Information Technology - Overview and Vocabulary. -- 12 of 34 -- ISO 27001:2022 IMPLEMENTATION GUIDE 13 In addition to the terms explained in the “Key Principles and Terminology” section above, the most important terms used in ISO 27001 are: Access Controls To ensure that physical and logical access to assets is authorised and restricted based on business and information security requirements. Information Asset A body of information, defined and managed as a single unit, so it can be understood, shared, protected and exploited. Information assets should be identified and its value established by assigning its value to the organisation, based on the reputational and/or financial impacts it may cause if compromised. Risk A combination of the likelihood of an information security event occurring and the resulting consequences. Risk Assessment The",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-NQAISO27001Imple-016",
+    "title": "NQA-ISO-27001-Implementation-Guide.pdf snippet 16",
+    "text": "process of identifying risks, analysing the level of risk posed by each risk and evaluating whether additional action is needed to reduce each risk to a more acceptable level. Risk Treatment Processes or actions that reduce identified risks to an acceptable level. Top Management The group of individuals who are the most senior decision makers in an organisation. They are likely to be accountable for setting its strategic direction, and for determining and achieving stakeholder objectives. Alongside ‘Risk’ are two other fundamental components of ISO 27001, and these are: Continual improvement (CI) The idea that small, ongoing and well-calculated changes can lead to major improvements over time. In ISO, CI refers to the company’s effort to constantly improve its management system to meet ISO standard requirements. When you write your Information Security Management System documentation, you don’t have to use these exact terms. However, it does help to clarify the meaning and intention if you can define the terms you have used. Providing a glossary within your system documentation may be useful. SECTION 3: TERMS AND DEFINITIONS There are no terms and definitions given in ISO 27001. Instead, reference is made to the most current version of ISO 27000 Information Security Management Systems – Overview and Vocabulary. The current version of this document contains 81 definitions of te",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-NQAISO27001Imple-017",
+    "title": "NQA-ISO-27001-Implementation-Guide.pdf snippet 17",
+    "text": "rms that are used in ISO 27001. -- 13 of 34 -- ISO 27001:2022 IMPLEMENTATION GUIDE 14 SECTION 4: CONTEXT OF THE ORGANISATIONS Internal Context The following are examples of the areas that can be considered when assessing the internal issues that may have a bearing on the ISMS risks: • Maturity: Are you an agile start-up with a blank canvas to work on, or a 30+ year old institution with well-established processes and security controls? • Organisation culture: Is your organisation relaxed about how, when and where people work, or extremely regimented? Might the culture resist the implementation of Information Security controls? • Management: Are there clear communication channels and processes from the organisation’s key decision makers through to the rest of the organisation? • Resource size: Are you working with an Information Security Team, or is one person doing it all? • Resource maturity: Are the available resources (employees/ contractors) knowledgeable, fully trained, dependable and consistent, or are personnel inexperienced and constantly changing? • Information asset formats: Are your information assets mainly stored in hard-copy (paper) format, or are they stored electronically on a server on-site, or in remote cloud-based systems? • Information asset sensitivity/value: Does your organisation have to manage highly valuable or particularly sensitive information assets?",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-NQAISO27001Imple-018",
+    "title": "NQA-ISO-27001-Implementation-Guide.pdf snippet 18",
+    "text": "• Consistency: Do you have uniform processes in place across the organisation, or a multitude of different operating practices with little consistency? • Systems: Does your organisation have many legacy systems running on software versions that are no longer supported by the manufacturer, or do you maintain the most up-to-date and best available technology? • Where does your infrastructure reside? Are you operating in the cloud, or do you have your own infrastructure onsite? • System complexity: Do you operate one main system that does all the heavy lifting, or multiple departmental systems with limited information transfer between them? • Physical space: Do you have a dedicated secure office facility, or do you operate in a space shared with other organisations, or are you a remote first/only organisation? External Context The following are examples of the areas that can be considered when assessing the external issues that may have a bearing on the ISMS risks: • Competition: Do you operate in a rapidly changing and innovative market, requiring many system upgrades to stay competitive, or in a mature, stable market with little innovation year-to-year? • Landlord: Do you need approval to upgrade physical security? • Regulators/enforcement bodies: Is there a requirement in your sector to make regular statutory changes, or is there little oversight from regulators in your market",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-NQAISO27001Imple-019",
+    "title": "NQA-ISO-27001-Implementation-Guide.pdf snippet 19",
+    "text": "sector? • Economic/political: Do currency fluctuations impact your organisation? How do geopolitical situations impact your organisation? • Environmental considerations: Is your site on a flood plain with the server(s) located in a basement? Are there factors making your site(s) a possible target for a break-in or a terrorist attack (e.g. in a prominent city centre location or next to a possible target)? • Prevalence of information security attacks: Does your organisation operate in a sector that regularly attracts interest from hackers (criminals, hacktivists)? • Shareholders: Are they very concerned about the vulnerability of the organisation to data breaches? How concerned are they about the cost of the organisation’s efforts to improve its information security? The purpose of your ISMS is to protect your organisation’s Information Assets, so the organisation can achieve its goals. How you go about this and the specific areas of priority will be driven by the context your organisation operates in, both: • Internally – the things that the organisation has some control. • Externally – the things that the organisation has no direct control. A careful analysis of the environment your organisation operates in is fundamental to identifying the inherent risks posed to the security of your Information Assets. The analysis is the foundation that will enable you to assess what process",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-NQAISO27001Imple-020",
+    "title": "NQA-ISO-27001-Implementation-Guide.pdf snippet 20",
+    "text": "es you need to consider adding or strengthening to build an effective ISMS. -- 14 of 34 -- ISO 27001:2022 IMPLEMENTATION GUIDE 15 Interested Parties An interested party is anyone who is, can be, or perceives themselves to be affected by an action or omission of your organisation. Your interested parties will become clear through the process of carrying out a thorough analysis of internal and external issues. They will probably include shareholders, landlords, regulators, customers, employees and competitors. They may extend to the general public and the environment, depending on the nature of your business. You don’t have to try to understand or satisfy their every whim, but you do have to determine which of their needs and expectations are relevant to your ISMS. Scope of the Management System To comply with ISO 27001, you must document the scope of your ISMS. Documented scopes typically describe: • The boundaries of the physical site or sites included (or not included). • The boundaries of the physical and logical networks included (or not included). • The internal and external employee groups included (or not included). • The internal and external processes, activities or services included (or not included). • Key interfaces at the boundaries of the scope. If you want to prioritise resources by building an ISMS that doesn’t cover all of your organisation, selecting a scope th",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-NQAISO27001Imple-021",
+    "title": "NQA-ISO-27001-Implementation-Guide.pdf snippet 21",
+    "text": "at is limited to managing key stakeholder interests is a pragmatic approach. This can be done by including only specific sites, assets, processes and business units or departments. Some examples of scope statements: • “All operations carried out by the IT Department”. • “Support and management of email”. • “All equipment, systems, data and infrastructure in the organisation’s data centre based at the Basingstoke site”. TIP: Document or maintain a file of all of the information collated in your analysis of your organisation’s context and interested parties such as: • Discussions with a senior representative of the organisation, e.g. an MD, CEO or CTO. • Minutes of meetings or business plans. • A specific document that identifies internal/external issues and interested parties and their needs and expectations e.g. a SWOT analysis, PESTLE study, or high-level business risk assessment. New consideration for climate change ISO has made changes to ISO 27001 to emphasise the importance of addressing the effects of climate change within the framework of organisational management systems. To enhance organisational awareness and response to climate change, ISO has introduced two critical changes within Clause 4: Original Clause 4.1: “Understanding the organisation and its context. The organisation shall determine external and internal issues that are relevant to its purpose and that affe",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-NQAISO27001Imple-022",
+    "title": "NQA-ISO-27001-Implementation-Guide.pdf snippet 22",
+    "text": "ct its ability to achieve the intended result(s) of its XXX management system.” Original Clause 4.2: “Understanding the needs and expectations of interested parties. The organisation shall determine: • The interested parties that are relevant to the XXX management system. • The relevant requirements of these interested parties. • Which of these requirements will be addressed through the XXX management system.” This clause now explicitly includes the statement: “The organisation shall determine whether climate change is a relevant issue.” The clause now also states: “Note: Relevant interested parties can have requirements related to climate change.” -- 15 of 34 -- ISO 27001:2022 IMPLEMENTATION GUIDE 16 SECTION 5: LEADERSHIP Information Security Policy A vital responsibility of the leadership is to establish and document an Information Security Policy (ISP) that is aligned with the key aims of the organisation. At the top level, it must either include objectives or a framework for setting them. To demonstrate that it’s aligned with your organisation’s context and the requirements of key stakeholders, it is recommended that it makes reference to, or contains a summary of, the principal issues and requirements it is designed to manage. It must also include a commitment to: • Satisfying applicable requirements relating to Information Security, such as legal requirements, customer ex",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-NQAISO27001Imple-023",
+    "title": "NQA-ISO-27001-Implementation-Guide.pdf snippet 23",
+    "text": "pectations and contractual commitments. • The continual improvement of your ISMS. The ISP may refer to, or include sub-policies that cover, the key controls of the organisation’s ISMS. Examples include: the selection of suppliers critical to Information Security, the recruitment and training of employees, clear desk and clear screen, cryptographic controls, access controls etc. To demonstrate the importance of the ISP, it is advisable that it is authorised by the most senior member of your Top Management or each member of the Top Management team. TIP: To ensure your ISP is well communicated and available to interested parties, it is a good idea to: • Include it in induction packs and presentations for new employees and contractors. • Post the key statement on internal noticeboards, intranets and your organisation’s website. • Make compliance with it and/or support for it a contractual requirement for employees, contractors and information security-critical suppliers. Roles and Responsibilities For Information Security activities to form part of the day-to- day activities for most people within the organisation, the responsibilities and accountabilities must be defined and clearly communicated. Although there is no requirement in the standard for a nominated Information Security representative, it may be helpful for some organisations to appoint one to lead an information securi",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-NQAISO27001Imple-024",
+    "title": "NQA-ISO-27001-Implementation-Guide.pdf snippet 24",
+    "text": "ty team to coordinate training, monitoring controls and reporting on the performance of the ISMS to the Top Management. This individual may already hold responsibility for data protection or IT services. However, to carry out their role effectively they will ideally be a member of the Top Management team and either have a strong technical knowledge of information security management or access to individuals who do. Evidencing Leadership to an Auditor The Top Management will be the individual or group of individuals who set the strategic direction and approve resource allocation for the organisation or business area with your ISMS scope. Depending on how your organisation is structured, these individuals may be the day-to-day management team. An auditor will typically test leadership by interview, and assess their level of involvement in the: • Evaluation of risks and opportunities. • Establishment and communication of policies. • Setting and communication of objectives. • Review and communication of system performance. • Allocation of appropriate resources, accountabilities and responsibilities. TIP: Before your external audit, identify who from Top Management will meet the external auditor. Prepare them with a mock interview that includes questions you expect them to be asked. Leadership in this context means active involvement in setting the direction of the ISMS, promoting i",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISOIEC270012022e-001",
+    "title": "ISO_IEC-270012022-ed.3.pdf snippet 1",
+    "text": "Information security, cybersecurity and privacy protection — Information security management systems — Requirements Sécurité de l'information, cybersécurité et protection de la vie privée — Systèmes de management de la sécurité de l'information — Exigences INTERNATIONAL STANDARD ISO/IEC 27001 Third edition 2022-10 Reference number ISO/IEC 27001:2022(E) © ISO/IEC 2022 SNV / licensed to 14955111 - Schweiz. Vereinigung für Qualitäts- und Management-Systeme (SQS) / S105748 / 2022-10-31_12:56 / ISO/IEC 27001:2022 -- 1 of 26 -- ii ISO/IEC 27001:2022(E) COPYRIGHT PROTECTED DOCUMENT © ISO/IEC 2022 All rights reserved. Unless otherwise specified, or required in the context of its implementation, no part of this publication may be reproduced or utilized otherwise in any form or by any means, electronic or mechanical, including photocopying, or posting on the internet or an intranet, without prior written permission. Permission can be requested from either ISO at the address below or ISO’s member body in the country of the requester. ISO copyright office CP 401 • Ch. de Blandonnet 8 CH-1214 Vernier, Geneva Phone: +41 22 749 01 11 Email: copyright@iso.org Website: www.iso.org Published in Switzerland © ISO/IEC 2022 – All rights reserved SNV / licensed to 14955111 - Schweiz. Vereinigung für Qualitäts- und Management-Systeme (SQS) / S105748 / 2022-10-31_12:56 / ISO/IEC 27001:2022 -- 2 of 26",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISOIEC270012022e-002",
+    "title": "ISO_IEC-270012022-ed.3.pdf snippet 2",
+    "text": "-- ISO/IEC 27001:2022(E) Foreword........................................................................................................................................................................................................................................iv Introduction .................................................................................................................................................................................................................................v 1 Scope ................................................................................................................................................................................................................................. 1 2 Normative references ..................................................................................................................................................................................... 1 3 Terms and definitions .................................................................................................................................................................................... 1 4 Context of the organization ...................................................................................................................................................................... 1 4.1 Understanding the organization and its",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISOIEC270012022e-003",
+    "title": "ISO_IEC-270012022-ed.3.pdf snippet 3",
+    "text": "context ..................................................................................................... 1 4.2 Understanding the needs and expectations of interested parties ........................................................... 1 4.3 Determining the scope of the information security management system ....................................... 2 4.4 Information security management system................................................................................................................... 2 5 Leadership .................................................................................................................................................................................................................. 2 5.1 Leadership and commitment ..................................................................................................................................................... 2 5.2 Policy ............................................................................................................................................................................................................... 3 5.3 Organizational roles, responsibilities and authorities ....................................................................................... 3 6 Planning ................................................................................................",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISOIEC270012022e-004",
+    "title": "ISO_IEC-270012022-ed.3.pdf snippet 4",
+    "text": "........................................................................................................................ 3 6.1 Actions to address risks and opportunities ................................................................................................................. 3 6.1.1 General ........................................................................................................................................................................................ 3 6.1.2 Information security risk assessment ............................................................................................................ 4 6.1.3 Information security risk treatment ................................................................................................................ 4 6.2 Information security objectives and planning to achieve them ................................................................. 5 7 Support ........................................................................................................................................................................................................................... 6 7.1 Resources .................................................................................................................................................................................................... 6 7.2 Competence .........",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISOIEC270012022e-005",
+    "title": "ISO_IEC-270012022-ed.3.pdf snippet 5",
+    "text": "...................................................................................................................................................................................... 6 7.3 Awareness................................................................................................................................................................................................... 6 7.4 Communication ...................................................................................................................................................................................... 6 7.5 Documented information .............................................................................................................................................................. 6 7.5.1 General ........................................................................................................................................................................................ 6 7.5.2 Creating and updating ................................................................................................................................................... 7 7.5.3 Control of documented information ................................................................................................................. 7 8 Operation ..................................................................",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISOIEC270012022e-006",
+    "title": "ISO_IEC-270012022-ed.3.pdf snippet 6",
+    "text": "................................................................................................................................................... 7 8.1 Operational planning and control ......................................................................................................................................... 7 8.2 Information security risk assessment ............................................................................................................................... 8 8.3 Information security risk treatment .................................................................................................................................. 8 9 Performance evaluation .............................................................................................................................................................................. 8 9.1 Monitoring, measurement, analysis and evaluation............................................................................................. 8 9.2 Internal audit ........................................................................................................................................................................................... 8 9.2.1 General ............................................................................................................................................................",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISOIEC270012022e-007",
+    "title": "ISO_IEC-270012022-ed.3.pdf snippet 7",
+    "text": "............................ 8 9.2.2 Internal audit programme ......................................................................................................................................... 9 9.3 Management review .......................................................................................................................................................................... 9 9.3.1 General ........................................................................................................................................................................................ 9 9.3.2 Management review inputs ...................................................................................................................................... 9 9.3.3 Management review results ..................................................................................................................................... 9 10 Improvement.........................................................................................................................................................................................................10 10.1 Continual improvement ............................................................................................................................................................... 10 10.2 Nonconformity and corrective action..................",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISOIEC270012022e-008",
+    "title": "ISO_IEC-270012022-ed.3.pdf snippet 8",
+    "text": "........................................................................................................... 10 Annex A (normative) Information security controls reference...........................................................................................11 Bibliography.............................................................................................................................................................................................................................19 iii © ISO/IEC 2022 – All rights reserved Contents Page SNV / licensed to 14955111 - Schweiz. Vereinigung für Qualitäts- und Management-Systeme (SQS) / S105748 / 2022-10-31_12:56 / ISO/IEC 27001:2022 -- 3 of 26 -- ISO/IEC 27001:2022(E) Foreword ISO (the International Organization for Standardization) and IEC (the International Electrotechnical Commission) form the specialized system for worldwide standardization. National bodies that are members of ISO or IEC participate in the development of International Standards through technical committees established by the respective organization to deal with particular fields of technical activity. ISO and IEC technical committees collaborate in fields of mutual interest. Other international organizations, governmental and non-governmental, in liaison with ISO and IEC, also take part in the work. The procedures used to develop this document and th",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISOIEC270012022e-009",
+    "title": "ISO_IEC-270012022-ed.3.pdf snippet 9",
+    "text": "ose intended for its further maintenance are described in the ISO/IEC Directives, Part 1. In particular, the different approval criteria needed for the different types of document should be noted. This document was drafted in accordance with the editorial rules of the ISO/IEC Directives, Part 2 (see www.iso.org/directives or www.iec.ch/members_experts/refdocs). Attention is drawn to the possibility that some of the elements of this document may be the subject of patent rights. ISO and IEC shall not be held responsible for identifying any or all such patent rights. Details of any patent rights identified during the development of the document will be in the Introduction and/or on the ISO list of patent declarations received (see www.iso.org/patents) or the IEC list of patent declarations received (see https://patents.iec.ch). Any trade name used in this document is information given for the convenience of users and does not constitute an endorsement. For an explanation of the voluntary nature of standards, the meaning of ISO specific terms and expressions related to conformity assessment, as well as information about ISO's adherence to the World Trade Organization (WTO) principles in the Technical Barriers to Trade (TBT) see www.iso.org/iso/foreword.html. In the IEC, see www.iec.ch/understanding-standards. This document was prepared by Joint Technical Committee ISO/IEC JTC 1, In",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISOIEC270012022e-010",
+    "title": "ISO_IEC-270012022-ed.3.pdf snippet 10",
+    "text": "formation Technology, Subcommittee SC 27, Information security, cybersecurity and privacy protection. This third edition cancels and replaces the second edition (ISO/IEC 27001:2013), which has been technically revised. It also incorporates the Technical Corrigenda ISO/IEC 27001:2013/Cor 1:2014 and ISO/IEC 27001:2013/Cor 2:2015. The main changes are as follows: — the text has been aligned with the harmonized structure for management system standards and ISO/IEC 27002:2022. Any feedback or questions on this document should be directed to the user’s national standards body. A complete listing of these bodies can be found at www.iso.org/members.html and www.iec.ch/national-committees. iv © ISO/IEC 2022 – All rights reserved SNV / licensed to 14955111 - Schweiz. Vereinigung für Qualitäts- und Management-Systeme (SQS) / S105748 / 2022-10-31_12:56 / ISO/IEC 27001:2022 -- 4 of 26 -- ISO/IEC 27001:2022(E) Introduction 0.1 General This document has been prepared to provide requirements for establishing, implementing, maintaining and continually improving an information security management system. The adoption of an information security management system is a strategic decision for an organization. The establishment and implementation of an organization’s information security management system is influenced by the organization’s needs and objectives, security requirements, the organizatio",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISOIEC270012022e-011",
+    "title": "ISO_IEC-270012022-ed.3.pdf snippet 11",
+    "text": "nal processes used and the size and structure of the organization. All of these influencing factors are expected to change over time. The information security management system preserves the confidentiality, integrity and availability of information by applying a risk management process and gives confidence to interested parties that risks are adequately managed. It is important that the information security management system is part of and integrated with the organization’s processes and overall management structure and that information security is considered in the design of processes, information systems, and controls. It is expected that an information security management system implementation will be scaled in accordance with the needs of the organization. This document can be used by internal and external parties to assess the organization's ability to meet the organization’s own information security requirements. The order in which requirements are presented in this document does not reflect their importance or imply the order in which they are to be implemented. The list items are enumerated for reference purpose only. ISO/IEC 27000 describes the overview and the vocabulary of information security management systems, referencing the information security management system family of standards (including ISO/IEC 27003[2], ISO/IEC 27004[3] and ISO/IEC 27005[4]), with relate",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISOIEC270012022e-012",
+    "title": "ISO_IEC-270012022-ed.3.pdf snippet 12",
+    "text": "d terms and definitions. 0.2 Compatibility with other management system standards This document applies the high-level structure, identical sub-clause titles, identical text, common terms, and core definitions defined in Annex SL of ISO/IEC Directives, Part 1, Consolidated ISO Supplement, and therefore maintains compatibility with other management system standards that have adopted the Annex SL. This common approach defined in the Annex SL will be useful for those organizations that choose to operate a single management system that meets the requirements of two or more management system standards. v © ISO/IEC 2022 – All rights reserved SNV / licensed to 14955111 - Schweiz. Vereinigung für Qualitäts- und Management-Systeme (SQS) / S105748 / 2022-10-31_12:56 / ISO/IEC 27001:2022 -- 5 of 26 -- SNV / licensed to 14955111 - Schweiz. Vereinigung für Qualitäts- und Management-Systeme (SQS) / S105748 / 2022-10-31_12:56 / ISO/IEC 27001:2022 -- 6 of 26 -- INTERNATIONAL STANDARD ISO/IEC 27001:2022(E) Information security, cybersecurity and privacy protection — Information security management systems — Requirements 1 Scope This document specifies the requirements for establishing, implementing, maintaining and continually improving an information security management system within the context of the organization. This document also includes requirements for the assessment and treatment of i",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISOIEC270012022e-013",
+    "title": "ISO_IEC-270012022-ed.3.pdf snippet 13",
+    "text": "nformation security risks tailored to the needs of the organization. The requirements set out in this document are generic and are intended to be applicable to all organizations, regardless of type, size or nature. Excluding any of the requirements specified in Clauses 4 to 10 is not acceptable when an organization claims conformity to this document. 2 Normative references The following documents are referred to in the text in such a way that some or all of their content constitutes requirements of this document. For dated references, only the edition cited applies. For undated references, the latest edition of the referenced document (including any amendments) applies. ISO/IEC 27000, Information technology — Security techniques — Information security management systems — Overview and vocabulary 3 Terms and definitions For the purposes of this document, the terms and definitions given in ISO/IEC 27000 apply. ISO and IEC maintain terminology databases for use in standardization at the following addresses: — ISO Online browsing platform: available at https://www.iso.org/obp — IEC Electropedia: available at https://www.electropedia.org/ 4 Context of the organization 4.1 Understanding the organization and its context The organization shall determine external and internal issues that are relevant to its purpose and that affect its ability to achieve the intended outcome(s) of its in",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISOIEC270012022e-014",
+    "title": "ISO_IEC-270012022-ed.3.pdf snippet 14",
+    "text": "formation security management system. NOTE Determining these issues refers to establishing the external and internal context of the organization considered in Clause 5.4.1 of ISO 31000:2018[5]. 4.2 Understanding the needs and expectations of interested parties The organization shall determine: a) interested parties that are relevant to the information security management system; b) the relevant requirements of these interested parties; c) which of these requirements will be addressed through the information security management system. 1 © ISO/IEC 2022 – All rights reserved SNV / licensed to 14955111 - Schweiz. Vereinigung für Qualitäts- und Management-Systeme (SQS) / S105748 / 2022-10-31_12:56 / ISO/IEC 27001:2022 -- 7 of 26 -- ISO/IEC 27001:2022(E) NOTE The requirements of interested parties can include legal and regulatory requirements and contractual obligations. 4.3 Determining the scope of the information security management system The organization shall determine the boundaries and applicability of the information security management system to establish its scope. When determining this scope, the organization shall consider: a) the external and internal issues referred to in 4.1; b) the requirements referred to in 4.2; c) interfaces and dependencies between activities performed by the organization, and those that are performed by other organizations. The scope shall be av",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISOIEC270012022e-015",
+    "title": "ISO_IEC-270012022-ed.3.pdf snippet 15",
+    "text": "ailable as documented information. 4.4 Information security management system The organization shall establish, implement, maintain and continually improve an information security management system, including the processes needed and their interactions, in accordance with the requirements of this document. 5 Leadership 5.1 Leadership and commitment Top management shall demonstrate leadership and commitment with respect to the information security management system by: a) ensuring the information security policy and the information security objectives are established and are compatible with the strategic direction of the organization; b) ensuring the integration of the information security management system requirements into the organization’s processes; c) ensuring that the resources needed for the information security management system are available; d) communicating the importance of effective information security management and of conforming to the information security management system requirements; e) ensuring that the information security management system achieves its intended outcome(s); f) directing and supporting persons to contribute to the effectiveness of the information security management system; g) promoting continual improvement; and h) supporting other relevant management roles to demonstrate their leadership as it applies to their areas of responsibility. NOT",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISOIEC270012022e-016",
+    "title": "ISO_IEC-270012022-ed.3.pdf snippet 16",
+    "text": "E Reference to “business” in this document can be interpreted broadly to mean those activities that are core to the purposes of the organization’s existence. © ISO/IEC 2022 – All rights reserved 2 SNV / licensed to 14955111 - Schweiz. Vereinigung für Qualitäts- und Management-Systeme (SQS) / S105748 / 2022-10-31_12:56 / ISO/IEC 27001:2022 -- 8 of 26 -- ISO/IEC 27001:2022(E) 5.2 Policy Top management shall establish an information security policy that: a) is appropriate to the purpose of the organization; b) includes information security objectives (see 6.2) or provides the framework for setting information security objectives; c) includes a commitment to satisfy applicable requirements related to information security; d) includes a commitment to continual improvement of the information security management system. The information security policy shall: e) be available as documented information; f) be communicated within the organization; g) be available to interested parties, as appropriate. 5.3 Organizational roles, responsibilities and authorities Top management shall ensure that the responsibilities and authorities for roles relevant to information security are assigned and communicated within the organization. Top management shall assign the responsibility and authority for: a) ensuring that the information security management system conforms to the requirements of this docu",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISOIEC270012022e-017",
+    "title": "ISO_IEC-270012022-ed.3.pdf snippet 17",
+    "text": "ment; b) reporting on the performance of the information security management system to top management. NOTE Top management can also assign responsibilities and authorities for reporting performance of the information security management system within the organization. 6 Planning 6.1 Actions to address risks and opportunities 6.1.1 General When planning for the information security management system, the organization shall consider the issues referred to in 4.1 and the requirements referred to in 4.2 and determine the risks and opportunities that need to be addressed to: a) ensure the information security management system can achieve its intended outcome(s); b) prevent, or reduce, undesired effects; c) achieve continual improvement. The organization shall plan: d) actions to address these risks and opportunities; and e) how to 1) integrate and implement the actions into its information security management system processes; and 2) evaluate the effectiveness of these actions. © ISO/IEC 2022 – All rights reserved 3 SNV / licensed to 14955111 - Schweiz. Vereinigung für Qualitäts- und Management-Systeme (SQS) / S105748 / 2022-10-31_12:56 / ISO/IEC 27001:2022 -- 9 of 26 -- ISO/IEC 27001:2022(E) 6.1.2 Information security risk assessment The organization shall define and apply an information security risk assessment process that: a) establishes and maintains information security risk",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISOIEC270012022e-018",
+    "title": "ISO_IEC-270012022-ed.3.pdf snippet 18",
+    "text": "criteria that include: 1) the risk acceptance criteria; and 2) criteria for performing information security risk assessments; b) ensures that repeated information security risk assessments produce consistent, valid and comparable results; c) identifies the information security risks: 1) apply the information security risk assessment process to identify risks associated with the loss of confidentiality, integrity and availability for information within the scope of the information security management system; and 2) identify the risk owners; d) analyses the information security risks: 1) assess the potential consequences that would result if the risks identified in 6.1.2 c) 1) were to materialize; 2) assess the realistic likelihood of the occurrence of the risks identified in 6.1.2 c) 1); and 3) determine the levels of risk; e) evaluates the information security risks: 1) compare the results of risk analysis with the risk criteria established in 6.1.2 a); and 2) prioritize the analysed risks for risk treatment. The organization shall retain documented information about the information security risk assessment process. 6.1.3 Information security risk treatment The organization shall define and apply an information security risk treatment process to: a) select appropriate information security risk treatment options, taking account of the risk assessment results; b) determine all co",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISOIEC270012022e-019",
+    "title": "ISO_IEC-270012022-ed.3.pdf snippet 19",
+    "text": "ntrols that are necessary to implement the information security risk treatment option(s) chosen; NOTE 1 Organizations can design controls as required, or identify them from any source. c) compare the controls determined in 6.1.3 b) above with those in Annex A and verify that no necessary controls have been omitted; NOTE 2 Annex A contains a list of possible information security controls. Users of this document are directed to Annex A to ensure that no necessary information security controls are overlooked. NOTE 3 The information security controls listed in Annex A are not exhaustive and additional information security controls can be included if needed. d) produce a Statement of Applicability that contains: — the necessary controls (see 6.1.3 b) and c)); © ISO/IEC 2022 – All rights reserved 4 SNV / licensed to 14955111 - Schweiz. Vereinigung für Qualitäts- und Management-Systeme (SQS) / S105748 / 2022-10-31_12:56 / ISO/IEC 27001:2022 -- 10 of 26 -- ISO/IEC 27001:2022(E) — justification for their inclusion; — whether the necessary controls are implemented or not; and — the justification for excluding any of the Annex A controls. e) formulate an information security risk treatment plan; and f) obtain risk owners’ approval of the information security risk treatment plan and acceptance of the residual information security risks. The organization shall retain documented information",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISOIEC270012022e-020",
+    "title": "ISO_IEC-270012022-ed.3.pdf snippet 20",
+    "text": "about the information security risk treatment process. NOTE 4 The information security risk assessment and treatment process in this document aligns with the principles and generic guidelines provided in ISO 31000[5]. 6.2 Information security objectives and planning to achieve them The organization shall establish information security objectives at relevant functions and levels. The information security objectives shall: a) be consistent with the information security policy; b) be measurable (if practicable); c) take into account applicable information security requirements, and results from risk assessment and risk treatment; d) be monitored; e) be communicated; f) be updated as appropriate; g) be available as documented information. The organization shall retain documented information on the information security objectives. When planning how to achieve its information security objectives, the organization shall determine: h) what will be done; i) what resources will be required; j) who will be responsible; k) when it will be completed; and l) how the results will be evaluated. 6.3 Planning of changes When the organization determines the need for changes to the information security management system, the changes shall be carried out in a planned manner. © ISO/IEC 2022 – All rights reserved 5 SNV / licensed to 14955111 - Schweiz. Vereinigung für Qualitäts- und Management-System",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISOIEC270012022e-021",
+    "title": "ISO_IEC-270012022-ed.3.pdf snippet 21",
+    "text": "e (SQS) / S105748 / 2022-10-31_12:56 / ISO/IEC 27001:2022 -- 11 of 26 -- ISO/IEC 27001:2022(E) 7 Support 7.1 Resources The organization shall determine and provide the resources needed for the establishment, implementation, maintenance and continual improvement of the information security management system. 7.2 Competence The organization shall: a) determine the necessary competence of person(s) doing work under its control that affects its information security performance; b) ensure that these persons are competent on the basis of appropriate education, training, or experience; c) where applicable, take actions to acquire the necessary competence, and evaluate the effectiveness of the actions taken; and d) retain appropriate documented information as evidence of competence. NOTE Applicable actions can include, for example: the provision of training to, the mentoring of, or the re- assignment of current employees; or the hiring or contracting of competent persons. 7.3 Awareness Persons doing work under the organization’s control shall be aware of: a) the information security policy; b) their contribution to the effectiveness of the information security management system, including the benefits of improved information security performance; and c) the implications of not conforming with the information security management system requirements. 7.4 Communication The organization sh",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISOIEC270012022e-022",
+    "title": "ISO_IEC-270012022-ed.3.pdf snippet 22",
+    "text": "all determine the need for internal and external communications relevant to the information security management system including: a) on what to communicate; b) when to communicate; c) with whom to communicate; d) how to communicate. 7.5 Documented information 7.5.1 General The organization’s information security management system shall include: a) documented information required by this document; and © ISO/IEC 2022 – All rights reserved 6 SNV / licensed to 14955111 - Schweiz. Vereinigung für Qualitäts- und Management-Systeme (SQS) / S105748 / 2022-10-31_12:56 / ISO/IEC 27001:2022 -- 12 of 26 -- ISO/IEC 27001:2022(E) b) documented information determined by the organization as being necessary for the effectiveness of the information security management system. NOTE The extent of documented information for an information security management system can differ from one organization to another due to: 1) the size of organization and its type of activities, processes, products and services; 2) the complexity of processes and their interactions; and 3) the competence of persons. 7.5.2 Creating and updating When creating and updating documented information the organization shall ensure appropriate: a) identification and description (e.g. a title, date, author, or reference number); b) format (e.g. language, software version, graphics) and media (e.g. paper, electronic); and c) review an",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISOIEC270012022e-023",
+    "title": "ISO_IEC-270012022-ed.3.pdf snippet 23",
+    "text": "d approval for suitability and adequacy. 7.5.3 Control of documented information Documented information required by the information security management system and by this document shall be controlled to ensure: a) it is available and suitable for use, where and when it is needed; and b) it is adequately protected (e.g. from loss of confidentiality, improper use, or loss of integrity). For the control of documented information, the organization shall address the following activities, as applicable: c) distribution, access, retrieval and use; d) storage and preservation, including the preservation of legibility; e) control of changes (e.g. version control); and f) retention and disposition. Documented information of external origin, determined by the organization to be necessary for the planning and operation of the information security management system, shall be identified as appropriate, and controlled. NOTE Access can imply a decision regarding the permission to view the documented information only, or the permission and authority to view and change the documented information, etc. 8 Operation 8.1 Operational planning and control The organization shall plan, implement and control the processes needed to meet requirements, and to implement the actions determined in Clause 6, by: — establishing criteria for the processes; — implementing control of the processes in accordance wi",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISOIEC270012022e-024",
+    "title": "ISO_IEC-270012022-ed.3.pdf snippet 24",
+    "text": "th the criteria. Documented information shall be available to the extent necessary to have confidence that the processes have been carried out as planned. © ISO/IEC 2022 – All rights reserved 7 SNV / licensed to 14955111 - Schweiz. Vereinigung für Qualitäts- und Management-Systeme (SQS) / S105748 / 2022-10-31_12:56 / ISO/IEC 27001:2022 -- 13 of 26 -- ISO/IEC 27001:2022(E) The organization shall control planned changes and review the consequences of unintended changes, taking action to mitigate any adverse effects, as necessary. The organization shall ensure that externally provided processes, products or services that are relevant to the information security management system are controlled. 8.2 Information security risk assessment The organization shall perform information security risk assessments at planned intervals or when significant changes are proposed or occur, taking account of the criteria established in 6.1.2 a). The organization shall retain documented information of the results of the information security risk assessments. 8.3 Information security risk treatment The organization shall implement the information security risk treatment plan. The organization shall retain documented information of the results of the information security risk treatment. 9 Performance evaluation 9.1 Monitoring, measurement, analysis and evaluation The organization shall determine: a) w",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISO27001pdf-001",
+    "title": "ISO27001.pdf snippet 1",
+    "text": "Reference number ISO/IEC 27002:2005(E) © ISO/IEC 2005 INTERNATIONAL STANDARD ISO/IEC 27002 First edition 2005-06-15 Information technology — Security techniques — Code of practice for information security management Technologies de l'information — Techniques de sécurité — Code de bonne pratique pour la gestion de la sécurité de l'information -- 1 of 128 -- ISO/IEC 27002:2005(E) © ISO/IEC 2005 – All rights reserved iii Foreword ISO (the International Organization for Standardization) and IEC (the International Electrotechnical Commission) form the specialized system for worldwide standardization. National bodies that are members of ISO or IEC participate in the development of International Standards through technical committees established by the respective organization to deal with particular fields of technical activity. ISO and IEC technical committees collaborate in fields of mutual interest. Other international organizations, governmental and non-governmental, in liaison with ISO and IEC, also take part in the work. In the field of information technology, ISO and IEC have established a joint technical committee, ISO/IEC JTC 1. International Standards are drafted in accordance with the rules given in the ISO/IEC Directives, Part 2. The main task of the joint technical committee is to prepare International Standards. Draft International Standards adopted by the joint technica",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISO27001pdf-002",
+    "title": "ISO27001.pdf snippet 2",
+    "text": "l committee are circulated to national bodies for voting. Publication as an International Standard requires approval by at least 75 % of the national bodies casting a vote. Attention is drawn to the possibility that some of the elements of this document may be the subject of patent rights. ISO and IEC shall not be held responsible for identifying any or all such patent rights. ISO/IEC 27002 was prepared by Joint Technical Committee ISO/IEC JTC 1, Information technology, Subcommittee SC 27, IT Security techniques. This first edition of ISO/IEC 27002 comprises ISO/IEC 17799:2005 and ISO/IEC 17799:2005/Cor.1:2007. Its technical content is identical to that of ISO/IEC 17799:2005. ISO/IEC 17799:2005/Cor.1:2007 changes the reference number of the standard from 17799 to 27002. ISO/IEC 17799:2005 and ISO/IEC 17799:2005/Cor.1:2007 are provisionally retained until publication of the second edition of ISO/IEC 27002. -- 2 of 128 -- ICS 35.040 Ref. No. ISO/IEC 17799:2005/Cor.1:2007(E) © ISO/IEC 2007 – All rights reserved Published in Switzerland INTERNATIONAL STANDARD ISO/IEC 17799:2005 TECHNICAL CORRIGENDUM 1 Published 2007-07-01 INTERNATIONAL ORGANIZATION FOR STANDARDIZATION • МЕЖДУНАРОДНАЯ ОРГАНИЗАЦИЯ ПО СТАНДАРТИЗАЦИИ • ORGANISATION INTERNATIONALE DE NORMALISATION INTERNATIONAL ELECTROTECHNICAL COMMISSION • МЕЖДУНАРОДНАЯ ЭЛЕКТРОТЕХНИЧЕСКАЯ КОМИССИЯ • COMMISSION ÉLECTROTECHNIQUE INTERNAT",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISO27001pdf-003",
+    "title": "ISO27001.pdf snippet 3",
+    "text": "IONALE Information technology — Security techniques — Code of practice for information security management TECHNICAL CORRIGENDUM 1 Technologies de l'information — Techniques de sécurité — Code de bonne pratique pour la gestion de la sécurité de l'information RECTIFICATIF TECHNIQUE 1 Technical Corrigendum 1 to ISO/IEC 17799:2005 was prepared by Joint Technical Committee ISO/IEC JTC 1, Information technology, Subcommittee SC 27, IT Security techniques. Throughout the document: Replace “17799” with “27002”. -- 3 of 128 -- Please see the administrative notes on page iii RECIPIENTS OF THIS DRAFT ARE INVITED TO SUBMIT, WITH THEIR COMMENTS, NOTIFICATION OF ANY RELEVANT PATENT RIGHTS OF WHICH THEY ARE AWARE AND TO PROVIDE SUPPORT- ING DOCUMENTATION. IN ADDITION TO THEIR EVALUATION AS BEING ACCEPTABLE FOR INDUSTRIAL, TECHNO- LOGICAL, COMMERCIAL AND USER PURPOSES, DRAFT INTERNATIONAL STANDARDS MAY ON OCCASION HAVE TO BE CONSIDERED IN THE LIGHT OF THEIR POTENTIAL TO BECOME STAN- DARDS TO WHICH REFERENCE MAY BE MADE IN NATIONAL REGULATIONS. Reference number ISO/IEC FDIS 17799:2005(E) © ISO/IEC 2005 FINAL DRAFT ISO/IEC JTC 1 Secretariat: ANSI Voting begins on: 2005-02-11 Voting terminates on: 2005-04-11 INTERNATIONAL STANDARD ISO/IEC FDIS 17799 Information technology — Security techniques — Code of practice for information security management Technologies de l'information — Techniques de sé",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISO27001pdf-004",
+    "title": "ISO27001.pdf snippet 4",
+    "text": "curité — Code de pratique pour la gestion de sécurité d'information -- 4 of 128 -- ISO/IEC FDIS 17799:2005(E) iv © ISO/IEC 2005 – All rights reserved Contents Page FOREWORD ................................................................................................................................................... VIII 0 INTRODUCTION ........................................................................................................................................ IX 0.1 W HAT IS INFORMATION SECURITY? .........................................................................................................IX 0.2 W HY INFORMATION SECURITY IS NEEDED? ............................................................................................ IX 0.3 H OW TO ESTABLISH SECURITY REQUIREMENTS ....................................................................................... X 0.4 A SSESSING SECURITY RISKS .................................................................................................................... X 0.5 S ELECTING CONTROLS ............................................................................................................................. X 0.6 I NFORMATION SECURITY STARTING POINT ............................................................................................... X 0.7 CRITICAL SUCCESS FACTORS ....................................",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISO27001pdf-005",
+    "title": "ISO27001.pdf snippet 5",
+    "text": ".............................................................................. XI 0.8 D EVELOPING YOUR OWN GUIDELINES .................................................................................................. XII 1 SCOPE .............................................................................................................................................................. 1 2 TERMS AND DEFINITIONS ........................................................................................................................ 1 3 STRUCTURE OF THIS STANDARD........................................................................................................... 4 3.1 CLAUSES ................................................................................................................................................. 4 3.2 MAIN SECURITY CATEGORIES .................................................................................................................. 4 4 RISK ASSESSMENT AND TREATMENT .................................................................................................. 5 4.1 A SSESSING SECURITY RISKS .................................................................................................................... 5 4.2 TREATING SECURITY RISKS .............................................................................................................",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISO27001pdf-006",
+    "title": "ISO27001.pdf snippet 6",
+    "text": "......... 5 5 SECURITY POLICY ..................................................................................................................................... 7 5.1 I NFORMATION SECURITY POLICY ............................................................................................................ 7 5.1.1 Information security policy document ............................................................................................ 7 5.1.2 Review of the information security policy....................................................................................... 8 6 ORGANIZING INFORMATION SECURITY............................................................................................ 9 6.1 I NTERNAL ORGANIZATION ....................................................................................................................... 9 6.1.1 Management commitment to information security......................................................................... 9 6.1.2 Information security co-ordination............................................................................................... 10 6.1.3 Allocation of information security responsibilities....................................................................... 10 6.1.4 Authorization process for information processing facilities......................................................... 11 6.1.5 Confiden",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISO27001pdf-007",
+    "title": "ISO27001.pdf snippet 7",
+    "text": "tiality agreements........................................................................................................... 11 6.1.6 Contact with authorities ............................................................................................................... 12 6.1.7 Contact with special interest groups ............................................................................................ 12 6.1.8 Independent review of information security ................................................................................. 13 6.2 EXTERNAL PARTIES ............................................................................................................................... 14 6.2.1 Identification of risks related to external parties.......................................................................... 14 6.2.2 Addressing security when dealing with customers ....................................................................... 15 6.2.3 Addressing security in third party agreements ............................................................................. 16 7 ASSET MANAGEMENT.............................................................................................................................. 19 7.1 RESPONSIBILITY FOR ASSETS ................................................................................................................. 19 7.1.1 In",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISO27001pdf-008",
+    "title": "ISO27001.pdf snippet 8",
+    "text": "ventory of assets ........................................................................................................................ 19 7.1.2 Ownership of assets ...................................................................................................................... 20 7.1.3 Acceptable use of assets................................................................................................................ 20 7.2 I NFORMATION CLASSIFICATION ............................................................................................................. 21 7.2.1 Classification guidelines............................................................................................................... 21 7.2.2 Information labeling and handling ............................................................................................... 21 8 HUMAN RESOURCES SECURITY ........................................................................................................... 23 8.1 P RIOR TO EMPLOYMENT ........................................................................................................................ 23 8.1.1 Roles and responsibilities ............................................................................................................. 23 -- 5 of 128 -- ISO/IEC FDIS 17799:2005(E) © ISO/IEC 2005 – All rights reserved v 8.1.2 Screening ....",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISO27001pdf-009",
+    "title": "ISO27001.pdf snippet 9",
+    "text": ".................................................................................................................................. 23 8.1.3 Terms and conditions of employment ........................................................................................... 24 8.2 D URING EMPLOYMENT .......................................................................................................................... 25 8.2.1 Management responsibilities ........................................................................................................ 25 8.2.2 Information security awareness, education, and training ............................................................ 26 8.2.3 Disciplinary process ..................................................................................................................... 26 8.3 TERMINATION OR CHANGE OF EMPLOYMENT ......................................................................................... 27 8.3.1 Termination responsibilities ......................................................................................................... 27 8.3.2 Return of assets............................................................................................................................. 27 8.3.3 Removal of access rights ..........................................................................................................",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISO27001pdf-010",
+    "title": "ISO27001.pdf snippet 10",
+    "text": ".... 28 9 PHYSICAL AND ENVIRONMENTAL SECURITY ................................................................................ 29 9.1 S ECURE AREAS ...................................................................................................................................... 29 9.1.1 Physical security perimeter .......................................................................................................... 29 9.1.2 Physical entry controls ................................................................................................................. 30 9.1.3 Securing offices, rooms, and facilities .......................................................................................... 30 9.1.4 Protecting against external and environmental threats................................................................ 31 9.1.5 Working in secure areas ............................................................................................................... 31 9.1.6 Public access, delivery, and loading areas................................................................................... 32 9.2 EQUIPMENT SECURITY ........................................................................................................................... 32 9.2.1 Equipment siting and protection.........................................................................................",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISO27001pdf-011",
+    "title": "ISO27001.pdf snippet 11",
+    "text": ".......... 32 9.2.2 Supporting utilities ....................................................................................................................... 33 9.2.3 Cabling security............................................................................................................................ 34 9.2.4 Equipment maintenance................................................................................................................ 34 9.2.5 Security of equipment off-premises............................................................................................... 35 9.2.6 Secure disposal or re-use of equipment ........................................................................................ 35 9.2.7 Removal of property ..................................................................................................................... 36 10 COMMUNICATIONS AND OPERATIONS MANAGEMENT.............................................................. 37 10.1 O PERATIONAL PROCEDURES AND RESPONSIBILITIES ............................................................................. 37 10.1.1 Documented operating procedures............................................................................................... 37 10.1.2 Change management .................................................................................................................... 3",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISO27001pdf-012",
+    "title": "ISO27001.pdf snippet 12",
+    "text": "7 10.1.3 Segregation of duties .................................................................................................................... 38 10.1.4 Separation of development, test, and operational facilities.......................................................... 38 10.2 THIRD PARTY SERVICE DELIVERY MANAGEMENT .................................................................................. 39 10.2.1 Service delivery............................................................................................................................. 39 10.2.2 Monitoring and review of third party services.............................................................................. 40 10.2.3 Managing changes to third party services.................................................................................... 40 10.3 S YSTEM PLANNING AND ACCEPTANCE ................................................................................................... 41 10.3.1 Capacity management .................................................................................................................. 41 10.3.2 System acceptance ........................................................................................................................ 41 10.4 P ROTECTION AGAINST MALICIOUS AND MOBILE CODE ........................................................................... 42 10.4.",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISO27001pdf-013",
+    "title": "ISO27001.pdf snippet 13",
+    "text": "1 Controls against malicious code................................................................................................... 42 10.4.2 Controls against mobile code ....................................................................................................... 43 10.5 BACK- UP ............................................................................................................................................... 44 10.5.1 Information back-up ..................................................................................................................... 44 10.6 N ETWORK SECURITY MANAGEMENT ...................................................................................................... 45 10.6.1 Network controls........................................................................................................................... 45 10.6.2 Security of network services ......................................................................................................... 46 10.7 MEDIA HANDLING ................................................................................................................................. 46 10.7.1 Management of removable media................................................................................................. 46 10.7.2 Disposal of media ..............................................................",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISO27001pdf-014",
+    "title": "ISO27001.pdf snippet 14",
+    "text": "........................................................... 47 10.7.3 Information handling procedures ................................................................................................. 47 10.7.4 Security of system documentation................................................................................................. 48 10.8 EXCHANGE OF INFORMATION ................................................................................................................ 48 10.8.1 Information exchange policies and procedures ............................................................................ 49 10.8.2 Exchange agreements ................................................................................................................... 50 10.8.3 Physical media in transit .............................................................................................................. 51 10.8.4 Electronic messaging.................................................................................................................... 52 10.8.5 Business information systems ....................................................................................................... 52 -- 6 of 128 -- ISO/IEC FDIS 17799:2005(E) vi © ISO/IEC 2005 – All rights reserved 10.9 ELECTRONIC COMMERCE SERVICES .................................................................................",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISO27001pdf-015",
+    "title": "ISO27001.pdf snippet 15",
+    "text": "...................... 53 10.9.1 Electronic commerce .................................................................................................................... 53 10.9.2 On-Line Transactions ................................................................................................................... 54 10.9.3 Publicly available information ..................................................................................................... 55 10.10 MONITORING ..................................................................................................................................... 55 10.10.1 Audit logging ............................................................................................................................ 55 10.10.2 Monitoring system use .............................................................................................................. 56 10.10.3 Protection of log information ................................................................................................... 57 10.10.4 Administrator and operator logs .............................................................................................. 58 10.10.5 Fault logging ............................................................................................................................ 58 10.10.6 Clock synchronization ..............................",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISO27001pdf-016",
+    "title": "ISO27001.pdf snippet 16",
+    "text": "................................................................................ 58 11 ACCESS CONTROL .................................................................................................................................... 60 11.1 BUSINESS REQUIREMENT FOR ACCESS CONTROL ................................................................................... 60 11.1.1 Access control policy .................................................................................................................... 60 11.2 U SER ACCESS MANAGEMENT ................................................................................................................. 61 11.2.1 User registration........................................................................................................................... 61 11.2.2 Privilege management .................................................................................................................. 62 11.2.3 User password management......................................................................................................... 62 11.2.4 Review of user access rights ......................................................................................................... 63 11.3 U SER RESPONSIBILITIES ......................................................................................................................... 63",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISO27001pdf-017",
+    "title": "ISO27001.pdf snippet 17",
+    "text": "11.3.1 Password use ................................................................................................................................ 64 11.3.2 Unattended user equipment .......................................................................................................... 64 11.3.3 Clear desk and clear screen policy............................................................................................... 65 11.4 N ETWORK ACCESS CONTROL ................................................................................................................. 65 11.4.1 Policy on use of network services ................................................................................................. 66 11.4.2 User authentication for external connections............................................................................... 66 11.4.3 Equipment identification in networks ........................................................................................... 67 11.4.4 Remote diagnostic and configuration port protection .................................................................. 67 11.4.5 Segregation in networks ............................................................................................................... 68 11.4.6 Network connection control................................................................................................",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISO27001pdf-018",
+    "title": "ISO27001.pdf snippet 18",
+    "text": ".......... 68 11.4.7 Network routing control ............................................................................................................... 69 11.5 O PERATING SYSTEM ACCESS CONTROL .................................................................................................. 69 11.5.1 Secure log-on procedures ............................................................................................................. 69 11.5.2 User identification and authentication ......................................................................................... 70 11.5.3 Password management system...................................................................................................... 71 11.5.4 Use of system utilities ................................................................................................................... 72 11.5.5 Session time-out............................................................................................................................ 72 11.5.6 Limitation of connection time ....................................................................................................... 72 11.6 A PPLICATION AND INFORMATION ACCESS CONTROL ............................................................................. 73 11.6.1 Information access restriction ................................................................",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISO27001pdf-019",
+    "title": "ISO27001.pdf snippet 19",
+    "text": "...................................... 73 11.6.2 Sensitive system isolation ............................................................................................................. 74 11.7 MOBILE COMPUTING AND TELEWORKING .............................................................................................. 74 11.7.1 Mobile computing and communications ....................................................................................... 74 11.7.2 Teleworking .................................................................................................................................. 75 12 INFORMATION SYSTEMS ACQUISITION, DEVELOPMENT AND MAINTENANCE .................. 77 12.1 S ECURITY REQUIREMENTS OF INFORMATION SYSTEMS .......................................................................... 77 12.1.1 Security requirements analysis and specification......................................................................... 77 12.2 CORRECT PROCESSING IN APPLICATIONS ............................................................................................... 78 12.2.1 Input data validation..................................................................................................................... 78 12.2.2 Control of internal processing...................................................................................................... 78 12.2.3 Mes",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISO27001pdf-020",
+    "title": "ISO27001.pdf snippet 20",
+    "text": "sage integrity.......................................................................................................................... 79 12.2.4 Output data validation.................................................................................................................. 79 12.3 CRYPTOGRAPHIC CONTROLS ................................................................................................................. 80 12.3.1 Policy on the use of cryptographic controls ................................................................................. 80 12.3.2 Key management........................................................................................................................... 81 12.4 S ECURITY OF SYSTEM FILES ................................................................................................................... 83 12.4.1 Control of operational software ................................................................................................... 83 12.4.2 Protection of system test data ....................................................................................................... 84 -- 7 of 128 -- ISO/IEC FDIS 17799:2005(E) © ISO/IEC 2005 – All rights reserved vii 12.4.3 Access control to program source code........................................................................................ 84 12.5 S ECURITY IN DEVELOPMEN",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISO27001pdf-021",
+    "title": "ISO27001.pdf snippet 21",
+    "text": "T AND SUPPORT PROCESSES ......................................................................... 85 12.5.1 Change control procedures .......................................................................................................... 85 12.5.2 Technical review of applications after operating system changes................................................ 86 12.5.3 Restrictions on changes to software packages.............................................................................. 86 12.5.4 Information leakage...................................................................................................................... 87 12.5.5 Outsourced software development................................................................................................ 87 12.6 TECHNICAL V ULNERABILITY MANAGEMENT ........................................................................................ 88 12.6.1 Control of technical vulnerabilities .............................................................................................. 88 13 INFORMATION SECURITY INCIDENT MANAGEMENT ................................................................. 90 13.1 REPORTING INFORMATION SECURITY EVENTS AND WEAKNESSES .......................................................... 90 13.1.1 Reporting information security events ..............................................................",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISO27001pdf-022",
+    "title": "ISO27001.pdf snippet 22",
+    "text": "............................ 90 13.1.2 Reporting security weaknesses ..................................................................................................... 91 13.2 MANAGEMENT OF INFORMATION SECURITY INCIDENTS AND IMPROVEMENTS ....................................... 91 13.2.1 Responsibilities and procedures ................................................................................................... 92 13.2.2 Learning from information security incidents .............................................................................. 93 13.2.3 Collection of evidence................................................................................................................... 93 14 BUSINESS CONTINUITY MANAGEMENT ............................................................................................ 95 14.1 I NFORMATION SECURITY ASPECTS OF BUSINESS CONTINUITY MANAGEMENT ........................................ 95 14.1.1 Including information security in the business continuity management process .......................... 95 14.1.2 Business continuity and risk assessment....................................................................................... 96 14.1.3 Developing and implementing continuity plans including information security .......................... 96 14.1.4 Business continuity planning framework .......................................",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISO27001pdf-023",
+    "title": "ISO27001.pdf snippet 23",
+    "text": "............................................... 97 14.1.5 Testing, maintaining and re-assessing business continuity plans................................................. 98 15 COMPLIANCE........................................................................................................................................... 100 15.1 COMPLIANCE WITH LEGAL REQUIREMENTS ......................................................................................... 100 15.1.1 Identification of applicable legislation ....................................................................................... 100 15.1.2 Intellectual property rights (IPR) ............................................................................................... 100 15.1.3 Protection of organizational records.......................................................................................... 101 15.1.4 Data protection and privacy of personal information ................................................................ 102 15.1.5 Prevention of misuse of information processing facilities .......................................................... 102 15.1.6 Regulation of cryptographic controls ......................................................................................... 103 15.2 COMPLIANCE WITH SECURITY POLICIES AND STANDARDS AND TECHNICAL COMPLIANCE ................... 103 15.2.1 Compliance w",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  },
+  {
+    "id": "ISO-ISO27001pdf-024",
+    "title": "ISO27001.pdf snippet 24",
+    "text": "ith security policies and standards....................................................................... 104 15.2.2 Technical compliance checking .................................................................................................. 104 15.3 I NFORMATION SYSTEMS AUDIT CONSIDERATIONS ............................................................................... 105 15.3.1 Information systems audit controls............................................................................................. 105 15.3.2 Protection of information systems audit tools ............................................................................ 105 BIBLIOGRAPHY.............................................................................................................................................. 107 INDEX ................................................................................................................................................................ 108 -- 8 of 128 -- ISO/IEC FDIS 17799:2005(E) viii © ISO/IEC 2005 – All rights reserved Foreword ISO (the International Organization for Standardization) and IEC (the International Electrotechnical Commission) form the specialized system for worldwide standardization. National bodies that are members of ISO or IEC participate in the development of International Standards through technical committees established by t",
+    "tags": [
+      "iso",
+      "security",
+      "control"
+    ]
+  }
+]

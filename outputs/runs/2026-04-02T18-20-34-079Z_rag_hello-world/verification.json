@@ -1,0 +1,34 @@
+{
+  "passed": false,
+  "checks": [
+    {
+      "name": "structural-completeness",
+      "passed": true,
+      "detail": "All required sections exist."
+    },
+    {
+      "name": "evidence-grounding",
+      "passed": false,
+      "detail": "1 finding(s) missing evidence field."
+    },
+    {
+      "name": "control-grounding",
+      "passed": true,
+      "detail": "Control references align with retrieved controls."
+    },
+    {
+      "name": "consistency",
+      "passed": true,
+      "detail": "No obvious issue/severity/recommendation inconsistencies."
+    },
+    {
+      "name": "empty-generic-detection",
+      "passed": true,
+      "detail": "Report has sufficient specific content."
+    }
+  ],
+  "warnings": [
+    "Some findings are missing evidence."
+  ],
+  "score": 0.8
+}

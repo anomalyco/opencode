@@ -1,0 +1,32 @@
+{
+  "passed": false,
+  "checks": [
+    {
+      "name": "structural-completeness",
+      "passed": true,
+      "detail": "All required sections exist."
+    },
+    {
+      "name": "evidence-grounding",
+      "passed": true,
+      "detail": "All findings include evidence."
+    },
+    {
+      "name": "control-grounding",
+      "passed": false,
+      "detail": "Unsupported control refs: pdf-020"
+    },
+    {
+      "name": "consistency",
+      "passed": true,
+      "detail": "No obvious issue/severity/recommendation inconsistencies."
+    },
+    {
+      "name": "empty-generic-detection",
+      "passed": true,
+      "detail": "Report has sufficient specific content."
+    }
+  ],
+  "warnings": [],
+  "score": 0.8
+}

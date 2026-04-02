@@ -83,31 +83,28 @@ export async function retrieveVector(input: {
     const pc = new Pinecone({ apiKey: key })
     const index = pc.index(idx)
     const ns = input.namespace ? index.namespace(input.namespace) : index
-    await ns.upsert({
+    await ns.upsertRecords({
       records: input.controls.map((item) => ({
         id: item.id,
-        values: embed(text(item)),
-        metadata: {
-          title: item.title,
-          text: item.text,
-          tags: (item.tags ?? []).join(","),
-        },
+        text: text(item),
+        title: item.title,
+        body: item.text,
+        tags: (item.tags ?? []).join(","),
       })),
     })
-    const hit = await ns.query({
-      topK: input.topk,
-      vector: embed(input.text),
-      includeMetadata: true,
+    const hit = await ns.searchRecords({
+      query: { topK: input.topk, inputs: { text: input.text } },
+      fields: ["title", "body", "tags", "text"],
     })
-    return (hit.matches ?? []).map((item) => ({
-      id: item.id,
-      title: String(item.metadata?.["title"] ?? ""),
-      text: String(item.metadata?.["text"] ?? ""),
-      tags: String(item.metadata?.["tags"] ?? "")
+    return (hit.result?.hits ?? []).map((item) => ({
+      id: String(item._id ?? ""),
+      title: String(item.fields?.["title"] ?? ""),
+      text: String(item.fields?.["body"] ?? item.fields?.["text"] ?? ""),
+      tags: String(item.fields?.["tags"] ?? "")
         .split(",")
         .map((x) => x.trim())
         .filter(Boolean),
-      score: item.score ?? 0,
+      score: Number(item._score ?? 0),
     }))
   }
 

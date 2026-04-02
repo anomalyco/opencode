@@ -1,0 +1,9 @@
+passed: false
+score: 0.80
+
+checks:
+- structural-completeness: pass (All required sections exist.)
+- evidence-grounding: pass (All findings include evidence.)
+- control-grounding: fail (Unsupported control refs: pdf-020)
+- consistency: pass (No obvious issue/severity/recommendation inconsistencies.)
+- empty-generic-detection: pass (Report has sufficient specific content.)
