@@ -1,7 +1,6 @@
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
-import { Cause, Effect, Layer, Record, ServiceMap } from "effect"
-import * as Queue from "effect/Queue"
+import { Effect, Layer, Record, ServiceMap } from "effect"
 import * as Stream from "effect/Stream"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, jsonSchema } from "ai"
 import { mergeDeep, pipe } from "remeda"
