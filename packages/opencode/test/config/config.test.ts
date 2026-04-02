@@ -710,8 +710,21 @@ test("updates config and writes to file", async () => {
       const newConfig = { model: "updated/model" }
       await Config.update(newConfig as any)
 
-      const writtenConfig = await Filesystem.readJson(path.join(tmp.path, "config.json"))
+      const writtenConfig = await Filesystem.readJson(path.join(tmp.path, "opencode.json"))
       expect(writtenConfig.model).toBe("updated/model")
+    },
+  })
+})
+
+test("patch then get returns updated config", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await Config.update({ agent: { testAgent: { model: "test/model" } } } as any)
+
+      const config = await Config.get()
+      expect(config.agent?.testAgent?.model).toBe("test/model")
     },
   })
 })
