@@ -773,6 +773,8 @@ export namespace SessionPrompt {
     messages: MessageV2.WithParts[]
   }) {
     using _ = log.time("resolveTools")
+    // Sidekick sessions are chat-only — no tools whatsoever
+    if (input.session.kind === "sidekick") return {}
     const tools: Record<string, AITool> = {}
 
     const context = (args: any, options: ToolCallOptions): Tool.Context => ({

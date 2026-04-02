@@ -328,6 +328,7 @@ export const SessionRoutes = lazy(() =>
       validator("json", Session.initialize.schema.omit({ sessionID: true })),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
+        await rejectSidekick(sessionID)
         const body = c.req.valid("json")
         await Session.initialize({ ...body, sessionID })
         return c.json(true)

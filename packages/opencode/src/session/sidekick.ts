@@ -179,6 +179,9 @@ export namespace Sidekick {
       text: z.string(),
     }),
     async (input) => {
+      const parent = await Session.get(input.parentID)
+      if (parent.kind === "sidekick") throw new Error("Cannot inject into a sidekick session")
+
       // Get last user message to reuse agent + model
       const msgs = await Session.messages({ sessionID: input.parentID, limit: 10 })
       let agent = "build"

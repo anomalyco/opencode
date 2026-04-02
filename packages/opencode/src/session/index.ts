@@ -633,8 +633,16 @@ export namespace Session {
   export const remove = fn(SessionID.zod, async (sessionID) => {
     try {
       const session = await get(sessionID)
-      for (const child of await children(sessionID)) {
-        await remove(child.id)
+      // Query ALL children (including sidekick) directly so nothing is orphaned
+      const allChildren = Database.use((db) =>
+        db
+          .select()
+          .from(SessionTable)
+          .where(and(eq(SessionTable.project_id, session.projectID), eq(SessionTable.parent_id, sessionID)))
+          .all(),
+      )
+      for (const child of allChildren) {
+        await remove(child.id as SessionID)
       }
       await unshare(sessionID).catch(() => {})
 
