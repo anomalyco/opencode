@@ -71,6 +71,7 @@ export namespace Session {
       workspaceID: row.workspace_id ?? undefined,
       directory: row.directory,
       parentID: row.parent_id ?? undefined,
+      kind: row.kind,
       title: row.title,
       version: row.version,
       summary,
@@ -92,6 +93,7 @@ export namespace Session {
       project_id: info.projectID,
       workspace_id: info.workspaceID,
       parent_id: info.parentID,
+      kind: info.kind,
       slug: info.slug,
       directory: info.directory,
       title: info.title,
@@ -128,6 +130,7 @@ export namespace Session {
       workspaceID: WorkspaceID.zod.optional(),
       directory: z.string(),
       parentID: SessionID.zod.optional(),
+      kind: z.enum(["default", "sidekick"]).default("default"),
       summary: z
         .object({
           additions: z.number(),
@@ -237,6 +240,7 @@ export namespace Session {
     z
       .object({
         parentID: SessionID.zod.optional(),
+        kind: Info.shape.kind.optional(),
         title: z.string().optional(),
         permission: Info.shape.permission,
         workspaceID: WorkspaceID.zod.optional(),
@@ -245,6 +249,7 @@ export namespace Session {
     async (input) => {
       return createNext({
         parentID: input?.parentID,
+        kind: input?.kind,
         directory: Instance.directory,
         title: input?.title,
         permission: input?.permission,
@@ -305,6 +310,7 @@ export namespace Session {
     id?: SessionID
     title?: string
     parentID?: SessionID
+    kind?: Info["kind"]
     workspaceID?: WorkspaceID
     directory: string
     permission?: Permission.Ruleset
@@ -317,6 +323,7 @@ export namespace Session {
       directory: input.directory,
       workspaceID: input.workspaceID,
       parentID: input.parentID,
+      kind: input.kind ?? "default",
       title: input.title ?? createDefaultTitle(!!input.parentID),
       permission: input.permission,
       time: {
@@ -489,6 +496,7 @@ export namespace Session {
     start?: number
     search?: string
     limit?: number
+    kind?: Info["kind"]
   }) {
     const project = Instance.project
     const conditions = [eq(SessionTable.project_id, project.id)]
@@ -508,6 +516,8 @@ export namespace Session {
     if (input?.search) {
       conditions.push(like(SessionTable.title, `%${input.search}%`))
     }
+    // default: exclude sidekick sessions from normal list
+    conditions.push(eq(SessionTable.kind, input?.kind ?? "default"))
 
     const limit = input?.limit ?? 100
 
