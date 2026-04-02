@@ -33,3 +33,26 @@ export function abortAfterAny(ms: number, ...signals: AbortSignal[]) {
     clearTimeout: timeout.clearTimeout,
   }
 }
+
+/**
+ * Races a promise against an AbortSignal, rejecting when the signal fires.
+ * Properly cleans up the abort listener when the promise settles first,
+ * avoiding unhandled rejection issues that occur with naive Promise.race patterns.
+ */
+export function raceSignal<T>(promise: Promise<T>, signal: AbortSignal, msg = "Aborted"): Promise<T> {
+  if (signal.aborted) return Promise.reject(new Error(msg))
+  return new Promise<T>((resolve, reject) => {
+    const handler = () => reject(new Error(msg))
+    signal.addEventListener("abort", handler, { once: true })
+    promise.then(
+      (v) => {
+        signal.removeEventListener("abort", handler)
+        resolve(v)
+      },
+      (e) => {
+        signal.removeEventListener("abort", handler)
+        reject(e)
+      },
+    )
+  })
+}

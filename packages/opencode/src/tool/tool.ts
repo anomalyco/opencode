@@ -4,6 +4,15 @@ import type { Agent } from "../agent/agent"
 import type { Permission } from "../permission"
 import type { SessionID, MessageID } from "../session/schema"
 import { Truncate } from "./truncate"
+import { abortAfterAny, raceSignal } from "../util/abort"
+import { Config } from "../config/config"
+
+const TOOL_TIMEOUT = 15 * 60 * 1000
+
+/** Compute the effective timeout for a non-task tool execution. Exported for testing. */
+export function timeout(input: { tool?: number }): number {
+  return input.tool ?? TOOL_TIMEOUT
+}
 
 export namespace Tool {
   interface Metadata {
@@ -69,20 +78,53 @@ export namespace Tool {
               { cause: error },
             )
           }
-          const result = await execute(args, ctx)
-          // skip truncation for tools that handle it themselves
-          if (result.metadata.truncated !== undefined) {
-            return result
+          // Task tool manages its own deadline inside task.ts — skip the
+          // outer raceSignal wrapper so nested tasks aren't starved of time.
+          if (id === "task") {
+            const result = await execute(args, ctx)
+            if (result.metadata.truncated !== undefined) return result
+            const truncated = await Truncate.output(result.output, {}, initCtx?.agent)
+            return {
+              ...result,
+              output: truncated.content,
+              metadata: {
+                ...result.metadata,
+                truncated: truncated.truncated,
+                ...(truncated.truncated && { outputPath: truncated.outputPath }),
+              },
+            }
           }
-          const truncated = await Truncate.output(result.output, {}, initCtx?.agent)
-          return {
-            ...result,
-            output: truncated.content,
-            metadata: {
-              ...result.metadata,
-              truncated: truncated.truncated,
-              ...(truncated.truncated && { outputPath: truncated.outputPath }),
-            },
+
+          let ms = TOOL_TIMEOUT
+          try {
+            const cfg = await Config.get()
+            ms = timeout({ tool: cfg.experimental?.tool_timeout })
+          } catch {
+            // No Instance context (e.g., unit tests) — use hardcoded default
+          }
+          const deadline = abortAfterAny(ms, ctx.abort)
+          try {
+            const result = await raceSignal(
+              execute(args, { ...ctx, abort: deadline.signal }),
+              deadline.signal,
+              `Tool execution exceeded ${Math.round(ms / 1000)}s global timeout`,
+            )
+            // skip truncation for tools that handle it themselves
+            if (result.metadata.truncated !== undefined) {
+              return result
+            }
+            const truncated = await Truncate.output(result.output, {}, initCtx?.agent)
+            return {
+              ...result,
+              output: truncated.content,
+              metadata: {
+                ...result.metadata,
+                truncated: truncated.truncated,
+                ...(truncated.truncated && { outputPath: truncated.outputPath }),
+              },
+            }
+          } finally {
+            deadline.clearTimeout()
           }
         }
         return toolInfo
