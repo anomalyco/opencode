@@ -306,6 +306,97 @@ describe("file/time", () => {
     })
   })
 
+  describe("path normalization", () => {
+    test("read with forward slashes, assert with backslashes", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "file.txt")
+      await fs.writeFile(filepath, "content", "utf-8")
+      await touch(filepath, 1_000)
+
+      const forwardSlash = filepath.replaceAll("\\", "/")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          await FileTime.read(sessionID, forwardSlash)
+          // assert with the native backslash path should still work
+          await FileTime.assert(sessionID, filepath)
+        },
+      })
+    })
+
+    test("read with backslashes, assert with forward slashes", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "file.txt")
+      await fs.writeFile(filepath, "content", "utf-8")
+      await touch(filepath, 1_000)
+
+      const forwardSlash = filepath.replaceAll("\\", "/")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          await FileTime.read(sessionID, filepath)
+          // assert with forward slashes should still work
+          await FileTime.assert(sessionID, forwardSlash)
+        },
+      })
+    })
+
+    test("get returns timestamp regardless of slash direction", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "file.txt")
+      await fs.writeFile(filepath, "content", "utf-8")
+
+      const forwardSlash = filepath.replaceAll("\\", "/")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          await FileTime.read(sessionID, forwardSlash)
+          const result = await FileTime.get(sessionID, filepath)
+          expect(result).toBeInstanceOf(Date)
+        },
+      })
+    })
+
+    test("withLock serializes regardless of slash direction", async () => {
+      await using tmp = await tmpdir()
+      const filepath = path.join(tmp.path, "file.txt")
+
+      const forwardSlash = filepath.replaceAll("\\", "/")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const order: number[] = []
+          const hold = gate()
+          const ready = gate()
+
+          const op1 = FileTime.withLock(filepath, async () => {
+            order.push(1)
+            ready.open()
+            await hold.wait
+            order.push(2)
+          })
+
+          await ready.wait
+
+          // Use forward-slash variant -- should still serialize against op1
+          const op2 = FileTime.withLock(forwardSlash, async () => {
+            order.push(3)
+            order.push(4)
+          })
+
+          hold.open()
+
+          await Promise.all([op1, op2])
+          expect(order).toEqual([1, 2, 3, 4])
+        },
+      })
+    })
+  })
+
   describe("stat() Filesystem.stat pattern", () => {
     test("reads file modification time via Filesystem.stat()", async () => {
       await using tmp = await tmpdir()

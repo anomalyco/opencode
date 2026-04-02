@@ -1,7 +1,9 @@
 import { seedSessionTask, withSession } from "../actions"
 import { test, expect } from "../fixtures"
+import { inputMatch } from "../prompt/mock"
+import { promptSelector } from "../selectors"
 
-test("task tool child-session link does not trigger stale show errors", async ({ page, withBackendProject }) => {
+test("task tool child-session link does not trigger stale show errors", async ({ page, llm, withMockProject }) => {
   test.setTimeout(120_000)
 
   const errs: string[] = []
@@ -10,17 +12,22 @@ test("task tool child-session link does not trigger stale show errors", async ({
   }
   page.on("pageerror", onError)
 
-  await withBackendProject(async ({ gotoSession, trackSession, sdk }) => {
-    await withSession(sdk, `e2e child nav ${Date.now()}`, async (session) => {
-      trackSession(session.id)
-      const child = await seedSessionTask(sdk, {
-        sessionID: session.id,
-        description: "Open child session",
-        prompt: "Search the repository for AssistantParts and then reply with exactly CHILD_OK.",
-      })
-      trackSession(child.sessionID)
+  try {
+    await withMockProject(async ({ gotoSession, trackSession, sdk }) => {
+      await withSession(sdk, `e2e child nav ${Date.now()}`, async (session) => {
+        const taskInput = {
+          description: "Open child session",
+          prompt: "Search the repository for AssistantParts and then reply with exactly CHILD_OK.",
+          subagent_type: "general",
+        }
+        await llm.toolMatch(inputMatch(taskInput), "task", taskInput)
+        const child = await seedSessionTask(sdk, {
+          sessionID: session.id,
+          description: taskInput.description,
+          prompt: taskInput.prompt,
+        })
+        trackSession(child.sessionID)
 
-      try {
         await gotoSession(session.id)
 
         const link = page
@@ -31,11 +38,11 @@ test("task tool child-session link does not trigger stale show errors", async ({
         await link.click()
 
         await expect(page).toHaveURL(new RegExp(`/session/${child.sessionID}(?:[/?#]|$)`), { timeout: 30_000 })
-        await page.waitForTimeout(1000)
-        expect(errs).toEqual([])
-      } finally {
-        page.off("pageerror", onError)
-      }
+        await expect(page.locator(promptSelector)).toBeVisible({ timeout: 30_000 })
+        await expect.poll(() => errs, { timeout: 5_000 }).toEqual([])
+      })
     })
-  })
+  } finally {
+    page.off("pageerror", onError)
+  }
 })
