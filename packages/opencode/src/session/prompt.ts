@@ -1368,7 +1368,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             )
             // Some providers return "stop" even when the assistant message contains tool calls.
             // Keep the loop running so tool results can be sent back to the model.
-            const hasToolCalls = lastAssistantMsg?.parts.some((part) => part.type === "tool") ?? false
+            // Skip tool parts that are already completed/errored (e.g. provider-executed tools
+            // where the provider handled the full tool lifecycle within a single stream).
+            const hasToolCalls =
+              lastAssistantMsg?.parts.some(
+                (part) => part.type === "tool" && part.state.status !== "completed" && part.state.status !== "error",
+              ) ?? false
 
             if (
               lastAssistant?.finish &&
