@@ -183,15 +183,11 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
 
       // Use bash tool (always registered) to create a file
       const command = `echo 'snapshot race test content' > ${path.join(dir, "race-test.txt")}`
-      yield* llm.toolMatch(
-        (hit) => JSON.stringify(hit.body).includes("create the file"),
-        "bash",
-        { command, description: "create test file" },
-      )
-      yield* llm.textMatch(
-        (hit) => JSON.stringify(hit.body).includes("bash"),
-        "done",
-      )
+      yield* llm.toolMatch((hit) => JSON.stringify(hit.body).includes("create the file"), "bash", {
+        command,
+        description: "create test file",
+      })
+      yield* llm.textMatch((hit) => JSON.stringify(hit.body).includes("bash"), "done")
 
       // Seed user message
       yield* prompt.prompt({
@@ -208,12 +204,15 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
       // Verify the file was created
       const filePath = path.join(dir, "race-test.txt")
       const fileExists = yield* Effect.promise(() =>
-        fs.access(filePath).then(() => true).catch(() => false),
+        fs
+          .access(filePath)
+          .then(() => true)
+          .catch(() => false),
       )
       expect(fileExists).toBe(true)
 
       // Verify the tool call completed (in the first assistant message)
-      const allMsgs = yield* Effect.promise(() => MessageV2.filterCompacted(MessageV2.stream(session.id)))
+      const allMsgs = yield* MessageV2.filterCompactedEffect(session.id)
       const tool = allMsgs
         .flatMap((m) => m.parts)
         .find((p): p is MessageV2.ToolPart => p.type === "tool" && p.tool === "bash")

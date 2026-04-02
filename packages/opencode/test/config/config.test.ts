@@ -1,4 +1,4 @@
-import { test, expect, describe, mock, afterEach, spyOn } from "bun:test"
+import { test, expect, describe, mock, afterEach, beforeEach, spyOn } from "bun:test"
 import { Effect, Layer, Option } from "effect"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Config } from "../../src/config/config"
@@ -34,8 +34,13 @@ const emptyAuth = Layer.mock(Auth.Service)({
 // Get managed config directory from environment (set in preload.ts)
 const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
 
+beforeEach(async () => {
+  await Config.invalidate(true)
+})
+
 afterEach(async () => {
   await fs.rm(managedConfigDir, { force: true, recursive: true }).catch(() => {})
+  await Config.invalidate(true)
 })
 
 async function writeManagedSettings(settings: object, filename = "opencode.json") {
@@ -169,7 +174,7 @@ test("loads JSONC config file", async () => {
   })
 })
 
-test("merges multiple config files with correct precedence", async () => {
+test("jsonc overrides json in the same directory", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await writeConfig(
@@ -191,7 +196,7 @@ test("merges multiple config files with correct precedence", async () => {
     directory: tmp.path,
     fn: async () => {
       const config = await Config.get()
-      expect(config.model).toBe("override")
+      expect(config.model).toBe("base")
       expect(config.username).toBe("base")
     },
   })
@@ -1174,6 +1179,51 @@ test("deduplicates duplicate plugins from global and local configs", async () =>
   })
 })
 
+test("keeps plugin origins aligned with merged plugin list", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const project = path.join(dir, "project")
+      const local = path.join(project, ".opencode")
+      await fs.mkdir(local, { recursive: true })
+
+      await Filesystem.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          plugin: [["shared-plugin@1.0.0", { source: "global" }], "global-only@1.0.0"],
+        }),
+      )
+
+      await Filesystem.write(
+        path.join(local, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          plugin: [["shared-plugin@2.0.0", { source: "local" }], "local-only@1.0.0"],
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: path.join(tmp.path, "project"),
+    fn: async () => {
+      const cfg = await Config.get()
+      const plugins = cfg.plugin ?? []
+      const origins = cfg.plugin_origins ?? []
+      const names = plugins.map((item) => Config.pluginSpecifier(item))
+
+      expect(names).toContain("shared-plugin@2.0.0")
+      expect(names).not.toContain("shared-plugin@1.0.0")
+      expect(names).toContain("global-only@1.0.0")
+      expect(names).toContain("local-only@1.0.0")
+
+      expect(origins.map((item) => item.spec)).toEqual(plugins)
+      const hit = origins.find((item) => Config.pluginSpecifier(item.spec) === "shared-plugin@2.0.0")
+      expect(hit?.scope).toBe("local")
+    },
+  })
+})
+
 // Legacy tools migration tests
 
 test("migrates legacy tools config to permissions - allow", async () => {
@@ -1550,7 +1600,7 @@ test("project config can override MCP server enabled status", async () => {
     init: async (dir) => {
       // Simulates a base config (like from remote .well-known) with disabled MCP
       await Filesystem.write(
-        path.join(dir, "opencode.jsonc"),
+        path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
           mcp: {
@@ -1569,7 +1619,7 @@ test("project config can override MCP server enabled status", async () => {
       )
       // Project config enables just jira
       await Filesystem.write(
-        path.join(dir, "opencode.json"),
+        path.join(dir, "opencode.jsonc"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
           mcp: {
@@ -1608,7 +1658,7 @@ test("MCP config deep merges preserving base config properties", async () => {
     init: async (dir) => {
       // Base config with full MCP definition
       await Filesystem.write(
-        path.join(dir, "opencode.jsonc"),
+        path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
           mcp: {
@@ -1625,7 +1675,7 @@ test("MCP config deep merges preserving base config properties", async () => {
       )
       // Override just enables it, should preserve other properties
       await Filesystem.write(
-        path.join(dir, "opencode.json"),
+        path.join(dir, "opencode.jsonc"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
           mcp: {
@@ -1875,11 +1925,20 @@ describe("resolvePluginSpec", () => {
   })
 })
 
-describe("deduplicatePlugins", () => {
+describe("deduplicatePluginOrigins", () => {
+  const dedupe = (plugins: Config.PluginSpec[]) =>
+    Config.deduplicatePluginOrigins(
+      plugins.map((spec) => ({
+        spec,
+        source: "",
+        scope: "global" as const,
+      })),
+    ).map((item) => item.spec)
+
   test("removes duplicates keeping higher priority (later entries)", () => {
     const plugins = ["global-plugin@1.0.0", "shared-plugin@1.0.0", "local-plugin@2.0.0", "shared-plugin@2.0.0"]
 
-    const result = Config.deduplicatePlugins(plugins)
+    const result = dedupe(plugins)
 
     expect(result).toContain("global-plugin@1.0.0")
     expect(result).toContain("local-plugin@2.0.0")
@@ -1891,7 +1950,7 @@ describe("deduplicatePlugins", () => {
   test("keeps path plugins separate from package plugins", () => {
     const plugins = ["oh-my-opencode@2.4.3", "file:///project/.opencode/plugin/oh-my-opencode.js"]
 
-    const result = Config.deduplicatePlugins(plugins)
+    const result = dedupe(plugins)
 
     expect(result).toEqual(plugins)
   })
@@ -1899,7 +1958,7 @@ describe("deduplicatePlugins", () => {
   test("deduplicates direct path plugins by exact spec", () => {
     const plugins = ["file:///project/.opencode/plugin/demo.ts", "file:///project/.opencode/plugin/demo.ts"]
 
-    const result = Config.deduplicatePlugins(plugins)
+    const result = dedupe(plugins)
 
     expect(result).toEqual(["file:///project/.opencode/plugin/demo.ts"])
   })
@@ -1907,7 +1966,7 @@ describe("deduplicatePlugins", () => {
   test("preserves order of remaining plugins", () => {
     const plugins = ["a-plugin@1.0.0", "b-plugin@1.0.0", "c-plugin@1.0.0"]
 
-    const result = Config.deduplicatePlugins(plugins)
+    const result = dedupe(plugins)
 
     expect(result).toEqual(["a-plugin@1.0.0", "b-plugin@1.0.0", "c-plugin@1.0.0"])
   })
