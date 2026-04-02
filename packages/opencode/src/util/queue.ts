@@ -26,9 +26,9 @@ export class AsyncQueue<T> implements AsyncIterable<T> {
 
   close(opts?: { clear?: boolean }) {
     if (this.closed) return
+    if (this.sentinel === undefined) throw new Error("AsyncQueue.close requires a sentinel")
     this.closed = true
     if (opts?.clear) this.clear()
-    if (this.sentinel === undefined) return
     if (this.resolvers.length > 0) {
       const list = this.resolvers.splice(0)
       for (const resolve of list) resolve(this.sentinel)

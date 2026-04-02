@@ -135,6 +135,11 @@ describe("AsyncQueue", () => {
       q.close({ clear: false }) // no-op
       expect(await q.next()).toBe(null)
     })
+
+    test("throws when closed without a sentinel", () => {
+      const q = new AsyncQueue<number>()
+      expect(() => q.close()).toThrow("sentinel")
+    })
   })
 
   // --- async iteration ---
