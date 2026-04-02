@@ -114,6 +114,12 @@ export namespace Provider {
     })
   }
 
+  function e2eURL() {
+    const url = Env.get("OPENCODE_E2E_LLM_URL")
+    if (typeof url !== "string" || url === "") return
+    return url
+  }
+
   type BundledSDK = {
     languageModel(modelId: string): LanguageModelV3
   }
@@ -903,8 +909,8 @@ export namespace Provider {
         npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible",
       },
       status: model.status ?? "active",
-      headers: {},
-      options: {},
+      headers: model.headers ?? {},
+      options: model.options ?? {},
       cost: {
         input: model.cost?.input ?? 0,
         output: model.cost?.output ?? 0,
@@ -1450,6 +1456,17 @@ export namespace Provider {
         if (s.models.has(key)) return s.models.get(key)!
 
         return yield* Effect.promise(async () => {
+          const url = e2eURL()
+          if (url) {
+            const language = createOpenAICompatible({
+              name: model.providerID,
+              apiKey: "test-key",
+              baseURL: url,
+            }).chatModel(model.api.id)
+            s.models.set(key, language)
+            return language
+          }
+
           const provider = s.providers[model.providerID]
           const sdk = await resolveSDK(model, s)
 

@@ -48,70 +48,61 @@ test("collapsed sidebar popover stays open when archiving a session", async ({ p
   }
 })
 
-test("open sidebar project popover stays closed after clicking avatar", async ({ page, withProject }) => {
+test("open sidebar project popover stays closed after clicking avatar", async ({ page, project }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
 
   const other = await createTestProject()
   const slug = dirSlug(other)
 
   try {
-    await withProject(
-      async () => {
-        await openSidebar(page)
+    await project.open({ extra: [other] })
+    await openSidebar(page)
 
-        const project = page.locator(projectSwitchSelector(slug)).first()
-        const card = page.locator('[data-component="hover-card-content"]')
+    const projectButton = page.locator(projectSwitchSelector(slug)).first()
+    const card = page.locator('[data-component="hover-card-content"]')
 
-        await expect(project).toBeVisible()
-        await project.hover()
-        await expect(card.getByText(/recent sessions/i)).toBeVisible()
+    await expect(projectButton).toBeVisible()
+    await projectButton.hover()
+    await expect(card.getByText(/recent sessions/i)).toBeVisible()
 
-        await page.mouse.down()
-        await expect(card).toHaveCount(0)
-        await page.mouse.up()
+    await projectButton.click()
+    await expect(card).toHaveCount(0)
 
-        await waitSession(page, { directory: other })
-        await expect(card).toHaveCount(0)
-      },
-      { extra: [other] },
-    )
+    await waitSession(page, { directory: other })
+    await expect(card).toHaveCount(0)
   } finally {
     await cleanupTestProject(other)
   }
 })
 
-test("open sidebar project switch activates on first tabbed enter", async ({ page, withProject }) => {
+test("open sidebar project switch activates on first tabbed enter", async ({ page, project }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
 
   const other = await createTestProject()
   const slug = dirSlug(other)
 
   try {
-    await withProject(
-      async () => {
-        await openSidebar(page)
-        await defocus(page)
+    await project.open({ extra: [other] })
+    await openSidebar(page)
+    await defocus(page)
 
-        const project = page.locator(projectSwitchSelector(slug)).first()
+    const projectButton = page.locator(projectSwitchSelector(slug)).first()
 
-        await expect(project).toBeVisible()
+    await expect(projectButton).toBeVisible()
 
-        let hit = false
-        for (let i = 0; i < 20; i++) {
-          hit = await project.evaluate((el) => {
-            return el.matches(":focus") || !!el.parentElement?.matches(":focus")
-          })
-          if (hit) break
-          await page.keyboard.press("Tab")
-        }
+    let hit = false
+    for (let i = 0; i < 20; i++) {
+      hit = await projectButton.evaluate((el) => {
+        return el.matches(":focus") || !!el.parentElement?.matches(":focus")
+      })
+      if (hit) break
+      await page.keyboard.press("Tab")
+    }
 
-        expect(hit).toBe(true)
+    expect(hit).toBe(true)
 
-        await page.keyboard.press("Enter")
-        await waitSession(page, { directory: other })
-      },
-      { extra: [other] },
-    )
+    await page.keyboard.press("Enter")
+    await waitSession(page, { directory: other })
   } finally {
     await cleanupTestProject(other)
   }

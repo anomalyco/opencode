@@ -2,6 +2,7 @@ import { Log } from "../util/log"
 import path from "path"
 import { pathToFileURL } from "url"
 import os from "os"
+import { Process } from "../util/process"
 import z from "zod"
 import { ModelsDev } from "../provider/models"
 import { mergeDeep, pipe, unique } from "remeda"
@@ -74,6 +75,59 @@ export namespace Config {
   }
 
   const managedDir = managedConfigDir()
+
+  const MANAGED_PLIST_DOMAIN = "ai.opencode.managed"
+
+  // Keys injected by macOS/MDM into the managed plist that are not OpenCode config
+  const PLIST_META = new Set([
+    "PayloadDisplayName",
+    "PayloadIdentifier",
+    "PayloadType",
+    "PayloadUUID",
+    "PayloadVersion",
+    "_manualProfile",
+  ])
+
+  /**
+   * Parse raw JSON (from plutil conversion of a managed plist) into OpenCode config.
+   * Strips MDM metadata keys before parsing through the config schema.
+   * Pure function — no OS interaction, safe to unit test directly.
+   */
+  export function parseManagedPlist(json: string, source: string): Info {
+    const raw = JSON.parse(json)
+    for (const key of Object.keys(raw)) {
+      if (PLIST_META.has(key)) delete raw[key]
+    }
+    return parseConfig(JSON.stringify(raw), source)
+  }
+
+  /**
+   * Read macOS managed preferences deployed via .mobileconfig / MDM (Jamf, Kandji, etc).
+   * MDM-installed profiles write to /Library/Managed Preferences/ which is only writable by root.
+   * User-scoped plists are checked first, then machine-scoped.
+   */
+  async function readManagedPreferences(): Promise<Info> {
+    if (process.platform !== "darwin") return {}
+
+    const domain = MANAGED_PLIST_DOMAIN
+    const user = os.userInfo().username
+    const paths = [
+      path.join("/Library/Managed Preferences", user, `${domain}.plist`),
+      path.join("/Library/Managed Preferences", `${domain}.plist`),
+    ]
+
+    for (const plist of paths) {
+      if (!existsSync(plist)) continue
+      log.info("reading macOS managed preferences", { path: plist })
+      const result = await Process.run(["plutil", "-convert", "json", "-o", "-", plist], { nothrow: true })
+      if (result.code !== 0) {
+        log.warn("failed to convert managed preferences plist", { path: plist })
+        continue
+      }
+      return parseManagedPlist(result.stdout.toString(), `mobileconfig:${plist}`)
+    }
+    return {}
+  }
 
   // Custom merge function that concatenates array fields instead of replacing them
   function mergeConfigConcatArrays(target: Info, source: Info): Info {
@@ -730,77 +784,28 @@ export namespace Config {
   })
   export type Layout = z.infer<typeof Layout>
 
-  export const Model = z
-    .object({
-      id: z.string(),
-      name: z.string(),
-      family: z.string().optional(),
-      release_date: z.string(),
-      attachment: z.boolean(),
-      reasoning: z.boolean(),
-      temperature: z.boolean(),
-      tool_call: z.boolean(),
-      interleaved: z
-        .union([
-          z.literal(true),
-          z
-            .object({
-              field: z.enum(["reasoning_content", "reasoning_details"]),
-            })
-            .strict(),
-        ])
-        .optional(),
-      cost: z
-        .object({
-          input: z.number(),
-          output: z.number(),
-          cache_read: z.number().optional(),
-          cache_write: z.number().optional(),
-          context_over_200k: z
-            .object({
-              input: z.number(),
-              output: z.number(),
-              cache_read: z.number().optional(),
-              cache_write: z.number().optional(),
-            })
-            .optional(),
-        })
-        .optional(),
-      limit: z.object({
-        context: z.number(),
-        input: z.number().optional(),
-        output: z.number(),
-      }),
-      modalities: z
-        .object({
-          input: z.array(z.enum(["text", "audio", "image", "video", "pdf"])),
-          output: z.array(z.enum(["text", "audio", "image", "video", "pdf"])),
-        })
-        .optional(),
-      experimental: z.boolean().optional(),
-      status: z.enum(["alpha", "beta", "deprecated"]).optional(),
-      options: z.record(z.string(), z.any()),
-      headers: z.record(z.string(), z.string()).optional(),
-      provider: z.object({ npm: z.string().optional(), api: z.string().optional() }).optional(),
-      variants: z
-        .record(
-          z.string(),
-          z
-            .object({
-              disabled: z.boolean().optional().describe("Disable this variant for the model"),
-            })
-            .catchall(z.any()),
-        )
-        .optional()
-        .describe("Variant-specific configuration"),
-    })
-    .partial()
-
   export const Provider = ModelsDev.Provider.partial()
     .extend({
       whitelist: z.array(z.string()).optional(),
       blacklist: z.array(z.string()).optional(),
-      models: z.record(z.string(), Model).optional(),
+      models: z
+        .record(
+          z.string(),
+          ModelsDev.Model.partial().extend({
+            variants: z
+              .record(
+                z.string(),
+                z
+                  .object({
+                    disabled: z.boolean().optional().describe("Disable this variant for the model"),
+                  })
+                  .catchall(z.any()),
+              )
+              .optional()
+              .describe("Variant-specific configuration"),
+          }),
+        )
+        .optional(),
       options: z
         .object({
           apiKey: z.string().optional(),
@@ -1404,6 +1409,9 @@ export namespace Config {
               merge(source, yield* loadFile(source), "global")
             }
           }
+
+          // macOS managed preferences (.mobileconfig deployed via MDM) override everything
+          result = mergeConfigConcatArrays(result, yield* Effect.promise(() => readManagedPreferences()))
 
           for (const [name, mode] of Object.entries(result.mode ?? {})) {
             result.agent = mergeDeep(result.agent ?? {}, {
