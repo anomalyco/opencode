@@ -1,5 +1,5 @@
 import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
-import { expect, type Locator, type Page } from "@playwright/test"
+import { expect, type Locator, type Page, type Route } from "@playwright/test"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -41,6 +41,27 @@ export async function defocus(page: Page) {
       if (el instanceof HTMLElement) el.blur()
     })
     .catch(() => undefined)
+}
+
+export async function withNoReplyPrompt<T>(page: Page, fn: () => Promise<T>) {
+  const url = "**/session/*/prompt_async"
+  const route = async (input: Route) => {
+    const body = input.request().postDataJSON()
+    await input.continue({
+      postData: JSON.stringify({ ...body, noReply: true }),
+      headers: {
+        ...input.request().headers(),
+        "content-type": "application/json",
+      },
+    })
+  }
+
+  await page.route(url, route)
+  try {
+    return await fn()
+  } finally {
+    await page.unroute(url, route)
+  }
 }
 
 async function terminalID(term: Locator) {

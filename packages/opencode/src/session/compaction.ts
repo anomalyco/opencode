@@ -190,6 +190,7 @@ export namespace SessionCompaction {
 Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next.
 The summary that you construct will be used so that another agent can read it and continue the work.
 Do not call any tools. Respond only with the summary text.
+Respond in the same language as the user's messages in the conversation.
 
 When constructing the summary, try to stick to this template:
 ---
