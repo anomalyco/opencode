@@ -344,6 +344,7 @@ export namespace MessageV2 {
     tool: z.string(),
     state: ToolState,
     metadata: z.record(z.string(), z.any()).optional(),
+    providerExecuted: z.boolean().optional(),
   }).meta({
     ref: "ToolPart",
   })

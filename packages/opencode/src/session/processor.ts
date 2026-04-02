@@ -162,6 +162,7 @@ export namespace SessionProcessor {
                 tool: value.toolName,
                 callID: value.id,
                 state: { status: "pending", input: {}, raw: "" },
+                providerExecuted: value.providerExecuted,
               } satisfies MessageV2.ToolPart)
               return
 
