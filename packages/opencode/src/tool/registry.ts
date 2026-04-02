@@ -32,6 +32,7 @@ import { pathToFileURL } from "url"
 import { Effect, Layer, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
+import { Env } from "../env"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -166,7 +167,8 @@ export namespace ToolRegistry {
           }
 
           const usePatch =
-            model.modelID.includes("gpt-") && !model.modelID.includes("oss") && !model.modelID.includes("gpt-4")
+            !!Env.get("OPENCODE_E2E_LLM_URL") ||
+            (model.modelID.includes("gpt-") && !model.modelID.includes("oss") && !model.modelID.includes("gpt-4"))
           if (tool.id === "apply_patch") return usePatch
           if (tool.id === "edit" || tool.id === "write") return !usePatch
 
