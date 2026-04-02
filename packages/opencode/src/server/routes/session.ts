@@ -360,6 +360,7 @@ export const SessionRoutes = lazy(() =>
       validator("json", Session.fork.schema.omit({ sessionID: true })),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
+        await rejectSidekick(sessionID)
         const body = c.req.valid("json")
         const result = await Session.fork({ ...body, sessionID })
         return c.json(result)
@@ -390,7 +391,9 @@ export const SessionRoutes = lazy(() =>
         }),
       ),
       async (c) => {
-        SessionPrompt.cancel(c.req.valid("param").sessionID)
+        const sessionID = c.req.valid("param").sessionID
+        await rejectSidekick(sessionID)
+        SessionPrompt.cancel(sessionID)
         return c.json(true)
       },
     )
@@ -420,6 +423,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
+        await rejectSidekick(sessionID)
         await Session.share(sessionID)
         const session = await Session.get(sessionID)
         return c.json(session)
@@ -529,6 +533,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
+        await rejectSidekick(sessionID)
         const body = c.req.valid("json")
         const session = await Session.get(sessionID)
         await SessionRevert.cleanup(session)

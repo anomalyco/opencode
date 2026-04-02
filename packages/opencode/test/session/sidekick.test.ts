@@ -236,3 +236,49 @@ describe("sidekick inject", () => {
     })
   })
 })
+
+describe("sidekick isolation guards", () => {
+  test("Session.fork rejects sidekick session", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const session = await Session.create({})
+        const sidekick = await Sidekick.ensure(session.id)
+
+        await expect(Session.fork({ sessionID: sidekick.id })).rejects.toThrow("Cannot fork a sidekick session")
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("Session.share rejects sidekick session", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const session = await Session.create({})
+        const sidekick = await Sidekick.ensure(session.id)
+
+        await expect(Session.share(sidekick.id)).rejects.toThrow("Cannot share a sidekick session")
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("Session.create rejects child of sidekick session", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const session = await Session.create({})
+        const sidekick = await Sidekick.ensure(session.id)
+
+        await expect(Session.create({ parentID: sidekick.id })).rejects.toThrow(
+          "Cannot create a child of a sidekick session",
+        )
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+})

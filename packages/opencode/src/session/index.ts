@@ -248,9 +248,9 @@ export namespace Session {
       .optional(),
     async (input) => {
       if (input?.kind === "sidekick" && !input?.parentID) throw new Error("Sidekick sessions require a parentID")
-      if (input?.kind === "sidekick" && input?.parentID) {
+      if (input?.parentID) {
         const parent = await get(input.parentID)
-        if (parent.kind === "sidekick") throw new Error("Cannot create a sidekick of a sidekick session")
+        if (parent.kind === "sidekick") throw new Error("Cannot create a child of a sidekick session")
       }
 
       return createNext({
@@ -272,6 +272,7 @@ export namespace Session {
     async (input) => {
       const original = await get(input.sessionID)
       if (!original) throw new Error("session not found")
+      if (original.kind === "sidekick") throw new Error("Cannot fork a sidekick session")
       const title = getForkedTitle(original.title)
       const session = await createNext({
         directory: Instance.directory,
@@ -374,6 +375,8 @@ export namespace Session {
   })
 
   export const share = fn(SessionID.zod, async (id) => {
+    const session = await get(id)
+    if (session.kind === "sidekick") throw new Error("Cannot share a sidekick session")
     const cfg = await Config.get()
     if (cfg.share === "disabled") {
       throw new Error("Sharing is disabled in configuration")
@@ -632,6 +635,7 @@ export namespace Session {
 
   export const remove = fn(SessionID.zod, async (sessionID) => {
     try {
+      SessionPrompt.cancel(sessionID)
       const session = await get(sessionID)
       // Query ALL children (including sidekick) directly so nothing is orphaned
       const allChildren = Database.use((db) =>
