@@ -1,18 +1,34 @@
-import { createContext, useContext, type ParentProps, Show } from "solid-js"
+import { createContext, useContext, type ParentProps, Show, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "@tui/context/theme"
 import { useTerminalDimensions } from "@opentui/solid"
-import { SplitBorder } from "../component/border"
 import { TextAttributes } from "@opentui/core"
 import z from "zod"
 import { TuiEvent } from "../event"
 
 export type ToastOptions = z.infer<typeof TuiEvent.ToastShow.properties>
 
+const VARIANT_ICONS: Record<string, string> = {
+  error: "✗",
+  success: "✓",
+  info: "ℹ",
+  warning: "⚠",
+}
+
 export function Toast() {
   const toast = useToast()
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
+
+  const icon = createMemo(() => {
+    if (!toast.currentToast) return ""
+    return VARIANT_ICONS[toast.currentToast.variant] ?? "●"
+  })
+
+  const iconColor = createMemo(() => {
+    if (!toast.currentToast) return theme.text
+    return theme[toast.currentToast.variant] ?? theme.text
+  })
 
   return (
     <Show when={toast.currentToast}>
@@ -30,14 +46,18 @@ export function Toast() {
           paddingBottom={1}
           backgroundColor={theme.backgroundPanel}
           borderColor={theme[current().variant]}
-          border={["left", "right"]}
-          customBorderChars={SplitBorder.customBorderChars}
+          border={["top", "bottom", "left", "right"]}
         >
-          <Show when={current().title}>
-            <text attributes={TextAttributes.BOLD} marginBottom={1} fg={theme.text}>
-              {current().title}
+          <box flexDirection="row" gap={1} marginBottom={1}>
+            <text fg={iconColor()} attributes={TextAttributes.BOLD}>
+              {icon()}
             </text>
-          </Show>
+            <Show when={current().title}>
+              <text attributes={TextAttributes.BOLD} fg={theme.text}>
+                {current().title}
+              </text>
+            </Show>
+          </box>
           <text fg={theme.text} wrapMode="word" width="100%">
             {current().message}
           </text>
@@ -64,7 +84,7 @@ function init() {
         setStore("currentToast", null)
       }, duration).unref()
     },
-    error: (err: any) => {
+    error: (err: unknown) => {
       if (err instanceof Error)
         return toast.show({
           variant: "error",

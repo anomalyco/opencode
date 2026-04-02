@@ -22,6 +22,11 @@ export const TuiOptions = z.object({
     .enum(["auto", "stacked"])
     .optional()
     .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+  notifications: z
+    .boolean()
+    .default(true)
+    .optional()
+    .describe("Show system notifications when sessions complete or error. Requires terminal focus-loss detection."),
 })
 
 export const TuiInfo = z

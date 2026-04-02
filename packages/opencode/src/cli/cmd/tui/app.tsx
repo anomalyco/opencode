@@ -59,6 +59,7 @@ import { TuiConfigProvider, useTuiConfig } from "./context/tui-config"
 import { TuiConfig } from "@/config/tui"
 import { createTuiApi, TuiPluginRuntime, type RouteMap } from "./plugin"
 import { FormatError, FormatUnknownError } from "@/cli/error"
+import { Notification } from "@/notification"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -816,6 +817,17 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     }
   })
 
+  sdk.event.on("session.idle", async (evt) => {
+    if (tuiConfig.notifications === false) return
+    const focused = await Notification.terminalIsFocused().catch(() => false)
+    if (focused) return
+
+    const sessionID = evt.properties.info?.id
+    const session = sessionID ? sync.data.session?.[sessionID] : undefined
+    const title = session?.title ?? sessionID ?? "Session"
+    Notification.show("opencode", `${title} completed`)
+  })
+
   sdk.event.on("session.error", (evt) => {
     const error = evt.properties.error
     if (error && typeof error === "object" && error.name === "MessageAbortedError") return
@@ -825,6 +837,12 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       variant: "error",
       message,
       duration: 5000,
+    })
+
+    void Notification.terminalIsFocused().then((focused) => {
+      if (focused) return
+      if (tuiConfig.notifications === false) return
+      Notification.show("opencode", `Error: ${message}`)
     })
   })
 
