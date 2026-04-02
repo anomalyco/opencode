@@ -1,4 +1,12 @@
-import type { AssistantMessage, Part, Provider, ReasoningPart, TextPart, ToolPart, UserMessage } from "@opencode-ai/sdk/v2"
+import type {
+  AssistantMessage,
+  Part,
+  Provider,
+  ReasoningPart,
+  TextPart,
+  ToolPart,
+  UserMessage,
+} from "@opencode-ai/sdk/v2"
 import {
   addDefaultParsers,
   type BoxRenderable,
