@@ -303,6 +303,7 @@ export function createTuiApi(input: Input): TuiHostPluginApi {
             visible={props.visible}
             disabled={props.disabled}
             onSubmit={props.onSubmit}
+            ref={props.ref}
             hint={props.hint}
             right={props.right}
             showPlaceholder={props.showPlaceholder}

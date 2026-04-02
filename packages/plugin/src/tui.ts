@@ -1,6 +1,8 @@
 import type {
+  AgentPart,
   OpencodeClient,
   Event,
+  FilePart,
   LspStatus,
   McpStatus,
   Todo,
@@ -10,6 +12,7 @@ import type {
   PermissionRequest,
   QuestionRequest,
   SessionStatus,
+  TextPart,
   Workspace,
   Config as SdkConfig,
 } from "@opencode-ai/sdk/v2"
@@ -135,12 +138,41 @@ export type TuiDialogSelectProps<Value = unknown> = {
   current?: Value
 }
 
+export type TuiPromptInfo = {
+  input: string
+  mode?: "normal" | "shell"
+  parts: (
+    | Omit<FilePart, "id" | "messageID" | "sessionID">
+    | Omit<AgentPart, "id" | "messageID" | "sessionID">
+    | (Omit<TextPart, "id" | "messageID" | "sessionID"> & {
+        source?: {
+          text: {
+            start: number
+            end: number
+            value: string
+          }
+        }
+      })
+  )[]
+}
+
+export type TuiPromptRef = {
+  focused: boolean
+  current: TuiPromptInfo
+  set(prompt: TuiPromptInfo): void
+  reset(): void
+  blur(): void
+  focus(): void
+  submit(): void
+}
+
 export type TuiPromptProps = {
   sessionID?: string
   workspaceID?: string
   visible?: boolean
   disabled?: boolean
   onSubmit?: () => void
+  ref?: (ref: TuiPromptRef | undefined) => void
   hint?: JSX.Element
   right?: JSX.Element
   showPlaceholder?: boolean
@@ -296,6 +328,7 @@ export type TuiHostSlotMap = {
   home_logo: {}
   home_prompt: {
     workspace_id?: string
+    ref?: (ref: TuiPromptRef | undefined) => void
   }
   home_prompt_right: {
     workspace_id?: string
@@ -305,6 +338,7 @@ export type TuiHostSlotMap = {
     visible?: boolean
     disabled?: boolean
     on_submit?: () => void
+    ref?: (ref: TuiPromptRef | undefined) => void
   }
   session_prompt_right: {
     session_id: string
@@ -349,7 +383,10 @@ export type TuiSlotPlugin<Slots extends Record<string, object> = {}> = Omit<Slot
 }
 
 export type TuiSlots = {
-  register: <Slots extends Record<string, object> = {}>(plugin: TuiSlotPlugin<Slots>) => string
+  register: {
+    (plugin: TuiSlotPlugin): string
+    <Slots extends Record<string, object>>(plugin: TuiSlotPlugin<Slots>): string
+  }
 }
 
 export type TuiEventBus = {

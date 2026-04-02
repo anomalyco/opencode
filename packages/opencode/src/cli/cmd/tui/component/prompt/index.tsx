@@ -42,7 +42,7 @@ export type PromptProps = {
   visible?: boolean
   disabled?: boolean
   onSubmit?: () => void
-  ref?: (ref: PromptRef) => void
+  ref?: (ref: PromptRef | undefined) => void
   hint?: JSX.Element
   right?: JSX.Element
   showPlaceholder?: boolean
@@ -436,6 +436,10 @@ export function Prompt(props: PromptProps) {
       submit()
     },
   }
+
+  onCleanup(() => {
+    props.ref?.(undefined)
+  })
 
   createEffect(() => {
     if (props.visible !== false) input?.focus()

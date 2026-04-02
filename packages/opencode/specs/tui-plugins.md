@@ -244,7 +244,7 @@ Command behavior:
 - `ui.Dialog` is the base dialog wrapper.
 - `ui.DialogAlert`, `ui.DialogConfirm`, `ui.DialogPrompt`, `ui.DialogSelect` are built-in dialog components.
 - `ui.Slot` renders host or plugin-defined slots by name from plugin JSX.
-- `ui.Prompt` renders the same prompt component used by the host app and accepts `sessionID`, `workspaceID`, and `right` for the prompt meta row's right side.
+- `ui.Prompt` renders the same prompt component used by the host app and accepts `sessionID`, `workspaceID`, `ref`, and `right` for the prompt meta row's right side.
 - `ui.toast(...)` shows a toast.
 - `ui.dialog` exposes the host dialog stack:
   - `replace(render, onClose?)`
@@ -317,9 +317,9 @@ Current host slot names:
 
 - `app`
 - `home_logo`
-- `home_prompt` with props `{ workspace_id? }`
+- `home_prompt` with props `{ workspace_id?, ref? }`
 - `home_prompt_right` with props `{ workspace_id? }`
-- `session_prompt` with props `{ session_id, visible?, disabled?, on_submit? }`
+- `session_prompt` with props `{ session_id, visible?, disabled?, on_submit?, ref? }`
 - `session_prompt_right` with props `{ session_id }`
 - `home_bottom`
 - `home_footer`
