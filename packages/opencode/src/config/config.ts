@@ -980,6 +980,16 @@ export namespace Config {
             .positive()
             .optional()
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
+          security_audit: z
+            .object({
+              vector: z.enum(["pinecone", "qdrant"]).optional(),
+              collection: z.string().optional(),
+              namespace: z.string().optional(),
+              pinecone_index: z.string().optional(),
+              qdrant_url: z.string().optional(),
+              qdrant_api_key: z.string().optional(),
+            })
+            .optional(),
         })
         .optional(),
     })

@@ -127,17 +127,23 @@ OpenCode includes an experimental local security-audit workflow with three modes
 Run from your project:
 
 ```bash
-opencode analyze --file sample.yaml --mode rag --controls data/security_controls.json --topk 3
+opencode analyze --path . --mode rag --vector qdrant --controls data/security_controls.json --topk 3
 ```
 
 Available flags:
 
-- `--file` input file to audit (required)
+- `--path` input file or directory to audit recursively (required)
 - `--mode` one of `direct|baseline|rag` (default `baseline`)
 - `--controls` controls corpus path for RAG (default `data/security_controls.json`)
 - `--topk` number of controls to retrieve (default `3`)
 - `--out` output directory for experiment logs (default `outputs/runs`)
+- `--vector` `pinecone|qdrant` override for RAG backend
+- `--collection` vector collection/index logical name
+- `--namespace` optional vector namespace
+- `--maxchars` cap loaded codebase text size
 - `--prompt`, `--model`, `--agent`, `--session` for optional control
+
+PDF files are ingested by default during recursive directory analysis.
 
 API support is also available on the session router:
 
@@ -147,10 +153,28 @@ Expected body:
 
 ```json
 {
-  "file": "sample.yaml",
+  "path": ".",
   "mode": "rag",
+  "vector": "qdrant",
   "controls": "data/security_controls.json",
   "topk": 3
+}
+```
+
+Config default provider (optional) can be set in your OpenCode config:
+
+```json
+{
+  "experimental": {
+    "security_audit": {
+      "vector": "qdrant",
+      "collection": "security_controls",
+      "namespace": "default",
+      "pinecone_index": "your-pinecone-index",
+      "qdrant_url": "http://127.0.0.1:6333",
+      "qdrant_api_key": ""
+    }
+  }
 }
 ```
 

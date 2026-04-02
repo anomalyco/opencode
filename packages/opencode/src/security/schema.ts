@@ -2,6 +2,8 @@ import z from "zod"
 
 export const SecurityMode = z.enum(["direct", "baseline", "rag"])
 export type SecurityMode = z.infer<typeof SecurityMode>
+export const SecurityVector = z.enum(["pinecone", "qdrant"])
+export type SecurityVector = z.infer<typeof SecurityVector>
 
 export const SecurityControl = z.object({
   id: z.string().min(1),
@@ -37,7 +39,8 @@ export type SecurityVerification = z.infer<typeof SecurityVerification>
 
 export const SecurityAnalyzeInput = z.object({
   sessionID: z.string().optional(),
-  file: z.string(),
+  file: z.string().optional(),
+  path: z.string().optional(),
   mode: SecurityMode.default("baseline"),
   controls: z.string().optional(),
   topk: z.number().int().positive().default(3),
@@ -45,6 +48,10 @@ export const SecurityAnalyzeInput = z.object({
   prompt: z.string().optional(),
   model: z.string().optional(),
   agent: z.string().optional(),
+  vector: SecurityVector.optional(),
+  collection: z.string().optional(),
+  namespace: z.string().optional(),
+  maxchars: z.number().int().positive().optional(),
 })
 export type SecurityAnalyzeInput = z.infer<typeof SecurityAnalyzeInput>
 
@@ -63,3 +70,5 @@ export type SecurityAnalyzeResult = z.infer<typeof SecurityAnalyzeResult>
 export const DEFAULT_TOPK = 3
 export const DEFAULT_CONTROLS_PATH = "data/security_controls.json"
 export const DEFAULT_OUT_DIR = "outputs/runs"
+export const DEFAULT_VECTOR_COLLECTION = "security_controls"
+export const DEFAULT_MAX_CHARS = 120000

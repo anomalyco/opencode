@@ -22,7 +22,7 @@ import { lazy } from "../../util/lazy"
 import { Bus } from "../../bus"
 import { NamedError } from "@opencode-ai/util/error"
 import { analyze } from "@/security/analyze"
-import { SecurityMode } from "@/security/schema"
+import { SecurityMode, SecurityVector } from "@/security/schema"
 
 const log = Log.create({ service: "server" })
 
@@ -839,7 +839,8 @@ export const SessionRoutes = lazy(() =>
       validator(
         "json",
         z.object({
-          file: z.string(),
+          file: z.string().optional(),
+          path: z.string().optional(),
           mode: SecurityMode.default("baseline"),
           controls: z.string().optional(),
           topk: z.coerce.number().int().positive().default(3),
@@ -847,6 +848,10 @@ export const SessionRoutes = lazy(() =>
           prompt: z.string().optional(),
           model: z.string().optional(),
           agent: z.string().optional(),
+          vector: SecurityVector.optional(),
+          collection: z.string().optional(),
+          namespace: z.string().optional(),
+          maxchars: z.coerce.number().int().positive().optional(),
         }),
       ),
       async (c) => {

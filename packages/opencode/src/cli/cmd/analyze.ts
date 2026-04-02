@@ -10,11 +10,11 @@ export const AnalyzeCommand = cmd({
   describe: "generate a structured security audit report",
   builder: (yargs: Argv) => {
     return yargs
-      .option("file", {
+      .option("path", {
         type: "string",
-        alias: ["f"],
+        alias: ["f", "file"],
         demandOption: true,
-        describe: "path to file for audit analysis",
+        describe: "path to file or directory for audit analysis",
       })
       .option("mode", {
         type: "string",
@@ -53,11 +53,28 @@ export const AnalyzeCommand = cmd({
         type: "string",
         describe: "existing session id for baseline or rag",
       })
+      .option("vector", {
+        type: "string",
+        choices: ["pinecone", "qdrant"],
+        describe: "vector backend override for rag mode",
+      })
+      .option("collection", {
+        type: "string",
+        describe: "vector collection/index namespace name",
+      })
+      .option("namespace", {
+        type: "string",
+        describe: "optional vector namespace",
+      })
+      .option("maxchars", {
+        type: "number",
+        describe: "max chars loaded from file/codebase",
+      })
   },
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
       const result = await analyze({
-        file: String(args.file),
+        path: String(args.path),
         mode: args.mode as "direct" | "baseline" | "rag",
         controls: args.controls ? String(args.controls) : undefined,
         topk: Number(args.topk),
@@ -66,6 +83,10 @@ export const AnalyzeCommand = cmd({
         model: args.model ? String(args.model) : undefined,
         agent: args.agent ? String(args.agent) : undefined,
         sessionID: args.session ? String(args.session) : undefined,
+        vector: args.vector as "pinecone" | "qdrant" | undefined,
+        collection: args.collection ? String(args.collection) : undefined,
+        namespace: args.namespace ? String(args.namespace) : undefined,
+        maxchars: typeof args.maxchars === "number" ? Number(args.maxchars) : undefined,
       })
 
       UI.println(`mode: ${result.mode}`)
