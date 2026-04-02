@@ -475,9 +475,8 @@ export namespace Snapshot {
                     const dec = new TextDecoder()
                     let i = 0
                     for (const ref of refs) {
-                      let end = i
-                      // 10 is "\n".
-                      while (stdout[end] !== 10) end++
+                      let end = i                    
+                      while (stdout[end] !== 10) end++ // 10 is "\n".
                       const head = dec.decode(stdout.slice(i, end))
                       i = end + 1
                       if (head.endsWith(" missing")) {
@@ -533,8 +532,7 @@ export namespace Snapshot {
                   refs.push(`${from}:${file}`, `${to}:${file}`)
                 }
 
-                const text = yield* catFile(refs).pipe(
-                )
+                const text = yield* catFile(refs)
 
                 for (const line of lines) {
                   if (!line) continue
