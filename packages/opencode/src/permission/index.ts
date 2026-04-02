@@ -193,7 +193,7 @@ export namespace Permission {
             },
             { status: permissionStatus },
           ),
-        ).pipe(Effect.option)
+        ).pipe(Effect.timeout(5000), Effect.option)
         if (hookResult._tag === "Some") {
           permissionStatus = hookResult.value.status
         }
