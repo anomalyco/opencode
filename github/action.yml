@@ -38,6 +38,16 @@ inputs:
     description: "Base URL for OIDC token exchange API. Only required when running a custom GitHub App install. Defaults to https://api.opencode.ai"
     required: false
 
+  print_logs:
+    description: "Print opencode serve logs to stderr (shows agent thoughts in workflow logs)"
+    required: false
+    default: "false"
+
+  log_level:
+    description: "Log level for opencode serve (DEBUG, INFO, WARN, ERROR)"
+    required: false
+    default: "INFO"
+
 runs:
   using: "composite"
   steps:
@@ -77,3 +87,5 @@ runs:
         MENTIONS: ${{ inputs.mentions }}
         VARIANT: ${{ inputs.variant }}
         OIDC_BASE_URL: ${{ inputs.oidc_base_url }}
+        PRINT_LOGS: ${{ inputs.print_logs }}
+        LOG_LEVEL: ${{ inputs.log_level }}

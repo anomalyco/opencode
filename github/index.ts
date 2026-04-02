@@ -232,7 +232,14 @@ function createOpencode() {
   const host = "127.0.0.1"
   const port = 4096
   const url = `http://${host}:${port}`
-  const proc = spawn(`opencode`, [`serve`, `--hostname=${host}`, `--port=${port}`])
+  const printLogs = process.env["PRINT_LOGS"] === "true"
+  const logLevel = process.env["LOG_LEVEL"] || "INFO"
+
+  const args = [`serve`, `--hostname=${host}`, `--port=${port}`]
+  if (printLogs) args.push(`--print-logs`)
+  args.push(`--log-level=${logLevel}`)
+
+  const proc = spawn(`opencode`, args)
   const client = createOpencodeClient({ baseUrl: url })
 
   return {
