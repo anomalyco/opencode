@@ -61,7 +61,7 @@ import { DialogConfirm } from "@tui/ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
-import { Sidebar } from "./sidebar"
+import { Sidebar, setSidebarTab, sidebarTab } from "./sidebar"
 import { Flag } from "@/flag/flag"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
@@ -575,6 +575,26 @@ export function Session() {
           setSidebar(() => (isVisible ? "hide" : "auto"))
           setSidebarOpen(!isVisible)
         })
+        dialog.clear()
+      },
+    },
+    {
+      title: sidebarTab() === "sidekick" ? "Close sidekick" : "Open sidekick",
+      value: "session.sidekick.toggle",
+      keybind: "ctrl+shift+k",
+      category: "Session",
+      onSelect: (dialog) => {
+        if (sidebarTab() === "sidekick") {
+          setSidebarTab("plugins")
+        } else {
+          setSidebarTab("sidekick")
+          if (!sidebarVisible()) {
+            batch(() => {
+              setSidebar(() => "auto")
+              setSidebarOpen(true)
+            })
+          }
+        }
         dialog.clear()
       },
     },
