@@ -31,6 +31,7 @@ import type { CommandChild } from "./cli"
 import { installCli, syncCli } from "./cli"
 import { CHANNEL, UPDATER_ENABLED } from "./constants"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand, sendSqliteMigrationProgress } from "./ipc"
+import { projectLink } from "./links"
 import { initLogging } from "./logging"
 import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
@@ -78,6 +79,15 @@ function setupApp() {
     event.preventDefault()
     logger.log("deep link received via open-url", { url })
     emitDeepLinks([url])
+  })
+
+  app.on("open-file", (event: Event, path: string) => {
+    event.preventDefault()
+    const link = projectLink(path)
+    if (!link) return
+    logger.log("project received via open-file", { path })
+    emitDeepLinks([link])
+    focusMainWindow()
   })
 
   app.on("before-quit", () => {

@@ -53,6 +53,16 @@ const getBase = (): Configuration => ({
     entitlements: "resources/entitlements.plist",
     entitlementsInherit: "resources/entitlements.plist",
     notarize: true,
+    extendInfo: {
+      CFBundleDocumentTypes: [
+        {
+          CFBundleTypeName: "Folder",
+          CFBundleTypeRole: "Editor",
+          LSHandlerRank: "Owner",
+          LSItemContentTypes: ["public.folder"],
+        },
+      ],
+    },
     target: ["dmg", "zip"],
   },
   dmg: {
