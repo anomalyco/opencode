@@ -176,6 +176,49 @@ export namespace SessionCompaction {
           }
         }
 
+        // When compaction is triggered by a context overflow (413), aggressively
+        // strip tool outputs from messages *before* sending them to the compaction
+        // model. Without this the compaction call itself would exceed the context
+        // limit and fail, leaving the user stuck with no way to recover — not even
+        // /compact would work because it also needs an API call.
+        if (input.overflow) {
+          log.info("overflow compaction: pruning tool outputs before compaction call")
+          const OVERFLOW_OUTPUT_BUDGET = 500 // chars to keep per tool output as a hint
+          const OVERFLOW_TEXT_BUDGET = 2000 // chars to keep per synthetic text part
+          for (const m of messages) {
+            for (const part of m.parts) {
+              if (part.type === "tool" && part.state.status === "completed") {
+                const output = part.state.output
+                if (typeof output === "string" && output.length > OVERFLOW_OUTPUT_BUDGET) {
+                  part.state.output =
+                    output.slice(0, OVERFLOW_OUTPUT_BUDGET) +
+                    `\n\n[... truncated ${output.length - OVERFLOW_OUTPUT_BUDGET} chars for compaction]`
+                }
+              }
+              // Also truncate large synthetic text parts (e.g. file contents injected
+              // via @ references) which can be massive and blow up the context.
+              if (part.type === "text" && "synthetic" in part && part.synthetic) {
+                if (part.text.length > OVERFLOW_TEXT_BUDGET) {
+                  part.text =
+                    part.text.slice(0, OVERFLOW_TEXT_BUDGET) +
+                    `\n\n[... truncated ${part.text.length - OVERFLOW_TEXT_BUDGET} chars for compaction]`
+                }
+              }
+            }
+          }
+          // If the conversation is very long, also drop older messages keeping
+          // only the most recent turns. The compaction model only needs enough
+          // context to produce a useful summary — it doesn't need every message.
+          const OVERFLOW_MAX_MESSAGES = 40
+          if (messages.length > OVERFLOW_MAX_MESSAGES) {
+            log.info("overflow compaction: trimming old messages", {
+              before: messages.length,
+              after: OVERFLOW_MAX_MESSAGES,
+            })
+            messages = messages.slice(-OVERFLOW_MAX_MESSAGES)
+          }
+        }
+
         const agent = yield* agents.get("compaction")
         const model = agent.model
           ? yield* provider.getModel(agent.model.providerID, agent.model.modelID)
