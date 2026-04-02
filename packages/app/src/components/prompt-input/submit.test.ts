@@ -20,6 +20,8 @@ const storedSessions: Record<string, Array<{ id: string; title?: string }>> = {}
 const promoted: Array<{ directory: string; sessionID: string }> = []
 const sentShell: string[] = []
 const syncedDirectories: string[] = []
+const clearedTodos: Array<{ sessionID: string; dir: string }> = []
+const localTodos: Array<{ sessionID: string; dir: string }> = []
 
 let params: { id?: string } = {}
 let selected = "/repo/worktree-a"
@@ -164,12 +166,22 @@ beforeAll(async () => {
 
   mock.module("@/context/global-sync", () => ({
     useGlobalSync: () => ({
+      todo: {
+        set(sessionID: string, todos: unknown[] | undefined) {
+          if (todos?.length) return
+          clearedTodos.push({ sessionID, dir: "global" })
+        },
+      },
       child: (directory: string) => {
         syncedDirectories.push(directory)
         storedSessions[directory] ??= []
         return [
           { session: storedSessions[directory] },
           (...args: unknown[]) => {
+            if (args[0] === "todo" && args[2] instanceof Array && args[2].length === 0) {
+              localTodos.push({ sessionID: args[1] as string, dir: directory })
+              return
+            }
             if (args[0] !== "session") return
             const next = args[1]
             if (typeof next === "function") {
@@ -211,6 +223,8 @@ beforeEach(() => {
   params = {}
   sentShell.length = 0
   syncedDirectories.length = 0
+  clearedTodos.length = 0
+  localTodos.length = 0
   selected = "/repo/worktree-a"
   variant = undefined
   for (const key of Object.keys(storedSessions)) delete storedSessions[key]
@@ -246,12 +260,26 @@ describe("prompt submit worktree selection", () => {
     expect(createdClients).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
     expect(createdSessions).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
     expect(sentShell).toEqual(["/repo/worktree-a", "/repo/worktree-b"])
-    expect(syncedDirectories).toEqual(["/repo/worktree-a", "/repo/worktree-a", "/repo/worktree-b", "/repo/worktree-b"])
+    expect(syncedDirectories).toEqual([
+      "/repo/worktree-a",
+      "/repo/worktree-a",
+      "/repo/worktree-a",
+      "/repo/worktree-b",
+      "/repo/worktree-b",
+      "/repo/worktree-b",
+    ])
     expect(promoted).toEqual([
       { directory: "/repo/worktree-a", sessionID: "session-1" },
       { directory: "/repo/worktree-b", sessionID: "session-2" },
     ])
-    expect(syncedDirectories).toEqual(["/repo/worktree-a", "/repo/worktree-a", "/repo/worktree-b", "/repo/worktree-b"])
+    expect(syncedDirectories).toEqual([
+      "/repo/worktree-a",
+      "/repo/worktree-a",
+      "/repo/worktree-a",
+      "/repo/worktree-b",
+      "/repo/worktree-b",
+      "/repo/worktree-b",
+    ])
   })
 
   test("applies auto-accept to newly created sessions", async () => {
@@ -314,6 +342,34 @@ describe("prompt submit worktree selection", () => {
         variant: "high",
       },
     })
+  })
+
+  test("clears stale todos before sending a followup prompt", async () => {
+    params = { id: "session-1" }
+
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    await submit.handleSubmit(event)
+
+    expect(clearedTodos).toEqual([{ sessionID: "session-1", dir: "global" }])
+    expect(localTodos).toEqual([{ sessionID: "session-1", dir: "/repo/main" }])
   })
 
   test("seeds new sessions before optimistic prompts are added", async () => {

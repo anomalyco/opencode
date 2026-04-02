@@ -217,13 +217,17 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     return language.t("common.requestFailed")
   }
 
+  const clearTodo = (sessionID: string, dir = sdk.directory) => {
+    globalSync.todo.set(sessionID, [])
+    const [, setStore] = globalSync.child(dir)
+    setStore("todo", sessionID, [])
+  }
+
   const abort = async () => {
     const sessionID = params.id
     if (!sessionID) return Promise.resolve()
 
-    globalSync.todo.set(sessionID, [])
-    const [, setStore] = globalSync.child(sdk.directory)
-    setStore("todo", sessionID, [])
+    clearTodo(sessionID)
 
     input.onAbort?.()
 
@@ -427,6 +431,8 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
 
     input.onSubmit?.()
+
+    clearTodo(session.id, sessionDirectory)
 
     if (mode === "shell") {
       clearInput()
