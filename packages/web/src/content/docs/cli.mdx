@@ -352,6 +352,65 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 ---
 
+### shell
+
+Generate a shell command from a natural language description. This is useful when you know what you want to do but can't remember the exact command syntax.
+
+```bash
+opencode shell <prompt>
+```
+
+By default, the command runs in interactive mode. The LLM generates a shell command and prompts you to confirm before executing:
+
+```bash frame="none"
+opencode shell "find all json files in current folder"
+# -> find . -type f -name "*.json"
+# -> [E]xecute, [D]escribe, [C]orrect, [A]bort:
+```
+
+#### Interactive Options
+
+When prompted, you can choose:
+
+- **[E]xecute** - Run the command immediately
+- **[D]escribe** - Ask the LLM to explain what the command does
+- **[C]orrect** - Provide feedback to refine the command (can be used multiple times)
+- **[A]bort** - Exit without running
+
+#### Flags
+
+| Flag     | Short | Description                                       |
+| -------- | ----- | ------------------------------------------------- |
+| `--model`| `-m`  | Model to use in the form of provider/model        |
+| `--yes`  | `-y`  | Execute immediately without confirmation          |
+
+#### Examples
+
+Interactive refinement (default mode):
+
+```bash frame="none"
+opencode shell "list large files"
+# -> find . -type f -size +10M
+# -> [E]xecute, [D]escribe, [C]orrect, [A]bort: c
+# -> Correction: only in the downloads folder
+# -> find ~/Downloads -type f -size +10M
+# -> [E]xecute, [D]escribe, [C]orrect, [A]bort: e
+```
+
+Skip confirmation and execute immediately:
+
+```bash
+opencode shell "count lines in all python files" --yes
+```
+
+Use a specific model:
+
+```bash
+opencode shell "compress all log files older than 7 days" --model anthropic/claude-sonnet-4-6
+```
+
+---
+
 ### serve
 
 Start a headless OpenCode server for API access. Check out the [server docs](/docs/server) for the full HTTP interface.

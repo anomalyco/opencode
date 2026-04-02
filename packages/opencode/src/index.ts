@@ -35,6 +35,7 @@ import { JsonMigration } from "./storage/json-migration"
 import { Database } from "./storage/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
+import { ShellCommand } from "./cli/cmd/shell"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -167,6 +168,7 @@ const cli = yargs(args)
   .command(SessionCommand)
   .command(PluginCommand)
   .command(DbCommand)
+  .command(ShellCommand)
   .fail((msg, err) => {
     if (
       msg?.startsWith("Unknown argument") ||
