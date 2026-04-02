@@ -22,7 +22,7 @@ const FILES = [
   "CONTEXT.md", // deprecated
 ]
 
-function globals() {
+function globalFiles() {
   const files = []
   if (Flag.OPENCODE_CONFIG_DIR) {
     files.push(path.join(Flag.OPENCODE_CONFIG_DIR, "AGENTS.md"))
@@ -131,7 +131,7 @@ export namespace Instruction {
             }
           }
 
-          for (const file of globals()) {
+          for (const file of globalFiles()) {
             if (yield* fs.existsSafe(file)) {
               paths.add(path.resolve(file))
               break
