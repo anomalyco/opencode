@@ -32,24 +32,12 @@ export namespace Todo {
     readonly get: (sessionID: SessionID) => Effect.Effect<Info[]>
   }
 
-  const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
-    Effect.sync(() => Database.use(fn))
-
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/SessionTodo") {}
 
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const list = Effect.fnUntraced(function* (sessionID: SessionID) {
-        const rows = yield* db((db) =>
-          db.select().from(TodoTable).where(eq(TodoTable.session_id, sessionID)).orderBy(asc(TodoTable.position)).all(),
-        )
-        return rows.map((row) => ({
-          content: row.content,
-          status: row.status,
-          priority: row.priority,
-        }))
-      })
+      const bus = yield* Bus.Service
 
       const update = Effect.fn("Todo.update")(function* (input: { sessionID: SessionID; todos: Info[] }) {
         yield* Effect.sync(() =>
@@ -69,20 +57,33 @@ export namespace Todo {
               .run()
           }),
         )
-        yield* Effect.sync(() => {
-          void Bus.publish(Event.Updated, input)
-        })
+        yield* bus.publish(Event.Updated, input)
       })
 
       const get = Effect.fn("Todo.get")(function* (sessionID: SessionID) {
-        return yield* list(sessionID)
+        const rows = yield* Effect.sync(() =>
+          Database.use((db) =>
+            db
+              .select()
+              .from(TodoTable)
+              .where(eq(TodoTable.session_id, sessionID))
+              .orderBy(asc(TodoTable.position))
+              .all(),
+          ),
+        )
+        return rows.map((row) => ({
+          content: row.content,
+          status: row.status,
+          priority: row.priority,
+        }))
       })
 
       return Service.of({ update, get })
     }),
   )
 
-  const { runPromise } = makeRuntime(Service, layer)
+  const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export async function update(input: { sessionID: SessionID; todos: Info[] }) {
     return runPromise((svc) => svc.update(input))
