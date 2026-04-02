@@ -277,6 +277,9 @@ export const dict = {
   "prompt.attachment.remove": "Удалить вложение",
   "prompt.action.send": "Отправить",
   "prompt.action.stop": "Остановить",
+  "prompt.action.startVoice": "Начать голосовой ввод",
+  "prompt.action.stopVoice": "Остановить запись",
+  "prompt.action.voiceNotSupported": "Распознавание речи не поддерживается",
 
   "prompt.toast.pasteUnsupported.title": "Неподдерживаемое вложение",
   "prompt.toast.pasteUnsupported.description": "Здесь можно прикрепить только изображения, PDF или текстовые файлы.",

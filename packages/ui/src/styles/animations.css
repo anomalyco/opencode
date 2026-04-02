@@ -33,6 +33,23 @@
   }
 }
 
+@keyframes mic-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.15);
+  }
+}
+
+[data-recording="true"] {
+  animation: mic-pulse 1s ease-in-out infinite;
+  color: rgb(239 68 68);
+}
+
 @keyframes fadeUp {
   from {
     opacity: 0;

@@ -277,6 +277,9 @@ export const dict = {
   "prompt.attachment.remove": "เอาไฟล์แนบออก",
   "prompt.action.send": "ส่ง",
   "prompt.action.stop": "หยุด",
+  "prompt.action.startVoice": "เริ่มป้อนข้อมูลด้วยเสียง",
+  "prompt.action.stopVoice": "หยุดบันทึกเสียง",
+  "prompt.action.voiceNotSupported": "ไม่รองรับการรู้จำเสียง",
 
   "prompt.toast.pasteUnsupported.title": "ไฟล์แนบที่ไม่รองรับ",
   "prompt.toast.pasteUnsupported.description": "แนบได้เฉพาะรูปภาพ, PDF หรือไฟล์ข้อความเท่านั้น",

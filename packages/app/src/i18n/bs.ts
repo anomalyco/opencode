@@ -278,6 +278,9 @@ export const dict = {
   "prompt.attachment.remove": "Ukloni prilog",
   "prompt.action.send": "Pošalji",
   "prompt.action.stop": "Zaustavi",
+  "prompt.action.startVoice": "Pokreni glasovni unos",
+  "prompt.action.stopVoice": "Zaustavi snimanje",
+  "prompt.action.voiceNotSupported": "Prepoznavanje govora nije podržano",
 
   "prompt.toast.pasteUnsupported.title": "Nepodržan prilog",
   "prompt.toast.pasteUnsupported.description": "Ovdje se mogu priložiti samo slike, PDF-ovi ili tekstualne datoteke.",

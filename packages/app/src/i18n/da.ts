@@ -276,6 +276,9 @@ export const dict = {
   "prompt.attachment.remove": "Fjern vedhæftning",
   "prompt.action.send": "Send",
   "prompt.action.stop": "Stop",
+  "prompt.action.startVoice": "Start stemmeinput",
+  "prompt.action.stopVoice": "Stop optagelse",
+  "prompt.action.voiceNotSupported": "Talegenkendelse understøttes ikke",
 
   "prompt.toast.pasteUnsupported.title": "Ikke understøttet vedhæftning",
   "prompt.toast.pasteUnsupported.description": "Kun billeder, PDF'er eller tekstfiler kan vedhæftes her.",
