@@ -3,12 +3,10 @@ const ENABLE_PROCESSED_INPUT = 0x0001
 
 let mod: typeof import("bun:ffi") | undefined
 type K32 = {
-  symbols: {
-    GetStdHandle: (n: number) => bigint | number
-    GetConsoleMode: (h: bigint | number, mode: unknown) => number
-    SetConsoleMode: (h: bigint | number, mode: number) => number
-    FlushConsoleInputBuffer: (h: bigint | number) => number
-  }
+  GetStdHandle: (n: number) => bigint | number
+  GetConsoleMode: (h: bigint | number, mode: unknown) => number
+  SetConsoleMode: (h: bigint | number, mode: number) => number
+  FlushConsoleInputBuffer: (h: bigint | number) => number
 }
 
 let k32: K32 | undefined
@@ -21,12 +19,12 @@ export async function win32Init() {
   if (ready !== undefined) return ready
   try {
     mod = await import("bun:ffi")
-    k32 = mod.dlopen("kernel32.dll", {
+    k32 = (mod.dlopen("kernel32.dll", {
       GetStdHandle: { args: ["i32"], returns: "ptr" },
       GetConsoleMode: { args: ["ptr", "ptr"], returns: "i32" },
       SetConsoleMode: { args: ["ptr", "u32"], returns: "i32" },
       FlushConsoleInputBuffer: { args: ["ptr"], returns: "i32" },
-    }) as K32
+    }).symbols as unknown as K32
     ready = true
     return true
   } catch {
@@ -44,13 +42,14 @@ export function win32DisableProcessedInput() {
   if (!k32 || !mod) return
   const ptr = mod.ptr as Ptr
 
-  const handle = k32.symbols.GetStdHandle(STD_INPUT_HANDLE)
+  const lib = k32
+  const handle = lib.GetStdHandle(STD_INPUT_HANDLE)
   const buf = new Uint32Array(1)
-  if (k32.symbols.GetConsoleMode(handle, ptr(buf)) === 0) return
+  if (lib.GetConsoleMode(handle, ptr(buf)) === 0) return
 
   const mode = buf[0]!
   if ((mode & ENABLE_PROCESSED_INPUT) === 0) return
-  k32.symbols.SetConsoleMode(handle, mode & ~ENABLE_PROCESSED_INPUT)
+  lib.SetConsoleMode(handle, mode & ~ENABLE_PROCESSED_INPUT)
 }
 
 /**
@@ -61,8 +60,9 @@ export function win32FlushInputBuffer() {
   if (!process.stdin.isTTY) return
   if (!k32) return
 
-  const handle = k32.symbols.GetStdHandle(STD_INPUT_HANDLE)
-  k32.symbols.FlushConsoleInputBuffer(handle)
+  const lib = k32
+  const handle = lib.GetStdHandle(STD_INPUT_HANDLE)
+  lib.FlushConsoleInputBuffer(handle)
 }
 
 let unhook: (() => void) | undefined
@@ -84,21 +84,22 @@ export function win32InstallCtrlCGuard() {
   if (!k32 || !mod) return
   if (unhook) return unhook
   const ptr = mod.ptr as Ptr
+  const lib = k32
 
   const stdin = process.stdin as any
   const original = stdin.setRawMode
 
-  const handle = k32.symbols.GetStdHandle(STD_INPUT_HANDLE)
+  const handle = lib.GetStdHandle(STD_INPUT_HANDLE)
   const buf = new Uint32Array(1)
 
-  if (k32.symbols.GetConsoleMode(handle, ptr(buf)) === 0) return
+  if (lib.GetConsoleMode(handle, ptr(buf)) === 0) return
   const initial = buf[0]!
 
   const enforce = () => {
-    if (k32.symbols.GetConsoleMode(handle, ptr(buf)) === 0) return
+    if (lib.GetConsoleMode(handle, ptr(buf)) === 0) return
     const mode = buf[0]!
     if ((mode & ENABLE_PROCESSED_INPUT) === 0) return
-    k32.symbols.SetConsoleMode(handle, mode & ~ENABLE_PROCESSED_INPUT)
+    lib.SetConsoleMode(handle, mode & ~ENABLE_PROCESSED_INPUT)
   }
 
   // Some runtimes can re-apply console modes on the next tick; enforce twice.
@@ -135,7 +136,7 @@ export function win32InstallCtrlCGuard() {
       stdin.setRawMode = original
     }
 
-    k32.symbols.SetConsoleMode(handle, initial)
+    lib.SetConsoleMode(handle, initial)
     unhook = undefined
   }
 
