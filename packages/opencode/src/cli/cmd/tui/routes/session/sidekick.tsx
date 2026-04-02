@@ -19,14 +19,24 @@ export function SidekickChat(props: { parentID: string }) {
   const base = () => `${sdk.url}/session/${props.parentID}`
 
   async function ensure() {
-    const res = await (sdk.fetch ?? fetch)(`${base()}/sidekick`, {
-      method: "GET",
-      headers: { "Content-Type": "application/json" },
-    })
-    const session = await res.json()
-    setSidekickID(session.id)
-    await sync.session.sync(session.id)
-    return session.id
+    try {
+      const res = await (sdk.fetch ?? fetch)(`${base()}/sidekick`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      })
+      if (!res.ok) {
+        const msg = await res.text().catch(() => res.statusText)
+        setError(msg || `Failed to create sidekick (${res.status})`)
+        return undefined
+      }
+      const session = await res.json()
+      setSidekickID(session.id)
+      await sync.session.sync(session.id)
+      return session.id as string
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to create sidekick")
+      return undefined
+    }
   }
 
   onMount(() => {
@@ -53,6 +63,7 @@ export function SidekickChat(props: { parentID: string }) {
 
     try {
       const id = sidekickID() ?? (await ensure())
+      if (!id) return
 
       const model = local.model.current()
       const body: Record<string, unknown> = { text }

@@ -220,6 +220,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             setStore("session", result.index, reconcile(event.properties.info))
             break
           }
+          // Don't insert sidekick sessions into the global session list
+          if (event.properties.info.kind === "sidekick") break
           setStore(
             "session",
             produce((draft) => {
