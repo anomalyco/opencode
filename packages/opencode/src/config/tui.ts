@@ -72,7 +72,7 @@ export namespace TuiConfig {
     let projectFiles = Flag.OPENCODE_DISABLE_PROJECT_CONFIG
       ? []
       : await ConfigPaths.projectFiles("tui", Instance.directory, Instance.worktree)
-    const directories = await ConfigPaths.directories(Instance.directory, Instance.worktree)
+    const directories = (await ConfigPaths.directories(Instance.directory, Instance.worktree)).map((item) => item.path)
     const custom = customPath()
     const managed = Config.managedConfigDir()
     await migrateTuiConfig({ directories, custom, managed })

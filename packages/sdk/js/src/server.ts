@@ -1,12 +1,15 @@
 import { spawn } from "node:child_process"
 import { type Config } from "./gen/types.gen.js"
 
+export type SettingSource = "global" | "project" | "remote" | "managed"
+
 export type ServerOptions = {
   hostname?: string
   port?: number
   signal?: AbortSignal
   timeout?: number
   config?: Config
+  settingSources?: SettingSource[]
 }
 
 export type TuiOptions = {
@@ -16,6 +19,7 @@ export type TuiOptions = {
   agent?: string
   signal?: AbortSignal
   config?: Config
+  settingSources?: SettingSource[]
 }
 
 export async function createOpencodeServer(options?: ServerOptions) {
@@ -36,6 +40,9 @@ export async function createOpencodeServer(options?: ServerOptions) {
     env: {
       ...process.env,
       OPENCODE_CONFIG_CONTENT: JSON.stringify(options.config ?? {}),
+      ...(options.settingSources !== undefined && {
+        OPENCODE_SETTINGS_SOURCES: options.settingSources.join(","),
+      }),
     },
   })
 
@@ -112,6 +119,9 @@ export function createOpencodeTui(options?: TuiOptions) {
     env: {
       ...process.env,
       OPENCODE_CONFIG_CONTENT: JSON.stringify(options?.config ?? {}),
+      ...(options?.settingSources !== undefined && {
+        OPENCODE_SETTINGS_SOURCES: options.settingSources.join(","),
+      }),
     },
   })
 

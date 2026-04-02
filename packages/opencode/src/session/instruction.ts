@@ -22,18 +22,6 @@ const FILES = [
   "CONTEXT.md", // deprecated
 ]
 
-function globalFiles() {
-  const files = []
-  if (Flag.OPENCODE_CONFIG_DIR) {
-    files.push(path.join(Flag.OPENCODE_CONFIG_DIR, "AGENTS.md"))
-  }
-  files.push(path.join(Global.Path.config, "AGENTS.md"))
-  if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT) {
-    files.push(path.join(os.homedir(), ".claude", "CLAUDE.md"))
-  }
-  return files
-}
-
 function extract(messages: MessageV2.WithParts[]) {
   const paths = new Set<string>()
   for (const msg of messages) {
@@ -122,9 +110,11 @@ export namespace Instruction {
         const systemPaths = Effect.fn("Instruction.systemPaths")(function* () {
           const config = yield* cfg.get()
           const paths = new Set<string>()
+          const raw = Flag.OPENCODE_SETTINGS_SOURCES
+          const sources = raw === undefined ? undefined : raw === "" ? ([] as string[]) : raw.split(",")
 
           // The first project-level match wins so we don't stack AGENTS.md/CLAUDE.md from every ancestor.
-          if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+          if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG && (!sources || sources.includes("project"))) {
             for (const file of FILES) {
               const matches = yield* fs.findUp(file, Instance.directory, Instance.worktree)
               if (matches.length > 0) {
@@ -134,10 +124,25 @@ export namespace Instruction {
             }
           }
 
-          for (const file of globalFiles()) {
+          let found = false
+          if (Flag.OPENCODE_CONFIG_DIR) {
+            const file = path.join(Flag.OPENCODE_CONFIG_DIR, "AGENTS.md")
             if (yield* fs.existsSafe(file)) {
               paths.add(path.resolve(file))
-              break
+              found = true
+            }
+          }
+          if (!found && (!sources || sources.includes("global"))) {
+            const file = path.join(Global.Path.config, "AGENTS.md")
+            if (yield* fs.existsSafe(file)) {
+              paths.add(path.resolve(file))
+              found = true
+            }
+          }
+          if (!found && (!sources || sources.includes("global")) && !Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT) {
+            const file = path.join(os.homedir(), ".claude", "CLAUDE.md")
+            if (yield* fs.existsSafe(file)) {
+              paths.add(path.resolve(file))
             }
           }
 

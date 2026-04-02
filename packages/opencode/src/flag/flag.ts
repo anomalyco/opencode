@@ -19,6 +19,7 @@ export namespace Flag {
   export declare const OPENCODE_CONFIG_DIR: string | undefined
   export declare const OPENCODE_PLUGIN_META_FILE: string | undefined
   export const OPENCODE_CONFIG_CONTENT = process.env["OPENCODE_CONFIG_CONTENT"]
+  export declare const OPENCODE_SETTINGS_SOURCES: string | undefined
   export const OPENCODE_DISABLE_AUTOUPDATE = truthy("OPENCODE_DISABLE_AUTOUPDATE")
   export const OPENCODE_ALWAYS_NOTIFY_UPDATE = truthy("OPENCODE_ALWAYS_NOTIFY_UPDATE")
   export const OPENCODE_DISABLE_PRUNE = truthy("OPENCODE_DISABLE_PRUNE")
@@ -148,6 +149,17 @@ Object.defineProperty(Flag, "OPENCODE_PLUGIN_META_FILE", {
 Object.defineProperty(Flag, "OPENCODE_CLIENT", {
   get() {
     return process.env["OPENCODE_CLIENT"] ?? "cli"
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+// Dynamic getter for OPENCODE_SETTINGS_SOURCES
+// This must be evaluated at access time, not module load time,
+// because tests and external tooling set this env var at runtime
+Object.defineProperty(Flag, "OPENCODE_SETTINGS_SOURCES", {
+  get() {
+    return process.env["OPENCODE_SETTINGS_SOURCES"]
   },
   enumerable: true,
   configurable: false,

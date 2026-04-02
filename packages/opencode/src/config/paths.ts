@@ -14,24 +14,28 @@ export namespace ConfigPaths {
 
   export async function directories(directory: string, worktree: string) {
     return [
-      Global.Path.config,
+      { path: Global.Path.config, source: "global" as const },
       ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
-        ? await Array.fromAsync(
-            Filesystem.up({
-              targets: [".opencode"],
-              start: directory,
-              stop: worktree,
-            }),
-          )
+        ? (
+            await Array.fromAsync(
+              Filesystem.up({
+                targets: [".opencode"],
+                start: directory,
+                stop: worktree,
+              }),
+            )
+          ).map((item) => ({ path: item, source: "project" as const }))
         : []),
-      ...(await Array.fromAsync(
-        Filesystem.up({
-          targets: [".opencode"],
-          start: Global.Path.home,
-          stop: Global.Path.home,
-        }),
-      )),
-      ...(Flag.OPENCODE_CONFIG_DIR ? [Flag.OPENCODE_CONFIG_DIR] : []),
+      ...(
+        await Array.fromAsync(
+          Filesystem.up({
+            targets: [".opencode"],
+            start: Global.Path.home,
+            stop: Global.Path.home,
+          }),
+        )
+      ).map((item) => ({ path: item, source: "global" as const })),
+      ...(Flag.OPENCODE_CONFIG_DIR ? [{ path: Flag.OPENCODE_CONFIG_DIR, source: "always" as const }] : []),
     ]
   }
 

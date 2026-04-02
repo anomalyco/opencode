@@ -2346,3 +2346,280 @@ test("parseManagedPlist handles empty config", async () => {
   )
   expect(config.$schema).toBe("https://opencode.ai/config.json")
 })
+
+describe("OPENCODE_SETTINGS_SOURCES", () => {
+  let originalSources: string | undefined
+  let originalConfigDir: string | undefined
+  let originalConfigContent: string | undefined
+  let originalDisableProject: string | undefined
+  let originalGlobalConfig: string
+
+  beforeEach(() => {
+    originalSources = process.env["OPENCODE_SETTINGS_SOURCES"]
+    originalConfigDir = process.env["OPENCODE_CONFIG_DIR"]
+    originalConfigContent = process.env["OPENCODE_CONFIG_CONTENT"]
+    originalDisableProject = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+    originalGlobalConfig = Global.Path.config
+  })
+
+  afterEach(async () => {
+    if (originalSources === undefined) delete process.env["OPENCODE_SETTINGS_SOURCES"]
+    else process.env["OPENCODE_SETTINGS_SOURCES"] = originalSources
+    if (originalConfigDir === undefined) delete process.env["OPENCODE_CONFIG_DIR"]
+    else process.env["OPENCODE_CONFIG_DIR"] = originalConfigDir
+    if (originalConfigContent === undefined) delete process.env["OPENCODE_CONFIG_CONTENT"]
+    else process.env["OPENCODE_CONFIG_CONTENT"] = originalConfigContent
+    if (originalDisableProject === undefined) delete process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
+    else process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = originalDisableProject
+    ;(Global.Path as { config: string }).config = originalGlobalConfig
+    await Config.invalidate()
+  })
+
+  async function writeSources(globalDir: string, dir: string) {
+    await writeConfig(globalDir, {
+      $schema: "https://opencode.ai/config.json",
+      username: "global-user",
+    })
+    await writeConfig(dir, {
+      $schema: "https://opencode.ai/config.json",
+      model: "project/model",
+    })
+    await fs.mkdir(path.join(dir, ".opencode"), { recursive: true })
+    await writeConfig(
+      path.join(dir, ".opencode"),
+      {
+        $schema: "https://opencode.ai/config.json",
+        share: "disabled",
+      },
+      "opencode.json",
+    )
+    await writeManagedSettings({
+      $schema: "https://opencode.ai/config.json",
+      disabled_providers: ["openai"],
+    })
+  }
+
+  test("loads all sources when OPENCODE_SETTINGS_SOURCES is not set", async () => {
+    await using globalTmp = await tmpdir()
+    await using tmp = await tmpdir({ git: true })
+    delete process.env["OPENCODE_SETTINGS_SOURCES"]
+    ;(Global.Path as { config: string }).config = globalTmp.path
+    await writeSources(globalTmp.path, tmp.path)
+    await Config.invalidate()
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.username).toBe("global-user")
+        expect(config.model).toBe("project/model")
+        expect(config.share).toBe("disabled")
+        expect(config.disabled_providers?.includes("openai") ?? false).toBe(true)
+      },
+    })
+  })
+
+  test("loads no filesystem sources when OPENCODE_SETTINGS_SOURCES is empty string", async () => {
+    await using globalTmp = await tmpdir()
+    await using tmp = await tmpdir({ git: true })
+    process.env["OPENCODE_SETTINGS_SOURCES"] = ""
+    ;(Global.Path as { config: string }).config = globalTmp.path
+    await writeSources(globalTmp.path, tmp.path)
+    await Config.invalidate()
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.username).not.toBe("global-user")
+        expect(config.model).not.toBe("project/model")
+        expect(config.share).not.toBe("disabled")
+        expect(config.disabled_providers?.includes("openai") ?? false).toBe(false)
+      },
+    })
+  })
+
+  test("loads only global sources when OPENCODE_SETTINGS_SOURCES is 'global'", async () => {
+    await using globalTmp = await tmpdir()
+    await using tmp = await tmpdir({ git: true })
+    process.env["OPENCODE_SETTINGS_SOURCES"] = "global"
+    ;(Global.Path as { config: string }).config = globalTmp.path
+    await writeSources(globalTmp.path, tmp.path)
+    await Config.invalidate()
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.username).toBe("global-user")
+        expect(config.model).not.toBe("project/model")
+        expect(config.share).not.toBe("disabled")
+        expect(config.disabled_providers?.includes("openai") ?? false).toBe(false)
+      },
+    })
+  })
+
+  test("loads only project sources when OPENCODE_SETTINGS_SOURCES is 'project'", async () => {
+    await using globalTmp = await tmpdir()
+    await using tmp = await tmpdir({ git: true })
+    process.env["OPENCODE_SETTINGS_SOURCES"] = "project"
+    ;(Global.Path as { config: string }).config = globalTmp.path
+    await writeSources(globalTmp.path, tmp.path)
+    await Config.invalidate()
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.username).not.toBe("global-user")
+        expect(config.model).toBe("project/model")
+        expect(config.share).toBe("disabled")
+        expect(config.disabled_providers?.includes("openai") ?? false).toBe(false)
+      },
+    })
+  })
+
+  test("loads multiple sources when comma-separated", async () => {
+    await using globalTmp = await tmpdir()
+    await using tmp = await tmpdir({ git: true })
+    process.env["OPENCODE_SETTINGS_SOURCES"] = "global,project"
+    ;(Global.Path as { config: string }).config = globalTmp.path
+    await writeSources(globalTmp.path, tmp.path)
+    await Config.invalidate()
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.username).toBe("global-user")
+        expect(config.model).toBe("project/model")
+        expect(config.share).toBe("disabled")
+        expect(config.disabled_providers?.includes("openai") ?? false).toBe(false)
+      },
+    })
+  })
+
+  test("OPENCODE_CONFIG_DIR always loaded regardless of settingSources", async () => {
+    await using globalTmp = await tmpdir()
+    await using profileTmp = await tmpdir()
+    await using tmp = await tmpdir({ git: true })
+    process.env["OPENCODE_SETTINGS_SOURCES"] = ""
+    process.env["OPENCODE_CONFIG_DIR"] = profileTmp.path
+    ;(Global.Path as { config: string }).config = globalTmp.path
+    await writeSources(globalTmp.path, tmp.path)
+    await writeConfig(profileTmp.path, {
+      $schema: "https://opencode.ai/config.json",
+      model: "configdir/model",
+    })
+    await Config.invalidate()
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.model).toBe("configdir/model")
+      },
+    })
+  })
+
+  test("OPENCODE_CONFIG_CONTENT always loaded regardless of settingSources", async () => {
+    await using tmp = await tmpdir()
+    process.env["OPENCODE_SETTINGS_SOURCES"] = ""
+    process.env["OPENCODE_CONFIG_CONTENT"] = JSON.stringify({
+      $schema: "https://opencode.ai/config.json",
+      model: "content/model",
+    })
+    await Config.invalidate()
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.model).toBe("content/model")
+      },
+    })
+  })
+
+  test("managed sources gated by settingSources", async () => {
+    await using globalTmp = await tmpdir()
+    await using tmp = await tmpdir()
+    ;(Global.Path as { config: string }).config = globalTmp.path
+    await writeConfig(globalTmp.path, {
+      $schema: "https://opencode.ai/config.json",
+      username: "global-user",
+    })
+    await writeManagedSettings({
+      $schema: "https://opencode.ai/config.json",
+      disabled_providers: ["openai"],
+    })
+
+    process.env["OPENCODE_SETTINGS_SOURCES"] = "global"
+    await Config.invalidate()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.username).toBe("global-user")
+        expect(config.disabled_providers?.includes("openai") ?? false).toBe(false)
+      },
+    })
+
+    process.env["OPENCODE_SETTINGS_SOURCES"] = "managed"
+    await Config.invalidate()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.username).not.toBe("global-user")
+        expect(config.disabled_providers?.includes("openai") ?? false).toBe(true)
+      },
+    })
+  })
+
+  test("skips project .opencode/ directories when project not in settingSources", async () => {
+    await using globalTmp = await tmpdir()
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        const commandDir = path.join(dir, ".opencode", "command")
+        await fs.mkdir(commandDir, { recursive: true })
+        await Filesystem.write(path.join(commandDir, "test.md"), "# Test\nBody")
+      },
+    })
+    process.env["OPENCODE_SETTINGS_SOURCES"] = "global"
+    ;(Global.Path as { config: string }).config = globalTmp.path
+    await Config.invalidate()
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const directories = await Config.directories()
+        const config = await Config.get()
+        expect(directories.some((item) => item.startsWith(tmp.path))).toBe(false)
+        expect(config.command?.test).toBeUndefined()
+      },
+    })
+  })
+
+  test("coexists with OPENCODE_DISABLE_PROJECT_CONFIG", async () => {
+    await using globalTmp = await tmpdir()
+    await using tmp = await tmpdir({ git: true })
+    process.env["OPENCODE_SETTINGS_SOURCES"] = "global,project"
+    process.env["OPENCODE_DISABLE_PROJECT_CONFIG"] = "true"
+    ;(Global.Path as { config: string }).config = globalTmp.path
+    await writeSources(globalTmp.path, tmp.path)
+    await Config.invalidate()
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const directories = await Config.directories()
+        const config = await Config.get()
+        expect(config.username).toBe("global-user")
+        expect(config.model).not.toBe("project/model")
+        expect(config.share).not.toBe("disabled")
+        expect(directories.some((item) => item.startsWith(tmp.path))).toBe(false)
+      },
+    })
+  })
+})

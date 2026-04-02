@@ -284,3 +284,151 @@ describe("Instruction.systemPaths OPENCODE_CONFIG_DIR", () => {
     }
   })
 })
+
+describe("Instruction.systemPaths OPENCODE_SETTINGS_SOURCES", () => {
+  let originalSources: string | undefined
+  let originalConfigDir: string | undefined
+  let originalGlobalConfig: string
+
+  beforeEach(() => {
+    originalSources = process.env["OPENCODE_SETTINGS_SOURCES"]
+    originalConfigDir = process.env["OPENCODE_CONFIG_DIR"]
+    originalGlobalConfig = Global.Path.config
+  })
+
+  afterEach(() => {
+    if (originalSources === undefined) {
+      delete process.env["OPENCODE_SETTINGS_SOURCES"]
+    } else {
+      process.env["OPENCODE_SETTINGS_SOURCES"] = originalSources
+    }
+    if (originalConfigDir === undefined) {
+      delete process.env["OPENCODE_CONFIG_DIR"]
+    } else {
+      process.env["OPENCODE_CONFIG_DIR"] = originalConfigDir
+    }
+    ;(Global.Path as { config: string }).config = originalGlobalConfig
+  })
+
+  test("skips project AGENTS.md when project not in settingSources", async () => {
+    await using globalTmp = await tmpdir()
+    await using projectTmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "AGENTS.md"), "# Project Instructions")
+      },
+    })
+
+    process.env["OPENCODE_SETTINGS_SOURCES"] = "global"
+    ;(Global.Path as { config: string }).config = globalTmp.path
+
+    await Instance.provide({
+      directory: projectTmp.path,
+      fn: async () => {
+        const paths = await Instruction.systemPaths()
+        expect(paths.has(path.join(projectTmp.path, "AGENTS.md"))).toBe(false)
+      },
+    })
+  })
+
+  test("skips global AGENTS.md when global not in settingSources", async () => {
+    await using globalTmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "AGENTS.md"), "# Global Instructions")
+      },
+    })
+    await using projectTmp = await tmpdir()
+
+    process.env["OPENCODE_SETTINGS_SOURCES"] = "project"
+    ;(Global.Path as { config: string }).config = globalTmp.path
+
+    await Instance.provide({
+      directory: projectTmp.path,
+      fn: async () => {
+        const paths = await Instruction.systemPaths()
+        expect(paths.has(path.join(globalTmp.path, "AGENTS.md"))).toBe(false)
+      },
+    })
+  })
+
+  test("loads both project and global when both in settingSources", async () => {
+    await using globalTmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "AGENTS.md"), "# Global Instructions")
+      },
+    })
+    await using projectTmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "AGENTS.md"), "# Project Instructions")
+      },
+    })
+
+    process.env["OPENCODE_SETTINGS_SOURCES"] = "project,global"
+    ;(Global.Path as { config: string }).config = globalTmp.path
+
+    await Instance.provide({
+      directory: projectTmp.path,
+      fn: async () => {
+        const paths = await Instruction.systemPaths()
+        expect(paths.has(path.join(projectTmp.path, "AGENTS.md"))).toBe(true)
+        expect(paths.has(path.join(globalTmp.path, "AGENTS.md"))).toBe(true)
+      },
+    })
+  })
+
+  test("OPENCODE_CONFIG_DIR AGENTS.md always loaded", async () => {
+    await using profileTmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "AGENTS.md"), "# Profile Instructions")
+      },
+    })
+    await using globalTmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "AGENTS.md"), "# Global Instructions")
+      },
+    })
+    await using projectTmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "AGENTS.md"), "# Project Instructions")
+      },
+    })
+
+    process.env["OPENCODE_SETTINGS_SOURCES"] = ""
+    process.env["OPENCODE_CONFIG_DIR"] = profileTmp.path
+    ;(Global.Path as { config: string }).config = globalTmp.path
+
+    await Instance.provide({
+      directory: projectTmp.path,
+      fn: async () => {
+        const paths = await Instruction.systemPaths()
+        expect(paths.has(path.join(profileTmp.path, "AGENTS.md"))).toBe(true)
+        expect(paths.has(path.join(projectTmp.path, "AGENTS.md"))).toBe(false)
+        expect(paths.has(path.join(globalTmp.path, "AGENTS.md"))).toBe(false)
+      },
+    })
+  })
+
+  test("loads all when OPENCODE_SETTINGS_SOURCES is not set", async () => {
+    await using globalTmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "AGENTS.md"), "# Global Instructions")
+      },
+    })
+    await using projectTmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "AGENTS.md"), "# Project Instructions")
+      },
+    })
+
+    delete process.env["OPENCODE_SETTINGS_SOURCES"]
+    ;(Global.Path as { config: string }).config = globalTmp.path
+
+    await Instance.provide({
+      directory: projectTmp.path,
+      fn: async () => {
+        const paths = await Instruction.systemPaths()
+        expect(paths.has(path.join(projectTmp.path, "AGENTS.md"))).toBe(true)
+        expect(paths.has(path.join(globalTmp.path, "AGENTS.md"))).toBe(true)
+      },
+    })
+  })
+})

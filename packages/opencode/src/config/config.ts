@@ -5,7 +5,7 @@ import os from "os"
 import { Process } from "../util/process"
 import z from "zod"
 import { ModelsDev } from "../provider/models"
-import { mergeDeep, pipe, unique } from "remeda"
+import { mergeDeep, pipe } from "remeda"
 import { Global } from "../global"
 import fsNode from "fs/promises"
 import { NamedError } from "@opencode-ai/util/error"
@@ -1257,6 +1257,13 @@ export namespace Config {
         })
 
         const loadInstanceState = Effect.fnUntraced(function* (ctx: InstanceContext) {
+          const settings = (() => {
+            const raw = Flag.OPENCODE_SETTINGS_SOURCES
+            if (raw === undefined) return undefined
+            if (raw === "") return [] as string[]
+            return raw.split(",")
+          })()
+          const enabled = (s: string) => !settings || settings.includes(s)
           const auth = yield* authSvc.all().pipe(Effect.orDie)
 
           let result: Info = {}
@@ -1288,6 +1295,7 @@ export namespace Config {
             if (value.type === "wellknown") {
               const url = key.replace(/\/+$/, "")
               process.env[value.key] = value.token
+              if (!enabled("remote")) continue
               log.debug("fetching remote config", { url: `${url}/.well-known/opencode` })
               const response = yield* Effect.promise(() => fetch(`${url}/.well-known/opencode`))
               if (!response.ok) {
@@ -1306,15 +1314,17 @@ export namespace Config {
             }
           }
 
-          const global = yield* getGlobal()
-          merge(Global.Path.config, global, "global")
+          if (enabled("global")) {
+            const global = yield* getGlobal()
+            merge(Global.Path.config, global, "global")
+          }
 
           if (Flag.OPENCODE_CONFIG) {
             merge(Flag.OPENCODE_CONFIG, yield* loadFile(Flag.OPENCODE_CONFIG))
             log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
           }
 
-          if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+          if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG && enabled("project")) {
             for (const file of yield* Effect.promise(() =>
               ConfigPaths.projectFiles("opencode", ctx.directory, ctx.worktree),
             )) {
@@ -1326,7 +1336,16 @@ export namespace Config {
           result.mode = result.mode || {}
           result.plugin = result.plugin || []
 
-          const directories = yield* Effect.promise(() => ConfigPaths.directories(ctx.directory, ctx.worktree))
+          const tagged = yield* Effect.promise(() => ConfigPaths.directories(ctx.directory, ctx.worktree))
+          const seen = new Set<string>()
+          const directories: string[] = []
+
+          for (const entry of tagged) {
+            if (seen.has(entry.path)) continue
+            seen.add(entry.path)
+            if (entry.source !== "always" && !enabled(entry.source)) continue
+            directories.push(entry.path)
+          }
 
           if (Flag.OPENCODE_CONFIG_DIR) {
             log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
@@ -1334,7 +1353,7 @@ export namespace Config {
 
           const deps: Promise<void>[] = []
 
-          for (const dir of unique(directories)) {
+          for (const dir of directories) {
             if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
               for (const file of ["opencode.json", "opencode.jsonc"]) {
                 const source = path.join(dir, file)
@@ -1391,7 +1410,7 @@ export namespace Config {
                   dir: path.dirname(source),
                   source,
                 })
-                merge(source, next, "global")
+                if (enabled("remote")) merge(source, next, "global")
               }
             }).pipe(
               Effect.catch((err) => {
@@ -1403,7 +1422,7 @@ export namespace Config {
             )
           }
 
-          if (existsSync(managedDir)) {
+          if (enabled("managed") && existsSync(managedDir)) {
             for (const file of ["opencode.json", "opencode.jsonc"]) {
               const source = path.join(managedDir, file)
               merge(source, yield* loadFile(source), "global")
