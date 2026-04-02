@@ -54,19 +54,6 @@ export namespace Todo {
       })
 
       const update = Effect.fn("Todo.update")(function* (input: { sessionID: SessionID; todos: Info[] }) {
-        const prev = yield* list(input.sessionID)
-        if (
-          prev.length === input.todos.length &&
-          prev.every(
-            (item, i) =>
-              item.content === input.todos[i]?.content &&
-              item.status === input.todos[i]?.status &&
-              item.priority === input.todos[i]?.priority,
-          )
-        ) {
-          return
-        }
-
         yield* Effect.sync(() =>
           Database.transaction((db) => {
             db.delete(TodoTable).where(eq(TodoTable.session_id, input.sessionID)).run()
@@ -84,7 +71,7 @@ export namespace Todo {
               .run()
           }),
         )
-        yield* bus.publish(Event.Updated, input)
+        yield* bus.publish(Event.Updated, input).pipe(Effect.forkDaemon)
       })
 
       const get = Effect.fn("Todo.get")(function* (sessionID: SessionID) {
