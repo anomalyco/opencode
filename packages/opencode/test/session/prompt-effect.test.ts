@@ -21,6 +21,7 @@ import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
 import { AppFileSystem } from "../../src/filesystem"
 import { SessionCompaction } from "../../src/session/compaction"
+import { Instruction } from "../../src/session/instruction"
 import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
@@ -171,6 +172,7 @@ function makeHttp() {
       Layer.provideMerge(proc),
       Layer.provideMerge(registry),
       Layer.provideMerge(trunc),
+      Layer.provide(Instruction.defaultLayer),
       Layer.provideMerge(deps),
     ),
   )
