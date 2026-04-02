@@ -78,7 +78,7 @@ export function SessionSidePanel(props: {
       return "mix" as const
     }
 
-    const normalize = (p: string) => p.replaceAll("\\\\", "/").replace(/\/+$/, "")
+    const normalize = (p: string) => p?.replaceAll("\\\\", "/")?.replace(/\/+$/, "") ?? ""
 
     const out = new Map<string, "add" | "del" | "mix">()
     for (const diff of diffs()) {

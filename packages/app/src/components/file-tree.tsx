@@ -215,7 +215,7 @@ export default function FileTree(props: {
 
   const key = (p: string) =>
     file
-      .normalize(p)
+      .normalize(p ?? "")
       .replace(/[\\/]+$/, "")
       .replaceAll("\\", "/")
   const chain = props._chain ? [...props._chain, key(props.path)] : [key(props.path)]
