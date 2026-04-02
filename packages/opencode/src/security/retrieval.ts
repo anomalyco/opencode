@@ -83,8 +83,8 @@ export async function retrieveVector(input: {
     const pc = new Pinecone({ apiKey: key })
     const index = pc.index(idx)
     const ns = input.namespace ? index.namespace(input.namespace) : index
-    await ns.upsert(
-      input.controls.map((item) => ({
+    await ns.upsert({
+      records: input.controls.map((item) => ({
         id: item.id,
         values: embed(text(item)),
         metadata: {
@@ -93,7 +93,7 @@ export async function retrieveVector(input: {
           tags: (item.tags ?? []).join(","),
         },
       })),
-    )
+    })
     const hit = await ns.query({
       topK: input.topk,
       vector: embed(input.text),
