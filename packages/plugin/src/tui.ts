@@ -349,7 +349,7 @@ export type TuiSlotPlugin<Slots extends Record<string, object> = {}> = Omit<Slot
 }
 
 export type TuiSlots = {
-  register: <Slots extends Record<string, object>>(plugin: TuiSlotPlugin<Slots>) => string
+  register: <Slots extends Record<string, object> = {}>(plugin: TuiSlotPlugin<Slots>) => string
 }
 
 export type TuiEventBus = {

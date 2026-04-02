@@ -9,7 +9,7 @@ export type HostSlotPlugin<Slots extends Record<string, object> = {}> = SolidPlu
 
 export type HostPluginApi = TuiPluginApi
 export type HostSlots = {
-  register: <Slots extends Record<string, object>>(plugin: HostSlotPlugin<Slots>) => () => void
+  register: <Slots extends Record<string, object> = {}>(plugin: HostSlotPlugin<Slots>) => () => void
 }
 
 function empty<Name extends string>(_props: TuiSlotProps<Name>) {
