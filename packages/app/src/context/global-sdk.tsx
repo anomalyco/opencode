@@ -1,6 +1,7 @@
 import type { Event } from "@opencode-ai/sdk/v2/client"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { batch, onCleanup } from "solid-js"
 import z from "zod"
 import { createSdkForServer } from "@/utils/server"
@@ -213,14 +214,9 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       if (Date.now() - lastEventAt < HEARTBEAT_TIMEOUT_MS) return
       attempt?.abort()
     }
-    if (typeof document !== "undefined") {
-      document.addEventListener("visibilitychange", onVisibility)
-    }
+    if (typeof document !== "undefined") makeEventListener(document, "visibilitychange", onVisibility)
 
     onCleanup(() => {
-      if (typeof document !== "undefined") {
-        document.removeEventListener("visibilitychange", onVisibility)
-      }
       stop()
       abort.abort()
       flush()
