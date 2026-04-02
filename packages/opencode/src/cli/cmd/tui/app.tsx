@@ -822,10 +822,8 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     const focused = await Notification.terminalIsFocused().catch(() => false)
     if (focused) return
 
-    const sessionID = evt.properties.info?.id
-    const session = sessionID ? sync.data.session?.[sessionID] : undefined
-    const title = session?.title ?? sessionID ?? "Session"
-    Notification.show("opencode", `${title} completed`).catch(() => {})
+    const sessionID = evt.properties.sessionID
+    Notification.show("opencode", `${sessionID} completed`).catch(() => {})
   })
 
   sdk.event.on("session.error", (evt) => {
