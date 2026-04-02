@@ -30,7 +30,7 @@ jobs:
       synced: ${{ steps.push.outputs.synced || 'false' }}
     steps:
       - name: Checkout fork
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ env.FORK_BRANCH }}
           fetch-depth: 0
