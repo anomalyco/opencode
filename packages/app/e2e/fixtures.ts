@@ -15,6 +15,7 @@ import {
   waitSlug,
   waitSession,
 } from "./actions"
+import { openaiModel, withMockOpenAI } from "./prompt/mock"
 import { createSdk, dirSlug, getWorktree, sessionPath } from "./utils"
 
 type LLMFixture = {
@@ -47,6 +48,7 @@ type LLMFixture = {
   wait: (count: number) => Promise<void>
   inputs: () => Promise<Record<string, unknown>[]>
   pending: () => Promise<number>
+  misses: () => Promise<Array<{ url: URL; body: Record<string, unknown> }>>
 }
 
 export const settingsKey = "settings.v3"
@@ -83,6 +85,7 @@ type TestFixtures = {
   gotoSession: (sessionID?: string) => Promise<void>
   withProject: <T>(callback: (project: ProjectHandle) => Promise<T>, options?: ProjectOptions) => Promise<T>
   withBackendProject: <T>(callback: (project: ProjectHandle) => Promise<T>, options?: ProjectOptions) => Promise<T>
+  withMockProject: <T>(callback: (project: ProjectHandle) => Promise<T>, options?: ProjectOptions) => Promise<T>
 }
 
 type WorkerFixtures = {
@@ -132,6 +135,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         wait: (count) => rt.runPromise(svc.wait(count)),
         inputs: () => rt.runPromise(svc.inputs),
         pending: () => rt.runPromise(svc.pending),
+        misses: () => rt.runPromise(svc.misses),
       })
     } finally {
       await rt.dispose()
@@ -191,6 +195,21 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   withBackendProject: async ({ page, backend }, use) => {
     await use((callback, options) =>
       runProject(page, callback, { ...options, serverUrl: backend.url, sdk: backend.sdk }),
+    )
+  },
+  withMockProject: async ({ page, llm, backend }, use) => {
+    await use((callback, options) =>
+      withMockOpenAI({
+        serverUrl: backend.url,
+        llmUrl: llm.url,
+        fn: () =>
+          runProject(page, callback, {
+            ...options,
+            model: options?.model ?? openaiModel,
+            serverUrl: backend.url,
+            sdk: backend.sdk,
+          }),
+      }),
     )
   },
 })

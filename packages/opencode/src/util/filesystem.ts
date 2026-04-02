@@ -166,16 +166,41 @@ export namespace Filesystem {
     return !relative(parent, child).startsWith("..")
   }
 
-  export async function findUp(target: string, start: string, stop?: string) {
+  export async function findUp(
+    target: string,
+    start: string,
+    stop?: string,
+    options?: { rootFirst?: boolean },
+  ): Promise<string[]>
+  export async function findUp(
+    target: string[],
+    start: string,
+    stop?: string,
+    options?: { rootFirst?: boolean },
+  ): Promise<string[]>
+  export async function findUp(
+    target: string | string[],
+    start: string,
+    stop?: string,
+    options?: { rootFirst?: boolean },
+  ) {
+    const dirs = [start]
     let current = start
-    const result = []
     while (true) {
-      const search = join(current, target)
-      if (await exists(search)) result.push(search)
       if (stop === current) break
       const parent = dirname(current)
       if (parent === current) break
+      dirs.push(parent)
       current = parent
+    }
+
+    const targets = Array.isArray(target) ? target : [target]
+    const result = []
+    for (const dir of options?.rootFirst ? dirs.toReversed() : dirs) {
+      for (const item of targets) {
+        const search = join(dir, item)
+        if (await exists(search)) result.push(search)
+      }
     }
     return result
   }
