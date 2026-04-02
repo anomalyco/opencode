@@ -12,35 +12,34 @@ async function open(page: Page) {
   return term
 }
 
-test("terminal reconnects without replacing the pty", async ({ page, withProject }) => {
-  await withProject(async ({ gotoSession }) => {
-    const name = `OPENCODE_E2E_RECONNECT_${Date.now()}`
-    const token = `E2E_RECONNECT_${Date.now()}`
+test("terminal reconnects without replacing the pty", async ({ page, project }) => {
+  await project.open()
+  const name = `OPENCODE_E2E_RECONNECT_${Date.now()}`
+  const token = `E2E_RECONNECT_${Date.now()}`
 
-    await gotoSession()
+  await project.gotoSession()
 
-    const term = await open(page)
-    const id = await term.getAttribute("data-pty-id")
-    if (!id) throw new Error("Active terminal missing data-pty-id")
+  const term = await open(page)
+  const id = await term.getAttribute("data-pty-id")
+  if (!id) throw new Error("Active terminal missing data-pty-id")
 
-    const prev = await terminalConnects(page, { term })
+  const prev = await terminalConnects(page, { term })
 
-    await runTerminal(page, {
-      term,
-      cmd: `export ${name}=${token}; echo ${token}`,
-      token,
-    })
+  await runTerminal(page, {
+    term,
+    cmd: `export ${name}=${token}; echo ${token}`,
+    token,
+  })
 
-    await disconnectTerminal(page, { term })
+  await disconnectTerminal(page, { term })
 
-    await expect.poll(() => terminalConnects(page, { term }), { timeout: 15_000 }).toBeGreaterThan(prev)
-    await expect.poll(() => term.getAttribute("data-pty-id"), { timeout: 5_000 }).toBe(id)
+  await expect.poll(() => terminalConnects(page, { term }), { timeout: 15_000 }).toBeGreaterThan(prev)
+  await expect.poll(() => term.getAttribute("data-pty-id"), { timeout: 5_000 }).toBe(id)
 
-    await runTerminal(page, {
-      term,
-      cmd: `echo $${name}`,
-      token,
-      timeout: 15_000,
-    })
+  await runTerminal(page, {
+    term,
+    cmd: `echo $${name}`,
+    token,
+    timeout: 15_000,
   })
 })

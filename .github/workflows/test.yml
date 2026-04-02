@@ -47,6 +47,11 @@ jobs:
 
       - name: Run unit tests
         run: bun turbo test
+        env:
+          # Bun 1.3.11 intermittently crashes on Windows during test teardown
+          # inside the native @parcel/watcher binding. Unit CI does not rely on
+          # the live watcher backend there, so disable it for that platform.
+          OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
 
   e2e:
     name: e2e (${{ matrix.settings.name }})
