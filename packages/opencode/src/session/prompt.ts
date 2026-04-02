@@ -216,7 +216,7 @@ export namespace SessionPrompt {
             (yield* provider.getModel(input.providerID, input.modelID)))
         const msgs = onlySubtasks
           ? [{ role: "user" as const, content: subtasks.map((p) => p.prompt).join("\n") }]
-          : yield* Effect.promise(() => MessageV2.toModelMessages(context, mdl))
+          : yield* MessageV2.toModelMessagesEffect(context, mdl)
         const text = yield* Effect.promise(async (signal) => {
           const result = await LLM.stream({
             agent: ag,
@@ -1342,7 +1342,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             yield* status.set(sessionID, { type: "busy" })
             log.info("loop", { step, sessionID })
 
-            let msgs = yield* Effect.promise(() => MessageV2.filterCompacted(MessageV2.stream(sessionID)))
+            let msgs = yield* MessageV2.filterCompactedEffect(sessionID)
 
             let lastUser: MessageV2.User | undefined
             let lastAssistant: MessageV2.Assistant | undefined
