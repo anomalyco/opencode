@@ -666,6 +666,10 @@ export namespace Provider {
       }
     },
     "cloudflare-workers-ai": async (input) => {
+      // When baseURL is already configured (e.g. corporate config routing through a proxy/gateway),
+      // skip the account ID check — the URL is fully specified and doesn't need template substitution.
+      if (input.options?.baseURL) return { autoload: false }
+
       const auth = await Auth.get(input.id)
       const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID") || (auth?.type === "api" ? auth.metadata?.accountId : undefined)
       if (!accountId)
@@ -702,6 +706,9 @@ export namespace Provider {
       }
     },
     "cloudflare-ai-gateway": async (input) => {
+      // When baseURL is already configured (e.g. corporate config), skip the ID checks.
+      if (input.options?.baseURL) return { autoload: false }
+
       const auth = await Auth.get(input.id)
       const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID") || (auth?.type === "api" ? auth.metadata?.accountId : undefined)
       const gateway = Env.get("CLOUDFLARE_GATEWAY_ID") || (auth?.type === "api" ? auth.metadata?.gatewayId : undefined)
