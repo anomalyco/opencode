@@ -22,6 +22,26 @@ export const TuiOptions = z.object({
     .enum(["auto", "stacked"])
     .optional()
     .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+  status_line: z
+    .object({
+      templates: z
+        .record(z.enum(["terminal_title", "session_footer", "home_footer"]), z.string())
+        .optional()
+        .describe("Template strings per display target with {variable:format} placeholders"),
+      interval: z
+        .number()
+        .int()
+        .min(1)
+        .max(300)
+        .optional()
+        .describe("Polling interval in seconds"),
+      commands: z
+        .record(z.string(), z.string())
+        .optional()
+        .describe("Named shell commands available as {shell:name} in templates"),
+    })
+    .optional()
+    .describe("Status line template configuration"),
 })
 
 export const TuiInfo = z

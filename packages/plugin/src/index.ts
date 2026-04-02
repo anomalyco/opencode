@@ -273,4 +273,12 @@ export interface Hooks {
    * Modify tool definitions (description and parameters) sent to LLM
    */
   "tool.definition"?: (input: { toolID: string }, output: { description: string; parameters: any }) => Promise<void>
+  /**
+   * Called periodically to collect custom variables for the status line template.
+   * Plugins return key-value pairs that become available as {key} in the template.
+   */
+  "tui.statusLine.variables"?: (
+    input: { sessionID?: string },
+    output: { variables: Record<string, string> },
+  ) => Promise<void>
 }

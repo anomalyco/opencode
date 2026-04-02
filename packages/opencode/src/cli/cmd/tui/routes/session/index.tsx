@@ -70,6 +70,7 @@ import { Toast, useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv.tsx"
 import { Editor } from "../../util/editor"
 import stripAnsi from "strip-ansi"
+import { useStatusLine } from "../../context/statusline"
 import { usePromptRef } from "../../context/prompt"
 import { useExit } from "../../context/exit"
 import { Filesystem } from "@/util/filesystem"
@@ -113,6 +114,7 @@ export function Session() {
   const kv = useKV()
   const { theme } = useTheme()
   const promptRef = usePromptRef()
+  const statusline = useStatusLine()
   const session = createMemo(() => sync.session.get(route.sessionID))
   const children = createMemo(() => {
     const parentID = session()?.parentID ?? session()?.id
@@ -1105,8 +1107,8 @@ export function Session() {
                                       </text>
                                     )}
                                   </For>
-                                </box>
-                              </Show>
+            </box>
+          </Show>
                             </box>
                           </box>
                         )
@@ -1171,6 +1173,11 @@ export function Session() {
                 sessionID={route.sessionID}
               />
             </box>
+            <Show when={statusline.templates().session_footer}>
+              <box flexShrink={0} paddingTop={1}>
+                <text fg={theme.textMuted}>{statusline.templates().session_footer}</text>
+              </box>
+            </Show>
           </Show>
           <Toast />
         </box>

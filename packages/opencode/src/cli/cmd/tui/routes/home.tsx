@@ -1,5 +1,5 @@
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import { createEffect, on, onMount } from "solid-js"
+import { createEffect, on, onMount, Show } from "solid-js"
 import { Logo } from "../component/logo"
 import { useSync } from "../context/sync"
 import { Toast } from "../ui/toast"
@@ -7,7 +7,9 @@ import { useArgs } from "../context/args"
 import { useRouteData } from "@tui/context/route"
 import { usePromptRef } from "../context/prompt"
 import { useLocal } from "../context/local"
+import { useTheme } from "../context/theme"
 import { TuiPluginRuntime } from "../plugin"
+import { useStatusLine } from "../context/statusline"
 
 // TODO: what is the best way to do this?
 let once = false
@@ -34,6 +36,8 @@ export function Home() {
       once = true
     }
   })
+  const { theme } = useTheme()
+  const statusline = useStatusLine()
 
   // Wait for sync and model store to be ready before auto-submitting --prompt
   createEffect(
@@ -77,7 +81,12 @@ export function Home() {
         <Toast />
       </box>
       <box width="100%" flexShrink={0}>
-        <TuiPluginRuntime.Slot name="home_footer" mode="single_winner" />
+        <Show
+          when={!statusline.templates().home_footer}
+          fallback={<text fg={theme.textMuted}>{statusline.templates().home_footer}</text>}
+        >
+          <TuiPluginRuntime.Slot name="home_footer" mode="single_winner" />
+        </Show>
       </box>
     </>
   )
