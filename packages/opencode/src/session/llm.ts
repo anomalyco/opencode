@@ -76,7 +76,7 @@ export namespace LLM {
 
   export const defaultLayer = layer
 
-  function parseToolArgs(input: string) {
+  export function parseToolArgs(input: string) {
     const parse = (text: string) => {
       try {
         const value = JSON.parse(text)
