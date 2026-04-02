@@ -205,7 +205,7 @@ export async function closeDialog(page: Page, dialog: Locator) {
   await expect(dialog).toHaveCount(0)
 }
 
-export async function isSidebarClosed(page: Page) {
+async function isSidebarClosed(page: Page) {
   const button = await waitSidebarButton(page, "isSidebarClosed")
   return (await button.getAttribute("aria-expanded")) !== "true"
 }
@@ -236,7 +236,7 @@ async function errorBoundaryText(page: Page) {
   return [title ? "Error boundary" : "", description ?? "", detail ?? ""].filter(Boolean).join("\n")
 }
 
-export async function assertHealthy(page: Page, context: string) {
+async function assertHealthy(page: Page, context: string) {
   const text = await errorBoundaryText(page)
   if (!text) return
   console.log(`[e2e:error-boundary][${context}]\n${text}`)

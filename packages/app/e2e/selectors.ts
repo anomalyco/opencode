@@ -1,5 +1,5 @@
 export const promptSelector = '[data-component="prompt-input"]'
-export const terminalPanelSelector = '#terminal-panel[aria-hidden="false"]'
+const terminalPanelSelector = '#terminal-panel[aria-hidden="false"]'
 export const terminalSelector = `${terminalPanelSelector} [data-component="terminal"]`
 export const sessionComposerDockSelector = '[data-component="session-prompt-dock"]'
 export const questionDockSelector = '[data-component="dock-prompt"][data-kind="question"]'
@@ -24,7 +24,7 @@ export const settingsSoundsErrorsSelector = '[data-action="settings-sounds-error
 export const settingsUpdatesStartupSelector = '[data-action="settings-updates-startup"]'
 export const settingsReleaseNotesSelector = '[data-action="settings-release-notes"]'
 
-export const sidebarNavSelector = '[data-component="sidebar-nav-desktop"]'
+const sidebarNavSelector = '[data-component="sidebar-nav-desktop"]'
 
 export const projectSwitchSelector = (slug: string) =>
   `${sidebarNavSelector} [data-action="project-switch"][data-project="${slug}"]`

@@ -82,6 +82,7 @@ import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
 import { getScrollAcceleration } from "../../util/scroll"
+import { TuiPluginRuntime } from "../../plugin"
 
 addDefaultParsers(parsers.parsers)
 
@@ -129,6 +130,8 @@ export function Session() {
     if (session()?.parentID) return []
     return children().flatMap((x) => sync.data.question[x.id] ?? [])
   })
+  const visible = createMemo(() => !session()?.parentID && permissions().length === 0 && questions().length === 0)
+  const disabled = createMemo(() => permissions().length > 0 || questions().length > 0)
 
   const pending = createMemo(() => {
     return messages().findLast((x) => x.role === "assistant" && !x.time.completed)?.id
@@ -190,12 +193,7 @@ export function Session() {
   const sdk = useSDK()
 
   // Handle initial prompt from fork
-  createEffect(() => {
-    if (route.initialPrompt && prompt) {
-      prompt.set(route.initialPrompt)
-    }
-  })
-
+  let seeded = false
   let lastSwitch: string | undefined = undefined
   sdk.event.on("message.part.updated", (evt) => {
     const part = evt.properties.part
@@ -214,7 +212,14 @@ export function Session() {
   })
 
   let scroll: ScrollBoxRenderable
-  let prompt: PromptRef
+  let prompt: PromptRef | undefined
+  const bind = (r: PromptRef | undefined) => {
+    prompt = r
+    promptRef.set(r)
+    if (seeded || !route.initialPrompt || !r) return
+    seeded = true
+    r.set(route.initialPrompt)
+  }
   const keybind = useKeybind()
   const dialog = useDialog()
   const renderer = useRenderer()
@@ -409,7 +414,7 @@ export function Session() {
               if (child) scroll.scrollBy(child.y - scroll.y - 1)
             }}
             sessionID={route.sessionID}
-            setPrompt={(promptInfo) => prompt.set(promptInfo)}
+            setPrompt={(promptInfo) => prompt?.set(promptInfo)}
           />
         ))
       },
@@ -510,7 +515,7 @@ export function Session() {
             toBottom()
           })
         const parts = sync.data.part[message.id]
-        prompt.set(
+        prompt?.set(
           parts.reduce(
             (agg, part) => {
               if (part.type === "text") {
@@ -543,7 +548,7 @@ export function Session() {
           sdk.client.session.unrevert({
             sessionID: route.sessionID,
           })
-          prompt.set({ input: "", parts: [] })
+          prompt?.set({ input: "", parts: [] })
           return
         }
         sdk.client.session.revert({
@@ -1124,7 +1129,7 @@ export function Session() {
                             <DialogMessage
                               messageID={message.id}
                               sessionID={route.sessionID}
-                              setPrompt={(promptInfo) => prompt.set(promptInfo)}
+                              setPrompt={(promptInfo) => prompt?.set(promptInfo)}
                             />
                           ))
                         }}
@@ -1154,22 +1159,28 @@ export function Session() {
               <Show when={session()?.parentID}>
                 <SubagentFooter />
               </Show>
-              <Prompt
-                visible={!session()?.parentID && permissions().length === 0 && questions().length === 0}
-                ref={(r) => {
-                  prompt = r
-                  promptRef.set(r)
-                  // Apply initial prompt when prompt component mounts (e.g., from fork)
-                  if (route.initialPrompt) {
-                    r.set(route.initialPrompt)
-                  }
-                }}
-                disabled={permissions().length > 0 || questions().length > 0}
-                onSubmit={() => {
-                  toBottom()
-                }}
-                sessionID={route.sessionID}
-              />
+              <Show when={visible()}>
+                <TuiPluginRuntime.Slot
+                  name="session_prompt"
+                  mode="replace"
+                  session_id={route.sessionID}
+                  visible={visible()}
+                  disabled={disabled()}
+                  on_submit={toBottom}
+                  ref={bind}
+                >
+                  <Prompt
+                    visible={visible()}
+                    ref={bind}
+                    disabled={disabled()}
+                    onSubmit={() => {
+                      toBottom()
+                    }}
+                    sessionID={route.sessionID}
+                    right={<TuiPluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
+                  />
+                </TuiPluginRuntime.Slot>
+              </Show>
             </box>
           </Show>
           <Toast />
