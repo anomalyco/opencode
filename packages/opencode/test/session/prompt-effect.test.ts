@@ -576,7 +576,7 @@ it.live("command-created subtasks inherit the selected variant", () =>
 
       expect(seen?.variant).toBe("high")
 
-      const msgs = yield* Effect.promise(() => MessageV2.filterCompacted(MessageV2.stream(chat.id)))
+      const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
       const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
       expect(taskMsg?.info.role).toBe("assistant")
       if (!taskMsg || taskMsg.info.role !== "assistant") return
