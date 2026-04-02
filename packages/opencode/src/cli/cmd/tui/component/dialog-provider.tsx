@@ -105,7 +105,13 @@ export function createDialogProviderOptions() {
             }
           }
           if (method.type === "api") {
-            return dialog.replace(() => <ApiMethod providerID={provider.id} title={method.label} />)
+            let metadata: Record<string, string> | undefined
+            if (method.prompts?.length) {
+              const value = await PromptsMethod({ dialog, prompts: method.prompts })
+              if (!value) return
+              metadata = value
+            }
+            return dialog.replace(() => <ApiMethod providerID={provider.id} title={method.label} metadata={metadata} />)
           }
         },
       })),
@@ -224,6 +230,7 @@ function CodeMethod(props: CodeMethodProps) {
 interface ApiMethodProps {
   providerID: string
   title: string
+  metadata?: Record<string, string>
 }
 function ApiMethod(props: ApiMethodProps) {
   const dialog = useDialog()
@@ -268,6 +275,7 @@ function ApiMethod(props: ApiMethodProps) {
           auth: {
             type: "api",
             key: value,
+            ...(props.metadata ? { metadata: props.metadata } : {}),
           },
         })
         await sdk.client.instance.dispose()

@@ -666,7 +666,8 @@ export namespace Provider {
       }
     },
     "cloudflare-workers-ai": async (input) => {
-      const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID")
+      const auth = await Auth.get(input.id)
+      const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID") || (auth?.type === "api" ? auth.metadata?.accountId : undefined)
       if (!accountId)
         return {
           autoload: false,
@@ -678,7 +679,6 @@ export namespace Provider {
       const apiKey = await iife(async () => {
         const envToken = Env.get("CLOUDFLARE_API_KEY")
         if (envToken) return envToken
-        const auth = await Auth.get(input.id)
         if (auth?.type === "api") return auth.key
         return undefined
       })
@@ -699,30 +699,33 @@ export namespace Provider {
       }
     },
     "cloudflare-ai-gateway": async (input) => {
-      const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID")
-      const gateway = Env.get("CLOUDFLARE_GATEWAY_ID")
+      const auth = await Auth.get(input.id)
+      const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID") || (auth?.type === "api" ? auth.metadata?.accountId : undefined)
+      const gateway = Env.get("CLOUDFLARE_GATEWAY_ID") || (auth?.type === "api" ? auth.metadata?.gatewayId : undefined)
 
-      // Get API token from env or auth - required for authenticated gateways
-      const apiToken = await (async () => {
-        const envToken = Env.get("CLOUDFLARE_API_TOKEN") || Env.get("CF_AIG_TOKEN")
-        if (envToken) return envToken
-        const auth = await Auth.get(input.id)
-        if (auth?.type === "api") return auth.key
-        return undefined
-      })()
-
-      if (!accountId || !gateway || !apiToken) {
-        const missing = [
-          !accountId && "CLOUDFLARE_ACCOUNT_ID",
-          !gateway && "CLOUDFLARE_GATEWAY_ID",
-          !apiToken && "CLOUDFLARE_API_TOKEN",
-        ].filter(Boolean)
+      if (!accountId || !gateway) {
+        const missing = [!accountId && "CLOUDFLARE_ACCOUNT_ID", !gateway && "CLOUDFLARE_GATEWAY_ID"].filter(Boolean)
         return {
           autoload: false,
           async getModel() {
             throw new Error(`${missing.join(" and ")} missing. Set with: ${missing.map((v) => `export ${v}=<value>`).join(" && ")}`)
           },
         }
+      }
+
+      // Get API token from env or auth - required for authenticated gateways
+      const apiToken = await (async () => {
+        const envToken = Env.get("CLOUDFLARE_API_TOKEN") || Env.get("CF_AIG_TOKEN")
+        if (envToken) return envToken
+        if (auth?.type === "api") return auth.key
+        return undefined
+      })()
+
+      if (!apiToken) {
+        throw new Error(
+          "CLOUDFLARE_API_TOKEN (or CF_AIG_TOKEN) is required for Cloudflare AI Gateway. " +
+            "Set it via environment variable or run `opencode auth cloudflare-ai-gateway`.",
+        )
       }
 
       // Use official ai-gateway-provider package (v2.x for AI SDK v5 compatibility)
