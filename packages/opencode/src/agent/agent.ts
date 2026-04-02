@@ -243,7 +243,6 @@ export namespace Agent {
                 Permission.fromConfig({
                   "*": "deny",
                 }),
-                user,
               ),
             },
           }

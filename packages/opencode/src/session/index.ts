@@ -247,6 +247,8 @@ export namespace Session {
       })
       .optional(),
     async (input) => {
+      if (input?.kind === "sidekick" && !input?.parentID) throw new Error("Sidekick sessions require a parentID")
+
       return createNext({
         parentID: input?.parentID,
         kind: input?.kind,
@@ -545,6 +547,8 @@ export namespace Session {
     archived?: boolean
   }) {
     const conditions: SQL[] = []
+
+    conditions.push(eq(SessionTable.kind, "default"))
 
     if (input?.directory) {
       conditions.push(eq(SessionTable.directory, input.directory))

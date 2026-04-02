@@ -106,7 +106,10 @@ export function SidekickChat(props: { parentID: string }) {
             {(msg) => {
               const text = createMemo(() =>
                 parts(msg.id)
-                  .filter((p): p is Part & { type: "text" } => p.type === "text")
+                  .filter(
+                    (p): p is Part & { type: "text" } =>
+                      p.type === "text" && !(p as unknown as { synthetic?: boolean }).synthetic,
+                  )
                   .map((p) => (p as unknown as { text: string }).text)
                   .join("\n"),
               )

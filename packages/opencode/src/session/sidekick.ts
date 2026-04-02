@@ -15,6 +15,9 @@ export namespace Sidekick {
    * Each parent session has at most one sidekick session.
    */
   export const ensure = fn(SessionID.zod, async (parentID) => {
+    const parent = await Session.get(parentID)
+    if (parent.kind === "sidekick") throw new Error("Cannot create a sidekick of a sidekick session")
+
     const children = await Session.children(parentID)
     const existing = children.find((c) => c.kind === "sidekick")
     if (existing) return existing
@@ -49,15 +52,22 @@ export namespace Sidekick {
           .filter((p): p is MessageV2.TextPart => p.type === "text" && !p.synthetic)
           .map((p) => p.text)
           .join("\n")
-        if (!text.trim()) continue
+        const tools = msg.parts.filter((p): p is MessageV2.ToolPart => p.type === "tool")
 
         if (role === "user") {
+          if (!text.trim()) continue
           lines.push(`[User]: ${text}`)
         }
         if (role === "assistant") {
-          const tools = msg.parts.filter((p) => p.type === "tool")
-          const summary = tools.length > 0 ? ` (used ${tools.length} tools)` : ""
-          lines.push(`[Assistant${summary}]: ${text}`)
+          const toolSummary = tools
+            .map((t) => {
+              const title = t.state.status === "completed" || t.state.status === "running" ? t.state.title : undefined
+              return title ? `${t.tool}(${title})` : `${t.tool}[${t.state.status}]`
+            })
+            .join(", ")
+          if (!text.trim() && !toolSummary) continue
+          const prefix = toolSummary ? ` (tools: ${toolSummary})` : ""
+          lines.push(`[Assistant${prefix}]: ${text || "(working...)"}`)
         }
       }
       lines.push("</main_conversation>")
@@ -155,7 +165,6 @@ export namespace Sidekick {
         sessionID: input.parentID,
         type: "text",
         text: `[Injected from Sidekick]: ${input.text}`,
-        synthetic: true,
       } satisfies MessageV2.TextPart)
 
       return msg

@@ -124,7 +124,7 @@ export function Session() {
   const children = createMemo(() => {
     const parentID = session()?.parentID ?? session()?.id
     return sync.data.session
-      .filter((x) => x.parentID === parentID || x.id === parentID)
+      .filter((x) => (x.parentID === parentID || x.id === parentID) && x.kind !== "sidekick")
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
