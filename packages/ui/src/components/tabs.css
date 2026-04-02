@@ -146,7 +146,7 @@
       --tabs-review-fade: 16px;
       gap: var(--tabs-review-gap);
       background-color: var(--background-stronger);
-      border-bottom: 1px solid var(--border-weak-base);
+      border-bottom: 1px solid var(--border-weaker-base);
 
       &::after {
         display: none;
@@ -407,11 +407,7 @@
       align-items: center;
       background-color: var(--background-stronger);
       box-sizing: border-box;
-      border-bottom: 1px solid transparent;
-
-      &[data-scrolled] {
-        border-bottom-color: var(--border-weak-base);
-      }
+      border-bottom: 1px solid var(--border-weak-base);
     }
 
     [data-slot="tabs-trigger-wrapper"] {
