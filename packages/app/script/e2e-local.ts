@@ -45,6 +45,14 @@ async function waitForHealth(url: string) {
 const appDir = process.cwd()
 const repoDir = path.resolve(appDir, "../..")
 const opencodeDir = path.join(repoDir, "packages", "opencode")
+const paid = process.env.OPENCODE_E2E_REQUIRE_PAID === "true"
+const model = (() => {
+  const value = process.env.OPENCODE_E2E_MODEL ?? "opencode/gpt-5-nano"
+  if (!paid || process.env.OPENCODE_API_KEY) return value
+  if (!value.startsWith("opencode/")) return value
+  console.warn(`e2e-local: missing OPENCODE_API_KEY, falling back from ${value} to opencode/gpt-5-nano`)
+  return "opencode/gpt-5-nano"
+})()
 
 const extraArgs = (() => {
   const args = process.argv.slice(2)
@@ -71,7 +79,8 @@ const serverEnv = {
   OPENCODE_E2E_PROJECT_DIR: repoDir,
   OPENCODE_E2E_SESSION_TITLE: "E2E Session",
   OPENCODE_E2E_MESSAGE: "Seeded for UI e2e",
-  OPENCODE_E2E_MODEL: process.env.OPENCODE_E2E_MODEL ?? "opencode/gpt-5-nano",
+  OPENCODE_E2E_MODEL: model,
+  OPENCODE_E2E_REQUIRE_PAID: paid && !!process.env.OPENCODE_API_KEY ? "true" : "false",
   OPENCODE_CLIENT: "app",
   OPENCODE_STRICT_CONFIG_DEPS: "true",
 } satisfies Record<string, string>

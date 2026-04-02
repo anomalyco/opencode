@@ -1,6 +1,8 @@
 import { Ripgrep } from "../file/ripgrep"
 
 import { Instance } from "../project/instance"
+import { Memory } from "../memory/memory"
+import { GitContext } from "../git/context"
 
 import PROMPT_ANTHROPIC from "./prompt/anthropic.txt"
 import PROMPT_DEFAULT from "./prompt/default.txt"
@@ -35,6 +37,7 @@ export namespace SystemPrompt {
 
   export async function environment(model: Provider.Model) {
     const project = Instance.project
+    const git = project.vcs === "git" ? await GitContext.section() : undefined
     return [
       [
         `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
@@ -56,8 +59,16 @@ export namespace SystemPrompt {
             : ""
         }`,
         `</directories>`,
+        ...(git ? [git] : []),
       ].join("\n"),
     ]
+  }
+
+  export async function memory(query: string) {
+    const items = await Memory.recall(query).catch(() => [])
+    if (!items.length) return undefined
+    const entries = items.map((m) => `### ${m.title}\n${m.content}`).join("\n\n")
+    return `<memory>\n${entries}\n</memory>`
   }
 
   export async function skills(agent: Agent.Info) {

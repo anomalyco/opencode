@@ -990,6 +990,301 @@ describe("session.compaction.process", () => {
   })
 })
 
+describe("session.compaction.circuitBreaker", () => {
+  test("skips compaction when failures >= 3 and auto is false", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        // Manually set compactFailures to threshold
+        await Session.setCompactFailures({ sessionID: session.id, failures: 3 })
+        const msg = await user(session.id, "hello")
+        const rt = runtime("continue", Plugin.defaultLayer, wide())
+        try {
+          const msgs = await Session.messages({ sessionID: session.id })
+          const result = await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: msg.id,
+                messages: msgs,
+                sessionID: session.id,
+                auto: false,
+              }),
+            ),
+          )
+          // Circuit breaker: returns "continue" without running LLM
+          expect(result).toBe("continue")
+          // No summary assistant message should have been created
+          const all = await Session.messages({ sessionID: session.id })
+          expect(all.some((m) => m.info.role === "assistant" && m.info.summary)).toBe(false)
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("increments failure counter on compact (error) result", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const msg = await user(session.id, "hello")
+        const rt = runtime("compact", Plugin.defaultLayer, wide())
+        try {
+          const msgs = await Session.messages({ sessionID: session.id })
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: msg.id,
+                messages: msgs,
+                sessionID: session.id,
+                auto: false,
+              }),
+            ),
+          )
+          const updated = await Session.get(session.id)
+          expect(updated.compactFailures).toBe(1)
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("resets failure counter on successful compaction", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        await Session.setCompactFailures({ sessionID: session.id, failures: 2 })
+        const msg = await user(session.id, "hello")
+        const rt = runtime("continue", Plugin.defaultLayer, wide())
+        try {
+          const msgs = await Session.messages({ sessionID: session.id })
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: msg.id,
+                messages: msgs,
+                sessionID: session.id,
+                auto: false,
+              }),
+            ),
+          )
+          const updated = await Session.get(session.id)
+          expect(updated.compactFailures).toBe(0)
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+})
+
+describe("session.compaction.thresholds", () => {
+  test("publishes warning event at 70% usage", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const model = createModel({ context: 100_000, output: 32_000 })
+        // 72K / 100K = 72% → warning threshold
+        const tokens = { input: 70_000, output: 2_000, reasoning: 0, cache: { read: 0, write: 0 } }
+
+        let seen: string | undefined
+        const rt = runtime("continue", Plugin.defaultLayer, wide())
+        try {
+          const unsub = await rt.runPromise(
+            Bus.Service.use((svc) =>
+              svc.subscribeCallback(SessionCompaction.Event.ContextThreshold, (evt) => {
+                if (evt.properties.sessionID !== session.id) return
+                seen = evt.properties.level
+              }),
+            ),
+          )
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) => svc.checkThresholds({ sessionID: session.id, tokens, model })),
+          )
+          unsub()
+          expect(seen).toBe("warning")
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("publishes error event at 85% usage", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const model = createModel({ context: 100_000, output: 32_000 })
+        const tokens = { input: 87_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+
+        let seen: string | undefined
+        const rt = runtime("continue", Plugin.defaultLayer, wide())
+        try {
+          const unsub = await rt.runPromise(
+            Bus.Service.use((svc) =>
+              svc.subscribeCallback(SessionCompaction.Event.ContextThreshold, (evt) => {
+                if (evt.properties.sessionID !== session.id) return
+                seen = evt.properties.level
+              }),
+            ),
+          )
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) => svc.checkThresholds({ sessionID: session.id, tokens, model })),
+          )
+          unsub()
+          expect(seen).toBe("error")
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("publishes blocking event at 95% usage", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const model = createModel({ context: 100_000, output: 32_000 })
+        const tokens = { input: 96_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+
+        let seen: string | undefined
+        const rt = runtime("continue", Plugin.defaultLayer, wide())
+        try {
+          const unsub = await rt.runPromise(
+            Bus.Service.use((svc) =>
+              svc.subscribeCallback(SessionCompaction.Event.ContextThreshold, (evt) => {
+                if (evt.properties.sessionID !== session.id) return
+                seen = evt.properties.level
+              }),
+            ),
+          )
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) => svc.checkThresholds({ sessionID: session.id, tokens, model })),
+          )
+          unsub()
+          expect(seen).toBe("blocking")
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("does not publish event below warning threshold", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const model = createModel({ context: 100_000, output: 32_000 })
+        const tokens = { input: 50_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+
+        let seen = false
+        const rt = runtime("continue", Plugin.defaultLayer, wide())
+        try {
+          const unsub = await rt.runPromise(
+            Bus.Service.use((svc) =>
+              svc.subscribeCallback(SessionCompaction.Event.ContextThreshold, () => {
+                seen = true
+              }),
+            ),
+          )
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) => svc.checkThresholds({ sessionID: session.id, tokens, model })),
+          )
+          unsub()
+          expect(seen).toBe(false)
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("does not publish when model context limit is 0", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const model = createModel({ context: 0, output: 32_000 })
+        const tokens = { input: 100_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+
+        let seen = false
+        const rt = runtime("continue", Plugin.defaultLayer, wide())
+        try {
+          const unsub = await rt.runPromise(
+            Bus.Service.use((svc) =>
+              svc.subscribeCallback(SessionCompaction.Event.ContextThreshold, () => {
+                seen = true
+              }),
+            ),
+          )
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) => svc.checkThresholds({ sessionID: session.id, tokens, model })),
+          )
+          unsub()
+          expect(seen).toBe(false)
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+})
+
+describe("session.compaction.partialCompaction", () => {
+  test("partial compaction with fromID/toID only processes sliced messages", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const msg1 = await user(session.id, "first")
+        await assistant(session.id, msg1.id, tmp.path)
+        const msg2 = await user(session.id, "second (partial start)")
+        await assistant(session.id, msg2.id, tmp.path)
+        const msg3 = await user(session.id, "third (partial end)")
+        await assistant(session.id, msg3.id, tmp.path)
+        const parent = await user(session.id, "parent for compaction")
+
+        const rt = runtime("continue", Plugin.defaultLayer, wide())
+        try {
+          const msgs = await Session.messages({ sessionID: session.id })
+          const result = await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({
+                parentID: parent.id,
+                messages: msgs,
+                sessionID: session.id,
+                auto: false,
+                fromID: msg2.id,
+                toID: msg3.id,
+              }),
+            ),
+          )
+          expect(result).toBe("continue")
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+})
+
 describe("util.token.estimate", () => {
   test("estimates tokens from text (4 chars per token)", () => {
     const text = "x".repeat(4000)

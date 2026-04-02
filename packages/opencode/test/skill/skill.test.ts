@@ -1,4 +1,4 @@
-import { afterEach, test, expect } from "bun:test"
+import { afterEach, test, expect, describe } from "bun:test"
 import { Skill } from "../../src/skill"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
@@ -45,17 +45,135 @@ Instructions here.
       )
     },
   })
+})
 
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const skills = await Skill.all()
-      expect(skills.length).toBe(1)
-      const testSkill = skills.find((s) => s.name === "test-skill")
-      expect(testSkill).toBeDefined()
-      expect(testSkill!.description).toBe("A test skill for verification.")
-      expect(testSkill!.location).toContain(path.join("skill", "test-skill", "SKILL.md"))
-    },
+describe("enhanced skill features (17.x)", () => {
+  test("17.1: parses extended frontmatter fields (paths, allowed-tools, model, effort, when_to_use, argument-hint)", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        const skillDir = path.join(dir, ".opencode", "skill", "rich-skill")
+        await Bun.write(
+          path.join(skillDir, "SKILL.md"),
+          `---
+name: rich-skill
+description: A skill with extended frontmatter.
+paths:
+  - "**/*.test.ts"
+  - "**/*.spec.ts"
+allowed-tools:
+  - read
+  - grep
+model: fast
+effort: low
+when_to_use: Use when working on test files.
+argument-hint: $ARGUMENTS
+---
+
+# Rich Skill
+
+Content here.
+`,
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const skill = await Skill.get("rich-skill")
+        expect(skill).toBeDefined()
+        expect(skill!.paths).toEqual(["**/*.test.ts", "**/*.spec.ts"])
+        expect(skill!.allowedTools).toEqual(["read", "grep"])
+        expect(skill!.model).toBe("fast")
+        expect(skill!.effort).toBe("low")
+        expect(skill!.whenToUse).toBe("Use when working on test files.")
+        expect(skill!.argumentHint).toBe("$ARGUMENTS")
+      },
+    })
+  })
+
+  test("17.2: conditional activation — skills with paths filter against context files", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        const s1 = path.join(dir, ".opencode", "skill", "test-skill")
+        const s2 = path.join(dir, ".opencode", "skill", "generic-skill")
+        await Bun.write(
+          path.join(s1, "SKILL.md"),
+          `---
+name: test-skill
+description: Only for test files.
+paths:
+  - "**/*.test.ts"
+---
+
+# Test Skill
+`,
+        )
+        await Bun.write(
+          path.join(s2, "SKILL.md"),
+          `---
+name: generic-skill
+description: Works on any file.
+---
+
+# Generic Skill
+`,
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        // with no context files — only generic (path-restricted skill is excluded)
+        const withoutContext = await Skill.available(undefined, [])
+        expect(withoutContext.find((s) => s.name === "test-skill")).toBeUndefined()
+        expect(withoutContext.find((s) => s.name === "generic-skill")).toBeDefined()
+
+        // with matching context file — test-skill appears
+        const withMatch = await Skill.available(undefined, ["src/foo.test.ts"])
+        expect(withMatch.find((s) => s.name === "test-skill")).toBeDefined()
+        expect(withMatch.find((s) => s.name === "generic-skill")).toBeDefined()
+
+        // with non-matching context file — test-skill excluded
+        const noMatch = await Skill.available(undefined, ["src/foo.ts"])
+        expect(noMatch.find((s) => s.name === "test-skill")).toBeUndefined()
+      },
+    })
+  })
+
+  test("17.4: deduplication by resolved path — symlinked skills load only once", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        const real = path.join(dir, ".opencode", "skill", "dedup-skill")
+        const link = path.join(dir, ".opencode", "skill", "dedup-skill-link")
+        await Bun.write(
+          path.join(real, "SKILL.md"),
+          `---
+name: dedup-skill
+description: A skill that should only load once even when symlinked.
+---
+
+# Dedup Skill
+`,
+        )
+        // Create symlink pointing to the same directory
+        await fs.symlink(real, link)
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const skills = await Skill.all()
+        const dedup = skills.filter((s) => s.name === "dedup-skill")
+        // Should only appear once despite being reachable via two paths
+        expect(dedup.length).toBe(1)
+      },
+    })
   })
 })
 

@@ -72,9 +72,25 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
     })
   }
 
+  const contextLevel = createMemo(() => {
+    const usage = context()?.usage ?? 0
+    if (usage >= 95) return "blocking"
+    if (usage >= 85) return "error"
+    if (usage >= 70) return "warning"
+    return "normal"
+  })
+
+  const circleColor = createMemo(() => {
+    const level = contextLevel()
+    if (level === "blocking") return "text-red-500"
+    if (level === "error") return "text-orange-500"
+    if (level === "warning") return "text-yellow-500"
+    return undefined
+  })
+
   const circle = () => (
     <div class="flex items-center justify-center">
-      <ProgressCircle size={16} strokeWidth={2} percentage={context()?.usage ?? 0} />
+      <ProgressCircle size={16} strokeWidth={2} percentage={context()?.usage ?? 0} class={circleColor()} />
     </div>
   )
 
@@ -88,9 +104,18 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
               <span class="text-text-invert-base">{language.t("context.usage.tokens")}</span>
             </div>
             <div class="flex items-center gap-2">
-              <span class="text-text-invert-strong">{ctx().usage ?? 0}%</span>
+              <span class={`text-text-invert-strong ${circleColor() ?? ""}`}>{ctx().usage ?? 0}%</span>
               <span class="text-text-invert-base">{language.t("context.usage.usage")}</span>
             </div>
+            <Show when={contextLevel() === "blocking"}>
+              <div class="text-red-400 text-xs mt-1">{language.t("context.usage.blocking")}</div>
+            </Show>
+            <Show when={contextLevel() === "error"}>
+              <div class="text-orange-400 text-xs mt-1">{language.t("context.usage.high")}</div>
+            </Show>
+            <Show when={contextLevel() === "warning"}>
+              <div class="text-yellow-400 text-xs mt-1">{language.t("context.usage.warning")}</div>
+            </Show>
           </>
         )}
       </Show>

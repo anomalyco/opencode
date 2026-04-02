@@ -30,7 +30,7 @@ import { SessionID, MessageID, PartID } from "./schema"
 
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
-import { Permission } from "@/permission"
+import { Permission, PermissionMode, DEFAULT_PERMISSION_MODE } from "@/permission"
 import { Global } from "@/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 import { Effect, Layer, Scope, ServiceMap } from "effect"
@@ -79,6 +79,8 @@ export namespace Session {
       share,
       revert,
       permission: row.permission ?? undefined,
+      permissionMode: row.permission_mode ?? DEFAULT_PERMISSION_MODE,
+      compactFailures: row.compact_failures ?? 0,
       time: {
         created: row.time_created,
         updated: row.time_updated,
@@ -105,6 +107,8 @@ export namespace Session {
       summary_diffs: info.summary?.diffs,
       revert: info.revert ?? null,
       permission: info.permission,
+      permission_mode: info.permissionMode,
+      compact_failures: info.compactFailures ?? 0,
       time_created: info.time.created,
       time_updated: info.time.updated,
       time_compacting: info.time.compacting,
@@ -152,6 +156,8 @@ export namespace Session {
         archived: z.number().optional(),
       }),
       permission: Permission.Ruleset.optional(),
+      permissionMode: PermissionMode.optional().default(DEFAULT_PERMISSION_MODE),
+      compactFailures: z.number().int().min(0).default(0),
       revert: z
         .object({
           messageID: MessageID.zod,
@@ -327,6 +333,9 @@ export namespace Session {
     readonly setTitle: (input: { sessionID: SessionID; title: string }) => Effect.Effect<void>
     readonly setArchived: (input: { sessionID: SessionID; time?: number }) => Effect.Effect<void>
     readonly setPermission: (input: { sessionID: SessionID; permission: Permission.Ruleset }) => Effect.Effect<void>
+    readonly setPermissionMode: (input: { sessionID: SessionID; permissionMode: PermissionMode }) => Effect.Effect<void>
+    readonly setDirectory: (input: { sessionID: SessionID; directory: string }) => Effect.Effect<void>
+    readonly setCompactFailures: (input: { sessionID: SessionID; failures: number }) => Effect.Effect<void>
     readonly setRevert: (input: {
       sessionID: SessionID
       revert: Info["revert"]
@@ -382,8 +391,10 @@ export namespace Session {
         workspaceID?: WorkspaceID
         directory: string
         permission?: Permission.Ruleset
+        permissionMode?: PermissionMode
       }) {
         const ctx = yield* InstanceState.context
+        const cfg = yield* config.get()
         const result: Info = {
           id: SessionID.descending(input.id),
           slug: Slug.create(),
@@ -394,6 +405,8 @@ export namespace Session {
           parentID: input.parentID,
           title: input.title ?? createDefaultTitle(!!input.parentID),
           permission: input.permission,
+          permissionMode: input.permissionMode ?? cfg.permission_mode ?? DEFAULT_PERMISSION_MODE,
+          compactFailures: 0,
           time: {
             created: Date.now(),
             updated: Date.now(),
@@ -403,7 +416,6 @@ export namespace Session {
 
         yield* Effect.sync(() => SyncEvent.run(Event.Created, { sessionID: result.id, info: result }))
 
-        const cfg = yield* config.get()
         if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto")) {
           yield* share(result.id).pipe(Effect.ignore, Effect.forkIn(scope))
         }
@@ -567,6 +579,27 @@ export namespace Session {
         yield* patch(input.sessionID, { permission: input.permission, time: { updated: Date.now() } })
       })
 
+      const setPermissionMode = Effect.fn("Session.setPermissionMode")(function* (input: {
+        sessionID: SessionID
+        permissionMode: PermissionMode
+      }) {
+        yield* patch(input.sessionID, { permissionMode: input.permissionMode, time: { updated: Date.now() } })
+      })
+
+      const setCompactFailures = Effect.fn("Session.setCompactFailures")(function* (input: {
+        sessionID: SessionID
+        failures: number
+      }) {
+        yield* patch(input.sessionID, { compactFailures: input.failures, time: { updated: Date.now() } })
+      })
+
+      const setDirectory = Effect.fn("Session.setDirectory")(function* (input: {
+        sessionID: SessionID
+        directory: string
+      }) {
+        yield* patch(input.sessionID, { directory: input.directory, time: { updated: Date.now() } })
+      })
+
       const setRevert = Effect.fn("Session.setRevert")(function* (input: {
         sessionID: SessionID
         revert: Info["revert"]
@@ -664,6 +697,9 @@ export namespace Session {
         setTitle,
         setArchived,
         setPermission,
+        setPermissionMode,
+        setDirectory,
+        setCompactFailures,
         setRevert,
         clearRevert,
         setSummary,
@@ -691,6 +727,7 @@ export namespace Session {
         parentID: SessionID.zod.optional(),
         title: z.string().optional(),
         permission: Info.shape.permission,
+        permissionMode: PermissionMode.optional(),
         workspaceID: WorkspaceID.zod.optional(),
       })
       .optional(),
@@ -716,6 +753,19 @@ export namespace Session {
 
   export const setPermission = fn(z.object({ sessionID: SessionID.zod, permission: Permission.Ruleset }), (input) =>
     runPromise((svc) => svc.setPermission(input)),
+  )
+
+  export const setPermissionMode = fn(z.object({ sessionID: SessionID.zod, permissionMode: PermissionMode }), (input) =>
+    runPromise((svc) => svc.setPermissionMode(input)),
+  )
+
+  export const setDirectory = fn(z.object({ sessionID: SessionID.zod, directory: z.string() }), (input) =>
+    runPromise((svc) => svc.setDirectory(input)),
+  )
+
+  export const setCompactFailures = fn(
+    z.object({ sessionID: SessionID.zod, failures: z.number().int().min(0) }),
+    (input) => runPromise((svc) => svc.setCompactFailures(input)),
   )
 
   export const setRevert = fn(

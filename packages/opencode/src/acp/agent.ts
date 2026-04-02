@@ -1458,6 +1458,23 @@ export namespace ACP {
             { throwOnError: true },
           )
           break
+        case "plan": {
+          const sess = await this.config.sdk.session.get({ sessionID, directory }, { throwOnError: true })
+          const current = sess.data!.permissionMode ?? "default"
+          const next = current === "plan" ? "default" : "plan"
+          await this.config.sdk.session.permissionMode(
+            { sessionID, directory, permissionMode: next },
+            { throwOnError: true },
+          )
+          break
+        }
+        case "vim":
+          // vim keybindings are a TUI-client concern; no server action needed
+          break
+        case "effort": {
+          // effort/thinking level is handled as part of the prompt context; acknowledge
+          break
+        }
       }
 
       await sendUsageUpdate(this.connection, this.sdk, sessionID, directory)

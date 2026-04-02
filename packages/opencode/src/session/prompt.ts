@@ -34,6 +34,7 @@ import * as Stream from "effect/Stream"
 import { Command } from "../command"
 import { pathToFileURL, fileURLToPath } from "url"
 import { ConfigMarkdown } from "../config/markdown"
+import { Config } from "../config/config"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/util/error"
 import { SessionProcessor } from "./processor"
@@ -429,6 +430,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 sessionID: input.session.id,
                 tool: { messageID: input.processor.message.id, callID: options.toolCallId },
                 ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
+                permissionMode: input.session.permissionMode,
               }),
             ),
         })
@@ -640,6 +642,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     ...req,
                     sessionID,
                     ruleset: Permission.merge(taskAgent.permission, session.permission ?? []),
+                    permissionMode: session.permissionMode,
                   }),
                 )
               },
@@ -1334,6 +1337,39 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           throw new Error("Impossible")
         })
 
+      const publishBudgetMessage = Effect.fn("SessionPrompt.publishBudgetMessage")(function* (
+        sessionID: SessionID,
+        lastUser: MessageV2.User,
+        ctx: { directory: string; worktree: string },
+        text: string,
+      ) {
+        const msg: MessageV2.Assistant = yield* sessions.updateMessage({
+          id: MessageID.ascending(),
+          parentID: lastUser.id,
+          role: "assistant",
+          mode: lastUser.agent,
+          agent: lastUser.agent,
+          variant: lastUser.variant,
+          path: { cwd: ctx.directory, root: ctx.worktree },
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          modelID: lastUser.model?.modelID ?? "",
+          providerID: lastUser.model?.providerID ?? "",
+          time: { created: Date.now() },
+          sessionID,
+          finish: "stop",
+        })
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: msg.id,
+          sessionID,
+          type: "text",
+          text,
+          synthetic: false,
+        })
+        return msg
+      })
+
       const runLoop: (sessionID: SessionID) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.run")(
         function* (sessionID: SessionID) {
           const ctx = yield* InstanceState.context
@@ -1362,13 +1398,38 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             }
 
             if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
+            step++
 
-            const lastAssistantMsg = msgs.findLast(
-              (msg) => msg.info.role === "assistant" && msg.info.id === lastAssistant?.id,
-            )
-            // Some providers return "stop" even when the assistant message contains tool calls.
-            // Keep the loop running so tool results can be sent back to the model.
-            const hasToolCalls = lastAssistantMsg?.parts.some((part) => part.type === "tool") ?? false
+            // Budget guards — check maxTurns and maxUsd before each turn
+            const budget = yield* Effect.promise(() => Config.get().then((c) => c.budget))
+            const maxTurns =
+              budget?.maxTurns ??
+              (process.env.OPENCODE_MAX_TURNS ? parseInt(process.env.OPENCODE_MAX_TURNS, 10) : undefined)
+            const maxUsd =
+              budget?.maxUsd ?? (process.env.OPENCODE_MAX_USD ? parseFloat(process.env.OPENCODE_MAX_USD) : undefined)
+            if (maxTurns !== undefined && step > maxTurns) {
+              yield* publishBudgetMessage(
+                sessionID,
+                lastUser,
+                ctx,
+                `Budget exceeded: maximum ${maxTurns} turns reached.`,
+              )
+              break
+            }
+            if (maxUsd !== undefined) {
+              const spent = msgs
+                .filter((m) => m.info.role === "assistant")
+                .reduce((s, m) => s + ((m.info as MessageV2.Assistant).cost ?? 0), 0)
+              if (spent >= maxUsd) {
+                yield* publishBudgetMessage(
+                  sessionID,
+                  lastUser,
+                  ctx,
+                  `Budget exceeded: $${spent.toFixed(4)} spent, limit is $${maxUsd}.`,
+                )
+                break
+              }
+            }
 
             if (
               lastAssistant?.finish &&
@@ -1380,7 +1441,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               break
             }
 
-            step++
             if (step === 1)
               yield* title({
                 session,
@@ -1416,6 +1476,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             ) {
               yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })
               continue
+            }
+
+            // Publish graduated threshold events for TUI display
+            if (lastFinished && lastFinished.summary !== true) {
+              yield* compaction.checkThresholds({ sessionID, tokens: lastFinished.tokens, model }).pipe(Effect.ignore)
             }
 
             const agent = yield* agents.get(lastUser.agent)
@@ -1498,6 +1563,21 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
                 yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
+                const [skills, env, instructions, mem, modelMsgs] = yield* Effect.promise(() =>
+                  Promise.all([
+                    SystemPrompt.skills(agent),
+                    SystemPrompt.environment(model),
+                    InstructionPrompt.system(),
+                    SystemPrompt.memory(
+                      msgs
+                        .findLast((m) => m.info.role === "user")
+                        ?.parts.map((p) => ("text" in p ? p.text : ""))
+                        .join(" ") ?? "",
+                    ),
+                    MessageV2.toModelMessages(msgs, model),
+                  ]),
+                )
+                const system = [...env, ...(skills ? [skills] : []), ...(mem ? [mem] : []), ...instructions]
                 const [skills, env, instructions, modelMsgs] = yield* Effect.all([
                   Effect.promise(() => SystemPrompt.skills(agent)),
                   Effect.promise(() => SystemPrompt.environment(model)),
@@ -1642,13 +1722,23 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
         yield* getModel(taskModel.providerID, taskModel.modelID, input.sessionID)
 
-        const agent = yield* agents.get(agentName)
+        let agent = yield* agents.get(agentName)
         if (!agent) {
           const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
           const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
           const error = new NamedError.Unknown({ message: `Agent not found: "${agentName}".${hint}` })
           yield* bus.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
           throw error
+        }
+
+        // 17.5: enforce allowed-tools restriction from skill frontmatter
+        if (cmd.allowedTools && cmd.allowedTools.length > 0) {
+          const allowed = new Set(cmd.allowedTools)
+          const ids = yield* registry.ids()
+          const rules = ids
+            .filter((id) => !allowed.has(id))
+            .map((id) => ({ permission: id, pattern: "*", action: "deny" as const }))
+          agent = { ...agent, permission: [...agent.permission, ...rules] }
         }
 
         const templateParts = yield* resolvePromptParts(template)

@@ -94,6 +94,17 @@ export type EventMessagePartDelta = {
   }
 }
 
+export type PermissionMode = "default" | "plan" | "acceptEdits" | "bypassPermissions"
+
+export type EventPermissionModeChanged = {
+  type: "permission-mode.changed"
+  properties: {
+    sessionID: string
+    previousMode: PermissionMode
+    newMode: PermissionMode
+  }
+}
+
 export type PermissionRequest = {
   id: string
   sessionID: string
@@ -120,6 +131,75 @@ export type EventPermissionReplied = {
     sessionID: string
     requestID: string
     reply: "once" | "always" | "reject"
+  }
+}
+
+export type EventTuiPromptAppend = {
+  type: "tui.prompt.append"
+  properties: {
+    text: string
+  }
+}
+
+export type EventTuiCommandExecute = {
+  type: "tui.command.execute"
+  properties: {
+    command:
+      | "session.list"
+      | "session.new"
+      | "session.share"
+      | "session.interrupt"
+      | "session.compact"
+      | "session.page.up"
+      | "session.page.down"
+      | "session.line.up"
+      | "session.line.down"
+      | "session.half.page.up"
+      | "session.half.page.down"
+      | "session.first"
+      | "session.last"
+      | "prompt.clear"
+      | "prompt.submit"
+      | "agent.cycle"
+      | string
+  }
+}
+
+export type EventTuiToastShow = {
+  type: "tui.toast.show"
+  properties: {
+    title?: string
+    message: string
+    variant: "info" | "success" | "warning" | "error"
+    /**
+     * Duration in milliseconds
+     */
+    duration?: number
+  }
+}
+
+export type EventTuiSessionSelect = {
+  type: "tui.session.select"
+  properties: {
+    /**
+     * Session ID to navigate to
+     */
+    sessionID: string
+  }
+}
+
+export type EventMcpToolsChanged = {
+  type: "mcp.tools.changed"
+  properties: {
+    server: string
+  }
+}
+
+export type EventMcpBrowserOpenFailed = {
+  type: "mcp.browser.open.failed"
+  properties: {
+    mcpName: string
+    url: string
   }
 }
 
@@ -230,6 +310,15 @@ export type EventSessionCompacted = {
   }
 }
 
+export type EventSessionContextThreshold = {
+  type: "session.context_threshold"
+  properties: {
+    sessionID: string
+    level: "warning" | "error" | "blocking"
+    fraction: number
+  }
+}
+
 export type EventFileEdited = {
   type: "file.edited"
   properties: {
@@ -268,72 +357,18 @@ export type EventTodoUpdated = {
   }
 }
 
-export type EventTuiPromptAppend = {
-  type: "tui.prompt.append"
+export type EventWorktreeReady = {
+  type: "worktree.ready"
   properties: {
-    text: string
+    name: string
+    branch: string
   }
 }
 
-export type EventTuiCommandExecute = {
-  type: "tui.command.execute"
+export type EventWorktreeFailed = {
+  type: "worktree.failed"
   properties: {
-    command:
-      | "session.list"
-      | "session.new"
-      | "session.share"
-      | "session.interrupt"
-      | "session.compact"
-      | "session.page.up"
-      | "session.page.down"
-      | "session.line.up"
-      | "session.line.down"
-      | "session.half.page.up"
-      | "session.half.page.down"
-      | "session.first"
-      | "session.last"
-      | "prompt.clear"
-      | "prompt.submit"
-      | "agent.cycle"
-      | string
-  }
-}
-
-export type EventTuiToastShow = {
-  type: "tui.toast.show"
-  properties: {
-    title?: string
     message: string
-    variant: "info" | "success" | "warning" | "error"
-    /**
-     * Duration in milliseconds
-     */
-    duration?: number
-  }
-}
-
-export type EventTuiSessionSelect = {
-  type: "tui.session.select"
-  properties: {
-    /**
-     * Session ID to navigate to
-     */
-    sessionID: string
-  }
-}
-
-export type EventMcpToolsChanged = {
-  type: "mcp.tools.changed"
-  properties: {
-    server: string
-  }
-}
-
-export type EventMcpBrowserOpenFailed = {
-  type: "mcp.browser.open.failed"
-  properties: {
-    mcpName: string
-    url: string
   }
 }
 
@@ -497,21 +532,6 @@ export type EventPtyDeleted = {
   type: "pty.deleted"
   properties: {
     id: string
-  }
-}
-
-export type EventWorktreeReady = {
-  type: "worktree.ready"
-  properties: {
-    name: string
-    branch: string
-  }
-}
-
-export type EventWorktreeFailed = {
-  type: "worktree.failed"
-  properties: {
-    message: string
   }
 }
 
@@ -931,6 +951,8 @@ export type Session = {
     archived?: number
   }
   permission?: PermissionRuleset
+  permissionMode?: PermissionMode
+  compactFailures?: number
   revert?: {
     messageID: string
     partID?: string
@@ -973,23 +995,27 @@ export type Event =
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventMessagePartDelta
+  | EventPermissionModeChanged
   | EventPermissionAsked
   | EventPermissionReplied
-  | EventSessionStatus
-  | EventSessionIdle
-  | EventQuestionAsked
-  | EventQuestionReplied
-  | EventQuestionRejected
-  | EventSessionCompacted
-  | EventFileEdited
-  | EventFileWatcherUpdated
-  | EventTodoUpdated
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow
   | EventTuiSessionSelect
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
+  | EventSessionStatus
+  | EventSessionIdle
+  | EventQuestionAsked
+  | EventQuestionReplied
+  | EventQuestionRejected
+  | EventSessionCompacted
+  | EventSessionContextThreshold
+  | EventFileEdited
+  | EventFileWatcherUpdated
+  | EventTodoUpdated
+  | EventWorktreeReady
+  | EventWorktreeFailed
   | EventCommandExecuted
   | EventSessionDiff
   | EventSessionError
@@ -1000,8 +1026,6 @@ export type Event =
   | EventPtyUpdated
   | EventPtyExited
   | EventPtyDeleted
-  | EventWorktreeReady
-  | EventWorktreeFailed
   | EventMessageUpdated
   | EventMessageRemoved
   | EventMessagePartUpdated
@@ -1092,6 +1116,8 @@ export type SyncEventSessionUpdated = {
         archived: number | null
       }
       permission: PermissionRuleset | null
+      permissionMode: PermissionMode | null
+      compactFailures: number | null
       revert: {
         messageID: string
         partID?: string
@@ -1461,6 +1487,54 @@ export type Config = {
       ]
   >
   /**
+   * Plugin manifests with contribution point definitions
+   */
+  plugin_manifests?: Array<{
+    /**
+     * Unique plugin identifier
+     */
+    id: string
+    /**
+     * Paths to skill directories provided by this plugin
+     */
+    skills?: Array<string>
+    /**
+     * Lifecycle hooks provided by this plugin
+     */
+    hooks?: Array<{
+      event: string
+      pattern?: string
+      command: string
+      timeout?: number
+    }>
+    /**
+     * MCP servers bundled with this plugin
+     */
+    mcpServers?: {
+      [key: string]: {
+        type: "local"
+        command: Array<string>
+        environment?: {
+          [key: string]: string
+        }
+        timeout?: number
+      }
+    }
+    /**
+     * Enable or disable this plugin
+     */
+    enabled?: boolean
+  }>
+  /**
+   * Plugin marketplace configuration
+   */
+  marketplace?: {
+    /**
+     * URL for plugin marketplace index
+     */
+    url?: string
+  }
+  /**
    * Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing
    */
   share?: "manual" | "auto" | "disabled"
@@ -1571,8 +1645,34 @@ export type Config = {
   instructions?: Array<string>
   layout?: LayoutConfig
   permission?: PermissionConfig
+  permission_mode?: PermissionMode
   tools?: {
     [key: string]: boolean
+  }
+  /**
+   * Sandbox execution configuration (bubblewrap/bwrap, Linux only)
+   */
+  sandbox?: {
+    /**
+     * Enable sandbox execution via bubblewrap (Linux only)
+     */
+    enabled?: boolean
+    /**
+     * Paths to bind read-only inside the sandbox
+     */
+    read?: Array<string>
+    /**
+     * Paths to bind read-write inside the sandbox
+     */
+    write?: Array<string>
+    /**
+     * Allow network access inside the sandbox (default: true)
+     */
+    network?: boolean
+    /**
+     * Proxy ports to forward into the sandbox
+     */
+    proxyPorts?: Array<number>
   }
   enterprise?: {
     /**
@@ -1593,6 +1693,57 @@ export type Config = {
      * Token buffer for compaction. Leaves enough window to avoid overflow during compaction.
      */
     reserved?: number
+    /**
+     * Graduated context usage thresholds
+     */
+    thresholds?: {
+      /**
+       * Context usage fraction to show warning (default: 0.70)
+       */
+      warning?: number
+      /**
+       * Context usage fraction to show error (default: 0.85)
+       */
+      error?: number
+      /**
+       * Context usage fraction to block new turns (default: 0.95)
+       */
+      blocking?: number
+    }
+  }
+  /**
+   * Lifecycle hooks — shell commands run on bus events
+   */
+  hooks?: Array<{
+    /**
+     * Bus event to hook (e.g. 'session.start', 'tool.pre', 'tool.post')
+     */
+    event: string
+    /**
+     * Optional tool/event pattern filter
+     */
+    pattern?: string
+    /**
+     * Shell command to execute
+     */
+    command: string
+    /**
+     * Timeout in ms (default 10000)
+     */
+    timeout?: number
+  }>
+  /**
+   * Budget limits for agent sessions
+   */
+  budget?: {
+    /**
+     * Maximum number of agent turns per session (stops loop when exceeded)
+     */
+    maxTurns?: number
+    /**
+     * Maximum spend in USD per session (stops loop when exceeded)
+     */
+    maxUsd?: number
   }
   experimental?: {
     disable_paste_summary?: boolean
@@ -1814,6 +1965,8 @@ export type GlobalSession = {
     archived?: number
   }
   permission?: PermissionRuleset
+  permissionMode?: PermissionMode
+  compactFailures?: number
   revert?: {
     messageID: string
     partID?: string
@@ -2014,6 +2167,7 @@ export type Command = {
   template: string
   subtask?: boolean
   hints: Array<string>
+  allowedTools?: Array<string>
 }
 
 export type Agent = {
@@ -3011,6 +3165,7 @@ export type SessionCreateData = {
     parentID?: string
     title?: string
     permission?: PermissionRuleset
+    permissionMode?: PermissionMode
     workspaceID?: string
   }
   path?: never
@@ -3176,8 +3331,10 @@ export type SessionUpdateResponses = {
 
 export type SessionUpdateResponse = SessionUpdateResponses[keyof SessionUpdateResponses]
 
-export type SessionChildrenData = {
-  body?: never
+export type SessionPermissionModeData = {
+  body?: {
+    permissionMode?: PermissionMode
+  }
   path: {
     sessionID: string
   }
@@ -3185,10 +3342,10 @@ export type SessionChildrenData = {
     directory?: string
     workspace?: string
   }
-  url: "/session/{sessionID}/children"
+  url: "/session/{sessionID}/permission-mode"
 }
 
-export type SessionChildrenErrors = {
+export type SessionPermissionModeErrors = {
   /**
    * Bad request
    */
@@ -3199,50 +3356,18 @@ export type SessionChildrenErrors = {
   404: NotFoundError
 }
 
-export type SessionChildrenError = SessionChildrenErrors[keyof SessionChildrenErrors]
+export type SessionPermissionModeError = SessionPermissionModeErrors[keyof SessionPermissionModeErrors]
 
-export type SessionChildrenResponses = {
+export type SessionPermissionModeResponses = {
   /**
-   * List of children
+   * Successfully updated permission mode
    */
-  200: Array<Session>
-}
-
-export type SessionChildrenResponse = SessionChildrenResponses[keyof SessionChildrenResponses]
-
-export type SessionTodoData = {
-  body?: never
-  path: {
-    sessionID: string
+  200: {
+    permissionMode: PermissionMode
   }
-  query?: {
-    directory?: string
-    workspace?: string
-  }
-  url: "/session/{sessionID}/todo"
 }
 
-export type SessionTodoErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * Not found
-   */
-  404: NotFoundError
-}
-
-export type SessionTodoError = SessionTodoErrors[keyof SessionTodoErrors]
-
-export type SessionTodoResponses = {
-  /**
-   * Todo list
-   */
-  200: Array<Todo>
-}
-
-export type SessionTodoResponse = SessionTodoResponses[keyof SessionTodoResponses]
+export type SessionPermissionModeResponse = SessionPermissionModeResponses[keyof SessionPermissionModeResponses]
 
 export type SessionInitData = {
   body?: {
@@ -3428,6 +3553,40 @@ export type SessionDiffResponses = {
 }
 
 export type SessionDiffResponse = SessionDiffResponses[keyof SessionDiffResponses]
+
+export type SessionTodoData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/todo"
+}
+
+export type SessionTodoErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionTodoError = SessionTodoErrors[keyof SessionTodoErrors]
+
+export type SessionTodoResponses = {
+  /**
+   * List of todos
+   */
+  200: Array<Todo>
+}
+
+export type SessionTodoResponse = SessionTodoResponses[keyof SessionTodoResponses]
 
 export type SessionSummarizeData = {
   body?: {
@@ -4701,6 +4860,135 @@ export type McpDisconnectResponses = {
 
 export type McpDisconnectResponse = McpDisconnectResponses[keyof McpDisconnectResponses]
 
+export type MemoryListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    scope?: "user" | "project"
+  }
+  url: "/memory"
+}
+
+export type MemoryListResponses = {
+  /**
+   * List of memories
+   */
+  200: Array<{
+    id: string
+    scope: "user" | "project"
+    project_id?: string
+    type: "user" | "feedback" | "project" | "reference"
+    title: string
+    content: string
+    tags?: Array<string>
+    file: string
+    time_created: number
+    time_updated: number
+  }>
+}
+
+export type MemoryListResponse = MemoryListResponses[keyof MemoryListResponses]
+
+export type MemoryAddData = {
+  body?: {
+    type: "user" | "feedback" | "project" | "reference"
+    title: string
+    content: string
+    tags?: Array<string>
+    scope?: "user" | "project"
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/memory"
+}
+
+export type MemoryAddResponses = {
+  /**
+   * Created memory
+   */
+  200: {
+    id: string
+    scope: "user" | "project"
+    project_id?: string
+    type: "user" | "feedback" | "project" | "reference"
+    title: string
+    content: string
+    tags?: Array<string>
+    file: string
+    time_created: number
+    time_updated: number
+  }
+}
+
+export type MemoryAddResponse = MemoryAddResponses[keyof MemoryAddResponses]
+
+export type MemoryDeleteData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/memory/{id}"
+}
+
+export type MemoryDeleteResponses = {
+  /**
+   * Deleted
+   */
+  200: boolean
+}
+
+export type MemoryDeleteResponse = MemoryDeleteResponses[keyof MemoryDeleteResponses]
+
+export type MemoryGetData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/memory/{id}"
+}
+
+export type MemoryGetErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type MemoryGetError = MemoryGetErrors[keyof MemoryGetErrors]
+
+export type MemoryGetResponses = {
+  /**
+   * Memory
+   */
+  200: {
+    id: string
+    scope: "user" | "project"
+    project_id?: string
+    type: "user" | "feedback" | "project" | "reference"
+    title: string
+    content: string
+    tags?: Array<string>
+    file: string
+    time_created: number
+    time_updated: number
+  }
+}
+
+export type MemoryGetResponse = MemoryGetResponses[keyof MemoryGetResponses]
+
 export type TuiAppendPromptData = {
   body?: {
     text: string
@@ -5122,6 +5410,12 @@ export type AppSkillsResponses = {
     description: string
     location: string
     content: string
+    paths?: Array<string>
+    allowedTools?: Array<string>
+    model?: string
+    effort?: "low" | "medium" | "high"
+    whenToUse?: string
+    argumentHint?: string
   }>
 }
 

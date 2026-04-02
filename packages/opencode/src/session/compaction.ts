@@ -30,6 +30,14 @@ export namespace SessionCompaction {
         sessionID: SessionID.zod,
       }),
     ),
+    ContextThreshold: BusEvent.define(
+      "session.context_threshold",
+      z.object({
+        sessionID: SessionID.zod,
+        level: z.enum(["warning", "error", "blocking"]),
+        fraction: z.number(),
+      }),
+    ),
   }
 
   export const PRUNE_MINIMUM = 20_000
@@ -41,6 +49,11 @@ export namespace SessionCompaction {
       tokens: MessageV2.Assistant["tokens"]
       model: Provider.Model
     }) => Effect.Effect<boolean>
+    readonly checkThresholds: (input: {
+      sessionID: SessionID
+      tokens: MessageV2.Assistant["tokens"]
+      model: Provider.Model
+    }) => Effect.Effect<void>
     readonly prune: (input: { sessionID: SessionID }) => Effect.Effect<void>
     readonly process: (input: {
       parentID: MessageID
@@ -48,6 +61,8 @@ export namespace SessionCompaction {
       sessionID: SessionID
       auto: boolean
       overflow?: boolean
+      fromID?: MessageID
+      toID?: MessageID
     }) => Effect.Effect<"continue" | "stop">
     readonly create: (input: {
       sessionID: SessionID
@@ -86,6 +101,30 @@ export namespace SessionCompaction {
         model: Provider.Model
       }) {
         return overflow({ cfg: yield* config.get(), tokens: input.tokens, model: input.model })
+      })
+
+      const checkThresholds = Effect.fn("SessionCompaction.checkThresholds")(function* (input: {
+        sessionID: SessionID
+        tokens: MessageV2.Assistant["tokens"]
+        model: Provider.Model
+      }) {
+        const cfg = yield* config.get()
+        const context = input.model.limit.context
+        if (context === 0) return
+        const count =
+          input.tokens.total ??
+          input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
+        const fraction = count / context
+        const t = cfg.compaction?.thresholds
+        const blocking = t?.blocking ?? 0.95
+        const error = t?.error ?? 0.85
+        const warning = t?.warning ?? 0.7
+        if (fraction >= blocking)
+          yield* bus.publish(Event.ContextThreshold, { sessionID: input.sessionID, level: "blocking", fraction })
+        else if (fraction >= error)
+          yield* bus.publish(Event.ContextThreshold, { sessionID: input.sessionID, level: "error", fraction })
+        else if (fraction >= warning)
+          yield* bus.publish(Event.ContextThreshold, { sessionID: input.sessionID, level: "warning", fraction })
       })
 
       // goes backwards through parts until there are PRUNE_PROTECT tokens worth of tool
@@ -138,20 +177,123 @@ export namespace SessionCompaction {
         }
       })
 
+      // Post-compact file restoration: find the top 5 most-read files and re-inject
+      const MAX_RESTORE_FILES = 5
+      const MAX_RESTORE_TOKENS = 50_000
+
+      const restoreReadFiles = Effect.fnUntraced(function* (input: {
+        sessionID: SessionID
+        userMessage: MessageV2.User
+      }) {
+        const msgs = yield* session
+          .messages({ sessionID: input.sessionID })
+          .pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed(undefined)))
+        if (!msgs) return
+
+        // Count read tool invocations by path
+        const freq = new Map<string, number>()
+        for (const msg of msgs) {
+          for (const part of msg.parts) {
+            if (part.type === "tool" && part.tool === "read" && part.state.status === "completed") {
+              const p = part.state.input?.["filePath"] as string | undefined
+              if (p) freq.set(p, (freq.get(p) ?? 0) + 1)
+            }
+          }
+        }
+        if (freq.size === 0) return
+
+        const top = [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, MAX_RESTORE_FILES)
+        let totalTokens = 0
+        const contents: string[] = []
+
+        for (const [p] of top) {
+          const exists = yield* Effect.promise(() => Bun.file(p).exists())
+          if (!exists) continue
+          const text = yield* Effect.promise(() => Bun.file(p).text())
+          const estimate = Token.estimate(text)
+          if (totalTokens + estimate > MAX_RESTORE_TOKENS) continue
+          totalTokens += estimate
+          contents.push(`### ${p}\n\`\`\`\n${text}\n\`\`\``)
+        }
+
+        if (contents.length === 0) return
+        log.info("restoring read files post-compact", { count: contents.length, tokens: totalTokens })
+
+        const restoreMsg = yield* session.updateMessage({
+          id: MessageID.ascending(),
+          role: "user",
+          sessionID: input.sessionID,
+          agent: input.userMessage.agent,
+          model: input.userMessage.model,
+          time: { created: Date.now() },
+        })
+        yield* session.updatePart({
+          id: PartID.ascending(),
+          messageID: restoreMsg.id,
+          sessionID: input.sessionID,
+          type: "text",
+          synthetic: true,
+          text: `[Post-compact file restoration — re-reading top files from session history]\n\n${contents.join("\n\n")}`,
+          time: { start: Date.now(), end: Date.now() },
+        })
+      })
+
       const processCompaction = Effect.fn("SessionCompaction.process")(function* (input: {
         parentID: MessageID
         messages: MessageV2.WithParts[]
         sessionID: SessionID
         auto: boolean
         overflow?: boolean
+        fromID?: MessageID
+        toID?: MessageID
       }) {
+        // Circuit breaker: skip auto-compaction after 3 consecutive failures
+        const CIRCUIT_THRESHOLD = 3
+        const sessionInfo = yield* session
+          .get(input.sessionID)
+          .pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed(undefined)))
+        if (sessionInfo && sessionInfo.compactFailures >= CIRCUIT_THRESHOLD) {
+          log.info("circuit breaker open — skipping compaction", { failures: sessionInfo.compactFailures })
+          return "continue"
+        }
+
         const parent = input.messages.findLast((m) => m.info.id === input.parentID)
         if (!parent || parent.info.role !== "user") {
           throw new Error(`Compaction parent must be a user message: ${input.parentID}`)
         }
         const userMessage = parent.info
 
+        // Tier 1: try pruning tool outputs first before full LLM compaction
+        if (input.auto && !input.overflow) {
+          yield* prune({ sessionID: input.sessionID })
+          // Re-fetch messages to get updated token picture — check if we're still overflowing
+          const refreshed = yield* session
+            .messages({ sessionID: input.sessionID })
+            .pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed(undefined)))
+          if (refreshed) {
+            const lastAssistant = refreshed.findLast((m) => m.info.role === "assistant" && m.info.finish) as
+              | { info: MessageV2.Assistant }
+              | undefined
+            if (lastAssistant) {
+              const model = yield* provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
+              const stillOverflowing = overflow({ cfg: yield* config.get(), tokens: lastAssistant.info.tokens, model })
+              if (!stillOverflowing) {
+                log.info("tier-1 prune resolved overflow — skipping full compaction")
+                return "continue"
+              }
+            }
+          }
+        }
+
         let messages = input.messages
+
+        // Partial compaction: slice to the specified from/to range
+        if (input.fromID || input.toID) {
+          const from = input.fromID ? messages.findIndex((m) => m.info.id === input.fromID) : 0
+          const to = input.toID ? messages.findIndex((m) => m.info.id === input.toID) : messages.length - 1
+          if (from >= 0 && to >= from) messages = messages.slice(from, to + 1)
+        }
+
         let replay:
           | {
               info: MessageV2.User
@@ -279,6 +421,12 @@ When constructing the summary, try to stick to this template:
           }).toObject()
           processor.message.finish = "error"
           yield* session.updateMessage(processor.message)
+          // Increment circuit breaker failure counter
+          const info = yield* session
+            .get(input.sessionID)
+            .pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed(undefined)))
+          if (info)
+            yield* session.setCompactFailures({ sessionID: input.sessionID, failures: (info.compactFailures ?? 0) + 1 })
           return "stop"
         }
 
@@ -341,8 +489,27 @@ When constructing the summary, try to stick to this template:
           }
         }
 
-        if (processor.message.error) return "stop"
-        if (result === "continue") yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
+        if (processor.message.error) {
+          // Increment circuit breaker failure counter
+          const info = yield* session
+            .get(input.sessionID)
+            .pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed(undefined)))
+          if (info)
+            yield* session.setCompactFailures({ sessionID: input.sessionID, failures: (info.compactFailures ?? 0) + 1 })
+          return "stop"
+        }
+        if (result === "continue") {
+          // Reset circuit breaker on success
+          const info = yield* session
+            .get(input.sessionID)
+            .pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed(undefined)))
+          if (info && info.compactFailures > 0)
+            yield* session.setCompactFailures({ sessionID: input.sessionID, failures: 0 })
+          yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
+
+          // Post-compact file restoration: re-inject top 5 most-read files
+          yield* restoreReadFiles({ sessionID: input.sessionID, userMessage }).pipe(Effect.ignore)
+        }
         return result
       })
 
@@ -373,6 +540,7 @@ When constructing the summary, try to stick to this template:
 
       return Service.of({
         isOverflow,
+        checkThresholds,
         prune,
         process: processCompaction,
         create,
@@ -400,6 +568,15 @@ When constructing the summary, try to stick to this template:
     return runPromise((svc) => svc.isOverflow(input))
   }
 
+  export const checkThresholds = fn(
+    z.object({
+      sessionID: SessionID.zod,
+      tokens: z.custom<MessageV2.Assistant["tokens"]>(),
+      model: z.custom<Provider.Model>(),
+    }),
+    (input) => runPromise((svc) => svc.checkThresholds(input)),
+  )
+
   export async function prune(input: { sessionID: SessionID }) {
     return runPromise((svc) => svc.prune(input))
   }
@@ -411,6 +588,8 @@ When constructing the summary, try to stick to this template:
       sessionID: SessionID.zod,
       auto: z.boolean(),
       overflow: z.boolean().optional(),
+      fromID: MessageID.zod.optional(),
+      toID: MessageID.zod.optional(),
     }),
     (input) => runPromise((svc) => svc.process(input)),
   )

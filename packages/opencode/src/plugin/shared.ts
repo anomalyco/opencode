@@ -5,6 +5,14 @@ import { Npm } from "@/npm"
 import { Filesystem } from "@/util/filesystem"
 import { isRecord } from "@/util/record"
 
+// 18.7: Variable substitution — resolve ${user_config.X} placeholders in plugin config values
+export function substituteVars(value: unknown, vars: Record<string, string>): unknown {
+  if (typeof value === "string") return value.replace(/\$\{user_config\.([^}]+)\}/g, (_, key) => vars[key] ?? "")
+  if (Array.isArray(value)) return value.map((v) => substituteVars(v, vars))
+  if (isRecord(value)) return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, substituteVars(v, vars)]))
+  return value
+}
+
 // Old npm package names for plugins that are now built-in
 export const DEPRECATED_PLUGIN_PACKAGES = ["opencode-openai-codex-auth", "opencode-copilot-auth"]
 
