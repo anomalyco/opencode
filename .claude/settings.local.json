@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go install:*)",
+      "Bash(lash:*)",
+      "Read(//Users/lacy/.nvm/versions/node/v22.18.0/lib/node_modules/lash-cli/**)",
+      "Bash(npm run build:*)",
+      "Bash(npm run:*)",
+      "Bash(find:*)",
+      "Bash(bun run:*)",
+      "Bash(./dist/lash-darwin-arm64:*)",
+      "Bash(./packages/opencode/dist/lash-darwin-arm64 --version)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Read(//Users/lacy/go/bin/**)",
+      "Bash(/Users/lacy/go/bin/lash:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(echo $PATH)",
+      "Bash(export:*)",
+      "Bash(brew install:*)",
+      "Bash(brew list:*)",
+      "Bash(brew info:*)",
+      "Bash(git -C /Users/lacy/repo/lash status)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
