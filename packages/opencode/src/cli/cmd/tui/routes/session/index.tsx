@@ -1057,7 +1057,34 @@ export function Session() {
             >
               <box height={1} />
               <For each={messages()}>
-                {(message, index) => (
+                {(message, index) => {
+                  const msgParts = sync.data.part[message.id] ?? []
+                  const isCompactionTrigger =
+                    message.role === "user" && msgParts.some((p: Part) => p.type === "compaction")
+                  const isSummary = message.role === "assistant" && (message as AssistantMessage).summary === true
+
+                  // Find last compaction boundary
+                  const lastCompIdx = messages().findLastIndex((m) => {
+                    const mp = sync.data.part[m.id] ?? []
+                    return m.role === "user" && mp.some((p: Part) => p.type === "compaction")
+                  })
+
+                  // Hide everything before last compaction
+                  if (lastCompIdx >= 0 && index() < lastCompIdx) return <></>
+
+                  // At the compaction trigger: show a single line
+                  if (isCompactionTrigger) {
+                    return (
+                      <box marginTop={1} paddingLeft={2}>
+                        <text fg={theme.textMuted}>▣ Compaction · morph</text>
+                      </box>
+                    )
+                  }
+
+                  // Hide summary messages (compaction output, LLM context only)
+                  if (isSummary) return <></>
+
+                  return (
                   <Switch>
                     <Match when={message.id === revert()?.messageID}>
                       {(function () {
@@ -1149,7 +1176,8 @@ export function Session() {
                       />
                     </Match>
                   </Switch>
-                )}
+                  )
+                }}
               </For>
             </scrollbox>
             <box flexShrink={0}>
@@ -1235,8 +1263,6 @@ function UserMessage(props: {
   const queuedFg = createMemo(() => selectedForeground(theme, color()))
   const metadataVisible = createMemo(() => queued() || ctx.showTimestamps())
 
-  const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
-
   return (
     <>
       <Show when={text()}>
@@ -1299,15 +1325,6 @@ function UserMessage(props: {
             </Show>
           </box>
         </box>
-      </Show>
-      <Show when={compaction()}>
-        <box
-          marginTop={1}
-          border={["top"]}
-          title=" Compaction "
-          titleAlignment="center"
-          borderColor={theme.borderActive}
-        />
       </Show>
     </>
   )

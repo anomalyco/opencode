@@ -669,10 +669,7 @@ export namespace MessageV2 {
           }
 
           if (part.type === "compaction") {
-            userMessage.parts.push({
-              type: "text",
-              text: "What did we do so far?",
-            })
+            // no-op: compaction parts don't inject user-visible text
           }
           if (part.type === "subtask") {
             userMessage.parts.push({

@@ -962,6 +962,16 @@ export namespace Config {
         .object({
           auto: z.boolean().optional().describe("Enable automatic compaction when context is full (default: true)"),
           prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
+          provider: z
+            .enum(["builtin", "morph"])
+            .optional()
+            .describe('Compaction provider to use (default: "morph"). "builtin" uses an LLM to summarize.'),
+          compressionRatio: z
+            .number()
+            .min(0)
+            .max(1)
+            .optional()
+            .describe("Compression ratio for external compaction providers like Morph (default: 0.3)"),
           reserved: z
             .number()
             .int()
