@@ -39,6 +39,7 @@ import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
 import { drizzle } from "drizzle-orm/bun-sqlite"
 import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process"
+import { statSync } from "fs"
 
 const processMetadata = ensureProcessMetadata("main")
 
@@ -55,6 +56,23 @@ process.on("uncaughtException", (e) => {
 })
 
 const args = hideBin(process.argv)
+
+function applyWorkingDirectoryOverride() {
+  const override = process.env.OPENCODE_CWD?.trim()
+  if (!override) return
+
+  const resolved = path.resolve(override)
+  const stats = statSync(resolved, { throwIfNoEntry: false })
+  if (!stats) {
+    throw new Error(`OPENCODE_CWD does not exist: ${resolved}`)
+  }
+  if (!stats.isDirectory()) {
+    throw new Error(`OPENCODE_CWD is not a directory: ${resolved}`)
+  }
+  process.chdir(resolved)
+}
+
+applyWorkingDirectoryOverride()
 
 function show(out: string) {
   const text = out.trimStart()
