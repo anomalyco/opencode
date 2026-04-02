@@ -59,6 +59,7 @@ import { TuiConfigProvider, useTuiConfig } from "./context/tui-config"
 import { TuiConfig } from "@/config/tui"
 import { createTuiApi, TuiPluginRuntime, type RouteMap } from "./plugin"
 import { FormatError, FormatUnknownError } from "@/cli/error"
+import { Log } from "@/util/log"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -181,7 +182,16 @@ export function tui(input: {
     // the original console mode which re-enables ENABLE_PROCESSED_INPUT.
     win32DisableProcessedInput()
 
+    // Redirect console.warn/error to the log service so third-party SDK
+    // warnings (e.g. OpenRouter) don't bleed into the TUI as raw text.
+    const _warn = console.warn
+    const _error = console.error
+    console.warn = (...args: any[]) => Log.Default.warn("console", { message: args.map(String).join(" ") })
+    console.error = (...args: any[]) => Log.Default.error("console", { message: args.map(String).join(" ") })
+
     const onExit = async () => {
+      console.warn = _warn
+      console.error = _error
       unguard?.()
       resolve()
     }
