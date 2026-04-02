@@ -96,16 +96,19 @@ export async function retrieveVector(input: {
       query: { topK: input.topk, inputs: { text: input.text } },
       fields: ["title", "body", "tags", "text"],
     })
-    return (hit.result?.hits ?? []).map((item) => ({
-      id: String(item._id ?? ""),
-      title: String(item.fields?.["title"] ?? ""),
-      text: String(item.fields?.["body"] ?? item.fields?.["text"] ?? ""),
-      tags: String(item.fields?.["tags"] ?? "")
-        .split(",")
-        .map((x) => x.trim())
-        .filter(Boolean),
-      score: Number(item._score ?? 0),
-    }))
+    return (hit.result?.hits ?? []).map((item) => {
+      const f = (item.fields ?? {}) as Record<string, unknown>
+      return {
+        id: String(item._id ?? ""),
+        title: String(f["title"] ?? ""),
+        text: String(f["body"] ?? f["text"] ?? ""),
+        tags: String(f["tags"] ?? "")
+          .split(",")
+          .map((x) => x.trim())
+          .filter(Boolean),
+        score: Number(item._score ?? 0),
+      }
+    })
   }
 
   const url = input.qdrantUrl ?? process.env.QDRANT_URL
