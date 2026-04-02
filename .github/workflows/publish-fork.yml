@@ -99,7 +99,7 @@ jobs:
           gh release create "$tag" \
             --title "opencode $tag (f5xc fork)" \
             --notes "$(cat <<EOF
-          Fork build of opencode with LiteLLM fixes + TUI enhancements.
+          Fork build of opencode with F5 branding, personality system, and TUI enhancements.
           Based on upstream v${base} + fork patches.
 
           ## Install
@@ -113,15 +113,16 @@ jobs:
           brew upgrade f5xc-salesdemos/tap/opencode
           \`\`\`
 
-          ## Changes from upstream
-          - feat: persistent footer with p10k-style git status colorization
-          - fix: role-aware empty/whitespace content filtering for all providers
-          - fix: preserve Anthropic thinking block signatures in assistant messages
-          - fix: filter empty text/reasoning parts at DB load time
-          - fix: post-interleaved-filter empty content guard
+          ## Fork enhancements
+          - F5 circular emblem logo and xcsh-matched branding colors
+          - Hermes-inspired soul and personality system
+          - Consolidated agent/model/provider status line
+          - Sidebar defaults to hidden
+          - Slow-breathing spinner animation
+          - Role-aware content filtering for all providers
           EOF
           )" \
-            --prerelease \
+            --latest \
             packages/opencode/dist/opencode-darwin-arm64.zip \
             packages/opencode/dist/opencode-darwin-x64.zip \
             packages/opencode/dist/opencode-linux-arm64.tar.gz \
