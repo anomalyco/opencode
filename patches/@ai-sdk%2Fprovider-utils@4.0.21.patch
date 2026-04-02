@@ -1,0 +1,61 @@
+diff --git a/dist/index.js b/dist/index.js
+index 9aa8e83684777e860d905ff7a6895995a7347a4f..820797581ac2a33e731e139da3ebc98b4d93fdcf 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -395,10 +395,13 @@ function validateDownloadUrl(url) {
+       message: `Invalid URL: ${url}`
+     });
+   }
++  if (parsed.protocol === "data:") {
++    return;
++  }
+   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+     throw new DownloadError({
+       url,
+-      message: `URL scheme must be http or https, got ${parsed.protocol}`
++      message: `URL scheme must be http, https, or data, got ${parsed.protocol}`
+     });
+   }
+   const hostname = parsed.hostname;
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 095fdc188b1d7f227b42591c78ecb71fe2e2cf8b..ca5227d3b6e358aea8ecd85782a0a2b48130a2c9 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -299,10 +299,13 @@ function validateDownloadUrl(url) {
+       message: `Invalid URL: ${url}`
+     });
+   }
++  if (parsed.protocol === "data:") {
++    return;
++  }
+   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+     throw new DownloadError({
+       url,
+-      message: `URL scheme must be http or https, got ${parsed.protocol}`
++      message: `URL scheme must be http, https, or data, got ${parsed.protocol}`
+     });
+   }
+   const hostname = parsed.hostname;
+diff --git a/src/validate-download-url.ts b/src/validate-download-url.ts
+index 7c026ad6b400aef551ce3a424c343e1cedc60997..6a2f11398e58f80a8e11995ac1ce5f4d7c110561 100644
+--- a/src/validate-download-url.ts
++++ b/src/validate-download-url.ts
+@@ -18,11 +18,16 @@ export function validateDownloadUrl(url: string): void {
+     });
+   }
+ 
+-  // Only allow http and https protocols
++  // data: URLs are inline content and do not make network requests.
++  if (parsed.protocol === 'data:') {
++    return;
++  }
++
++  // Only allow http and https network protocols
+   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+     throw new DownloadError({
+       url,
+-      message: `URL scheme must be http or https, got ${parsed.protocol}`,
++      message: `URL scheme must be http, https, or data, got ${parsed.protocol}`,
+     });
+   }
+ 
