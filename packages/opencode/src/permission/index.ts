@@ -14,6 +14,7 @@ import { Deferred, Effect, Layer, Schema, ServiceMap } from "effect"
 import os from "os"
 import z from "zod"
 import { evaluate as evalRule } from "./evaluate"
+import { Plugin } from "@/plugin"
 import { PermissionID } from "./schema"
 
 export namespace Permission {
@@ -180,7 +181,26 @@ export namespace Permission {
           needsAsk = true
         }
 
-        if (!needsAsk) return
+        let permissionStatus: "ask" | "deny" | "allow" = needsAsk ? "ask" : "allow"
+        const hookResult = yield* Effect.tryPromise(() =>
+          Plugin.trigger(
+            "permission.ask",
+            {
+              sessionID: request.sessionID,
+              permission: request.permission,
+              patterns: request.patterns,
+              metadata: request.metadata,
+            },
+            { status: permissionStatus },
+          ),
+        ).pipe(Effect.option)
+        if (hookResult._tag === "Some") {
+          permissionStatus = hookResult.value.status
+        }
+        if (permissionStatus === "allow") return
+        if (permissionStatus === "deny") {
+          return yield* new DeniedError({ ruleset: [] })
+        }
 
         const id = request.id ?? PermissionID.ascending()
         const info: Request = {
