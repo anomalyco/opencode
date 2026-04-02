@@ -14,6 +14,7 @@ import {
   onMount,
   untrack,
 } from "solid-js"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLocal } from "@/context/local"
@@ -1687,11 +1688,10 @@ export default function Page() {
   )
 
   onMount(() => {
-    document.addEventListener("keydown", handleKeyDown)
+    makeEventListener(document, "keydown", handleKeyDown)
   })
 
   onCleanup(() => {
-    document.removeEventListener("keydown", handleKeyDown)
     if (reviewFrame !== undefined) cancelAnimationFrame(reviewFrame)
     if (refreshFrame !== undefined) cancelAnimationFrame(refreshFrame)
     if (refreshTimer !== undefined) window.clearTimeout(refreshTimer)

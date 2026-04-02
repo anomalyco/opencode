@@ -1,5 +1,6 @@
-import { createEffect, on, onCleanup } from "solid-js"
+import { createEffect, createSignal, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 
 export interface AutoScrollOptions {
@@ -14,7 +15,6 @@ export function createAutoScroll(options: AutoScrollOptions) {
   let settling = false
   let settleTimer: ReturnType<typeof setTimeout> | undefined
   let autoTimer: ReturnType<typeof setTimeout> | undefined
-  let cleanup: (() => void) | undefined
   let auto: { top: number; time: number } | undefined
 
   const threshold = () => options.bottomThreshold ?? 10
@@ -216,26 +216,14 @@ export function createAutoScroll(options: AutoScrollOptions) {
   onCleanup(() => {
     if (settleTimer) clearTimeout(settleTimer)
     if (autoTimer) clearTimeout(autoTimer)
-    if (cleanup) cleanup()
   })
 
   return {
     scrollRef: (el: HTMLElement | undefined) => {
-      if (cleanup) {
-        cleanup()
-        cleanup = undefined
-      }
-
-      scroll = el
-
       if (!el) return
 
       updateOverflowAnchor(el)
-      el.addEventListener("wheel", handleWheel, { passive: true })
-
-      cleanup = () => {
-        el.removeEventListener("wheel", handleWheel)
-      }
+      makeEventListener(el, "wheel", handleWheel, { passive: true })
     },
     contentRef: (el: HTMLElement | undefined) => setStore("contentRef", el),
     handleScroll,
