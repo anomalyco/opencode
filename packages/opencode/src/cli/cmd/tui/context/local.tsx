@@ -223,8 +223,18 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
           const provider = sync.data.provider.find((x) => x.id === value.providerID)
           const info = provider?.models[value.modelID]
+          const cred = provider?.credential
+          const credSuffix = (() => {
+            if (!cred || provider?.id !== "amazon-bedrock") return ""
+            if (cred.type === "profile") return ` · ${cred.profile}`
+            if (cred.type === "bearer_token") return " · API Key"
+            if (cred.type === "access_key") return " · IAM"
+            if (cred.type === "web_identity") return " · WebId"
+            if (cred.type === "container") return " · Container"
+            return ""
+          })()
           return {
-            provider: provider?.name ?? value.providerID,
+            provider: (provider?.name ?? value.providerID) + credSuffix,
             model: info?.name ?? value.modelID,
             reasoning: info?.capabilities?.reasoning ?? false,
           }

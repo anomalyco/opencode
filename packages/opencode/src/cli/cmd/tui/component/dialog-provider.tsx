@@ -8,7 +8,7 @@ import { DialogPrompt } from "../ui/dialog-prompt"
 import { Link } from "../ui/link"
 import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
-import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@opencode-ai/sdk/v2"
+import type { ProviderAuthAuthorization, ProviderAuthMethod, ProviderCredential } from "@opencode-ai/sdk/v2"
 import { DialogModel } from "./dialog-model"
 import { useKeyboard } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
@@ -23,6 +23,16 @@ const PROVIDER_PRIORITY: Record<string, number> = {
   google: 5,
 }
 
+function bedrockCredentialDescription(credential?: ProviderCredential): string | undefined {
+  if (!credential) return undefined
+  if (credential.type === "profile") return `(Profile: ${credential.profile})`
+  if (credential.type === "bearer_token") return "(API Key)"
+  if (credential.type === "access_key") return "(Access Key)"
+  if (credential.type === "web_identity") return "(Web Identity)"
+  if (credential.type === "container") return "(Container)"
+  return undefined
+}
+
 export function createDialogProviderOptions() {
   const sync = useSync()
   const dialog = useDialog()
@@ -35,12 +45,17 @@ export function createDialogProviderOptions() {
       map((provider) => ({
         title: provider.name,
         value: provider.id,
-        description: {
-          opencode: "(Recommended)",
-          anthropic: "(API key)",
-          openai: "(ChatGPT Plus/Pro or API key)",
-          "opencode-go": "Low cost subscription for everyone",
-        }[provider.id],
+        description:
+          provider.id === "amazon-bedrock"
+            ? bedrockCredentialDescription(sync.data.provider.find((p) => p.id === "amazon-bedrock")?.credential)
+            : (
+                {
+                  opencode: "(Recommended)",
+                  anthropic: "(API key)",
+                  openai: "(ChatGPT Plus/Pro or API key)",
+                  "opencode-go": "Low cost subscription for everyone",
+                } as Record<string, string>
+              )[provider.id],
         category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
         async onSelect() {
           const methods = sync.data.provider_auth[provider.id] ?? [

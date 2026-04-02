@@ -1727,6 +1727,11 @@ export type Model = {
   }
 }
 
+export type ProviderCredential = {
+  type: "profile" | "bearer_token" | "access_key" | "web_identity" | "container"
+  profile?: string
+}
+
 export type Provider = {
   id: string
   name: string
@@ -1739,6 +1744,7 @@ export type Provider = {
   models: {
     [key: string]: Model
   }
+  credential?: ProviderCredential
 }
 
 export type ToolIds = Array<string>

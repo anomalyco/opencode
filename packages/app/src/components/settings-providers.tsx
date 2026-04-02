@@ -12,6 +12,7 @@ import { DialogConnectProvider } from "./dialog-connect-provider"
 import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogCustomProvider } from "./dialog-custom-provider"
 import { SettingsList } from "./settings-list"
+import type { ProviderCredential } from "@opencode-ai/sdk/v2"
 
 type ProviderSource = "env" | "api" | "config" | "custom"
 type ProviderItem = ReturnType<ReturnType<typeof useProviders>["connected"]>[number]
@@ -70,6 +71,18 @@ export const SettingsProviders: Component = () => {
   }
 
   const canDisconnect = (item: ProviderItem) => source(item) !== "env"
+
+  const credentialLabel = (item: ProviderItem): string | undefined => {
+    if (item.id !== "amazon-bedrock") return
+    const cred = (item as { credential?: ProviderCredential }).credential
+    if (!cred) return
+    if (cred.type === "profile") return `Profile: ${cred.profile}`
+    if (cred.type === "bearer_token") return "API Key"
+    if (cred.type === "access_key") return "Access Key"
+    if (cred.type === "web_identity") return "Web Identity"
+    if (cred.type === "container") return "Container"
+    return
+  }
 
   const note = (id: string) => PROVIDER_NOTES.find((item) => item.match(id))?.key
 
@@ -153,6 +166,9 @@ export const SettingsProviders: Component = () => {
                       <ProviderIcon id={item.id} class="size-5 shrink-0 icon-strong-base" />
                       <span class="text-14-medium text-text-strong truncate">{item.name}</span>
                       <Tag>{type(item)}</Tag>
+                      <Show when={credentialLabel(item)}>
+                        <Tag>{credentialLabel(item)}</Tag>
+                      </Show>
                     </div>
                     <Show
                       when={canDisconnect(item)}

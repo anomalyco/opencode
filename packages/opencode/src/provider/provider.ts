@@ -150,6 +150,7 @@ export namespace Provider {
     vars?: CustomVarsLoader
     options?: Record<string, any>
     discoverModels?: CustomDiscoverModels
+    credential?: Credential
   }>
 
   function useLanguageModel(sdk: any) {
@@ -317,9 +318,20 @@ export namespace Provider {
         providerOptions.baseURL = endpoint
       }
 
+      const credential: Credential = awsBearerToken
+        ? { type: "bearer_token" }
+        : profile
+          ? { type: "profile", profile }
+          : awsWebIdentityTokenFile
+            ? { type: "web_identity" }
+            : containerCreds
+              ? { type: "container" }
+              : { type: "access_key" }
+
       return {
         autoload: true,
         options: providerOptions,
+        credential,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
           // Skip region prefixing if model already has a cross-region inference profile prefix
           // Models from models.dev may already include prefixes like us., eu., global., etc.
@@ -845,6 +857,16 @@ export namespace Provider {
     })
   export type Model = z.infer<typeof Model>
 
+  export const Credential = z
+    .object({
+      type: z.enum(["profile", "bearer_token", "access_key", "web_identity", "container"]),
+      profile: z.string().optional(),
+    })
+    .meta({
+      ref: "ProviderCredential",
+    })
+  export type Credential = z.infer<typeof Credential>
+
   export const Info = z
     .object({
       id: ProviderID.zod,
@@ -854,6 +876,7 @@ export namespace Provider {
       key: z.string().optional(),
       options: z.record(z.string(), z.any()),
       models: z.record(z.string(), Model),
+      credential: Credential.optional(),
     })
     .meta({
       ref: "Provider",
@@ -1163,6 +1186,7 @@ export namespace Provider {
               const patch: Partial<Info> = providers[providerID]
                 ? { options: opts }
                 : { source: "custom", options: opts }
+              if (result.credential) patch.credential = result.credential
               mergeProvider(providerID, patch)
             }
           }

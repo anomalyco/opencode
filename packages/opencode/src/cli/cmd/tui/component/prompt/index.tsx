@@ -1060,19 +1060,23 @@ export function Prompt(props: PromptProps) {
               cursorColor={theme.text}
               syntaxStyle={syntax()}
             />
-            <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
-              <text fg={highlight()}>
+            <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} overflow="hidden">
+              <text flexShrink={0} fg={highlight()}>
                 {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
               </text>
               <Show when={store.mode === "normal"}>
-                <box flexDirection="row" gap={1}>
+                <box flexDirection="row" gap={1} flexShrink={1} overflow="hidden">
                   <text flexShrink={0} fg={keybind.leader ? theme.textMuted : theme.text}>
                     {local.model.parsed().model}
                   </text>
-                  <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
+                  <text flexShrink={1} fg={theme.textMuted}>
+                    {local.model.parsed().provider}
+                  </text>
                   <Show when={showVariant()}>
-                    <text fg={theme.textMuted}>·</text>
-                    <text>
+                    <text flexShrink={0} fg={theme.textMuted}>
+                      ·
+                    </text>
+                    <text flexShrink={0}>
                       <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
                     </text>
                   </Show>

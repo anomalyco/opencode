@@ -84,7 +84,21 @@ export function DialogModel(props: { providerID?: string }) {
             description: favorites.some((item) => item.providerID === provider.id && item.modelID === model)
               ? "(Favorite)"
               : undefined,
-            category: connected() ? provider.name : undefined,
+            category: connected()
+              ? provider.id === "amazon-bedrock" && provider.credential
+                ? provider.credential.type === "profile"
+                  ? `${provider.name} · ${provider.credential.profile}`
+                  : `${provider.name} · ${
+                      provider.credential.type === "bearer_token"
+                        ? "API Key"
+                        : provider.credential.type === "access_key"
+                          ? "IAM"
+                          : provider.credential.type === "web_identity"
+                            ? "Web Identity"
+                            : "Container"
+                    }`
+                : provider.name
+              : undefined,
             disabled: provider.id === "opencode" && model.includes("-nano"),
             footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
             onSelect() {
