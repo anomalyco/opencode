@@ -59,8 +59,10 @@ test("test description", async ({ page, sdk, gotoSession }) => {
 ### Using Fixtures
 
 - `page` - Playwright page
-- `sdk` - OpenCode SDK client for API calls
-- `gotoSession(sessionID?)` - Navigate to session
+- `llm` - Mock LLM server for queuing responses (`text`, `tool`, `toolMatch`, `textMatch`, etc.)
+- `project` - Golden-path project fixture (call `project.open()` first, then use `project.sdk`, `project.prompt(...)`, `project.gotoSession(...)`, `project.trackSession(...)`)
+- `sdk` - OpenCode SDK client for API calls (worker-scoped, shared directory)
+- `gotoSession(sessionID?)` - Navigate to session (worker-scoped, shared directory)
 
 ### Helper Functions
 
@@ -73,12 +75,9 @@ test("test description", async ({ page, sdk, gotoSession }) => {
 - `waitTerminalReady(page, { term? })` - Wait for a mounted terminal to connect and finish rendering output
 - `runTerminal(page, { cmd, token, term?, timeout? })` - Type into the terminal via the browser and wait for rendered output
 - `withSession(sdk, title, callback)` - Create temp session
-- `withProject(...)` - Create temp project/workspace
 - `sessionIDFromUrl(url)` - Read session ID from URL
 - `slugFromUrl(url)` - Read workspace slug from URL
 - `waitSlug(page, skip?)` - Wait for resolved workspace slug
-- `trackSession(sessionID, directory?)` - Register session for fixture cleanup
-- `trackDirectory(directory)` - Register directory for fixture cleanup
 - `clickListItem(container, filter)` - Click list item by key/text
 
 **Selectors** (`selectors.ts`):
@@ -128,9 +127,9 @@ test("test with cleanup", async ({ page, sdk, gotoSession }) => {
 })
 ```
 
-- Prefer `withSession(...)` for temp sessions
-- In `withProject(...)` tests that create sessions or extra workspaces, call `trackSession(sessionID, directory?)` and `trackDirectory(directory)`
-- This lets fixture teardown abort, wait for idle, and clean up safely under CI concurrency
+- Prefer the `project` fixture for tests that need a dedicated project with LLM mocking — call `project.open()` then use `project.prompt(...)`, `project.trackSession(...)`, etc.
+- Use `withSession(sdk, title, callback)` for lightweight temp sessions on the shared worker directory
+- Call `project.trackSession(sessionID, directory?)` and `project.trackDirectory(directory)` for any resources created outside the fixture so teardown can clean them up
 - Avoid calling `sdk.session.delete(...)` directly
 
 ### Timeouts
