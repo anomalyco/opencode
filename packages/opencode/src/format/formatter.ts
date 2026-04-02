@@ -144,7 +144,7 @@ export const biome: Info = {
       const found = await Filesystem.findUp(config, Instance.directory, Instance.worktree)
       if (found.length > 0) {
         const bin = await Npm.which("@biomejs/biome")
-        if (bin) return [bin, "check", "--write", "$FILE"]
+        if (bin) return [bin, "format", "--write", "$FILE"]
       }
     }
     return false
