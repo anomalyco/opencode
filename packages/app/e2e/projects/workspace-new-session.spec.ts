@@ -9,6 +9,7 @@ import {
   waitSession,
   waitSessionSaved,
   waitSlug,
+  withNoReplyPrompt,
 } from "../actions"
 import { promptSelector, workspaceItemSelector, workspaceNewSessionSelector } from "../selectors"
 import { createSdk } from "../utils"
@@ -58,8 +59,10 @@ async function createSessionFromWorkspace(
 
   const prompt = page.locator(promptSelector)
   await expect(prompt).toBeVisible()
-  await prompt.fill(text)
-  await page.keyboard.press("Enter")
+  await withNoReplyPrompt(page, async () => {
+    await prompt.fill(text)
+    await page.keyboard.press("Enter")
+  })
 
   await expect.poll(() => sessionIDFromUrl(page.url()) ?? "", { timeout: 15_000 }).not.toBe("")
   const sessionID = sessionIDFromUrl(page.url())
