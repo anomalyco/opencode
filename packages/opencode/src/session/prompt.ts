@@ -15,7 +15,7 @@ import { Instance } from "../project/instance"
 import { Bus } from "../bus"
 import { ProviderTransform } from "../provider/transform"
 import { SystemPrompt } from "./system"
-import { InstructionPrompt } from "./instruction"
+import { Instruction } from "./instruction"
 import { Plugin } from "../plugin"
 import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
@@ -100,6 +100,7 @@ export namespace SessionPrompt {
       const truncate = yield* Truncate.Service
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
       const scope = yield* Scope.Scope
+      const instruction = yield* Instruction.Service
 
       const state = yield* InstanceState.make(
         Effect.fn("SessionPrompt.state")(function* () {
@@ -979,7 +980,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           variant,
         }
 
-        yield* Effect.addFinalizer(() => InstanceState.withALS(() => InstructionPrompt.clear(info.id)))
+        yield* Effect.addFinalizer(() =>
+          InstanceState.withALS(() => instruction.clear(info.id)).pipe(Effect.flatMap((x) => x)),
+        )
 
         type Draft<T> = T extends MessageV2.Part ? Omit<T, "id"> & { id?: string } : never
         const assign = (part: Draft<MessageV2.Part>): MessageV2.Part => ({
@@ -1486,14 +1489,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
                 yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
-                const [skills, env, instructions, modelMsgs] = yield* Effect.promise(() =>
-                  Promise.all([
-                    SystemPrompt.skills(agent),
-                    SystemPrompt.environment(model),
-                    InstructionPrompt.system(),
-                    MessageV2.toModelMessages(msgs, model),
-                  ]),
-                )
+                const [skills, env, instructions, modelMsgs] = yield* Effect.all([
+                  Effect.promise(() => SystemPrompt.skills(agent)),
+                  Effect.promise(() => SystemPrompt.environment(model)),
+                  instruction.system().pipe(Effect.orDie),
+                  Effect.promise(() => MessageV2.toModelMessages(msgs, model)),
+                ])
                 const system = [...env, ...(skills ? [skills] : []), ...instructions]
                 const format = lastUser.format ?? { type: "text" as const }
                 if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
@@ -1542,7 +1543,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               }),
               Effect.fnUntraced(function* (exit) {
                 if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) yield* handle.abort()
-                yield* InstanceState.withALS(() => InstructionPrompt.clear(handle.message.id))
+                yield* InstanceState.withALS(() => instruction.clear(handle.message.id)).pipe(Effect.flatMap((x) => x))
               }),
             )
             if (outcome === "break") break
@@ -1712,6 +1713,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         Layer.provide(ToolRegistry.defaultLayer),
         Layer.provide(Truncate.layer),
         Layer.provide(Provider.defaultLayer),
+        Layer.provide(Instruction.defaultLayer),
         Layer.provide(AppFileSystem.defaultLayer),
         Layer.provide(Plugin.defaultLayer),
         Layer.provide(Session.defaultLayer),
