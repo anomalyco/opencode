@@ -168,14 +168,6 @@ export namespace McpAuth {
   export const updateCodeVerifier = async (mcpName: string, codeVerifier: string) =>
     runPromise((svc) => svc.updateCodeVerifier(mcpName, codeVerifier))
 
-  export const clearCodeVerifier = async (mcpName: string) => runPromise((svc) => svc.clearCodeVerifier(mcpName))
-
   export const updateOAuthState = async (mcpName: string, oauthState: string) =>
     runPromise((svc) => svc.updateOAuthState(mcpName, oauthState))
-
-  export const getOAuthState = async (mcpName: string) => runPromise((svc) => svc.getOAuthState(mcpName))
-
-  export const clearOAuthState = async (mcpName: string) => runPromise((svc) => svc.clearOAuthState(mcpName))
-
-  export const isTokenExpired = async (mcpName: string) => runPromise((svc) => svc.isTokenExpired(mcpName))
 }

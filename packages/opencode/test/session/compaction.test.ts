@@ -211,7 +211,7 @@ function liveRuntime(layer: Layer.Layer<LLM.Service>, provider = ProviderTest.fa
       Layer.provide(Session.defaultLayer),
       Layer.provide(Snapshot.defaultLayer),
       Layer.provide(layer),
-      Layer.provide(Permission.layer),
+      Layer.provide(Permission.defaultLayer),
       Layer.provide(Agent.defaultLayer),
       Layer.provide(Plugin.defaultLayer),
       Layer.provide(status),
