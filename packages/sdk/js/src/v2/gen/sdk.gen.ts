@@ -1615,7 +1615,6 @@ export class Session2 extends HeyApiClient {
       directory?: string
       workspace?: string
       parentID?: string
-      kind?: "default" | "sidekick"
       title?: string
       permission?: PermissionRuleset
       workspaceID?: string
@@ -1630,7 +1629,6 @@ export class Session2 extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "parentID" },
-            { in: "body", key: "kind" },
             { in: "body", key: "title" },
             { in: "body", key: "permission" },
             { in: "body", key: "workspaceID" },

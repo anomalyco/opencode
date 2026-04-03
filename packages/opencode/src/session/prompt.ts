@@ -1547,7 +1547,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   if (session.kind === "sidekick") {
                     yield* bus.publish(Session.Event.Error, {
                       sessionID,
-                      error: { message: "Sidekick context limit reached. Please reset the sidekick to continue." },
+                      error: new NamedError.Unknown({
+                        message: "Sidekick context limit reached. Please reset the sidekick to continue.",
+                      }).toObject(),
                     })
                     return "break" as const
                   }

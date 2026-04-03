@@ -913,7 +913,7 @@ export type Session = {
   workspaceID?: string
   directory: string
   parentID?: string
-  kind?: "default" | "sidekick"
+  kind: "default" | "sidekick"
   summary?: {
     additions: number
     deletions: number
@@ -1798,7 +1798,7 @@ export type GlobalSession = {
   workspaceID?: string
   directory: string
   parentID?: string
-  kind?: "default" | "sidekick"
+  kind: "default" | "sidekick"
   summary?: {
     additions: number
     deletions: number
@@ -3012,7 +3012,6 @@ export type SessionListResponse = SessionListResponses[keyof SessionListResponse
 export type SessionCreateData = {
   body?: {
     parentID?: string
-    kind?: "default" | "sidekick"
     title?: string
     permission?: PermissionRuleset
     workspaceID?: string

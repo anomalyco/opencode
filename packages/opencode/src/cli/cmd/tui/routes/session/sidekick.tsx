@@ -16,23 +16,16 @@ export function SidekickChat(props: { parentID: string }) {
   const [sending, setSending] = createSignal(false)
   const [error, setError] = createSignal<string | undefined>()
 
-  const base = () => `${sdk.url}/session/${props.parentID}`
-
   async function ensure() {
     try {
-      const res = await (sdk.fetch ?? fetch)(`${base()}/sidekick`, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      })
-      if (!res.ok) {
-        const msg = await res.text().catch(() => res.statusText)
-        setError(msg || `Failed to create sidekick (${res.status})`)
+      const res = await sdk.client.session.sidekick.get({ sessionID: props.parentID })
+      if (res.error) {
+        setError(`Failed to create sidekick`)
         return undefined
       }
-      const session = await res.json()
-      setSidekickID(session.id)
-      await sync.session.sync(session.id)
-      return session.id as string
+      setSidekickID(res.data.id)
+      await sync.session.sync(res.data.id)
+      return res.data.id as string
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create sidekick")
       return undefined
@@ -73,23 +66,20 @@ export function SidekickChat(props: { parentID: string }) {
       if (!id) return
 
       const model = local.model.current()
-      const body: Record<string, unknown> = { text }
+      const params: Record<string, unknown> = { sessionID: props.parentID, text }
       if (model) {
-        body.model = {
+        params.model = {
           providerID: model.providerID,
           modelID: model.modelID,
         }
       }
 
-      const res = await (sdk.fetch ?? fetch)(`${sdk.url}/session/${props.parentID}/sidekick`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      })
+      const res = await sdk.client.session.sidekick.prompt(
+        params as Parameters<typeof sdk.client.session.sidekick.prompt>[0],
+      )
 
-      if (!res.ok) {
-        const msg = await res.text().catch(() => res.statusText)
-        setError(msg || `Request failed (${res.status})`)
+      if (res.error) {
+        setError(`Request failed`)
       }
 
       // Sync to pick up the new messages
@@ -103,13 +93,9 @@ export function SidekickChat(props: { parentID: string }) {
 
   async function reset() {
     try {
-      const res = await (sdk.fetch ?? fetch)(`${base()}/sidekick`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-      })
-      if (!res.ok) {
-        const msg = await res.text().catch(() => res.statusText)
-        setError(msg || `Failed to reset sidekick (${res.status})`)
+      const res = await sdk.client.session.sidekick.reset({ sessionID: props.parentID })
+      if (res.error) {
+        setError(`Failed to reset sidekick`)
         return
       }
       setSidekickID(undefined)
@@ -122,14 +108,9 @@ export function SidekickChat(props: { parentID: string }) {
 
   async function inject(text: string) {
     try {
-      const res = await (sdk.fetch ?? fetch)(`${base()}/sidekick/inject`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      })
-      if (!res.ok) {
-        const msg = await res.text().catch(() => res.statusText)
-        setError(msg || `Failed to inject message (${res.status})`)
+      const res = await sdk.client.session.sidekick.inject({ sessionID: props.parentID, text })
+      if (res.error) {
+        setError(`Failed to inject message`)
         return
       }
       setError(undefined)

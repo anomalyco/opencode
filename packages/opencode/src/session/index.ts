@@ -132,7 +132,7 @@ export namespace Session {
       workspaceID: WorkspaceID.zod.optional(),
       directory: z.string(),
       parentID: SessionID.zod.optional(),
-      kind: z.enum(["default", "sidekick"]).default("default"),
+      kind: z.enum(["default", "sidekick"]),
       summary: z
         .object({
           additions: z.number(),
