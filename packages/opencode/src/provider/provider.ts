@@ -1014,8 +1014,6 @@ export namespace Provider {
 
           log.info("init")
 
-          const configProviders = Object.entries(cfg.provider ?? {})
-
           function mergeProvider(providerID: ProviderID, provider: Partial<Info>) {
             const existing = providers[providerID]
             if (existing) {
@@ -1028,6 +1026,12 @@ export namespace Provider {
             // @ts-expect-error
             providers[providerID] = mergeDeep(match, provider)
           }
+
+          // load plugins first so config() hook runs before reading cfg.provider
+          const plugins = yield* plugin.list()
+
+          // now read config providers - includes any modifications from plugin config() hook
+          const configProviders = Object.entries(cfg.provider ?? {})
 
           // extend database from config
           for (const [providerID, provider] of configProviders) {
@@ -1145,7 +1149,7 @@ export namespace Provider {
             }
           }
 
-          const plugins = yield* plugin.list()
+          // plugin auth loader - database now has entries for config providers
           for (const plugin of plugins) {
             if (!plugin.auth) continue
             const providerID = ProviderID.make(plugin.auth.provider)
@@ -1187,7 +1191,7 @@ export namespace Provider {
             }
           }
 
-          // load config
+          // load config - re-apply with updated data
           for (const [id, provider] of configProviders) {
             const providerID = ProviderID.make(id)
             const partial: Partial<Info> = { source: "config" }

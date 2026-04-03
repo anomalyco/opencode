@@ -1,10 +1,11 @@
 import { test, expect } from "bun:test"
-import { unlink } from "fs/promises"
+import { mkdir, unlink } from "fs/promises"
 import path from "path"
 
 import { tmpdir } from "../fixture/fixture"
 import { Global } from "../../src/global"
 import { Instance } from "../../src/project/instance"
+import { Plugin } from "../../src/plugin/index"
 import { Provider } from "../../src/provider/provider"
 import { ProviderID, ModelID } from "../../src/provider/schema"
 import { Filesystem } from "../../src/util/filesystem"
@@ -2290,6 +2291,60 @@ test("cloudflare-ai-gateway forwards config metadata options", async () => {
       })
     },
   })
+})
+
+test("plugin config providers persist after instance dispose", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const root = path.join(dir, ".opencode", "plugin")
+      await mkdir(root, { recursive: true })
+      await Bun.write(
+        path.join(root, "demo-provider.ts"),
+        [
+          "export default {",
+          '  id: "demo.plugin-provider",',
+          "  server: async () => ({",
+          "    async config(cfg) {",
+          "      cfg.provider ??= {}",
+          "      cfg.provider.demo = {",
+          '        name: "Demo Provider",',
+          '        npm: "@ai-sdk/openai-compatible",',
+          '        api: "https://example.com/v1",',
+          "        models: {",
+          "          chat: {",
+          '            name: "Demo Chat",',
+          "            tool_call: true,",
+          "            limit: { context: 128000, output: 4096 },",
+          "          },",
+          "        },",
+          "      }",
+          "    },",
+          "  }),",
+          "}",
+          "",
+        ].join("\n"),
+      )
+    },
+  })
+
+  const first = await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await Plugin.init()
+      return Provider.list()
+    },
+  })
+  expect(first[ProviderID.make("demo")]).toBeDefined()
+  expect(first[ProviderID.make("demo")].models[ModelID.make("chat")]).toBeDefined()
+
+  await Instance.disposeAll()
+
+  const second = await Instance.provide({
+    directory: tmp.path,
+    fn: async () => Provider.list(),
+  })
+  expect(second[ProviderID.make("demo")]).toBeDefined()
+  expect(second[ProviderID.make("demo")].models[ModelID.make("chat")]).toBeDefined()
 })
 
 test("opencode loader keeps paid models when config apiKey is present", async () => {
