@@ -11,7 +11,6 @@ import { createOpencodeClient, type Message, type OpencodeClient, type ToolPart 
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
 import { Agent } from "../../agent/agent"
-import { Flag } from "../../flag/flag"
 import { Permission } from "../../permission"
 import { Tool } from "../../tool/tool"
 import { GlobTool } from "../../tool/glob"
