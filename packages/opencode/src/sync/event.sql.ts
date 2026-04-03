@@ -13,4 +13,5 @@ export const EventTable = sqliteTable("event", {
   seq: integer().notNull(),
   type: text().notNull(),
   data: text({ mode: "json" }).$type<Record<string, unknown>>().notNull(),
+  origin: text({ mode: "json" }).$type<{ machine: string; pid: number }>(),
 })

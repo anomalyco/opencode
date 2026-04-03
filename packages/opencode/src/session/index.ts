@@ -1,5 +1,6 @@
 import { Slug } from "@opencode-ai/util/slug"
 import path from "path"
+import { unlinkSync } from "fs"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
@@ -79,6 +80,7 @@ export namespace Session {
       share,
       revert,
       permission: row.permission ?? undefined,
+      originMachine: row.origin_machine ?? undefined,
       time: {
         created: row.time_created,
         updated: row.time_updated,
@@ -105,6 +107,7 @@ export namespace Session {
       summary_diffs: info.summary?.diffs,
       revert: info.revert ?? null,
       permission: info.permission,
+      origin_machine: info.originMachine,
       time_created: info.time.created,
       time_updated: info.time.updated,
       time_compacting: info.time.compacting,
@@ -152,6 +155,7 @@ export namespace Session {
         archived: z.number().optional(),
       }),
       permission: Permission.Ruleset.optional(),
+      originMachine: z.string().optional(),
       revert: z
         .object({
           messageID: MessageID.zod,
@@ -403,6 +407,38 @@ export namespace Session {
 
         yield* Effect.sync(() => SyncEvent.run(Event.Created, { sessionID: result.id, info: result }))
 
+        // Set root_session_id on the session row
+        if (!input.parentID) {
+          yield* Effect.sync(() =>
+            Database.use((d) =>
+              d.update(SessionTable).set({ root_session_id: result.id }).where(eq(SessionTable.id, result.id)).run(),
+            ),
+          )
+          try {
+            Database.session(result.id)
+          } catch (e) {
+            log.error("failed to create per-tree db", { error: e })
+          }
+        }
+        if (input.parentID) {
+          const parent = yield* db((d) =>
+            d
+              .select({ root_session_id: SessionTable.root_session_id })
+              .from(SessionTable)
+              .where(eq(SessionTable.id, input.parentID!))
+              .get(),
+          )
+          yield* Effect.sync(() =>
+            Database.use((d) =>
+              d
+                .update(SessionTable)
+                .set({ root_session_id: parent?.root_session_id ?? input.parentID! })
+                .where(eq(SessionTable.id, result.id))
+                .run(),
+            ),
+          )
+        }
+
         const cfg = yield* config.get()
         if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto")) {
           yield* share(result.id).pipe(Effect.ignore, Effect.forkIn(scope))
@@ -469,6 +505,18 @@ export namespace Session {
             SyncEvent.run(Event.Deleted, { sessionID, info: session })
             SyncEvent.remove(sessionID)
           })
+          // Cleanup per-tree DB for root sessions
+          if (!session.parentID) {
+            try {
+              Database.closeSession(sessionID)
+              const dir = Database.sessionDir
+              for (const ext of [".db", ".db-wal", ".db-shm"]) {
+                try {
+                  unlinkSync(path.join(dir, sessionID + ext))
+                } catch {}
+              }
+            } catch {}
+          }
         } catch (e) {
           log.error(e)
         }

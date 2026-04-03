@@ -21,6 +21,7 @@ import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { Bus } from "../../bus"
 import { NamedError } from "@opencode-ai/util/error"
+import { Plugin } from "@/plugin"
 
 const log = Log.create({ service: "server" })
 
@@ -58,6 +59,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const query = c.req.valid("query")
+        await Plugin.trigger("session.list.before", query, {})
         const sessions: Session.Info[] = []
         for await (const session of Session.list({
           directory: query.directory,
@@ -91,7 +93,9 @@ export const SessionRoutes = lazy(() =>
       }),
       async (c) => {
         const result = await SessionStatus.list()
-        return c.json(Object.fromEntries(result))
+        const status = Object.fromEntries(result)
+        const merged = await Plugin.trigger("session.status.before", {}, { status })
+        return c.json(merged.status)
       },
     )
     .get(
@@ -121,6 +125,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
+        await Plugin.trigger("session.ensure.before", { sessionID, mode: "get" }, {})
         log.info("SEARCH", { url: c.req.url })
         const session = await Session.get(sessionID)
         return c.json(session)
@@ -183,6 +188,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
+        await Plugin.trigger("session.ensure.before", { sessionID, mode: "todo" }, {})
         const todos = await Todo.get(sessionID)
         return c.json(todos)
       },
@@ -604,6 +610,7 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const query = c.req.valid("query")
         const sessionID = c.req.valid("param").sessionID
+        await Plugin.trigger("session.ensure.before", { sessionID, mode: "messages" }, {})
         if (query.limit === undefined) {
           await Session.get(sessionID)
           const messages = await Session.messages({ sessionID })
@@ -664,6 +671,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const params = c.req.valid("param")
+        await Plugin.trigger("session.ensure.before", { sessionID: params.sessionID, mode: "messages" }, {})
         const message = await MessageV2.get({
           sessionID: params.sessionID,
           messageID: params.messageID,
@@ -816,6 +824,7 @@ export const SessionRoutes = lazy(() =>
         return stream(c, async (stream) => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
+          await Plugin.trigger("session.ensure.before", { sessionID, mode: "prompt" }, {})
           const msg = await SessionPrompt.prompt({ ...body, sessionID })
           stream.write(JSON.stringify(msg))
         })
@@ -848,6 +857,7 @@ export const SessionRoutes = lazy(() =>
         return stream(c, async () => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
+          await Plugin.trigger("session.ensure.before", { sessionID, mode: "prompt_async" }, {})
           SessionPrompt.prompt({ ...body, sessionID }).catch((err) => {
             log.error("prompt_async failed", { sessionID, error: err })
             Bus.publish(Session.Event.Error, {
@@ -891,6 +901,7 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
+        await Plugin.trigger("session.ensure.before", { sessionID, mode: "command" }, {})
         const msg = await SessionPrompt.command({ ...body, sessionID })
         return c.json(msg)
       },
@@ -923,6 +934,7 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
+        await Plugin.trigger("session.ensure.before", { sessionID, mode: "shell" }, {})
         const msg = await SessionPrompt.shell({ ...body, sessionID })
         return c.json(msg)
       },

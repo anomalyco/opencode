@@ -1,12 +1,15 @@
 import z from "zod"
 import type { ZodObject } from "zod"
 import { EventEmitter } from "events"
+import node from "node:process"
+import os from "os"
 import { Database, eq } from "@/storage/db"
 import { Bus as ProjectBus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
+import type { SessionID } from "@/session/schema"
+import { SessionTable } from "@/session/session.sql"
 import { EventSequenceTable, EventTable } from "./event.sql"
 import { EventID } from "./schema"
-import { Flag } from "@/flag/flag"
 
 export namespace SyncEvent {
   export type Definition = {
@@ -30,6 +33,9 @@ export namespace SyncEvent {
   export type SerializedEvent<Def extends Definition = Definition> = Event<Def> & { type: string }
 
   type ProjectorFunc = (db: Database.TxOrDb, data: unknown) => void
+  type Sync<T> = T extends Promise<any> ? never : T
+  const sessionTypes = new Set(["session.created", "session.updated", "session.deleted"])
+  const origin = { machine: os.hostname(), pid: node.pid }
 
   export const registry = new Map<string, Definition>()
   let projectors: Map<Definition, ProjectorFunc> | undefined
@@ -102,6 +108,92 @@ export namespace SyncEvent {
     return [def, func as ProjectorFunc]
   }
 
+  function root(type: string, agg: string) {
+    if (sessionTypes.has(type)) return
+    return Database.use((db) =>
+      db
+        .select({ root_session_id: SessionTable.root_session_id })
+        .from(SessionTable)
+        .where(eq(SessionTable.id, agg as SessionID))
+        .get(),
+    )?.root_session_id
+  }
+
+  function seq(type: string, agg: string) {
+    const id = root(type, agg)
+    if (id) {
+      return Database.session(id)
+        .select({ seq: EventSequenceTable.seq })
+        .from(EventSequenceTable)
+        .where(eq(EventSequenceTable.aggregate_id, agg))
+        .get()
+    }
+    return Database.use((db) =>
+      db
+        .select({ seq: EventSequenceTable.seq })
+        .from(EventSequenceTable)
+        .where(eq(EventSequenceTable.aggregate_id, agg))
+        .get(),
+    )
+  }
+
+  function transact<T>(
+    type: string,
+    agg: string,
+    cb: (tx: Database.TxOrDb) => Sync<T>,
+    options?: { behavior?: "deferred" | "immediate" | "exclusive" },
+  ): Sync<T> {
+    const id = root(type, agg)
+    if (id) {
+      return Database.session(id).transaction((tx) => cb(tx), { behavior: options?.behavior }) as Sync<T>
+    }
+    return Database.transaction(cb, options)
+  }
+
+  function apply<Def extends Definition>(tx: Database.TxOrDb, projector: ProjectorFunc, def: Def, event: Event<Def>) {
+    projector(tx, event.data)
+    tx.insert(EventSequenceTable)
+      .values({
+        aggregate_id: event.aggregateID,
+        seq: event.seq,
+      })
+      .onConflictDoUpdate({
+        target: EventSequenceTable.aggregate_id,
+        set: { seq: event.seq },
+      })
+      .run()
+    tx.insert(EventTable)
+      .values({
+        id: event.id,
+        seq: event.seq,
+        aggregate_id: event.aggregateID,
+        type: versionedType(def.type, def.version),
+        data: event.data as Record<string, unknown>,
+        origin,
+      })
+      .run()
+  }
+
+  function emit<Def extends Definition>(def: Def, event: Event<Def>, options: { publish: boolean }) {
+    return () => {
+      Bus.emit("event", {
+        def,
+        event,
+      })
+
+      if (options?.publish) {
+        const result = convertEvent(def.type, event.data)
+        if (result instanceof Promise) {
+          result.then((data) => {
+            ProjectBus.publish({ type: def.type, properties: def.schema }, data)
+          })
+          return
+        }
+        ProjectBus.publish({ type: def.type, properties: def.schema }, result)
+      }
+    }
+  }
+
   function process<Def extends Definition>(def: Def, event: Event<Def>, options: { publish: boolean }) {
     if (projectors == null) {
       throw new Error("No projectors available. Call `SyncEvent.init` to install projectors")
@@ -114,49 +206,8 @@ export namespace SyncEvent {
 
     // idempotent: need to ignore any events already logged
 
-    Database.transaction((tx) => {
-      projector(tx, event.data)
-
-      if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
-        tx.insert(EventSequenceTable)
-          .values({
-            aggregate_id: event.aggregateID,
-            seq: event.seq,
-          })
-          .onConflictDoUpdate({
-            target: EventSequenceTable.aggregate_id,
-            set: { seq: event.seq },
-          })
-          .run()
-        tx.insert(EventTable)
-          .values({
-            id: event.id,
-            seq: event.seq,
-            aggregate_id: event.aggregateID,
-            type: versionedType(def.type, def.version),
-            data: event.data as Record<string, unknown>,
-          })
-          .run()
-      }
-
-      Database.effect(() => {
-        Bus.emit("event", {
-          def,
-          event,
-        })
-
-        if (options?.publish) {
-          const result = convertEvent(def.type, event.data)
-          if (result instanceof Promise) {
-            result.then((data) => {
-              ProjectBus.publish({ type: def.type, properties: def.schema }, data)
-            })
-          } else {
-            ProjectBus.publish({ type: def.type, properties: def.schema }, result)
-          }
-        }
-      })
-    })
+    transact(def.type, event.aggregateID, (tx) => apply(tx, projector, def, event))
+    Database.effect(emit(def, event, options))
   }
 
   // TODO:
@@ -171,13 +222,7 @@ export namespace SyncEvent {
       throw new Error(`Unknown event type: ${event.type}`)
     }
 
-    const row = Database.use((db) =>
-      db
-        .select({ seq: EventSequenceTable.seq })
-        .from(EventSequenceTable)
-        .where(eq(EventSequenceTable.aggregate_id, event.aggregateID))
-        .get(),
-    )
+    const row = seq(def.type, event.aggregateID)
 
     const latest = row?.seq ?? -1
     if (event.seq <= latest) {
@@ -207,7 +252,10 @@ export namespace SyncEvent {
     // Note that this is an "immediate" transaction which is critical.
     // We need to make sure we can safely read and write with nothing
     // else changing the data from under us
-    Database.transaction(
+    let fn = () => {}
+    transact(
+      def.type,
+      agg,
       (tx) => {
         const id = EventID.ascending()
         const row = tx
@@ -218,12 +266,18 @@ export namespace SyncEvent {
         const seq = row?.seq != null ? row.seq + 1 : 0
 
         const event = { id, seq, aggregateID: agg, data }
-        process(def, event, { publish: true })
+        const projector = projectors?.get(def)
+        if (!projector) {
+          throw new Error(`Projector not found for event: ${def.type}`)
+        }
+        apply(tx, projector, def, event)
+        fn = emit(def, event, { publish: true })
       },
       {
         behavior: "immediate",
       },
     )
+    Database.effect(fn)
   }
 
   export function remove(aggregateID: string) {

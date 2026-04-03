@@ -21,6 +21,7 @@ export const SessionTable = sqliteTable(
       .references(() => ProjectTable.id, { onDelete: "cascade" }),
     workspace_id: text().$type<WorkspaceID>(),
     parent_id: text().$type<SessionID>(),
+    root_session_id: text().$type<SessionID>(),
     slug: text().notNull(),
     directory: text().notNull(),
     title: text().notNull(),
@@ -32,6 +33,7 @@ export const SessionTable = sqliteTable(
     summary_diffs: text({ mode: "json" }).$type<Snapshot.FileDiff[]>(),
     revert: text({ mode: "json" }).$type<{ messageID: MessageID; partID?: PartID; snapshot?: string; diff?: string }>(),
     permission: text({ mode: "json" }).$type<Permission.Ruleset>(),
+    origin_machine: text(),
     ...Timestamps,
     time_compacting: integer(),
     time_archived: integer(),
@@ -40,6 +42,7 @@ export const SessionTable = sqliteTable(
     index("session_project_idx").on(table.project_id),
     index("session_workspace_idx").on(table.workspace_id),
     index("session_parent_idx").on(table.parent_id),
+    index("session_root_session_idx").on(table.root_session_id),
   ],
 )
 

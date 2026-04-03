@@ -547,18 +547,24 @@ export namespace MessageV2 {
       and(eq(MessageTable.time_created, row.time), lt(MessageTable.id, row.id)),
     )
 
-  function hydrate(rows: (typeof MessageTable.$inferSelect)[]) {
+  function resolve(sid: SessionID) {
+    const row = Database.use((db) =>
+      db.select({ root_session_id: SessionTable.root_session_id }).from(SessionTable).where(eq(SessionTable.id, sid)).get(),
+    )
+    if (row?.root_session_id) return Database.session(row.root_session_id)
+    return Database.Client()
+  }
+
+  function hydrate(db: Database.TxOrDb, rows: (typeof MessageTable.$inferSelect)[]) {
     const ids = rows.map((row) => row.id)
     const partByMessage = new Map<string, MessageV2.Part[]>()
     if (ids.length > 0) {
-      const partRows = Database.use((db) =>
-        db
-          .select()
-          .from(PartTable)
-          .where(inArray(PartTable.message_id, ids))
-          .orderBy(PartTable.message_id, PartTable.id)
-          .all(),
-      )
+      const partRows = db
+        .select()
+        .from(PartTable)
+        .where(inArray(PartTable.message_id, ids))
+        .orderBy(PartTable.message_id, PartTable.id)
+        .all()
       for (const row of partRows) {
         const next = part(row)
         const list = partByMessage.get(row.message_id)
@@ -824,15 +830,14 @@ export namespace MessageV2 {
     const where = before
       ? and(eq(MessageTable.session_id, input.sessionID), older(before))
       : eq(MessageTable.session_id, input.sessionID)
-    const rows = Database.use((db) =>
-      db
-        .select()
-        .from(MessageTable)
-        .where(where)
-        .orderBy(desc(MessageTable.time_created), desc(MessageTable.id))
-        .limit(input.limit + 1)
-        .all(),
-    )
+    const db = resolve(input.sessionID)
+    const rows = db
+      .select()
+      .from(MessageTable)
+      .where(where)
+      .orderBy(desc(MessageTable.time_created), desc(MessageTable.id))
+      .limit(input.limit + 1)
+      .all()
     if (rows.length === 0) {
       const row = Database.use((db) =>
         db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.id, input.sessionID)).get(),
@@ -846,7 +851,7 @@ export namespace MessageV2 {
 
     const more = rows.length > input.limit
     const slice = more ? rows.slice(0, input.limit) : rows
-    const items = hydrate(slice)
+    const items = hydrate(db, slice)
     items.reverse()
     const tail = slice.at(-1)
     return {
@@ -870,33 +875,22 @@ export namespace MessageV2 {
     }
   }
 
-  export function parts(message_id: MessageID) {
-    const rows = Database.use((db) =>
-      db.select().from(PartTable).where(eq(PartTable.message_id, message_id)).orderBy(PartTable.id).all(),
-    )
-    return rows.map(
-      (row) =>
-        ({
-          ...row.data,
-          id: row.id,
-          sessionID: row.session_id,
-          messageID: row.message_id,
-        }) as MessageV2.Part,
-    )
+  export function parts(mid: MessageID, sid?: SessionID) {
+    const db = sid ? resolve(sid) : Database.Client()
+    return db.select().from(PartTable).where(eq(PartTable.message_id, mid)).orderBy(PartTable.id).all().map(part)
   }
 
   export function get(input: { sessionID: SessionID; messageID: MessageID }): WithParts {
-    const row = Database.use((db) =>
-      db
-        .select()
-        .from(MessageTable)
-        .where(and(eq(MessageTable.id, input.messageID), eq(MessageTable.session_id, input.sessionID)))
-        .get(),
-    )
+    const db = resolve(input.sessionID)
+    const row = db
+      .select()
+      .from(MessageTable)
+      .where(and(eq(MessageTable.id, input.messageID), eq(MessageTable.session_id, input.sessionID)))
+      .get()
     if (!row) throw new NotFoundError({ message: `Message not found: ${input.messageID}` })
     return {
       info: info(row),
-      parts: parts(input.messageID),
+      parts: db.select().from(PartTable).where(eq(PartTable.message_id, input.messageID)).orderBy(PartTable.id).all().map(part),
     }
   }
 

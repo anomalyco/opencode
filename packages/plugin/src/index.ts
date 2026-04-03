@@ -189,6 +189,20 @@ export type AuthOuathResult = AuthOAuthResult
 export interface Hooks {
   event?: (input: { event: Event }) => Promise<void>
   config?: (input: Config) => Promise<void>
+  "session.list.before"?: (
+    input: { directory?: string; roots?: boolean; start?: number; search?: string; limit?: number },
+    output: {},
+  ) => Promise<void>
+  "session.status.before"?: (
+    input: {},
+    output: {
+      status: Record<string, { type: "idle" | "busy" | "retry"; attempt?: number; message?: string; next?: number }>
+    },
+  ) => Promise<void>
+  "session.ensure.before"?: (
+    input: { sessionID: string; mode: "get" | "messages" | "todo" | "prompt" | "prompt_async" | "command" | "shell" },
+    output: {},
+  ) => Promise<void>
   tool?: {
     [key: string]: ToolDefinition
   }

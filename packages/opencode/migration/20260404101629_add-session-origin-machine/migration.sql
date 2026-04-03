@@ -1,0 +1,1 @@
+ALTER TABLE `session` ADD `origin_machine` text;

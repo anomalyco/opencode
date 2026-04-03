@@ -3,7 +3,7 @@ import { Bus } from "@/bus"
 import { SessionID } from "./schema"
 import z from "zod"
 import { Database, eq, asc } from "../storage/db"
-import { TodoTable } from "./session.sql"
+import { TodoTable, SessionTable } from "./session.sql"
 
 export namespace Todo {
   export const Info = z
@@ -25,6 +25,13 @@ export namespace Todo {
     ),
   }
 
+  function resolve(sid: SessionID) {
+    const row = Database.use((db) =>
+      db.select({ root_session_id: SessionTable.root_session_id }).from(SessionTable).where(eq(SessionTable.id, sid)).get(),
+    )
+    if (row?.root_session_id) return Database.session(row.root_session_id)
+    return Database.Client()
+  }
   export function update(input: { sessionID: SessionID; todos: Info[] }) {
     Database.transaction((db) => {
       db.delete(TodoTable).where(eq(TodoTable.session_id, input.sessionID)).run()
@@ -45,13 +52,17 @@ export namespace Todo {
   }
 
   export function get(sessionID: SessionID) {
-    const rows = Database.use((db) =>
-      db.select().from(TodoTable).where(eq(TodoTable.session_id, sessionID)).orderBy(asc(TodoTable.position)).all(),
-    )
-    return rows.map((row) => ({
-      content: row.content,
-      status: row.status,
-      priority: row.priority,
-    }))
+    const db = resolve(sessionID)
+    return db
+      .select()
+      .from(TodoTable)
+      .where(eq(TodoTable.session_id, sessionID))
+      .orderBy(asc(TodoTable.position))
+      .all()
+      .map((row) => ({
+        content: row.content,
+        status: row.status,
+        priority: row.priority,
+      }))
   }
 }
