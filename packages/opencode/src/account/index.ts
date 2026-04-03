@@ -1,4 +1,4 @@
-import { Clock, Duration, Effect, Layer, Option, Schema, SchemaGetter, ServiceMap } from "effect"
+import { Cache, Clock, Duration, Effect, Layer, Option, Schema, SchemaGetter, ServiceMap } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 
 import { makeRuntime } from "@/effect/run-service"
@@ -119,6 +119,11 @@ class TokenRefreshRequest extends Schema.Class<TokenRefreshRequest>("TokenRefres
 }) {}
 
 const clientId = "opencode-cli"
+const eagerRefreshThreshold = Duration.minutes(5)
+const eagerRefreshThresholdMs = Duration.toMillis(eagerRefreshThreshold)
+
+const isTokenFresh = (tokenExpiry: number | null, now: number) =>
+  tokenExpiry != null && tokenExpiry > now + eagerRefreshThresholdMs
 
 const mapAccountServiceError =
   (message = "Account service operation failed") =>
@@ -175,9 +180,8 @@ export namespace Account {
           mapAccountServiceError("HTTP request failed"),
         )
 
-      const resolveToken = Effect.fnUntraced(function* (row: AccountRow) {
+      const refreshToken = Effect.fnUntraced(function* (row: AccountRow) {
         const now = yield* Clock.currentTimeMillis
-        if (row.token_expiry && row.token_expiry > now) return row.access_token
 
         const response = yield* executeEffectOk(
           HttpClientRequest.post(`${row.url}/auth/device/token`).pipe(
@@ -206,6 +210,34 @@ export namespace Account {
         })
 
         return parsed.access_token
+      })
+
+      const refreshTokenCache = yield* Cache.make<AccountID, AccessToken, AccountError>({
+        capacity: Number.POSITIVE_INFINITY,
+        timeToLive: Duration.zero,
+        lookup: Effect.fnUntraced(function* (accountID) {
+          const maybeAccount = yield* repo.getRow(accountID)
+          if (Option.isNone(maybeAccount)) {
+            return yield* Effect.fail(new AccountServiceError({ message: "Account not found during token refresh" }))
+          }
+
+          const account = maybeAccount.value
+          const now = yield* Clock.currentTimeMillis
+          if (isTokenFresh(account.token_expiry, now)) {
+            return account.access_token
+          }
+
+          return yield* refreshToken(account)
+        }),
+      })
+
+      const resolveToken = Effect.fnUntraced(function* (row: AccountRow) {
+        const now = yield* Clock.currentTimeMillis
+        if (isTokenFresh(row.token_expiry, now)) {
+          return row.access_token
+        }
+
+        return yield* Cache.get(refreshTokenCache, row.id)
       })
 
       const resolveAccess = Effect.fnUntraced(function* (accountID: AccountID) {
@@ -383,11 +415,6 @@ export namespace Account {
 
   export async function active(): Promise<Info | undefined> {
     return Option.getOrUndefined(await runPromise((service) => service.active()))
-  }
-
-  export async function config(accountID: AccountID, orgID: OrgID): Promise<Record<string, unknown> | undefined> {
-    const cfg = await runPromise((service) => service.config(accountID, orgID))
-    return Option.getOrUndefined(cfg)
   }
 
   export async function token(accountID: AccountID): Promise<AccessToken | undefined> {

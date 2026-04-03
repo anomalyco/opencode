@@ -32,15 +32,7 @@ export const WorktreeAdaptor: Adaptor = {
     const config = Config.parse(info)
     await Worktree.remove({ directory: config.directory })
   },
-  async fetch(info, input: RequestInfo | URL, init?: RequestInit) {
-    const { Server } = await import("../../server/server")
-
-    const config = Config.parse(info)
-    const url = input instanceof Request || input instanceof URL ? input : new URL(input, "http://opencode.internal")
-    const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
-    headers.set("x-opencode-directory", config.directory)
-
-    const request = new Request(url, { ...init, headers })
-    return Server.Default().fetch(request)
+  async fetch(_info, _input: RequestInfo | URL, _init?: RequestInit) {
+    throw new Error("fetch not implemented")
   },
 }

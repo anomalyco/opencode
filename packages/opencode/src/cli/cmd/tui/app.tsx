@@ -121,9 +121,11 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
 }
 
 import type { EventSource } from "./context/sdk"
+import { DialogVariant } from "./component/dialog-variant"
 
 function rendererConfig(_config: TuiConfig.Info): CliRendererConfig {
   return {
+    externalOutputMode: "passthrough",
     targetFps: 60,
     gatherStats: false,
     exitOnCtrlC: false,
@@ -249,7 +251,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const route = useRoute()
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
-  renderer.disableStdoutInterception()
   const dialog = useDialog()
   const local = useLocal()
   const kv = useKV()
@@ -298,7 +299,8 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
 
   useKeyboard((evt) => {
     if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
-    if (!renderer.getSelection()) return
+    const sel = renderer.getSelection()
+    if (!sel) return
 
     // Windows Terminal-like behavior:
     // - Ctrl+C copies and dismisses selection
@@ -319,6 +321,11 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       renderer.clearSelection()
       evt.preventDefault()
       evt.stopPropagation()
+      return
+    }
+
+    const focus = renderer.currentFocusedRenderable
+    if (focus?.hasSelection() && sel.selectedRenderables.includes(focus)) {
       return
     }
 
@@ -584,9 +591,20 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       value: "variant.cycle",
       keybind: "variant_cycle",
       category: "Agent",
-      hidden: true,
       onSelect: () => {
         local.model.variant.cycle()
+      },
+    },
+    {
+      title: "Switch model variant",
+      value: "variant.list",
+      category: "Agent",
+      hidden: local.model.variant.list().length === 0,
+      slash: {
+        name: "variants",
+      },
+      onSelect: () => {
+        dialog.replace(() => <DialogVariant />)
       },
     },
     {

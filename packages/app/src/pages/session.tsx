@@ -14,6 +14,7 @@ import {
   onMount,
   untrack,
 } from "solid-js"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLocal } from "@/context/local"
@@ -329,10 +330,9 @@ export default function Page() {
   const { params, sessionKey, tabs, view } = useSessionLayout()
 
   createEffect(() => {
-    if (!untrack(() => prompt.ready())) return
-    prompt.ready()
+    if (!prompt.ready()) return
     untrack(() => {
-      if (params.id || !prompt.ready()) return
+      if (params.id) return
       const text = searchParams.prompt
       if (!text) return
       prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
@@ -544,6 +544,8 @@ export default function Page() {
   let reviewFrame: number | undefined
   let refreshFrame: number | undefined
   let refreshTimer: number | undefined
+  let todoFrame: number | undefined
+  let todoTimer: number | undefined
   let diffFrame: number | undefined
   let diffTimer: number | undefined
 
@@ -718,7 +720,6 @@ export default function Page() {
             if (!info) return true
             return Date.now() - info.at > SESSION_PREFETCH_TTL
           })()
-      const todos = untrack(() => sync.data.todo[id] !== undefined || globalSync.data.session_todo[id] !== undefined)
       untrack(() => {
         void sync.session.sync(id)
       })
@@ -730,11 +731,45 @@ export default function Page() {
           if (params.id !== id) return
           untrack(() => {
             if (stale) void sync.session.sync(id, { force: true })
-            void sync.session.todo(id, todos ? { force: true } : undefined)
           })
         }, 0)
       })
     }),
+  )
+
+  createEffect(
+    on(
+      () => {
+        const id = params.id
+        return [
+          sdk.directory,
+          id,
+          id ? (sync.data.session_status[id]?.type ?? "idle") : "idle",
+          id ? composer.blocked() : false,
+        ] as const
+      },
+      ([dir, id, status, blocked]) => {
+        if (todoFrame !== undefined) cancelAnimationFrame(todoFrame)
+        if (todoTimer !== undefined) window.clearTimeout(todoTimer)
+        todoFrame = undefined
+        todoTimer = undefined
+        if (!id) return
+        if (status === "idle" && !blocked) return
+        const cached = untrack(() => sync.data.todo[id] !== undefined || globalSync.data.session_todo[id] !== undefined)
+
+        todoFrame = requestAnimationFrame(() => {
+          todoFrame = undefined
+          todoTimer = window.setTimeout(() => {
+            todoTimer = undefined
+            if (sdk.directory !== dir || params.id !== id) return
+            untrack(() => {
+              void sync.session.todo(id, cached ? { force: true } : undefined)
+            })
+          }, 0)
+        })
+      },
+      { defer: true },
+    ),
   )
 
   createEffect(
@@ -1011,6 +1046,9 @@ export default function Page() {
         onLineCommentUpdate={updateCommentInContext}
         onLineCommentDelete={removeCommentFromContext}
         lineCommentActions={reviewCommentActions()}
+        commentMentions={{
+          items: file.searchFilesAndDirectories,
+        }}
         comments={comments.all()}
         focusedComment={comments.focus()}
         onFocusedCommentChange={comments.setFocus}
@@ -1640,15 +1678,25 @@ export default function Page() {
     consumePendingMessage: layout.pendingMessage.consume,
   })
 
+  createEffect(
+    on(
+      () => params.id,
+      (id) => {
+        if (!id) requestAnimationFrame(() => inputRef?.focus())
+      },
+    ),
+  )
+
   onMount(() => {
-    document.addEventListener("keydown", handleKeyDown)
+    makeEventListener(document, "keydown", handleKeyDown)
   })
 
   onCleanup(() => {
-    document.removeEventListener("keydown", handleKeyDown)
     if (reviewFrame !== undefined) cancelAnimationFrame(reviewFrame)
     if (refreshFrame !== undefined) cancelAnimationFrame(refreshFrame)
     if (refreshTimer !== undefined) window.clearTimeout(refreshTimer)
+    if (todoFrame !== undefined) cancelAnimationFrame(todoFrame)
+    if (todoTimer !== undefined) window.clearTimeout(todoTimer)
     if (diffFrame !== undefined) cancelAnimationFrame(diffFrame)
     if (diffTimer !== undefined) window.clearTimeout(diffTimer)
     if (scrollStateFrame !== undefined) cancelAnimationFrame(scrollStateFrame)

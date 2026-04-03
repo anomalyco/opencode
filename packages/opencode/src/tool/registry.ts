@@ -32,6 +32,7 @@ import { pathToFileURL } from "url"
 import { Effect, Layer, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
+import { Env } from "../env"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -46,18 +47,18 @@ export namespace ToolRegistry {
     readonly tools: (
       model: { providerID: ProviderID; modelID: ModelID },
       agent?: Agent.Info,
-    ) => Effect.Effect<(Awaited<ReturnType<Tool.Info["init"]>> & { id: string })[]>
+    ) => Effect.Effect<(Tool.Def & { id: string })[]>
   }
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/ToolRegistry") {}
 
-  export const layer = Layer.effect(
+  export const layer: Layer.Layer<Service, never, Config.Service | Plugin.Service> = Layer.effect(
     Service,
     Effect.gen(function* () {
       const config = yield* Config.Service
       const plugin = yield* Plugin.Service
 
-      const cache = yield* InstanceState.make<State>(
+      const state = yield* InstanceState.make<State>(
         Effect.fn("ToolRegistry.state")(function* (ctx) {
           const custom: Tool.Info[] = []
 
@@ -139,18 +140,18 @@ export namespace ToolRegistry {
       })
 
       const register = Effect.fn("ToolRegistry.register")(function* (tool: Tool.Info) {
-        const state = yield* InstanceState.get(cache)
-        const idx = state.custom.findIndex((t) => t.id === tool.id)
+        const s = yield* InstanceState.get(state)
+        const idx = s.custom.findIndex((t) => t.id === tool.id)
         if (idx >= 0) {
-          state.custom.splice(idx, 1, tool)
+          s.custom.splice(idx, 1, tool)
           return
         }
-        state.custom.push(tool)
+        s.custom.push(tool)
       })
 
       const ids = Effect.fn("ToolRegistry.ids")(function* () {
-        const state = yield* InstanceState.get(cache)
-        const tools = yield* all(state.custom)
+        const s = yield* InstanceState.get(state)
+        const tools = yield* all(s.custom)
         return tools.map((t) => t.id)
       })
 
@@ -158,15 +159,16 @@ export namespace ToolRegistry {
         model: { providerID: ProviderID; modelID: ModelID },
         agent?: Agent.Info,
       ) {
-        const state = yield* InstanceState.get(cache)
-        const allTools = yield* all(state.custom)
+        const s = yield* InstanceState.get(state)
+        const allTools = yield* all(s.custom)
         const filtered = allTools.filter((tool) => {
           if (tool.id === "codesearch" || tool.id === "websearch") {
             return model.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
           }
 
           const usePatch =
-            model.modelID.includes("gpt-") && !model.modelID.includes("oss") && !model.modelID.includes("gpt-4")
+            !!Env.get("OPENCODE_E2E_LLM_URL") ||
+            (model.modelID.includes("gpt-") && !model.modelID.includes("oss") && !model.modelID.includes("gpt-4"))
           if (tool.id === "apply_patch") return usePatch
           if (tool.id === "edit" || tool.id === "write") return !usePatch
 
@@ -174,7 +176,7 @@ export namespace ToolRegistry {
         })
         return yield* Effect.forEach(
           filtered,
-          Effect.fnUntraced(function* (tool) {
+          Effect.fnUntraced(function* (tool: Tool.Info) {
             using _ = log.time(tool.id)
             const next = yield* Effect.promise(() => tool.init({ agent }))
             const output = {
@@ -184,10 +186,11 @@ export namespace ToolRegistry {
             yield* plugin.trigger("tool.definition", { toolID: tool.id }, output)
             return {
               id: tool.id,
-              ...next,
               description: output.description,
               parameters: output.parameters,
-            } as Awaited<ReturnType<Tool.Info["init"]>> & { id: string }
+              execute: next.execute,
+              formatValidationError: next.formatValidationError,
+            }
           }),
           { concurrency: "unbounded" },
         )
@@ -203,10 +206,6 @@ export namespace ToolRegistry {
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
-  export async function register(tool: Tool.Info) {
-    return runPromise((svc) => svc.register(tool))
-  }
-
   export async function ids() {
     return runPromise((svc) => svc.ids())
   }
@@ -217,7 +216,7 @@ export namespace ToolRegistry {
       modelID: ModelID
     },
     agent?: Agent.Info,
-  ): Promise<(Awaited<ReturnType<Tool.Info["init"]>> & { id: string })[]> {
+  ): Promise<(Tool.Def & { id: string })[]> {
     return runPromise((svc) => svc.tools(model, agent))
   }
 }

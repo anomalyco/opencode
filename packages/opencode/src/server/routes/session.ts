@@ -394,7 +394,7 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
         await rejectSidekick(sessionID)
-        SessionPrompt.cancel(sessionID)
+        await SessionPrompt.cancel(sessionID)
         return c.json(true)
       },
     )
@@ -450,13 +450,13 @@ export const SessionRoutes = lazy(() =>
       validator(
         "param",
         z.object({
-          sessionID: SessionSummary.diff.schema.shape.sessionID,
+          sessionID: SessionSummary.DiffInput.shape.sessionID,
         }),
       ),
       validator(
         "query",
         z.object({
-          messageID: SessionSummary.diff.schema.shape.messageID,
+          messageID: SessionSummary.DiffInput.shape.messageID,
         }),
       ),
       async (c) => {
@@ -716,7 +716,7 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const params = c.req.valid("param")
         await rejectSidekick(params.sessionID)
-        SessionPrompt.assertNotBusy(params.sessionID)
+        await SessionPrompt.assertNotBusy(params.sessionID)
         await Session.removeMessage({
           sessionID: params.sessionID,
           messageID: params.messageID,

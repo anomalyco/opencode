@@ -356,6 +356,90 @@
         ]
       }
     },
+    "/log": {
+      "post": {
+        "operationId": "app.log",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Write log",
+        "description": "Write a log entry to the server logs with specified level and metadata.",
+        "responses": {
+          "200": {
+            "description": "Log entry written successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "service": {
+                    "description": "Service name for the log entry",
+                    "type": "string"
+                  },
+                  "level": {
+                    "description": "Log level",
+                    "type": "string",
+                    "enum": ["debug", "info", "error", "warn"]
+                  },
+                  "message": {
+                    "description": "Log message",
+                    "type": "string"
+                  },
+                  "extra": {
+                    "description": "Additional metadata for the log entry",
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  }
+                },
+                "required": ["service", "level", "message"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.app.log({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/project": {
       "get": {
         "operationId": "project.list",
@@ -3858,6 +3942,10 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg.*"
+                  },
                   "agent": {
                     "type": "string"
                   },
@@ -6762,90 +6850,6 @@
         ]
       }
     },
-    "/log": {
-      "post": {
-        "operationId": "app.log",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "directory",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "workspace",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "summary": "Write log",
-        "description": "Write a log entry to the server logs with specified level and metadata.",
-        "responses": {
-          "200": {
-            "description": "Log entry written successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "boolean"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
-                }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "service": {
-                    "description": "Service name for the log entry",
-                    "type": "string"
-                  },
-                  "level": {
-                    "description": "Log level",
-                    "type": "string",
-                    "enum": ["debug", "info", "error", "warn"]
-                  },
-                  "message": {
-                    "description": "Log message",
-                    "type": "string"
-                  },
-                  "extra": {
-                    "description": "Additional metadata for the log entry",
-                    "type": "object",
-                    "propertyNames": {
-                      "type": "string"
-                    },
-                    "additionalProperties": {}
-                  }
-                },
-                "required": ["service", "level", "message"]
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.app.log({\n  ...\n})"
-          }
-        ]
-      }
-    },
     "/agent": {
       "get": {
         "operationId": "app.agents",
@@ -7040,44 +7044,6 @@
   },
   "components": {
     "schemas": {
-      "Event.installation.updated": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "installation.updated"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "version": {
-                "type": "string"
-              }
-            },
-            "required": ["version"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.installation.update-available": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "installation.update-available"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "version": {
-                "type": "string"
-              }
-            },
-            "required": ["version"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
       "Project": {
         "type": "object",
         "properties": {
@@ -7150,6 +7116,44 @@
           },
           "properties": {
             "$ref": "#/components/schemas/Project"
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.installation.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "installation.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": ["version"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.installation.update-available": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "installation.update-available"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": ["version"]
           }
         },
         "required": ["type", "properties"]
@@ -9734,13 +9738,13 @@
       "Event": {
         "anyOf": [
           {
+            "$ref": "#/components/schemas/Event.project.updated"
+          },
+          {
             "$ref": "#/components/schemas/Event.installation.updated"
           },
           {
             "$ref": "#/components/schemas/Event.installation.update-available"
-          },
-          {
-            "$ref": "#/components/schemas/Event.project.updated"
           },
           {
             "$ref": "#/components/schemas/Event.server.instance.disposed"

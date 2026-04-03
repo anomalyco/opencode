@@ -1,6 +1,7 @@
 import { useSync } from "@tui/context/sync"
 import { createMemo, createSignal, Match, Show, Switch } from "solid-js"
 import { useTheme } from "../../context/theme"
+import { useTuiConfig } from "../../context/tui-config"
 import { Installation } from "@/installation"
 import { TuiPluginRuntime } from "../../plugin"
 import { SidekickChat } from "./sidekick"
@@ -9,10 +10,14 @@ export type SidebarTab = "plugins" | "sidekick"
 
 export const [sidebarTab, setSidebarTab] = createSignal<SidebarTab>("plugins")
 
+import { getScrollAcceleration } from "../../util/scroll"
+
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
   const { theme } = useTheme()
+  const tuiConfig = useTuiConfig()
   const session = createMemo(() => sync.session.get(props.sessionID))
+  const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
 
   return (
     <Show when={session()}>
