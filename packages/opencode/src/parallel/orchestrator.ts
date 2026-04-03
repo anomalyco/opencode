@@ -1059,16 +1059,49 @@ export namespace Orchestrator {
       return override ? { ...st, model: override } : st
     })
 
+    // Build a map of old workers by subtask title for matching
+    const oldWorkersByTitle = new Map<string, Plan["workers"][number]>()
+    for (const worker of plan.workers) {
+      const subtask = plan.subtasks.find((st) => st.id === worker.subtaskID)
+      if (subtask) {
+        oldWorkersByTitle.set(subtask.title, worker)
+      }
+    }
+
+    // Preserve successful workers, reset failed/conflict/blocked ones
+    const restoredWorkers = restoredSubtasks.map((st) => {
+      const oldWorker = oldWorkersByTitle.get(st.title)
+
+      // If there's a matching old worker that was successful, preserve it
+      if (oldWorker && (oldWorker.status === "done" || oldWorker.status === "merged")) {
+        return {
+          ...oldWorker,
+          subtaskID: st.id, // Update to new subtask ID
+        }
+      }
+
+      // If old worker was failed, conflict, or blocked, reset to pending for retry
+      if (oldWorker && ["failed", "conflict", "blocked"].includes(oldWorker.status)) {
+        return {
+          subtaskID: st.id,
+          status: "pending" as const,
+        }
+      }
+
+      // New subtask or no matching old worker - create fresh pending worker
+      return {
+        subtaskID: st.id,
+        status: "pending" as const,
+      }
+    })
+
     return PlanStore.update({
       id: planID,
       subtasks: restoredSubtasks,
       sharedContracts: sharedContracts ?? null,
       conventions: conventions ?? null,
       feedback,
-      workers: restoredSubtasks.map((st) => ({
-        subtaskID: st.id,
-        status: "pending" as const,
-      })),
+      workers: restoredWorkers,
       executionMode: plan.executionMode ?? selectExecutionMode(plan, Project.get(plan.projectID)),
       status: "proposed",
     })

@@ -606,4 +606,134 @@ describe("tool.parallel_plan", () => {
       models.mockRestore()
     }
   })
+
+  test("recovery preserves successful workers and only retries failed", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    const models = spyOn(Orchestrator, "resolveModels").mockResolvedValue({
+      orchestratorModel: { providerID: "test" as any, modelID: "orchestrator" as any },
+      workerModel: { providerID: "test" as any, modelID: "worker" as any },
+    })
+
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        init: InstanceBootstrap,
+        fn: async () => {
+          // Create a plan with 3 subtasks
+          const session = await Session.create({ title: "selective retry test" })
+          const tool = await ParallelPlanTool.init({
+            agent: {
+              name: "orchestrator",
+              model: { providerID: "test" as any, modelID: "glm-5-turbo" as any },
+            } as any,
+          })
+
+          const result = await tool.execute(
+            {
+              task: "Test selective retry",
+              subtasks: [
+                {
+                  title: "Task 1",
+                  description: "First task that succeeds",
+                  fileScope: ["src/task1.ts"],
+                },
+                {
+                  title: "Task 2",
+                  description: "Second task that succeeds",
+                  fileScope: ["src/task2.ts"],
+                },
+                {
+                  title: "Task 3",
+                  description: "Third task that fails",
+                  fileScope: ["src/task3.ts"],
+                },
+              ],
+            },
+            ctx(session.id),
+          )
+
+          // Get the created plan
+          const plans = await PlanStore.listByProject(Instance.project.id)
+          expect(plans).toHaveLength(1)
+          const plan = plans[0]
+
+          // Verify workers were created
+          expect(plan.workers).toHaveLength(3)
+
+          // Get workers from the plan
+          const worker1 = plan.workers.find((w) => w.subtaskID === plan.subtasks[0].id)
+          const worker2 = plan.workers.find((w) => w.subtaskID === plan.subtasks[1].id)
+          const worker3 = plan.workers.find((w) => w.subtaskID === plan.subtasks[2].id)
+          expect(worker1).toBeDefined()
+          expect(worker2).toBeDefined()
+          expect(worker3).toBeDefined()
+
+          // Mark plan as failed and set up worker states:
+          // - Task 1: done (successful)
+          // - Task 2: merged (successful)
+          // - Task 3: failed (needs retry)
+          await PlanStore.transition({ id: plan.id, status: "failed" })
+          await PlanStore.updateWorker({
+            id: plan.id,
+            subtaskID: worker1!.subtaskID,
+            status: "done",
+            worktreeName: "worker-task1",
+            worktreeDir: "/tmp/worker-task1",
+          })
+          await PlanStore.updateWorker({
+            id: plan.id,
+            subtaskID: worker2!.subtaskID,
+            status: "merged",
+            worktreeName: "worker-task2",
+            worktreeDir: "/tmp/worker-task2",
+          })
+          await PlanStore.updateWorker({
+            id: plan.id,
+            subtaskID: worker3!.subtaskID,
+            status: "failed",
+            error: "Task 3 failed",
+          })
+
+          // Verify initial states
+          const planBeforeRetry = await PlanStore.get(plan.id)
+          expect(planBeforeRetry.status).toBe("failed")
+          const task1WorkerBefore = planBeforeRetry.workers.find((w) => w.subtaskID === plan.subtasks[0].id)
+          const task2WorkerBefore = planBeforeRetry.workers.find((w) => w.subtaskID === plan.subtasks[1].id)
+          const task3WorkerBefore = planBeforeRetry.workers.find((w) => w.subtaskID === plan.subtasks[2].id)
+          expect(task1WorkerBefore!.status).toBe("done")
+          expect(task2WorkerBefore!.status).toBe("merged")
+          expect(task3WorkerBefore!.status).toBe("failed")
+
+          // Now retry the plan
+          const retriedPlan = await Orchestrator.retry(plan.id)
+
+          // Verify the retried plan preserves successful workers
+          expect(retriedPlan.status).toBe("proposed")
+          expect(retriedPlan.workers).toHaveLength(3)
+
+          const task1WorkerAfter = retriedPlan.workers.find((w) => w.subtaskID === retriedPlan.subtasks[0].id)
+          const task2WorkerAfter = retriedPlan.workers.find((w) => w.subtaskID === retriedPlan.subtasks[1].id)
+          const task3WorkerAfter = retriedPlan.workers.find((w) => w.subtaskID === retriedPlan.subtasks[2].id)
+
+          // Key assertions: successful workers should be preserved
+          expect(task1WorkerAfter!.status).toBe("done")
+          expect(task1WorkerAfter!.worktreeName).toBe("worker-task1")
+          expect(task1WorkerAfter!.worktreeDir).toBe("/tmp/worker-task1")
+
+          expect(task2WorkerAfter!.status).toBe("merged")
+          expect(task2WorkerAfter!.worktreeName).toBe("worker-task2")
+          expect(task2WorkerAfter!.worktreeDir).toBe("/tmp/worker-task2")
+
+          // Failed worker should be reset to pending for retry
+          expect(task3WorkerAfter!.status).toBe("pending")
+          expect(task3WorkerAfter!.error).toBeUndefined()
+          expect(task3WorkerAfter!.worktreeName).toBeUndefined()
+          expect(task3WorkerAfter!.worktreeDir).toBeUndefined()
+        },
+      })
+    } finally {
+      models.mockRestore()
+    }
+  })
 })
