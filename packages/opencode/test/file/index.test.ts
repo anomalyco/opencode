@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test"
+import { afterEach, describe, test, expect } from "bun:test"
 import { $ } from "bun"
 import path from "path"
 import fs from "fs/promises"
@@ -6,6 +6,10 @@ import { File } from "../../src/file"
 import { Instance } from "../../src/project/instance"
 import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
+
+afterEach(async () => {
+  await Instance.disposeAll()
+})
 
 describe("file/index Filesystem patterns", () => {
   describe("File.read() - text content", () => {
@@ -689,6 +693,18 @@ describe("file/index Filesystem patterns", () => {
       })
     })
 
+    test("search works before explicit init", async () => {
+      await using tmp = await setupSearchableRepo()
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const result = await File.search({ query: "main", type: "file" })
+          expect(result.some((f) => f.includes("main"))).toBe(true)
+        },
+      })
+    })
+
     test("empty query returns dirs sorted with hidden last", async () => {
       await using tmp = await setupSearchableRepo()
 
@@ -785,6 +801,23 @@ describe("file/index Filesystem patterns", () => {
         },
       })
     })
+
+    test("search refreshes after init when files change", async () => {
+      await using tmp = await setupSearchableRepo()
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          await File.init()
+          expect(await File.search({ query: "fresh", type: "file" })).toEqual([])
+
+          await fs.writeFile(path.join(tmp.path, "fresh.ts"), "fresh", "utf-8")
+
+          const result = await File.search({ query: "fresh", type: "file" })
+          expect(result).toContain("fresh.ts")
+        },
+      })
+    })
   })
 
   describe("File.read() - diff/patch", () => {
@@ -845,6 +878,67 @@ describe("file/index Filesystem patterns", () => {
           expect(result.content).toBe("unchanged")
           expect(result.diff).toBeUndefined()
           expect(result.patch).toBeUndefined()
+        },
+      })
+    })
+  })
+
+  describe("InstanceState isolation", () => {
+    test("two directories get independent file caches", async () => {
+      await using one = await tmpdir({ git: true })
+      await using two = await tmpdir({ git: true })
+      await fs.writeFile(path.join(one.path, "a.ts"), "one", "utf-8")
+      await fs.writeFile(path.join(two.path, "b.ts"), "two", "utf-8")
+
+      await Instance.provide({
+        directory: one.path,
+        fn: async () => {
+          await File.init()
+          const results = await File.search({ query: "a.ts", type: "file" })
+          expect(results).toContain("a.ts")
+          const results2 = await File.search({ query: "b.ts", type: "file" })
+          expect(results2).not.toContain("b.ts")
+        },
+      })
+
+      await Instance.provide({
+        directory: two.path,
+        fn: async () => {
+          await File.init()
+          const results = await File.search({ query: "b.ts", type: "file" })
+          expect(results).toContain("b.ts")
+          const results2 = await File.search({ query: "a.ts", type: "file" })
+          expect(results2).not.toContain("a.ts")
+        },
+      })
+    })
+
+    test("disposal gives fresh state on next access", async () => {
+      await using tmp = await tmpdir({ git: true })
+      await fs.writeFile(path.join(tmp.path, "before.ts"), "before", "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          await File.init()
+          const results = await File.search({ query: "before", type: "file" })
+          expect(results).toContain("before.ts")
+        },
+      })
+
+      await Instance.disposeAll()
+
+      await fs.writeFile(path.join(tmp.path, "after.ts"), "after", "utf-8")
+      await fs.rm(path.join(tmp.path, "before.ts"))
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          await File.init()
+          const results = await File.search({ query: "after", type: "file" })
+          expect(results).toContain("after.ts")
+          const stale = await File.search({ query: "before", type: "file" })
+          expect(stale).not.toContain("before.ts")
         },
       })
     })
