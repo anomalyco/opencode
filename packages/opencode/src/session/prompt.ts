@@ -52,7 +52,6 @@ import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { Config } from "@/config/config"
 import { TOONTransform } from "./toon-transform"
-import { TOON } from "@/format/toon"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1525,9 +1524,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                       mode: toonConfig.mode ?? "balanced",
                     })
                   }
-                  if (toonConfig.output_transform) {
-                    system.push(TOON.outputSystemPrompt(toonConfig.mode ?? "balanced"))
-                  }
                 }
 
                 const result = yield* handle.process({
@@ -1558,19 +1554,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     }).toObject()
                     yield* sessions.updateMessage(handle.message)
                     return "break" as const
-                  }
-                }
-
-                // Decode TOON output if enabled
-                if (toonConfig?.enabled && toonConfig.output_transform) {
-                  const parts = MessageV2.parts(handle.message.id)
-                  for (const part of parts) {
-                    if (part.type === "text") {
-                      const decoded = TOON.deserialize(part.text)
-                      if (decoded !== part.text) {
-                        yield* sessions.updatePart({ ...part, text: decoded })
-                      }
-                    }
                   }
                 }
 
