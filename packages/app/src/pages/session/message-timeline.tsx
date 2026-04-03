@@ -200,7 +200,7 @@ export function MessageTimeline(props: {
   mobileChanges: boolean
   mobileFallback: JSX.Element
   actions?: UserActions
-  scroll: { overflow: boolean; bottom: boolean }
+  scroll: { overflow: boolean; bottom: boolean; jump: boolean }
   onResumeScroll: () => void
   setScrollRef: (el: HTMLDivElement | undefined) => void
   onScheduleScrollState: (el: HTMLDivElement) => void
@@ -568,10 +568,9 @@ export function MessageTimeline(props: {
         <div
           class="absolute left-1/2 -translate-x-1/2 bottom-6 z-[60] pointer-events-none transition-all duration-200 ease-out"
           classList={{
-            "opacity-100 translate-y-0 scale-100":
-              props.scroll.overflow && !props.scroll.bottom && !staging.isStaging(),
+            "opacity-100 translate-y-0 scale-100": props.scroll.overflow && props.scroll.jump && !staging.isStaging(),
             "opacity-0 translate-y-2 scale-95 pointer-events-none":
-              !props.scroll.overflow || props.scroll.bottom || staging.isStaging(),
+              !props.scroll.overflow || !props.scroll.jump || staging.isStaging(),
           }}
         >
           <button
