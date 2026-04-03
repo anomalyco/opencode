@@ -2,6 +2,7 @@ use comrak::{
     Arena, Options, create_formatter, html::ChildRendering, nodes::NodeValue, parse_document,
 };
 use std::fmt::Write;
+use std::time::Instant;
 
 create_formatter!(ExternalLinkFormatter, {
     NodeValue::Link(ref nl) => |context, node, entering| {
@@ -147,7 +148,7 @@ fn protect_math_blocks(input: &str) -> String {
     out
 }
 
-pub fn parse_markdown(input: &str) -> String {
+fn parse_markdown_profile(input: &str) -> (String, u128, u128, u128) {
     let mut options = Options::default();
     options.extension.strikethrough = true;
     options.extension.table = true;
@@ -157,17 +158,27 @@ pub fn parse_markdown(input: &str) -> String {
     options.render.r#unsafe = true;
 
     let arena = Arena::new();
+    let protect_start = Instant::now();
     let input = protect_math_blocks(input);
+    let protect_elapsed = protect_start.elapsed().as_millis();
+    let parse_start = Instant::now();
     let doc = parse_document(&arena, &input, &options);
+    let parse_elapsed = parse_start.elapsed().as_millis();
     let mut html = String::new();
+    let render_start = Instant::now();
     ExternalLinkFormatter::format_document(doc, &options, &mut html).unwrap_or_default();
-    html
+    let render_elapsed = render_start.elapsed().as_millis();
+    (html, protect_elapsed, parse_elapsed, render_elapsed)
+}
+
+pub fn parse_markdown(input: &str) -> String {
+    parse_markdown_profile(input).0
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn parse_markdown_command(markdown: String) -> Result<String, String> {
-    Ok(parse_markdown(&markdown))
+    Ok(parse_markdown_profile(&markdown).0)
 }
 
 #[cfg(test)]

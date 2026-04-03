@@ -8,29 +8,25 @@ export const useSessionHashScroll = (input: {
   sessionKey: () => string
   sessionID: () => string | undefined
   messagesReady: () => boolean
-  userScrolled: () => boolean
+  live: () => boolean
   visibleUserMessages: () => UserMessage[]
-  renderedUserMessages?: () => UserMessage[]
   historyMore: () => boolean
   historyLoading: () => boolean
   loadMore: (sessionID: string) => Promise<void>
-  turnStart: () => number
   currentMessageId: () => string | undefined
   pendingMessage: () => string | undefined
   setPendingMessage: (value: string | undefined) => void
   setActiveMessage: (message: UserMessage | undefined) => void
-  setTurnStart: (value: number) => void
+  enterLive: () => void
+  enterAnchored: (id?: string) => void
   autoScroll: { pause: () => void; forceScrollToBottom: () => void }
   scroller: () => HTMLDivElement | undefined
-  seekMessage?: (id: string, behavior: ScrollBehavior) => boolean
   anchor: (id: string) => string
   scheduleScrollState: (el: HTMLDivElement) => void
   consumePendingMessage: (key: string) => string | undefined
 }) => {
   const visibleUserMessages = createMemo(() => input.visibleUserMessages())
-  const renderedUserMessages = createMemo(() => input.renderedUserMessages?.() ?? visibleUserMessages())
   const messageById = createMemo(() => new Map(visibleUserMessages().map((m) => [m.id, m])))
-  const messageIndex = createMemo(() => new Map(visibleUserMessages().map((m, i) => [m.id, i])))
   let pendingKey = ""
   let freshKey = ""
   let fresh = true
@@ -105,10 +101,6 @@ export const useSessionHashScroll = (input: {
   }
 
   const seek = (id: string, behavior: ScrollBehavior, left = 4): boolean => {
-    if (input.seekMessage?.(id, behavior)) {
-      settle(id)
-      return true
-    }
     const el = document.getElementById(input.anchor(id))
     if (el) return scrollToElement(el, behavior)
     if (left <= 0) return false
@@ -120,19 +112,8 @@ export const useSessionHashScroll = (input: {
 
   const scrollToMessage = (message: UserMessage, behavior: ScrollBehavior = "smooth") => {
     cancel()
+    input.enterAnchored(message.id)
     if (input.currentMessageId() !== message.id) input.setActiveMessage(message)
-
-    const index = messageIndex().get(message.id) ?? -1
-    if (index !== -1 && index < input.turnStart()) {
-      input.setTurnStart(index)
-
-      queue(() => {
-        seek(message.id, behavior)
-      })
-
-      updateHash(message.id)
-      return
-    }
 
     if (seek(message.id, behavior)) {
       updateHash(message.id)
@@ -145,8 +126,9 @@ export const useSessionHashScroll = (input: {
   const applyHash = (behavior: ScrollBehavior) => {
     const hash = location.hash.slice(1)
     if (!hash) {
-      if (input.userScrolled() && !fresh) return
+      if (!input.live() && !fresh) return
       fresh = false
+      input.enterLive()
       input.autoScroll.forceScrollToBottom()
       const el = input.scroller()
       if (el) input.scheduleScrollState(el)
@@ -155,6 +137,7 @@ export const useSessionHashScroll = (input: {
 
     const messageId = messageIdFromHash(hash)
     if (messageId) {
+      input.enterAnchored(messageId)
       input.autoScroll.pause()
       const msg = messageById().get(messageId)
       if (msg) {
@@ -166,11 +149,13 @@ export const useSessionHashScroll = (input: {
 
     const target = document.getElementById(hash)
     if (target) {
+      input.enterAnchored()
       input.autoScroll.pause()
       scrollToElement(target, behavior)
       return
     }
 
+    input.enterLive()
     input.autoScroll.forceScrollToBottom()
     const el = input.scroller()
     if (el) input.scheduleScrollState(el)
@@ -188,8 +173,6 @@ export const useSessionHashScroll = (input: {
     if (!input.sessionID() || !input.messagesReady()) return
 
     visibleUserMessages()
-    renderedUserMessages()
-    input.turnStart()
 
     let targetId = input.pendingMessage()
     if (!targetId) {
@@ -198,14 +181,12 @@ export const useSessionHashScroll = (input: {
         pendingKey = key
         const next = input.consumePendingMessage(key)
         if (next) {
-          if (input.userScrolled() && !fresh) return
+          if (!input.live() && !fresh) return
           input.setPendingMessage(next)
           targetId = next
         }
       }
     }
-
-    const source = targetId ? "pending" : "hash"
     if (!targetId && !clearing) targetId = messageIdFromHash(location.hash)
     if (!targetId) return
 

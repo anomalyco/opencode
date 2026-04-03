@@ -23,7 +23,6 @@ import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Select } from "@opencode-ai/ui/select"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
-import type { VirtualizerHandle } from "virtua/solid"
 import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@opencode-ai/ui/toast"
@@ -69,379 +68,13 @@ const emptyFollowups: (FollowupDraft & { id: string })[] = []
 
 type ChangeMode = "git" | "branch" | "session" | "turn"
 type VcsMode = "git" | "branch"
+type ScrollMode = "live" | "anchored"
 
 function list(value: unknown): FileDiff[] {
   // Older/local session records have previously persisted malformed `summary.diffs`
   // values. Treat anything non-array as "no diffs" so a bad record can't crash
   // the entire session view while opening review.
   return Array.isArray(value) ? value : []
-}
-
-type SessionHistoryWindowInput = {
-  sessionID: () => string | undefined
-  messagesReady: () => boolean
-  loaded: () => number
-  visibleUserMessages: () => UserMessage[]
-  historyMore: () => boolean
-  historyLoading: () => boolean
-  loadMore: (sessionID: string) => Promise<void>
-  userScrolled: () => boolean
-  scroller: () => HTMLDivElement | undefined
-}
-
-/**
- * Maintains the rendered history window for a session timeline.
- *
- * It keeps initial paint bounded to recent turns, reveals cached turns in
- * small batches while scrolling upward, and prefetches older history near top.
- */
-function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
-  const turnInit = 10
-  const turnBatch = 8
-  const turnScrollThreshold = 200
-  const turnPrefetchBuffer = 16
-  const prefetchCooldownMs = 400
-  const prefetchNoGrowthLimit = 2
-  const turnBottomThreshold = 24
-
-  let prevTop = 0
-  let preserveA: number | undefined
-  let preserving = false
-
-  const [state, setState] = createStore({
-    turnID: undefined as string | undefined,
-    turnStart: 0,
-    prefetchUntil: 0,
-    prefetchNoGrowth: 0,
-  })
-
-  const initialTurnStart = (len: number) => (len > turnInit ? len - turnInit : 0)
-
-  const turnStart = createMemo(() => {
-    const id = input.sessionID()
-    const len = input.visibleUserMessages().length
-    if (!id || len <= 0) return 0
-    if (state.turnID !== id) return initialTurnStart(len)
-    if (state.turnStart <= 0) return 0
-    if (state.turnStart >= len) return initialTurnStart(len)
-    return state.turnStart
-  })
-
-  const setTurnStart = (start: number) => {
-    const id = input.sessionID()
-    const next = start > 0 ? start : 0
-    if (!id) {
-      setState({ turnID: undefined, turnStart: next })
-      return
-    }
-    setState({ turnID: id, turnStart: next })
-  }
-
-  const renderedUserMessages = createMemo(
-    () => {
-      const msgs = input.visibleUserMessages()
-      const start = turnStart()
-      if (start <= 0) return msgs
-      return msgs.slice(start)
-    },
-    emptyUserMessages,
-    {
-      equals: same,
-    },
-  )
-
-  const clearPreserve = () => {
-    if (preserveA !== undefined) cancelAnimationFrame(preserveA)
-    preserveA = undefined
-    preserving = false
-  }
-
-  type Pin = {
-    id: string
-    top: number
-  }
-
-  type Hold = {
-    pin: Pin | undefined
-    top: number
-    height: number
-  }
-
-  const snap = () => {
-    const el = input.scroller()
-    if (!el) return
-
-    const box = el.getBoundingClientRect()
-    const line = box.top + 100
-    const list = [...el.querySelectorAll<HTMLElement>("[data-message-id]")]
-      .map((node) => {
-        const id = node.dataset.messageId
-        if (!id) return
-        const rect = node.getBoundingClientRect()
-        return { id, top: rect.top, bottom: rect.bottom }
-      })
-      .filter((item): item is { id: string; top: number; bottom: number } => !!item)
-
-    const shown = list.filter((item) => item.bottom > box.top && item.top < box.bottom)
-    const hit =
-      shown.find((item) => item.top <= line && item.bottom >= line) ??
-      [...shown].sort((a, b) => {
-        const da = Math.abs(a.top - line)
-        const db = Math.abs(b.top - line)
-        if (da !== db) return da - db
-        return a.top - b.top
-      })[0] ??
-      list.filter((item) => item.top <= line).at(-1) ??
-      list[0]
-
-    if (!hit) return
-    return {
-      id: hit.id,
-      top: hit.top - box.top,
-    }
-  }
-
-  const keep = (pin: Pin | undefined, top: number, height: number, left = 4) => {
-    const el = input.scroller()
-    if (!el) {
-      preserving = false
-      return
-    }
-
-    if (pin) {
-      const key = typeof CSS === "undefined" ? pin.id : CSS.escape(pin.id)
-      const node = el.querySelector<HTMLElement>(`[data-message-id="${key}"]`)
-      if (node) {
-        const box = el.getBoundingClientRect()
-        const next = node.getBoundingClientRect().top - box.top
-        const delta = next - pin.top
-        if (Math.abs(delta) > 1) el.scrollTop += delta
-      }
-    } else {
-      const delta = el.scrollHeight - height
-      if (delta) el.scrollTop = top + delta
-    }
-
-    if (left <= 0) {
-      preserving = false
-      return
-    }
-
-    preserveA = requestAnimationFrame(() => {
-      preserveA = undefined
-      keep(pin, top, height, left - 1)
-    })
-  }
-
-  const hold = (): Hold => {
-    const el = input.scroller()
-    if (!el) {
-      return {
-        pin: undefined,
-        top: 0,
-        height: 0,
-      }
-    }
-
-    return {
-      pin: snap(),
-      top: el.scrollTop,
-      height: el.scrollHeight,
-    }
-  }
-
-  const restore = (state: Hold, fn?: () => void) => {
-    const el = input.scroller()
-    if (!el) {
-      fn?.()
-      return
-    }
-
-    clearPreserve()
-    preserving = true
-    fn?.()
-
-    preserveA = requestAnimationFrame(() => {
-      preserveA = undefined
-      keep(state.pin, state.top, state.height)
-    })
-  }
-
-  const preserveScroll = (fn: () => void) => {
-    restore(hold(), fn)
-  }
-
-  const backfillTurns = () => {
-    const start = turnStart()
-    if (start <= 0) return
-
-    const next = start - turnBatch
-    const nextStart = next > 0 ? next : 0
-
-    preserveScroll(() => setTurnStart(nextStart))
-  }
-
-  /** Button path: reveal all cached turns, fetch older history, reveal one batch. */
-  const loadAndReveal = async () => {
-    const id = input.sessionID()
-    if (!id) return
-
-    const start = turnStart()
-    const beforeVisible = input.visibleUserMessages().length
-    let loaded = input.loaded()
-
-    if (start > 0) setTurnStart(0)
-
-    if (!input.historyMore() || input.historyLoading()) return
-
-    let afterVisible = beforeVisible
-    let added = 0
-
-    while (true) {
-      await input.loadMore(id)
-      if (input.sessionID() !== id) return
-
-      afterVisible = input.visibleUserMessages().length
-      const nextLoaded = input.loaded()
-      const raw = nextLoaded - loaded
-      added += raw
-      loaded = nextLoaded
-
-      if (afterVisible > beforeVisible) break
-      if (raw <= 0) break
-      if (!input.historyMore()) break
-    }
-
-    if (added <= 0) return
-    if (state.prefetchNoGrowth) setState("prefetchNoGrowth", 0)
-
-    const growth = afterVisible - beforeVisible
-    if (growth <= 0) return
-    if (turnStart() !== 0) return
-
-    const target = Math.min(afterVisible, beforeVisible + turnBatch)
-    setTurnStart(Math.max(0, afterVisible - target))
-  }
-
-  /** Scroll/prefetch path: fetch older history from server. */
-  const fetchOlderMessages = async (opts?: { prefetch?: boolean }) => {
-    const id = input.sessionID()
-    if (!id) return
-    if (!input.historyMore() || input.historyLoading()) return
-
-    if (opts?.prefetch) {
-      const now = Date.now()
-      if (state.prefetchUntil > now) return
-      if (state.prefetchNoGrowth >= prefetchNoGrowthLimit) return
-      setState("prefetchUntil", now + prefetchCooldownMs)
-    }
-
-    const start = turnStart()
-    const mark = hold()
-    const beforeVisible = input.visibleUserMessages().length
-    const beforeRendered = start <= 0 ? beforeVisible : renderedUserMessages().length
-    let loaded = input.loaded()
-    let added = 0
-    let growth = 0
-
-    while (true) {
-      await input.loadMore(id)
-      if (input.sessionID() !== id) return
-
-      const nextLoaded = input.loaded()
-      const raw = nextLoaded - loaded
-      added += raw
-      loaded = nextLoaded
-      growth = input.visibleUserMessages().length - beforeVisible
-
-      if (growth > 0) break
-      if (raw <= 0) break
-      if (opts?.prefetch) break
-      if (!input.historyMore()) break
-    }
-
-    const afterVisible = input.visibleUserMessages().length
-
-    if (opts?.prefetch) {
-      setState("prefetchNoGrowth", added > 0 ? 0 : state.prefetchNoGrowth + 1)
-    } else if (added > 0 && state.prefetchNoGrowth) {
-      setState("prefetchNoGrowth", 0)
-    }
-
-    if (added <= 0) return
-    if (growth <= 0) return
-
-    if (opts?.prefetch) {
-      const current = turnStart()
-      restore(mark, () => setTurnStart(current + growth))
-      return
-    }
-
-    if (turnStart() !== start) return
-
-    const currentRendered = renderedUserMessages().length
-    const base = Math.max(beforeRendered, currentRendered)
-    const target = Math.min(afterVisible, base + turnBatch)
-    restore(mark, () => setTurnStart(Math.max(0, afterVisible - target)))
-  }
-
-  const onScrollerScroll = () => {
-    if (!input.userScrolled()) return
-    if (preserving) return
-    const el = input.scroller()
-    if (!el) return
-
-    const top = el.scrollTop
-    const max = Math.max(0, el.scrollHeight - el.clientHeight)
-    const down = top > prevTop
-    prevTop = top
-
-    if (max - top <= turnBottomThreshold) return
-    if (down) return
-    if (top >= turnScrollThreshold) return
-
-    const start = turnStart()
-    if (start > 0) {
-      if (start <= turnPrefetchBuffer) {
-        void fetchOlderMessages({ prefetch: true })
-      }
-      backfillTurns()
-      return
-    }
-
-    void fetchOlderMessages()
-  }
-
-  createEffect(
-    on(
-      input.sessionID,
-      () => {
-        prevTop = 0
-        clearPreserve()
-        setState({ prefetchUntil: 0, prefetchNoGrowth: 0 })
-      },
-      { defer: true },
-    ),
-  )
-
-  createEffect(
-    on(
-      () => [input.sessionID(), input.messagesReady()] as const,
-      ([id, ready]) => {
-        if (!id || !ready) return
-        setTurnStart(initialTurnStart(input.visibleUserMessages().length))
-      },
-      { defer: true },
-    ),
-  )
-
-  return {
-    turnStart,
-    setTurnStart,
-    renderedUserMessages,
-    loadAndReveal,
-    onScrollerScroll,
-  }
 }
 
 export default function Page() {
@@ -473,10 +106,19 @@ export default function Page() {
     })
   })
 
+  createEffect(
+    on(
+      sessionKey,
+      () => {},
+      { defer: true },
+    ),
+  )
+
   const [ui, setUi] = createStore({
     pendingMessage: undefined as string | undefined,
     reviewSnap: false,
     scrollGesture: 0,
+    mode: "live" as ScrollMode,
     scroll: {
       overflow: false,
       bottom: true,
@@ -484,6 +126,22 @@ export default function Page() {
   })
 
   const composer = createSessionComposerState()
+  const debugSession = (event: string, extra?: Record<string, unknown>) => {
+    if (!import.meta.env.DEV) return
+    console.debug("[session-debug]", {
+      event,
+      at: Date.now(),
+      sessionID: params.id,
+      mode: ui.mode,
+      bottom: ui.scroll.bottom,
+      overflow: ui.scroll.overflow,
+      userScrolled: autoScroll.userScrolled(),
+      scrollTop: scroller?.scrollTop,
+      scrollHeight: scroller?.scrollHeight,
+      clientHeight: scroller?.clientHeight,
+      ...extra,
+    })
+  }
 
   const workspaceKey = createMemo(() => params.dir ?? "")
   const workspaceTabs = createMemo(() => layout.tabs(workspaceKey))
@@ -652,7 +310,6 @@ export default function Page() {
     mobileTab: "session" as "session" | "changes",
     changes: "git" as ChangeMode,
     newSessionWorktree: "main",
-    deferRender: false,
   })
 
   const [vcs, setVcs] = createStore({
@@ -675,17 +332,6 @@ export default function Page() {
       { id: string; prompt: FollowupDraft["prompt"]; context: FollowupDraft["context"] } | undefined
     >,
   })
-
-  createComputed((prev) => {
-    const key = sessionKey()
-    if (key !== prev) {
-      setStore("deferRender", true)
-      requestAnimationFrame(() => {
-        setTimeout(() => setStore("deferRender", false), 0)
-      })
-    }
-    return key
-  }, sessionKey())
 
   let reviewFrame: number | undefined
   let refreshFrame: number | undefined
@@ -1321,7 +967,7 @@ export default function Page() {
     loadingClass: string
     emptyClass: string
   }) => (
-    <Show when={!store.deferRender}>
+    <Show when={true}>
       <SessionReviewTab
         title={changesTitle()}
         empty={reviewEmpty(input)}
@@ -1517,22 +1163,80 @@ export default function Page() {
 
   const autoScroll = createAutoScroll({
     working: () => true,
-    overflowAnchor: "dynamic",
+    overflowAnchor: "none",
     bottomThreshold: scrollBottomThreshold,
+    resize: "off",
   })
+  const live = () => ui.mode === "live"
+  const enterLive = () => {
+    if (ui.mode === "live") return
+    logScroll("mode:set", { source: "enterLive", nextMode: "live" })
+    setUi("mode", "live")
+  }
+  const enterAnchored = (id?: string) => {
+    if (ui.mode === "anchored") return
+    logScroll("mode:set", { source: "enterAnchored", nextMode: "anchored", nextAnchorId: id })
+    setUi("mode", "anchored")
+  }
 
   const handleTimelineAutoScroll = () => {
     autoScroll.handleScroll()
   }
 
+  // Streaming stability depends on locking the outer timeline directly to the
+  // physical bottom. This avoids relying on the auto-scroll state machine once
+  // content height is already changing every frame.
+  const lockBottom = (el: HTMLDivElement, source: string) => {
+    const next = Math.max(0, el.scrollHeight - el.clientHeight)
+    if (Math.abs(el.scrollTop - next) <= 1) return
+    logScroll("scroll:write", { source, prevTop: el.scrollTop, nextTop: next })
+    el.scrollTop = next
+  }
+
   let scrollStateFrame: number | undefined
   let scrollStateTarget: HTMLDivElement | undefined
   let fillFrame: number | undefined
+  let initialScrollKey: string | undefined
+  let initialScrollFrame: number | undefined
+
+  const logScroll = debugSession
+
+  const clamp = (el: HTMLDivElement, reason = "clamp") => {
+    const max = Math.max(0, el.scrollHeight - el.clientHeight)
+    const top = Math.max(0, Math.min(el.scrollTop, max))
+    if (Math.abs(el.scrollTop - top) <= 1) return top
+    logScroll("scroll:write", {
+      source: reason,
+      prevTop: el.scrollTop,
+      nextTop: top,
+      max,
+    })
+    el.scrollTop = top
+    return top
+  }
+
+  createResizeObserver(
+    () => content,
+    () => {
+      const root = scroller
+      if (!root) return
+      clamp(root, "content:resize:clamp")
+      // Deferred markdown/math expansion can increase content height after the
+      // stream is already idle. If the viewport was still at the bottom before
+      // that resize, keep it pinned instead of letting the tail drift upward.
+      if (live() || ui.scroll.bottom) {
+        debugSession("content:resize", { source: live() ? "live-lock-bottom" : "bottom-lock-bottom" })
+        lockBottom(root, "content:resize:lock-bottom")
+      }
+      scheduleScrollState(root)
+    },
+  )
 
   const updateScrollState = (el: HTMLDivElement) => {
+    const top = clamp(el)
     const max = el.scrollHeight - el.clientHeight
     const overflow = max > 1
-    const bottom = !overflow || max - el.scrollTop <= scrollBottomThreshold
+    const bottom = !overflow || max - top <= scrollBottomThreshold
 
     if (ui.scroll.overflow === overflow && ui.scroll.bottom === bottom) return
     setUi("scroll", { overflow, bottom })
@@ -1553,79 +1257,7 @@ export default function Page() {
     })
   }
 
-  const resumeScroll = () => {
-    setStore("messageId", undefined)
-    autoScroll.forceScrollToBottom()
-    clearMessageHash()
-
-    const el = scroller
-    if (el) scheduleScrollState(el)
-  }
-
-  // When the user returns to the bottom, treat the active message as "latest".
-  createEffect(
-    on(
-      autoScroll.userScrolled,
-      (scrolled) => {
-        if (scrolled) return
-        setStore("messageId", undefined)
-        clearMessageHash()
-      },
-      { defer: true },
-    ),
-  )
-
-  createEffect(
-    on(
-      sessionKey,
-      (_next, prev) => {
-        if (!prev) return
-        const id = store.messageId
-        if (!id) return
-        layout.pendingMessage.set(prev, id)
-      },
-      { defer: true },
-    ),
-  )
-
-  let fill = () => {}
-  let virtualizer: VirtualizerHandle | undefined
-  let virtualized = false
-
-  const setScrollRef = (el: HTMLDivElement | undefined) => {
-    scroller = el
-    autoScroll.scrollRef(el)
-    if (!el) return
-    scheduleScrollState(el)
-    fill()
-  }
-
-  const markUserScroll = () => {
-    scrollMark += 1
-  }
-
-  createResizeObserver(
-    () => content,
-    () => {
-      const el = scroller
-      if (el) scheduleScrollState(el)
-      fill()
-    },
-  )
-
-  const historyWindow = createSessionHistoryWindow({
-    sessionID: () => params.id,
-    messagesReady,
-    loaded: () => messages().length,
-    visibleUserMessages,
-    historyMore,
-    historyLoading,
-    loadMore: (sessionID) => sync.session.history.loadMore(sessionID),
-    userScrolled: autoScroll.userScrolled,
-    scroller: () => scroller,
-  })
-
-  fill = () => {
+  const fill = () => {
     if (fillFrame !== undefined) return
 
     fillFrame = requestAnimationFrame(() => {
@@ -1637,10 +1269,117 @@ export default function Page() {
       const el = scroller
       if (!el) return
       if (el.scrollHeight > el.clientHeight + 1) return
-      if (historyWindow.turnStart() <= 0 && !historyMore()) return
+      if (!historyMore()) return
 
-      void historyWindow.loadAndReveal()
+      void loadEarlier()
     })
+  }
+
+  const resumeScroll = () => {
+    setStore("messageId", undefined)
+    enterLive()
+    logScroll("scroll:write", { source: "resumeScroll:bottom" })
+    autoScroll.forceScrollToBottom()
+    clearMessageHash()
+
+    const el = scroller
+    if (el) scheduleScrollState(el)
+  }
+
+  // When the user returns to the bottom, treat the active message as "latest".
+  createEffect(
+    on(
+      () => [sessionKey(), messagesReady(), !!scroller] as const,
+      ([key, ready, mounted]) => {
+        if (!ready) return
+        if (!mounted) return
+        if (initialScrollKey === key) return
+        initialScrollKey = key
+        debugSession("initial-scroll:schedule", { key })
+        if (initialScrollFrame !== undefined) cancelAnimationFrame(initialScrollFrame)
+        initialScrollFrame = requestAnimationFrame(() => {
+          initialScrollFrame = requestAnimationFrame(() => {
+            initialScrollFrame = undefined
+            if (sessionKey() !== key) return
+            const el = scroller
+            if (!el) return
+            setStore("messageId", undefined)
+            enterLive()
+            clearMessageHash()
+            debugSession("initial-scroll:run", { key })
+            lockBottom(el, "initial-scroll:bottom")
+            scheduleScrollState(el)
+            initialScrollKey = undefined
+          })
+        })
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
+      autoScroll.userScrolled,
+      (scrolled) => {
+        debugSession("auto-scroll:userScrolled", { scrolled, anchor: store.messageId ?? cursor() })
+        if (scrolled) {
+          enterAnchored(store.messageId ?? cursor())
+          return
+        }
+        enterLive()
+        setStore("messageId", undefined)
+        clearMessageHash()
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => ui.scroll.bottom,
+      (bottom, prev) => {
+        debugSession("scroll-state:bottom", { bottom, prev })
+        if (!bottom) return
+        if (prev === undefined || prev === bottom) return
+        if (ui.mode !== "live") {
+          enterLive()
+          setStore("messageId", undefined)
+          clearMessageHash()
+        }
+        if (!autoScroll.userScrolled()) return
+        autoScroll.resume()
+      },
+      { defer: true },
+    ),
+  )
+
+  const setScrollRef = (el: HTMLDivElement | undefined) => {
+    scroller = el
+    autoScroll.scrollRef(el)
+    if (!el) return
+    scheduleScrollState(el)
+    fill()
+  }
+
+  const markUserScroll = () => {
+    scrollMark += 1
+    logScroll("user:scroll", { source: "markUserScroll", scrollMark })
+  }
+
+  const loadEarlier = async () => {
+    const id = params.id
+    if (!id) return
+    if (!historyMore() || historyLoading()) return
+
+    while (true) {
+      const loaded = messages().length
+      await sync.session.history.loadMore(id)
+      if (params.id !== id) return
+      const nextLoaded = messages().length
+      if (visibleUserMessages().length > 0 && nextLoaded > loaded) return
+      if (nextLoaded <= loaded) return
+      if (!historyMore()) return
+    }
   }
 
   createEffect(
@@ -1649,15 +1388,14 @@ export default function Page() {
         [
           params.id,
           messagesReady(),
-          historyWindow.turnStart(),
           historyMore(),
           historyLoading(),
           autoScroll.userScrolled(),
           visibleUserMessages().length,
         ] as const,
-      ([id, ready, start, more, loading, scrolled]) => {
+      ([id, ready, more, loading, scrolled]) => {
         if (!id || !ready || loading || scrolled) return
-        if (start <= 0 && !more) return
+        if (!more) return
         fill()
       },
       { defer: true },
@@ -1967,7 +1705,15 @@ export default function Page() {
         requestAnimationFrame(() => {
           if (scroller !== el) return
           const top = el.scrollHeight - el.clientHeight - gap
+          logScroll("scroll:write", {
+            source: "dock:resize",
+            prevTop: el.scrollTop,
+            nextTop: top > 0 ? top : 0,
+            gap,
+            delta,
+          })
           el.scrollTop = top > 0 ? top : 0
+          clamp(el, "dock:resize:clamp")
         })
       }
 
@@ -1980,31 +1726,19 @@ export default function Page() {
     sessionKey,
     sessionID: () => params.id,
     messagesReady,
-    userScrolled: autoScroll.userScrolled,
+    live,
     visibleUserMessages,
-    renderedUserMessages: historyWindow.renderedUserMessages,
     historyMore,
     historyLoading,
     loadMore: (sessionID) => sync.session.history.loadMore(sessionID),
-    turnStart: historyWindow.turnStart,
     currentMessageId: () => store.messageId,
     pendingMessage: () => ui.pendingMessage,
     setPendingMessage: (value) => setUi("pendingMessage", value),
     setActiveMessage,
-    setTurnStart: historyWindow.setTurnStart,
+    enterLive,
+    enterAnchored,
     autoScroll,
     scroller: () => scroller,
-    seekMessage: (id, behavior) => {
-      const msgs = visibleUserMessages()
-      const index = msgs.findIndex((m) => m.id === id)
-      if (index < 0) return false
-      if (!virtualizer) return false
-      virtualizer.scrollToIndex(index, {
-        align: "start",
-        smooth: behavior === "smooth",
-      })
-      return true
-    },
     anchor,
     scheduleScrollState,
     consumePendingMessage: layout.pendingMessage.consume,
@@ -2083,6 +1817,7 @@ export default function Page() {
                     })}
                     actions={actions}
                     scroll={ui.scroll}
+                    live={live()}
                     onResumeScroll={resumeScroll}
                     setScrollRef={setScrollRef}
                     onScheduleScrollState={scheduleScrollState}
@@ -2090,14 +1825,8 @@ export default function Page() {
                     onMarkScrollGesture={markScrollGesture}
                     hasScrollGesture={hasScrollGesture}
                     onUserScroll={markUserScroll}
-                    onTurnBackfillScroll={historyWindow.onScrollerScroll}
                     onAutoScrollInteraction={autoScroll.handleInteraction}
                     centered={centered()}
-                    scrollRef={() => scroller}
-                    userScrolled={autoScroll.userScrolled}
-                    onVirtualizedChange={(value) => {
-                      virtualized = value
-                    }}
                     setContentRef={(el) => {
                       content = el
                       autoScroll.contentRef(el)
@@ -2105,16 +1834,12 @@ export default function Page() {
                       const root = scroller
                       if (root) scheduleScrollState(root)
                     }}
-                    setVirtualizerRef={(handle) => {
-                      virtualizer = handle
-                    }}
-                    turnStart={historyWindow.turnStart()}
                     historyMore={historyMore()}
                     historyLoading={historyLoading()}
                     onLoadEarlier={() => {
-                      void historyWindow.loadAndReveal()
+                      void loadEarlier()
                     }}
-                    renderedUserMessages={historyWindow.renderedUserMessages()}
+                    renderedUserMessages={visibleUserMessages()}
                     anchor={anchor}
                   />
                 </Show>
@@ -2127,7 +1852,7 @@ export default function Page() {
 
           <SessionComposerRegion
             state={composer}
-            ready={!store.deferRender && messagesReady()}
+            ready={messagesReady()}
             centered={centered()}
             inputRef={(el) => {
               inputRef = el

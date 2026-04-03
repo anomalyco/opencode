@@ -28,6 +28,7 @@ export interface AutoScrollOptions {
   onUserInteracted?: () => void
   overflowAnchor?: "none" | "auto" | "dynamic"
   bottomThreshold?: number
+  resize?: "follow" | "off"
 }
 
 export function createAutoScroll(options: AutoScrollOptions) {
@@ -39,6 +40,10 @@ export function createAutoScroll(options: AutoScrollOptions) {
   let auto: { top: number; time: number } | undefined
 
   const threshold = () => options.bottomThreshold ?? 10
+
+  const log = (event: string, extra?: Record<string, unknown>) => {
+    if (!event || !extra) return
+  }
 
   const atBottom = (el: HTMLElement) => {
     return distanceFromBottom(el) <= threshold()
@@ -92,6 +97,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
     const el = scroll
     if (!el) return
     markAuto(el)
+    log("scroll:write", { source: "scrollToBottomNow", behavior, nextTop: el.scrollHeight })
     if (behavior === "smooth") {
       el.scrollTo({ top: el.scrollHeight, behavior })
       return
@@ -125,11 +131,16 @@ export function createAutoScroll(options: AutoScrollOptions) {
     const el = scroll
     if (!el) return
     if (!canScroll(el)) {
+      log("stop:skip", { source: "stop", why: "cannot-scroll" })
       if (store.userScrolled) setStore("userScrolled", false)
       return
     }
-    if (store.userScrolled) return
+    if (store.userScrolled) {
+      log("stop:skip", { source: "stop", why: "already-stopped" })
+      return
+    }
 
+    log("state:set", { source: "stop", nextUserScrolled: true })
     setStore("userScrolled", true)
     options.onUserInteracted?.()
   }
@@ -142,7 +153,11 @@ export function createAutoScroll(options: AutoScrollOptions) {
     const el = scroll
     const target = e.target instanceof Element ? e.target : undefined
     const nested = target?.closest("[data-scrollable]")
-    if (el && nested && nested !== el) return
+    if (el && nested && nested !== el) {
+      log("wheel:skip", { source: "handleWheel", why: "nested-scrollable", deltaY: e.deltaY })
+      return
+    }
+    log("wheel:up", { source: "handleWheel", deltaY: e.deltaY })
     stop()
   }
 
@@ -151,21 +166,25 @@ export function createAutoScroll(options: AutoScrollOptions) {
     if (!el) return
 
     if (!canScroll(el)) {
+      log("scroll:state", { source: "handleScroll", why: "cannot-scroll" })
       if (store.userScrolled) setStore("userScrolled", false)
       return
     }
 
     if (atBottom(el)) {
+      log("scroll:state", { source: "handleScroll", why: "at-bottom" })
       if (store.userScrolled) setStore("userScrolled", false)
       return
     }
 
     // Ignore scroll events triggered by our own scrollToBottom calls.
     if (!store.userScrolled && isAuto(el)) {
+      log("scroll:state", { source: "handleScroll", why: "auto-scroll" })
       scrollToBottom(false)
       return
     }
 
+    log("scroll:state", { source: "handleScroll", why: "user-scroll" })
     stop()
   }
 
@@ -196,6 +215,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
   createResizeObserver(
     () => store.contentRef,
     () => {
+      if (options.resize === "off") return
       if (resizeSuppressCount > 0) return
       const el = scroll
       if (el && !canScroll(el)) {

@@ -9,6 +9,7 @@ import {
   createMemo,
   createResource,
   createSignal,
+  on,
   onCleanup,
   onMount,
   splitProps,
@@ -302,6 +303,14 @@ function touch(key: string, value: Entry) {
   cache.delete(first)
 }
 
+function cacheMode(input: {
+  highlight?: "full" | "defer"
+  chunked?: boolean
+  math?: "full" | "defer"
+}) {
+  return [input.highlight ?? "full", input.math ?? "full", input.chunked ? "chunked" : "plain"].join(":")
+}
+
 function wrapCodeBlocks(container: HTMLElement) {
   for (const block of Array.from(container.querySelectorAll("pre"))) {
     const parent = block.parentElement
@@ -463,182 +472,160 @@ export function Markdown(
     text: string
     cacheKey?: string
     eager?: boolean
+    viewport?: HTMLElement
     class?: string
     classList?: Record<string, boolean>
     streaming?: boolean
     highlight?: "full" | "defer"
     chunked?: boolean
+    math?: "full" | "defer"
   },
 ) {
   const [local, others] = splitProps(props, [
     "text",
     "cacheKey",
     "eager",
+    "viewport",
     "class",
     "classList",
     "streaming",
     "highlight",
     "chunked",
+    "math",
   ])
   const marked = useMarked()
   const i18n = useI18n()
   const [root, setRoot] = createSignal<HTMLDivElement>()
-  const [ready, setReady] = createSignal(isServer || local.eager !== false)
+  const [ready, setReady] = createSignal(true)
+  const [seen, setSeen] = createSignal(!!local.eager)
+  const [mathSeen, setMathSeen] = createSignal(!!local.eager || local.math !== "defer")
   const labels = createMemo(() => ({
     copy: i18n.t("ui.message.copy"),
     copied: i18n.t("ui.message.copied"),
   }))
 
-  // Track whether we used fast parse (no shiki) for the current content
-  let usedFastParse = false
-  let highlightTimer: ReturnType<typeof setTimeout> | undefined
-  let highlightIdle: number | undefined
-  let chunkTimer: ReturnType<typeof setTimeout> | undefined
-  let chunkIdle: number | undefined
-  let chunkGeneration = 0
-  // Monotonically increasing generation counter to discard stale full-parse results
-  let parseGeneration = 0
+  const visible = createMemo(() => local.eager || seen())
+  const mathReady = createMemo(() => local.math !== "defer" || local.eager || mathSeen())
+  const mode = createMemo<"full" | "fast" | "lite">(() => {
+    if (local.streaming) return "fast"
+    if (!visible()) return "lite"
+    return "full"
+  })
+
+  const src = createMemo(() => {
+    if (!ready()) return
+    const markdown = local.text
+    const normalized = normalize(markdown)
+    const hash = checksum(normalized)
+    const cache = cacheMode({ highlight: local.highlight, chunked: local.chunked, math: local.math })
+    const current = mode()
+    const key = hash ? `${cache}:${current}:${hash}` : undefined
+    return {
+      markdown,
+      normalized,
+      hash,
+      mode: current,
+      key,
+      cacheKey: local.cacheKey ? `${cache}:${current}:${local.cacheKey}` : undefined,
+      streaming: !!local.streaming,
+      highlight: local.highlight,
+      chunked: local.chunked,
+      math: mathReady() ? "full" : "defer",
+    }
+  })
 
   const [html, { mutate: setHtml }] = createResource(
-    () => (ready() ? local.text : undefined),
-    async (markdown) => {
-      if (!markdown) return ""
-      if (isServer) return fallback(markdown)
+    src,
+    async (input) => {
+      if (!input) return ""
+      if (isServer) return fallback(input.markdown)
 
-      const normalized = normalize(markdown)
-
-      const hash = checksum(normalized)
-      const key = local.cacheKey ?? hash
-      if (key && hash) {
-        const cached = cache.get(key)
-        if (cached && cached.hash === hash) {
-          touch(key, cached)
-          usedFastParse = false
-          return cached.html
+      const key = input.cacheKey ?? input.key
+      if (key && input.hash) {
+        const hit = cache.get(key)
+        if (hit && hit.hash === input.hash) {
+          touch(key, hit)
+          return hit.html
         }
       }
 
-      // Fast parse avoids shiki on first paint, then upgrades when needed.
-      const defer = local.highlight === "defer"
-      const streaming = local.streaming
-      const chunked = local.chunked && marked.parseLite
-      const fast = !chunked && (streaming || defer) && marked.parseFast
-      const parseFn = chunked ? marked.parseLite : fast ? marked.parseFast : marked.parse
+      const parse =
+        input.mode === "lite"
+          ? marked.parseLite
+          : input.mode === "fast"
+            ? marked.parseFast
+            : input.math === "defer" && marked.parseNoMath
+              ? marked.parseNoMath
+              : marked.parse
 
-      let safe = ""
-      try {
-        safe = sanitize(await parseFn(normalized))
-      } catch (err) {
+      const rendered = await parse(input.normalized).catch((err) => {
         console.error("markdown render failed", err)
-        safe = fallback(normalized)
-      }
+        return fallback(input.normalized)
+      })
 
-      if (chunked || fast) {
-        usedFastParse = true
-        // Don't cache fast or lite results — they lack final highlighting/upgrades
-      } else {
-        usedFastParse = false
-        if (key && hash) touch(key, { hash, html: safe })
+      const safe = sanitize(rendered)
+      if (!input.streaming && key && input.hash) {
+        touch(key, { hash: input.hash, html: safe })
       }
-
       return safe
     },
     { initialValue: isServer ? fallback(local.text) : "" },
   )
 
-  // When streaming stops, schedule a full re-parse with shiki highlighting
-  createEffect(() => {
-    const defer = local.highlight === "defer"
-    const streaming = local.streaming
-    const text = local.text
-
-    if (highlightTimer) {
-      clearTimeout(highlightTimer)
-      highlightTimer = undefined
-    }
-    if (highlightIdle !== undefined) {
-      cancelIdleCallback(highlightIdle)
-      highlightIdle = undefined
-    }
-    if (chunkTimer) {
-      clearTimeout(chunkTimer)
-      chunkTimer = undefined
-    }
-    if (chunkIdle !== undefined) {
-      cancelIdleCallback(chunkIdle)
-      chunkIdle = undefined
-    }
-
-    if (!streaming && defer && usedFastParse && text) {
-      if (local.chunked) return
-      const gen = ++parseGeneration
-      highlightTimer = setTimeout(() => {
-        const run = async () => {
-          try {
-            const normalized = normalize(text)
-            const hash = checksum(normalized)
-            const key = local.cacheKey ?? hash
-            const safe = sanitize(await marked.parse(normalized))
-            if (gen === parseGeneration) {
-              setHtml(safe)
-              usedFastParse = false
-              if (key && hash) touch(key, { hash, html: safe })
-            }
-          } catch (err) {
-            console.error("markdown highlight upgrade failed", err)
-          }
-        }
-
-        if (typeof requestIdleCallback !== "function") {
-          void run()
-          return
-        }
-
-        highlightIdle = requestIdleCallback(
-          () => {
-            highlightIdle = undefined
-            void run()
-          },
-          { timeout: HIGHLIGHT_IDLE_TIMEOUT_MS },
-        )
-      }, HIGHLIGHT_DEBOUNCE_MS)
-    }
-  })
-
   let copySetupTimer: ReturnType<typeof setTimeout> | undefined
   let copyCleanup: (() => void) | undefined
 
   onMount(() => {
-    if (isServer) return
-    if (local.eager !== false) {
-      setReady(true)
-      return
-    }
+    setReady(true)
+  })
 
-    const container = root()
-    if (!container) return
-    if (typeof IntersectionObserver === "undefined") {
-      setReady(true)
-      return
-    }
-
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (!entries.some((entry) => entry.isIntersecting)) return
-        setReady(true)
-        io.disconnect()
+  createEffect(
+    on(
+      () => [root(), local.viewport, local.eager] as const,
+      ([container, viewport, eager]) => {
+        if (!container || eager) {
+          if (eager) setSeen(true)
+          return
+        }
+        const observer = new IntersectionObserver(
+          (entries) => {
+            if (!entries.some((entry) => entry.isIntersecting)) return
+            setSeen(true)
+          },
+          {
+            root: viewport,
+            rootMargin: "800px 0px",
+          },
+        )
+        observer.observe(container)
+        onCleanup(() => observer.disconnect())
       },
-      { rootMargin: "300px 0px" },
-    )
+    ),
+  )
 
-    io.observe(container)
-    onCleanup(() => io.disconnect())
-  })
-
-  createEffect(() => {
-    const container = root()
-    if (!container) return
-  })
+  createEffect(
+    on(
+      () => [root(), local.viewport, local.eager, local.math] as const,
+      ([container, viewport, eager, math]) => {
+        if (!container || eager || math !== "defer") {
+          setMathSeen(true)
+          return
+        }
+        const observer = new IntersectionObserver(
+          (entries) => {
+            if (!entries.some((entry) => entry.isIntersecting)) return
+            setMathSeen(true)
+          },
+          {
+            root: viewport,
+            rootMargin: "200px 0px",
+          },
+        )
+        observer.observe(container)
+        onCleanup(() => observer.disconnect())
+      },
+    ),
+  )
 
   createEffect(() => {
     const container = root()
@@ -745,61 +732,6 @@ export function Markdown(
 
   createEffect(() => {
     const container = root()
-    const content = html()
-    if (!container || !content || !local.chunked) return
-    if (isServer) return
-    if (!container.dataset.html) return
-
-    const gen = ++chunkGeneration
-    // Large file preview first mounts cheap HTML, then upgrades blocks over idle slices.
-    const queue = Array.from(container.children).filter((node): node is Element => node instanceof Element)
-    if (queue.length === 0) return
-
-    const setup = () => {
-      if (copySetupTimer) clearTimeout(copySetupTimer)
-      copySetupTimer = setTimeout(() => {
-        if (gen !== chunkGeneration) return
-        if (copyCleanup) copyCleanup()
-        copyCleanup = setupCodeCopy(container, labels())
-        setLabels(container, labels())
-      }, 150)
-    }
-
-    const run = async () => {
-      const start = performance.now()
-      while (queue.length > 0) {
-        if (gen !== chunkGeneration) return
-        const node = queue.shift()
-        if (!node || !node.isConnected) continue
-        await upgradeNode(marked, node)
-        if (performance.now() - start > 12) break
-      }
-
-      setup()
-
-      if (queue.length === 0) {
-        usedFastParse = false
-        return
-      }
-
-      const nextRun = () => {
-        chunkIdle = undefined
-        void run()
-      }
-
-      if (typeof requestIdleCallback === "function") {
-        chunkIdle = requestIdleCallback(nextRun, { timeout: 120 })
-        return
-      }
-
-      chunkTimer = setTimeout(nextRun, 16)
-    }
-
-    void run()
-  })
-
-  createEffect(() => {
-    const container = root()
     const next = labels()
     if (!container) return
     if (isServer) return
@@ -817,10 +749,6 @@ export function Markdown(
   onCleanup(() => {
     if (copySetupTimer) clearTimeout(copySetupTimer)
     if (copyCleanup) copyCleanup()
-    if (highlightTimer) clearTimeout(highlightTimer)
-    if (highlightIdle !== undefined) cancelIdleCallback(highlightIdle)
-    if (chunkTimer) clearTimeout(chunkTimer)
-    if (chunkIdle !== undefined) cancelIdleCallback(chunkIdle)
   })
 
   return (

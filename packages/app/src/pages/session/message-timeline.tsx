@@ -1,4 +1,4 @@
-import { For, createEffect, createMemo, on, onCleanup, Show, Index, type JSX, createSignal } from "solid-js"
+import { For, createEffect, createMemo, on, Show, Index, type JSX, createSignal, onCleanup } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { useNavigate } from "@solidjs/router"
 import { useMutation } from "@tanstack/solid-query"
@@ -28,16 +28,8 @@ import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
-import {
-  captureScroll,
-  itemStyle,
-  pickPin,
-  restorePinnedTop,
-  virtualizeTop,
-  virtualize,
-} from "@/pages/session/message-timeline-utils"
+import { itemStyle } from "@/pages/session/message-timeline-utils"
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
-import { Virtualizer, type VirtualizerHandle } from "virtua/solid"
 import { messageAgentColor } from "@/utils/agent"
 import { makeTimer } from "@solid-primitives/timer"
 import { active, working } from "./session-working"
@@ -53,6 +45,41 @@ type MessageComment = {
 
 const emptyMessages: MessageType[] = []
 const idle = { type: "idle" as const }
+const estimatedTurnHeight = 680
+const windowOverscan = 1600
+const windowThreshold = 24
+
+type MathMode = "turn" | "markdown"
+
+function mathMode(): MathMode {
+  if (typeof window === "undefined") return "markdown"
+  const value = window.localStorage.getItem("opencode.desktop.session.math")
+  return value === "turn" ? "turn" : "markdown"
+}
+
+const sameMessages = (a: MessageType[], b: MessageType[]) => {
+  if (a === b) return true
+  if (a.length !== b.length) return false
+  return a.every((item, index) => item === b[index])
+}
+
+const turnMessages = (messages: MessageType[], id: string) => {
+  const result = Binary.search(messages, id, (message) => message.id)
+  const start = result.found ? result.index : messages.findIndex((message) => message.id === id)
+  if (start < 0) return emptyMessages
+  const message = messages[start]
+  if (!message || message.role !== "user") return emptyMessages
+
+  let end = messages.length
+  for (let i = start + 1; i < messages.length; i++) {
+    if (messages[i]?.role === "user") {
+      end = i
+      break
+    }
+  }
+
+  return messages.slice(start, end)
+}
 
 type UserActions = {
   fork?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
@@ -77,17 +104,6 @@ const messageComments = (parts: Part[]): MessageComment[] =>
       },
     ]
   })
-
-const partHeight = (part: Part) => {
-  if (part.type === "text" || part.type === "reasoning") {
-    const len = part.text?.length ?? 0
-    return Math.min(560, 80 + len * 0.11)
-  }
-  if (part.type === "tool") return 96
-  if (part.type === "step-start") return 40
-  if (part.type === "snapshot") return 32
-  return 56
-}
 
 const boundaryTarget = (root: HTMLElement, target: EventTarget | null) => {
   const current = target instanceof Element ? target : undefined
@@ -120,106 +136,12 @@ const markBoundaryGesture = (input: {
   }
 }
 
-type StageConfig = {
-  init: number
-  batch: number
-}
-
-type TimelineStageInput = {
-  sessionKey: () => string
-  messages: () => UserMessage[]
-  config: StageConfig
-}
-
-/**
- * Defer-mounts timeline windows so session switches and history reveals do not
- * block first paint with a large DOM mount.
- *
- * Staging runs on session switches so the first paint stays responsive even
- * when the next session contains heavy markdown/LaTeX content.
- */
-function createTimelineStaging(input: TimelineStageInput) {
-  const [state, setState] = createStore({
-    activeSession: "",
-    count: 0,
-  })
-
-  const stagedCount = createMemo(() => {
-    const total = input.messages().length
-    if (state.activeSession === input.sessionKey()) {
-      const init = Math.min(total, input.config.init)
-      if (state.count <= init) return init
-      if (state.count >= total) return total
-      return state.count
-    }
-    return total
-  })
-
-  const stagedUserMessages = createMemo(() => {
-    const list = input.messages()
-    const count = stagedCount()
-    if (count >= list.length) return list
-    return list.slice(Math.max(0, list.length - count))
-  })
-
-  let frame: number | undefined
-  const cancel = () => {
-    if (frame === undefined) return
-    cancelAnimationFrame(frame)
-    frame = undefined
-  }
-
-  createEffect(
-    on(
-      () => [input.sessionKey(), input.messages().length] as const,
-      ([sessionKey, total], prev) => {
-        cancel()
-        if (sessionKey === prev?.[0]) {
-          if (state.activeSession !== sessionKey) setState({ activeSession: "", count: total })
-          return
-        }
-        if (total <= input.config.init) {
-          setState({ activeSession: "", count: total })
-          return
-        }
-
-        let count = Math.min(total, input.config.init)
-        setState({ activeSession: sessionKey, count })
-
-        const step = () => {
-          if (input.sessionKey() !== sessionKey) {
-            frame = undefined
-            return
-          }
-          const currentTotal = input.messages().length
-          count = Math.min(currentTotal, count + input.config.batch)
-          setState("count", count)
-          if (count >= currentTotal) {
-            setState({ activeSession: "", count: currentTotal })
-            frame = undefined
-            return
-          }
-          frame = requestAnimationFrame(step)
-        }
-        frame = requestAnimationFrame(step)
-      },
-    ),
-  )
-
-  const isStaging = createMemo(() => {
-    const key = input.sessionKey()
-    return state.activeSession === key
-  })
-
-  onCleanup(cancel)
-  return { messages: stagedUserMessages, isStaging }
-}
-
 export function MessageTimeline(props: {
   mobileChanges: boolean
   mobileFallback: JSX.Element
   actions?: UserActions
   scroll: { overflow: boolean; bottom: boolean }
+  live: boolean
   onResumeScroll: () => void
   setScrollRef: (el: HTMLDivElement | undefined) => void
   onScheduleScrollState: (el: HTMLDivElement) => void
@@ -227,15 +149,9 @@ export function MessageTimeline(props: {
   onMarkScrollGesture: (target?: EventTarget | null) => void
   hasScrollGesture: () => boolean
   onUserScroll: () => void
-  onTurnBackfillScroll: () => void
   onAutoScrollInteraction: (event: MouseEvent) => void
   centered: boolean
-  scrollRef: () => HTMLDivElement | undefined
-  userScrolled: () => boolean
-  onVirtualizedChange?: (value: boolean) => void
   setContentRef: (el: HTMLDivElement) => void
-  setVirtualizerRef: (handle: VirtualizerHandle | undefined) => void
-  turnStart: number
   historyMore: boolean
   historyLoading: boolean
   onLoadEarlier: () => void
@@ -243,8 +159,6 @@ export function MessageTimeline(props: {
   anchor: (id: string) => string
 }) {
   let touchGesture: number | undefined
-  let restoreA: number | undefined
-  let restoreB: number | undefined
 
   const navigate = useNavigate()
   const globalSDK = useGlobalSDK()
@@ -255,22 +169,43 @@ export function MessageTimeline(props: {
   const language = useLanguage()
   const { params, sessionKey } = useSessionKey()
   const platform = usePlatform()
+  const debugTimeline = (event: string, extra?: Record<string, unknown>) => {
+    if (!import.meta.env.DEV) return
+    console.debug("[timeline-debug]", {
+      event,
+      at: Date.now(),
+      sessionID: params.id,
+      rendered: rendered().length,
+      canWindow: canWindow(),
+      start: windowed.start,
+      end: windowed.end,
+      top: windowed.top,
+      bottom: windowed.bottom,
+      scrollTop: viewport?.scrollTop,
+      clientHeight: viewport?.clientHeight,
+      scrollHeight: viewport?.scrollHeight,
+      ...extra,
+    })
+  }
+  let viewport: HTMLDivElement | undefined
+  let windowFrame: number | undefined
+  const turnHeights = new Map<string, number>()
 
   const rendered = createMemo(() => props.renderedUserMessages.map((message) => message.id))
-  const itemSize = createMemo(() => {
-    const list = props.renderedUserMessages
-    if (list.length === 0) return 520
-
-    const recent = list.slice(Math.max(0, list.length - 8))
-    const total = recent.reduce((sum, message) => {
-      const parts = sync.data.part[message.id] ?? []
-      const comments = messageComments(parts)
-      const body = parts.reduce((value, part) => value + partHeight(part), 120)
-      const notes = comments.length * 88
-      return sum + body + notes + 48
-    }, 0)
-
-    return Math.max(320, Math.min(1200, Math.round(total / recent.length)))
+  const renderedIndex = createMemo(() => new Map(rendered().map((id, index) => [id, index])))
+  const averageTurnHeight = () => {
+    if (turnHeights.size === 0) return estimatedTurnHeight
+    let total = 0
+    for (const value of turnHeights.values()) total += value
+    return Math.max(estimatedTurnHeight / 2, total / turnHeights.size)
+  }
+  const estimateTurnHeight = (id: string) => turnHeights.get(id) ?? averageTurnHeight()
+  const totalHeight = createMemo(() => rendered().reduce((sum, id) => sum + estimateTurnHeight(id), 0))
+  const [windowed, setWindowed] = createStore({
+    start: 0,
+    end: Infinity,
+    top: 0,
+    bottom: 0,
   })
   const sessionID = createMemo(() => params.id)
   const sessionMessages = createMemo(() => {
@@ -285,122 +220,12 @@ export function MessageTimeline(props: {
     return sync.data.session_status[id] ?? idle
   })
   const isWorking = createMemo(() => working(sessionStatus(), sessionMessages()))
-  const shouldVirtualize = createMemo<boolean>((prev) => {
-    const next = virtualize({
-      desktop: platform.platform === "desktop",
-      count: rendered().length,
-      working: isWorking(),
-    })
-    if (!props.userScrolled()) return next
-    return prev ?? next
-  })
-  createEffect(() => props.onVirtualizedChange?.(shouldVirtualize()))
-  createEffect(
-    on(
-      shouldVirtualize,
-      (next, prev) => {
-        if (prev === undefined || next === prev) return
-
-        const root = props.scrollRef()
-        if (!root) return
-        const follow = !props.userScrolled()
-
-        const state = captureScroll({
-          scrollTop: root.scrollTop,
-          scrollHeight: root.scrollHeight,
-          clientHeight: root.clientHeight,
-        })
-
-        if (follow) {
-          if (restoreA !== undefined) cancelAnimationFrame(restoreA)
-          if (restoreB !== undefined) cancelAnimationFrame(restoreB)
-
-          restoreA = requestAnimationFrame(() => {
-            restoreA = undefined
-            restoreB = requestAnimationFrame(() => {
-              restoreB = undefined
-
-              const nextRoot = props.scrollRef()
-              if (!nextRoot) return
-
-              // When the user is following the latest turn, a virtualization
-              // flip must stay pinned to the bottom. Restoring the previous
-              // top/pin here can resurrect a transient `scrollTop = 0` from
-              // the old DOM and jump the whole session back to the start.
-              nextRoot.scrollTop = virtualizeTop({
-                ...state,
-                follow,
-                scrollHeight: nextRoot.scrollHeight,
-                clientHeight: nextRoot.clientHeight,
-              })
-              props.onScheduleScrollState(nextRoot)
-            })
-          })
-          return
-        }
-        const pin = state.bottom
-          ? undefined
-          : (() => {
-              const box = root.getBoundingClientRect()
-              const list = [...root.querySelectorAll<HTMLElement>("[data-message-id]")]
-                .map((node) => {
-                  const id = node.dataset.messageId
-                  if (!id) return
-                  const rect = node.getBoundingClientRect()
-                  return { id, top: rect.top, bottom: rect.bottom }
-                })
-                .filter((item): item is { id: string; top: number; bottom: number } => !!item)
-              return pickPin({
-                viewTop: box.top,
-                viewBottom: box.bottom,
-                items: list,
-              })
-            })()
-
-        if (restoreA !== undefined) cancelAnimationFrame(restoreA)
-        if (restoreB !== undefined) cancelAnimationFrame(restoreB)
-
-        restoreA = requestAnimationFrame(() => {
-          restoreA = undefined
-          restoreB = requestAnimationFrame(() => {
-            restoreB = undefined
-
-            const nextRoot = props.scrollRef()
-            if (!nextRoot) return
-
-            if (pin) {
-              const key = typeof CSS === "undefined" ? pin.id : CSS.escape(pin.id)
-              const node = nextRoot.querySelector<HTMLElement>(`[data-message-id="${key}"]`)
-              if (node) {
-                const box = nextRoot.getBoundingClientRect()
-                const top = restorePinnedTop({
-                  scrollTop: nextRoot.scrollTop,
-                  scrollHeight: nextRoot.scrollHeight,
-                  clientHeight: nextRoot.clientHeight,
-                  pinTop: pin.top,
-                  nextTop: node.getBoundingClientRect().top - box.top,
-                })
-                if (Math.abs(nextRoot.scrollTop - top) > 1) nextRoot.scrollTop = top
-                props.onScheduleScrollState(nextRoot)
-                return
-              }
-            }
-
-            const top = virtualizeTop({
-              ...state,
-              follow,
-              scrollHeight: nextRoot.scrollHeight,
-              clientHeight: nextRoot.clientHeight,
-            })
-            if (Math.abs(nextRoot.scrollTop - top) > 1) nextRoot.scrollTop = top
-            props.onScheduleScrollState(nextRoot)
-          })
-        })
-      },
-      { defer: true },
-    ),
-  )
   const tint = createMemo(() => messageAgentColor(sessionMessages(), sync.data.agent))
+  // Windowing is only disabled while the active reply is still growing. Static
+  // sessions may stay pinned to the bottom and still use history windowing;
+  // otherwise long math-heavy conversations would remount the full timeline
+  // and make the whole page feel sluggish.
+  const canWindow = createMemo(() => !isWorking())
 
   const [timeoutDone, setTimeoutDone] = createSignal(true)
 
@@ -415,6 +240,213 @@ export function MessageTimeline(props: {
 
     setTimeoutDone(false)
     makeTimer(() => setTimeoutDone(true), 260, setTimeout)
+  })
+
+  const captureWindowAnchor = () => {
+    const root = viewport
+    if (!root) return
+    const box = root.getBoundingClientRect()
+    const nodes = [...root.querySelectorAll<HTMLElement>("[data-message-id]")]
+    const visible =
+      nodes.find((node) => {
+        const rect = node.getBoundingClientRect()
+        return rect.bottom > box.top && rect.top < box.bottom
+      }) ?? nodes[0]
+    if (!visible?.dataset.messageId) return
+    return {
+      id: visible.dataset.messageId,
+      top: visible.getBoundingClientRect().top - box.top,
+    }
+  }
+
+  const buildWindow = () => {
+    const root = viewport
+    const ids = rendered()
+    if (!canWindow() || !root || ids.length <= windowThreshold) {
+      return {
+        start: 0,
+        end: ids.length,
+        top: 0,
+        bottom: 0,
+      }
+    }
+
+    if (props.live) {
+      let end = ids.length
+      let bottom = 0
+      let covered = 0
+      const target = root.clientHeight + windowOverscan
+      while (end > 0 && covered < target) {
+        end -= 1
+        covered += estimateTurnHeight(ids[end]!)
+      }
+
+      let top = 0
+      for (let i = 0; i < end; i++) top += estimateTurnHeight(ids[i]!)
+      return {
+        start: end,
+        end: ids.length,
+        top,
+        bottom,
+      }
+    }
+
+    const min = Math.max(0, root.scrollTop - windowOverscan)
+    const max = root.scrollTop + root.clientHeight + windowOverscan
+    let offset = 0
+    let start = 0
+    while (start < ids.length) {
+      const next = offset + estimateTurnHeight(ids[start]!)
+      if (next >= min) break
+      offset = next
+      start += 1
+    }
+
+    let end = start
+    let tail = offset
+    while (end < ids.length) {
+      tail += estimateTurnHeight(ids[end]!)
+      end += 1
+      if (tail >= max) break
+    }
+
+    return {
+      start,
+      end: Math.max(start + 1, end),
+      top: offset,
+      bottom: Math.max(0, totalHeight() - tail),
+    }
+  }
+
+  const sameWindow = (next: { start: number; end: number; top: number; bottom: number }) =>
+    windowed.start === next.start &&
+    windowed.end === next.end &&
+    Math.abs(windowed.top - next.top) <= 1 &&
+    Math.abs(windowed.bottom - next.bottom) <= 1
+
+  const syncWindow = (next: { start: number; end: number; top: number; bottom: number }, id?: string) => {
+    if (!id) return next
+    const ids = rendered()
+    const index = renderedIndex().get(id)
+    if (index === undefined) return next
+    if (index >= next.start && index < next.end) return next
+
+    const start = Math.min(next.start, index)
+    const end = Math.max(next.end, index + 1)
+    let top = 0
+    for (let i = 0; i < start; i++) top += estimateTurnHeight(ids[i]!)
+    let tail = top
+    for (let i = start; i < end; i++) tail += estimateTurnHeight(ids[i]!)
+    return {
+      start,
+      end,
+      top,
+      bottom: Math.max(0, totalHeight() - tail),
+    }
+  }
+
+  const applyWindow = () => {
+    const anchor = captureWindowAnchor()
+    const next = syncWindow(buildWindow(), anchor?.id)
+    if (sameWindow(next)) return
+
+    debugTimeline("window:apply", {
+      anchor: anchor?.id,
+      anchorTop: anchor?.top,
+      nextStart: next.start,
+      nextEnd: next.end,
+      nextTop: next.top,
+      nextBottom: next.bottom,
+    })
+    setWindowed(next)
+    if (props.live) {
+      requestAnimationFrame(() => {
+        const root = viewport
+        if (!root) return
+        root.scrollTop = root.scrollHeight
+        props.onScheduleScrollState(root)
+      })
+      return
+    }
+    if (!anchor) return
+
+    // Spacer heights are estimate-driven, so changing the render window can
+    // shift the viewport by a few pixels. Re-apply the previous visible turn's
+    // top offset after the DOM commits so the viewport content stays stable
+    // even while the scrollbar length changes.
+    requestAnimationFrame(() => {
+      const root = viewport
+      if (!root) return
+      const key = typeof CSS === "undefined" ? anchor.id : CSS.escape(anchor.id)
+      const node = root.querySelector<HTMLElement>(`[data-message-id="${key}"]`)
+      if (!node) return
+      const box = root.getBoundingClientRect()
+      const top = node.getBoundingClientRect().top - box.top
+      const delta = top - anchor.top
+      debugTimeline("window:correct", { anchor: anchor.id, delta, nodeTop: top })
+      if (Math.abs(delta) <= 1) return
+      root.scrollTop += delta
+      props.onScheduleScrollState(root)
+    })
+  }
+
+  const scheduleWindow = () => {
+    if (windowFrame !== undefined) return
+    windowFrame = requestAnimationFrame(() => {
+      windowFrame = undefined
+      applyWindow()
+    })
+  }
+
+  const shouldWindow = () => {
+    const root = viewport
+    const ids = rendered()
+    if (!canWindow() || !root || ids.length <= windowThreshold) return false
+    if (windowed.end === Infinity) return true
+    const top = root.scrollTop
+    const bottom = top + root.clientHeight
+    const start = Math.max(0, windowed.top + windowOverscan / 2)
+    const end = totalHeight() - Math.max(0, windowed.bottom + windowOverscan / 2)
+    return top < start || bottom > end
+  }
+
+  const visibleRendered = createMemo(() => {
+    const ids = rendered()
+    if (!canWindow() || ids.length <= windowThreshold) return ids
+    return ids.slice(windowed.start, Math.min(ids.length, windowed.end))
+  })
+
+  createEffect(
+    on(rendered, () => {
+      const ids = new Set(rendered())
+      for (const id of turnHeights.keys()) {
+        if (!ids.has(id)) turnHeights.delete(id)
+      }
+      debugTimeline("rendered:change")
+      scheduleWindow()
+    }),
+  )
+
+  createEffect(() => {
+    if (canWindow()) return
+    const ids = rendered()
+    debugTimeline("window:disable", { reason: "working" })
+    setWindowed({
+      start: 0,
+      end: ids.length,
+      top: 0,
+      bottom: 0,
+    })
+  })
+
+  createEffect(() => {
+    if (!canWindow()) return
+    debugTimeline("window:enable")
+    scheduleWindow()
+  })
+
+  onCleanup(() => {
+    if (windowFrame !== undefined) cancelAnimationFrame(windowFrame)
   })
 
   const activeMessageID = createMemo(() => {
@@ -446,13 +478,6 @@ export function MessageTimeline(props: {
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
   const parentID = createMemo(() => info()?.parentID)
   const showHeader = createMemo(() => !!(titleValue() || parentID()))
-  const stageCfg = platform.platform === "desktop" ? { init: 1, batch: 1 } : { init: 1, batch: 3 }
-  const staging = createTimelineStaging({
-    sessionKey,
-    messages: () => props.renderedUserMessages,
-    config: stageCfg,
-  })
-
   const [title, setTitle] = createStore({
     draft: "",
     editing: false,
@@ -709,11 +734,6 @@ export function MessageTimeline(props: {
     )
   }
 
-  onCleanup(() => {
-    if (restoreA !== undefined) cancelAnimationFrame(restoreA)
-    if (restoreB !== undefined) cancelAnimationFrame(restoreB)
-  })
-
   return (
     <Show
       when={!props.mobileChanges}
@@ -723,10 +743,8 @@ export function MessageTimeline(props: {
         <div
           class="absolute left-1/2 -translate-x-1/2 bottom-6 z-[60] pointer-events-none transition-all duration-200 ease-out"
           classList={{
-            "opacity-100 translate-y-0 scale-100":
-              props.scroll.overflow && !props.scroll.bottom && !staging.isStaging(),
-            "opacity-0 translate-y-2 scale-95 pointer-events-none":
-              !props.scroll.overflow || props.scroll.bottom || staging.isStaging(),
+            "opacity-100 translate-y-0 scale-100": props.scroll.overflow && !props.scroll.bottom,
+            "opacity-0 translate-y-2 scale-95 pointer-events-none": !props.scroll.overflow || props.scroll.bottom,
           }}
         >
           <button
@@ -737,7 +755,11 @@ export function MessageTimeline(props: {
           </button>
         </div>
         <ScrollView
-          viewportRef={props.setScrollRef}
+          viewportRef={(el) => {
+            viewport = el
+            props.setScrollRef(el)
+            scheduleWindow()
+          }}
           onWheel={(e) => {
             const root = e.currentTarget
             const delta = normalizeWheelDelta({
@@ -775,9 +797,14 @@ export function MessageTimeline(props: {
           }}
           onScroll={(e) => {
             props.onScheduleScrollState(e.currentTarget)
-            props.onTurnBackfillScroll()
-            props.onAutoScrollHandleScroll()
-            if (!props.hasScrollGesture()) return
+            const gesture = props.hasScrollGesture()
+            // Programmatic scroll corrections also emit scroll events. Only let
+            // real user gestures drive the auto-scroll state machine, otherwise
+            // streaming or anchor correction gets misclassified as manual exit
+            // from bottom follow mode.
+            if (gesture) props.onAutoScrollHandleScroll()
+            if (shouldWindow()) scheduleWindow()
+            if (!gesture) return
             props.onUserScroll()
             props.onMarkScrollGesture(e.currentTarget)
           }}
@@ -788,7 +815,12 @@ export function MessageTimeline(props: {
             "--sticky-accordion-top": showHeader() ? "48px" : "0px",
           }}
         >
-          <div ref={props.setContentRef} class="min-w-0 w-full">
+          <div
+            ref={(el) => {
+              props.setContentRef(el)
+            }}
+            class="min-w-0 w-full"
+          >
             <Show when={showHeader()}>
               <div
                 data-session-title
@@ -1055,14 +1087,13 @@ export function MessageTimeline(props: {
               class="flex flex-col items-start justify-start pb-16 transition-[margin]"
               classList={{
                 "w-full": true,
-                "flex flex-col gap-12": !shouldVirtualize(),
-                block: shouldVirtualize(),
+                "flex flex-col gap-12": true,
                 "mt-0.5": props.centered,
                 "mt-0": !props.centered,
               }}
               style={itemStyle(props.centered)}
             >
-              <Show when={props.turnStart > 0 || props.historyMore}>
+              <Show when={props.historyMore}>
                 <div class="w-full flex justify-center">
                   <Button
                     variant="ghost"
@@ -1077,24 +1108,16 @@ export function MessageTimeline(props: {
                   </Button>
                 </div>
               </Show>
-              <Show
-                when={shouldVirtualize()}
-                fallback={
-                  <For each={rendered()}>
-                    {(messageID, index) => <TimelineItem index={index()} messageID={messageID} />}
-                  </For>
-                }
-              >
-                <Virtualizer
-                  data={rendered()}
-                  scrollRef={props.scrollRef()}
-                  shift
-                  itemSize={itemSize()}
-                  keepMounted={rendered().length > 0 ? [Math.max(0, rendered().length - 1)] : []}
-                  ref={props.setVirtualizerRef}
-                >
-                  {(messageID, index) => <TimelineItem index={index()} messageID={messageID} />}
-                </Virtualizer>
+              <Show when={windowed.top > 0}>
+                <div class="w-full shrink-0" style={{ height: `${windowed.top}px` }} aria-hidden="true" />
+              </Show>
+              <div class="w-full contents">
+                <For each={visibleRendered()}>
+                  {(messageID) => <TimelineItem index={renderedIndex().get(messageID) ?? 0} messageID={messageID} />}
+                </For>
+              </div>
+              <Show when={windowed.bottom > 0}>
+                <div class="w-full shrink-0" style={{ height: `${windowed.bottom}px` }} aria-hidden="true" />
               </Show>
             </div>
           </div>
@@ -1105,19 +1128,54 @@ export function MessageTimeline(props: {
 
   function TimelineItem(item: { messageID: string; index: number }) {
     const active = createMemo(() => activeMessageID() === item.messageID)
-    const eager = createMemo(() => rendered().length - item.index <= 2)
+    const eager = createMemo(() => active() || item.index >= rendered().length - 3)
+    const highlight = createMemo<"full" | "defer">(() => (active() ? "full" : "defer"))
+    const math = createMemo<"full" | "defer">(() => {
+      if (mathMode() !== "turn") return "full"
+      return eager() ? "full" : "defer"
+    })
+    const messages = createMemo<MessageType[]>(
+      (prev?: MessageType[]) => {
+        if (active()) return turnMessages(sessionMessages(), item.messageID)
+        const next = turnMessages(sessionMessages(), item.messageID)
+        return prev && sameMessages(prev, next) ? prev : next
+      },
+      emptyMessages,
+    )
     const comments = createMemo(() => messageComments(sync.data.part[item.messageID] ?? []), [], {
       equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
     })
     const commentCount = createMemo(() => comments().length)
+    let rootRef: HTMLDivElement | undefined
+
+    const measure = () => {
+      const next = rootRef?.offsetHeight
+      if (!next) return
+      const prev = turnHeights.get(item.messageID)
+      if (prev !== undefined && Math.abs(prev - next) <= 1) return
+      turnHeights.set(item.messageID, next)
+      scheduleWindow()
+    }
+
+    createEffect(() => {
+      if (!rootRef) return
+      measure()
+      // Each rendered turn feeds back its real height so spacer estimates
+      // converge as the user scrolls through long markdown/math history.
+      const observer = new ResizeObserver(() => measure())
+      observer.observe(rootRef)
+      onCleanup(() => observer.disconnect())
+    })
 
     return (
       <div
+        ref={(el) => {
+          rootRef = el
+        }}
         id={props.anchor(item.messageID)}
         data-message-id={item.messageID}
         classList={{
           "min-w-0 w-full max-w-full": true,
-          "pb-12": shouldVirtualize(),
         }}
         style={itemStyle(props.centered)}
       >
@@ -1161,7 +1219,10 @@ export function MessageTimeline(props: {
         <SessionTurn
           sessionID={sessionID() ?? ""}
           messageID={item.messageID}
+          messages={messages()}
           actions={props.actions}
+          autoScroll={false}
+          fill={false}
           active={active()}
           status={active() ? sessionStatus() : undefined}
           showReasoningSummaries={settings.general.showReasoningSummaries()}
@@ -1169,6 +1230,9 @@ export function MessageTimeline(props: {
           shellToolDefaultOpen={settings.general.shellToolPartsExpanded()}
           editToolDefaultOpen={settings.general.editToolPartsExpanded()}
           markdownEager={eager()}
+          markdownViewport={viewport}
+          markdownHighlight={highlight()}
+          markdownMath={math()}
           classes={{
             root: "min-w-0 w-full relative",
             content: "flex flex-col justify-between !overflow-visible",
