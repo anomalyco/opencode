@@ -71,7 +71,7 @@ export namespace Locale {
     const keepStart = Math.ceil((maxLength - ellipsis.length) / 2)
     const keepEnd = Math.floor((maxLength - ellipsis.length) / 2)
 
-    return str.slice(0, keepStart) + ellipsis + str.slice(-keepEnd)
+    return str.slice(0, keepStart) + ellipsis + (keepEnd > 0 ? str.slice(-keepEnd) : "")
   }
 
   export function pluralize(count: number, singular: string, plural: string): string {
