@@ -1,8 +1,8 @@
 {
   "nodeModules": {
-    "x86_64-linux": "sha256-bhX2N9wtE5Uy+oUHkaYBXovB8JmnCnDXvWEbM/xHF0E=",
-    "aarch64-linux": "sha256-WmwpHpV1fNbfm0EDD523XZZdifLAbhUQabiP5sEBRa0=",
-    "aarch64-darwin": "sha256-8LgZ3d1g6dKfFSi/ZMEaD45GWseY0KpAtkxhzMBaOdY=",
-    "x86_64-darwin": "sha256-DqM5DePr4f3Lr3p+KKXkzJwUisjipfsSSL7ORDxPgfY="
+    "x86_64-linux": "sha256-g6zIq2w5nM+UPMsOzqB5EbCi4a9xkarin27WwTHqzHo=",
+    "aarch64-linux": "sha256-ivRoB8jrPtMGaphkIQuZ4G5E83/iPjoMGQGgxIp6p8Q=",
+    "aarch64-darwin": "sha256-0oW0PQpcXsNOGA868BjGRAAJWKcZJ8GVVkQueJfz6ng=",
+    "x86_64-darwin": "sha256-7Jm198RsxBC9yewcTlV6HXLtT3+GRFThi+5vL/R8d18="
   }
 }

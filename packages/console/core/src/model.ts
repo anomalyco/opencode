@@ -26,8 +26,9 @@ export namespace ZenData {
     allowAnonymous: z.boolean().optional(),
     byokProvider: z.enum(["openai", "anthropic", "google"]).optional(),
     stickyProvider: z.enum(["strict", "prefer"]).optional(),
-    trialProvider: z.string().optional(),
+    trialProviders: z.array(z.string()).optional(),
     fallbackProvider: z.string().optional(),
+    rateLimit: z.number().optional(),
     providers: z.array(
       z.object({
         id: z.string(),
@@ -35,6 +36,8 @@ export namespace ZenData {
         weight: z.number().optional(),
         disabled: z.boolean().optional(),
         storeModel: z.string().optional(),
+        payloadModifier: z.record(z.string(), z.any()).optional(),
+        safetyIdentifier: z.boolean().optional(),
       }),
     ),
   })
@@ -45,6 +48,8 @@ export namespace ZenData {
     format: FormatSchema.optional(),
     headerMappings: z.record(z.string(), z.string()).optional(),
     payloadModifier: z.record(z.string(), z.any()).optional(),
+    payloadMappings: z.record(z.string(), z.string()).optional(),
+    adjustCacheUsage: z.boolean().optional(),
   })
 
   const ModelsSchema = z.object({
