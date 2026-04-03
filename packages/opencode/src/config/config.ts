@@ -188,15 +188,6 @@ export namespace Config {
     }
   }
 
-  function rel(item: string, patterns: string[]) {
-    const normalizedItem = item.replaceAll("\\", "/")
-    for (const pattern of patterns) {
-      const index = normalizedItem.indexOf(pattern)
-      if (index === -1) continue
-      return normalizedItem.slice(index + pattern.length)
-    }
-  }
-
   function trim(file: string) {
     const ext = path.extname(file)
     return ext.length ? file.slice(0, -ext.length) : file
@@ -221,8 +212,8 @@ export namespace Config {
       })
       if (!md) continue
 
-      const patterns = ["/.opencode/command/", "/.opencode/commands/", "/command/", "/commands/"]
-      const file = rel(item, patterns) ?? path.basename(item)
+      const relative = path.relative(dir, item).replaceAll("\\", "/")
+      const file = relative.replace(/^commands?\//, "")
       const name = trim(file)
 
       const config = {
@@ -260,8 +251,8 @@ export namespace Config {
       })
       if (!md) continue
 
-      const patterns = ["/.opencode/agent/", "/.opencode/agents/", "/agent/", "/agents/"]
-      const file = rel(item, patterns) ?? path.basename(item)
+      const relative = path.relative(dir, item).replaceAll("\\", "/")
+      const file = relative.replace(/^agents?\//, "")
       const agentName = trim(file)
 
       const config = {
