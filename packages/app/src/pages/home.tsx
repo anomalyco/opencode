@@ -28,7 +28,7 @@ export default function Home() {
     if (!sync.ready) return
     const directory = sync.data.path.directory
     if (directory) {
-      openProject(directory)
+      navigate(`/${base64Encode(directory)}`)
     }
   })
   const recent = createMemo(() => {
