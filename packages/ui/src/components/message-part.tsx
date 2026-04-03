@@ -1106,17 +1106,20 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   )
 }
 
-type HighlightSegment = { text: string; type?: "file" | "agent" | "code-inline" | "code-block" }
+type HighlightSegment = { text: string; type?: "file" | "agent" | "code-inline" | "code-block"; lang?: string }
+
+const COLLAPSE_LINES = 8
 
 function parseCode(text: string): HighlightSegment[] {
   const result: HighlightSegment[] = []
-  const re = /```([\w-]*)\n?([\s\S]*?)```|`([^`\n]+)`/g
+  // match fenced code blocks first, then inline code
+  const re = /```([\w.-]*)[^\S\r\n]*\r?\n?([\s\S]*?)```|`([^`\n]+)`/g
   let last = 0
   let match: RegExpExecArray | null
   while ((match = re.exec(text)) !== null) {
     if (match.index > last) result.push({ text: text.slice(last, match.index) })
     if (match[2] !== undefined) {
-      result.push({ text: match[0], type: "code-block" })
+      result.push({ text: match[2], type: "code-block", lang: match[1] || undefined })
     } else {
       result.push({ text: match[3], type: "code-inline" })
     }
@@ -1124,6 +1127,34 @@ function parseCode(text: string): HighlightSegment[] {
   }
   if (last < text.length) result.push({ text: text.slice(last) })
   return result
+}
+
+function CodeBlock(props: { text: string; lang?: string }) {
+  const lines = createMemo(() => props.text.trimEnd().split("\n"))
+  const collapsible = createMemo(() => lines().length > COLLAPSE_LINES)
+  const [open, setOpen] = createSignal(false)
+  const preview = createMemo(() => lines().slice(0, COLLAPSE_LINES).join("\n"))
+  const extra = createMemo(() => lines().length - COLLAPSE_LINES)
+
+  return (
+    <div data-slot="user-message-code-block">
+      <Show when={props.lang}>
+        <span data-slot="user-message-code-lang">{props.lang}</span>
+      </Show>
+      <pre>
+        <code>{collapsible() && !open() ? preview() : props.text.trimEnd()}</code>
+      </pre>
+      <Show when={collapsible()}>
+        <button
+          type="button"
+          data-slot="user-message-code-toggle"
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open() ? "Show less" : `Show ${extra()} more lines`}
+        </button>
+      </Show>
+    </div>
+  )
 }
 
 function HighlightedText(props: { text: string; references: FilePart[]; agents: AgentPart[] }) {
@@ -1159,7 +1190,7 @@ function HighlightedText(props: { text: string; references: FilePart[]; agents: 
       {(seg) => (
         <Switch fallback={<span data-highlight={seg.type}>{seg.text}</span>}>
           <Match when={seg.type === "code-block"}>
-            <Markdown text={seg.text} data-slot="user-message-code-block" />
+            <CodeBlock text={seg.text} lang={seg.lang} />
           </Match>
           <Match when={seg.type === "code-inline"}>
             <code data-slot="user-message-code-inline">{seg.text}</code>
