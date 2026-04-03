@@ -56,6 +56,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
           <Match when={sidebarTab() === "plugins"}>
             <scrollbox
               flexGrow={1}
+              scrollAcceleration={scrollAcceleration()}
               verticalScrollbarOptions={{
                 trackOptions: {
                   backgroundColor: theme.background,

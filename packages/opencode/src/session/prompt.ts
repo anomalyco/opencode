@@ -1469,7 +1469,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   messages: msgs,
                 })
 
-                if (lastUser.format?.type === "json_schema") {
+                if (lastUser.format?.type === "json_schema" && session.kind !== "sidekick") {
                   tools["StructuredOutput"] = createStructuredOutputTool({
                     schema: lastUser.format.schema,
                     onSuccess(output) {
@@ -1509,7 +1509,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 ])
                 const system = [...env, ...(skills ? [skills] : []), ...instructions]
                 const format = lastUser.format ?? { type: "text" as const }
-                if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+                if (format.type === "json_schema" && session.kind !== "sidekick") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
                 const result = yield* handle.process({
                   user: lastUser,
                   agent,

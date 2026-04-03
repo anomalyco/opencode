@@ -141,11 +141,14 @@ export namespace Sidekick {
       const snapshot = await context({ parentID: input.parentID, limit: 30 })
 
       // Mark previous synthetic snapshot parts as ignored to prevent duplication
-      const prev = await Session.messages({ sessionID: session.id })
+      // Only scan recent messages — older synthetic parts are already ignored from prior calls
+      const prev = await Session.messages({ sessionID: session.id, limit: 100 })
       const stale = prev.flatMap((msg) =>
         msg.parts.filter((p): p is MessageV2.TextPart => p.type === "text" && p.synthetic === true && !p.ignored),
       )
-      await Promise.all(stale.map((p) => Session.updatePart({ ...p, ignored: true })))
+      if (stale.length > 0) {
+        await Promise.all(stale.map((p) => Session.updatePart({ ...p, ignored: true })))
+      }
 
       const parts: SessionPrompt.PromptInput["parts"] = []
 
@@ -201,6 +204,7 @@ export namespace Sidekick {
         .get(),
     )
     if (!existing) return false
+    await SessionPrompt.cancel(existing.id as SessionID)
     await Session.remove(existing.id as SessionID)
     return true
   })

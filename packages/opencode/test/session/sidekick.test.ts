@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
+import os from "os"
 import { Session } from "../../src/session"
 import { Log } from "../../src/util/log"
 import { Instance } from "../../src/project/instance"
@@ -342,6 +343,37 @@ describe("sidekick project isolation", () => {
         expect(msg.role).toBe("user")
 
         await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("inject rejects cross-project parentID", async () => {
+    // Create a session in project A
+    let sessionID: string | undefined
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const session = await Session.create({})
+        sessionID = session.id
+      },
+    })
+
+    // Try to inject from project B — different directory = different project
+    const otherDir = os.tmpdir()
+    await Instance.provide({
+      directory: otherDir,
+      fn: async () => {
+        await expect(
+          Sidekick.inject({ parentID: sessionID as any, text: "cross-project test" }),
+        ).rejects.toThrow("different project")
+      },
+    })
+
+    // Cleanup from original project context
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        await Session.remove(sessionID as any)
       },
     })
   })

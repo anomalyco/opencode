@@ -18,6 +18,7 @@ import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Sidekick } from "../../session/sidekick"
+import { HTTPException } from "hono/http-exception"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { Bus } from "../../bus"
@@ -28,7 +29,7 @@ const log = Log.create({ service: "server" })
 async function rejectSidekick(sessionID: SessionID) {
   const session = await Session.get(sessionID)
   if (session.kind === "sidekick")
-    throw new Error("Sidekick sessions cannot be prompted through generic routes. Use the /sidekick endpoint instead.")
+    throw new HTTPException(422, { message: "Sidekick sessions cannot be prompted through generic routes. Use the /sidekick endpoint instead." })
 }
 
 export const SessionRoutes = lazy(() =>
