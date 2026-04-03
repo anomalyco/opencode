@@ -772,16 +772,41 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     ),
   )
 
+  const resolveAppendPath = async (raw: string): Promise<{ pillPath: string; suffix: string } | null> => {
+    const match = raw.match(/^@?(.+?):(\d+)(?:-(\d+))?(?::(\d+))?$/)
+    if (!match) return null
+    const candidate = match[1]
+    const startLine = match[2]
+    const endLine = match[3]
+    const col = match[4]
+    const paths = await files.searchFilesAndDirectories(candidate)
+    const hit = paths.find((p) => p === candidate) ?? paths.find((p) => p.endsWith(candidate))
+    if (!hit) return null
+    const suffix = ":" + startLine + (endLine ? "-" + endLine : "") + (col ? ":" + col : "")
+    return { pillPath: hit, suffix }
+  }
+
   // Listen for external text append events (opencode://append?text=xxx)
   onMount(() => {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<{ text: string; action: string }>).detail
       if (!detail?.text) return
-      const cursor = prompt.cursor() ?? promptLength(prompt.current())
-      addPart({ type: "text", content: detail.text, start: 0, end: 0 })
-      if (detail.action === "submit") {
-        requestAnimationFrame(() => handleSubmit(event as unknown as KeyboardEvent))
+
+      const tryInsert = async () => {
+        const resolved = await resolveAppendPath(detail.text)
+        if (resolved) {
+          addPart({ type: "file", path: resolved.pillPath, content: "@" + resolved.pillPath, start: 0, end: 0 })
+          if (resolved.suffix) {
+            addPart({ type: "text", content: resolved.suffix, start: 0, end: 0 })
+          }
+        } else {
+          addPart({ type: "text", content: detail.text, start: 0, end: 0 })
+        }
+        if (detail.action === "submit") {
+          requestAnimationFrame(() => handleSubmit(event as unknown as KeyboardEvent))
+        }
       }
+      void tryInsert()
     }
     makeEventListener(window, appendTextEvent, handler as EventListener)
   })
