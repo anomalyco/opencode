@@ -398,6 +398,47 @@ describe("file/index Filesystem patterns", () => {
   })
 
   describe("File.status()", () => {
+    test("reports staged additions before first commit", async () => {
+      await using tmp = await tmpdir()
+      await $`git init`.cwd(tmp.path).quiet()
+      await $`git config core.fsmonitor false`.cwd(tmp.path).quiet()
+      await fs.writeFile(path.join(tmp.path, "new.txt"), "line\n", "utf-8")
+      await $`git add new.txt`.cwd(tmp.path).quiet()
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const result = await File.status()
+          const entry = result.find((f) => f.path === "new.txt")
+          expect(entry).toBeDefined()
+          expect(entry!.status).toBe("modified")
+          expect(entry!.added).toBe(1)
+          expect(entry!.removed).toBe(0)
+        },
+      })
+    })
+
+    test("includes unstaged edits for AM files before first commit", async () => {
+      await using tmp = await tmpdir()
+      await $`git init`.cwd(tmp.path).quiet()
+      await $`git config core.fsmonitor false`.cwd(tmp.path).quiet()
+      await fs.writeFile(path.join(tmp.path, "am.txt"), "one\n", "utf-8")
+      await $`git add am.txt`.cwd(tmp.path).quiet()
+      await fs.writeFile(path.join(tmp.path, "am.txt"), "one\ntwo\n", "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const result = await File.status()
+          const entry = result.find((f) => f.path === "am.txt")
+          expect(entry).toBeDefined()
+          expect(entry!.status).toBe("modified")
+          expect(entry!.added).toBe(2)
+          expect(entry!.removed).toBe(0)
+        },
+      })
+    })
+
     test("detects modified file", async () => {
       await using tmp = await tmpdir({ git: true })
       const filepath = path.join(tmp.path, "file.txt")
@@ -821,6 +862,45 @@ describe("file/index Filesystem patterns", () => {
   })
 
   describe("File.read() - diff/patch", () => {
+    test("returns staged diff before first commit", async () => {
+      await using tmp = await tmpdir()
+      await $`git init`.cwd(tmp.path).quiet()
+      await $`git config core.fsmonitor false`.cwd(tmp.path).quiet()
+      await fs.writeFile(path.join(tmp.path, "staged.txt"), "one\n", "utf-8")
+      await $`git add staged.txt`.cwd(tmp.path).quiet()
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const result = await File.read("staged.txt")
+          expect(result.diff).toBeDefined()
+          expect(result.diff).toContain("one")
+          expect(result.patch).toBeDefined()
+          expect(result.patch!.hunks.length).toBeGreaterThan(0)
+        },
+      })
+    })
+
+    test("uses empty patch base before first commit", async () => {
+      await using tmp = await tmpdir()
+      await $`git init`.cwd(tmp.path).quiet()
+      await $`git config core.fsmonitor false`.cwd(tmp.path).quiet()
+      const file = path.join(tmp.path, "file.txt")
+      await fs.writeFile(file, "one\n", "utf-8")
+      await $`git add file.txt`.cwd(tmp.path).quiet()
+      await fs.writeFile(file, "two\n", "utf-8")
+
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const result = await File.read("file.txt")
+          expect(result.diff).toBeDefined()
+          expect(result.diff).not.toContain("one")
+          expect(result.diff).toContain("two")
+        },
+      })
+    })
+
     test("returns diff and patch for modified tracked file", async () => {
       await using tmp = await tmpdir({ git: true })
       const filepath = path.join(tmp.path, "file.txt")

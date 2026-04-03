@@ -117,6 +117,34 @@ describe("Worktree", () => {
       await withInstance(tmp.path, () => Worktree.remove({ directory: info.directory }))
     })
 
+    test("create worktree before repo has a first commit", async () => {
+      await using tmp = await tmpdir()
+      await $`git init`.cwd(tmp.path).quiet()
+      await $`git config core.fsmonitor false`.cwd(tmp.path).quiet()
+
+      // This repo has no commits yet, so HEAD should not resolve.
+      const head = await $`git rev-parse --verify HEAD`.cwd(tmp.path).quiet().nothrow()
+      expect(head.exitCode).not.toBe(0)
+
+      const info = await withInstance(tmp.path, () => Worktree.create())
+
+      const text = await $`git worktree list --porcelain`.cwd(tmp.path).quiet().text()
+      const dir = await fs.realpath(info.directory).catch(() => info.directory)
+      expect(normalize(text)).toContain(normalize(dir))
+
+      const branch = await $`git symbolic-ref --short HEAD`.cwd(info.directory).quiet().text()
+      expect(branch.trim()).toBe(info.branch)
+
+      // The new worktree should still be an unborn branch.
+      const status = await $`git status --short --branch`.cwd(info.directory).quiet().text()
+      expect(status).toContain("No commits yet")
+
+      await withInstance(info.directory, () => Instance.dispose())
+      await Bun.sleep(100)
+      const ok = await withInstance(tmp.path, () => Worktree.remove({ directory: info.directory }))
+      expect(ok).toBe(true)
+    })
+
     test("create with custom name", async () => {
       await using tmp = await tmpdir({ git: true })
       const ready = waitReady()
@@ -152,7 +180,60 @@ describe("Worktree", () => {
     })
   })
 
+  describe("reset edge cases", () => {
+    test("reset cleans a worktree before first commit", async () => {
+      await using tmp = await tmpdir()
+      await $`git init`.cwd(tmp.path).quiet()
+      await $`git config core.fsmonitor false`.cwd(tmp.path).quiet()
+      const ready = waitReady()
+
+      const info = await withInstance(tmp.path, () => Worktree.create())
+      await ready
+
+      await fs.writeFile(path.join(info.directory, "dirty.txt"), "dirty\n", "utf-8")
+
+      const ok = await withInstance(tmp.path, () => Worktree.reset({ directory: info.directory }))
+      expect(ok).toBe(true)
+
+      const exists = await fs
+        .stat(path.join(info.directory, "dirty.txt"))
+        .then(() => true)
+        .catch(() => false)
+      expect(exists).toBe(false)
+
+      const branch = await $`git symbolic-ref --short HEAD`.cwd(info.directory).quiet().text()
+      expect(branch.trim()).toBe(info.branch)
+
+      await withInstance(info.directory, () => Instance.dispose())
+      await Bun.sleep(100)
+      await withInstance(tmp.path, () => Worktree.remove({ directory: info.directory }))
+    })
+  })
+
   describe("remove edge cases", () => {
+    test("remove succeeds for worktrees created before first commit", async () => {
+      await using tmp = await tmpdir()
+      await $`git init`.cwd(tmp.path).quiet()
+      await $`git config core.fsmonitor false`.cwd(tmp.path).quiet()
+
+      const worktreePath = path.join(tmp.path, "..", path.basename(tmp.path) + "-unborn-worktree")
+      await $`git worktree add -b unborn-branch ${worktreePath}`.cwd(tmp.path).quiet()
+
+      const ok = await withInstance(tmp.path, () => Worktree.remove({ directory: worktreePath }))
+      expect(ok).toBe(true)
+
+      const list = await $`git worktree list --porcelain`.cwd(tmp.path).quiet().text()
+      const normalizedList = normalize(list)
+      const normalizedDir = normalize(worktreePath)
+      expect(normalizedList).not.toContain(normalizedDir)
+
+      const exists = await fs
+        .stat(worktreePath)
+        .then(() => true)
+        .catch(() => false)
+      expect(exists).toBe(false)
+    })
+
     test("remove non-existent directory succeeds silently", async () => {
       await using tmp = await tmpdir({ git: true })
 

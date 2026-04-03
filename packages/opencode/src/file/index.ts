@@ -418,10 +418,16 @@ export namespace File {
         if (Instance.project.vcs !== "git") return []
 
         return yield* Effect.promise(async () => {
+          const hasHead = (await Git.run(["rev-parse", "--verify", "HEAD"], { cwd: Instance.directory })).exitCode === 0
+          const EMPTY = "4b825dc642cb6eb9a060e54bf8d69288fbee4904" // Git's canonical empty-tree object, used as the diff base before the first commit.
+          const ref = hasHead ? "HEAD" : EMPTY
           const diffOutput = (
-            await Git.run(["-c", "core.fsmonitor=false", "-c", "core.quotepath=false", "diff", "--numstat", "HEAD"], {
-              cwd: Instance.directory,
-            })
+            await Git.run(
+              ["-c", "core.fsmonitor=false", "-c", "core.quotepath=false", "diff", "--numstat", ref],
+              {
+                cwd: Instance.directory,
+              },
+            )
           ).text()
 
           const changed: File.Info[] = []
@@ -481,7 +487,7 @@ export namespace File {
                 "diff",
                 "--name-only",
                 "--diff-filter=D",
-                "HEAD",
+                ref,
               ],
               {
                 cwd: Instance.directory,
@@ -570,7 +576,8 @@ export namespace File {
               ).text()
             }
             if (diff.trim()) {
-              const original = (await Git.run(["show", `HEAD:${file}`], { cwd: Instance.directory })).text()
+              const hasHead = (await Git.run(["rev-parse", "--verify", "HEAD"], { cwd: Instance.directory })).exitCode === 0
+              const original = hasHead ? (await Git.run(["show", `HEAD:${file}`], { cwd: Instance.directory })).text() : ""
               const patch = structuredPatch(file, file, original, content, "old", "new", {
                 context: Infinity,
                 ignoreWhitespace: true,

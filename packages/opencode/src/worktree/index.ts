@@ -233,9 +233,16 @@ export namespace Worktree {
 
       const setup = Effect.fnUntraced(function* (info: Info) {
         const ctx = yield* InstanceState.context
-        const created = yield* git(["worktree", "add", "--no-checkout", "-b", info.branch, info.directory], {
-          cwd: ctx.worktree,
-        })
+        const hasHead = (yield* git(["rev-parse", "--verify", "HEAD"], { cwd: ctx.worktree })).code === 0
+        const args = [
+          "worktree",
+          "add",
+          ...(hasHead ? ["--no-checkout"] : []),
+          "-b",
+          info.branch,
+          info.directory,
+        ]
+        const created = yield* git(args, { cwd: ctx.worktree })
         if (created.code !== 0) {
           throw new CreateFailedError({ message: created.stderr || created.text || "Failed to create git worktree" })
         }
@@ -404,6 +411,10 @@ export namespace Worktree {
 
         const branch = entry.branch?.replace(/^refs\/heads\//, "")
         if (branch) {
+          const ref = `refs/heads/${branch}`
+          const exists = yield* git(["show-ref", "--verify", "--quiet", ref], { cwd: Instance.worktree })
+          if (exists.code !== 0) return true
+
           const deleted = yield* git(["branch", "-D", branch], { cwd: Instance.worktree })
           if (deleted.code !== 0) {
             throw new RemoveFailedError({
@@ -516,11 +527,19 @@ export namespace Worktree {
 
         const worktreePath = entry.path
 
+        const hasHead = (yield* git(["rev-parse", "--verify", "HEAD"], { cwd: Instance.worktree })).code === 0
         const base = yield* Effect.promise(() => Git.defaultBranch(Instance.worktree))
-        if (!base) {
+        if (!base && hasHead) {
           throw new ResetFailedError({ message: "Default branch not found" })
         }
 
+        if (!base) {
+          yield* gitExpect(
+            ["reset", "--hard"],
+            { cwd: worktreePath },
+            (r) => new ResetFailedError({ message: r.stderr || r.text || "Failed to reset worktree to target" }),
+          )
+        } else {
         const sep = base.ref.indexOf("/")
         if (base.ref !== base.name && sep > 0) {
           const remote = base.ref.slice(0, sep)
@@ -537,6 +556,7 @@ export namespace Worktree {
           { cwd: worktreePath },
           (r) => new ResetFailedError({ message: r.stderr || r.text || "Failed to reset worktree to target" }),
         )
+        }
 
         const cleanResult = yield* sweep(worktreePath)
         if (cleanResult.code !== 0) {
