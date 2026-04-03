@@ -1112,12 +1112,17 @@ const COLLAPSE_LINES = 8
 
 function parseCode(text: string): HighlightSegment[] {
   const result: HighlightSegment[] = []
-  // match fenced code blocks first, then inline code
   const re = /```([\w.-]*)[^\S\r\n]*\r?\n?([\s\S]*?)```|`([^`\n]+)`/g
   let last = 0
   let match: RegExpExecArray | null
   while ((match = re.exec(text)) !== null) {
-    if (match.index > last) result.push({ text: text.slice(last, match.index) })
+    if (match.index > last) {
+      // trim leading newlines from text that follows a code block
+      const chunk = result.some((s) => s.type === "code-block")
+        ? text.slice(last, match.index).replace(/^\n+/, "")
+        : text.slice(last, match.index)
+      if (chunk) result.push({ text: chunk })
+    }
     if (match[2] !== undefined) {
       result.push({ text: match[2], type: "code-block", lang: match[1] || undefined })
     } else {
@@ -1125,7 +1130,12 @@ function parseCode(text: string): HighlightSegment[] {
     }
     last = match.index + match[0].length
   }
-  if (last < text.length) result.push({ text: text.slice(last) })
+  if (last < text.length) {
+    const chunk = result.some((s) => s.type === "code-block")
+      ? text.slice(last).replace(/^\n+/, "")
+      : text.slice(last)
+    if (chunk) result.push({ text: chunk })
+  }
   return result
 }
 
