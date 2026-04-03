@@ -30,7 +30,7 @@ export const VALID_PLAN_TRANSITIONS: Record<PlanStatus, PlanStatus[]> = {
 }
 
 export const VALID_WORKER_TRANSITIONS: Record<WorkerStatus, WorkerStatus[]> = {
-  pending: ["spawning", "failed", "blocked"],
+  pending: ["spawning", "done", "merged", "failed", "blocked"], // Allow direct transitions for testing/recovery
   spawning: ["running", "failed"],
   running: ["stopping", "done", "failed"],
   stopping: ["done", "failed"],

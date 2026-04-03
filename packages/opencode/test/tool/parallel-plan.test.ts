@@ -2,6 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test"
 import { ParallelPlanTool } from "../../src/tool/parallel-plan"
 import { PlanStore } from "../../src/parallel/plan"
 import { Orchestrator } from "../../src/parallel/orchestrator"
+import { Decomposition } from "../../src/parallel/decomposition"
 import { Instance } from "../../src/project/instance"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { Session } from "../../src/session"
@@ -615,6 +616,17 @@ describe("tool.parallel_plan", () => {
       workerModel: { providerID: "test" as any, modelID: "worker" as any },
     })
 
+    // Mock decomposition to avoid needing real provider during retry
+    const decompose = spyOn(Decomposition, "decompose").mockResolvedValue({
+      subtasks: [
+        { id: "sub_0", title: "Task 1", description: "First task", fileScope: ["src/task1.ts"] },
+        { id: "sub_1", title: "Task 2", description: "Second task", fileScope: ["src/task2.ts"] },
+        { id: "sub_2", title: "Task 3", description: "Third task", fileScope: ["src/task3.ts"] },
+      ],
+      sharedContracts: [],
+      conventions: {},
+    } as any)
+
     try {
       await Instance.provide({
         directory: tmp.path,
@@ -734,6 +746,7 @@ describe("tool.parallel_plan", () => {
       })
     } finally {
       models.mockRestore()
+      decompose.mockRestore()
     }
   })
 })
