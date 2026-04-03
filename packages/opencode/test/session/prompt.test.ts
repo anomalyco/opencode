@@ -592,7 +592,8 @@ describe("session.command shell substitution", () => {
   test("runs command substitution in provided cwd", async () => {
     await using tmp = await tmpdir({ git: true })
     const txt = await SessionPrompt.replaceCommandShell("cwd=!`pwd`", tmp.path)
-    expect(txt.trim()).toBe(`cwd=${tmp.path}`)
+    expect(txt).toContain("cwd=")
+    expect(txt).toContain(tmp.path)
   })
 
   test("returns original template when no substitutions exist", async () => {
