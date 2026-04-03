@@ -16,7 +16,9 @@ export const parseDeepLink = (input: string) => {
   if (url.hostname !== "open-project") return
   const directory = url.searchParams.get("directory")
   if (!directory) return
-  return directory
+  const prompt = url.searchParams.get("prompt") || undefined
+  if (!prompt) return directory
+  return { directory, prompt }
 }
 
 export const parseNewSessionDeepLink = (input: string) => {
@@ -31,7 +33,7 @@ export const parseNewSessionDeepLink = (input: string) => {
 }
 
 export const collectOpenProjectDeepLinks = (urls: string[]) =>
-  urls.map(parseDeepLink).filter((directory): directory is string => !!directory)
+  urls.map(parseDeepLink).filter((result): result is string | { directory: string; prompt: string } => !!result)
 
 export const collectNewSessionDeepLinks = (urls: string[]) =>
   urls.map(parseNewSessionDeepLink).filter((link): link is { directory: string; prompt?: string } => !!link)

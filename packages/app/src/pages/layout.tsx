@@ -1364,8 +1364,20 @@ export default function Layout(props: ParentProps) {
   const handleDeepLinks = (urls: string[]) => {
     if (!server.isLocal()) return
 
-    for (const directory of collectOpenProjectDeepLinks(urls)) {
-      openProject(directory)
+    for (const result of collectOpenProjectDeepLinks(urls)) {
+      const directory = typeof result === "string" ? result : result.directory
+      const prompt = typeof result === "string" ? undefined : result.prompt
+      openProject(directory, !prompt)
+      if (prompt) {
+        const slug = base64Encode(directory)
+        const current = currentDir()
+        const sessionId = params.id
+        if (current && workspaceKey(current) === workspaceKey(directory) && sessionId) {
+          navigateWithSidebarReset(`/${slug}/session/${sessionId}?prompt=${encodeURIComponent(prompt)}`)
+        } else {
+          navigateWithSidebarReset(`/${slug}/session?prompt=${encodeURIComponent(prompt)}`)
+        }
+      }
     }
 
     for (const link of collectNewSessionDeepLinks(urls)) {
