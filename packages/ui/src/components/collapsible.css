@@ -9,7 +9,8 @@
   overflow: visible;
 
   &.tool-collapsible {
-    gap: 8px;
+    --tool-content-gap: 8px;
+    gap: var(--tool-content-gap);
   }
 
   [data-slot="collapsible-trigger"] {
