@@ -1,0 +1,1 @@
+ALTER TABLE `session` ADD `last_response_id` text;

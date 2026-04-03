@@ -747,6 +747,7 @@ export namespace ProviderTransform {
     model: Provider.Model
     sessionID: string
     providerOptions?: Record<string, any>
+    previousResponseId?: string
   }): Record<string, any> {
     const result: Record<string, any> = {}
 
@@ -784,6 +785,10 @@ export namespace ProviderTransform {
 
     if (input.model.providerID === "openai" || input.providerOptions?.setCacheKey) {
       result["promptCacheKey"] = input.sessionID
+    }
+
+    if (input.previousResponseId && input.model.api.npm === "@ai-sdk/openai") {
+      result["previousResponseId"] = input.previousResponseId
     }
 
     if (input.model.api.npm === "@ai-sdk/google" || input.model.api.npm === "@ai-sdk/google-vertex") {

@@ -270,6 +270,10 @@ export namespace SessionProcessor {
                 usage: value.usage,
                 metadata: value.providerMetadata,
               })
+              const responseId = value.providerMetadata?.openai?.responseId
+              if (typeof responseId === "string" && responseId.length > 0) {
+                yield* session.setResponseId({ sessionID: ctx.sessionID, responseId })
+              }
               ctx.assistantMessage.finish = value.finishReason
               ctx.assistantMessage.cost += usage.cost
               ctx.assistantMessage.tokens = usage.tokens

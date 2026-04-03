@@ -35,6 +35,7 @@ export namespace LLM {
     tools: Record<string, Tool>
     retries?: number
     toolChoice?: "auto" | "required" | "none"
+    lastResponseId?: string
   }
 
   export type StreamRequest = StreamInput & {
@@ -134,6 +135,7 @@ export namespace LLM {
           model: input.model,
           sessionID: input.sessionID,
           providerOptions: provider.options,
+          previousResponseId: input.lastResponseId,
         })
     const options: Record<string, any> = pipe(
       base,

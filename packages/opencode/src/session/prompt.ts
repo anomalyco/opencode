@@ -1339,9 +1339,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           const ctx = yield* InstanceState.context
           let structured: unknown | undefined
           let step = 0
-          const session = yield* sessions.get(sessionID)
-
           while (true) {
+            const session = yield* sessions.get(sessionID)
             yield* status.set(sessionID, { type: "busy" })
             log.info("loop", { step, sessionID })
 
@@ -1518,6 +1517,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   tools,
                   model,
                   toolChoice: format.type === "json_schema" ? "required" : undefined,
+                  lastResponseId: session.lastResponseId,
                 })
 
                 if (structured !== undefined) {

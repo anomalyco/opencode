@@ -85,6 +85,7 @@ export namespace Session {
         compacting: row.time_compacting ?? undefined,
         archived: row.time_archived ?? undefined,
       },
+      lastResponseId: row.last_response_id ?? undefined,
     }
   }
 
@@ -109,6 +110,7 @@ export namespace Session {
       time_updated: info.time.updated,
       time_compacting: info.time.compacting,
       time_archived: info.time.archived,
+      last_response_id: info.lastResponseId,
     }
   }
 
@@ -160,6 +162,7 @@ export namespace Session {
           diff: z.string().optional(),
         })
         .optional(),
+      lastResponseId: z.string().optional(),
     })
     .meta({
       ref: "Session",
@@ -334,6 +337,7 @@ export namespace Session {
     }) => Effect.Effect<void>
     readonly clearRevert: (sessionID: SessionID) => Effect.Effect<void>
     readonly setSummary: (input: { sessionID: SessionID; summary: Info["summary"] }) => Effect.Effect<void>
+    readonly setResponseId: (input: { sessionID: SessionID; responseId: string }) => Effect.Effect<void>
     readonly diff: (sessionID: SessionID) => Effect.Effect<Snapshot.FileDiff[]>
     readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<MessageV2.WithParts[]>
     readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
@@ -586,6 +590,13 @@ export namespace Session {
         yield* patch(input.sessionID, { time: { updated: Date.now() }, summary: input.summary })
       })
 
+      const setResponseId = Effect.fn("Session.setResponseId")(function* (input: {
+        sessionID: SessionID
+        responseId: string
+      }) {
+        yield* patch(input.sessionID, { lastResponseId: input.responseId })
+      })
+
       const diff = Effect.fn("Session.diff")(function* (sessionID: SessionID) {
         return yield* Effect.tryPromise(() => Storage.read<Snapshot.FileDiff[]>(["session_diff", sessionID])).pipe(
           Effect.orElseSucceed(() => [] as Snapshot.FileDiff[]),
@@ -667,6 +678,7 @@ export namespace Session {
         setRevert,
         clearRevert,
         setSummary,
+        setResponseId,
         diff,
         messages,
         children,
@@ -883,5 +895,10 @@ export namespace Session {
   export const initialize = fn(
     z.object({ sessionID: SessionID.zod, modelID: ModelID.zod, providerID: ProviderID.zod, messageID: MessageID.zod }),
     (input) => runPromise((svc) => svc.initialize(input)),
+  )
+
+  export const setResponseId = fn(
+    z.object({ sessionID: SessionID.zod, responseId: z.string() }),
+    (input) => runPromise((svc) => svc.setResponseId(input)),
   )
 }

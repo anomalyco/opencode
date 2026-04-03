@@ -102,6 +102,35 @@ describe("ProviderTransform.options - setCacheKey", () => {
     })
     expect(result.store).toBe(false)
   })
+
+  test("should set previousResponseId for openai sdk models", () => {
+    const openaiModel = {
+      ...mockModel,
+      providerID: "openai",
+      api: {
+        id: "gpt-5",
+        url: "https://api.openai.com",
+        npm: "@ai-sdk/openai",
+      },
+    }
+    const result = ProviderTransform.options({
+      model: openaiModel,
+      sessionID,
+      providerOptions: {},
+      previousResponseId: "resp_123",
+    })
+    expect(result.previousResponseId).toBe("resp_123")
+  })
+
+  test("should not set previousResponseId for non-openai sdk models", () => {
+    const result = ProviderTransform.options({
+      model: mockModel,
+      sessionID,
+      providerOptions: { setCacheKey: true },
+      previousResponseId: "resp_123",
+    })
+    expect(result.previousResponseId).toBeUndefined()
+  })
 })
 
 describe("ProviderTransform.options - google thinkingConfig gating", () => {
