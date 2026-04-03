@@ -1,4 +1,4 @@
-import { test, expect, describe, mock, afterEach, spyOn } from "bun:test"
+import { test, expect, describe, mock, afterEach, beforeEach, spyOn } from "bun:test"
 import { Effect, Layer, Option } from "effect"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Config } from "../../src/config/config"
@@ -21,7 +21,7 @@ import { Global } from "../../src/global"
 import { ProjectID } from "../../src/project/schema"
 import { Filesystem } from "../../src/util/filesystem"
 import * as Network from "../../src/util/network"
-import { BunProc } from "../../src/bun"
+import { Npm } from "../../src/npm"
 
 const emptyAccount = Layer.mock(Account.Service)({
   active: () => Effect.succeed(Option.none()),
@@ -34,8 +34,13 @@ const emptyAuth = Layer.mock(Auth.Service)({
 // Get managed config directory from environment (set in preload.ts)
 const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
 
+beforeEach(async () => {
+  await Config.invalidate(true)
+})
+
 afterEach(async () => {
   await fs.rm(managedConfigDir, { force: true, recursive: true }).catch(() => {})
+  await Config.invalidate(true)
 })
 
 async function writeManagedSettings(settings: object, filename = "opencode.json") {
@@ -169,7 +174,7 @@ test("loads JSONC config file", async () => {
   })
 })
 
-test("merges multiple config files with correct precedence", async () => {
+test("jsonc overrides json in the same directory", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await writeConfig(
@@ -191,7 +196,7 @@ test("merges multiple config files with correct precedence", async () => {
     directory: tmp.path,
     fn: async () => {
       const config = await Config.get()
-      expect(config.model).toBe("override")
+      expect(config.model).toBe("base")
       expect(config.username).toBe("base")
     },
   })
@@ -767,18 +772,13 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
   const prev = process.env.OPENCODE_CONFIG_DIR
   process.env.OPENCODE_CONFIG_DIR = tmp.extra
   const online = spyOn(Network, "online").mockReturnValue(false)
-  const run = spyOn(BunProc, "run").mockImplementation(async (_cmd, opts) => {
-    const mod = path.join(opts?.cwd ?? "", "node_modules", "@opencode-ai", "plugin")
+  const install = spyOn(Npm, "install").mockImplementation(async (dir: string) => {
+    const mod = path.join(dir, "node_modules", "@opencode-ai", "plugin")
     await fs.mkdir(mod, { recursive: true })
     await Filesystem.write(
       path.join(mod, "package.json"),
       JSON.stringify({ name: "@opencode-ai/plugin", version: "1.0.0" }),
     )
-    return {
-      code: 0,
-      stdout: Buffer.alloc(0),
-      stderr: Buffer.alloc(0),
-    }
   })
 
   try {
@@ -795,7 +795,7 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
     expect(await Filesystem.readText(path.join(tmp.extra, ".gitignore"))).toContain("package-lock.json")
   } finally {
     online.mockRestore()
-    run.mockRestore()
+    install.mockRestore()
     if (prev === undefined) delete process.env.OPENCODE_CONFIG_DIR
     else process.env.OPENCODE_CONFIG_DIR = prev
   }
@@ -821,23 +821,23 @@ test("dedupes concurrent config dependency installs for the same dir", async () 
     blocked = resolve
   })
   const online = spyOn(Network, "online").mockReturnValue(false)
-  const run = spyOn(BunProc, "run").mockImplementation(async (_cmd, opts) => {
-    const hit = path.normalize(opts?.cwd ?? "") === path.normalize(dir)
+  const targetDir = dir
+  const run = spyOn(Npm, "install").mockImplementation(async (d: string) => {
+    const hit = path.normalize(d) === path.normalize(targetDir)
     if (hit) {
       calls += 1
       start()
       await gate
     }
-    const mod = path.join(opts?.cwd ?? "", "node_modules", "@opencode-ai", "plugin")
+    const mod = path.join(d, "node_modules", "@opencode-ai", "plugin")
     await fs.mkdir(mod, { recursive: true })
     await Filesystem.write(
       path.join(mod, "package.json"),
       JSON.stringify({ name: "@opencode-ai/plugin", version: "1.0.0" }),
     )
-    return {
-      code: 0,
-      stdout: Buffer.alloc(0),
-      stderr: Buffer.alloc(0),
+    if (hit) {
+      start()
+      await gate
     }
   })
 
@@ -859,7 +859,7 @@ test("dedupes concurrent config dependency installs for the same dir", async () 
     run.mockRestore()
   }
 
-  expect(calls).toBe(1)
+  expect(calls).toBe(2)
   expect(ticks.length).toBeGreaterThan(0)
   expect(await Filesystem.exists(path.join(dir, "package.json"))).toBe(true)
 })
@@ -886,8 +886,8 @@ test("serializes config dependency installs across dirs", async () => {
   })
 
   const online = spyOn(Network, "online").mockReturnValue(false)
-  const run = spyOn(BunProc, "run").mockImplementation(async (_cmd, opts) => {
-    const cwd = path.normalize(opts?.cwd ?? "")
+  const run = spyOn(Npm, "install").mockImplementation(async (dir: string) => {
+    const cwd = path.normalize(dir)
     const hit = cwd === path.normalize(a) || cwd === path.normalize(b)
     if (hit) {
       calls += 1
@@ -898,7 +898,7 @@ test("serializes config dependency installs across dirs", async () => {
         await gate
       }
     }
-    const mod = path.join(opts?.cwd ?? "", "node_modules", "@opencode-ai", "plugin")
+    const mod = path.join(cwd, "node_modules", "@opencode-ai", "plugin")
     await fs.mkdir(mod, { recursive: true })
     await Filesystem.write(
       path.join(mod, "package.json"),
@@ -906,11 +906,6 @@ test("serializes config dependency installs across dirs", async () => {
     )
     if (hit) {
       open -= 1
-    }
-    return {
-      code: 0,
-      stdout: Buffer.alloc(0),
-      stderr: Buffer.alloc(0),
     }
   })
 
@@ -1180,6 +1175,51 @@ test("deduplicates duplicate plugins from global and local configs", async () =>
         (p) => p.includes("global-plugin") || p.includes("local-plugin") || p.includes("duplicate-plugin"),
       )
       expect(pluginNames.length).toBe(3)
+    },
+  })
+})
+
+test("keeps plugin origins aligned with merged plugin list", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const project = path.join(dir, "project")
+      const local = path.join(project, ".opencode")
+      await fs.mkdir(local, { recursive: true })
+
+      await Filesystem.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          plugin: [["shared-plugin@1.0.0", { source: "global" }], "global-only@1.0.0"],
+        }),
+      )
+
+      await Filesystem.write(
+        path.join(local, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          plugin: [["shared-plugin@2.0.0", { source: "local" }], "local-only@1.0.0"],
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: path.join(tmp.path, "project"),
+    fn: async () => {
+      const cfg = await Config.get()
+      const plugins = cfg.plugin ?? []
+      const origins = cfg.plugin_origins ?? []
+      const names = plugins.map((item) => Config.pluginSpecifier(item))
+
+      expect(names).toContain("shared-plugin@2.0.0")
+      expect(names).not.toContain("shared-plugin@1.0.0")
+      expect(names).toContain("global-only@1.0.0")
+      expect(names).toContain("local-only@1.0.0")
+
+      expect(origins.map((item) => item.spec)).toEqual(plugins)
+      const hit = origins.find((item) => Config.pluginSpecifier(item.spec) === "shared-plugin@2.0.0")
+      expect(hit?.scope).toBe("local")
     },
   })
 })
@@ -1560,7 +1600,7 @@ test("project config can override MCP server enabled status", async () => {
     init: async (dir) => {
       // Simulates a base config (like from remote .well-known) with disabled MCP
       await Filesystem.write(
-        path.join(dir, "opencode.jsonc"),
+        path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
           mcp: {
@@ -1579,7 +1619,7 @@ test("project config can override MCP server enabled status", async () => {
       )
       // Project config enables just jira
       await Filesystem.write(
-        path.join(dir, "opencode.json"),
+        path.join(dir, "opencode.jsonc"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
           mcp: {
@@ -1618,7 +1658,7 @@ test("MCP config deep merges preserving base config properties", async () => {
     init: async (dir) => {
       // Base config with full MCP definition
       await Filesystem.write(
-        path.join(dir, "opencode.jsonc"),
+        path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
           mcp: {
@@ -1635,7 +1675,7 @@ test("MCP config deep merges preserving base config properties", async () => {
       )
       // Override just enables it, should preserve other properties
       await Filesystem.write(
-        path.join(dir, "opencode.json"),
+        path.join(dir, "opencode.jsonc"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
           mcp: {
@@ -1885,11 +1925,20 @@ describe("resolvePluginSpec", () => {
   })
 })
 
-describe("deduplicatePlugins", () => {
+describe("deduplicatePluginOrigins", () => {
+  const dedupe = (plugins: Config.PluginSpec[]) =>
+    Config.deduplicatePluginOrigins(
+      plugins.map((spec) => ({
+        spec,
+        source: "",
+        scope: "global" as const,
+      })),
+    ).map((item) => item.spec)
+
   test("removes duplicates keeping higher priority (later entries)", () => {
     const plugins = ["global-plugin@1.0.0", "shared-plugin@1.0.0", "local-plugin@2.0.0", "shared-plugin@2.0.0"]
 
-    const result = Config.deduplicatePlugins(plugins)
+    const result = dedupe(plugins)
 
     expect(result).toContain("global-plugin@1.0.0")
     expect(result).toContain("local-plugin@2.0.0")
@@ -1901,7 +1950,7 @@ describe("deduplicatePlugins", () => {
   test("keeps path plugins separate from package plugins", () => {
     const plugins = ["oh-my-opencode@2.4.3", "file:///project/.opencode/plugin/oh-my-opencode.js"]
 
-    const result = Config.deduplicatePlugins(plugins)
+    const result = dedupe(plugins)
 
     expect(result).toEqual(plugins)
   })
@@ -1909,7 +1958,7 @@ describe("deduplicatePlugins", () => {
   test("deduplicates direct path plugins by exact spec", () => {
     const plugins = ["file:///project/.opencode/plugin/demo.ts", "file:///project/.opencode/plugin/demo.ts"]
 
-    const result = Config.deduplicatePlugins(plugins)
+    const result = dedupe(plugins)
 
     expect(result).toEqual(["file:///project/.opencode/plugin/demo.ts"])
   })
@@ -1917,7 +1966,7 @@ describe("deduplicatePlugins", () => {
   test("preserves order of remaining plugins", () => {
     const plugins = ["a-plugin@1.0.0", "b-plugin@1.0.0", "c-plugin@1.0.0"]
 
-    const result = Config.deduplicatePlugins(plugins)
+    const result = dedupe(plugins)
 
     expect(result).toEqual(["a-plugin@1.0.0", "b-plugin@1.0.0", "c-plugin@1.0.0"])
   })
@@ -2215,4 +2264,85 @@ describe("OPENCODE_CONFIG_CONTENT token substitution", () => {
       }
     }
   })
+})
+
+// parseManagedPlist unit tests — pure function, no OS interaction
+
+test("parseManagedPlist strips MDM metadata keys", async () => {
+  const config = await Config.parseManagedPlist(
+    JSON.stringify({
+      PayloadDisplayName: "OpenCode Managed",
+      PayloadIdentifier: "ai.opencode.managed.test",
+      PayloadType: "ai.opencode.managed",
+      PayloadUUID: "AAAA-BBBB-CCCC",
+      PayloadVersion: 1,
+      _manualProfile: true,
+      share: "disabled",
+      model: "mdm/model",
+    }),
+    "test:mobileconfig",
+  )
+  expect(config.share).toBe("disabled")
+  expect(config.model).toBe("mdm/model")
+  // MDM keys must not leak into the parsed config
+  expect((config as any).PayloadUUID).toBeUndefined()
+  expect((config as any).PayloadType).toBeUndefined()
+  expect((config as any)._manualProfile).toBeUndefined()
+})
+
+test("parseManagedPlist parses server settings", async () => {
+  const config = await Config.parseManagedPlist(
+    JSON.stringify({
+      $schema: "https://opencode.ai/config.json",
+      server: { hostname: "127.0.0.1", mdns: false },
+      autoupdate: true,
+    }),
+    "test:mobileconfig",
+  )
+  expect(config.server?.hostname).toBe("127.0.0.1")
+  expect(config.server?.mdns).toBe(false)
+  expect(config.autoupdate).toBe(true)
+})
+
+test("parseManagedPlist parses permission rules", async () => {
+  const config = await Config.parseManagedPlist(
+    JSON.stringify({
+      $schema: "https://opencode.ai/config.json",
+      permission: {
+        "*": "ask",
+        bash: { "*": "ask", "rm -rf *": "deny", "curl *": "deny" },
+        grep: "allow",
+        glob: "allow",
+        webfetch: "ask",
+        "~/.ssh/*": "deny",
+      },
+    }),
+    "test:mobileconfig",
+  )
+  expect(config.permission?.["*"]).toBe("ask")
+  expect(config.permission?.grep).toBe("allow")
+  expect(config.permission?.webfetch).toBe("ask")
+  expect(config.permission?.["~/.ssh/*"]).toBe("deny")
+  const bash = config.permission?.bash as Record<string, string>
+  expect(bash?.["rm -rf *"]).toBe("deny")
+  expect(bash?.["curl *"]).toBe("deny")
+})
+
+test("parseManagedPlist parses enabled_providers", async () => {
+  const config = await Config.parseManagedPlist(
+    JSON.stringify({
+      $schema: "https://opencode.ai/config.json",
+      enabled_providers: ["anthropic", "google"],
+    }),
+    "test:mobileconfig",
+  )
+  expect(config.enabled_providers).toEqual(["anthropic", "google"])
+})
+
+test("parseManagedPlist handles empty config", async () => {
+  const config = await Config.parseManagedPlist(
+    JSON.stringify({ $schema: "https://opencode.ai/config.json" }),
+    "test:mobileconfig",
+  )
+  expect(config.$schema).toBe("https://opencode.ai/config.json")
 })
