@@ -179,11 +179,11 @@ export default function Layout(props: ParentProps) {
   const [state, setState] = createStore({
     autoselect: !initialDirectory,
     busyWorkspaces: {} as Record<string, boolean>,
-    hoverSession: undefined as string | undefined,
     scrollSessionKey: undefined as string | undefined,
     nav: undefined as HTMLElement | undefined,
     sortNow: Date.now(),
     sizing: false,
+    previewSidebarWidth: undefined as number | undefined,
   })
 
   const [findbar, setFindbar] = createStore({
@@ -268,7 +268,10 @@ export default function Layout(props: ParentProps) {
   })
 
   onMount(() => {
-    const stop = () => setState("sizing", false)
+    const stop = () => {
+      setState("sizing", false)
+      setState("previewSidebarWidth", undefined)
+    }
     const blur = () => reset()
     const hide = () => {
       if (document.visibilityState !== "hidden") return
@@ -288,19 +291,9 @@ export default function Layout(props: ParentProps) {
     })
   })
 
-  const sidebarHovering = createMemo(() => false)
   const sidebarExpanded = createMemo(() => layout.sidebar.opened())
-  const clearHoverProjectSoon = () => undefined
-  const setHoverSession = (id: string | undefined) => setState("hoverSession", id)
-
-  const reset = () => {
-    setState("hoverSession", undefined)
-  }
-
-  createEffect(() => {
-    if (!layout.sidebar.opened()) return
-    setState("hoverSession", undefined)
-  })
+  const sidebarReduced = createMemo(() => false)
+  const reset = () => undefined
 
   createEffect(() => {
     if (!state.autoselect) return
@@ -2302,11 +2295,12 @@ export default function Layout(props: ParentProps) {
   )
 
   createEffect(() => {
-    const sidebarWidth = layout.sidebar.opened() ? layout.sidebar.width() : 48
+    const sidebarWidth = layout.sidebar.opened() ? Math.max(layout.sidebar.width(), 244) : 48
     document.documentElement.style.setProperty("--dialog-left-margin", `${sidebarWidth}px`)
   })
 
-  const side = createMemo(() => Math.max(layout.sidebar.width(), 244))
+  const side = createMemo(() => Math.max(state.previewSidebarWidth ?? layout.sidebar.width(), 244))
+  const dragSide = createMemo(() => Math.max(state.previewSidebarWidth ?? layout.sidebar.width(), 244))
   const panel = createMemo(() => Math.max(side() - 64, 0))
 
   let started = false
@@ -2462,11 +2456,8 @@ export default function Layout(props: ParentProps) {
     currentDir,
     navList: currentSessions,
     sidebarExpanded,
-    sidebarHovering,
+    sidebarReduced,
     nav: () => state.nav,
-    hoverSession: () => state.hoverSession,
-    setHoverSession,
-    clearHoverProjectSoon,
     prefetchSession,
     archiveSession,
     workspaceName,
@@ -2490,7 +2481,7 @@ export default function Layout(props: ParentProps) {
 
   const projectSidebarCtx: ProjectSidebarContext = {
     currentDir,
-    sidebarHovering,
+    sidebarReduced,
     navigateToProject,
     closeProject,
     showEditProjectDialog,
@@ -2506,8 +2497,6 @@ export default function Layout(props: ParentProps) {
   }) => {
     const project = panelProps.project
     const merged = createMemo(() => panelProps.mobile || (panelProps.merged ?? layout.sidebar.opened()))
-    const hover = createMemo(() => !panelProps.mobile && panelProps.merged === false && !layout.sidebar.opened())
-    const popover = createMemo(() => !!panelProps.mobile || panelProps.merged === false || layout.sidebar.opened())
     const empty = createMemo(() => !params.dir && layout.projects.list().length === 0)
     const projectName = createMemo(() => {
       const item = project()
@@ -2552,8 +2541,8 @@ export default function Layout(props: ParentProps) {
           "flex flex-col min-h-0 min-w-0 box-border rounded-tl-[12px] px-3": true,
           "border border-b-0 border-border-weak-base": !merged(),
           "border-l border-t border-border-weaker-base": merged(),
-          "bg-background-base": merged() || hover(),
-          "bg-background-stronger": !merged() && !hover(),
+          "bg-background-base": merged(),
+          "bg-background-stronger": !merged(),
           "flex-1 min-w-0": panelProps.mobile,
           "max-w-full overflow-hidden": panelProps.mobile,
         }}
@@ -2614,7 +2603,7 @@ export default function Layout(props: ParentProps) {
                   </Tooltip>
                 </div>
 
-                <DropdownMenu modal={!sidebarHovering()}>
+                <DropdownMenu modal>
                   <DropdownMenu.Trigger
                     as={IconButton}
                     icon="dot-grid"
@@ -2724,7 +2713,6 @@ export default function Layout(props: ParentProps) {
                         project={project()!}
                         sortNow={sortNow}
                         mobile={panelProps.mobile}
-                        popover={popover()}
                       />
                     </div>
                   </>
@@ -2783,7 +2771,6 @@ export default function Layout(props: ParentProps) {
                                 project={project()!}
                                 sortNow={sortNow}
                                 mobile={panelProps.mobile}
-                                popover={popover()}
                               />
                             )}
                           </For>
@@ -2892,6 +2879,7 @@ export default function Layout(props: ParentProps) {
                 "hidden xl:block": true,
                 "absolute inset-y-0 left-0": true,
                 "z-10": true,
+                "pointer-events-none": state.sizing,
               }}
               style={{ width: `${side()}px` }}
               ref={(el) => {
@@ -2904,18 +2892,25 @@ export default function Layout(props: ParentProps) {
             <Show when={layout.sidebar.opened()}>
               <div
                 class="hidden xl:block absolute inset-y-0 z-30 w-0 overflow-visible"
-                style={{ left: `${side()}px` }}
-                onPointerDown={() => setState("sizing", true)}
+                style={{ left: `${dragSide()}px` }}
+                onPointerDown={() => {
+                  setState("sizing", true)
+                  setState("previewSidebarWidth", layout.sidebar.width())
+                }}
               >
                 <ResizeHandle
                   direction="horizontal"
-                  size={layout.sidebar.width()}
+                  size={state.previewSidebarWidth ?? layout.sidebar.width()}
                   min={244}
                   max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
                   onResize={(w) => {
                     setState("sizing", true)
                     if (sizet !== undefined) clearTimeout(sizet)
                     sizet = window.setTimeout(() => setState("sizing", false), 120)
+                    setState("previewSidebarWidth", w)
+                  }}
+                  onResizeEnd={(w) => {
+                    setState("previewSidebarWidth", undefined)
                     layout.sidebar.resize(w)
                   }}
                 />

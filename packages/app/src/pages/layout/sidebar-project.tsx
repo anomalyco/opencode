@@ -13,7 +13,7 @@ import { projectSelected } from "./sidebar-project-helpers"
 
 export type ProjectSidebarContext = {
   currentDir: Accessor<string>
-  sidebarHovering: Accessor<boolean>
+  sidebarReduced: Accessor<boolean>
   navigateToProject: (directory: string) => void
   closeProject: (directory: string) => void
   showEditProjectDialog: (project: LocalProject) => void
@@ -41,7 +41,7 @@ export const ProjectDragOverlay = (props: {
 const ProjectTile = (props: {
   project: LocalProject
   mobile?: boolean
-  sidebarHovering: Accessor<boolean>
+  sidebarReduced: Accessor<boolean>
   selected: Accessor<boolean>
   active: Accessor<boolean>
   dirs: Accessor<string[]>
@@ -69,7 +69,7 @@ const ProjectTile = (props: {
 
   return (
     <ContextMenu
-      modal={!props.sidebarHovering()}
+      modal
       onOpenChange={(value) => {
         props.setMenu(value)
       }}
@@ -88,10 +88,11 @@ const ProjectTile = (props: {
           data-action="project-switch"
           data-project={base64Encode(props.project.worktree)}
           classList={{
-            "flex items-center justify-center size-10 p-1 rounded-xl overflow-hidden transition-all duration-150 cursor-pointer": true,
+            "flex items-center justify-center size-10 p-1 rounded-xl overflow-hidden cursor-pointer": true,
+            "transition-all duration-150": !props.sidebarReduced(),
             "bg-surface-interactive-selected border-2 border-border-brand-base": props.selected(),
             "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-base hover:scale-105":
-              !props.selected() && !props.active(),
+              !props.sidebarReduced() && !props.selected() && !props.active(),
             "bg-surface-base-hover border border-border-base": !props.selected() && props.active(),
           }}
           onPointerDown={(event) => {
@@ -164,7 +165,7 @@ export const SortableProject = (props: {
     <ProjectTile
       project={props.project}
       mobile={props.mobile}
-      sidebarHovering={props.ctx.sidebarHovering}
+      sidebarReduced={props.ctx.sidebarReduced}
       selected={selected}
       active={() => state.menu}
       dirs={dirs}
