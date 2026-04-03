@@ -599,14 +599,16 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
       },
       sidebar: {
-        opened: createMemo(() => store.sidebar.opened),
+        opened: createMemo(() => platform.platform === "desktop" || store.sidebar.opened),
         open() {
           setStore("sidebar", "opened", true)
         },
         close() {
+          if (platform.platform === "desktop") return
           setStore("sidebar", "opened", false)
         },
         toggle() {
+          if (platform.platform === "desktop") return
           setStore("sidebar", "opened", (x) => !x)
         },
         width: createMemo(() => store.sidebar.width),

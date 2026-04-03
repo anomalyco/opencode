@@ -31,6 +31,9 @@ export function SessionSidePanel(props: {
   focusReviewDiff: (path: string) => void
   reviewSnap: boolean
   size: Sizing
+  panelWidth?: () => number | undefined
+  treeWidth?: () => number
+  treeMax?: () => number
 }) {
   const layout = useLayout()
   const sync = useSync()
@@ -48,10 +51,15 @@ export function SessionSidePanel(props: {
   const reviewTab = createMemo(() => isDesktop())
   const panelWidth = createMemo(() => {
     if (!open()) return "0px"
+    const width = props.panelWidth?.()
+    if (width !== undefined) return `${width}px`
     if (reviewOpen()) return `calc(100% - ${layout.session.width()}px)`
     return `${layout.fileTree.width()}px`
   })
-  const treeWidth = createMemo(() => (fileOpen() ? `${layout.fileTree.width()}px` : "0px"))
+  const treeWidth = createMemo(() => {
+    if (!fileOpen()) return "0px"
+    return `${props.treeWidth?.() ?? layout.fileTree.width()}px`
+  })
 
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
@@ -436,9 +444,9 @@ export function SessionSidePanel(props: {
                 <ResizeHandle
                   direction="horizontal"
                   edge="start"
-                  size={layout.fileTree.width()}
+                  size={props.treeWidth?.() ?? layout.fileTree.width()}
                   min={200}
-                  max={480}
+                  max={props.treeMax?.() ?? 480}
                   onResize={(width) => {
                     props.size.touch()
                     layout.fileTree.resize(width)

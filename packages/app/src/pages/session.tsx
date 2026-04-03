@@ -314,6 +314,8 @@ function createSessionHistoryWindow(input: SessionHistoryWindowInput) {
 }
 
 export default function Page() {
+  const chatMin = 450
+  const reviewMin = 360
   const globalSync = useGlobalSync()
   const layout = useLayout()
   const local = useLocal()
@@ -348,6 +350,7 @@ export default function Page() {
       overflow: false,
       bottom: true,
     },
+    width: 0,
   })
 
   const composer = createSessionComposerState()
@@ -396,12 +399,59 @@ export default function Page() {
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
   const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
+  const treePane = createMemo(() => {
+    if (!desktopFileTreeOpen()) return 0
+    const width = ui.width
+    if (!width) return layout.fileTree.width()
+    const spare = width - chatMin - (desktopReviewOpen() ? reviewMin : 0)
+    if (spare <= 0) return 0
+    return Math.min(layout.fileTree.width(), spare)
+  })
+  const chatPane = createMemo(() => {
+    if (!desktopSidePanelOpen()) return
+    const width = ui.width
+    if (!width) {
+      if (desktopReviewOpen()) return layout.session.width()
+      return
+    }
+    if (!desktopReviewOpen()) return Math.max(0, width - treePane())
+    const full = Math.max(0, width - treePane())
+    const min = Math.min(chatMin, full)
+    const reserve = full <= chatMin ? 0 : Math.min(reviewMin, full - chatMin)
+    const max = Math.max(min, full - reserve)
+    const base = Math.min(layout.session.width(), max)
+    return Math.max(min, base)
+  })
+  const sidePane = createMemo(() => {
+    if (!desktopSidePanelOpen()) return
+    const width = ui.width
+    if (!width) {
+      if (desktopReviewOpen()) return
+      return treePane()
+    }
+    return Math.max(0, width - (chatPane() ?? 0))
+  })
+  const treeMax = createMemo(() => {
+    const width = ui.width
+    if (!width) return 480
+    return Math.max(200, Math.min(480, width - chatMin - (desktopReviewOpen() ? reviewMin : 0)))
+  })
+  const chatMax = createMemo(() => {
+    const width = ui.width
+    if (!width) return typeof window === "undefined" ? 1000 : window.innerWidth * 0.45
+    const full = Math.max(0, width - treePane())
+    const min = Math.min(chatMin, full)
+    const reserve = full <= chatMin ? 0 : Math.min(reviewMin, full - chatMin)
+    return Math.max(min, full - reserve)
+  })
   const sessionPanelWidth = createMemo(() => {
     if (!desktopSidePanelOpen()) return "100%"
+    const width = chatPane()
+    if (width !== undefined) return `${width}px`
     if (desktopReviewOpen()) return `${layout.session.width()}px`
     return `calc(100% - ${layout.fileTree.width()}px)`
   })
-  const centered = createMemo(() => isDesktop() && !desktopReviewOpen())
+  const centered = createMemo(() => isDesktop() && !desktopSidePanelOpen())
 
   function normalizeTab(tab: string) {
     if (!tab.startsWith("file://")) return tab
@@ -684,6 +734,7 @@ export default function Page() {
   let inputRef!: HTMLDivElement
   let promptDock: HTMLDivElement | undefined
   let dockHeight = 0
+  let body: HTMLDivElement | undefined
   let scroller: HTMLDivElement | undefined
   let content: HTMLDivElement | undefined
   let scrollMark = 0
@@ -1636,6 +1687,15 @@ export default function Page() {
   })
 
   createResizeObserver(
+    () => body,
+    ({ width }) => {
+      const next = Math.ceil(width)
+      if (next === ui.width) return
+      setUi("width", next)
+    },
+  )
+
+  createResizeObserver(
     () => promptDock,
     ({ height }) => {
       const next = Math.ceil(height)
@@ -1706,7 +1766,7 @@ export default function Page() {
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
-      <div class="flex-1 min-h-0 flex flex-col md:flex-row">
+      <div ref={body} class="flex-1 min-h-0 flex flex-col md:flex-row">
         <Show when={!isDesktop() && !!params.id}>
           <Tabs value={store.mobileTab} class="h-auto">
             <Tabs.List>
@@ -1849,9 +1909,9 @@ export default function Page() {
             <div onPointerDown={() => size.start()}>
               <ResizeHandle
                 direction="horizontal"
-                size={layout.session.width()}
+                size={chatPane() ?? layout.session.width()}
                 min={450}
-                max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.45}
+                max={chatMax()}
                 onResize={(width) => {
                   size.touch()
                   layout.session.resize(width)
@@ -1867,6 +1927,9 @@ export default function Page() {
           focusReviewDiff={focusReviewDiff}
           reviewSnap={ui.reviewSnap}
           size={size}
+          panelWidth={sidePane}
+          treeWidth={treePane}
+          treeMax={treeMax}
         />
       </div>
 
