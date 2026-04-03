@@ -1135,6 +1135,7 @@ function CodeBlock(props: { text: string; lang?: string }) {
   const [open, setOpen] = createSignal(false)
   const preview = createMemo(() => lines().slice(0, COLLAPSE_LINES).join("\n"))
   const extra = createMemo(() => lines().length - COLLAPSE_LINES)
+  const i18n = useI18n()
 
   return (
     <div data-slot="user-message-code-block">
@@ -1150,7 +1151,9 @@ function CodeBlock(props: { text: string; lang?: string }) {
           data-slot="user-message-code-toggle"
           onClick={() => setOpen((v) => !v)}
         >
-          {open() ? "Show less" : `Show ${extra()} more lines`}
+          {open()
+            ? i18n.t("ui.message.codeBlock.showLess")
+            : i18n.t("ui.message.codeBlock.showMore", { count: String(extra()) })}
         </button>
       </Show>
     </div>
