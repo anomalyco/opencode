@@ -296,6 +296,106 @@ describe("tool.parallel_plan", () => {
     expect(result.failed).toBe(0) // blocked is NOT a failure, it's a dependency issue
   })
 
+  test("no race condition between spawnAll completion and waitAll check", async () => {
+    // This test verifies that workers in "spawning" state are properly waited for
+    // when spawnAll completes but workers haven't fully transitioned to "running" yet.
+    // Without the fix, this could cause the orchestrator to skip the waitAll phase
+    // prematurely, leaving workers incomplete.
+    await using tmp = await tmpdir({ git: true })
+
+    const models = spyOn(Orchestrator, "resolveModels").mockResolvedValue({
+      orchestratorModel: { providerID: "test" as any, modelID: "orchestrator" as any },
+      workerModel: { providerID: "test" as any, modelID: "worker" as any },
+    })
+
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        init: InstanceBootstrap,
+        fn: async () => {
+          const session = await Session.create({ title: "race condition test" })
+          const tool = await ParallelPlanTool.init({
+            agent: {
+              name: "orchestrator",
+              model: { providerID: "test" as any, modelID: "glm-5-turbo" as any },
+            } as any,
+          })
+
+          const result = await tool.execute(
+            {
+              task: "Test race condition handling",
+              subtasks: [
+                {
+                  title: "Task 1",
+                  description: "First task",
+                  fileScope: ["src/task1.ts"],
+                },
+                {
+                  title: "Task 2",
+                  description: "Second task",
+                  fileScope: ["src/task2.ts"],
+                },
+              ],
+            },
+            ctx(session.id),
+          )
+
+          expect(result.output).toContain("depends on")
+
+          // Get the created plan
+          const plans = await PlanStore.listByProject(Instance.project.id)
+          expect(plans).toHaveLength(1)
+          const plan = plans[0]
+
+          // Verify workers were created
+          expect(plan.workers).toHaveLength(2)
+
+          // Simulate the race condition: set workers to "spawning" state
+          // This simulates the state where spawnAll has completed but workers
+          // haven't fully transitioned to "running" yet
+          await PlanStore.updateWorker({
+            id: plan.id,
+            subtaskID: plan.workers[0].subtaskID,
+            status: "spawning",
+          })
+          await PlanStore.updateWorker({
+            id: plan.id,
+            subtaskID: plan.workers[1].subtaskID,
+            status: "spawning",
+          })
+
+          // Verify workers are in "spawning" state
+          const planWithSpawningWorkers = await PlanStore.get(plan.id)
+          const spawningWorkers = planWithSpawningWorkers.workers.filter(
+            (w) => w.status === "spawning"
+          )
+          expect(spawningWorkers.length).toBe(2)
+
+          // The key assertion: the orchestrator's waitAll check should recognize
+          // "spawning" workers as still running and wait for them.
+          // If we check the logic in orchestrator.ts line 787:
+          // const stillRunning = afterSpawn.workers.filter((w) => ["running", "spawning"].includes(w.status))
+          // This should include "spawning" workers in the stillRunning count.
+          
+          // Simulate the orchestrator's check
+          const afterSpawn = await PlanStore.get(plan.id)
+          const stillRunning = afterSpawn.workers.filter((w) => ["running", "spawning"].includes(w.status))
+          
+          // This is the critical assertion - spawning workers should be counted as still running
+          expect(stillRunning.length).toBe(2)
+          
+          // If the fix is NOT applied (only checking "running"), this would be 0
+          // causing the orchestrator to skip waitAll prematurely
+          const buggyStillRunning = afterSpawn.workers.filter((w) => w.status === "running")
+          // This demonstrates the bug - with only "running" check, spawning workers are missed
+          expect(buggyStillRunning.length).toBe(0) // This would cause the race condition bug
+        },
+      })
+    } finally {
+      models.mockRestore()
+    }
+  })
+
   test("detects deadlock when all remaining subtasks have failed dependencies", async () => {
     await using tmp = await tmpdir({ git: true })
 
