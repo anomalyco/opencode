@@ -19,6 +19,7 @@ import { Log } from "../util/log"
 import { updateSchema } from "../util/update-schema"
 import { MessageV2 } from "./message-v2"
 import { Instance } from "../project/instance"
+import { InstanceState } from "@/effect/instance-state"
 import { SessionPrompt } from "./prompt"
 import { fn } from "@/util/fn"
 import { Command } from "../command"
@@ -257,6 +258,9 @@ export namespace Session {
     const cacheReadInputTokens = safe(input.usage.cachedInputTokens ?? 0)
     const cacheWriteInputTokens = safe(
       (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
+        // google-vertex-anthropic returns metadata under "vertex" key
+        // (AnthropicMessagesLanguageModel custom provider key from 'vertex.anthropic.messages')
+        input.metadata?.["vertex"]?.["cacheCreationInputTokens"] ??
         // @ts-expect-error
         input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
         // @ts-expect-error
@@ -334,14 +338,14 @@ export namespace Session {
     readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<MessageV2.WithParts[]>
     readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
     readonly remove: (sessionID: SessionID) => Effect.Effect<void>
-    readonly updateMessage: (msg: MessageV2.Info) => Effect.Effect<MessageV2.Info>
+    readonly updateMessage: <T extends MessageV2.Info>(msg: T) => Effect.Effect<T>
     readonly removeMessage: (input: { sessionID: SessionID; messageID: MessageID }) => Effect.Effect<MessageID>
     readonly removePart: (input: {
       sessionID: SessionID
       messageID: MessageID
       partID: PartID
     }) => Effect.Effect<PartID>
-    readonly updatePart: (part: MessageV2.Part) => Effect.Effect<MessageV2.Part>
+    readonly updatePart: <T extends MessageV2.Part>(part: T) => Effect.Effect<T>
     readonly updatePartDelta: (input: {
       sessionID: SessionID
       messageID: MessageID
@@ -379,11 +383,12 @@ export namespace Session {
         directory: string
         permission?: Permission.Ruleset
       }) {
+        const ctx = yield* InstanceState.context
         const result: Info = {
           id: SessionID.descending(input.id),
           slug: Slug.create(),
           version: Installation.VERSION,
-          projectID: Instance.project.id,
+          projectID: ctx.project.id,
           directory: input.directory,
           workspaceID: input.workspaceID,
           parentID: input.parentID,
@@ -441,12 +446,12 @@ export namespace Session {
       })
 
       const children = Effect.fn("Session.children")(function* (parentID: SessionID) {
-        const project = Instance.project
+        const ctx = yield* InstanceState.context
         const rows = yield* db((d) =>
           d
             .select()
             .from(SessionTable)
-            .where(and(eq(SessionTable.project_id, project.id), eq(SessionTable.parent_id, parentID)))
+            .where(and(eq(SessionTable.project_id, ctx.project.id), eq(SessionTable.parent_id, parentID)))
             .all(),
         )
         return rows.map(fromRow)
@@ -469,26 +474,23 @@ export namespace Session {
         }
       })
 
-      const updateMessage = Effect.fn("Session.updateMessage")(function* (msg: MessageV2.Info) {
-        yield* Effect.sync(() =>
-          SyncEvent.run(MessageV2.Event.Updated, {
-            sessionID: msg.sessionID,
-            info: msg,
-          }),
-        )
-        return msg
-      })
+      const updateMessage = <T extends MessageV2.Info>(msg: T): Effect.Effect<T> =>
+        Effect.gen(function* () {
+          yield* Effect.sync(() => SyncEvent.run(MessageV2.Event.Updated, { sessionID: msg.sessionID, info: msg }))
+          return msg
+        }).pipe(Effect.withSpan("Session.updateMessage"))
 
-      const updatePart = Effect.fn("Session.updatePart")(function* (part: MessageV2.Part) {
-        yield* Effect.sync(() =>
-          SyncEvent.run(MessageV2.Event.PartUpdated, {
-            sessionID: part.sessionID,
-            part: structuredClone(part),
-            time: Date.now(),
-          }),
-        )
-        return part
-      })
+      const updatePart = <T extends MessageV2.Part>(part: T): Effect.Effect<T> =>
+        Effect.gen(function* () {
+          yield* Effect.sync(() =>
+            SyncEvent.run(MessageV2.Event.PartUpdated, {
+              sessionID: part.sessionID,
+              part: structuredClone(part),
+              time: Date.now(),
+            }),
+          )
+          return part
+        }).pipe(Effect.withSpan("Session.updatePart"))
 
       const create = Effect.fn("Session.create")(function* (input?: {
         parentID?: SessionID
@@ -496,9 +498,10 @@ export namespace Session {
         permission?: Permission.Ruleset
         workspaceID?: WorkspaceID
       }) {
+        const directory = yield* InstanceState.directory
         return yield* createNext({
           parentID: input?.parentID,
-          directory: Instance.directory,
+          directory,
           title: input?.title,
           permission: input?.permission,
           workspaceID: input?.workspaceID,
@@ -506,10 +509,11 @@ export namespace Session {
       })
 
       const fork = Effect.fn("Session.fork")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
+        const directory = yield* InstanceState.directory
         const original = yield* get(input.sessionID)
         const title = getForkedTitle(original.title)
         const session = yield* createNext({
-          directory: Instance.directory,
+          directory,
           workspaceID: original.workspaceID,
           title,
         })
@@ -589,15 +593,10 @@ export namespace Session {
       })
 
       const messages = Effect.fn("Session.messages")(function* (input: { sessionID: SessionID; limit?: number }) {
-        return yield* Effect.promise(async () => {
-          const result = [] as MessageV2.WithParts[]
-          for await (const msg of MessageV2.stream(input.sessionID)) {
-            if (input.limit && result.length >= input.limit) break
-            result.push(msg)
-          }
-          result.reverse()
-          return result
-        })
+        if (input.limit) {
+          return MessageV2.page({ sessionID: input.sessionID, limit: input.limit }).items
+        }
+        return Array.from(MessageV2.stream(input.sessionID)).reverse()
       })
 
       const removeMessage = Effect.fn("Session.removeMessage")(function* (input: {
@@ -851,7 +850,10 @@ export namespace Session {
 
   export const children = fn(SessionID.zod, (id) => runPromise((svc) => svc.children(id)))
   export const remove = fn(SessionID.zod, (id) => runPromise((svc) => svc.remove(id)))
-  export const updateMessage = fn(MessageV2.Info, (msg) => runPromise((svc) => svc.updateMessage(msg)))
+  export async function updateMessage<T extends MessageV2.Info>(msg: T): Promise<T> {
+    MessageV2.Info.parse(msg)
+    return runPromise((svc) => svc.updateMessage(msg))
+  }
 
   export const removeMessage = fn(z.object({ sessionID: SessionID.zod, messageID: MessageID.zod }), (input) =>
     runPromise((svc) => svc.removeMessage(input)),
@@ -862,7 +864,10 @@ export namespace Session {
     (input) => runPromise((svc) => svc.removePart(input)),
   )
 
-  export const updatePart = fn(MessageV2.Part, (part) => runPromise((svc) => svc.updatePart(part)))
+  export async function updatePart<T extends MessageV2.Part>(part: T): Promise<T> {
+    MessageV2.Part.parse(part)
+    return runPromise((svc) => svc.updatePart(part))
+  }
 
   export const updatePartDelta = fn(
     z.object({

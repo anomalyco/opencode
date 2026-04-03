@@ -16,7 +16,7 @@ export const TodoWriteTool = Tool.define("todowrite", {
       metadata: {},
     })
 
-    Todo.update({
+    await Todo.update({
       sessionID: ctx.sessionID,
       todos: params.todos,
     })
