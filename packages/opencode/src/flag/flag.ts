@@ -12,7 +12,7 @@ function falsy(key: string) {
 
 export namespace Flag {
   export const OPENCODE_AUTO_SHARE = truthy("OPENCODE_AUTO_SHARE")
-  export declare const OPENCODE_AUTO_HEAP_SNAPSHOT: boolean
+  export const OPENCODE_AUTO_HEAP_SNAPSHOT = truthy("OPENCODE_AUTO_HEAP_SNAPSHOT")
   export const OPENCODE_GIT_BASH_PATH = process.env["OPENCODE_GIT_BASH_PATH"]
   export const OPENCODE_CONFIG = process.env["OPENCODE_CONFIG"]
   export declare const OPENCODE_PURE: boolean
@@ -87,17 +87,6 @@ export namespace Flag {
     return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
   }
 }
-
-// Dynamic getter for OPENCODE_AUTO_HEAP_SNAPSHOT
-// This must be evaluated at access time, not module load time,
-// because external tooling may set this env var at runtime.
-Object.defineProperty(Flag, "OPENCODE_AUTO_HEAP_SNAPSHOT", {
-  get() {
-    return truthy("OPENCODE_AUTO_HEAP_SNAPSHOT")
-  },
-  enumerable: true,
-  configurable: false,
-})
 
 // Dynamic getter for OPENCODE_DISABLE_PROJECT_CONFIG
 // This must be evaluated at access time, not module load time,
