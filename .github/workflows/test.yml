@@ -47,6 +47,11 @@ jobs:
 
       - name: Run unit tests
         run: bun turbo test
+        env:
+          # Bun 1.3.11 intermittently crashes on Windows during test teardown
+          # inside the native @parcel/watcher binding. Unit CI does not rely on
+          # the live watcher backend there, so disable it for that platform.
+          OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
 
   e2e:
     name: e2e (${{ matrix.settings.name }})
@@ -100,18 +105,17 @@ jobs:
         run: bun --cwd packages/app test:e2e:local
         env:
           CI: true
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          OPENCODE_E2E_MODEL: opencode/claude-haiku-4-5
-          OPENCODE_E2E_REQUIRE_PAID: "true"
+          PLAYWRIGHT_JUNIT_OUTPUT: e2e/junit-${{ matrix.settings.name }}.xml
         timeout-minutes: 30
 
       - name: Upload Playwright artifacts
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-${{ matrix.settings.name }}-${{ github.run_attempt }}
           if-no-files-found: ignore
           retention-days: 7
           path: |
+            packages/app/e2e/junit-*.xml
             packages/app/e2e/test-results
             packages/app/e2e/playwright-report

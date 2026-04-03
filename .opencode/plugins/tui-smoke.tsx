@@ -653,23 +653,30 @@ const home = (api: TuiPluginApi, input: Cfg) => ({
       const skin = look(ctx.theme.current)
       type Prompt = (props: {
         workspaceID?: string
+        visible?: boolean
+        disabled?: boolean
+        onSubmit?: () => void
         hint?: JSX.Element
+        right?: JSX.Element
+        showPlaceholder?: boolean
         placeholders?: {
           normal?: string[]
           shell?: string[]
         }
       }) => JSX.Element
-      if (!("Prompt" in api.ui)) return null
-      const view = api.ui.Prompt
-      if (typeof view !== "function") return null
-      const Prompt = view as Prompt
+      type Slot = (
+        props: { name: string; mode?: unknown; children?: JSX.Element } & Record<string, unknown>,
+      ) => JSX.Element | null
+      const ui = api.ui as TuiPluginApi["ui"] & { Prompt: Prompt; Slot: Slot }
+      const Prompt = ui.Prompt
+      const Slot = ui.Slot
       const normal = [
         `[SMOKE] route check for ${input.label}`,
         "[SMOKE] confirm home_prompt slot override",
-        "[SMOKE] verify api.ui.Prompt rendering",
+        "[SMOKE] verify prompt-right slot passthrough",
       ]
       const shell = ["printf '[SMOKE] home prompt\n'", "git status --short", "bun --version"]
-      const Hint = (
+      const hint = (
         <box flexShrink={0} flexDirection="row" gap={1}>
           <text fg={skin.muted}>
             <span style={{ fg: skin.accent }}>•</span> smoke home prompt
@@ -677,7 +684,46 @@ const home = (api: TuiPluginApi, input: Cfg) => ({
         </box>
       )
 
-      return <Prompt workspaceID={value.workspace_id} hint={Hint} placeholders={{ normal, shell }} />
+      return (
+        <Prompt
+          workspaceID={value.workspace_id}
+          hint={hint}
+          right={
+            <box flexDirection="row" gap={1}>
+              <Slot name="home_prompt_right" workspace_id={value.workspace_id} />
+              <Slot name="smoke_prompt_right" workspace_id={value.workspace_id} label={input.label} />
+            </box>
+          }
+          placeholders={{ normal, shell }}
+        />
+      )
+    },
+    home_prompt_right(ctx, value) {
+      const skin = look(ctx.theme.current)
+      const id = value.workspace_id?.slice(0, 8) ?? "none"
+      return (
+        <text fg={skin.muted}>
+          <span style={{ fg: skin.accent }}>{input.label}</span> home:{id}
+        </text>
+      )
+    },
+    session_prompt_right(ctx, value) {
+      const skin = look(ctx.theme.current)
+      return (
+        <text fg={skin.muted}>
+          <span style={{ fg: skin.accent }}>{input.label}</span> session:{value.session_id.slice(0, 8)}
+        </text>
+      )
+    },
+    smoke_prompt_right(ctx, value) {
+      const skin = look(ctx.theme.current)
+      const id = typeof value.workspace_id === "string" ? value.workspace_id.slice(0, 8) : "none"
+      const label = typeof value.label === "string" ? value.label : input.label
+      return (
+        <text fg={skin.muted}>
+          <span style={{ fg: skin.accent }}>{label}</span> custom:{id}
+        </text>
+      )
     },
     home_bottom(ctx) {
       const skin = look(ctx.theme.current)
