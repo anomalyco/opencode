@@ -27,6 +27,7 @@ import { Snapshot } from "@/snapshot"
 import { ProjectID } from "../project/schema"
 import { WorkspaceID } from "../control-plane/schema"
 import { SessionID, MessageID, PartID } from "./schema"
+import { SessionErrorEvent } from "./error-event"
 
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
@@ -226,13 +227,7 @@ export namespace Session {
         diff: Snapshot.FileDiff.array(),
       }),
     ),
-    Error: BusEvent.define(
-      "session.error",
-      z.object({
-        sessionID: SessionID.zod.optional(),
-        error: MessageV2.Assistant.shape.error,
-      }),
-    ),
+    Error: SessionErrorEvent,
   }
 
   export function plan(input: { slug: string; time: { created: number } }) {

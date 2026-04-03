@@ -5,7 +5,7 @@ import { Log } from "../util/log"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { Flag } from "../flag/flag"
 import { CodexAuthPlugin } from "./codex"
-import { Session } from "../session"
+import { SessionErrorEvent } from "../session/error-event"
 import { NamedError } from "@opencode-ai/util/error"
 import { CopilotAuthPlugin } from "./copilot"
 import { gitlabAuthPlugin as GitlabAuthPlugin } from "opencode-gitlab-auth"
@@ -176,7 +176,7 @@ export namespace Plugin {
                       version: parsed.version,
                       error: message,
                     })
-                    Bus.publish(Session.Event.Error, {
+                    Bus.publish(SessionErrorEvent, {
                       error: new NamedError.Unknown({
                         message: `Failed to install plugin ${parsed.pkg}@${parsed.version}: ${message}`,
                       }).toObject(),
@@ -186,7 +186,7 @@ export namespace Plugin {
 
                   if (resolved.stage === "compatibility") {
                     log.warn("plugin incompatible", { path: plan.spec, error: message })
-                    Bus.publish(Session.Event.Error, {
+                    Bus.publish(SessionErrorEvent, {
                       error: new NamedError.Unknown({
                         message: `Plugin ${plan.spec} skipped: ${message}`,
                       }).toObject(),
@@ -198,7 +198,7 @@ export namespace Plugin {
                     path: plan.spec,
                     error: message,
                   })
-                  Bus.publish(Session.Event.Error, {
+                  Bus.publish(SessionErrorEvent, {
                     error: new NamedError.Unknown({
                       message: `Failed to load plugin ${plan.spec}: ${message}`,
                     }).toObject(),
@@ -210,7 +210,7 @@ export namespace Plugin {
                 if (!mod.ok) {
                   const message = errorMessage(mod.error)
                   log.error("failed to load plugin", { path: plan.spec, target: resolved.value.entry, error: message })
-                  Bus.publish(Session.Event.Error, {
+                  Bus.publish(SessionErrorEvent, {
                     error: new NamedError.Unknown({
                       message: `Failed to load plugin ${plan.spec}: ${message}`,
                     }).toObject(),
@@ -238,7 +238,7 @@ export namespace Plugin {
               },
             }).pipe(
               Effect.catch((message) =>
-                bus.publish(Session.Event.Error, {
+                bus.publish(SessionErrorEvent, {
                   error: new NamedError.Unknown({
                     message: `Failed to load plugin ${load.row.spec}: ${message}`,
                   }).toObject(),
