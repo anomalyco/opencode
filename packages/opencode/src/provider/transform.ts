@@ -962,12 +962,29 @@ export namespace ProviderTransform {
     }
     */
 
+    const isPlainObject = (node: unknown): node is Record<string, any> =>
+      typeof node === "object" && node !== null && !Array.isArray(node)
+    const hasCombiner = (node: unknown) =>
+      isPlainObject(node) && (Array.isArray(node.anyOf) || Array.isArray(node.oneOf) || Array.isArray(node.allOf))
+
+    // Ensure all array schemas have an items property.
+    // MCP servers may omit items which strict provider APIs reject.
+    const sanitizeArrays = (obj: any): any => {
+      if (obj === null || typeof obj !== "object") return obj
+      if (Array.isArray(obj)) return obj.map(sanitizeArrays)
+      const result: any = {}
+      for (const [key, value] of Object.entries(obj)) {
+        result[key] = typeof value === "object" && value !== null ? sanitizeArrays(value) : value
+      }
+      if (result.type === "array" && !hasCombiner(result) && result.items == null) {
+        result.items = {}
+      }
+      return result
+    }
+    schema = sanitizeArrays(schema)
+
     // Convert integer enums to string enums for Google/Gemini
     if (model.providerID === "google" || model.api.id.includes("gemini")) {
-      const isPlainObject = (node: unknown): node is Record<string, any> =>
-        typeof node === "object" && node !== null && !Array.isArray(node)
-      const hasCombiner = (node: unknown) =>
-        isPlainObject(node) && (Array.isArray(node.anyOf) || Array.isArray(node.oneOf) || Array.isArray(node.allOf))
       const hasSchemaIntent = (node: unknown) => {
         if (!isPlainObject(node)) return false
         if (hasCombiner(node)) return true

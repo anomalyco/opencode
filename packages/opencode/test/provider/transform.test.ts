@@ -677,6 +677,149 @@ describe("ProviderTransform.schema - gemini combiner nodes", () => {
   })
 })
 
+describe("ProviderTransform.schema - array items sanitization (all providers)", () => {
+  const openaiModel = {
+    providerID: "openai",
+    api: {
+      id: "gpt-4",
+    },
+  } as any
+
+  const anthropicModel = {
+    providerID: "anthropic",
+    api: {
+      id: "claude-3-5-sonnet-20241022",
+    },
+  } as any
+
+  test("adds missing items to flat array properties for openai", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        tags: { type: "array" },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(openaiModel, schema) as any
+
+    expect(result.properties.tags.items).toEqual({})
+  })
+
+  test("adds missing items to flat array properties for anthropic", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        tags: { type: "array" },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(anthropicModel, schema) as any
+
+    expect(result.properties.tags.items).toEqual({})
+  })
+
+  test("preserves existing items", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        names: { type: "array", items: { type: "string" } },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(openaiModel, schema) as any
+
+    expect(result.properties.names.items).toEqual({ type: "string" })
+  })
+
+  test("adds items to nested arrays recursively", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        values: {
+          type: "array",
+          items: { type: "array" },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(openaiModel, schema) as any
+
+    expect(result.properties.values.items.items).toEqual({})
+  })
+
+  test("handles deeply nested 3D arrays", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        matrix: {
+          type: "array",
+          items: {
+            type: "array",
+            items: { type: "array" },
+          },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(openaiModel, schema) as any
+
+    expect(result.properties.matrix.items.items.items).toEqual({})
+  })
+
+  test("handles arrays nested inside objects", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        data: {
+          type: "object",
+          properties: {
+            rows: { type: "array" },
+          },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(openaiModel, schema) as any
+
+    expect(result.properties.data.properties.rows.items).toEqual({})
+  })
+
+  test("does not add items to arrays with anyOf combiner", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        edits: {
+          type: "array",
+          anyOf: [{ items: { type: "string" } }, { items: { type: "number" } }],
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(openaiModel, schema) as any
+
+    expect(result.properties.edits.items).toBeUndefined()
+  })
+
+  test("matches google-docs writeSpreadsheet schema from issue #20273", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        spreadsheetId: { type: "string" },
+        values: {
+          type: "array",
+          items: {
+            type: "array",
+          },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(openaiModel, schema) as any
+
+    expect(result.properties.values.items.items).toEqual({})
+  })
+})
+
 describe("ProviderTransform.schema - gemini non-object properties removal", () => {
   const geminiModel = {
     providerID: "google",
