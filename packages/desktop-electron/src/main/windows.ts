@@ -143,7 +143,7 @@ function injectGlobals(win: BrowserWindow, globals: Globals) {
     const deepLinks = globals.deepLinks ?? []
     const data = {
       updaterEnabled: globals.updaterEnabled,
-      deepLinks: Array.isArray(deepLinks) ? deepLinks.splice(0) : deepLinks,
+      deepLinks: Array.isArray(deepLinks) ? deepLinks.slice(0) : deepLinks,
     }
     void win.webContents.executeJavaScript(
       `window.__OPENCODE__ = Object.assign(window.__OPENCODE__ ?? {}, ${JSON.stringify(data)})`,
