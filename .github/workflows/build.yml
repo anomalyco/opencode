@@ -16,6 +16,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Compute version from package.json
+        id: version
+        run: |
+          UPSTREAM_VER=$(python3 -c "import json; print(json.load(open('packages/opencode/package.json'))['version'])")
+          PATCHED_VER="${UPSTREAM_VER}-copilot-fix"
+          echo "upstream=$UPSTREAM_VER" >> "$GITHUB_OUTPUT"
+          echo "patched=$PATCHED_VER" >> "$GITHUB_OUTPUT"
+          echo "Version: upstream=$UPSTREAM_VER patched=$PATCHED_VER"
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
@@ -28,7 +37,7 @@ jobs:
         run: bun run script/build.ts --single
         working-directory: packages/opencode
         env:
-          OPENCODE_VERSION: "1.3.13-copilot-fix"
+          OPENCODE_VERSION: "${{ steps.version.outputs.patched }}"
 
       - name: Verify binary exists
         run: |
@@ -43,6 +52,21 @@ jobs:
             echo "ERROR: binary --version failed"
             exit 1
           fi
+
+      - name: Smoke test — patch signatures
+        run: |
+          BINARY="packages/opencode/dist/opencode-linux-x64/bin/opencode"
+          EXCHANGE=$(strings "$BINARY" | grep -c "exchangeCopilotToken" || echo 0)
+          GHU_CHECK=$(strings "$BINARY" | grep -c "isGhuToken" || echo 0)
+          VSCODE_ID=$(strings "$BINARY" | grep -c "Iv1.b507a08c87ecfe98" || echo 0)
+          echo "exchangeCopilotToken: $EXCHANGE"
+          echo "isGhuToken: $GHU_CHECK"
+          echo "VS Code client ID: $VSCODE_ID"
+          if [ "$EXCHANGE" -eq 0 ] || [ "$GHU_CHECK" -eq 0 ] || [ "$VSCODE_ID" -eq 0 ]; then
+            echo "ERROR: Patch signatures missing in binary!"
+            exit 1
+          fi
+          echo "All patch signatures verified."
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
