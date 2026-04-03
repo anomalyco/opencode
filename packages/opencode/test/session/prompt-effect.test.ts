@@ -150,7 +150,7 @@ function makeHttp() {
     LLM.defaultLayer,
     AgentSvc.defaultLayer,
     Command.defaultLayer,
-    Permission.layer,
+    Permission.defaultLayer,
     Plugin.defaultLayer,
     Config.defaultLayer,
     ProviderSvc.defaultLayer,

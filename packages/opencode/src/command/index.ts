@@ -124,20 +124,24 @@ export namespace Command {
             source: "mcp",
             description: prompt.description,
             get template() {
-              return new Promise<string>(async (resolve, reject) => {
-                const template = await MCP.getPrompt(
-                  prompt.client,
-                  prompt.name,
-                  prompt.arguments
-                    ? Object.fromEntries(prompt.arguments.map((argument, i) => [argument.name, `$${i + 1}`]))
-                    : {},
-                ).catch(reject)
-                resolve(
-                  template?.messages
-                    .map((message) => (message.content.type === "text" ? message.content.text : ""))
-                    .join("\n") || "",
-                )
-              })
+              return Effect.runPromise(
+                mcp
+                  .getPrompt(
+                    prompt.client,
+                    prompt.name,
+                    prompt.arguments
+                      ? Object.fromEntries(prompt.arguments.map((argument, i) => [argument.name, `$${i + 1}`]))
+                      : {},
+                  )
+                  .pipe(
+                    Effect.map(
+                      (template) =>
+                        template?.messages
+                          .map((message) => (message.content.type === "text" ? message.content.text : ""))
+                          .join("\n") || "",
+                    ),
+                  ),
+              )
             },
             hints: prompt.arguments?.map((_, i) => `$${i + 1}`) ?? [],
           }
@@ -184,10 +188,6 @@ export namespace Command {
   )
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function get(name: string) {
-    return runPromise((svc) => svc.get(name))
-  }
 
   export async function list() {
     return runPromise((svc) => svc.list())

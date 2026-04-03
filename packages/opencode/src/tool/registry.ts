@@ -206,10 +206,6 @@ export namespace ToolRegistry {
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
-  export async function register(tool: Tool.Info) {
-    return runPromise((svc) => svc.register(tool))
-  }
-
   export async function ids() {
     return runPromise((svc) => svc.ids())
   }
