@@ -10,9 +10,14 @@ import { Global } from "@/global"
 export namespace ConfigPaths {
   export async function projectFiles(name: string | string[], directory: string, worktree: string) {
     const names = Array.isArray(name) ? name : [name]
-    return Filesystem.findUp(names.flatMap((n) => [`${n}.json`, `${n}.jsonc`]), directory, worktree, {
-      rootFirst: true,
-    })
+    return Filesystem.findUp(
+      names.flatMap((n) => [`${n}.json`, `${n}.jsonc`]),
+      directory,
+      worktree,
+      {
+        rootFirst: true,
+      },
+    )
   }
 
   export async function directories(directory: string, worktree: string) {
