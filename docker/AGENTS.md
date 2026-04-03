@@ -11,7 +11,7 @@
 Python 패키지 설치 시 반드시 uv로 가상환경을 만들어 사용하세요.
 
 ```bash
-cd /home/jovyan/project
+cd ~/project
 uv venv .venv
 source .venv/bin/activate
 uv pip install flask  # 예시
@@ -35,7 +35,7 @@ npx serve -l 3000 ./dist
 프로젝트에 패키지를 설치하려면 npm을 사용하세요.
 
 ```bash
-cd /home/jovyan/project
+cd ~/project
 npm init -y
 npm install express
 ```
@@ -57,7 +57,7 @@ echo "https://$OPENCODE_HUB_HOST/serve/$JUPYTERHUB_USER/"
 정적 파일 서빙:
 
 ```bash
-cd /home/jovyan/project
+cd ~/project
 python3 -m http.server 3000
 ```
 
