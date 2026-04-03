@@ -14,9 +14,13 @@ import { spawn as lspspawn } from "./launch"
 import { Effect, Layer, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
+import { withTimeout } from "../util/timeout"
 
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
+
+  // Safety net timeout for LSP server spawn (must exceed worst-case individual timeouts)
+  const LSP_SPAWN_TIMEOUT_MS = 300_000
 
   export const Event = {
     Updated: BusEvent.define("lsp.updated", z.object({})),
@@ -285,7 +289,11 @@ export namespace LSP {
 
             const inflight = s.spawning.get(root + server.id)
             if (inflight) {
-              const client = await inflight
+              const client = await withTimeout(inflight, LSP_SPAWN_TIMEOUT_MS).catch(() => {
+                s.broken.add(root + server.id)
+                log.warn("LSP server spawn timed out (inflight)", { serverID: server.id, root })
+                return undefined
+              })
               if (!client) continue
               result.push(client)
               continue
@@ -300,7 +308,11 @@ export namespace LSP {
               }
             })
 
-            const client = await task
+            const client = await withTimeout(task, LSP_SPAWN_TIMEOUT_MS).catch(() => {
+              s.broken.add(root + server.id)
+              log.warn("LSP server spawn timed out", { serverID: server.id, root })
+              return undefined
+            })
             if (!client) continue
 
             result.push(client)
