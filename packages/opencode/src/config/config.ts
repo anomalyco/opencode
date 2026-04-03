@@ -1043,6 +1043,11 @@ export namespace Config {
                 .optional()
                 .default(true)
                 .describe("Preserve code blocks without TOON transformation"),
+              output_transform: z
+                .boolean()
+                .optional()
+                .default(false)
+                .describe("Ask the model to respond in TOON format and decode its output back to full text"),
             })
             .optional()
             .describe("TOON (Token-Oriented Object Notation) wire format configuration"),
