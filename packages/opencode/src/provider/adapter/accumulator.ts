@@ -1,4 +1,4 @@
-import { parseToolCalls, type ToolCallOpenAI } from "./index"
+import type { ToolCallOpenAI } from "./base"
 
 /**
  * Streaming chunk accumulator for tool call patterns.
@@ -8,12 +8,20 @@ import { parseToolCalls, type ToolCallOpenAI } from "./index"
  *   Chunk 1: '<tools>{"name": "x", "arg'
  *   Chunk 2: 'uments": {}}'
  *   Chunk 3: '</tools>'
+ *
+ * Usage:
+ *   const acc = new ToolCallAccumulator(parseToolCalls)
+ *   acc.push(chunk)  // returns ToolCallOpenAI[] when complete
  */
 export class ToolCallAccumulator {
   private buffer = ""
   private openTags = 0
   private hasOpenBrace = false
   private braceDepth = 0
+
+  constructor(
+    private readonly parser: (content: string) => ToolCallOpenAI[] | null,
+  ) {}
 
   /**
    * Push a streaming chunk into the accumulator.
@@ -43,14 +51,14 @@ export class ToolCallAccumulator {
 
     // Parse when all tags are closed AND braces are balanced
     if (this.openTags <= 0 && this.hasOpenBrace && this.braceDepth <= 0) {
-      const result = parseToolCalls(this.buffer)
+      const result = this.parser(this.buffer)
       this.reset()
       return result
     }
 
     // Also try parsing if we have complete content (no open tags but has tool pattern)
     if (this.openTags === 0 && this.buffer.length > 0) {
-      const result = parseToolCalls(this.buffer)
+      const result = this.parser(this.buffer)
       if (result) {
         this.reset()
         return result
@@ -66,7 +74,7 @@ export class ToolCallAccumulator {
    */
   flush(): ToolCallOpenAI[] | null {
     if (!this.buffer.trim()) return null
-    const result = parseToolCalls(this.buffer)
+    const result = this.parser(this.buffer)
     this.reset()
     return result
   }

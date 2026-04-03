@@ -1,4 +1,5 @@
 import { ToolCallAdapter, type ToolCallOpenAI } from "./base"
+import { ToolCallAccumulator } from "./accumulator"
 import { QwenToolCallAdapter } from "./qwen"
 import { GptOssToolCallAdapter } from "./gpt-oss"
 import { LlamaThinkingAdapter } from "./llama"
@@ -18,6 +19,7 @@ const adapters: ToolCallAdapter[] = [
 
 /**
  * Detect and parse tool calls from model output content.
+ * Acts as an orchestrator: tries each adapter in priority order.
  * Returns OpenAI-standard tool_calls or null if none found.
  */
 export function parseToolCalls(content: string): ToolCallOpenAI[] | null {
@@ -33,6 +35,14 @@ export function parseToolCalls(content: string): ToolCallOpenAI[] | null {
   }
 
   return null
+}
+
+/**
+ * Create a streaming accumulator pre-wired with parseToolCalls.
+ * Convenience factory so callers don't need to pass the parser manually.
+ */
+export function createAccumulator(): ToolCallAccumulator {
+  return new ToolCallAccumulator(parseToolCalls)
 }
 
 /**

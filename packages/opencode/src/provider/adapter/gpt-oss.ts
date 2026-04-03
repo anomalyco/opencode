@@ -2,11 +2,16 @@ import { ToolCallAdapter, type ToolCallOpenAI } from "./base"
 
 /**
  * GPT-OSS adapter.
- * Input: to=functions.func_name<|channel|>...
- * Enhanced: handles key=value, key:value, and quoted strings.
+ * Input variants:
+ *   to=functions.func_name<|channel|>...
+ *   to=functions.func_name ...
+ *   to=functions.func_name<|channel|>key=value
+ * Enhanced: loose pattern tolerant of missing <|channel|> token.
  */
 export class GptOssToolCallAdapter extends ToolCallAdapter {
+  // Loose: matches func_name regardless of what follows
   private readonly TOOL_PATTERN = /to=functions\.(\w+)/
+  // Args: key=value or key:value, handles quoted strings, stops at <| or newline or comma
   private readonly ARG_PATTERN = /(\w+)[=:]\s*("[^"]*"|'[^']*'|[^\s<|,]+)/g
 
   detect(content: string): boolean {
