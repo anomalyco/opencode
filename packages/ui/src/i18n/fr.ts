@@ -157,4 +157,7 @@ export const dict = {
   "ui.toolErrorCard.copyError": "Copier l'erreur",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
+
+  "ui.message.codeBlock.showMore": "Afficher {{count}} lignes de plus",
+  "ui.message.codeBlock.showLess": "Afficher moins",
 }
