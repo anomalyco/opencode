@@ -587,3 +587,16 @@ describe("session.agent-resolution", () => {
     })
   }, 30000)
 })
+
+describe("session.command shell substitution", () => {
+  test("runs command substitution in provided cwd", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const txt = await SessionPrompt.replaceCommandShell("cwd=!`pwd`", tmp.path)
+    expect(txt.trim()).toBe(`cwd=${tmp.path}`)
+  })
+
+  test("returns original template when no substitutions exist", async () => {
+    const txt = await SessionPrompt.replaceCommandShell("no shell here", process.cwd())
+    expect(txt).toBe("no shell here")
+  })
+})
