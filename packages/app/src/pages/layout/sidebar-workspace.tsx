@@ -34,8 +34,8 @@ export type WorkspaceSidebarContext = {
   currentDir: Accessor<string>
   navList: Accessor<Session[]>
   sidebarExpanded: Accessor<boolean>
-  sidebarHovering: Accessor<boolean>
-  clearHoverProjectSoon: () => void
+  sidebarReduced: Accessor<boolean>
+  nav: Accessor<HTMLElement | undefined>
   prefetchSession: (session: Session, priority?: "high" | "low") => void
   archiveSession: (session: Session) => Promise<void>
   generateSessionTitle: (session: Session) => Promise<void>
@@ -142,7 +142,6 @@ const WorkspaceActions = (props: {
   pendingRename: Accessor<boolean>
   setMenuOpen: (open: boolean) => void
   setPendingRename: (value: boolean) => void
-  sidebarHovering: Accessor<boolean>
   touch: Accessor<boolean>
   language: ReturnType<typeof useLanguage>
   workspaceValue: Accessor<string>
@@ -150,7 +149,6 @@ const WorkspaceActions = (props: {
   showResetWorkspaceDialog: WorkspaceSidebarContext["showResetWorkspaceDialog"]
   showDeleteWorkspaceDialog: WorkspaceSidebarContext["showDeleteWorkspaceDialog"]
   root: string
-  clearHoverProjectSoon: WorkspaceSidebarContext["clearHoverProjectSoon"]
   navigateToNewSession: () => void
 }): JSX.Element => (
   <div
@@ -163,7 +161,7 @@ const WorkspaceActions = (props: {
     }}
   >
     <DropdownMenu
-      modal={!props.sidebarHovering()}
+      modal
       open={props.menuOpen()}
       onOpenChange={(open) => props.setMenuOpen(open)}
     >
@@ -223,7 +221,6 @@ const WorkspaceActions = (props: {
           onClick={(event) => {
             event.preventDefault()
             event.stopPropagation()
-            props.clearHoverProjectSoon()
             props.navigateToNewSession()
           }}
         />
@@ -261,9 +258,8 @@ const WorkspaceSessionList = (props: {
         <NewSessionItem
           slug={props.slug()}
           mobile={props.mobile}
+          reduced={props.ctx.sidebarReduced()}
           sidebarExpanded={props.ctx.sidebarExpanded}
-          clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
-          setHoverSession={props.ctx.setHoverSession}
         />
       </Show>
       <Show when={props.loading()}>
@@ -295,12 +291,8 @@ const WorkspaceSessionList = (props: {
                 navList={props.ctx.navList}
                 slug={props.slug()}
                 mobile={props.mobile}
-                popover={props.popover}
+                reduced={props.ctx.sidebarReduced()}
                 sidebarExpanded={props.ctx.sidebarExpanded}
-                sidebarHovering={props.ctx.sidebarHovering}
-                hoverSession={props.ctx.hoverSession}
-                setHoverSession={props.ctx.setHoverSession}
-                clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
                 prefetchSession={props.ctx.prefetchSession}
                 archiveSession={props.ctx.archiveSession}
               />
@@ -312,7 +304,12 @@ const WorkspaceSessionList = (props: {
         <div class="relative w-full px-2 pt-2 pb-1">
           <Button
             variant="ghost"
-            class="flex h-8 w-full items-center justify-center rounded-lg border border-dashed border-border bg-surface-raised-base/35 px-3 text-12-medium text-text-weak transition-colors hover:border-border-strong hover:bg-surface-raised-base-hover hover:text-text"
+            classList={{
+              "flex h-8 w-full items-center justify-center rounded-lg border border-dashed border-border bg-surface-raised-base/35 px-3 text-12-medium text-text-weak":
+                true,
+              "transition-colors hover:border-border-strong hover:bg-surface-raised-base-hover hover:text-text":
+                !props.ctx.sidebarReduced(),
+            }}
             size="large"
             onClick={(e: MouseEvent) => {
               props.loadMore()
@@ -426,9 +423,9 @@ export const SortableWorkspace = (props: {
                 when={workspaceEditActive()}
                 fallback={
                   <Collapsible.Trigger
-                    class={`flex items-center justify-between w-full pl-2 py-1.5 rounded-lg hover:bg-surface-raised-base-hover transition-[padding] duration-200 ${
-                      menu.open ? "pr-16" : "pr-2"
-                    } group-hover/workspace:pr-16 group-focus-within/workspace:pr-16`}
+                    class={`flex items-center justify-between w-full pl-2 py-1.5 rounded-lg ${
+                      menu.open || props.ctx.sidebarReduced() ? "pr-2" : "pr-16"
+                    } ${props.ctx.sidebarReduced() ? "" : "hover:bg-surface-raised-base-hover transition-[padding] duration-200 group-hover/workspace:pr-16 group-focus-within/workspace:pr-16"}`}
                     data-action="workspace-toggle"
                     data-workspace={base64Encode(props.directory)}
                   >
@@ -437,9 +434,9 @@ export const SortableWorkspace = (props: {
                 }
               >
                 <div
-                  class={`flex items-center justify-between w-full pl-2 py-1.5 rounded-lg transition-[padding] duration-200 ${
-                    menu.open ? "pr-16" : "pr-2"
-                  } group-hover/workspace:pr-16 group-focus-within/workspace:pr-16`}
+                  class={`flex items-center justify-between w-full pl-2 py-1.5 rounded-lg ${
+                    menu.open || props.ctx.sidebarReduced() ? "pr-2" : "pr-16"
+                  } ${props.ctx.sidebarReduced() ? "" : "transition-[padding] duration-200 group-hover/workspace:pr-16 group-focus-within/workspace:pr-16"}`}
                 >
                   {header()}
                 </div>
@@ -452,7 +449,6 @@ export const SortableWorkspace = (props: {
                 pendingRename={() => menu.pendingRename}
                 setMenuOpen={(open) => setMenu("open", open)}
                 setPendingRename={(value) => setMenu("pendingRename", value)}
-                sidebarHovering={props.ctx.sidebarHovering}
                 touch={touch}
                 language={language}
                 workspaceValue={workspaceValue}
@@ -460,7 +456,6 @@ export const SortableWorkspace = (props: {
                 showResetWorkspaceDialog={props.ctx.showResetWorkspaceDialog}
                 showDeleteWorkspaceDialog={props.ctx.showDeleteWorkspaceDialog}
                 root={props.project.worktree}
-                clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
                 navigateToNewSession={() => navigate(`/${slug()}/session`)}
               />
             </div>
@@ -530,12 +525,12 @@ export const LocalWorkspace = (props: {
           value={searchQuery}
           onInput={setSearchQuery}
           placeholder={language.t("sidebar.search.placeholder")}
+          reduced={props.ctx.sidebarReduced()}
         />
       </Show>
       <WorkspaceSessionList
         slug={slug}
         mobile={props.mobile}
-        popover={props.popover}
         ctx={props.ctx}
         showNew={() => false}
         loading={loading}

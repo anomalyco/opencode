@@ -187,11 +187,11 @@ export default function Layout(props: ParentProps) {
   const [state, setState] = createStore({
     autoselect: !initialDirectory && !USE_NEW_DESIGN,
     busyWorkspaces: {} as Record<string, boolean>,
-    hoverSession: undefined as string | undefined,
     scrollSessionKey: undefined as string | undefined,
     nav: undefined as HTMLElement | undefined,
     sortNow: Date.now(),
     sizing: false,
+    previewSidebarWidth: undefined as number | undefined,
   })
 
   const [findbar, setFindbar] = createStore({
@@ -276,7 +276,10 @@ export default function Layout(props: ParentProps) {
   })
 
   onMount(() => {
-    const stop = () => setState("sizing", false)
+    const stop = () => {
+      setState("sizing", false)
+      setState("previewSidebarWidth", undefined)
+    }
     const blur = () => reset()
     const hide = () => {
       if (document.visibilityState !== "hidden") return
@@ -289,19 +292,9 @@ export default function Layout(props: ParentProps) {
     makeEventListener(document, "visibilitychange", hide)
   })
 
-  const sidebarHovering = createMemo(() => false)
   const sidebarExpanded = createMemo(() => layout.sidebar.opened())
-  const clearHoverProjectSoon = () => undefined
-  const setHoverSession = (id: string | undefined) => setState("hoverSession", id)
-
-  const reset = () => {
-    setState("hoverSession", undefined)
-  }
-
-  createEffect(() => {
-    if (!layout.sidebar.opened()) return
-    setState("hoverSession", undefined)
-  })
+  const sidebarReduced = createMemo(() => false)
+  const reset = () => undefined
 
   createEffect(() => {
     if (!state.autoselect) return
@@ -2393,13 +2386,12 @@ export default function Layout(props: ParentProps) {
   )
 
   createEffect(() => {
-    document.documentElement.style.setProperty(
-      "--dialog-left-margin",
-      USE_NEW_DESIGN ? "0px" : `${layout.sidebar.opened() ? layout.sidebar.width() : 48}px`,
-    )
+    const sidebarWidth = layout.sidebar.opened() ? Math.max(layout.sidebar.width(), 244) : 48
+    document.documentElement.style.setProperty("--dialog-left-margin", `${sidebarWidth}px`)
   })
 
-  const side = createMemo(() => Math.max(layout.sidebar.width(), 244))
+  const side = createMemo(() => Math.max(state.previewSidebarWidth ?? layout.sidebar.width(), 244))
+  const dragSide = createMemo(() => Math.max(state.previewSidebarWidth ?? layout.sidebar.width(), 244))
   const panel = createMemo(() => Math.max(side() - 64, 0))
 
   let started = false
@@ -3460,8 +3452,8 @@ export default function Layout(props: ParentProps) {
     currentDir,
     navList: currentSessions,
     sidebarExpanded,
-    sidebarHovering,
-    clearHoverProjectSoon,
+    sidebarReduced,
+    nav: () => state.nav,
     prefetchSession,
     archiveSession,
     workspaceName,
@@ -3485,7 +3477,7 @@ export default function Layout(props: ParentProps) {
 
   const projectSidebarCtx: ProjectSidebarContext = {
     currentDir,
-    sidebarHovering,
+    sidebarReduced,
     navigateToProject,
     closeProject,
     showEditProjectDialog,
@@ -3501,7 +3493,6 @@ export default function Layout(props: ParentProps) {
   }) => {
     const project = panelProps.project
     const merged = createMemo(() => panelProps.mobile || (panelProps.merged ?? layout.sidebar.opened()))
-    const hover = createMemo(() => !panelProps.mobile && panelProps.merged === false && !layout.sidebar.opened())
     const empty = createMemo(() => !params.dir && layout.projects.list().length === 0)
     const projectName = createMemo(() => {
       const item = project()
@@ -3546,8 +3537,8 @@ export default function Layout(props: ParentProps) {
           "flex flex-col min-h-0 min-w-0 box-border rounded-tl-[12px] px-3": true,
           "border border-b-0 border-border-weak-base": !merged(),
           "border-l border-t border-border-weaker-base": merged(),
-          "bg-background-base": merged() || hover(),
-          "bg-background-stronger": !merged() && !hover(),
+          "bg-background-base": merged(),
+          "bg-background-stronger": !merged(),
           "flex-1 min-w-0": panelProps.mobile,
           "max-w-full overflow-hidden": panelProps.mobile,
         }}
@@ -3672,6 +3663,74 @@ export default function Layout(props: ParentProps) {
                     </DropdownMenu.Portal>
                   </DropdownMenu>
                 </div>
+
+                <DropdownMenu modal>
+                  <DropdownMenu.Trigger
+                    as={IconButton}
+                    icon="dot-grid"
+                    variant="ghost"
+                    data-action="project-menu"
+                    data-project={slug()}
+                    class="shrink-0 size-6 rounded-md transition-opacity data-[expanded]:bg-surface-base-active"
+                    classList={{
+                      "opacity-100": panelProps.mobile || merged(),
+                      "opacity-0 group-hover/project:opacity-100 group-focus-within/project:opacity-100 data-[expanded]:opacity-100":
+                        !panelProps.mobile && !merged(),
+                    }}
+                    aria-label={language.t("common.moreOptions")}
+                  />
+                  <DropdownMenu.Portal>
+                    <DropdownMenu.Content class="mt-1">
+                      <DropdownMenu.Item
+                        onSelect={() => {
+                          const item = project()
+                          if (!item) return
+                          showEditProjectDialog(item)
+                        }}
+                      >
+                        <DropdownMenu.ItemLabel>{language.t("common.edit")}</DropdownMenu.ItemLabel>
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Item
+                        data-action="project-workspaces-toggle"
+                        data-project={slug()}
+                        disabled={!canToggle()}
+                        onSelect={() => {
+                          const item = project()
+                          if (!item) return
+                          toggleProjectWorkspaces(item)
+                        }}
+                      >
+                        <DropdownMenu.ItemLabel>
+                          {workspacesEnabled()
+                            ? language.t("sidebar.workspaces.disable")
+                            : language.t("sidebar.workspaces.enable")}
+                        </DropdownMenu.ItemLabel>
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Item
+                        data-action="project-clear-notifications"
+                        data-project={slug()}
+                        disabled={unseenCount() === 0}
+                        onSelect={clearNotifications}
+                      >
+                        <DropdownMenu.ItemLabel>
+                          {language.t("sidebar.project.clearNotifications")}
+                        </DropdownMenu.ItemLabel>
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Separator />
+                      <DropdownMenu.Item
+                        data-action="project-close-menu"
+                        data-project={slug()}
+                        onSelect={() => {
+                          const dir = worktree()
+                          if (!dir) return
+                          closeProject(dir)
+                        }}
+                      >
+                        <DropdownMenu.ItemLabel>{language.t("common.close")}</DropdownMenu.ItemLabel>
+                      </DropdownMenu.Item>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Portal>
+                </DropdownMenu>
               </div>
 
               <div class="flex-1 min-h-0 flex flex-col">
@@ -3737,49 +3796,88 @@ export default function Layout(props: ParentProps) {
                         />
                       </div>
                     </div>
-                    <div class="relative flex-1 min-h-0">
-                      <DragDropProvider
-                        onDragStart={handleWorkspaceDragStart}
-                        onDragEnd={handleWorkspaceDragEnd}
-                        onDragOver={handleWorkspaceDragOver}
-                        collisionDetector={closestCenter}
-                      >
-                        <DragDropSensors />
-                        <ConstrainDragXAxis />
-                        <div
-                          ref={(el) => {
-                            if (!panelProps.mobile) scrollContainerRef = el
-                          }}
-                          class="size-full flex flex-col py-2 gap-4 overflow-y-auto no-scrollbar [overflow-anchor:none]"
-                        >
-                          <SortableProvider ids={workspaces()}>
-                            <For each={workspaces()}>
-                              {(directory) => (
-                                <SortableWorkspace
-                                  ctx={workspaceSidebarCtx}
-                                  directory={directory}
-                                  project={project}
-                                  sortNow={sortNow}
-                                  mobile={panelProps.mobile}
-                                />
-                              )}
-                            </For>
-                          </SortableProvider>
-                        </div>
-                        <DragOverlay>
-                          <WorkspaceDragOverlay
-                            sidebarProject={sidebarProject}
-                            activeWorkspace={() => store.activeWorkspace}
-                            workspaceLabel={workspaceLabel}
-                          />
-                        </DragOverlay>
-                      </DragDropProvider>
+                    <div class="flex-1 min-h-0">
+                      <LocalWorkspace
+                        ctx={workspaceSidebarCtx}
+                        project={project()!}
+                        sortNow={sortNow}
+                        mobile={panelProps.mobile}
+                      />
                     </div>
                   </>
-                </Show>
-              </div>
-            </>
-          )}
+                }
+              >
+                <>
+                  <div class="shrink-0 py-4 px-3">
+                    <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                      <Button
+                        size="large"
+                        icon="plus-small"
+                        class="w-full"
+                        onClick={() => {
+                          const item = project()
+                          if (!item) return
+                          createWorkspace(item)
+                        }}
+                      >
+                        {language.t("workspace.new")}
+                      </Button>
+                      <IconButton
+                        icon="archive"
+                        variant="ghost"
+                        size="large"
+                        class="rounded-lg border border-border-weak-base"
+                        aria-label={language.t("sidebar.project.viewArchivedSessions")}
+                        onClick={() => {
+                          const item = project()
+                          if (!item) return
+                          dialog.show(() => <DialogArchivedSessions project={item} />)
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div class="relative flex-1 min-h-0">
+                    <DragDropProvider
+                      onDragStart={handleWorkspaceDragStart}
+                      onDragEnd={handleWorkspaceDragEnd}
+                      onDragOver={handleWorkspaceDragOver}
+                      collisionDetector={closestCenter}
+                    >
+                      <DragDropSensors />
+                      <ConstrainDragXAxis />
+                      <div
+                        ref={(el) => {
+                          if (!panelProps.mobile) scrollContainerRef = el
+                        }}
+                        class="size-full flex flex-col py-2 gap-4 overflow-y-auto no-scrollbar [overflow-anchor:none]"
+                      >
+                        <SortableProvider ids={workspaces()}>
+                          <For each={workspaces()}>
+                            {(directory) => (
+                              <SortableWorkspace
+                                ctx={workspaceSidebarCtx}
+                                directory={directory}
+                                project={project()!}
+                                sortNow={sortNow}
+                                mobile={panelProps.mobile}
+                              />
+                            )}
+                          </For>
+                        </SortableProvider>
+                      </div>
+                      <DragOverlay>
+                        <WorkspaceDragOverlay
+                          sidebarProject={sidebarProject}
+                          activeWorkspace={() => store.activeWorkspace}
+                          workspaceLabel={workspaceLabel}
+                        />
+                      </DragOverlay>
+                    </DragDropProvider>
+                  </div>
+                </>
+              </Show>
+            </div>
+          </>
         </Show>
 
         <div
@@ -3891,6 +3989,7 @@ export default function Layout(props: ParentProps) {
                 "hidden xl:block": true,
                 "absolute inset-y-0 left-0": true,
                 "z-10": true,
+                "pointer-events-none": state.sizing,
               }}
               style={{ width: `${side()}px` }}
               ref={(el) => {
@@ -3918,55 +4017,31 @@ export default function Layout(props: ParentProps) {
               </Show>
             </nav>
 
-        <main
-          classList={{
-            "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base": true,
-            "xl:border-l xl:rounded-tl-[12px]": !layout.sidebar.opened(),
-          }}
-        >
-          <Show when={findbar.open && platform.find}>
-            <div class="pointer-events-none absolute top-3 right-3 z-30 w-[min(480px,calc(100%-24px))]">
-              <div class="pointer-events-auto flex flex-row items-center gap-2 rounded-2xl border border-border-weak-base bg-background-stronger/92 px-2 py-2 shadow-lg backdrop-blur-xl">
-                <div class="flex flex-1 min-w-0 flex-row items-center gap-2 rounded-xl bg-surface-panel px-3 ring-1 ring-border-weaker-base/70">
-                  <Icon name="magnifying-glass" size="small" class="shrink-0 text-text-weaker" />
-                  <InlineInput
-                    ref={findInput}
-                    value={findbar.q}
-                    autofocus
-                    placeholder={language.t("common.search.placeholder")}
-                    style={{ "--inline-input-shadow": "none" }}
-                    class="h-10 flex-1 min-w-0 bg-transparent text-14-regular text-text-strong placeholder:text-text-weaker"
-                    onInput={(event) => setFindbar("q", event.currentTarget.value)}
-                    onKeyDown={findbarKeyDown}
-                  />
-                </div>
-                <div class="flex flex-row items-center gap-1 rounded-xl bg-surface-panel px-1.5 py-1 ring-1 ring-border-weaker-base/70">
-                  <IconButton
-                    icon="arrow-left"
-                    variant="ghost"
-                    size="large"
-                    class="rounded-lg text-text-weak hover:text-text-strong"
-                    aria-label={language.t("command.page.find.previous")}
-                    onClick={() => runFindbar(-1)}
-                  />
-                  <IconButton
-                    icon="arrow-right"
-                    variant="ghost"
-                    size="large"
-                    class="rounded-lg text-text-weak hover:text-text-strong"
-                    aria-label={language.t("command.page.find.next")}
-                    onClick={() => runFindbar(1)}
-                  />
-                  <div class="mx-0.5 h-5 w-px bg-border-weaker-base" />
-                  <IconButton
-                    icon="close"
-                    variant="ghost"
-                    size="large"
-                    class="rounded-lg text-text-weak hover:text-text-strong"
-                    aria-label={language.t("common.close")}
-                    onClick={closeFindbar}
-                  />
-                </div>
+            <Show when={layout.sidebar.opened()}>
+              <div
+                class="hidden xl:block absolute inset-y-0 z-30 w-0 overflow-visible"
+                style={{ left: `${dragSide()}px` }}
+                onPointerDown={() => {
+                  setState("sizing", true)
+                  setState("previewSidebarWidth", layout.sidebar.width())
+                }}
+              >
+                <ResizeHandle
+                  direction="horizontal"
+                  size={state.previewSidebarWidth ?? layout.sidebar.width()}
+                  min={244}
+                  max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
+                  onResize={(w) => {
+                    setState("sizing", true)
+                    if (sizet !== undefined) clearTimeout(sizet)
+                    sizet = window.setTimeout(() => setState("sizing", false), 120)
+                    setState("previewSidebarWidth", w)
+                  }}
+                  onResizeEnd={(w) => {
+                    setState("previewSidebarWidth", undefined)
+                    layout.sidebar.resize(w)
+                  }}
+                />
               </div>
             </div>
 

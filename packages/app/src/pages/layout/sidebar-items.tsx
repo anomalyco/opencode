@@ -1,14 +1,12 @@
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import { Avatar } from "@opencode-ai/ui/avatar"
-import { DiffChanges } from "@opencode-ai/ui/diff-changes"
-import { HoverCard } from "@opencode-ai/ui/hover-card"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { getFilename } from "@opencode-ai/core/util/path"
+import { getFilename } from "@opencode-ai/util/path"
 import { A, useParams } from "@solidjs/router"
-import { type Accessor, createMemo, For, type JSX, Match, Show, Switch } from "solid-js"
+import { type Accessor, createMemo, For, type JSX, Match, onCleanup, Show, Switch } from "solid-js"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
@@ -99,12 +97,8 @@ export type SessionItemProps = {
   slug: string
   mobile?: boolean
   dense?: boolean
-  popover?: boolean
+  reduced?: boolean
   sidebarExpanded: Accessor<boolean>
-  sidebarHovering: Accessor<boolean>
-  hoverSession: Accessor<string | undefined>
-  setHoverSession: (id: string | undefined) => void
-  clearHoverProjectSoon: () => void
   prefetchSession: (session: Session, priority?: "high" | "low") => void
   archiveSession: (session: Session) => Promise<void>
   generateSessionTitle: (session: Session) => Promise<void>
@@ -121,23 +115,19 @@ const SessionRow = (props: {
   hasPermissions: Accessor<boolean>
   hasError: Accessor<boolean>
   unseenCount: Accessor<number>
-  clearHoverProjectSoon: () => void
   sidebarOpened: Accessor<boolean>
   warmPress: () => void
   warmFocus: () => void
   cancelHoverPrefetch: () => void
+  reduced?: boolean
 }): JSX.Element => (
   <A
     href={`/${props.slug}/session/${props.session.id}`}
     class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${props.mobile ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
     onPointerDown={props.warmPress}
-    onPointerEnter={props.warmHover}
-    onPointerLeave={props.cancelHoverPrefetch}
     onFocus={props.warmFocus}
     onClick={() => {
-      props.setHoverSession(undefined)
       if (props.sidebarOpened()) return
-      props.clearHoverProjectSoon()
     }}
   >
     <div class="flex items-center gap-1 w-full">
@@ -166,9 +156,10 @@ const SessionRow = (props: {
       </Show>
       <span
         classList={{
-          "text-14-regular grow-1 min-w-0 overflow-hidden text-ellipsis truncate transition-colors": true,
+          "text-14-regular grow-1 min-w-0 overflow-hidden text-ellipsis truncate": true,
+          "transition-colors": !props.reduced,
           "font-medium": !!props.active,
-          "text-text-weak group-hover/session:text-text-strong": !props.active,
+          "text-text-weak group-hover/session:text-text-strong": !props.active && !props.reduced,
         }}
         style={props.active ? { color: "var(--sidebar-session-accent)" } : undefined}
       >
@@ -177,60 +168,6 @@ const SessionRow = (props: {
     </div>
   </A>
 )
-
-const SessionHoverPreview = (props: {
-  mobile?: boolean
-  hoverSession: Accessor<string | undefined>
-  session: Session
-  sidebarHovering: Accessor<boolean>
-  hoverReady: Accessor<boolean>
-  hoverMessages: Accessor<UserMessage[] | undefined>
-  language: ReturnType<typeof useLanguage>
-  isActive: Accessor<boolean>
-  slug: string
-  setHoverSession: (id: string | undefined) => void
-  messageLabel: (message: Message) => string | undefined
-  onMessageSelect: (message: Message) => void
-  trigger: JSX.Element
-}): JSX.Element => {
-  let ref: HTMLDivElement | undefined
-
-  return (
-    <A
-      href={`/${props.slug}/session/${props.session.id}`}
-      class={`flex items-center gap-2 min-w-0 w-full text-left focus:outline-none ${props.dense ? "py-0.5" : "py-1"}`}
-      onPointerDown={props.warmPress}
-      onFocus={props.warmFocus}
-      onClick={() => {
-        if (props.sidebarOpened()) return
-        props.clearHoverProjectSoon()
-      }}
-    >
-      <Show when={props.isWorking() || props.hasPermissions() || props.hasError() || props.unseenCount() > 0}>
-        <div
-          class="shrink-0 size-6 flex items-center justify-center"
-          style={{ color: props.tint() ?? "var(--icon-interactive-base)" }}
-        >
-          <Switch>
-            <Match when={props.isWorking()}>
-              <Spinner class="size-[15px]" />
-            </Match>
-            <Match when={props.hasPermissions()}>
-              <div class="size-1.5 rounded-full bg-surface-warning-strong" />
-            </Match>
-            <Match when={props.hasError()}>
-              <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
-            </Match>
-            <Match when={props.unseenCount() > 0}>
-              <div class="size-1.5 rounded-full bg-text-interactive-base" />
-            </Match>
-          </Switch>
-        </div>
-      </Show>
-      <span class="text-14-regular text-text-strong min-w-0 flex-1 truncate">{title()}</span>
-    </A>
-  )
-}
 
 export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const params = useParams()
@@ -262,12 +199,8 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   })
 
   const hoverAllowed = createMemo(() => !props.mobile && props.sidebarExpanded())
-  const hoverEnabled = createMemo(() => (props.popover ?? true) && hoverAllowed())
-  const hoverMessages = createMemo(() => {
-    if (!hoverEnabled()) return undefined
-    return sessionStore.message[props.session.id]?.filter((message): message is UserMessage => message.role === "user")
-  })
-  const hoverReady = createMemo(() => hoverMessages() !== undefined)
+  const hoverEnabled = createMemo(() => hoverAllowed())
+  const tooltip = createMemo(() => !props.reduced && (props.mobile || !props.sidebarExpanded()))
 
   const warm = (span: number, priority: "high" | "low") => {
     const nav = props.navList?.()
@@ -289,6 +222,24 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
     }
   }
 
+  const hoverPrefetch = {
+    current: undefined as ReturnType<typeof setTimeout> | undefined,
+  }
+  const cancelHoverPrefetch = () => {
+    if (hoverPrefetch.current === undefined) return
+    clearTimeout(hoverPrefetch.current)
+    hoverPrefetch.current = undefined
+  }
+  const scheduleHoverPrefetch = () => {
+    warm(1, "high")
+    if (hoverPrefetch.current !== undefined) return
+    hoverPrefetch.current = setTimeout(() => {
+      hoverPrefetch.current = undefined
+      warm(2, "low")
+    }, 80)
+  }
+
+  onCleanup(cancelHoverPrefetch)
   const item = (
     <SessionRow
       session={props.session}
@@ -301,19 +252,12 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       hasPermissions={hasPermissions}
       hasError={hasError}
       unseenCount={unseenCount}
-      setHoverSession={props.setHoverSession}
-      clearHoverProjectSoon={props.clearHoverProjectSoon}
       sidebarOpened={layout.sidebar.opened}
-      warmHover={() => {
-        if (!hoverEnabled()) return
-        scheduleHoverPrefetch()
-      }}
+      warmHover={() => undefined}
       warmPress={() => warm(2, "high")}
       warmFocus={() => warm(2, "high")}
-      cancelHoverPrefetch={() => {
-        if (!hoverEnabled()) return
-        cancelHoverPrefetch()
-      }}
+      cancelHoverPrefetch={cancelHoverPrefetch}
+      reduced={props.reduced}
     />
   )
 
@@ -323,76 +267,64 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       data-component="sidebar-session"
       data-active={isActive() ? "true" : "false"}
       classList={{
-        "group/session relative flex items-center w-full min-w-0 rounded-[22px] cursor-default transition-[background-color,border-color,box-shadow] pl-2 pr-3 border border-transparent": true,
+        "group/session relative flex items-center w-full min-w-0 rounded-[22px] cursor-default pl-2 pr-3 border border-transparent": true,
+        "transition-[background-color,border-color,box-shadow]": !props.reduced,
       }}
     >
       <div class="min-w-0 grow">
         <Show
-          when={hoverEnabled()}
+          when={!tooltip()}
           fallback={
             <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={10}>
               {item}
             </Tooltip>
           }
         >
-          <SessionHoverPreview
-            mobile={props.mobile}
-            hoverSession={props.hoverSession}
-            session={props.session}
-            sidebarHovering={props.sidebarHovering}
-            hoverReady={hoverReady}
-            hoverMessages={hoverMessages}
-            language={language}
-            isActive={isActive}
-            slug={props.slug}
-            setHoverSession={props.setHoverSession}
-            messageLabel={messageLabel}
-            onMessageSelect={(message) => {
-              if (!isActive()) {
-                layout.pendingMessage.set(`${base64Encode(props.session.directory)}/${props.session.id}`, message.id)
-              }
-              navigate(`${props.slug}/session/${props.session.id}#message-${message.id}`)
-            }}
-            trigger={item}
-          />
+          {item}
         </Show>
       </div>
 
       <div
-        class={`absolute ${props.dense ? "top-0.5 right-0.5" : "top-1 right-1"} flex items-center gap-0.5 transition-opacity`}
+        class="shrink-0 overflow-hidden"
         classList={{
-          "opacity-100 pointer-events-auto": !!props.mobile,
-          "opacity-0 pointer-events-none": !props.mobile,
-          "group-hover/session:opacity-100 group-hover/session:pointer-events-auto": true,
-          "group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto": true,
+          "transition-[width,opacity]": !props.reduced,
+          "w-6 opacity-100 pointer-events-auto": !!props.mobile,
+          "w-0 opacity-0 pointer-events-none": !props.mobile || !!props.reduced,
+          "group-hover/session:w-6 group-hover/session:opacity-100 group-hover/session:pointer-events-auto": !props.reduced,
+          "group-focus-within/session:w-6 group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto":
+            !props.reduced,
         }}
       >
-        <Tooltip value={language.t("session.generateTitle")} placement="top">
-          <IconButton
-            icon="models"
-            variant="ghost"
-            class="size-6 rounded-md"
-            aria-label={language.t("session.generateTitle")}
-            onClick={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              void props.generateSessionTitle(props.session)
-            }}
-          />
-        </Tooltip>
-        <Tooltip value={language.t("common.archive")} placement="top">
-          <IconButton
-            icon="archive"
-            variant="ghost"
-            class="size-6 rounded-md"
-            aria-label={language.t("common.archive")}
-            onClick={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              void props.archiveSession(props.session)
-            }}
-          />
-        </Tooltip>
+        <Show
+          when={!props.reduced}
+          fallback={
+            <IconButton
+              icon="archive"
+              variant="ghost"
+              class="size-6 rounded-md"
+              aria-label={language.t("common.archive")}
+              onClick={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                void props.archiveSession(props.session)
+              }}
+            />
+          }
+        >
+          <Tooltip value={language.t("common.archive")} placement="top">
+            <IconButton
+              icon="archive"
+              variant="ghost"
+              class="size-6 rounded-md"
+              aria-label={language.t("common.archive")}
+              onClick={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                void props.archiveSession(props.session)
+              }}
+            />
+          </Tooltip>
+        </Show>
       </div>
       <Show when={currentChild()} keyed>
         {(child) => (
@@ -409,8 +341,8 @@ export const NewSessionItem = (props: {
   slug: string
   mobile?: boolean
   dense?: boolean
+  reduced?: boolean
   sidebarExpanded: Accessor<boolean>
-  clearHoverProjectSoon: () => void
 }): JSX.Element => {
   const layout = useLayout()
   const language = useLanguage()
@@ -423,14 +355,22 @@ export const NewSessionItem = (props: {
       class={`flex items-center gap-2 min-w-0 w-full text-left focus:outline-none ${props.dense ? "py-0.5" : "py-1"}`}
       onClick={() => {
         if (layout.sidebar.opened()) return
-        props.clearHoverProjectSoon()
       }}
     >
       <div class="flex items-center gap-1 w-full">
         <div class="shrink-0 size-6 flex items-center justify-center">
-          <Icon name="plus" size="small" class="text-icon-weak group-hover/session:text-icon-base" />
+          <Icon
+            name="plus"
+            size="small"
+            classList={{ "text-icon-weak": true, "group-hover/session:text-icon-base": !props.reduced }}
+          />
         </div>
-        <span class="text-14-regular text-text-weak group-hover/session:text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate transition-colors">
+        <span
+          classList={{
+            "text-14-regular text-text-weak grow-1 min-w-0 overflow-hidden text-ellipsis truncate": true,
+            "group-hover/session:text-text-strong transition-colors": !props.reduced,
+          }}
+        >
           {label}
         </span>
       </div>
@@ -439,7 +379,13 @@ export const NewSessionItem = (props: {
   )
 
   return (
-    <div class="group/session relative w-full min-w-0 rounded-lg cursor-default transition-colors pl-2 pr-3 hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover">
+    <div
+      classList={{
+        "group/session relative w-full min-w-0 rounded-lg cursor-default pl-2 pr-3": true,
+        "transition-colors hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover":
+          !props.reduced,
+      }}
+    >
       <Show
         when={!tooltip()}
         fallback={
@@ -477,9 +423,15 @@ export const SessionSearchBar = (props: {
   value: Accessor<string>
   onInput: (value: string) => void
   placeholder: string
+  reduced?: boolean
 }): JSX.Element => (
   <div class="px-3 py-2">
-    <div class="flex items-center gap-2 px-2.5 h-8 rounded-lg border border-transparent transition-colors focus-within:bg-surface-base focus-within:border-border-weak-base">
+    <div
+      classList={{
+        "flex items-center gap-2 px-2.5 h-8 rounded-lg border border-transparent": true,
+        "transition-colors focus-within:bg-surface-base focus-within:border-border-weak-base": !props.reduced,
+      }}
+    >
       <Icon name="magnifying-glass" size="small" class="text-icon-weak shrink-0" />
       <input
         type="text"
