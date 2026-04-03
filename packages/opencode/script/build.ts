@@ -277,7 +277,8 @@ if (Script.release) {
   if (files.length === 0) {
     console.warn("No release archives found in dist; skipping gh release upload")
   } else {
-    await $`gh release upload v${Script.version} ${files} --clobber --repo ${process.env.GH_REPO}`
+    const repo = process.env.GH_REPO ? ["--repo", process.env.GH_REPO] : []
+    await $`gh release upload v${Script.version} ${files} --clobber ${repo}`
   }
 }
 

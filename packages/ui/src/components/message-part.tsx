@@ -2220,7 +2220,7 @@ ToolRegistry.register({
                 const answer = () => answers()[i()] ?? []
                 return (
                   <div data-slot="question-answer-item">
-                    <div data-slot="question-text">{q.question}</div>
+                    <Markdown data-slot="question-text" text={q.question ?? ""} />
                     <div data-slot="answer-text">{answer().join(", ") || i18n.t("ui.question.answer.none")}</div>
                   </div>
                 )
