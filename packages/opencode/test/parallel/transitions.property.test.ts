@@ -32,14 +32,15 @@ const PLAN_STATUSES: PlanStatus[] = [
 ]
 
 const WORKER_STATUSES: WorkerStatus[] = [
-  "pending",
-  "spawning",
-  "running",
-  "stopping",
+  "blocked",
+  "conflict",
   "done",
   "failed",
   "merged",
-  "conflict",
+  "pending",
+  "running",
+  "spawning",
+  "stopping",
 ]
 
 const planStatusArb = fc.oneof(...PLAN_STATUSES.map((s) => fc.constant(s)))
