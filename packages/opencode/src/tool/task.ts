@@ -1,6 +1,7 @@
 import { Tool } from "./tool"
 import DESCRIPTION from "./task.txt"
 import z from "zod"
+import { Effect } from "effect"
 import { Session } from "../session"
 import { SessionID, MessageID } from "../session/schema"
 import { MessageV2 } from "../session/message-v2"
@@ -25,142 +26,156 @@ const parameters = z.object({
   command: z.string().describe("The command that triggered this task").optional(),
 })
 
-export const TaskTool = Tool.define("task", async (ctx) => {
-  const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
+export const TaskTool = Tool.defineEffect(
+  "task",
+  Effect.gen(function* () {
+    const agent = yield* Agent.Service
+    const config = yield* Config.Service
 
-  // Filter agents by permissions if agent provided
-  const caller = ctx?.agent
-  const accessibleAgents = caller
-    ? agents.filter((a) => Permission.evaluate("task", a.name, caller.permission).action !== "deny")
-    : agents
-  const list = accessibleAgents.toSorted((a, b) => a.name.localeCompare(b.name))
+    return async (ctx) => {
+      const agents = await agent.list().pipe(
+        Effect.map((x) => x.filter((a) => a.mode !== "primary")),
+        Effect.runPromise,
+      )
 
-  const description = DESCRIPTION.replace(
-    "{agents}",
-    list
-      .map((a) => `- ${a.name}: ${a.description ?? "This subagent should only be called manually by the user."}`)
-      .join("\n"),
-  )
-  return {
-    description,
-    parameters,
-    async execute(params: z.infer<typeof parameters>, ctx) {
-      const config = await Config.get()
+      const caller = ctx?.agent
+      const accessibleAgents = caller
+        ? agents.filter((a) => Permission.evaluate("task", a.name, caller.permission).action !== "deny")
+        : agents
+      const list = accessibleAgents.toSorted((a, b) => a.name.localeCompare(b.name))
 
-      // Skip permission check when user explicitly invoked via @ or command subtask
-      if (!ctx.extra?.bypassAgentCheck) {
-        await ctx.ask({
-          permission: "task",
-          patterns: [params.subagent_type],
-          always: ["*"],
-          metadata: {
-            description: params.description,
-            subagent_type: params.subagent_type,
-          },
-        })
-      }
-
-      const agent = await Agent.get(params.subagent_type)
-      if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
-
-      const hasTaskPermission = agent.permission.some((rule) => rule.permission === "task")
-      const hasTodoWritePermission = agent.permission.some((rule) => rule.permission === "todowrite")
-
-      const session = await iife(async () => {
-        if (params.task_id) {
-          const found = await Session.get(SessionID.make(params.task_id)).catch(() => {})
-          if (found) return found
-        }
-
-        return await Session.create({
-          parentID: ctx.sessionID,
-          title: params.description + ` (@${agent.name} subagent)`,
-          permission: [
-            ...(hasTodoWritePermission
-              ? []
-              : [
-                  {
-                    permission: "todowrite" as const,
-                    pattern: "*" as const,
-                    action: "deny" as const,
-                  },
-                ]),
-            ...(hasTaskPermission
-              ? []
-              : [
-                  {
-                    permission: "task" as const,
-                    pattern: "*" as const,
-                    action: "deny" as const,
-                  },
-                ]),
-            ...(config.experimental?.primary_tools?.map((t) => ({
-              pattern: "*",
-              action: "allow" as const,
-              permission: t,
-            })) ?? []),
-          ],
-        })
-      })
-      const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
-      if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
-
-      const model = agent.model ?? {
-        modelID: msg.info.modelID,
-        providerID: msg.info.providerID,
-      }
-
-      ctx.metadata({
-        title: params.description,
-        metadata: {
-          sessionId: session.id,
-          model,
-        },
-      })
-
-      const messageID = MessageID.ascending()
-
-      function cancel() {
-        SessionPrompt.cancel(session.id)
-      }
-      ctx.abort.addEventListener("abort", cancel)
-      using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
-      const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
-
-      const result = await SessionPrompt.prompt({
-        messageID,
-        sessionID: session.id,
-        model: {
-          modelID: model.modelID,
-          providerID: model.providerID,
-        },
-        agent: agent.name,
-        tools: {
-          ...(hasTodoWritePermission ? {} : { todowrite: false }),
-          ...(hasTaskPermission ? {} : { task: false }),
-          ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
-        },
-        parts: promptParts,
-      })
-
-      const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
-
-      const output = [
-        `task_id: ${session.id} (for resuming to continue this task if needed)`,
-        "",
-        "<task_result>",
-        text,
-        "</task_result>",
-      ].join("\n")
+      const description = DESCRIPTION.replace(
+        "{agents}",
+        list
+          .map((a) => `- ${a.name}: ${a.description ?? "This subagent should only be called manually by the user."}`)
+          .join("\n"),
+      )
 
       return {
-        title: params.description,
-        metadata: {
-          sessionId: session.id,
-          model,
+        description,
+        parameters,
+        async execute(params: z.infer<typeof parameters>, ctx) {
+          const cfg = await config.get().pipe(Effect.runPromise)
+
+          // Skip permission check when user explicitly invoked via @ or command subtask
+          if (!ctx.extra?.bypassAgentCheck) {
+            await ctx.ask({
+              permission: "task",
+              patterns: [params.subagent_type],
+              always: ["*"],
+              metadata: {
+                description: params.description,
+                subagent_type: params.subagent_type,
+              },
+            })
+          }
+
+          const next = await agent
+            .get(params.subagent_type)
+            .pipe(Effect.runPromise)
+            .catch(() => undefined)
+          if (!next) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
+
+          const hasTaskPermission = next.permission.some((rule) => rule.permission === "task")
+          const hasTodoWritePermission = next.permission.some((rule) => rule.permission === "todowrite")
+
+          const session = await iife(async () => {
+            if (params.task_id) {
+              const found = await Session.get(SessionID.make(params.task_id)).catch(() => {})
+              if (found) return found
+            }
+
+            return await Session.create({
+              parentID: ctx.sessionID,
+              title: params.description + ` (@${next.name} subagent)`,
+              permission: [
+                ...(hasTodoWritePermission
+                  ? []
+                  : [
+                      {
+                        permission: "todowrite" as const,
+                        pattern: "*" as const,
+                        action: "deny" as const,
+                      },
+                    ]),
+                ...(hasTaskPermission
+                  ? []
+                  : [
+                      {
+                        permission: "task" as const,
+                        pattern: "*" as const,
+                        action: "deny" as const,
+                      },
+                    ]),
+                ...(cfg.experimental?.primary_tools?.map((t) => ({
+                  pattern: "*",
+                  action: "allow" as const,
+                  permission: t,
+                })) ?? []),
+              ],
+            })
+          })
+          const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
+          if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
+
+          const model = next.model ?? {
+            modelID: msg.info.modelID,
+            providerID: msg.info.providerID,
+          }
+
+          ctx.metadata({
+            title: params.description,
+            metadata: {
+              sessionId: session.id,
+              model,
+            },
+          })
+
+          const messageID = MessageID.ascending()
+
+          function cancel() {
+            SessionPrompt.cancel(session.id)
+          }
+          ctx.abort.addEventListener("abort", cancel)
+          using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
+          const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
+
+          const result = await SessionPrompt.prompt({
+            messageID,
+            sessionID: session.id,
+            model: {
+              modelID: model.modelID,
+              providerID: model.providerID,
+            },
+            agent: next.name,
+            tools: {
+              ...(hasTodoWritePermission ? {} : { todowrite: false }),
+              ...(hasTaskPermission ? {} : { task: false }),
+              ...Object.fromEntries((cfg.experimental?.primary_tools ?? []).map((t) => [t, false])),
+            },
+            parts: promptParts,
+          })
+
+          const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
+
+          const output = [
+            `task_id: ${session.id} (for resuming to continue this task if needed)`,
+            "",
+            "<task_result>",
+            text,
+            "</task_result>",
+          ].join("\n")
+
+          return {
+            title: params.description,
+            metadata: {
+              sessionId: session.id,
+              model,
+            },
+            output,
+          }
         },
-        output,
       }
-    },
-  }
-})
+    }
+  }),
+)
