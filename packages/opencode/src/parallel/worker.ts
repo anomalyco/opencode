@@ -982,6 +982,18 @@ export namespace WorkerManager {
           const myWave = waveIndex.get(st.id)!
           for (const wave of waveAnalysis.waves) {
             if (wave.index >= myWave) break
+
+            // Check if any task in earlier waves failed - cascade failure to this wave
+            const hasEarlierWaveFailure = wave.subtasks.some((id) => failed.has(id))
+            if (hasEarlierWaveFailure) {
+              // Mark this worker as blocked since an earlier wave had failures
+              blocked.add(st.id)
+              updateWorker(plan.id, st.id, { status: "blocked", error: "Wave dependency failed" }).catch((err) => {
+                log.warn("failed to mark worker as blocked due to wave failure", { subtaskID: st.id, error: err })
+              })
+              return false
+            }
+
             // All subtasks in earlier waves must be completed or failed
             const allDone = wave.subtasks.every((id) => completed.has(id) || failed.has(id))
             if (!allDone) return false
