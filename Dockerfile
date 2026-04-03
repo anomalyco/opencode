@@ -24,7 +24,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 RUN adduser -D -u 1000 -h /home/jovyan jovyan
 ENV OPENCODE_CONFIG_DIR=/etc/opencode HOME=/home/jovyan
-WORKDIR /home/jovyan
+WORKDIR /home/jovyan/project
 
 COPY --from=build /app/packages/opencode/dist/opencode-linux-x64/bin/opencode /usr/local/bin/opencode
 COPY docker/AGENTS.md /etc/opencode/AGENTS.md
