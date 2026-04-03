@@ -93,10 +93,11 @@ export function ModelSelectorPopover(props: {
   children?: JSX.Element
   triggerAs?: ValidComponent
   triggerProps?: ModelSelectorTriggerProps
+  onClose?: (cause: "escape" | "select") => void
 }) {
   const [store, setStore] = createStore<{
     open: boolean
-    dismiss: "escape" | "outside" | null
+    dismiss: "escape" | "outside" | "select" | "manage" | "provider" | null
   }>({
     open: false,
     dismiss: null,
@@ -104,6 +105,7 @@ export function ModelSelectorPopover(props: {
   const dialog = useDialog()
 
   const handleManage = () => {
+    setStore("dismiss", "manage")
     setStore("open", false)
     void import("./dialog-manage-models").then((x) => {
       dialog.show(() => <x.DialogManageModels />)
@@ -111,6 +113,7 @@ export function ModelSelectorPopover(props: {
   }
 
   const handleConnectProvider = () => {
+    setStore("dismiss", "provider")
     setStore("open", false)
     void import("./dialog-select-provider").then((x) => {
       dialog.show(() => <x.DialogSelectProvider />)
@@ -151,6 +154,10 @@ export function ModelSelectorPopover(props: {
           }}
           onCloseAutoFocus={(event) => {
             if (store.dismiss === "outside") event.preventDefault()
+            if (store.dismiss === "escape" || store.dismiss === "select") {
+              event.preventDefault()
+              props.onClose?.(store.dismiss)
+            }
             setStore("dismiss", null)
           }}
         >
@@ -158,7 +165,10 @@ export function ModelSelectorPopover(props: {
           <ModelList
             provider={props.provider}
             model={props.model}
-            onSelect={() => setStore("open", false)}
+            onSelect={() => {
+              setStore("dismiss", "select")
+              setStore("open", false)
+            }}
             class="p-1"
             action={
               <div class="flex items-center gap-1">

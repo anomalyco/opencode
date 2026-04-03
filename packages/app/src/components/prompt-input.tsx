@@ -502,6 +502,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return getCursorPosition(editorRef)
   }
 
+  const restoreFocus = () => {
+    requestAnimationFrame(() => {
+      const cursor = prompt.cursor() ?? promptLength(prompt.current())
+      editorRef.focus()
+      setCursorPosition(editorRef, cursor)
+      queueScroll()
+    })
+  }
+
   const renderEditorWithCursor = (parts: Prompt) => {
     const cursor = currentCursor()
     renderEditor(parts)
@@ -1471,7 +1480,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       size="normal"
                       options={agentNames()}
                       current={local.agent.current()?.name ?? ""}
-                      onSelect={local.agent.set}
+                      onSelect={(value) => {
+                        local.agent.set(value)
+                        restoreFocus()
+                      }}
                       class="capitalize max-w-[160px] text-text-base"
                       valueClass="truncate text-13-regular text-text-base"
                       triggerStyle={control()}
@@ -1534,6 +1546,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           class: "min-w-0 max-w-[320px] text-13-regular text-text-base group",
                           "data-action": "prompt-model",
                         }}
+                        onClose={restoreFocus}
                       >
                         <Show when={local.model.current()?.provider?.id}>
                           <ProviderIcon
@@ -1562,7 +1575,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       options={variants()}
                       current={local.model.variant.current() ?? "default"}
                       label={(x) => (x === "default" ? language.t("common.default") : x)}
-                      onSelect={(x) => local.model.variant.set(x === "default" ? undefined : x)}
+                      onSelect={(value) => {
+                        local.model.variant.set(value === "default" ? undefined : value)
+                        restoreFocus()
+                      }}
                       class="capitalize max-w-[160px] text-text-base"
                       valueClass="truncate text-13-regular text-text-base"
                       triggerStyle={control()}
