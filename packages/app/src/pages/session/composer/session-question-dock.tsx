@@ -54,6 +54,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
 
   let root: HTMLDivElement | undefined
   let replied = false
+  let max = ""
 
   const question = createMemo(() => questions()[store.tab])
   const options = createMemo(() => question()?.options ?? [])
@@ -100,6 +101,8 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     const top =
       head instanceof HTMLElement && head.classList.contains("sticky") ? head.getBoundingClientRect().bottom : 0
     if (!top) {
+      if (!max) return
+      max = ""
       root.style.removeProperty("--question-prompt-max-height")
       return
     }
@@ -110,8 +113,10 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     const dockBottom = dock.getBoundingClientRect().bottom
     const below = Math.max(0, dockBottom - root.getBoundingClientRect().bottom)
     const gap = 8
-    const max = Math.max(240, Math.floor(dockBottom - top - gap - below))
-    root.style.setProperty("--question-prompt-max-height", `${max}px`)
+    const next = `${Math.max(240, Math.floor(dockBottom - top - gap - below))}px`
+    if (next === max) return
+    max = next
+    root.style.setProperty("--question-prompt-max-height", next)
   }
 
   onMount(() => {
