@@ -10,6 +10,8 @@ import { useDialog, type DialogContext } from "@tui/ui/dialog"
 import { useKeybind } from "@tui/context/keybind"
 import { Keybind } from "@/util/keybind"
 import { Locale } from "@/util/locale"
+import { getScrollAcceleration } from "../util/scroll"
+import { useTuiConfig } from "../context/tui-config"
 
 export interface DialogSelectProps<T> {
   title: string
@@ -50,6 +52,9 @@ export type DialogSelectRef<T> = {
 export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const dialog = useDialog()
   const { theme } = useTheme()
+  const tuiConfig = useTuiConfig()
+  const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
+
   const [store, setStore] = createStore({
     selected: 0,
     filter: "",
@@ -253,6 +258,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             focusedTextColor={theme.textMuted}
             ref={(r) => {
               input = r
+              input.traits = { status: "FILTER" }
               setTimeout(() => {
                 if (!input) return
                 if (input.isDestroyed) return
@@ -276,6 +282,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           paddingLeft={1}
           paddingRight={1}
           scrollbarOptions={{ visible: false }}
+          scrollAcceleration={scrollAcceleration()}
           ref={(r: ScrollBoxRenderable) => (scroll = r)}
           maxHeight={height()}
         >
