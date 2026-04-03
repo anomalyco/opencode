@@ -285,7 +285,6 @@ export namespace Server {
     }
     url = new URL(`http://${opts.hostname}:${opts.port}`)
     const controlPlane = ControlPlaneRoutes({ cors: opts.cors })
-    const mounted = basePath !== "/" ? new Hono().route(basePath, controlPlane) : null
     const args = {
       hostname: opts.hostname,
       idleTimeout: 0,
@@ -293,11 +292,17 @@ export namespace Server {
         if (basePath !== "/") {
           const url = new URL(req.url)
           if (url.pathname.startsWith(basePath)) {
-            if (req.headers.get("upgrade")?.toLowerCase() === "websocket") {
-              return mounted!.fetch(req, server)
-            }
+            const original = req
             url.pathname = url.pathname.slice(basePath.length) || "/"
             req = new Request(url.toString(), req)
+            if (original.headers.get("upgrade")) {
+              // Bun's server.upgrade() requires the original Request to access
+              // the internal request_context for the underlying TCP socket.
+              // new Request() does not copy this field (oven-sh/bun#11382).
+              const upgrade = server.upgrade.bind(server)
+              server = Object.create(server)
+              server.upgrade = (_: Request, opts?: any) => upgrade(original, opts)
+            }
           }
         }
         return controlPlane.fetch(req, server)
