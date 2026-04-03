@@ -956,7 +956,9 @@ export namespace WorkerManager {
         const hasFailedDependency = Array.from(deps).some((dep) => failed.has(dep))
         if (hasFailedDependency) {
           // Mark this worker as blocked since a dependency failed
-          updateWorker(plan.id, st.id, { status: "blocked" }).catch(() => {})
+          updateWorker(plan.id, st.id, { status: "blocked" }).catch((err) => {
+            log.warn("failed to mark worker as blocked", { subtaskID: st.id, error: err })
+          })
           return false
         }
 
@@ -1001,7 +1003,7 @@ export namespace WorkerManager {
 
     // Preserve terminal state so paused plans can resume from completed waves.
     const initialWorkers = plan.workers.map((w) =>
-      ["done", "merged", "failed", "conflict"].includes(w.status) ? w : { ...w, status: "pending" as const },
+      ["done", "merged", "failed", "conflict", "blocked"].includes(w.status) ? w : { ...w, status: "pending" as const },
     )
     await PlanStore.update({ id: plan.id, workers: initialWorkers })
 

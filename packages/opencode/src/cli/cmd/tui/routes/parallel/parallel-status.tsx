@@ -501,7 +501,7 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
 
   const running = () => props.plan.workers.filter((worker) => worker.status === "running").length
   const done = () => props.plan.workers.filter((worker) => worker.status === "done" || worker.status === "merged").length
-  const failed = () => props.plan.workers.filter((worker) => worker.status === "failed" || worker.status === "conflict").length
+  const failed = () => props.plan.workers.filter((worker) => worker.status === "failed" || worker.status === "conflict" || worker.status === "blocked").length
   const total = () => props.plan.workers.length
   const width = () => Math.min(120, dim().width - 2)
   const height = () => Math.max(12, dim().height - 4)
@@ -584,7 +584,7 @@ export function ParallelStatus(props: { plan: Plan; onCancelled?: () => void; on
       .filter((item) => {
         const mode = view()
         if (mode === "all") return true
-        if (mode === "failed") return item.worker.status === "failed" || item.worker.status === "conflict"
+        if (mode === "failed") return item.worker.status === "failed" || item.worker.status === "conflict" || item.worker.status === "blocked"
         if (mode === "done") return item.worker.status === "done" || item.worker.status === "merged"
         return item.worker.status !== "done" && item.worker.status !== "merged"
       })

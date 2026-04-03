@@ -41,6 +41,7 @@ export function statusRank(status: WorkerState["status"]) {
       return 1
     case "failed":
     case "conflict":
+    case "blocked":
       return 2
     case "pending":
       return 3
@@ -74,6 +75,8 @@ export function statusIcon(status: WorkerState["status"]) {
     case "failed":
     case "conflict":
       return "✗"
+    case "blocked":
+      return "⊘"
     default:
       return "○"
   }
