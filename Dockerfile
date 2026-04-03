@@ -29,6 +29,7 @@ WORKDIR /home/jovyan/project
 COPY --from=build /app/packages/opencode/dist/opencode-linux-x64/bin/opencode /usr/local/bin/opencode
 COPY docker/AGENTS.md /etc/opencode/AGENTS.md
 COPY docker/.gitignore /etc/opencode/.gitignore
+COPY docker/opencode.jsonc /etc/opencode/opencode.jsonc
 
 EXPOSE 8888
 
