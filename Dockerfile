@@ -16,15 +16,20 @@ ARG PYTHON_VERSION=3.11.2-1+b1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git ca-certificates python3=${PYTHON_VERSION} \
-    && rm -rf /var/lib/apt/lists/*
+    curl wget procps jq make zip unzip less \
+    && rm -rf /var/lib/apt/lists/* \
+    && git config --system core.excludesFile /etc/opencode/.gitignore
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+
+RUN adduser -D -u 1000 -h /home/jovyan jovyan
+ENV OPENCODE_CONFIG_DIR=/etc/opencode HOME=/home/jovyan
+WORKDIR /home/jovyan/project
 
 COPY --from=build /app/packages/opencode/dist/opencode-linux-x64/bin/opencode /usr/local/bin/opencode
 COPY docker/AGENTS.md /etc/opencode/AGENTS.md
-ENV OPENCODE_CONFIG_DIR=/etc/opencode
-
-RUN adduser -D -u 1000 -h /home/jovyan jovyan
-ENV HOME=/home/jovyan
-WORKDIR /home/jovyan
+COPY docker/.gitignore /etc/opencode/.gitignore
+COPY docker/opencode.jsonc /etc/opencode/opencode.jsonc
 
 EXPOSE 8888
 
