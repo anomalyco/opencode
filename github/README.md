@@ -88,7 +88,7 @@ This will walk you through installing the GitHub app, creating the workflow, and
               persist-credentials: false
 
           - name: Run opencode
-           uses: f5xc-salesdemos/opencode/github@latest
+           uses: f5xc-salesdemos/xcsh/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
              GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -101,7 +101,7 @@ This will walk you through installing the GitHub app, creating the workflow, and
 
 ## Support
 
-This is an early release. If you encounter issues or have feedback, please create an issue at https://github.com/f5xc-salesdemos/opencode/issues.
+This is an early release. If you encounter issues or have feedback, please create an issue at https://github.com/f5xc-salesdemos/xcsh/issues.
 
 ## Development
 

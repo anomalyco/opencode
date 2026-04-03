@@ -2,7 +2,7 @@
 
 ## Sources
 
-- PR #10086: https://github.com/f5xc-salesdemos/opencode/pull/10086
+- PR #10086: https://github.com/f5xc-salesdemos/xcsh/pull/10086
 
 ## Do Not Translate (Locale Additions)
 

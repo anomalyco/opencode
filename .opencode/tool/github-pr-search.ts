@@ -24,7 +24,7 @@ interface PR {
 export default tool({
   description: `Use this tool to search GitHub pull requests by title and description.
 
-This tool searches PRs in the f5xc-salesdemos/opencode repository and returns LLM-friendly results including:
+This tool searches PRs in the f5xc-salesdemos/xcsh repository and returns LLM-friendly results including:
 - PR number and title
 - Author
 - State (open/closed/merged)
