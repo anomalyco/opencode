@@ -1,0 +1,31 @@
+{
+  "name": "@opencode-ai/openagent",
+  "version": "1.3.13",
+  "type": "module",
+  "license": "MIT",
+  "description": "Meta-orchestrator agent that controls OpenCode sessions to handle complex, multi-step coding tasks",
+  "scripts": {
+    "dev": "bun run src/cli.ts serve",
+    "serve": "bun run src/cli.ts serve",
+    "typecheck": "tsgo --noEmit"
+  },
+  "bin": {
+    "openagent": "./src/cli.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@opencode-ai/sdk": "workspace:*",
+    "ai": "catalog:",
+    "@ai-sdk/anthropic": "^3.0.64",
+    "hono": "catalog:",
+    "zod": "catalog:",
+    "remeda": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}
