@@ -286,6 +286,7 @@ export namespace MCP {
               clientId: oauthConfig?.clientId,
               clientSecret: oauthConfig?.clientSecret,
               scope: oauthConfig?.scope,
+              redirectUri: oauthConfig?.redirectUri,
             },
             {
               onRedirect: async (url) => {
@@ -731,6 +732,7 @@ export namespace MCP {
             clientId: oauthConfig?.clientId,
             clientSecret: oauthConfig?.clientSecret,
             scope: oauthConfig?.scope,
+            redirectUri: oauthConfig?.redirectUri,
           },
           {
             onRedirect: async (url) => {

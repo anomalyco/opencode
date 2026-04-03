@@ -398,6 +398,12 @@ export namespace Config {
         .describe("OAuth client ID. If not provided, dynamic client registration (RFC 7591) will be attempted."),
       clientSecret: z.string().optional().describe("OAuth client secret (if required by the authorization server)"),
       scope: z.string().optional().describe("OAuth scopes to request during authorization"),
+      redirectUri: z
+        .string()
+        .optional()
+        .describe(
+          "Custom OAuth redirect URI. If not provided, defaults to a local callback server. Use this when the OAuth provider requires a specific redirect URI (e.g. a token exchange proxy).",
+        ),
     })
     .strict()
     .meta({

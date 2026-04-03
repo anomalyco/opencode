@@ -17,6 +17,7 @@ export interface McpOAuthConfig {
   clientId?: string
   clientSecret?: string
   scope?: string
+  redirectUri?: string
 }
 
 export interface McpOAuthCallbacks {
@@ -32,6 +33,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
   ) {}
 
   get redirectUrl(): string {
+    if (this.config.redirectUri) return this.config.redirectUri
     return `http://127.0.0.1:${OAUTH_CALLBACK_PORT}${OAUTH_CALLBACK_PATH}`
   }
 
