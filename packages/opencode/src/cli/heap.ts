@@ -11,6 +11,7 @@ const LIMIT = 2 * 1024 * 1024 * 1024
 export namespace Heap {
   let timer: Timer | undefined
   let lock = false
+  let armed = true
 
   export function start() {
     if (!Flag.OPENCODE_AUTO_HEAP_SNAPSHOT) return
@@ -20,9 +21,14 @@ export namespace Heap {
       if (lock) return
 
       const stat = process.memoryUsage()
-      if (stat.rss <= LIMIT) return
+      if (stat.rss <= LIMIT) {
+        armed = true
+        return
+      }
+      if (!armed) return
 
       lock = true
+      armed = false
       const file = path.join(
         Global.Path.log,
         `heap-${process.pid}-${new Date().toISOString().replace(/[:.]/g, "")}.heapsnapshot`,
@@ -56,5 +62,6 @@ export namespace Heap {
     clearInterval(timer)
     timer = undefined
     lock = false
+    armed = true
   }
 }
