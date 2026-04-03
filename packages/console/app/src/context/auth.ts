@@ -41,7 +41,8 @@ export const getActor = async (workspace?: string): Promise<Actor.Info> => {
   "use server"
   const evt = getRequestEvent()
   if (!evt) throw new Error("No request event")
-  if (evt.locals.actor) return evt.locals.actor
+  const actor = evt.locals.actor
+  if (actor) return actor
   evt.locals.actor = (async () => {
     const auth = await useAuthSession()
     if (!workspace) {
@@ -92,7 +93,7 @@ export const getActor = async (workspace?: string): Promise<Actor.Info> => {
           .execute()
           .then((x) => x[0]),
       )
-      if (user) {
+      if (user?.accountID) {
         await Database.use((tx) =>
           tx
             .update(UserTable)

@@ -1,5 +1,5 @@
 import { redirect } from "@solidjs/router"
-import { APIEvent } from "@solidjs/start"
+import type { APIEvent } from "@solidjs/start/server"
 import { useAuthSession } from "~/context/auth"
 
 export async function GET(event: APIEvent) {
