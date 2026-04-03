@@ -331,23 +331,21 @@ export default function Page() {
 
   createEffect(() => {
     if (!prompt.ready()) return
-    untrack(() => {
-      const text = searchParams.prompt
-      if (!text) return
-      const current = prompt.current()
-      const textPart = current.find((p): p is TextPart => p.type === "text")
-      if (textPart) {
-        const next = current.map((p) =>
-          p === textPart
-            ? { ...p, content: p.content + (p.content ? "\n" : "") + text, end: p.content.length + text.length }
-            : p,
-        )
-        prompt.set(next, textPart.start + textPart.content.length + text.length)
-      } else {
-        prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
-      }
-      setSearchParams({ ...searchParams, prompt: undefined })
-    })
+    const text = searchParams.prompt
+    if (!text) return
+    const current = prompt.current()
+    const textPart = current.find((p): p is TextPart => p.type === "text")
+    if (textPart) {
+      const next = current.map((p) =>
+        p === textPart
+          ? { ...p, content: p.content + (p.content ? "\n" : "") + text, end: p.content.length + text.length }
+          : p,
+      )
+      prompt.set(next, textPart.start + textPart.content.length + text.length)
+    } else {
+      prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
+    }
+    setSearchParams({ ...searchParams, prompt: undefined })
   })
 
   const [ui, setUi] = createStore({
