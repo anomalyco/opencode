@@ -32,6 +32,21 @@ async function rejectSidekick(sessionID: SessionID) {
     throw new HTTPException(422, { message: "Sidekick sessions cannot be prompted through generic routes. Use the /sidekick endpoint instead." })
 }
 
+const SIDEKICK_CLIENT_ERRORS = [
+  "Cannot create a sidekick of a sidekick session",
+  "Cannot build sidekick context from a sidekick session",
+  "Cannot reset a sidekick of a sidekick session",
+  "Cannot inject into a sidekick session",
+  "Parent session belongs to a different project",
+]
+
+function rethrowSidekickErrors(err: unknown): never {
+  if (err instanceof HTTPException) throw err
+  if (err instanceof Error && SIDEKICK_CLIENT_ERRORS.some((msg) => err.message === msg))
+    throw new HTTPException(422, { message: err.message })
+  throw err
+}
+
 export const SessionRoutes = lazy(() =>
   new Hono()
     .get(
@@ -1043,8 +1058,12 @@ export const SessionRoutes = lazy(() =>
         }),
       ),
       async (c) => {
-        const session = await Sidekick.ensure(c.req.valid("param").sessionID)
-        return c.json(session)
+        try {
+          const session = await Sidekick.ensure(c.req.valid("param").sessionID)
+          return c.json(session)
+        } catch (err) {
+          rethrowSidekickErrors(err)
+        }
       },
     )
     .post(
@@ -1082,18 +1101,22 @@ export const SessionRoutes = lazy(() =>
         c.status(204)
         c.header("Content-Type", "application/json")
         return stream(c, async () => {
-          const parentID = c.req.valid("param").sessionID
-          const body = c.req.valid("json")
-          // Resolve the sidekick session ID before firing the async prompt
-          // so errors are attributed to the sidekick, not the parent
-          const sidekick = await Sidekick.ensure(parentID)
-          Sidekick.prompt({ parentID, text: body.text, model: body.model }).catch((err) => {
-            log.error("sidekick prompt failed", { sessionID: sidekick.id, error: err })
-            Bus.publish(Session.Event.Error, {
-              sessionID: sidekick.id,
-              error: new NamedError.Unknown({ message: err instanceof Error ? err.message : String(err) }).toObject(),
+          try {
+            const parentID = c.req.valid("param").sessionID
+            const body = c.req.valid("json")
+            // Resolve the sidekick session ID before firing the async prompt
+            // so errors are attributed to the sidekick, not the parent
+            const sidekick = await Sidekick.ensure(parentID)
+            Sidekick.prompt({ parentID, text: body.text, model: body.model }).catch((err) => {
+              log.error("sidekick prompt failed", { sessionID: sidekick.id, error: err })
+              Bus.publish(Session.Event.Error, {
+                sessionID: sidekick.id,
+                error: new NamedError.Unknown({ message: err instanceof Error ? err.message : String(err) }).toObject(),
+              })
             })
-          })
+          } catch (err) {
+            rethrowSidekickErrors(err)
+          }
         })
       },
     )
@@ -1123,9 +1146,13 @@ export const SessionRoutes = lazy(() =>
         }),
       ),
       async (c) => {
-        const parentID = c.req.valid("param").sessionID
-        const deleted = await Sidekick.reset(parentID)
-        return c.json(deleted)
+        try {
+          const parentID = c.req.valid("param").sessionID
+          const deleted = await Sidekick.reset(parentID)
+          return c.json(deleted)
+        } catch (err) {
+          rethrowSidekickErrors(err)
+        }
       },
     )
     .post(
@@ -1159,9 +1186,13 @@ export const SessionRoutes = lazy(() =>
         }),
       ),
       async (c) => {
-        const parentID = c.req.valid("param").sessionID
-        const msg = await Sidekick.inject({ parentID, text: c.req.valid("json").text })
-        return c.json(msg)
+        try {
+          const parentID = c.req.valid("param").sessionID
+          const msg = await Sidekick.inject({ parentID, text: c.req.valid("json").text })
+          return c.json(msg)
+        } catch (err) {
+          rethrowSidekickErrors(err)
+        }
       },
     )
     .post(
