@@ -30,6 +30,7 @@ export namespace Skill {
     description: z.string(),
     location: z.string(),
     content: z.string(),
+    model: z.string().optional(),
   })
   export type Info = z.infer<typeof Info>
 
@@ -83,7 +84,7 @@ export namespace Skill {
 
     if (!md) return
 
-    const parsed = Info.pick({ name: true, description: true }).safeParse(md.data)
+    const parsed = Info.pick({ name: true, description: true, model: true }).safeParse(md.data)
     if (!parsed.success) return
 
     if (state.skills[parsed.data.name]) {
@@ -100,6 +101,7 @@ export namespace Skill {
       description: parsed.data.description,
       location: match,
       content: md.content,
+      model: parsed.data.model,
     }
   })
 

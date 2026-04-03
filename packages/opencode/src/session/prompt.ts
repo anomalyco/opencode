@@ -1377,7 +1377,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 history: msgs,
               }).pipe(Effect.ignore, Effect.forkIn(scope))
 
-            const model = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
+            const baseModel = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
+            const resolved = yield* plugin.trigger("chat.model.resolve", { sessionID, model: baseModel }, { model: undefined as any })
+            const model = (resolved.model as typeof baseModel) ?? baseModel
             const task = tasks.pop()
 
             if (task?.type === "subtask") {
