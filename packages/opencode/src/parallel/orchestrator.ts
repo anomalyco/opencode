@@ -58,7 +58,7 @@ export namespace Orchestrator {
   }
 
   function unresolved(workers: Plan["workers"]) {
-    return workers.filter((worker) => !["done", "merged", "failed", "conflict"].includes(worker.status))
+    return workers.filter((worker) => !["done", "merged", "failed", "conflict", "blocked"].includes(worker.status))
   }
 
   function inflight(workers: Plan["workers"]) {

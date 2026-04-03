@@ -265,4 +265,34 @@ describe("tool.parallel_plan", () => {
       models.mockRestore()
     }
   })
+
+  test("orchestrator continues when workers are blocked, not stuck", () => {
+    // Test that resolveDirectOutcome treats blocked workers as terminal
+    // Blocked workers are intentionally not running (dependency failed), not stuck
+    // They should be excluded from the unresolved count
+
+    const mockWorker = (status: string, id: string) => ({
+      id,
+      subtaskID: id as any,
+      status: status as any,
+      branch: "main",
+      worktreePath: "/tmp",
+      spawnedAt: Date.now(),
+    })
+
+    // Scenario: 1 worker done, 1 worker blocked
+    // This should be partial_success, not failed
+    // Because blocked workers are terminal (dependency failed, cannot proceed)
+    const result = Orchestrator.resolveDirectOutcome([
+      mockWorker("done", "task1"),
+      mockWorker("blocked", "task2"),
+    ])
+
+    // Key assertion: blocked workers should NOT count as unresolved
+    // Currently this will FAIL because unresolved() doesn't exclude "blocked"
+    expect(result.unresolved).toBe(0)
+    expect(result.status).toBe("partial_success")
+    expect(result.done).toBe(1)
+    expect(result.failed).toBe(0) // blocked is NOT a failure, it's a dependency issue
+  })
 })
