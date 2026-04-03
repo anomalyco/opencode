@@ -259,6 +259,7 @@ When constructing the summary, try to stick to this template:
             agent,
             sessionID: input.sessionID,
             tools: {},
+            toolChoice: "none",
             system: [],
             messages: [
               ...modelMessages,
