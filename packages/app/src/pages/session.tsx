@@ -35,7 +35,7 @@ import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
-import { usePrompt } from "@/context/prompt"
+import { usePrompt, type TextPart } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
@@ -334,7 +334,18 @@ export default function Page() {
     untrack(() => {
       const text = searchParams.prompt
       if (!text) return
-      prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
+      const current = prompt.current()
+      const textPart = current.find((p): p is TextPart => p.type === "text")
+      if (textPart) {
+        const next = current.map((p) =>
+          p === textPart
+            ? { ...p, content: p.content + (p.content ? "\n" : "") + text, end: p.content.length + text.length }
+            : p,
+        )
+        prompt.set(next, textPart.start + textPart.content.length + text.length)
+      } else {
+        prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
+      }
       setSearchParams({ ...searchParams, prompt: undefined })
     })
   })
