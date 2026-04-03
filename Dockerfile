@@ -5,10 +5,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY package.json bun.lock bunfig.toml ./
-COPY packages/opencode/package.json packages/opencode/
-RUN bun install --frozen-lockfile --ignore-scripts
 COPY . .
+RUN bun install --frozen-lockfile --ignore-scripts
 ENV OPENCODE_CHANNEL=latest OPENCODE_VERSION=0.0.0-enk
 RUN cd packages/opencode && bun run build --single
 
