@@ -8,7 +8,6 @@ import { Instance } from "../../project/instance"
 import { Project } from "../../project/project"
 import { MCP } from "../../mcp"
 import { Session } from "../../session"
-import { zodToJsonSchema } from "zod-to-json-schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { WorkspaceRoutes } from "./workspace"
@@ -83,8 +82,11 @@ export const ExperimentalRoutes = lazy(() =>
           tools.map((t) => ({
             id: t.id,
             description: t.description,
-            // Handle both Zod schemas and plain JSON schemas
-            parameters: (t.parameters as any)?._def ? zodToJsonSchema(t.parameters as any) : t.parameters,
+            // Convert Zod schemas to JSON Schema via Zod v4 built-in.
+            // The previous zodToJsonSchema (zod-to-json-schema@3.x) is incompatible with Zod v4.
+            parameters: typeof (t.parameters as any)?.parse === "function"
+              ? z.toJSONSchema(t.parameters as any)
+              : t.parameters,
           })),
         )
       },
