@@ -211,6 +211,7 @@ export function BasicTool(props: BasicToolProps) {
   )
 }
 
+<<<<<<< HEAD
 function label(input: Record<string, unknown> | undefined) {
   const keys = ["description", "query", "url", "filePath", "path", "pattern", "name"]
   return keys.map((key) => input?.[key]).find((value): value is string => typeof value === "string" && value.length > 0)
@@ -237,6 +238,41 @@ export function GenericTool(props: {
   input?: Record<string, unknown>
 }) {
   const i18n = useI18n()
+  output?: string
+}) {
+  const i18n = useI18n()
+
+  const format = (value: unknown) => {
+    if (value === undefined) return ""
+    if (value === null) return "null"
+    if (typeof value === "string") return value
+    if (typeof value === "number" || typeof value === "boolean") return String(value)
+    if (typeof value === "object") {
+      if (Array.isArray(value) && value.length === 0) return ""
+      if (!Array.isArray(value) && Object.keys(value as Record<string, unknown>).length === 0) return ""
+    }
+
+    try {
+      return JSON.stringify(
+        value,
+        (_key, next) => (typeof next === "bigint" ? next.toString() : next),
+        2,
+      )
+    } catch {
+      return String(value)
+    }
+  }
+
+  const text = () => {
+    const ins = format(props.input)
+    const out = typeof props.output === "string" ? props.output : ""
+    const blocks: string[] = []
+    if (ins) blocks.push(`INPUT\n${ins}`)
+    if (out) blocks.push(`OUTPUT\n${out}`)
+    return blocks.join("\n\n")
+  }
+
+  const hasDetails = () => !!text()
 
   return (
     <BasicTool
@@ -247,7 +283,15 @@ export function GenericTool(props: {
         subtitle: label(props.input),
         args: args(props.input),
       }}
-      hideDetails={props.hideDetails}
-    />
+      hideDetails={props.hideDetails || !hasDetails()}
+    >
+      <Show when={hasDetails()}>
+        <div data-component="tool-output" data-scrollable>
+          <pre>
+            <code>{text()}</code>
+          </pre>
+        </div>
+      </Show>
+    </BasicTool>
   )
 }
