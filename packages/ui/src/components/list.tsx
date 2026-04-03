@@ -1,6 +1,7 @@
 import { type FilteredListProps, useFilteredList } from "@opencode-ai/ui/hooks"
-import { createEffect, For, onCleanup, type JSX, on, Show } from "solid-js"
+import { createEffect, For, type JSX, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { useI18n } from "../context/i18n"
 import { Icon, type IconProps } from "./icon"
 import { IconButton } from "./icon-button"
@@ -228,9 +229,8 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
         setState("stuck", rect.top <= scrollRect.top + 1 && scroll.scrollTop > 0)
       }
 
-      scroll.addEventListener("scroll", handler, { passive: true })
+      makeEventListener(scroll, "scroll", handler, { passive: true })
       handler()
-      onCleanup(() => scroll.removeEventListener("scroll", handler))
     })
 
     return (
