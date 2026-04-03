@@ -151,6 +151,7 @@ export async function exportDiagnosticsBundle(planID: PlanID): Promise<Diagnosti
     stopping: 0,
     done: 0,
     failed: 0,
+    blocked: 0,
     merged: 0,
     conflict: 0,
   }

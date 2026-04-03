@@ -822,8 +822,6 @@ export namespace Orchestrator {
             workers: runningWorkers.map((w) => ({
               subtaskID: w.subtaskID,
               status: w.status,
-              startedAt: w.startedAt,
-              duration: w.startedAt ? Date.now() - w.startedAt.getTime() : null,
               error: w.error?.substring(0, 200)
             })),
             whyActive: "still executing task code"
@@ -832,8 +830,7 @@ export namespace Orchestrator {
             count: spawningWorkers.length,
             workers: spawningWorkers.map((w) => ({
               subtaskID: w.subtaskID,
-              status: w.status,
-              startedAt: w.startedAt
+              status: w.status
             })),
             whyActive: "initialization/startup in progress"
           },
