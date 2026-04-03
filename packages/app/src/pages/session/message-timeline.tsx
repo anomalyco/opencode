@@ -697,6 +697,7 @@ export function MessageTimeline(props: {
                             onInput={(event) => setTitle("draft", event.currentTarget.value)}
                             onKeyDown={(event) => {
                               event.stopPropagation()
+                              if (event.isComposing) return
                               if (event.key === "Enter") {
                                 event.preventDefault()
                                 void saveTitleEditor()

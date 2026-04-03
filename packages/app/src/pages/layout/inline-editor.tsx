@@ -28,6 +28,7 @@ export function createInlineEditorController() {
   }
 
   const editorKeyDown = (event: KeyboardEvent, callback: (next: string) => void) => {
+    if (event.isComposing) return
     if (event.key === "Enter") {
       event.preventDefault()
       saveEditor(callback)

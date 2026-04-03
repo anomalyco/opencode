@@ -78,6 +78,7 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
   }
 
   const keydown = (e: KeyboardEvent) => {
+    if (e.isComposing) return
     if (e.key === "Enter") {
       e.preventDefault()
       save()

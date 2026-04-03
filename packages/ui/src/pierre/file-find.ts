@@ -472,6 +472,7 @@ export function createFileFind(opts: CreateFileFindOptions) {
       target = host
     },
     onInputKeyDown: (event: KeyboardEvent) => {
+      if (event.isComposing) return
       if (event.key === "Escape") {
         event.preventDefault()
         close()
