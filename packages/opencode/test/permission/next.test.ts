@@ -1146,3 +1146,40 @@ test("ask - abort should clear pending request", async () => {
     },
   })
 })
+
+test("ask - rejects immediately in non-interactive mode without blocking", async () => {
+  // Save original TTY state and simulate non-interactive (no TTY)
+  const originalIsTTY = process.stdout.isTTY
+  process.stdout.isTTY = false
+
+  try {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const start = Date.now()
+        // In non-interactive mode (no TTY), "ask" should immediately reject
+        const err = await Permission.ask({
+          sessionID: SessionID.make("session_noninteractive"),
+          permission: "bash",
+          patterns: ["ls"],
+          metadata: {},
+          always: [],
+          ruleset: [{ permission: "bash", pattern: "*", action: "ask" }],
+        }).then(
+          () => undefined,
+          (e) => e,
+        )
+
+        // Should reject immediately (within 1 second, not hang)
+        expect(Date.now() - start).toBeLessThan(1000)
+        expect(err).toBeInstanceOf(Permission.RejectedError)
+        // No pending requests should be created
+        expect(await Permission.list()).toHaveLength(0)
+      },
+    })
+  } finally {
+    // Restore original TTY state
+    process.stdout.isTTY = originalIsTTY
+  }
+})

@@ -183,6 +183,16 @@ export namespace Permission {
 
         if (!needsAsk) return
 
+        // In non-interactive/headless mode (no TTY, e.g. GitHub Actions), auto-reject
+        // permission requests that would normally block waiting for user input
+        if (!process.stdout.isTTY) {
+          log.info("noninteractive mode (no TTY), rejecting permission request", {
+            permission: request.permission,
+            patterns: request.patterns,
+          })
+          return yield* new RejectedError()
+        }
+
         const id = request.id ?? PermissionID.ascending()
         const info: Request = {
           id,
