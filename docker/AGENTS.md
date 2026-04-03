@@ -3,9 +3,42 @@
 ## 컨테이너 환경
 
 - `python3`만 설치되어 있습니다. `python` 명령어는 없습니다.
-- `uv`로 Python 가상환경과 패키지를 관리합니다. (`uv venv`, `uv pip install`, `uvx` 등)
-- `node`, `npm`, `npx`가 설치되어 있습니다. npx로 패키지를 임시 실행할 수 있습니다.
 - `curl`, `wget`, `jq`, `make`, `zip`, `unzip`, `less`, `ps` 등 기본 리눅스 명령어를 사용할 수 있습니다.
+- 추가 패키지가 필요하면 `apt-get update && apt-get install -y <패키지명>` 으로 설치할 수 있습니다.
+
+## Python 가상환경 (uv)
+
+Python 패키지 설치 시 반드시 uv로 가상환경을 만들어 사용하세요.
+
+```bash
+cd /home/jovyan/project
+uv venv .venv
+source .venv/bin/activate
+uv pip install flask  # 예시
+```
+
+일회성 실행은 uvx를 사용하세요.
+
+```bash
+uvx ruff check .
+```
+
+## Node.js 패키지 (npx)
+
+Node.js 패키지를 설치 없이 실행하려면 npx를 사용하세요.
+
+```bash
+npx create-react-app my-app
+npx serve -l 3000 ./dist
+```
+
+프로젝트에 패키지를 설치하려면 npm을 사용하세요.
+
+```bash
+cd /home/jovyan/project
+npm init -y
+npm install express
+```
 
 ## 결과물 서빙
 
