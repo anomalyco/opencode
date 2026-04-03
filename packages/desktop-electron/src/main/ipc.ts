@@ -193,3 +193,7 @@ export function sendMenuCommand(win: BrowserWindow, id: string) {
 export function sendDeepLinks(win: BrowserWindow, urls: string[]) {
   win.webContents.send("deep-link", urls)
 }
+
+export function sendAppendText(win: BrowserWindow, text: string, action: string) {
+  win.webContents.send("append-text", { text, action })
+}

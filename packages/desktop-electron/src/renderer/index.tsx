@@ -33,6 +33,7 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
 void initI18n()
 
 const deepLinkEvent = "opencode:deep-link"
+const appendTextEvent = "opencode:append-text"
 
 const emitDeepLinks = (urls: string[]) => {
   if (urls.length === 0) return
@@ -42,10 +43,18 @@ const emitDeepLinks = (urls: string[]) => {
   window.dispatchEvent(new CustomEvent(deepLinkEvent, { detail: { urls } }))
 }
 
+const emitAppendText = (text: string, action: string) => {
+  window.dispatchEvent(new CustomEvent(appendTextEvent, { detail: { text, action } }))
+}
+
 const listenForDeepLinks = () => {
   const startUrls = window.__OPENCODE__?.deepLinks ?? []
   if (startUrls.length) emitDeepLinks(startUrls)
   return window.api.onDeepLink((urls) => emitDeepLinks(urls))
+}
+
+const listenForAppendText = () => {
+  return window.api.onAppendText(({ text, action }) => emitAppendText(text, action))
 }
 
 const createPlatform = (): Platform => {
@@ -246,6 +255,7 @@ window.api.onMenuCommand((id) => {
   menuTrigger?.(id)
 })
 listenForDeepLinks()
+listenForAppendText()
 
 render(() => {
   const platform = createPlatform()

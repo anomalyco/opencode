@@ -40,6 +40,7 @@ export type ElectronAPI = {
   onSqliteMigrationProgress: (cb: (progress: SqliteMigrationProgress) => void) => () => void
   onMenuCommand: (cb: (id: string) => void) => () => void
   onDeepLink: (cb: (urls: string[]) => void) => () => void
+  onAppendText: (cb: (data: { text: string; action: string }) => void) => () => void
 
   openDirectoryPicker: (opts?: {
     multiple?: boolean

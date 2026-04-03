@@ -75,9 +75,11 @@ import {
 import {
   collectNewSessionDeepLinks,
   collectOpenProjectDeepLinks,
+  collectAppendDeepLinks,
   deepLinkEvent,
   drainPendingDeepLinks,
 } from "./layout/deep-links"
+import { pushAppendText } from "./layout/append-text"
 import { createInlineEditorController } from "./layout/inline-editor"
 import {
   LocalWorkspace,
@@ -1388,6 +1390,10 @@ export default function Layout(props: ParentProps) {
       }
       const href = link.prompt ? `/${slug}/session?prompt=${encodeURIComponent(link.prompt)}` : `/${slug}/session`
       navigateWithSidebarReset(href)
+    }
+
+    for (const link of collectAppendDeepLinks(urls)) {
+      pushAppendText(link)
     }
   }
 
