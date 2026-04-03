@@ -783,11 +783,19 @@ export namespace ProviderTransform {
       }
     }
 
-    if (input.model.providerID === "openai" || input.providerOptions?.setCacheKey) {
+    if (
+      input.model.api.npm === "@ai-sdk/openai" ||
+      input.model.api.npm === "@ai-sdk/github-copilot" ||
+      input.model.providerID === "openai" ||
+      input.providerOptions?.setCacheKey
+    ) {
       result["promptCacheKey"] = input.sessionID
     }
 
-    if (input.previousResponseId && input.model.api.npm === "@ai-sdk/openai") {
+    if (
+      input.previousResponseId &&
+      (input.model.api.npm === "@ai-sdk/openai" || input.model.api.npm === "@ai-sdk/github-copilot")
+    ) {
       result["previousResponseId"] = input.previousResponseId
     }
 

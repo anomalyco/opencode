@@ -122,6 +122,43 @@ describe("ProviderTransform.options - setCacheKey", () => {
     expect(result.previousResponseId).toBe("resp_123")
   })
 
+  test("should set promptCacheKey for github-copilot sdk models", () => {
+    const copilotModel = {
+      ...mockModel,
+      providerID: "github-copilot",
+      api: {
+        id: "gpt-5",
+        url: "https://api.githubcopilot.com",
+        npm: "@ai-sdk/github-copilot",
+      },
+    }
+    const result = ProviderTransform.options({
+      model: copilotModel,
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.promptCacheKey).toBe(sessionID)
+  })
+
+  test("should set previousResponseId for github-copilot sdk models", () => {
+    const copilotModel = {
+      ...mockModel,
+      providerID: "github-copilot",
+      api: {
+        id: "gpt-5",
+        url: "https://api.githubcopilot.com",
+        npm: "@ai-sdk/github-copilot",
+      },
+    }
+    const result = ProviderTransform.options({
+      model: copilotModel,
+      sessionID,
+      providerOptions: {},
+      previousResponseId: "resp_123",
+    })
+    expect(result.previousResponseId).toBe("resp_123")
+  })
+
   test("should not set previousResponseId for non-openai sdk models", () => {
     const result = ProviderTransform.options({
       model: mockModel,
