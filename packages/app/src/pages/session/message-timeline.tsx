@@ -290,7 +290,7 @@ export function MessageTimeline(props: {
       }
     }
 
-    if (props.live || props.scroll.bottom) return tailWindow(ids, root)
+    if (props.live) return tailWindow(ids, root)
 
     const min = Math.max(0, root.scrollTop - windowOverscan)
     const max = root.scrollTop + root.clientHeight + windowOverscan
@@ -360,7 +360,7 @@ export function MessageTimeline(props: {
       nextBottom: next.bottom,
     })
     setWindowed(next)
-    if (props.live || props.scroll.bottom) {
+    if (props.live) {
       requestAnimationFrame(() => {
         const root = viewport
         if (!root) return
