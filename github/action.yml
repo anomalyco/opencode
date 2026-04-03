@@ -45,29 +45,29 @@ runs:
       id: version
       shell: bash
       run: |
-        VERSION=$(curl -sf https://api.github.com/repos/f5xc-salesdemos/opencode/releases/latest | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4)
+        VERSION=$(curl -sf https://api.github.com/repos/f5xc-salesdemos/xcsh/releases/latest | grep -o '"tag_name": *"[^"]*"' | cut -d'"' -f4)
         echo "version=${VERSION:-latest}" >> $GITHUB_OUTPUT
 
-    - name: Cache opencode
+    - name: Cache xcsh
       id: cache
       uses: actions/cache@v4
       with:
-        path: ~/.opencode/bin
-        key: opencode-${{ runner.os }}-${{ runner.arch }}-${{ steps.version.outputs.version }}
+        path: ~/.xcsh/bin
+        key: xcsh-${{ runner.os }}-${{ runner.arch }}-${{ steps.version.outputs.version }}
 
-    - name: Install opencode
+    - name: Install xcsh
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
-      run: curl -fsSL https://opencode.ai/install | bash
+      run: curl -fsSL https://raw.githubusercontent.com/f5xc-salesdemos/xcsh/dev/install | bash
 
-    - name: Add opencode to PATH
+    - name: Add xcsh to PATH
       shell: bash
-      run: echo "$HOME/.opencode/bin" >> $GITHUB_PATH
+      run: echo "$HOME/.xcsh/bin" >> $GITHUB_PATH
 
-    - name: Run opencode
+    - name: Run xcsh
       shell: bash
-      id: run_opencode
-      run: opencode github run
+      id: run_xcsh
+      run: xcsh github run
       env:
         MODEL: ${{ inputs.model }}
         AGENT: ${{ inputs.agent }}

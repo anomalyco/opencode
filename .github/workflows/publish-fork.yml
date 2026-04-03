@@ -68,21 +68,21 @@ jobs:
       - name: Package binaries
         working-directory: packages/opencode/dist
         run: |
-          for dir in opencode-darwin-arm64 opencode-darwin-x64; do
-            (cd "$dir/bin" && zip -r "../../${dir}.zip" opencode)
+          for dir in xcsh-darwin-arm64 xcsh-darwin-x64; do
+            (cd "$dir/bin" && zip -r "../../${dir}.zip" xcsh)
           done
-          for dir in opencode-linux-arm64 opencode-linux-x64; do
-            (cd "$dir/bin" && tar czf "../../${dir}.tar.gz" opencode)
+          for dir in xcsh-linux-arm64 xcsh-linux-x64; do
+            (cd "$dir/bin" && tar czf "../../${dir}.tar.gz" xcsh)
           done
 
       - name: Compute SHA256 checksums
         id: sha
         working-directory: packages/opencode/dist
         run: |
-          echo "darwin_arm64=$(sha256sum opencode-darwin-arm64.zip | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-          echo "darwin_x64=$(sha256sum opencode-darwin-x64.zip | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-          echo "linux_arm64=$(sha256sum opencode-linux-arm64.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-          echo "linux_x64=$(sha256sum opencode-linux-x64.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "darwin_arm64=$(sha256sum xcsh-darwin-arm64.zip | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "darwin_x64=$(sha256sum xcsh-darwin-x64.zip | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "linux_arm64=$(sha256sum xcsh-linux-arm64.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "linux_x64=$(sha256sum xcsh-linux-x64.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         env:
@@ -97,20 +97,20 @@ jobs:
 
           gh release delete "$tag" --yes 2>/dev/null || true
           gh release create "$tag" \
-            --title "opencode $tag (f5xc fork)" \
+            --title "xcsh $tag (f5xc fork)" \
             --notes "$(cat <<EOF
-          Fork build of opencode with F5 branding, personality system, and TUI enhancements.
+          Fork build of xcsh (based on opencode) with F5 branding, personality system, and TUI enhancements.
           Based on upstream v${base} + fork patches.
 
           ## Install
           \`\`\`bash
           brew tap f5xc-salesdemos/tap
-          brew install f5xc-salesdemos/tap/opencode
+          brew install f5xc-salesdemos/tap/xcsh
           \`\`\`
 
           ## Upgrade
           \`\`\`bash
-          brew upgrade f5xc-salesdemos/tap/opencode
+          brew upgrade f5xc-salesdemos/tap/xcsh
           \`\`\`
 
           ## Fork enhancements
@@ -123,10 +123,10 @@ jobs:
           EOF
           )" \
             --latest \
-            packages/opencode/dist/opencode-darwin-arm64.zip \
-            packages/opencode/dist/opencode-darwin-x64.zip \
-            packages/opencode/dist/opencode-linux-arm64.tar.gz \
-            packages/opencode/dist/opencode-linux-x64.tar.gz
+            packages/opencode/dist/xcsh-darwin-arm64.zip \
+            packages/opencode/dist/xcsh-darwin-x64.zip \
+            packages/opencode/dist/xcsh-linux-arm64.tar.gz \
+            packages/opencode/dist/xcsh-linux-x64.tar.gz
 
       - name: Update Homebrew tap
         env:
@@ -134,13 +134,13 @@ jobs:
         run: |
           version="${{ steps.version.outputs.version }}"
           tag="${{ steps.version.outputs.tag }}"
-          repo="f5xc-salesdemos/opencode"
+          repo="f5xc-salesdemos/xcsh"
 
-          cat > /tmp/opencode.rb <<RUBY
+          cat > /tmp/xcsh.rb <<RUBY
           # typed: false
           # frozen_string_literal: true
 
-          class Opencode < Formula
+          class Xcsh < Formula
             desc "AI coding agent for the terminal (f5xc fork with LiteLLM fixes)"
             homepage "https://github.com/${repo}"
             version "${version}"
@@ -149,36 +149,36 @@ jobs:
 
             on_macos do
               if Hardware::CPU.intel?
-                url "https://github.com/${repo}/releases/download/${tag}/opencode-darwin-x64.zip"
+                url "https://github.com/${repo}/releases/download/${tag}/xcsh-darwin-x64.zip"
                 sha256 "${{ steps.sha.outputs.darwin_x64 }}"
 
                 def install
-                  bin.install "opencode"
+                  bin.install "xcsh"
                 end
               end
               if Hardware::CPU.arm?
-                url "https://github.com/${repo}/releases/download/${tag}/opencode-darwin-arm64.zip"
+                url "https://github.com/${repo}/releases/download/${tag}/xcsh-darwin-arm64.zip"
                 sha256 "${{ steps.sha.outputs.darwin_arm64 }}"
 
                 def install
-                  bin.install "opencode"
+                  bin.install "xcsh"
                 end
               end
             end
 
             on_linux do
               if Hardware::CPU.intel? and Hardware::CPU.is_64_bit?
-                url "https://github.com/${repo}/releases/download/${tag}/opencode-linux-x64.tar.gz"
+                url "https://github.com/${repo}/releases/download/${tag}/xcsh-linux-x64.tar.gz"
                 sha256 "${{ steps.sha.outputs.linux_x64 }}"
                 def install
-                  bin.install "opencode"
+                  bin.install "xcsh"
                 end
               end
               if Hardware::CPU.arm? and Hardware::CPU.is_64_bit?
-                url "https://github.com/${repo}/releases/download/${tag}/opencode-linux-arm64.tar.gz"
+                url "https://github.com/${repo}/releases/download/${tag}/xcsh-linux-arm64.tar.gz"
                 sha256 "${{ steps.sha.outputs.linux_arm64 }}"
                 def install
-                  bin.install "opencode"
+                  bin.install "xcsh"
                 end
               end
             end
@@ -186,11 +186,11 @@ jobs:
           RUBY
 
           git clone "https://x-access-token:${GH_TOKEN}@github.com/${FORK_TAP_REPO}.git" /tmp/homebrew-tap
-          cp /tmp/opencode.rb /tmp/homebrew-tap/opencode.rb
+          cp /tmp/xcsh.rb /tmp/homebrew-tap/xcsh.rb
           cd /tmp/homebrew-tap
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add opencode.rb
+          git add xcsh.rb
           git diff --cached --quiet && echo "No changes to tap" && exit 0
-          git commit -m "Update opencode to ${tag}"
+          git commit -m "Update xcsh to ${tag}"
           git push

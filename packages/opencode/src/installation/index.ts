@@ -137,8 +137,8 @@ export namespace Installation {
         )
 
         const getBrewFormula = Effect.fnUntraced(function* () {
-          const forkFormula = yield* text(["brew", "list", "--formula", "f5xc-salesdemos/tap/opencode"])
-          if (forkFormula.includes("opencode")) return "f5xc-salesdemos/tap/opencode"
+          const forkFormula = yield* text(["brew", "list", "--formula", "f5xc-salesdemos/tap/xcsh"])
+          if (forkFormula.includes("xcsh")) return "f5xc-salesdemos/tap/xcsh"
           const tapFormula = yield* text(["brew", "list", "--formula", "anomalyco/tap/opencode"])
           if (tapFormula.includes("opencode")) return "anomalyco/tap/opencode"
           const coreFormula = yield* text(["brew", "list", "--formula", "opencode"])
@@ -255,7 +255,7 @@ export namespace Installation {
           }
 
           const response = yield* httpOk.execute(
-            HttpClientRequest.get("https://api.github.com/repos/f5xc-salesdemos/opencode/releases/latest").pipe(
+            HttpClientRequest.get("https://api.github.com/repos/f5xc-salesdemos/xcsh/releases/latest").pipe(
               HttpClientRequest.acceptJson,
             ),
           )

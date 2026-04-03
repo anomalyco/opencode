@@ -406,7 +406,7 @@ jobs:
           persist-credentials: false
 
       - name: Run opencode
-        uses: f5xc-salesdemos/opencode/github@latest${envStr}
+        uses: f5xc-salesdemos/xcsh/github@latest${envStr}
         with:
           model: ${provider}/${model}`,
             )

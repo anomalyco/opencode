@@ -62,11 +62,11 @@ export namespace Config {
   function systemManagedConfigDir(): string {
     switch (process.platform) {
       case "darwin":
-        return "/Library/Application Support/opencode"
+        return "/Library/Application Support/xcsh"
       case "win32":
-        return path.join(process.env.ProgramData || "C:\\ProgramData", "opencode")
+        return path.join(process.env.ProgramData || "C:\\ProgramData", "xcsh")
       default:
-        return "/etc/opencode"
+        return "/etc/xcsh"
     }
   }
 
@@ -76,7 +76,7 @@ export namespace Config {
 
   const managedDir = managedConfigDir()
 
-  const MANAGED_PLIST_DOMAIN = "ai.opencode.managed"
+  const MANAGED_PLIST_DOMAIN = "ai.xcsh.managed"
 
   // Keys injected by macOS/MDM into the managed plist that are not OpenCode config
   const PLIST_META = new Set([
@@ -1091,7 +1091,7 @@ export namespace Config {
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/Config") {}
 
   function globalConfigFile() {
-    const candidates = ["opencode.jsonc", "opencode.json", "config.json"].map((file) =>
+    const candidates = ["xcsh.jsonc", "xcsh.json", "config.json"].map((file) =>
       path.join(Global.Path.config, file),
     )
     for (const file of candidates) {
@@ -1245,8 +1245,8 @@ export namespace Config {
           let result: Info = pipe(
             {},
             mergeDeep(yield* loadFile(path.join(Global.Path.config, "config.json"))),
-            mergeDeep(yield* loadFile(path.join(Global.Path.config, "opencode.json"))),
-            mergeDeep(yield* loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
+            mergeDeep(yield* loadFile(path.join(Global.Path.config, "xcsh.json"))),
+            mergeDeep(yield* loadFile(path.join(Global.Path.config, "xcsh.jsonc"))),
           )
 
           const legacy = path.join(Global.Path.config, "config")
@@ -1342,7 +1342,7 @@ export namespace Config {
 
           if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
             for (const file of yield* Effect.promise(() =>
-              ConfigPaths.projectFiles("opencode", ctx.directory, ctx.worktree),
+              ConfigPaths.projectFiles("xcsh", ctx.directory, ctx.worktree),
             )) {
               merge(file, yield* loadFile(file), "local")
             }
@@ -1361,8 +1361,8 @@ export namespace Config {
           const deps: Promise<void>[] = []
 
           for (const dir of unique(directories)) {
-            if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
-              for (const file of ["opencode.json", "opencode.jsonc"]) {
+            if (dir.endsWith(".xcsh") || dir === Flag.OPENCODE_CONFIG_DIR) {
+              for (const file of ["xcsh.json", "xcsh.jsonc"]) {
                 const source = path.join(dir, file)
                 log.debug(`loading config from ${source}`)
                 merge(source, yield* loadFile(source))
@@ -1430,7 +1430,7 @@ export namespace Config {
           }
 
           if (existsSync(managedDir)) {
-            for (const file of ["opencode.json", "opencode.jsonc"]) {
+            for (const file of ["xcsh.json", "xcsh.jsonc"]) {
               const source = path.join(managedDir, file)
               merge(source, yield* loadFile(source), "global")
             }

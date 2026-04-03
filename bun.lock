@@ -301,7 +301,7 @@
       "name": "opencode",
       "version": "1.3.13",
       "bin": {
-        "opencode": "./bin/opencode",
+        "xcsh": "./bin/xcsh",
       },
       "dependencies": {
         "@actions/core": "1.11.1",

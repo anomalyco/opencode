@@ -8,8 +8,11 @@ import { Flag } from "@/flag/flag"
 import { Global } from "@/global"
 
 export namespace ConfigPaths {
-  export async function projectFiles(name: string, directory: string, worktree: string) {
-    return Filesystem.findUp([`${name}.json`, `${name}.jsonc`], directory, worktree, { rootFirst: true })
+  export async function projectFiles(name: string | string[], directory: string, worktree: string) {
+    const names = Array.isArray(name) ? name : [name]
+    return Filesystem.findUp(names.flatMap((n) => [`${n}.json`, `${n}.jsonc`]), directory, worktree, {
+      rootFirst: true,
+    })
   }
 
   export async function directories(directory: string, worktree: string) {
@@ -18,7 +21,7 @@ export namespace ConfigPaths {
       ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
         ? await Array.fromAsync(
             Filesystem.up({
-              targets: [".opencode"],
+              targets: [".xcsh"],
               start: directory,
               stop: worktree,
             }),
@@ -26,7 +29,7 @@ export namespace ConfigPaths {
         : []),
       ...(await Array.fromAsync(
         Filesystem.up({
-          targets: [".opencode"],
+          targets: [".xcsh"],
           start: Global.Path.home,
           stop: Global.Path.home,
         }),

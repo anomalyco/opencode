@@ -1395,32 +1395,34 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           <text fg={theme.textMuted}>{props.message.error?.data.message}</text>
         </box>
       </Show>
-      <Switch>
-        <Match when={props.last || final() || props.message.error?.name === "MessageAbortedError"}>
-          <box paddingLeft={3}>
-            <text marginTop={1}>
-              <span
-                style={{
-                  fg:
-                    props.message.error?.name === "MessageAbortedError"
-                      ? theme.textMuted
-                      : local.agent.color(props.message.agent),
-                }}
-              >
-                ▣{" "}
-              </span>{" "}
-              <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
-              <span style={{ fg: theme.textMuted }}> · {model()}</span>
-              <Show when={duration()}>
-                <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
-              </Show>
-              <Show when={props.message.error?.name === "MessageAbortedError"}>
-                <span style={{ fg: theme.textMuted }}> · interrupted</span>
-              </Show>
-            </text>
-          </box>
-        </Match>
-      </Switch>
+      <Show when={ctx.showAssistantMetadata()}>
+        <Switch>
+          <Match when={props.last || final() || props.message.error?.name === "MessageAbortedError"}>
+            <box paddingLeft={3}>
+              <text marginTop={1}>
+                <span
+                  style={{
+                    fg:
+                      props.message.error?.name === "MessageAbortedError"
+                        ? theme.textMuted
+                        : local.agent.color(props.message.agent),
+                  }}
+                >
+                  ▣{" "}
+                </span>{" "}
+                <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
+                <span style={{ fg: theme.textMuted }}> · {model()}</span>
+                <Show when={duration()}>
+                  <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
+                </Show>
+                <Show when={props.message.error?.name === "MessageAbortedError"}>
+                  <span style={{ fg: theme.textMuted }}> · interrupted</span>
+                </Show>
+              </text>
+            </box>
+          </Match>
+        </Switch>
+      </Show>
     </>
   )
 }
