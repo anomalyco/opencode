@@ -129,6 +129,7 @@ export namespace Agent {
                 Permission.fromConfig({
                   question: "allow",
                   plan_exit: "allow",
+                  bash: "deny",
                   external_directory: {
                     [path.join(Global.Path.data, "plans", "*")]: "allow",
                   },
