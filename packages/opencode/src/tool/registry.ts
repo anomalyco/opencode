@@ -140,7 +140,6 @@ export namespace ToolRegistry {
       const all = Effect.fn("ToolRegistry.all")(function* (custom: Tool.Info[]) {
         const cfg = yield* config.get()
         const question = ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
-        const ask = question ? yield* build(QuestionTool) : undefined
 
         return [
           invalid,
