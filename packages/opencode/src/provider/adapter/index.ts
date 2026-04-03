@@ -52,3 +52,4 @@ export function getAdapterForModel(modelName: string): ToolCallAdapter | null {
 
 export type { ToolCallOpenAI } from "./base"
 export { ToolCallAdapter } from "./base"
+export { ToolCallAccumulator } from "./accumulator"
