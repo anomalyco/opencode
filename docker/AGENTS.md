@@ -3,7 +3,9 @@
 ## 컨테이너 환경
 
 - `python3`만 설치되어 있습니다. `python` 명령어는 없습니다.
-- `curl`, `wget`은 설치되어 있지 않습니다. HTTP 요청 테스트는 `python3 -c "import urllib.request; ..."` 를 사용하세요.
+- `uv`로 Python 가상환경과 패키지를 관리합니다. (`uv venv`, `uv pip install`, `uvx` 등)
+- `node`, `npm`, `npx`가 설치되어 있습니다. npx로 패키지를 임시 실행할 수 있습니다.
+- `curl`, `wget`, `jq`, `make`, `zip`, `unzip`, `less`, `ps` 등 기본 리눅스 명령어를 사용할 수 있습니다.
 
 ## 결과물 서빙
 

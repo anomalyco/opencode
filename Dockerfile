@@ -16,8 +16,10 @@ ARG PYTHON_VERSION=3.11.2-1+b1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git ca-certificates python3=${PYTHON_VERSION} \
+    curl wget procps jq make zip unzip less \
     && rm -rf /var/lib/apt/lists/*
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 COPY --from=build /app/packages/opencode/dist/opencode-linux-x64/bin/opencode /usr/local/bin/opencode
 COPY docker/AGENTS.md /etc/opencode/AGENTS.md
 ENV OPENCODE_CONFIG_DIR=/etc/opencode
