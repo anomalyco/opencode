@@ -3,70 +3,31 @@ import z from "zod"
 import { mergeDeep, unique } from "remeda"
 import { Config } from "./config"
 import { ConfigPaths } from "./paths"
-import { migrateTuiConfig } from "./migrate-tui-config"
+import { migrateTuiConfig } from "./tui-migrate"
 import { TuiInfo } from "./tui-schema"
 import { Instance } from "@/project/instance"
 import { Flag } from "@/flag/flag"
 import { Log } from "@/util/log"
 import { isRecord } from "@/util/record"
 import { Global } from "@/global"
-import { parsePluginSpecifier } from "@/plugin/shared"
 
 export namespace TuiConfig {
   const log = Log.create({ service: "tui.config" })
 
   export const Info = TuiInfo
 
-  export type PluginMeta = {
-    scope: "global" | "local"
-    source: string
-  }
-
-  export type PluginRecord = {
-    item: Config.PluginSpec
-    scope: PluginMeta["scope"]
-    source: string
-  }
-
-  type PluginEntry = {
-    item: Config.PluginSpec
-    meta: PluginMeta
-  }
-
   type Acc = {
     result: Info
-    entries: PluginEntry[]
   }
 
   export type Info = z.output<typeof Info> & {
     // Internal resolved plugin list used by runtime loading.
-    plugin_records?: PluginRecord[]
+    plugin_origins?: Config.PluginOrigin[]
   }
 
-  function pluginScope(file: string): PluginMeta["scope"] {
+  function pluginScope(file: string): Config.PluginScope {
     if (Instance.containsPath(file)) return "local"
     return "global"
-  }
-
-  function dedupePlugins(list: PluginEntry[]) {
-    const seen = new Set<string>()
-    const result: PluginEntry[] = []
-    for (const item of list.toReversed()) {
-      const spec = Config.pluginSpecifier(item.item)
-      const name = spec.startsWith("file://") ? spec : parsePluginSpecifier(spec).pkg
-      if (seen.has(name)) continue
-      seen.add(name)
-      result.push(item)
-    }
-    return result.toReversed()
-  }
-
-  function mergeInfo(target: Info, source: Info): Info {
-    const merged = mergeDeep(target, source)
-    if (target.plugin && source.plugin) {
-      merged.plugin = [...target.plugin, ...source.plugin]
-    }
-    return merged
   }
 
   function customPath() {
@@ -95,19 +56,16 @@ export namespace TuiConfig {
 
   async function mergeFile(acc: Acc, file: string) {
     const data = await loadFile(file)
-    acc.result = mergeInfo(acc.result, data)
+    acc.result = mergeDeep(acc.result, data)
     if (!data.plugin?.length) return
 
     const scope = pluginScope(file)
-    for (const item of data.plugin) {
-      acc.entries.push({
-        item,
-        meta: {
-          scope,
-          source: file,
-        },
-      })
-    }
+    const plugins = Config.deduplicatePluginOrigins([
+      ...(acc.result.plugin_origins ?? []),
+      ...data.plugin.map((spec) => ({ spec, scope, source: file })),
+    ])
+    acc.result.plugin = plugins.map((item) => item.spec)
+    acc.result.plugin_origins = plugins
   }
 
   const state = Instance.state(async () => {
@@ -125,7 +83,6 @@ export namespace TuiConfig {
 
     const acc: Acc = {
       result: {},
-      entries: [],
     }
 
     for (const file of ConfigPaths.fileInDirectory(Global.Path.config, "tui")) {
@@ -154,15 +111,7 @@ export namespace TuiConfig {
       }
     }
 
-    const merged = dedupePlugins(acc.entries)
     acc.result.keybinds = Config.Keybinds.parse(acc.result.keybinds ?? {})
-    const list = merged.map((item) => ({
-      item: item.item,
-      scope: item.meta.scope,
-      source: item.meta.source,
-    }))
-    acc.result.plugin = list.map((item) => item.item)
-    acc.result.plugin_records = list.length ? list : undefined
 
     const deps: Promise<void>[] = []
     if (acc.result.plugin?.length) {

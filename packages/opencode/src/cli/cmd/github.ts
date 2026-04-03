@@ -28,9 +28,9 @@ import { Provider } from "../../provider/provider"
 import { Bus } from "../../bus"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
+import { Git } from "@/git"
 import { setTimeout as sleep } from "node:timers/promises"
 import { Process } from "@/util/process"
-import { git } from "@/util/git"
 
 type GitHubAuthor = {
   login: string
@@ -257,7 +257,7 @@ export const GithubInstallCommand = cmd({
             }
 
             // Get repo info
-            const info = (await git(["remote", "get-url", "origin"], { cwd: Instance.worktree })).text().trim()
+            const info = (await Git.run(["remote", "get-url", "origin"], { cwd: Instance.worktree })).text().trim()
             const parsed = parseGitHubRemote(info)
             if (!parsed) {
               prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
@@ -496,20 +496,20 @@ export const GithubRunCommand = cmd({
           : "issue"
         : undefined
       const gitText = async (args: string[]) => {
-        const result = await git(args, { cwd: Instance.worktree })
+        const result = await Git.run(args, { cwd: Instance.worktree })
         if (result.exitCode !== 0) {
           throw new Process.RunFailedError(["git", ...args], result.exitCode, result.stdout, result.stderr)
         }
         return result.text().trim()
       }
       const gitRun = async (args: string[]) => {
-        const result = await git(args, { cwd: Instance.worktree })
+        const result = await Git.run(args, { cwd: Instance.worktree })
         if (result.exitCode !== 0) {
           throw new Process.RunFailedError(["git", ...args], result.exitCode, result.stdout, result.stderr)
         }
         return result
       }
-      const gitStatus = (args: string[]) => git(args, { cwd: Instance.worktree })
+      const gitStatus = (args: string[]) => Git.run(args, { cwd: Instance.worktree })
       const commitChanges = async (summary: string, actor?: string) => {
         const args = ["commit", "-m", summary]
         if (actor) args.push("-m", `Co-authored-by: ${actor} <${actor}@users.noreply.github.com>`)
