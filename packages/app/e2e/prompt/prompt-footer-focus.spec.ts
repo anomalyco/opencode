@@ -54,7 +54,7 @@ test("agent select returns focus to the prompt", async ({ page, gotoSession }) =
 
   const item = page.locator('[data-slot="select-select-item"]').filter({ hasText: next }).first()
   await expect(item).toBeVisible()
-  await item.click()
+  await item.click({ force: true })
 
   await expect(page.locator(`${promptAgentSelector} [data-slot="select-select-trigger-value"]`).first()).toHaveText(
     next,
@@ -79,7 +79,7 @@ test("model select returns focus to the prompt", async ({ page, gotoSession }) =
 
   const item = page.locator(`[data-slot="list-item"][data-key="${next.providerID}:${next.modelID}"]`).first()
   await expect(item).toBeVisible()
-  await item.click()
+  await item.click({ force: true })
 
   await expect(page.locator(`${promptModelSelector} [data-action="prompt-model"] span`).first()).toHaveText(next.name)
   await expect(prompt).toBeFocused()

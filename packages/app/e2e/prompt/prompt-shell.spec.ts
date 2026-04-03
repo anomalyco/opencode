@@ -1,21 +1,13 @@
 import type { ToolPart } from "@opencode-ai/sdk/v2/client"
 import { test, expect } from "../fixtures"
 import { withSession } from "../actions"
+import { promptModelSelector, promptSelector, promptVariantSelector } from "../selectors"
 
 const isBash = (part: unknown): part is ToolPart => {
   if (!part || typeof part !== "object") return false
   if (!("type" in part) || part.type !== "tool") return false
   if (!("tool" in part) || part.tool !== "bash") return false
   return "state" in part
-}
-
-async function setAutoAccept(page: Parameters<typeof test>[0]["page"], enabled: boolean) {
-  const button = page.locator('[data-action="prompt-permissions"]').first()
-  await expect(button).toBeVisible()
-  const pressed = (await button.getAttribute("aria-pressed")) === "true"
-  if (pressed === enabled) return
-  await button.click()
-  await expect(button).toHaveAttribute("aria-pressed", enabled ? "true" : "false")
 }
 
 test("shell mode runs a command in the project directory", async ({ page, project }) => {
@@ -27,7 +19,12 @@ test("shell mode runs a command in the project directory", async ({ page, projec
   await withSession(project.sdk, `e2e shell ${Date.now()}`, async (session) => {
     project.trackSession(session.id)
     await project.gotoSession(session.id)
-    await setAutoAccept(page, true)
+    const button = page.locator('[data-action="prompt-permissions"]').first()
+    await expect(button).toBeVisible()
+    if ((await button.getAttribute("aria-pressed")) !== "true") {
+      await button.click()
+      await expect(button).toHaveAttribute("aria-pressed", "true")
+    }
     await project.shell(cmd)
 
     await expect
@@ -56,4 +53,19 @@ test("shell mode runs a command in the project directory", async ({ page, projec
       )
       .toEqual(expect.objectContaining({ cwd: project.directory, output: expect.stringContaining("README.md") }))
   })
+})
+
+test("shell mode unmounts model and variant controls", async ({ page, project }) => {
+  await project.open()
+
+  const prompt = page.locator(promptSelector).first()
+  await expect(page.locator(promptModelSelector)).toHaveCount(1)
+  await expect(page.locator(promptVariantSelector)).toHaveCount(1)
+
+  await prompt.click()
+  await page.keyboard.type("!")
+
+  await expect(prompt).toHaveAttribute("aria-label", /enter shell command/i)
+  await expect(page.locator(promptModelSelector)).toHaveCount(0)
+  await expect(page.locator(promptVariantSelector)).toHaveCount(0)
 })
