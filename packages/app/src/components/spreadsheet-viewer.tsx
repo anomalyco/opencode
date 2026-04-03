@@ -20,6 +20,7 @@ import { UniverSheetsCollaborationPreset } from "@univerjs/presets/preset-sheets
 import sheetsCollaborationEnUs from "@univerjs/presets/preset-sheets-collaboration/locales/en-US"
 import "@univerjs/presets/lib/styles/preset-sheets-collaboration.css"
 import { registerOfficeUnit } from "@/lib/veritly-univer-files"
+import { univerBackendOrigin } from "@/lib/univer-backend-origin"
 
 type PendingImport = { base64: string; mimeType?: string }
 
@@ -38,7 +39,7 @@ type Props = {
   onUnitRegistered?: () => void
 }
 
-const UNIVERSER_BASE = import.meta.env.VITE_UNIVERSER_URL?.trim() || "http://127.0.0.1:8000"
+const UNIVERSER_BASE = univerBackendOrigin()
 const UNIVER_LICENSE = import.meta.env.VITE_UNIVER_LICENSE?.trim() ?? ""
 
 function base64ToFile(base64: string, name: string, mimeType?: string): File {

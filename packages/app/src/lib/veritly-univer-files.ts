@@ -1,9 +1,9 @@
+import { univerBackendOrigin } from "@/lib/univer-backend-origin"
+
 const OFFICE_PATH = /\.(xlsx|xlsm|xls|csv|docx|doc|odt|pptx|ppt|odp)$/i
 
-function resolveFilesApiBase(): string {
-  const fromEnv = import.meta.env.VITE_VERITLY_UNIVER_FILES_URL?.trim()
-  if (fromEnv) return fromEnv.replace(/\/$/, "")
-  return import.meta.env.DEV ? "http://127.0.0.1:8789" : "http://127.0.0.1:8789"
+function filesApiBase(): string {
+  return univerBackendOrigin()
 }
 
 function projectIdFromEnv(): string {
@@ -26,7 +26,7 @@ export async function uploadOfficeFile(
   mimeType?: string,
   options?: { projectId?: string },
 ) {
-  const base = resolveFilesApiBase()
+  const base = filesApiBase()
   const res = await fetch(new URL("/v1/files/upload-office", `${base}/`), {
     method: "POST",
     credentials: "include",
@@ -48,7 +48,7 @@ export async function uploadOfficeFile(
 }
 
 export async function registerOfficeUnit(workspaceRelativePath: string, unitId: string, options?: { projectId?: string }) {
-  const base = resolveFilesApiBase()
+  const base = filesApiBase()
   const res = await fetch(new URL("/v1/files/register-unit", `${base}/`), {
     method: "POST",
     credentials: "include",
@@ -66,7 +66,7 @@ export async function registerOfficeUnit(workspaceRelativePath: string, unitId: 
 }
 
 export async function readOfficeFile(workspaceRelativePath: string, options?: { projectId?: string }) {
-  const base = resolveFilesApiBase()
+  const base = filesApiBase()
   const url = new URL("/v1/files/content", `${base}/`)
   url.searchParams.set("path", workspaceRelativePath)
   const res = await fetch(url, {
@@ -90,7 +90,7 @@ export async function readOfficeFile(workspaceRelativePath: string, options?: { 
 }
 
 export async function resolveOfficeFile(workspaceRelativePath: string, options?: { projectId?: string }) {
-  const base = resolveFilesApiBase()
+  const base = filesApiBase()
   const url = new URL("/v1/files/resolve", `${base}/`)
   url.searchParams.set("path", workspaceRelativePath)
   const res = await fetch(url, {
@@ -110,7 +110,7 @@ export async function resolveOfficeFile(workspaceRelativePath: string, options?:
 }
 
 export async function listOfficeFiles(dirPath: string, options?: { projectId?: string }) {
-  const base = resolveFilesApiBase()
+  const base = filesApiBase()
   const url = new URL("/v1/files/list", `${base}/`)
   url.searchParams.set("path", dirPath)
   const res = await fetch(url, {
