@@ -833,6 +833,16 @@
   min-height: 0;
   max-height: var(--question-prompt-max-height, 100dvh);
 
+  &[data-collapsed] {
+    [data-slot="question-content"] {
+      display: none;
+    }
+
+    [data-slot="question-footer"] {
+      display: none;
+    }
+  }
+
   [data-slot="question-body"] {
     display: flex;
     flex-direction: column;

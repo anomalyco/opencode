@@ -13,7 +13,10 @@ import { useSDK } from "@/context/sdk"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 
-const cache = new Map<string, { tab: number; answers: QuestionAnswer[]; custom: string[]; customOn: boolean[] }>()
+const cache = new Map<
+  string,
+  { tab: number; answers: QuestionAnswer[]; custom: string[]; customOn: boolean[]; collapsed: boolean }
+>()
 
 function Mark(props: { multi: boolean; picked: boolean; onClick?: (event: MouseEvent) => void }) {
   return (
@@ -73,6 +76,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     answers: cached?.answers ?? ([] as QuestionAnswer[]),
     custom: cached?.custom ?? ([] as string[]),
     customOn: cached?.customOn ?? ([] as boolean[]),
+    collapsed: cached?.collapsed ?? false,
     editing: false,
     focus: 0,
   })
@@ -198,6 +202,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
       answers: store.answers.map((a) => (a ? [...a] : [])),
       custom: store.custom.map((s) => s ?? ""),
       customOn: store.customOn.map((b) => b ?? false),
+      collapsed: store.collapsed,
     })
   })
 
@@ -446,6 +451,15 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     clipboard.writeText(text).catch(() => {})
   }
 
+  const collapse = () => {
+    const next = !store.collapsed
+    setStore("collapsed", next)
+
+    if (!root) return
+    if (next) root.setAttribute("data-collapsed", "")
+    else root.removeAttribute("data-collapsed")
+  }
+
   return (
     <DockPrompt
       kind="question"
@@ -455,6 +469,16 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
         <>
           <div data-slot="question-header-title">{summary()}</div>
           <div data-slot="question-progress">
+            <IconButton
+              type="button"
+              icon={store.collapsed ? "expand" : "collapse"}
+              size="small"
+              variant="ghost"
+              aria-label={store.collapsed ? language.t("session.todo.expand") : language.t("session.todo.collapse")}
+              title={store.collapsed ? language.t("session.todo.expand") : language.t("session.todo.collapse")}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={collapse}
+            />
             <IconButton
               type="button"
               icon="copy"
