@@ -15,7 +15,18 @@ import { Permission } from "@/permission"
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
   prompt: z.string().describe("The task for the agent to perform"),
-  subagent_type: z.string().describe("The type of specialized agent to use for this task"),
+  subagent_type: z
+    .string()
+    .describe("The type of specialized agent to use for this task")
+    .optional(),
+  agent: z
+    .string()
+    .describe("Alias for subagent_type — the agent to use for this task")
+    .optional(),
+  agent_type: z
+    .string()
+    .describe("Alias for subagent_type — the agent to use for this task")
+    .optional(),
   task_id: z
     .string()
     .describe(
@@ -24,6 +35,19 @@ const parameters = z.object({
     .optional(),
   command: z.string().describe("The command that triggered this task").optional(),
 })
+
+/**
+ * Resolve the agent type from params, accepting "agent" and "agent_type" as
+ * aliases for "subagent_type". Non-Claude models frequently use the shorter
+ * parameter names when calling the task tool.
+ */
+export function resolveAgentType(params: z.infer<typeof parameters>): string {
+  const resolved = params.subagent_type || params.agent || params.agent_type
+  if (!resolved) {
+    throw new Error("One of subagent_type, agent, or agent_type is required")
+  }
+  return resolved
+}
 
 export const TaskTool = Tool.define("task", async (ctx) => {
   const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
@@ -45,23 +69,25 @@ export const TaskTool = Tool.define("task", async (ctx) => {
     description,
     parameters,
     async execute(params: z.infer<typeof parameters>, ctx) {
+      const agentType = resolveAgentType(params)
+
       const config = await Config.get()
 
       // Skip permission check when user explicitly invoked via @ or command subtask
       if (!ctx.extra?.bypassAgentCheck) {
         await ctx.ask({
           permission: "task",
-          patterns: [params.subagent_type],
+          patterns: [agentType],
           always: ["*"],
           metadata: {
             description: params.description,
-            subagent_type: params.subagent_type,
+            subagent_type: agentType,
           },
         })
       }
 
-      const agent = await Agent.get(params.subagent_type)
-      if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
+      const agent = await Agent.get(agentType)
+      if (!agent) throw new Error(`Unknown agent type: ${agentType} is not a valid agent type`)
 
       const hasTaskPermission = agent.permission.some((rule) => rule.permission === "task")
       const hasTodoWritePermission = agent.permission.some((rule) => rule.permission === "todowrite")

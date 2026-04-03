@@ -628,7 +628,9 @@ it.live(
             parameters: z.object({
               description: z.string(),
               prompt: z.string(),
-              subagent_type: z.string(),
+              subagent_type: z.string().optional(),
+              agent: z.string().optional(),
+              agent_type: z.string().optional(),
               task_id: z.string().optional(),
               command: z.string().optional(),
             }),
