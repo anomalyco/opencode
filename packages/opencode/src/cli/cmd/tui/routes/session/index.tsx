@@ -94,6 +94,7 @@ const context = createContext<{
   showTimestamps: () => boolean
   showDetails: () => boolean
   showGenericToolOutput: () => boolean
+  bashFollowCollapsed: () => boolean
   diffWrapMode: () => "word" | "none"
   providers: () => ReadonlyMap<string, Provider>
   sync: ReturnType<typeof useSync>
@@ -153,6 +154,7 @@ export function Session() {
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [animationsEnabled, setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
+  const [bashFollowCollapsed, setBashFollowCollapsed] = kv.signal("bash_follow_collapsed", false)
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
@@ -638,6 +640,16 @@ export function Session() {
       },
     },
     {
+      title: "Toggle collapsed bash follow",
+      value: "session.toggle.bash_follow_collapsed",
+      keybind: "bash_follow_collapsed",
+      category: "Session",
+      onSelect: (dialog) => {
+        setBashFollowCollapsed((prev) => !prev)
+        dialog.clear()
+      },
+    },
+    {
       title: "Page up",
       value: "session.page.up",
       keybind: "messages_page_up",
@@ -1025,6 +1037,7 @@ export function Session() {
         showTimestamps,
         showDetails,
         showGenericToolOutput,
+        bashFollowCollapsed,
         diffWrapMode,
         providers,
         sync,
@@ -1759,6 +1772,7 @@ function BlockTool(props: {
 
 function Bash(props: ToolProps<typeof BashTool>) {
   const { theme } = useTheme()
+  const ctx = use()
   const sync = useSync()
   const isRunning = createMemo(() => props.part.state.status === "running")
   const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
@@ -1767,6 +1781,7 @@ function Bash(props: ToolProps<typeof BashTool>) {
   const overflow = createMemo(() => lines().length > 10)
   const limited = createMemo(() => {
     if (expanded() || !overflow()) return output()
+    if (ctx.bashFollowCollapsed()) return ["…", ...lines().slice(-10)].join("\n")
     return [...lines().slice(0, 10), "…"].join("\n")
   })
 
