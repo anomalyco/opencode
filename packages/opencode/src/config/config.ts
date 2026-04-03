@@ -2,6 +2,7 @@ import { Log } from "../util/log"
 import path from "path"
 import { pathToFileURL } from "url"
 import os from "os"
+import { Process } from "../util/process"
 import z from "zod"
 import { ModelsDev } from "../provider/models"
 import { mergeDeep, pipe, unique } from "remeda"
@@ -74,6 +75,59 @@ export namespace Config {
   }
 
   const managedDir = managedConfigDir()
+
+  const MANAGED_PLIST_DOMAIN = "ai.opencode.managed"
+
+  // Keys injected by macOS/MDM into the managed plist that are not OpenCode config
+  const PLIST_META = new Set([
+    "PayloadDisplayName",
+    "PayloadIdentifier",
+    "PayloadType",
+    "PayloadUUID",
+    "PayloadVersion",
+    "_manualProfile",
+  ])
+
+  /**
+   * Parse raw JSON (from plutil conversion of a managed plist) into OpenCode config.
+   * Strips MDM metadata keys before parsing through the config schema.
+   * Pure function — no OS interaction, safe to unit test directly.
+   */
+  export function parseManagedPlist(json: string, source: string): Info {
+    const raw = JSON.parse(json)
+    for (const key of Object.keys(raw)) {
+      if (PLIST_META.has(key)) delete raw[key]
+    }
+    return parseConfig(JSON.stringify(raw), source)
+  }
+
+  /**
+   * Read macOS managed preferences deployed via .mobileconfig / MDM (Jamf, Kandji, etc).
+   * MDM-installed profiles write to /Library/Managed Preferences/ which is only writable by root.
+   * User-scoped plists are checked first, then machine-scoped.
+   */
+  async function readManagedPreferences(): Promise<Info> {
+    if (process.platform !== "darwin") return {}
+
+    const domain = MANAGED_PLIST_DOMAIN
+    const user = os.userInfo().username
+    const paths = [
+      path.join("/Library/Managed Preferences", user, `${domain}.plist`),
+      path.join("/Library/Managed Preferences", `${domain}.plist`),
+    ]
+
+    for (const plist of paths) {
+      if (!existsSync(plist)) continue
+      log.info("reading macOS managed preferences", { path: plist })
+      const result = await Process.run(["plutil", "-convert", "json", "-o", "-", plist], { nothrow: true })
+      if (result.code !== 0) {
+        log.warn("failed to convert managed preferences plist", { path: plist })
+        continue
+      }
+      return parseManagedPlist(result.stdout.toString(), `mobileconfig:${plist}`)
+    }
+    return {}
+  }
 
   // Custom merge function that concatenates array fields instead of replacing them
   function mergeConfigConcatArrays(target: Info, source: Info): Info {
@@ -1355,6 +1409,9 @@ export namespace Config {
               merge(source, yield* loadFile(source), "global")
             }
           }
+
+          // macOS managed preferences (.mobileconfig deployed via MDM) override everything
+          result = mergeConfigConcatArrays(result, yield* Effect.promise(() => readManagedPreferences()))
 
           for (const [name, mode] of Object.entries(result.mode ?? {})) {
             result.agent = mergeDeep(result.agent ?? {}, {

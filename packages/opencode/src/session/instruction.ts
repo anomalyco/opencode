@@ -248,16 +248,8 @@ export namespace Instruction {
     return runPromise((svc) => svc.systemPaths())
   }
 
-  export async function system() {
-    return runPromise((svc) => svc.system())
-  }
-
   export function loaded(messages: MessageV2.WithParts[]) {
     return extract(messages)
-  }
-
-  export async function find(dir: string) {
-    return runPromise((svc) => svc.find(dir))
   }
 
   export async function resolve(messages: MessageV2.WithParts[], filepath: string, messageID: MessageID) {

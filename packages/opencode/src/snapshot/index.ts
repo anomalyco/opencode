@@ -545,10 +545,6 @@ export namespace Snapshot {
     return runPromise((svc) => svc.init())
   }
 
-  export async function cleanup() {
-    return runPromise((svc) => svc.cleanup())
-  }
-
   export async function track() {
     return runPromise((svc) => svc.track())
   }

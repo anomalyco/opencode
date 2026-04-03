@@ -31,6 +31,7 @@
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "0.15.4",
     "effect": "catalog:",
+    "electron-context-menu": "4.1.2",
     "electron-log": "^5",
     "electron-store": "^10",
     "electron-updater": "^6",

@@ -254,6 +254,16 @@ function responseToolArgs(id: string, text: string, seq: number) {
   }
 }
 
+function responseToolArgsDone(id: string, args: string, seq: number) {
+  return {
+    type: "response.function_call_arguments.done",
+    sequence_number: seq,
+    output_index: 0,
+    item_id: id,
+    arguments: args,
+  }
+}
+
 function responseToolDone(tool: { id: string; item: string; name: string; args: string }, seq: number) {
   return {
     type: "response.output_item.done",
@@ -390,6 +400,8 @@ function responses(item: Sse, model: string) {
     lines.push(responseReasonDone(reason, seq))
   }
   if (call && !item.hang && !item.error) {
+    seq += 1
+    lines.push(responseToolArgsDone(call.item, call.args, seq))
     seq += 1
     lines.push(responseToolDone(call, seq))
   }
@@ -599,6 +611,11 @@ function isToolResultFollowUp(body: unknown): boolean {
   return false
 }
 
+function isTitleRequest(body: unknown): boolean {
+  if (!body || typeof body !== "object") return false
+  return JSON.stringify(body).includes("Generate a title for this conversation")
+}
+
 function requestSummary(body: unknown): string {
   if (!body || typeof body !== "object") return "empty body"
   if ("messages" in body && Array.isArray(body.messages)) {
@@ -623,6 +640,7 @@ namespace TestLLMServer {
     readonly error: (status: number, body: unknown) => Effect.Effect<void>
     readonly hang: Effect.Effect<void>
     readonly hold: (value: string, wait: PromiseLike<unknown>) => Effect.Effect<void>
+    readonly reset: Effect.Effect<void>
     readonly hits: Effect.Effect<Hit[]>
     readonly calls: Effect.Effect<number>
     readonly wait: (count: number) => Effect.Effect<void>
@@ -671,21 +689,20 @@ export class TestLLMServer extends ServiceMap.Service<TestLLMServer, TestLLMServ
         const req = yield* HttpServerRequest.HttpServerRequest
         const body = yield* req.json.pipe(Effect.orElseSucceed(() => ({})))
         const current = hit(req.originalUrl, body)
+        if (isTitleRequest(body)) {
+          hits = [...hits, current]
+          yield* notify()
+          const auto: Sse = { type: "sse", head: [role()], tail: [textLine("E2E Title"), finishLine("stop")] }
+          if (mode === "responses") return send(responses(auto, modelFrom(body)))
+          return send(auto)
+        }
         const next = pull(current)
         if (!next) {
-          // Auto-acknowledge tool-result follow-ups so tests only need to
-          // queue one response per tool call instead of two.
-          if (isToolResultFollowUp(body)) {
-            hits = [...hits, current]
-            yield* notify()
-            const auto: Sse = { type: "sse", head: [role()], tail: [textLine("ok"), finishLine("stop")] }
-            if (mode === "responses") return send(responses(auto, modelFrom(body)))
-            return send(auto)
-          }
-          misses = [...misses, current]
-          const summary = requestSummary(body)
-          console.warn(`[TestLLMServer] unmatched request: ${req.originalUrl} (${summary}, pending=${list.length})`)
-          return HttpServerResponse.text(`unexpected request: ${summary}`, { status: 500 })
+          hits = [...hits, current]
+          yield* notify()
+          const auto: Sse = { type: "sse", head: [role()], tail: [textLine("ok"), finishLine("stop")] }
+          if (mode === "responses") return send(responses(auto, modelFrom(body)))
+          return send(auto)
         }
         hits = [...hits, current]
         yield* notify()
@@ -754,6 +771,12 @@ export class TestLLMServer extends ServiceMap.Service<TestLLMServer, TestLLMServ
         }).pipe(Effect.withSpan("TestLLMServer.hang")),
         hold: Effect.fn("TestLLMServer.hold")(function* (value: string, wait: PromiseLike<unknown>) {
           queue(reply().wait(wait).text(value).stop().item())
+        }),
+        reset: Effect.sync(() => {
+          hits = []
+          list = []
+          waits = []
+          misses = []
         }),
         hits: Effect.sync(() => [...hits]),
         calls: Effect.sync(() => hits.length),

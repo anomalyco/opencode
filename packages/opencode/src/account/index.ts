@@ -417,11 +417,6 @@ export namespace Account {
     return Option.getOrUndefined(await runPromise((service) => service.active()))
   }
 
-  export async function config(accountID: AccountID, orgID: OrgID): Promise<Record<string, unknown> | undefined> {
-    const cfg = await runPromise((service) => service.config(accountID, orgID))
-    return Option.getOrUndefined(cfg)
-  }
-
   export async function token(accountID: AccountID): Promise<AccessToken | undefined> {
     const t = await runPromise((service) => service.token(accountID))
     return Option.getOrUndefined(t)
