@@ -612,7 +612,7 @@ export const dict = {
   "dialog.plugins.removed": "Plugin removed",
   "dialog.plugins.exists": "Plugin already exists",
   "dialog.plugins.specRequired": "Plugin spec is required",
-  "dialog.plugins.specInvalid": "Plugin spec must not contain spaces",
+  "dialog.plugins.specInvalid": "Plugin spec must not contain whitespace",
   "dialog.plugins.listTitle": "Configured plugins",
   "dialog.plugins.restartHint": "Some plugin changes may require reconnect/restart to fully apply.",
 

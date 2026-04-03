@@ -43,7 +43,7 @@ export function DialogManagePlugins() {
   const invalid = createMemo(() => {
     const value = state.spec.trim()
     if (!value) return false
-    if (value.includes(" ")) return true
+    if (/\s/.test(value)) return true
     return false
   })
 
