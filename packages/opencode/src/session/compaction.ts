@@ -220,6 +220,27 @@ When constructing the summary, try to stick to this template:
         const msgs = structuredClone(messages)
         yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
         const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, { stripMedia: true })
+
+        // Convert structured tool-call/tool-result parts into plain text so the
+        // compaction model never sees tool markup and can't hallucinate tool calls.
+        for (const msg of modelMessages) {
+          if (!Array.isArray(msg.content)) continue
+          msg.content = msg.content.map((part: any) => {
+            if (part.type === "tool-call") {
+              const inputStr = typeof part.input === "string" ? part.input : JSON.stringify(part.input)
+              const truncatedInput = inputStr.length > 300 ? inputStr.slice(0, 300) + "... [truncated]" : inputStr
+              return { type: "text" as const, text: `[Called tool: ${part.toolName}]\n[Input: ${truncatedInput}]` }
+            }
+            if (part.type === "tool-result") {
+              const outputStr = typeof part.output === "string" ? part.output : JSON.stringify(part.output)
+              const truncatedOutput = outputStr.length > 500 ? outputStr.slice(0, 500) + "... [truncated]" : outputStr
+              return { type: "text" as const, text: `[Tool result: ${part.toolName}]\n${truncatedOutput}` }
+            }
+            return part
+          })
+        }
+        // Remove tool-role messages that are now empty or redundant after transformation
+        const compactionMessages = modelMessages.filter((msg) => msg.role !== "tool")
         const ctx = yield* InstanceState.context
         const msg: MessageV2.Assistant = {
           id: MessageID.ascending(),
@@ -262,7 +283,7 @@ When constructing the summary, try to stick to this template:
             toolChoice: "none",
             system: [],
             messages: [
-              ...modelMessages,
+              ...compactionMessages,
               {
                 role: "user",
                 content: [{ type: "text", text: prompt }],

@@ -152,7 +152,8 @@ export namespace SessionProcessor {
 
             case "tool-input-start":
               if (ctx.assistantMessage.summary) {
-                throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
+                log.warn("ignoring tool call during summary generation", { tool: value.toolName })
+                return
               }
               ctx.toolcalls[value.id] = yield* session.updatePart({
                 id: ctx.toolcalls[value.id]?.id ?? PartID.ascending(),
@@ -173,7 +174,8 @@ export namespace SessionProcessor {
 
             case "tool-call": {
               if (ctx.assistantMessage.summary) {
-                throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
+                log.warn("ignoring tool call during summary generation", { tool: value.toolName })
+                return
               }
               const match = ctx.toolcalls[value.toolCallId]
               if (!match) return
