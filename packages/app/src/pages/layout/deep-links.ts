@@ -36,6 +36,18 @@ export const collectOpenProjectDeepLinks = (urls: string[]) =>
 export const collectNewSessionDeepLinks = (urls: string[]) =>
   urls.map(parseNewSessionDeepLink).filter((link): link is { directory: string; prompt?: string } => !!link)
 
+export const parseAppendDeepLink = (input: string) => {
+  const url = parseUrl(input)
+  if (!url) return
+  if (url.hostname !== "append") return
+  const text = url.searchParams.get("text")
+  if (!text) return
+  return { text, action: url.searchParams.get("action") ?? "insert" }
+}
+
+export const collectAppendDeepLinks = (urls: string[]) =>
+  urls.map(parseAppendDeepLink).filter((link): link is { text: string; action: string } => !!link)
+
 type OpenCodeWindow = Window & {
   __OPENCODE__?: {
     deepLinks?: string[]

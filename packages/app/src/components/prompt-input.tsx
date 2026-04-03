@@ -1,6 +1,7 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
-import { createEffect, on, Component, Show, onCleanup, createMemo, createSignal } from "solid-js"
+import { createEffect, on, onMount, Component, Show, onCleanup, createMemo, createSignal } from "solid-js"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/file"
@@ -55,6 +56,7 @@ import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
+import { appendTextEvent } from "@/pages/layout/append-text"
 
 interface PromptInputProps {
   class?: string
@@ -769,6 +771,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       },
     ),
   )
+
+  // Listen for external text append events (opencode://append?text=xxx)
+  onMount(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ text: string; action: string }>).detail
+      if (!detail?.text) return
+      const cursor = prompt.cursor() ?? promptLength(prompt.current())
+      addPart({ type: "text", content: detail.text, start: 0, end: 0 })
+      if (detail.action === "submit") {
+        requestAnimationFrame(() => handleSubmit(event as unknown as KeyboardEvent))
+      }
+    }
+    makeEventListener(window, appendTextEvent, handler as EventListener)
+  })
 
   const parseFromDOM = (): Prompt => {
     const parts: Prompt = []
