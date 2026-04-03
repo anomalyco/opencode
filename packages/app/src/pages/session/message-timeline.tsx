@@ -29,6 +29,7 @@ import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { messageAgentColor } from "@/utils/agent"
+import { sessionTitle } from "@/utils/session-title"
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
 import { makeTimer } from "@solid-primitives/timer"
 
@@ -43,7 +44,6 @@ type MessageComment = {
 
 const emptyMessages: MessageType[] = []
 const idle = { type: "idle" as const }
-
 type UserActions = {
   fork?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
   revert?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
@@ -291,6 +291,7 @@ export function MessageTimeline(props: {
     return sync.session.get(id)
   })
   const titleValue = createMemo(() => info()?.title)
+  const titleLabel = createMemo(() => sessionTitle(titleValue()))
   const shareUrl = createMemo(() => info()?.share?.url)
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
   const parentID = createMemo(() => info()?.parentID)
@@ -399,7 +400,7 @@ export function MessageTimeline(props: {
 
   const openTitleEditor = () => {
     if (!sessionID()) return
-    setTitle({ editing: true, draft: titleValue() ?? "" })
+    setTitle({ editing: true, draft: titleLabel() ?? "" })
     requestAnimationFrame(() => {
       titleRef?.focus()
       titleRef?.select()
@@ -417,7 +418,7 @@ export function MessageTimeline(props: {
     if (titleMutation.isPending) return
 
     const next = title.draft.trim()
-    if (!next || next === (titleValue() ?? "")) {
+    if (!next || next === (titleLabel() ?? "")) {
       setTitle("editing", false)
       return
     }
@@ -532,7 +533,9 @@ export function MessageTimeline(props: {
   }
 
   function DialogDeleteSession(props: { sessionID: string }) {
-    const name = createMemo(() => sync.session.get(props.sessionID)?.title ?? language.t("command.session.new"))
+    const name = createMemo(
+      () => sessionTitle(sync.session.get(props.sessionID)?.title) ?? language.t("command.session.new"),
+    )
     const handleDelete = async () => {
       await deleteSession(props.sessionID)
       dialog.close()
@@ -673,7 +676,7 @@ export function MessageTimeline(props: {
                           </div>
                         </Show>
                       </div>
-                      <Show when={titleValue() || title.editing}>
+                      <Show when={titleLabel() || title.editing}>
                         <Show
                           when={title.editing}
                           fallback={
@@ -681,7 +684,7 @@ export function MessageTimeline(props: {
                               class="text-14-medium text-text-strong truncate grow-1 min-w-0"
                               onDblClick={openTitleEditor}
                             >
-                              {titleValue()}
+                              {titleLabel()}
                             </h1>
                           }
                         >
