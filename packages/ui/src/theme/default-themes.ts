@@ -35,6 +35,10 @@ import synthwave84ThemeJson from "./themes/synthwave84.json"
 import tokyonightThemeJson from "./themes/tokyonight.json"
 import vercelThemeJson from "./themes/vercel.json"
 import vesperThemeJson from "./themes/vesper.json"
+import carbonfoxThemeJson from "./themes/carbonfox.json"
+import gruvboxThemeJson from "./themes/gruvbox.json"
+import auraThemeJson from "./themes/aura.json"
+import abyssThemeJson from "./themes/abyss.json"
 import zenburnThemeJson from "./themes/zenburn.json"
 import abyssThemeJson from "./themes/abyss.json"
 
@@ -74,6 +78,10 @@ export const synthwave84Theme = synthwave84ThemeJson as DesktopTheme
 export const tokyonightTheme = tokyonightThemeJson as DesktopTheme
 export const vercelTheme = vercelThemeJson as DesktopTheme
 export const vesperTheme = vesperThemeJson as DesktopTheme
+export const carbonfoxTheme = carbonfoxThemeJson as DesktopTheme
+export const gruvboxTheme = gruvboxThemeJson as DesktopTheme
+export const auraTheme = auraThemeJson as DesktopTheme
+export const abyssTheme = abyssThemeJson as DesktopTheme
 export const zenburnTheme = zenburnThemeJson as DesktopTheme
 export const abyssTheme = abyssThemeJson as DesktopTheme
 
