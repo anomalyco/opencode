@@ -997,6 +997,12 @@ export namespace Config {
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
       permission: Permission.optional(),
+      yolo: z
+        .boolean()
+        .optional()
+        .describe(
+          "When true, auto-approve all permission requests without prompting. Equivalent to the --yolo CLI flag. Use with caution.",
+        ),
       tools: z.record(z.string(), z.boolean()).optional(),
       enterprise: z
         .object({
@@ -1450,6 +1456,10 @@ export namespace Config {
           }
           if (Flag.OPENCODE_DISABLE_PRUNE) {
             result.compaction = { ...result.compaction, prune: false }
+          }
+
+          if (result.yolo && !Flag.OPENCODE_YOLO) {
+            process.env.OPENCODE_YOLO = "1"
           }
 
           return {

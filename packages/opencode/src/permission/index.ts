@@ -2,6 +2,7 @@ import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
+import { Flag } from "@/flag/flag"
 import { makeRuntime } from "@/effect/run-service"
 import { ProjectID } from "@/project/schema"
 import { Instance } from "@/project/instance"
@@ -165,6 +166,13 @@ export namespace Permission {
       )
 
       const ask = Effect.fn("Permission.ask")(function* (input: z.infer<typeof AskInput>) {
+        if (Flag.OPENCODE_YOLO) {
+          log.info("yolo mode: auto-approving", {
+            permission: input.permission,
+            patterns: input.patterns,
+          })
+          return
+        }
         const { approved, pending } = yield* InstanceState.get(state)
         const { ruleset, ...request } = input
         let needsAsk = false

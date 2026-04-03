@@ -82,9 +82,17 @@ const cli = yargs(args)
     describe: "run without external plugins",
     type: "boolean",
   })
+  .option("yolo", {
+    describe: "auto-approve all permission requests without prompting",
+    type: "boolean",
+  })
   .middleware(async (opts) => {
     if (opts.pure) {
       process.env.OPENCODE_PURE = "1"
+    }
+
+    if (opts.yolo) {
+      process.env.OPENCODE_YOLO = "1"
     }
 
     await Log.init({

@@ -44,6 +44,7 @@ export namespace Flag {
   export const OPENCODE_SERVER_PASSWORD = process.env["OPENCODE_SERVER_PASSWORD"]
   export const OPENCODE_SERVER_USERNAME = process.env["OPENCODE_SERVER_USERNAME"]
   export const OPENCODE_ENABLE_QUESTION_TOOL = truthy("OPENCODE_ENABLE_QUESTION_TOOL")
+  export declare const OPENCODE_YOLO: boolean
 
   // Experimental
   export const OPENCODE_EXPERIMENTAL = truthy("OPENCODE_EXPERIMENTAL")
@@ -149,6 +150,17 @@ Object.defineProperty(Flag, "OPENCODE_PLUGIN_META_FILE", {
 Object.defineProperty(Flag, "OPENCODE_CLIENT", {
   get() {
     return process.env["OPENCODE_CLIENT"] ?? "cli"
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+// Dynamic getter for OPENCODE_YOLO
+// This must be evaluated at access time, not module load time,
+// because the CLI can set this flag at runtime via --yolo
+Object.defineProperty(Flag, "OPENCODE_YOLO", {
+  get() {
+    return truthy("OPENCODE_YOLO")
   },
   enumerable: true,
   configurable: false,
