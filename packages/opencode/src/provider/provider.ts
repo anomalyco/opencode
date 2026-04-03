@@ -832,6 +832,10 @@ export namespace Provider {
           read: z.number(),
           write: z.number(),
         }),
+        /**
+         * @deprecated Use `contextTiers` instead.
+         * Kept for backward compatibility with older models.dev snapshots.
+         */
         experimentalOver200K: z
           .object({
             input: z.number(),
@@ -841,6 +845,25 @@ export namespace Provider {
               write: z.number(),
             }),
           })
+          .optional(),
+        /**
+         * Ordered pricing tiers that apply when total input tokens
+         * (input + cache_read) meet or exceed the tier's min_context threshold.
+         * Consumers should select the highest tier whose min_context is <=
+         * the current total input tokens.
+         */
+        contextTiers: z
+          .array(
+            z.object({
+              min_context: z.number(),
+              input: z.number(),
+              output: z.number(),
+              cache: z.object({
+                read: z.number(),
+                write: z.number(),
+              }),
+            }),
+          )
           .optional(),
       }),
       limit: z.object({
@@ -927,6 +950,17 @@ export namespace Provider {
               input: model.cost.context_over_200k.input,
               output: model.cost.context_over_200k.output,
             }
+          : undefined,
+        contextTiers: model.cost?.context_tiers
+          ? model.cost.context_tiers.map((tier) => ({
+              min_context: tier.min_context,
+              input: tier.input,
+              output: tier.output,
+              cache: {
+                read: tier.cache_read ?? 0,
+                write: tier.cache_write ?? 0,
+              },
+            }))
           : undefined,
       },
       limit: {

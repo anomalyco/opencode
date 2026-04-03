@@ -47,6 +47,9 @@ export namespace ModelsDev {
         output: z.number(),
         cache_read: z.number().optional(),
         cache_write: z.number().optional(),
+        /**
+         * @deprecated Use `context_tiers` instead.
+         */
         context_over_200k: z
           .object({
             input: z.number(),
@@ -54,6 +57,21 @@ export namespace ModelsDev {
             cache_read: z.number().optional(),
             cache_write: z.number().optional(),
           })
+          .optional(),
+        /**
+         * Ordered array of pricing tiers that apply when total input tokens
+         * (input + cache_read) meet or exceed the tier's min_context threshold.
+         */
+        context_tiers: z
+          .array(
+            z.object({
+              min_context: z.number(),
+              input: z.number(),
+              output: z.number(),
+              cache_read: z.number().optional(),
+              cache_write: z.number().optional(),
+            }),
+          )
           .optional(),
       })
       .optional(),

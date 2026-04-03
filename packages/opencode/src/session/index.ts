@@ -286,10 +286,28 @@ export namespace Session {
       },
     }
 
-    const costInfo =
-      input.model.cost?.experimentalOver200K && tokens.input + tokens.cache.read > 200_000
-        ? input.model.cost.experimentalOver200K
-        : input.model.cost
+    const costInfo = (() => {
+      const totalInputTokens = tokens.input + tokens.cache.read;
+
+      // Prefer new context_tiers with arbitrary thresholds
+      if (input.model.cost?.contextTiers && input.model.cost.contextTiers.length > 0) {
+        // Find the highest tier whose min_context <= totalInputTokens
+        let selected = input.model.cost; // base cost (no tier)
+        for (const tier of input.model.cost.contextTiers) {
+          if (totalInputTokens >= tier.min_context) {
+            selected = tier;
+          }
+        }
+        return selected;
+      }
+
+      // Fall back to legacy experimentalOver200K (hardcoded 200K threshold)
+      if (input.model.cost?.experimentalOver200K && totalInputTokens > 200_000) {
+        return input.model.cost.experimentalOver200K;
+      }
+
+      return input.model.cost;
+    })();
     return {
       cost: safe(
         new Decimal(0)
