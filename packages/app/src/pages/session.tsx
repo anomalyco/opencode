@@ -332,7 +332,6 @@ export default function Page() {
   createEffect(() => {
     if (!prompt.ready()) return
     untrack(() => {
-      if (params.id) return
       const text = searchParams.prompt
       if (!text) return
       prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
