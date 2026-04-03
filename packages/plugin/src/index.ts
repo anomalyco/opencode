@@ -262,4 +262,12 @@ export interface Hooks {
    * Modify tool definitions (description and parameters) sent to LLM
    */
   "tool.definition"?: (input: { toolID: string }, output: { description: string; parameters: any }) => Promise<void>
+  /**
+   * Resolve the model to use for a chat request. Allows plugins to override
+   * the model based on session state (e.g., skill-declared model).
+   */
+  "chat.model.resolve"?: (
+    input: { sessionID: string; model: Model },
+    output: { model: Model | undefined },
+  ) => Promise<void>
 }
