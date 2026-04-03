@@ -22,6 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 COPY --from=build /app/packages/opencode/dist/opencode-linux-x64/bin/opencode /usr/local/bin/opencode
 COPY docker/AGENTS.md /etc/opencode/AGENTS.md
+COPY docker/.gitignore /etc/opencode/.gitignore
 ENV OPENCODE_CONFIG_DIR=/etc/opencode
 
 RUN adduser -D -u 1000 -h /home/jovyan jovyan
