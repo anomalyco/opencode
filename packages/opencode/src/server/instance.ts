@@ -1,4 +1,4 @@
-import { describeRoute, resolver } from "hono-openapi"
+import { describeRoute, resolver, validator } from "hono-openapi"
 import { Hono } from "hono"
 import { proxy } from "hono/proxy"
 import z from "zod"
@@ -16,6 +16,7 @@ import { Command } from "../command"
 import { Flag } from "../flag/flag"
 import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
+import { Snapshot } from "@/snapshot"
 import { ProjectRoutes } from "./routes/project"
 import { SessionRoutes } from "./routes/session"
 import { PtyRoutes } from "./routes/pty"
@@ -134,10 +135,38 @@ export const InstanceRoutes = (app?: Hono) =>
         },
       }),
       async (c) => {
-        const branch = await Vcs.branch()
+        const [branch, default_branch] = await Promise.all([Vcs.branch(), Vcs.defaultBranch()])
         return c.json({
           branch,
+          default_branch,
         })
+      },
+    )
+    .get(
+      "/vcs/diff",
+      describeRoute({
+        summary: "Get VCS diff",
+        description: "Retrieve the current git diff for the working tree or against the default branch.",
+        operationId: "vcs.diff",
+        responses: {
+          200: {
+            description: "VCS diff",
+            content: {
+              "application/json": {
+                schema: resolver(Snapshot.FileDiff.array()),
+              },
+            },
+          },
+        },
+      }),
+      validator(
+        "query",
+        z.object({
+          mode: Vcs.Mode,
+        }),
+      ),
+      async (c) => {
+        return c.json(await Vcs.diff(c.req.valid("query").mode))
       },
     )
     .get(
