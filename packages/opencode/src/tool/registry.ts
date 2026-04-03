@@ -120,6 +120,7 @@ export namespace ToolRegistry {
       )
 
       const invalid = yield* build(InvalidTool)
+      const ask = yield* build(QuestionTool)
       const bash = yield* build(BashTool)
       const read = yield* build(ReadTool)
       const glob = yield* build(GlobTool)
@@ -140,11 +141,10 @@ export namespace ToolRegistry {
       const all = Effect.fn("ToolRegistry.all")(function* (custom: Tool.Info[]) {
         const cfg = yield* config.get()
         const question = ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
-        const ask = question ? yield* build(QuestionTool) : undefined
 
         return [
           invalid,
-          ...(ask ? [ask] : []),
+          ...(question ? [ask] : []),
           bash,
           read,
           glob,
