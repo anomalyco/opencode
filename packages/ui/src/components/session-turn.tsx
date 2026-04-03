@@ -240,9 +240,14 @@ export function SessionTurn(
     shellToolDefaultOpen?: boolean
     editToolDefaultOpen?: boolean
     markdownEager?: boolean
+    markdownViewport?: HTMLDivElement
+    markdownHighlight?: "full" | "defer"
+    markdownMath?: "full" | "defer"
     active?: boolean
     status?: SessionStatus
     onUserInteracted?: () => void
+    autoScroll?: boolean
+    fill?: boolean
     classes?: {
       root?: string
       content?: string
@@ -487,20 +492,43 @@ export function SessionTurn(
     onUserInteracted: props.onUserInteracted,
     overflowAnchor: "dynamic",
   })
+  const turnAutoScroll = () => props.autoScroll ?? true
+  const turnFill = () => props.fill ?? true
 
   return (
-    <div data-component="session-turn" class={props.classes?.root}>
+    <div
+      data-component="session-turn"
+      class={props.classes?.root}
+      style={
+        turnFill()
+          ? undefined
+          : {
+              height: "auto",
+              "min-height": "0",
+              display: "block",
+            }
+      }
+    >
       <div
-        ref={autoScroll.scrollRef}
-        onScroll={autoScroll.handleScroll}
+        ref={turnAutoScroll() ? autoScroll.scrollRef : undefined}
+        onScroll={turnAutoScroll() ? autoScroll.handleScroll : undefined}
         data-slot="session-turn-content"
         class={props.classes?.content}
+        style={
+          turnFill()
+            ? undefined
+            : {
+                height: "auto",
+                "min-height": "0",
+                overflow: "visible",
+              }
+        }
       >
-        <div onClick={autoScroll.handleInteraction}>
+        <div onClick={turnAutoScroll() ? autoScroll.handleInteraction : undefined}>
           <Show when={message()}>
             {(msg) => (
               <div
-                ref={autoScroll.contentRef}
+                ref={turnAutoScroll() ? autoScroll.contentRef : undefined}
                 data-message={msg().id}
                 data-slot="session-turn-message-container"
                 class={props.classes?.container}
@@ -510,14 +538,26 @@ export function SessionTurn(
                     message={msg()}
                     parts={parts()}
                     interrupted={interrupted()}
-                    showCustomHookParts={props.showCustomHookParts}
-                    markdownEager={props.markdownEager}
-                  />
+                    showReasoningSummaries={showReasoningSummaries()}
+                  showCustomHookParts={props.showCustomHookParts}
+                  markdownEager={props.markdownEager}
+                  markdownViewport={props.markdownViewport}
+                  markdownHighlight={props.markdownHighlight}
+                  markdownMath={props.markdownMath}
+                />
                 </div>
                 <Show when={compaction()}>
                   {(part) => (
                     <div data-slot="session-turn-compaction">
-                      <Part part={part()} message={msg()} hideDetails markdownEager={props.markdownEager} />
+                      <Part
+                        part={part()}
+                        message={msg()}
+                        hideDetails
+                        markdownEager={props.markdownEager}
+                        markdownViewport={props.markdownViewport}
+                        markdownHighlight={props.markdownHighlight}
+                        markdownMath={props.markdownMath}
+                      />
                     </div>
                   )}
                 </Show>
@@ -533,6 +573,9 @@ export function SessionTurn(
                       shellToolDefaultOpen={props.shellToolDefaultOpen}
                       editToolDefaultOpen={props.editToolDefaultOpen}
                       markdownEager={props.markdownEager}
+                      markdownViewport={props.markdownViewport}
+                      markdownHighlight={props.markdownHighlight}
+                      markdownMath={props.markdownMath}
                     />
                   </div>
                 </Show>

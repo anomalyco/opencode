@@ -145,6 +145,9 @@ export interface MessageProps {
   showReasoningSummaries?: boolean
   showCustomHookParts?: boolean
   markdownEager?: boolean
+  markdownViewport?: HTMLDivElement
+  markdownHighlight?: "full" | "defer"
+  markdownMath?: "full" | "defer"
 }
 
 export type SessionAction = (input: { sessionID: string; messageID: string }) => Promise<void> | void
@@ -163,6 +166,9 @@ export interface MessagePartProps {
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number
   markdownEager?: boolean
+  markdownViewport?: HTMLDivElement
+  markdownHighlight?: "full" | "defer"
+  markdownMath?: "full" | "defer"
 }
 
 export type PartComponent = Component<MessagePartProps>
@@ -240,17 +246,19 @@ function createPacedValue(getValue: () => string, live?: () => boolean) {
   return value
 }
 
-function PacedMarkdown(props: { text: string; cacheKey: string; streaming: boolean }) {
-  const value = createPacedValue(
-    () => props.text,
-    () => props.streaming,
-  )
+function createLiveText(getValue: () => string, active: () => boolean) {
+  const [value, setValue] = createSignal(getValue())
+  const throttled = createThrottledValue(getValue)
 
-  return (
-    <Show when={value()}>
-      <Markdown text={value()} cacheKey={props.cacheKey} streaming={props.streaming} />
-    </Show>
-  )
+  createEffect(() => {
+    if (active()) {
+      setValue(throttled())
+      return
+    }
+    setValue(getValue())
+  })
+
+  return value
 }
 
 function relativizeProjectPath(path: string, directory?: string) {
@@ -571,6 +579,9 @@ export function AssistantParts(props: {
   shellToolDefaultOpen?: boolean
   editToolDefaultOpen?: boolean
   markdownEager?: boolean
+  markdownViewport?: HTMLDivElement
+  markdownHighlight?: "full" | "defer"
+  markdownMath?: "full" | "defer"
 }) {
   const data = useData()
   const emptyParts: PartType[] = []
@@ -660,6 +671,9 @@ export function AssistantParts(props: {
                   turnDurationMs={props.turnDurationMs}
                   defaultOpen={partDefaultOpen(entry().part, props.shellToolDefaultOpen, props.editToolDefaultOpen)}
                   markdownEager={props.markdownEager}
+                  markdownViewport={props.markdownViewport}
+                  markdownHighlight={props.markdownHighlight}
+                  markdownMath={props.markdownMath}
                 />
               )}
             </Show>
@@ -766,6 +780,9 @@ export function Message(props: MessageProps) {
             interrupted={props.interrupted}
             showCustomHookParts={props.showCustomHookParts}
             markdownEager={props.markdownEager}
+            markdownViewport={props.markdownViewport}
+            markdownHighlight={props.markdownHighlight}
+            markdownMath={props.markdownMath}
           />
         )}
       </Match>
@@ -778,6 +795,8 @@ export function Message(props: MessageProps) {
             showReasoningSummaries={props.showReasoningSummaries}
             showCustomHookParts={props.showCustomHookParts}
             markdownEager={props.markdownEager}
+            markdownHighlight={props.markdownHighlight}
+            markdownMath={props.markdownMath}
           />
         )}
       </Match>
@@ -792,6 +811,8 @@ export function AssistantMessageDisplay(props: {
   showReasoningSummaries?: boolean
   showCustomHookParts?: boolean
   markdownEager?: boolean
+  markdownHighlight?: "full" | "defer"
+  markdownMath?: "full" | "defer"
 }) {
   const grouped = createMemo(() => {
     const keys: string[] = []
@@ -862,6 +883,7 @@ export function AssistantMessageDisplay(props: {
                   message={props.message}
                   showAssistantCopyPartID={props.showAssistantCopyPartID}
                   markdownEager={props.markdownEager}
+                  markdownMath={props.markdownMath}
                 />
               )}
             </Show>
@@ -990,6 +1012,9 @@ export function UserMessageDisplay(props: {
   interrupted?: boolean
   showCustomHookParts?: boolean
   markdownEager?: boolean
+  markdownViewport?: HTMLDivElement
+  markdownHighlight?: "full" | "defer"
+  markdownMath?: "full" | "defer"
 }) {
   const data = useData()
   const dialog = useDialog()
@@ -1124,7 +1149,14 @@ export function UserMessageDisplay(props: {
         <>
           <div data-slot="user-message-body">
             <div data-slot="user-message-text">
-              <Markdown text={text()} cacheKey={textPart()?.id} eager={props.markdownEager} />
+              <Markdown
+                text={text()}
+                cacheKey={textPart()?.id}
+                eager={props.markdownEager}
+                viewport={props.markdownViewport}
+                highlight={props.markdownHighlight}
+                math={props.markdownMath}
+              />
             </div>
           </div>
           <div data-slot="user-message-meta-bar">
@@ -1229,14 +1261,29 @@ export function UserMessageDisplay(props: {
           }}
         >
           <div data-slot="user-message-skill-content">
-            <Markdown text={skillTemplatePart()!.text} eager={props.markdownEager} />
+            <Markdown
+              text={skillTemplatePart()!.text}
+              eager={props.markdownEager}
+              viewport={props.markdownViewport}
+              highlight={props.markdownHighlight}
+              math={props.markdownMath}
+            />
           </div>
         </BasicTool>
       </Show>
       <Show when={hooks().length > 0}>
         <div data-slot="user-message-hooks">
           <For each={hooks()}>
-            {(part) => <Part part={part} message={props.message} markdownEager={props.markdownEager} />}
+            {(part) => (
+              <Part
+                part={part}
+                message={props.message}
+                markdownEager={props.markdownEager}
+                markdownViewport={props.markdownViewport}
+                markdownHighlight={props.markdownHighlight}
+                markdownMath={props.markdownMath}
+              />
+            )}
           </For>
         </div>
       </Show>
@@ -1258,6 +1305,9 @@ export function Part(props: MessagePartProps) {
         showAssistantCopyPartID={props.showAssistantCopyPartID}
         turnDurationMs={props.turnDurationMs}
         markdownEager={props.markdownEager}
+        markdownViewport={props.markdownViewport}
+        markdownHighlight={props.markdownHighlight}
+        markdownMath={props.markdownMath}
       />
     </Show>
   )
@@ -1276,6 +1326,7 @@ export interface ToolProps {
   forceOpen?: boolean
   locked?: boolean
   markdownEager?: boolean
+  markdownViewport?: HTMLDivElement
 }
 
 export type ToolComponent = Component<ToolProps>
@@ -1496,7 +1547,6 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   })
 
   const displayText = () => (part.text ?? "").trim()
-  const throttledText = createThrottledValue(displayText)
   const streaming = createMemo(() => {
     if (props.message.role !== "assistant") return false
     return typeof (props.message as AssistantMessage).time.completed !== "number"
@@ -1507,6 +1557,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
       .at(-1)
     return last?.id === part().id
   })
+  const renderText = createLiveText(displayText, () => streaming() && isLastTextPart())
   const showCopy = createMemo(() => {
     if (props.message.role !== "assistant") return isLastTextPart()
     if (props.showAssistantCopyPartID === null) return false
@@ -1525,10 +1576,18 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   }
 
   return (
-    <Show when={text()}>
-      <div data-component="text-part" data-timeline-part-id={part().id}>
+    <Show when={renderText()}>
+      <div data-component="text-part">
         <div data-slot="text-part-body">
-          <Markdown text={throttledText()} cacheKey={part.id} streaming={streaming()} />
+          <Markdown
+            text={renderText()}
+            cacheKey={part.id}
+            streaming={streaming()}
+            eager={props.markdownEager}
+            viewport={props.markdownViewport}
+            highlight={props.markdownHighlight}
+            math={props.markdownMath}
+          />
         </div>
         <Show when={showCopy()}>
           <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
@@ -1561,16 +1620,23 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   const part = props.part as ReasoningPart
   const text = () => part.text.trim()
-  const throttledText = createThrottledValue(text)
   const streaming = createMemo(() => {
     if (props.message.role !== "assistant") return false
     return typeof (props.message as AssistantMessage).time.completed !== "number"
   })
 
   return (
-    <Show when={throttledText()}>
+    <Show when={text()}>
       <div data-component="reasoning-part">
-        <Markdown text={throttledText()} cacheKey={part.id} streaming={streaming()} />
+        <Markdown
+          text={text()}
+          cacheKey={part.id}
+          streaming={streaming()}
+          eager={props.markdownEager}
+          viewport={props.markdownViewport}
+          highlight={props.markdownHighlight}
+          math={props.markdownMath}
+        />
       </div>
     </Show>
   )
@@ -1698,7 +1764,11 @@ ToolRegistry.register({
         <Show when={props.output}>
           {(output) => (
             <div data-component="tool-output" data-scrollable>
-              <Markdown text={output()} eager={props.markdownEager} />
+              <Markdown
+                text={output()}
+                eager={props.markdownEager}
+                viewport={props.markdownViewport}
+              />
             </div>
           )}
         </Show>
@@ -1725,7 +1795,11 @@ ToolRegistry.register({
         <Show when={props.output}>
           {(output) => (
             <div data-component="tool-output" data-scrollable>
-              <Markdown text={output()} eager={props.markdownEager} />
+              <Markdown
+                text={output()}
+                eager={props.markdownEager}
+                viewport={props.markdownViewport}
+              />
             </div>
           )}
         </Show>
@@ -1755,7 +1829,11 @@ ToolRegistry.register({
         <Show when={props.output}>
           {(output) => (
             <div data-component="tool-output" data-scrollable>
-              <Markdown text={output()} eager={props.markdownEager} />
+              <Markdown
+                text={output()}
+                eager={props.markdownEager}
+                viewport={props.markdownViewport}
+              />
             </div>
           )}
         </Show>
@@ -1939,7 +2017,11 @@ ToolRegistry.register({
         <Show when={props.output && !pending()}>
           {(output) => (
             <div data-component="tool-output" data-scrollable>
-              <Markdown text={String(output())} eager={props.markdownEager} />
+              <Markdown
+                text={String(output())}
+                eager={props.markdownEager}
+                viewport={props.markdownViewport}
+              />
             </div>
           )}
         </Show>
@@ -1983,7 +2065,11 @@ ToolRegistry.register({
         <Show when={props.output}>
           {(output) => (
             <div data-component="tool-output" data-scrollable>
-              <Markdown text={String(output())} eager={props.markdownEager} />
+              <Markdown
+                text={String(output())}
+                eager={props.markdownEager}
+                viewport={props.markdownViewport}
+              />
             </div>
           )}
         </Show>

@@ -1,4 +1,4 @@
-import { marked } from "marked"
+import { Marked } from "marked"
 import markedKatex from "marked-katex-extension"
 import markedShiki from "marked-shiki"
 import katex from "katex"
@@ -610,10 +610,18 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
       },
     }
 
-    const liteParser = marked.use(linkRenderer)
+    const liteParser = new Marked(linkRenderer)
+    const noMathParser = new Marked(
+      linkRenderer,
+      markedShiki({
+        async highlight(code, lang) {
+          return highlight(code, lang)
+        },
+      }),
+    )
 
     // Full parser with shiki highlighting — used for final render
-    const fullParser = marked.use(
+    const fullParser = new Marked(
       linkRenderer,
       markedKatex({
         output,
@@ -627,15 +635,9 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
       }),
     )
 
-    // Fast parser without shiki — used during active streaming
-    const fastParser = marked.use(
-      linkRenderer,
-      markedKatex({
-        output,
-        throwOnError: false,
-        nonStandard: true,
-      }),
-    )
+    // Fast parser skips both shiki and KaTeX so first paint stays cheap.
+    // The renderer upgrades to the full parser later when needed.
+    const fastParser = new Marked(linkRenderer)
 
     if (native) {
       return {
@@ -644,13 +646,17 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
           const withMath = renderMathExpressions(html, output)
           return highlightCodeBlocks(withMath)
         },
-        async parseFast(markdown: string): Promise<string> {
+        async parseNoMath(markdown: string): Promise<string> {
           const html = await native(markdown)
-          return renderMathExpressions(html, output)
+          return highlightCodeBlocks(html)
+        },
+        async parseFast(markdown: string): Promise<string> {
+          // Keep the first paint in-process; native IPC is too expensive per message.
+          return fastParser.parse(normalizeDisplayMath(markdown))
         },
         async parseLite(markdown: string): Promise<string> {
-          // Native parse keeps first paint cheap for large file previews; math/highlight upgrade later in the renderer.
-          return native(markdown)
+          // Large previews still mount with the local lightweight parser, then upgrade later.
+          return liteParser.parse(normalizeDisplayMath(markdown))
         },
         renderMath(html: string) {
           return renderMathExpressions(html, output)
@@ -666,9 +672,11 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
         const html = await fullParser.parse(normalizeDisplayMath(markdown))
         return renderMathExpressions(html, output)
       },
+      async parseNoMath(markdown: string): Promise<string> {
+        return noMathParser.parse(normalizeDisplayMath(markdown))
+      },
       async parseFast(markdown: string): Promise<string> {
-        const html = await fastParser.parse(normalizeDisplayMath(markdown))
-        return renderMathExpressions(html, output)
+        return fastParser.parse(normalizeDisplayMath(markdown))
       },
       async parseLite(markdown: string): Promise<string> {
         // The lite path skips KaTeX/shiki so large file previews can mount before block-by-block upgrades run.
