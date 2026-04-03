@@ -1,5 +1,6 @@
 import type * as Arr from "effect/Array"
-import { NodeSink, NodeStream } from "@effect/platform-node"
+import { NodeFileSystem, NodeSink, NodeStream } from "@effect/platform-node"
+import * as NodePath from "@effect/platform-node/NodePath"
 import * as Deferred from "effect/Deferred"
 import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
@@ -335,7 +336,7 @@ export const make = Effect.gen(function* () {
       if (Predicate.isUndefined(opts?.forceKillAfter)) return f(command, proc, signal)
       return Effect.timeoutOrElse(f(command, proc, signal), {
         duration: opts.forceKillAfter,
-        onTimeout: () => f(command, proc, "SIGKILL"),
+        orElse: () => f(command, proc, "SIGKILL"),
       })
     }
 
@@ -385,9 +386,17 @@ export const make = Effect.gen(function* () {
                 if (code !== 0 && Predicate.isNotNull(code)) return yield* Effect.ignore(kill(killGroup))
                 return yield* Effect.void
               }
-              return yield* kill((command, proc, signal) =>
-                Effect.catch(killGroup(command, proc, signal), () => killOne(command, proc, signal)),
-              ).pipe(Effect.andThen(Deferred.await(signal)), Effect.ignore)
+              const send = (s: NodeJS.Signals) =>
+                Effect.catch(killGroup(command, proc, s), () => killOne(command, proc, s))
+              const sig = command.options.killSignal ?? "SIGTERM"
+              const attempt = send(sig).pipe(Effect.andThen(Deferred.await(signal)), Effect.asVoid)
+              const escalated = command.options.forceKillAfter
+                ? Effect.timeoutOrElse(attempt, {
+                    duration: command.options.forceKillAfter,
+                    orElse: () => send("SIGKILL").pipe(Effect.andThen(Deferred.await(signal)), Effect.asVoid),
+                  })
+                : attempt
+              return yield* Effect.ignore(escalated)
             }),
           )
 
@@ -412,14 +421,17 @@ export const make = Effect.gen(function* () {
                 ),
               )
             }),
-            kill: (opts?: ChildProcess.KillOptions) =>
-              timeout(
-                proc,
-                command,
-                opts,
-              )((command, proc, signal) =>
-                Effect.catch(killGroup(command, proc, signal), () => killOne(command, proc, signal)),
-              ).pipe(Effect.andThen(Deferred.await(signal)), Effect.asVoid),
+            kill: (opts?: ChildProcess.KillOptions) => {
+              const sig = opts?.killSignal ?? "SIGTERM"
+              const send = (s: NodeJS.Signals) =>
+                Effect.catch(killGroup(command, proc, s), () => killOne(command, proc, s))
+              const attempt = send(sig).pipe(Effect.andThen(Deferred.await(signal)), Effect.asVoid)
+              if (!opts?.forceKillAfter) return attempt
+              return Effect.timeoutOrElse(attempt, {
+                duration: opts.forceKillAfter,
+                orElse: () => send("SIGKILL").pipe(Effect.andThen(Deferred.await(signal)), Effect.asVoid),
+              })
+            },
           })
         }
         case "PipedCommand": {
@@ -474,3 +486,17 @@ export const layer: Layer.Layer<ChildProcessSpawner, never, FileSystem.FileSyste
   ChildProcessSpawner,
   make,
 )
+
+export const defaultLayer = layer.pipe(Layer.provide(NodeFileSystem.layer), Layer.provide(NodePath.layer))
+
+import { lazy } from "@/util/lazy"
+
+const rt = lazy(async () => {
+  // Dynamic import to avoid circular dep: cross-spawn-spawner → run-service → Instance → project → cross-spawn-spawner
+  const { makeRuntime } = await import("@/effect/run-service")
+  return makeRuntime(ChildProcessSpawner, defaultLayer)
+})
+
+type RT = Awaited<ReturnType<typeof rt>>
+export const runPromiseExit: RT["runPromiseExit"] = async (...args) => (await rt()).runPromiseExit(...(args as [any]))
+export const runPromise: RT["runPromise"] = async (...args) => (await rt()).runPromise(...(args as [any]))
