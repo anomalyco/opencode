@@ -49,6 +49,12 @@ export namespace Server {
         const password = Flag.OPENCODE_SERVER_PASSWORD
         if (!password) return next()
         const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
+        const token = c.req.query("token")
+        if (token) {
+          const raw = Buffer.from(token, "base64").toString()
+          const i = raw.indexOf(":")
+          if (i !== -1 && raw.slice(0, i) === username && raw.slice(i + 1) === password) return next()
+        }
         return basicAuth({ username, password })(c, next)
       })
       .use(async (c, next) => {
@@ -286,8 +292,17 @@ export namespace Server {
         if (basePath !== "/") {
           const url = new URL(req.url)
           if (url.pathname.startsWith(basePath)) {
+            const original = req
             url.pathname = url.pathname.slice(basePath.length) || "/"
             req = new Request(url.toString(), req)
+            if (original.headers.get("upgrade")) {
+              // Bun's server.upgrade() requires the original Request to access
+              // the internal request_context for the underlying TCP socket.
+              // new Request() does not copy this field (oven-sh/bun#11382).
+              const upgrade = server.upgrade.bind(server)
+              server = Object.create(server)
+              server.upgrade = (_: Request, opts?: any) => upgrade(original, opts)
+            }
           }
         }
         return controlPlane.fetch(req, server)
