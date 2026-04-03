@@ -65,6 +65,8 @@ Trenutna lista modela uključuje:
 
 - **GLM-5**
 - **Kimi K2.5**
+- **MiMo-V2-Pro**
+- **MiMo-V2-Omni**
 - **MiniMax M2.5**
 - **MiniMax M2.7**
 
@@ -84,17 +86,19 @@ Ograničenja su definisana u dolarskoj vrijednosti. To znači da vaš stvarni br
 
 Tabela ispod pruža procijenjeni broj zahtjeva na osnovu tipičnih obrazaca korištenja Go pretplate:
 
-|                    | GLM-5 | Kimi K2.5 | MiniMax M2.7 | MiniMax M2.5 |
-| ------------------ | ----- | --------- | ------------ | ------------ |
-| zahtjeva na 5 sati | 1,150 | 1,850     | 14,000       | 20,000       |
-| zahtjeva sedmično  | 2,880 | 4,630     | 35,000       | 50,000       |
-| zahtjeva mjesečno  | 5,750 | 9,250     | 70,000       | 100,000      |
+|                    | GLM-5 | Kimi K2.5 | MiMo-V2-Pro | MiMo-V2-Omni | MiniMax M2.7 | MiniMax M2.5 |
+| ------------------ | ----- | --------- | ----------- | ------------ | ------------ | ------------ |
+| zahtjeva na 5 sati | 1,150 | 1,850     | 1,290       | 2,150        | 14,000       | 20,000       |
+| zahtjeva sedmično  | 2,880 | 4,630     | 3,225       | 5,450        | 35,000       | 50,000       |
+| zahtjeva mjesečno  | 5,750 | 9,250     | 6,450       | 10,900       | 70,000       | 100,000      |
 
 Procjene se zasnivaju na zapaženim prosječnim obrascima zahtjeva:
 
 - GLM-5 — 700 ulaznih (input), 52,000 keširanih, 150 izlaznih (output) tokena po zahtjevu
 - Kimi K2.5 — 870 ulaznih, 55,000 keširanih, 200 izlaznih tokena po zahtjevu
 - MiniMax M2.7/M2.5 — 300 ulaznih, 55,000 keširanih, 125 izlaznih tokena po zahtjevu
+- MiMo-V2-Pro — 350 ulaznih, 41,000 keširanih, 250 izlaznih tokena po zahtjevu
+- MiMo-V2-Omni — 1000 ulaznih, 60,000 keširanih, 140 izlaznih tokena po zahtjevu
 
 Svoju trenutnu potrošnju možete pratiti u **<a href={console}>konzoli</a>**.
 
@@ -122,6 +126,8 @@ Također možete pristupiti Go modelima putem sljedećih API endpointa.
 | ------------ | ------------ | ------------------------------------------------ | --------------------------- |
 | GLM-5        | glm-5        | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.5    | kimi-k2.5    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2-Pro  | mimo-v2-pro  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2-Omni | mimo-v2-omni | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7 | minimax-m2.7 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5 | minimax-m2.5 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
