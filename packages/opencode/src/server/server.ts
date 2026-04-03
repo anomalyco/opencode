@@ -40,32 +40,6 @@ export namespace Server {
     const app = new Hono()
     return app
       .onError(errorHandler(log))
-      .use((c, next) => {
-        // Allow CORS preflight requests to succeed without auth.
-        // Browser clients sending Authorization headers will preflight with OPTIONS.
-        if (c.req.method === "OPTIONS") return next()
-        const password = Flag.OPENCODE_SERVER_PASSWORD
-        if (!password) return next()
-        const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
-        return basicAuth({ username, password })(c, next)
-      })
-      .use(async (c, next) => {
-        const skip = c.req.path === "/log"
-        if (!skip) {
-          log.info("request", {
-            method: c.req.method,
-            path: c.req.path,
-          })
-        }
-        const timer = log.time("request", {
-          method: c.req.method,
-          path: c.req.path,
-        })
-        await next()
-        if (!skip) {
-          timer.stop()
-        }
-      })
       .use(
         cors({
           maxAge: 86_400,
@@ -93,6 +67,32 @@ export namespace Server {
           },
         }),
       )
+      .use((c, next) => {
+        // Allow CORS preflight requests to succeed without auth.
+        // Browser clients sending Authorization headers will preflight with OPTIONS.
+        if (c.req.method === "OPTIONS") return next()
+        const password = Flag.OPENCODE_SERVER_PASSWORD
+        if (!password) return next()
+        const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
+        return basicAuth({ username, password })(c, next)
+      })
+      .use(async (c, next) => {
+        const skip = c.req.path === "/log"
+        if (!skip) {
+          log.info("request", {
+            method: c.req.method,
+            path: c.req.path,
+          })
+        }
+        const timer = log.time("request", {
+          method: c.req.method,
+          path: c.req.path,
+        })
+        await next()
+        if (!skip) {
+          timer.stop()
+        }
+      })
       .use((c, next) => {
         if (skipCompress(c.req.path, c.req.method)) return next()
         return zipped(c, next)
