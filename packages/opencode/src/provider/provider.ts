@@ -915,14 +915,15 @@ export namespace Provider {
         input: model.cost?.input ?? 0,
         output: model.cost?.output ?? 0,
         cache: {
-          read: model.cost?.cache_read ?? 0,
-          write: model.cost?.cache_write ?? 0,
+          // Default cache prices to input/output prices to overestimate rather than undercharge
+          read: model.cost?.cache_read ?? model.cost?.input ?? 0,
+          write: model.cost?.cache_write ?? model.cost?.output ?? 0,
         },
         experimentalOver200K: model.cost?.context_over_200k
           ? {
               cache: {
-                read: model.cost.context_over_200k.cache_read ?? 0,
-                write: model.cost.context_over_200k.cache_write ?? 0,
+                read: model.cost.context_over_200k.cache_read ?? model.cost.context_over_200k.input ?? 0,
+                write: model.cost.context_over_200k.cache_write ?? model.cost.context_over_200k.output ?? 0,
               },
               input: model.cost.context_over_200k.input,
               output: model.cost.context_over_200k.output,
@@ -1093,8 +1094,19 @@ export namespace Provider {
                   input: model?.cost?.input ?? existingModel?.cost?.input ?? 0,
                   output: model?.cost?.output ?? existingModel?.cost?.output ?? 0,
                   cache: {
-                    read: model?.cost?.cache_read ?? existingModel?.cost?.cache.read ?? 0,
-                    write: model?.cost?.cache_write ?? existingModel?.cost?.cache.write ?? 0,
+                    // Default cache prices to input/output prices to overestimate rather than undercharge
+                    read:
+                      model?.cost?.cache_read ??
+                      existingModel?.cost?.cache.read ??
+                      model?.cost?.input ??
+                      existingModel?.cost?.input ??
+                      0,
+                    write:
+                      model?.cost?.cache_write ??
+                      existingModel?.cost?.cache.write ??
+                      model?.cost?.output ??
+                      existingModel?.cost?.output ??
+                      0,
                   },
                 },
                 options: mergeDeep(existingModel?.options ?? {}, model.options ?? {}),
