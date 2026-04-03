@@ -211,7 +211,6 @@ export function BasicTool(props: BasicToolProps) {
   )
 }
 
-<<<<<<< HEAD
 function label(input: Record<string, unknown> | undefined) {
   const keys = ["description", "query", "url", "filePath", "path", "pattern", "name"]
   return keys.map((key) => input?.[key]).find((value): value is string => typeof value === "string" && value.length > 0)
@@ -236,8 +235,6 @@ export function GenericTool(props: {
   status?: string
   hideDetails?: boolean
   input?: Record<string, unknown>
-}) {
-  const i18n = useI18n()
   output?: string
 }) {
   const i18n = useI18n()
