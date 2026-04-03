@@ -112,6 +112,7 @@ export const WorkerStatus = z.enum([
   "stopping",
   "done",
   "failed",
+  "blocked",
   "merged",
   "conflict",
 ])

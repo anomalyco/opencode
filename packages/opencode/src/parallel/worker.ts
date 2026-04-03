@@ -951,6 +951,15 @@ export namespace WorkerManager {
         if (allowed && !allowed.has(st.id)) return false
         // Check explicit dependencies
         const deps = dependencyGraph.get(st.id) ?? new Set()
+
+        // Check if any dependency has failed - if so, mark this worker as blocked
+        const hasFailedDependency = Array.from(deps).some((dep) => failed.has(dep))
+        if (hasFailedDependency) {
+          // Mark this worker as blocked since a dependency failed
+          updateWorker(plan.id, st.id, { status: "blocked" }).catch(() => {})
+          return false
+        }
+
         if (!Array.from(deps).every((dep) => completed.has(dep))) return false
 
         // In wave mode, also check that all earlier waves are complete
@@ -1588,7 +1597,7 @@ export namespace WorkerManager {
     planID: PlanID,
     subtaskID: SubtaskID,
     update: {
-      status?: "pending" | "spawning" | "running" | "done" | "failed" | "merged" | "conflict"
+      status?: "pending" | "spawning" | "running" | "done" | "failed" | "blocked" | "merged" | "conflict"
       error?: string
       sessionID?: string
       worktreeName?: string

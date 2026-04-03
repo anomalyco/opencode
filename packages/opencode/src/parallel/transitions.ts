@@ -30,12 +30,13 @@ export const VALID_PLAN_TRANSITIONS: Record<PlanStatus, PlanStatus[]> = {
 }
 
 export const VALID_WORKER_TRANSITIONS: Record<WorkerStatus, WorkerStatus[]> = {
-  pending: ["spawning", "failed"],
+  pending: ["spawning", "failed", "blocked"],
   spawning: ["running", "failed"],
   running: ["stopping", "done", "failed"],
   stopping: ["done", "failed"],
   done: ["merged", "conflict"],
   failed: ["pending"], // Allow retry
+  blocked: [], // Terminal state - dependency failed, cannot proceed
   merged: [],
   conflict: [],
 }
@@ -73,7 +74,7 @@ export function isPlanTerminal(status: PlanStatus): boolean {
 }
 
 export function isWorkerTerminal(status: WorkerStatus): boolean {
-  return status === "merged" || status === "failed" || status === "conflict"
+  return status === "merged" || status === "failed" || status === "conflict" || status === "blocked"
 }
 
 export function allWorkersTerminal(workers: WorkerState[]): boolean {
