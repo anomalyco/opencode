@@ -214,7 +214,7 @@ export namespace Vcs {
     }),
   )
 
-  export const defaultLayer = layer.pipe(
+  const defaultLayer = layer.pipe(
     Layer.provide(Git.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(Bus.layer),
@@ -222,19 +222,19 @@ export namespace Vcs {
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
-  export function init() {
+  export async function init() {
     return runPromise((svc) => svc.init())
   }
 
-  export function branch() {
+  export async function branch() {
     return runPromise((svc) => svc.branch())
   }
 
-  export function defaultBranch() {
+  export async function defaultBranch() {
     return runPromise((svc) => svc.defaultBranch())
   }
 
-  export function diff(mode: Mode) {
+  export async function diff(mode: Mode) {
     return runPromise((svc) => svc.diff(mode))
   }
 }
