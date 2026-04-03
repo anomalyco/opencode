@@ -1,15 +1,7 @@
 import { Popover as Kobalte } from "@kobalte/core/popover"
-import {
-  ComponentProps,
-  JSXElement,
-  ParentProps,
-  Show,
-  createEffect,
-  onCleanup,
-  splitProps,
-  ValidComponent,
-} from "solid-js"
+import { ComponentProps, JSXElement, ParentProps, Show, createEffect, splitProps, ValidComponent } from "solid-js"
 import { createStore } from "solid-js/store"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { useI18n } from "../context/i18n"
 import { IconButton } from "./icon-button"
 
@@ -104,15 +96,9 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
       close("outside")
     }
 
-    window.addEventListener("keydown", onKeyDown, true)
-    window.addEventListener("pointerdown", onPointerDown, true)
-    window.addEventListener("focusin", onFocusIn, true)
-
-    onCleanup(() => {
-      window.removeEventListener("keydown", onKeyDown, true)
-      window.removeEventListener("pointerdown", onPointerDown, true)
-      window.removeEventListener("focusin", onFocusIn, true)
-    })
+    makeEventListener(window, "keydown", onKeyDown, { capture: true })
+    makeEventListener(window, "pointerdown", onPointerDown, { capture: true })
+    makeEventListener(window, "focusin", onFocusIn, { capture: true })
   })
 
   const content = () => (

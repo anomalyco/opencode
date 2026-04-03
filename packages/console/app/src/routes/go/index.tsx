@@ -12,7 +12,7 @@ import { Footer } from "~/component/footer"
 import { Header } from "~/component/header"
 import { config } from "~/config"
 import { getLastSeenWorkspaceID } from "../workspace/common"
-import { IconMiniMax, IconZai } from "~/component/icon"
+import { IconMiniMax, IconMiMo, IconZai } from "~/component/icon"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { LocaleLinks } from "~/component/locale-links"
@@ -47,12 +47,14 @@ function LimitsGraph(props: { href: string }) {
   const models = [
     { id: "glm", name: "GLM-5", req: 1150, d: "120ms" },
     { id: "kimi", name: "Kimi K2.5", req: 1850, d: "240ms" },
+    { id: "mimo-v2-pro", name: "MiMo-V2-Pro", req: 1290, d: "150ms" },
+    { id: "mimo-v2-omni", name: "MiMo-V2-Omni", req: 2150, d: "270ms" },
     { id: "minimax-m2.7", name: "MiniMax M2.7", req: 14000, d: "330ms" },
     { id: "minimax-m2.5", name: "MiniMax M2.5", req: 20000, d: "360ms" },
   ]
 
   const w = 720
-  const h = 220
+  const h = 260
   const left = 40
   const right = 60
   const top = 18
@@ -298,6 +300,9 @@ export default function Home() {
                 <div>
                   <IconZai width="24" height="24" />
                 </div>
+                <div>
+                  <IconMiMo width="24" height="24" />
+                </div>
                 {/*
                 <div>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -432,10 +437,7 @@ export default function Home() {
                 </Faq>
               </li>
               <li>
-                <Faq question={i18n.t("go.faq.q5")}>
-                  {i18n.t("go.faq.a5.body")} <a href="mailto:contact@anoma.ly">{i18n.t("common.contactUs")}</a>{" "}
-                  {i18n.t("go.faq.a5.contactAfter")}
-                </Faq>
+                <Faq question={i18n.t("go.faq.q5")}>{i18n.t("go.faq.a5.body")}</Faq>
               </li>
               <li>
                 <Faq question={i18n.t("go.faq.q6")}>{i18n.t("go.faq.a6")}</Faq>
