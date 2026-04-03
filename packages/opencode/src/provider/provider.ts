@@ -45,7 +45,6 @@ import { createTogetherAI } from "@ai-sdk/togetherai"
 import { createPerplexity } from "@ai-sdk/perplexity"
 import { createVercel } from "@ai-sdk/vercel"
 import { createVenice } from "venice-ai-sdk-provider"
-import type { Auth as PluginAuth } from "@opencode-ai/sdk"
 import {
   createGitLab,
   VERSION as GITLAB_PROVIDER_VERSION,
@@ -153,7 +152,7 @@ export namespace Provider {
   type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
   type CustomVarsLoader = (options: Record<string, any>) => Record<string, string>
   type CustomDiscoverModels = () => Promise<Record<string, Model>>
-  type CustomLoader = (provider: Info) => Promise<{
+  type CustomLoader = (provider: Info) => Effect.Effect<{
     autoload: boolean
     getModel?: CustomModelLoader
     vars?: CustomVarsLoader
@@ -162,8 +161,8 @@ export namespace Provider {
   }>
 
   type CustomDep = {
-    auth: (id: string) => Promise<Auth.Info | undefined>
-    config: () => Promise<Config.Info>
+    auth: (id: string) => Effect.Effect<Auth.Info | undefined>
+    config: () => Effect.Effect<Config.Info>
   }
 
   function useLanguageModel(sdk: any) {
@@ -172,26 +171,27 @@ export namespace Provider {
 
   function custom(dep: CustomDep): Record<string, CustomLoader> {
     return {
-      async anthropic() {
-        return {
+      anthropic: () =>
+        Effect.succeed({
           autoload: false,
           options: {
             headers: {
               "anthropic-beta": "interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
             },
           },
-        }
-      },
-      async opencode(input) {
-        const hasKey = await (async () => {
-          const env = Env.all()
+        }),
+      opencode: Effect.fnUntraced(function* (input: Info) {
+        const env = Env.all()
+        const hasKey = iife(() => {
           if (input.env.some((item) => env[item])) return true
-          if (await dep.auth(input.id)) return true
-          if ((await dep.config()).provider?.["opencode"]?.options?.apiKey) return true
           return false
-        })()
+        })
+        const ok =
+          hasKey ||
+          Boolean(yield* dep.auth(input.id)) ||
+          Boolean((yield* dep.config()).provider?.["opencode"]?.options?.apiKey)
 
-        if (!hasKey) {
+        if (!ok) {
           for (const [key, value] of Object.entries(input.models)) {
             if (value.cost.input === 0) continue
             delete input.models[key]
@@ -200,45 +200,42 @@ export namespace Provider {
 
         return {
           autoload: Object.keys(input.models).length > 0,
-          options: hasKey ? {} : { apiKey: "public" },
+          options: ok ? {} : { apiKey: "public" },
         }
-      },
-      openai: async () => {
-        return {
+      }),
+      openai: () =>
+        Effect.succeed({
           autoload: false,
           async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
             return sdk.responses(modelID)
           },
           options: {},
-        }
-      },
-      xai: async () => {
-        return {
+        }),
+      xai: () =>
+        Effect.succeed({
           autoload: false,
           async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
             return sdk.responses(modelID)
           },
           options: {},
-        }
-      },
-      "github-copilot": async () => {
-        return {
+        }),
+      "github-copilot": () =>
+        Effect.succeed({
           autoload: false,
           async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
             if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
             return shouldUseCopilotResponsesApi(modelID) ? sdk.responses(modelID) : sdk.chat(modelID)
           },
           options: {},
-        }
-      },
-      azure: async (provider) => {
+        }),
+      azure: (provider) => {
         const resource = iife(() => {
           const name = provider.options?.resourceName
           if (typeof name === "string" && name.trim() !== "") return name
           return Env.get("AZURE_RESOURCE_NAME")
         })
 
-        return {
+        return Effect.succeed({
           autoload: false,
           async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
             if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
@@ -254,11 +251,11 @@ export namespace Provider {
               ...(resource && { AZURE_RESOURCE_NAME: resource }),
             }
           },
-        }
+        })
       },
-      "azure-cognitive-services": async () => {
+      "azure-cognitive-services": () => {
         const resourceName = Env.get("AZURE_COGNITIVE_SERVICES_RESOURCE_NAME")
-        return {
+        return Effect.succeed({
           autoload: false,
           async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
             if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
@@ -271,11 +268,11 @@ export namespace Provider {
           options: {
             baseURL: resourceName ? `https://${resourceName}.cognitiveservices.azure.com/openai` : undefined,
           },
-        }
+        })
       },
-      "amazon-bedrock": async () => {
-        const providerConfig = (await dep.config()).provider?.["amazon-bedrock"]
-        const auth = await dep.auth("amazon-bedrock")
+      "amazon-bedrock": Effect.fnUntraced(function* () {
+        const providerConfig = (yield* dep.config()).provider?.["amazon-bedrock"]
+        const auth = yield* dep.auth("amazon-bedrock")
 
         // Region precedence: 1) config file, 2) env var, 3) default
         const configRegion = providerConfig?.options?.region
@@ -418,9 +415,9 @@ export namespace Provider {
             return sdk.languageModel(modelID)
           },
         }
-      },
-      openrouter: async () => {
-        return {
+      }),
+      openrouter: () =>
+        Effect.succeed({
           autoload: false,
           options: {
             headers: {
@@ -428,10 +425,9 @@ export namespace Provider {
               "X-Title": "opencode",
             },
           },
-        }
-      },
-      vercel: async () => {
-        return {
+        }),
+      vercel: () =>
+        Effect.succeed({
           autoload: false,
           options: {
             headers: {
@@ -439,9 +435,8 @@ export namespace Provider {
               "x-title": "opencode",
             },
           },
-        }
-      },
-      "google-vertex": async (provider) => {
+        }),
+      "google-vertex": (provider) => {
         const project =
           provider.options?.project ??
           Env.get("GOOGLE_CLOUD_PROJECT") ??
@@ -457,8 +452,8 @@ export namespace Provider {
         )
 
         const autoload = Boolean(project)
-        if (!autoload) return { autoload: false }
-        return {
+        if (!autoload) return Effect.succeed({ autoload: false })
+        return Effect.succeed({
           autoload: true,
           vars(_options: Record<string, any>) {
             const endpoint =
@@ -487,14 +482,14 @@ export namespace Provider {
             const id = String(modelID).trim()
             return sdk.languageModel(id)
           },
-        }
+        })
       },
-      "google-vertex-anthropic": async () => {
+      "google-vertex-anthropic": () => {
         const project = Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
         const location = Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "global"
         const autoload = Boolean(project)
-        if (!autoload) return { autoload: false }
-        return {
+        if (!autoload) return Effect.succeed({ autoload: false })
+        return Effect.succeed({
           autoload: true,
           options: {
             project,
@@ -504,10 +499,10 @@ export namespace Provider {
             const id = String(modelID).trim()
             return sdk.languageModel(id)
           },
-        }
+        })
       },
-      "sap-ai-core": async () => {
-        const auth = await dep.auth("sap-ai-core")
+      "sap-ai-core": Effect.fnUntraced(function* () {
+        const auth = yield* dep.auth("sap-ai-core")
         // TODO: Using process.env directly because Env.set only updates a shallow copy (not process.env),
         // until the scope of the Env API is clarified (test only or runtime?)
         const envServiceKey = iife(() => {
@@ -529,9 +524,9 @@ export namespace Provider {
             return sdk(modelID)
           },
         }
-      },
-      zenmux: async () => {
-        return {
+      }),
+      zenmux: () =>
+        Effect.succeed({
           autoload: false,
           options: {
             headers: {
@@ -539,19 +534,18 @@ export namespace Provider {
               "X-Title": "opencode",
             },
           },
-        }
-      },
-      gitlab: async (input) => {
+        }),
+      gitlab: Effect.fnUntraced(function* (input: Info) {
         const instanceUrl = Env.get("GITLAB_INSTANCE_URL") || "https://gitlab.com"
 
-        const auth = await dep.auth(input.id)
-        const apiKey = await (async () => {
+        const auth = yield* dep.auth(input.id)
+        const apiKey = yield* Effect.sync(() => {
           if (auth?.type === "oauth") return auth.access
           if (auth?.type === "api") return auth.key
           return Env.get("GITLAB_TOKEN")
-        })()
+        })
 
-        const providerConfig = (await dep.config()).provider?.["gitlab"]
+        const providerConfig = (yield* dep.config()).provider?.["gitlab"]
 
         const aiGatewayHeaders = {
           "User-Agent": `opencode/${Installation.VERSION} gitlab-ai-provider/${GITLAB_PROVIDER_VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
@@ -676,15 +670,15 @@ export namespace Provider {
             }
           },
         }
-      },
-      "cloudflare-workers-ai": async (input) => {
+      }),
+      "cloudflare-workers-ai": Effect.fnUntraced(function* (input: Info) {
         const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID")
         if (!accountId) return { autoload: false }
 
-        const apiKey = await iife(async () => {
+        const apiKey = yield* Effect.gen(function* () {
           const envToken = Env.get("CLOUDFLARE_API_KEY")
           if (envToken) return envToken
-          const auth = await dep.auth(input.id)
+          const auth = yield* dep.auth(input.id)
           if (auth?.type === "api") return auth.key
           return undefined
         })
@@ -706,21 +700,21 @@ export namespace Provider {
             }
           },
         }
-      },
-      "cloudflare-ai-gateway": async (input) => {
+      }),
+      "cloudflare-ai-gateway": Effect.fnUntraced(function* (input: Info) {
         const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID")
         const gateway = Env.get("CLOUDFLARE_GATEWAY_ID")
 
         if (!accountId || !gateway) return { autoload: false }
 
         // Get API token from env or auth - required for authenticated gateways
-        const apiToken = await (async () => {
+        const apiToken = yield* Effect.gen(function* () {
           const envToken = Env.get("CLOUDFLARE_API_TOKEN") || Env.get("CF_AIG_TOKEN")
           if (envToken) return envToken
-          const auth = await dep.auth(input.id)
+          const auth = yield* dep.auth(input.id)
           if (auth?.type === "api") return auth.key
           return undefined
-        })()
+        })
 
         if (!apiToken) {
           throw new Error(
@@ -730,8 +724,8 @@ export namespace Provider {
         }
 
         // Use official ai-gateway-provider package (v2.x for AI SDK v5 compatibility)
-        const { createAiGateway } = await import("ai-gateway-provider")
-        const { createUnified } = await import("ai-gateway-provider/providers/unified")
+        const { createAiGateway } = yield* Effect.promise(() => import("ai-gateway-provider"))
+        const { createUnified } = yield* Effect.promise(() => import("ai-gateway-provider/providers/unified"))
 
         const metadata = iife(() => {
           if (input.options?.metadata) return input.options.metadata
@@ -768,19 +762,18 @@ export namespace Provider {
           },
           options: {},
         }
-      },
-      cerebras: async () => {
-        return {
+      }),
+      cerebras: () =>
+        Effect.succeed({
           autoload: false,
           options: {
             headers: {
               "X-Cerebras-3rd-Party-Integration": "opencode",
             },
           },
-        }
-      },
-      kilo: async () => {
-        return {
+        }),
+      kilo: () =>
+        Effect.succeed({
           autoload: false,
           options: {
             headers: {
@@ -788,8 +781,7 @@ export namespace Provider {
               "X-Title": "opencode",
             },
           },
-        }
-      },
+        }),
     }
   }
 
@@ -1016,8 +1008,8 @@ export namespace Provider {
             [providerID: string]: CustomDiscoverModels
           } = {}
           const dep = {
-            auth: (id: string) => Effect.runPromise(auth.get(id)),
-            config: () => Effect.runPromise(config.get()),
+            auth: (id: string) => auth.get(id).pipe(Effect.orDie),
+            config: () => config.get(),
           }
 
           log.info("init")
@@ -1159,12 +1151,15 @@ export namespace Provider {
             const providerID = ProviderID.make(plugin.auth.provider)
             if (disabled.has(providerID)) continue
 
-            const pluginAuth = yield* auth.get(providerID).pipe(Effect.orDie)
-            if (!pluginAuth) continue
+            const stored = yield* auth.get(providerID).pipe(Effect.orDie)
+            if (!stored) continue
             if (!plugin.auth.loader) continue
 
             const options = yield* Effect.promise(() =>
-              plugin.auth!.loader!(() => Promise.resolve(pluginAuth as PluginAuth), database[plugin.auth!.provider]),
+              plugin.auth!.loader!(
+                () => Effect.runPromise(auth.get(providerID).pipe(Effect.orDie)) as any,
+                database[plugin.auth!.provider],
+              ),
             )
             const opts = options ?? {}
             const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
@@ -1179,7 +1174,7 @@ export namespace Provider {
               log.error("Provider does not exist in model list " + providerID)
               continue
             }
-            const result = yield* Effect.promise(() => fn(data))
+            const result = yield* fn(data)
             if (result && (result.autoload || providers[providerID])) {
               if (result.getModel) modelLoaders[providerID] = result.getModel
               if (result.vars) varsLoaders[providerID] = result.vars
