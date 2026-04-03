@@ -121,11 +121,22 @@ export function SidekickChat(props: { parentID: string }) {
   }
 
   async function inject(text: string) {
-    await (sdk.fetch ?? fetch)(`${base()}/sidekick/inject`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    })
+    try {
+      const res = await (sdk.fetch ?? fetch)(`${base()}/sidekick/inject`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      })
+      if (!res.ok) {
+        const msg = await res.text().catch(() => res.statusText)
+        setError(msg || `Failed to inject message (${res.status})`)
+        return
+      }
+      setError(undefined)
+      await sync.session.sync(props.parentID)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to inject message")
+    }
   }
 
   return (

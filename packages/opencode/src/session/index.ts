@@ -635,7 +635,7 @@ export namespace Session {
 
   export const remove = fn(SessionID.zod, async (sessionID) => {
     try {
-      SessionPrompt.cancel(sessionID)
+      await SessionPrompt.cancel(sessionID)
       const session = await get(sessionID)
       // Query ALL children (including sidekick) directly so nothing is orphaned
       const allChildren = Database.use((db) =>

@@ -212,7 +212,7 @@ export const SessionRoutes = lazy(() =>
           },
         },
       }),
-      validator("json", Session.create.schema.optional()),
+      validator("json", Session.create.schema.unwrap().omit({ kind: true }).optional()),
       async (c) => {
         const body = c.req.valid("json") ?? {}
         // Prevent external clients from creating sidekick sessions via public API

@@ -318,7 +318,7 @@ describe("sidekick context guards", () => {
 })
 
 describe("sidekick project isolation", () => {
-  test("inject rejects cross-project parentID", async () => {
+  test("inject succeeds for same-project parent with user message", async () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {

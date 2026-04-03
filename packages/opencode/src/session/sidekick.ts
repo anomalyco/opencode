@@ -142,13 +142,10 @@ export namespace Sidekick {
 
       // Mark previous synthetic snapshot parts as ignored to prevent duplication
       const prev = await Session.messages({ sessionID: session.id })
-      for (const msg of prev) {
-        for (const part of msg.parts) {
-          if (part.type === "text" && part.synthetic && !part.ignored) {
-            await Session.updatePart({ ...part, ignored: true })
-          }
-        }
-      }
+      const stale = prev.flatMap((msg) =>
+        msg.parts.filter((p): p is MessageV2.TextPart => p.type === "text" && p.synthetic === true && !p.ignored),
+      )
+      await Promise.all(stale.map((p) => Session.updatePart({ ...p, ignored: true })))
 
       const parts: SessionPrompt.PromptInput["parts"] = []
 
@@ -224,8 +221,8 @@ export namespace Sidekick {
       if (parent.kind === "sidekick") throw new Error("Cannot inject into a sidekick session")
       if (parent.projectID !== Instance.project.id) throw new Error("Parent session belongs to a different project")
 
-      // Get last user message to reuse agent + model — scan all messages (no limit)
-      const msgs = await Session.messages({ sessionID: input.parentID })
+      // Get last user message to reuse agent + model — scan recent messages
+      const msgs = await Session.messages({ sessionID: input.parentID, limit: 50 })
       let agent = "build"
       let model = await Provider.defaultModel()
       for (let i = msgs.length - 1; i >= 0; i--) {
