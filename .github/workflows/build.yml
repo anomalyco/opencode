@@ -56,9 +56,9 @@ jobs:
       - name: Smoke test — patch signatures
         run: |
           BINARY="packages/opencode/dist/opencode-linux-x64/bin/opencode"
-          EXCHANGE=$(strings "$BINARY" | grep -c "exchangeCopilotToken" || echo 0)
-          GHU_CHECK=$(strings "$BINARY" | grep -c "isGhuToken" || echo 0)
-          VSCODE_ID=$(strings "$BINARY" | grep -c "Iv1.b507a08c87ecfe98" || echo 0)
+          EXCHANGE=$(strings "$BINARY" | grep -c "exchangeCopilotToken" || true)
+          GHU_CHECK=$(strings "$BINARY" | grep -c "isGhuToken" || true)
+          VSCODE_ID=$(strings "$BINARY" | grep -c "Iv1.b507a08c87ecfe98" || true)
           echo "exchangeCopilotToken: $EXCHANGE"
           echo "isGhuToken: $GHU_CHECK"
           echo "VS Code client ID: $VSCODE_ID"
