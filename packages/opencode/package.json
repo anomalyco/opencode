@@ -9,6 +9,7 @@
     "prepare": "effect-language-service patch || true",
     "typecheck": "tsgo --noEmit",
     "test": "bun test --timeout 30000",
+    "test:ci": "bun test --timeout 30000 --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml",
     "build": "bun run script/build.ts",
     "upgrade-opentui": "bun run script/upgrade-opentui.ts",
     "dev": "bun run --conditions=browser ./src/index.ts",
