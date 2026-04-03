@@ -19,6 +19,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app/packages/opencode/dist/opencode-linux-x64/bin/opencode /usr/local/bin/opencode
+COPY docker/AGENTS.md /etc/opencode/AGENTS.md
+ENV OPENCODE_CONFIG_DIR=/etc/opencode
 
 RUN adduser -D -u 1000 -h /home/jovyan jovyan
 ENV HOME=/home/jovyan
