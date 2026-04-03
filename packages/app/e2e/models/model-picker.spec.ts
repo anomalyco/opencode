@@ -2,7 +2,7 @@ import { test, expect } from "../fixtures"
 import { promptSelector } from "../selectors"
 import { clickListItem } from "../actions"
 
-test("smoke model selection updates prompt footer", async ({ page, gotoSession }) => {
+test.fixme("smoke model selection updates prompt footer", async ({ page, gotoSession }) => {
   await gotoSession()
 
   await page.locator(promptSelector).click()

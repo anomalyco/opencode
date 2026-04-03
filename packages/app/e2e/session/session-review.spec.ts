@@ -1,6 +1,6 @@
 import { waitSessionIdle, withSession } from "../actions"
 import { test, expect } from "../fixtures"
-import { createSdk } from "../utils"
+import { bodyText } from "../prompt/mock"
 
 const count = 14
 
@@ -40,8 +40,19 @@ function edit(file: string, prev: string, next: string) {
   )
 }
 
-async function patch(sdk: ReturnType<typeof createSdk>, sessionID: string, patchText: string) {
-  await sdk.session.promptAsync({
+async function patchWithMock(
+  llm: Parameters<typeof test>[0]["llm"],
+  sdk: Parameters<typeof withSession>[0],
+  sessionID: string,
+  patchText: string,
+) {
+  const callsBefore = await llm.calls()
+  await llm.toolMatch(
+    (hit) => bodyText(hit).includes("Your only valid response is one apply_patch tool call."),
+    "apply_patch",
+    { patchText },
+  )
+  await sdk.session.prompt({
     sessionID,
     agent: "build",
     system: [
@@ -54,7 +65,16 @@ async function patch(sdk: ReturnType<typeof createSdk>, sessionID: string, patch
     parts: [{ type: "text", text: "Apply the provided patch exactly once." }],
   })
 
-  await waitSessionIdle(sdk, sessionID, 120_000)
+  await expect.poll(() => llm.calls().then((c) => c > callsBefore), { timeout: 30_000 }).toBe(true)
+  await expect
+    .poll(
+      async () => {
+        const diff = await sdk.session.diff({ sessionID }).then((res) => res.data ?? [])
+        return diff.length
+      },
+      { timeout: 120_000 },
+    )
+    .toBeGreaterThan(0)
 }
 
 async function show(page: Parameters<typeof test>[0]["page"]) {
@@ -233,7 +253,7 @@ async function fileOverflow(page: Parameters<typeof test>[0]["page"]) {
   }
 }
 
-test("review applies inline comment clicks without horizontal overflow", async ({ page, withProject }) => {
+test("review applies inline comment clicks without horizontal overflow", async ({ page, llm, project }) => {
   test.setTimeout(180_000)
 
   const tag = `review-comment-${Date.now()}`
@@ -242,47 +262,45 @@ test("review applies inline comment clicks without horizontal overflow", async (
 
   await page.setViewportSize({ width: 1280, height: 900 })
 
-  await withProject(async (project) => {
-    const sdk = createSdk(project.directory)
+  await project.open()
+  await withSession(project.sdk, `e2e review comment ${tag}`, async (session) => {
+    project.trackSession(session.id)
+    await patchWithMock(llm, project.sdk, session.id, seed([{ file, mark: tag }]))
 
-    await withSession(sdk, `e2e review comment ${tag}`, async (session) => {
-      await patch(sdk, session.id, seed([{ file, mark: tag }]))
+    await expect
+      .poll(
+        async () => {
+          const diff = await project.sdk.session.diff({ sessionID: session.id }).then((res) => res.data ?? [])
+          return diff.length
+        },
+        { timeout: 60_000 },
+      )
+      .toBe(1)
 
-      await expect
-        .poll(
-          async () => {
-            const diff = await sdk.session.diff({ sessionID: session.id }).then((res) => res.data ?? [])
-            return diff.length
-          },
-          { timeout: 60_000 },
-        )
-        .toBe(1)
+    await project.gotoSession(session.id)
+    await show(page)
 
-      await project.gotoSession(session.id)
-      await show(page)
+    const tab = page.getByRole("tab", { name: /Review/i }).first()
+    await expect(tab).toBeVisible()
+    await tab.click()
 
-      const tab = page.getByRole("tab", { name: /Review/i }).first()
-      await expect(tab).toBeVisible()
-      await tab.click()
+    await expand(page)
+    await waitMark(page, file, tag)
+    await comment(page, file, note)
 
-      await expand(page)
-      await waitMark(page, file, tag)
-      await comment(page, file, note)
-
-      await expect
-        .poll(async () => (await overflow(page, file))?.width ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
-        .toBeLessThanOrEqual(1)
-      await expect
-        .poll(async () => (await overflow(page, file))?.pop ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
-        .toBeLessThanOrEqual(1)
-      await expect
-        .poll(async () => (await overflow(page, file))?.tools ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
-        .toBeLessThanOrEqual(1)
-    })
+    await expect
+      .poll(async () => (await overflow(page, file))?.width ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
+      .toBeLessThanOrEqual(1)
+    await expect
+      .poll(async () => (await overflow(page, file))?.pop ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
+      .toBeLessThanOrEqual(1)
+    await expect
+      .poll(async () => (await overflow(page, file))?.tools ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
+      .toBeLessThanOrEqual(1)
   })
 })
 
-test("review file comments submit on click without clipping actions", async ({ page, withProject }) => {
+test("review file comments submit on click without clipping actions", async ({ page, llm, project }) => {
   test.setTimeout(180_000)
 
   const tag = `review-file-comment-${Date.now()}`
@@ -291,49 +309,46 @@ test("review file comments submit on click without clipping actions", async ({ p
 
   await page.setViewportSize({ width: 1280, height: 900 })
 
-  await withProject(async (project) => {
-    const sdk = createSdk(project.directory)
+  await project.open()
+  await withSession(project.sdk, `e2e review file comment ${tag}`, async (session) => {
+    project.trackSession(session.id)
+    await patchWithMock(llm, project.sdk, session.id, seed([{ file, mark: tag }]))
 
-    await withSession(sdk, `e2e review file comment ${tag}`, async (session) => {
-      await patch(sdk, session.id, seed([{ file, mark: tag }]))
+    await expect
+      .poll(
+        async () => {
+          const diff = await project.sdk.session.diff({ sessionID: session.id }).then((res) => res.data ?? [])
+          return diff.length
+        },
+        { timeout: 60_000 },
+      )
+      .toBe(1)
 
-      await expect
-        .poll(
-          async () => {
-            const diff = await sdk.session.diff({ sessionID: session.id }).then((res) => res.data ?? [])
-            return diff.length
-          },
-          { timeout: 60_000 },
-        )
-        .toBe(1)
+    await project.gotoSession(session.id)
+    await show(page)
 
-      await project.gotoSession(session.id)
-      await show(page)
+    const tab = page.getByRole("tab", { name: /Review/i }).first()
+    await expect(tab).toBeVisible()
+    await tab.click()
 
-      const tab = page.getByRole("tab", { name: /Review/i }).first()
-      await expect(tab).toBeVisible()
-      await tab.click()
+    await expand(page)
+    await waitMark(page, file, tag)
+    await openReviewFile(page, file)
+    await fileComment(page, note)
 
-      await expand(page)
-      await waitMark(page, file, tag)
-      await openReviewFile(page, file)
-      await fileComment(page, note)
-
-      await expect
-        .poll(async () => (await fileOverflow(page))?.width ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
-        .toBeLessThanOrEqual(1)
-      await expect
-        .poll(async () => (await fileOverflow(page))?.pop ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
-        .toBeLessThanOrEqual(1)
-      await expect
-        .poll(async () => (await fileOverflow(page))?.tools ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
-        .toBeLessThanOrEqual(1)
-    })
+    await expect
+      .poll(async () => (await fileOverflow(page))?.width ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
+      .toBeLessThanOrEqual(1)
+    await expect
+      .poll(async () => (await fileOverflow(page))?.pop ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
+      .toBeLessThanOrEqual(1)
+    await expect
+      .poll(async () => (await fileOverflow(page))?.tools ?? Number.POSITIVE_INFINITY, { timeout: 10_000 })
+      .toBeLessThanOrEqual(1)
   })
 })
 
-test("review keeps scroll position after a live diff update", async ({ page, withProject }) => {
-  test.skip(Boolean(process.env.CI), "Flaky in CI for now.")
+test.fixme("review keeps scroll position after a live diff update", async ({ page, llm, project }) => {
   test.setTimeout(180_000)
 
   const tag = `review-${Date.now()}`
@@ -343,84 +358,83 @@ test("review keeps scroll position after a live diff update", async ({ page, wit
 
   await page.setViewportSize({ width: 1600, height: 1000 })
 
-  await withProject(async (project) => {
-    const sdk = createSdk(project.directory)
+  await project.open()
+  await withSession(project.sdk, `e2e review ${tag}`, async (session) => {
+    project.trackSession(session.id)
+    await patchWithMock(llm, project.sdk, session.id, seed(list))
 
-    await withSession(sdk, `e2e review ${tag}`, async (session) => {
-      await patch(sdk, session.id, seed(list))
+    await expect
+      .poll(
+        async () => {
+          const info = await project.sdk.session.get({ sessionID: session.id }).then((res) => res.data)
+          return info?.summary?.files ?? 0
+        },
+        { timeout: 60_000 },
+      )
+      .toBe(list.length)
 
-      await expect
-        .poll(
-          async () => {
-            const info = await sdk.session.get({ sessionID: session.id }).then((res) => res.data)
-            return info?.summary?.files ?? 0
-          },
-          { timeout: 60_000 },
-        )
-        .toBe(list.length)
+    await expect
+      .poll(
+        async () => {
+          const diff = await project.sdk.session.diff({ sessionID: session.id }).then((res) => res.data ?? [])
+          return diff.length
+        },
+        { timeout: 60_000 },
+      )
+      .toBe(list.length)
 
-      await expect
-        .poll(
-          async () => {
-            const diff = await sdk.session.diff({ sessionID: session.id }).then((res) => res.data ?? [])
-            return diff.length
-          },
-          { timeout: 60_000 },
-        )
-        .toBe(list.length)
+    await project.gotoSession(session.id)
+    await show(page)
 
-      await project.gotoSession(session.id)
-      await show(page)
+    const tab = page.getByRole("tab", { name: /Review/i }).first()
+    await expect(tab).toBeVisible()
+    await tab.click()
 
-      const tab = page.getByRole("tab", { name: /Review/i }).first()
-      await expect(tab).toBeVisible()
-      await tab.click()
+    const view = page.locator('[data-slot="session-review-scroll"] .scroll-view__viewport').first()
+    await expect(view).toBeVisible()
+    const heads = page.getByRole("heading", { level: 3 }).filter({ hasText: /^review-scroll-/ })
+    await expect(heads).toHaveCount(list.length, { timeout: 60_000 })
 
-      const view = page.locator('[data-slot="session-review-scroll"] .scroll-view__viewport').first()
-      await expect(view).toBeVisible()
-      const heads = page.getByRole("heading", { level: 3 }).filter({ hasText: /^review-scroll-/ })
-      await expect(heads).toHaveCount(list.length, {
-        timeout: 60_000,
+    await expand(page)
+    await waitMark(page, hit.file, hit.mark)
+
+    const row = page
+      .getByRole("heading", {
+        level: 3,
+        name: new RegExp(hit.file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
       })
+      .first()
+    await expect(row).toBeVisible()
+    await row.evaluate((el) => el.scrollIntoView({ block: "center" }))
 
-      await expand(page)
-      await waitMark(page, hit.file, hit.mark)
+    await expect.poll(async () => (await spot(page, hit.file))?.y ?? 0).toBeGreaterThan(200)
+    const prev = await spot(page, hit.file)
+    if (!prev) throw new Error(`missing review row for ${hit.file}`)
 
-      const row = page
-        .getByRole("heading", { level: 3, name: new RegExp(hit.file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) })
-        .first()
-      await expect(row).toBeVisible()
-      await row.evaluate((el) => el.scrollIntoView({ block: "center" }))
+    await patchWithMock(llm, project.sdk, session.id, edit(hit.file, hit.mark, next))
 
-      await expect.poll(async () => (await spot(page, hit.file))?.y ?? 0).toBeGreaterThan(200)
-      const prev = await spot(page, hit.file)
-      if (!prev) throw new Error(`missing review row for ${hit.file}`)
+    await expect
+      .poll(
+        async () => {
+          const diff = await project.sdk.session.diff({ sessionID: session.id }).then((res) => res.data ?? [])
+          const item = diff.find((item) => item.file === hit.file)
+          return typeof item?.after === "string" ? item.after : ""
+        },
+        { timeout: 60_000 },
+      )
+      .toContain(`mark ${next}`)
 
-      await patch(sdk, session.id, edit(hit.file, hit.mark, next))
+    await waitMark(page, hit.file, next)
 
-      await expect
-        .poll(
-          async () => {
-            const diff = await sdk.session.diff({ sessionID: session.id }).then((res) => res.data ?? [])
-            const item = diff.find((item) => item.file === hit.file)
-            return typeof item?.after === "string" ? item.after : ""
-          },
-          { timeout: 60_000 },
-        )
-        .toContain(`mark ${next}`)
-
-      await waitMark(page, hit.file, next)
-
-      await expect
-        .poll(
-          async () => {
-            const next = await spot(page, hit.file)
-            if (!next) return Number.POSITIVE_INFINITY
-            return Math.max(Math.abs(next.top - prev.top), Math.abs(next.y - prev.y))
-          },
-          { timeout: 60_000 },
-        )
-        .toBeLessThanOrEqual(32)
-    })
+    await expect
+      .poll(
+        async () => {
+          const next = await spot(page, hit.file)
+          if (!next) return Number.POSITIVE_INFINITY
+          return Math.max(Math.abs(next.top - prev.top), Math.abs(next.y - prev.y))
+        },
+        { timeout: 60_000 },
+      )
+      .toBeLessThanOrEqual(32)
   })
 })

@@ -6,6 +6,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
 import { TextStrikethrough } from "@opencode-ai/ui/text-strikethrough"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Index, createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { composerEnabled, composerProbe } from "@/testing/session-composer"
@@ -91,9 +92,7 @@ export function SessionTodoDock(props: {
       setStore("height", el.getBoundingClientRect().height)
     }
     update()
-    const observer = new ResizeObserver(update)
-    observer.observe(el)
-    onCleanup(() => observer.disconnect())
+    createResizeObserver(el, update)
   })
 
   createEffect(() => {
