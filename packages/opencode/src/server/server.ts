@@ -285,11 +285,23 @@ export namespace Server {
     }
     url = new URL(`http://${opts.hostname}:${opts.port}`)
     const controlPlane = ControlPlaneRoutes({ cors: opts.cors })
-    const app = basePath !== "/" ? new Hono().route(basePath, controlPlane) : controlPlane
+    const mounted = basePath !== "/" ? new Hono().route(basePath, controlPlane) : null
     const args = {
       hostname: opts.hostname,
       idleTimeout: 0,
-      fetch: (req: Request, server: any) => app.fetch(req, server),
+      fetch: (req: Request, server: any) => {
+        if (basePath !== "/") {
+          const url = new URL(req.url)
+          if (url.pathname.startsWith(basePath)) {
+            if (req.headers.get("upgrade")?.toLowerCase() === "websocket") {
+              return mounted!.fetch(req, server)
+            }
+            url.pathname = url.pathname.slice(basePath.length) || "/"
+            req = new Request(url.toString(), req)
+          }
+        }
+        return controlPlane.fetch(req, server)
+      },
       websocket: websocket,
     } as const
     const tryServe = (port: number) => {
