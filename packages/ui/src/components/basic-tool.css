@@ -189,7 +189,7 @@
   gap: 8px;
   padding: 8px 12px;
   border-radius: 6px;
-  border: 1px solid var(--border-base, rgba(255, 255, 255, 0.17));
+  border: 1px solid var(--border-weak-base, rgba(255, 255, 255, 0.08));
   background: color-mix(in srgb, var(--background-base) 92%, transparent);
   transition:
     border-color 0.15s ease,
@@ -251,7 +251,7 @@
 
   &:hover,
   &:focus-visible {
-    border-color: var(--border-base, rgba(255, 255, 255, 0.17));
+    border-color: var(--border-weak-base, rgba(255, 255, 255, 0.08));
     background: color-mix(in srgb, var(--background-stronger) 88%, transparent);
 
     [data-component="task-tool-action"] {

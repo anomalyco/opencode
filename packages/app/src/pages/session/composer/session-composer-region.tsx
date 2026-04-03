@@ -266,11 +266,7 @@ export function SessionComposerRegion(props: {
               >
                 <div
                   ref={props.inputRef}
-                  class="w-full rounded-[12px] border p-3 text-16-regular text-text-weak"
-                  style={{
-                    border: "1px solid var(--border-weak-base, rgba(255, 255, 255, 0.08))",
-                    background: "var(--surface-inset-base, rgba(13, 13, 13, 0.50))",
-                  }}
+                  class="w-full rounded-[12px] border border-border-weak-base bg-background-base p-3 text-16-regular text-text-weak"
                 >
                   <span>{language.t("session.child.promptDisabled")} </span>
                   <Show when={parentID()}>
