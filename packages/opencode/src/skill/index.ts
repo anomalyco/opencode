@@ -163,7 +163,11 @@ export namespace Skill {
       yield* scan(state, bus, dir, OPENCODE_SKILL_PATTERN)
     }
 
-    const cfg = yield* config.get()
+    // Read config that includes plugin config() hook mutations.
+    // Plugin.config() returns the config after all plugins' config() hooks
+    // have run, so skills.paths includes plugin-registered directories.
+    const { Plugin } = yield* Effect.promise(() => import("../plugin"))
+    const cfg = yield* Effect.promise(() => Plugin.config())
     for (const item of cfg.skills?.paths ?? []) {
       const expanded = item.startsWith("~/") ? path.join(os.homedir(), item.slice(2)) : item
       const dir = path.isAbsolute(expanded) ? expanded : path.join(directory, expanded)

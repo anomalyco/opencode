@@ -20,6 +20,7 @@ import { CloudflareAIGatewayAuthPlugin, CloudflareWorkersAuthPlugin } from "./cl
 import { Effect, Layer, Context, Stream } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
+import { makeRuntime } from "@/effect/run-service"
 import { errorMessage } from "@/util/error"
 import { PluginLoader } from "./loader"
 import { parsePluginSpecifier, readPluginId, readV1Plugin, resolvePluginId } from "./shared"
@@ -31,6 +32,7 @@ export namespace Plugin {
 
   type State = {
     hooks: Hooks[]
+    config: Config.Info
   }
 
   // Hook names that follow the (input, output) => Promise<void> trigger pattern
@@ -49,6 +51,7 @@ export namespace Plugin {
       output: Output,
     ) => Effect.Effect<Output>
     readonly list: () => Effect.Effect<Hooks[]>
+    readonly config: () => Effect.Effect<Config.Info>
     readonly init: () => Effect.Effect<void>
   }
 
@@ -253,7 +256,7 @@ export namespace Plugin {
             Effect.forkScoped,
           )
 
-          return { hooks }
+          return { hooks, config: cfg }
         }),
       )
 
@@ -277,13 +280,39 @@ export namespace Plugin {
         return s.hooks
       })
 
+      const cfg = Effect.fn("Plugin.config")(function* () {
+        const s = yield* InstanceState.get(state)
+        return s.config
+      })
+
       const init = Effect.fn("Plugin.init")(function* () {
         yield* InstanceState.get(state)
       })
 
-      return Service.of({ trigger, list, init })
+      return Service.of({ trigger, list, config: cfg, init })
     }),
   )
 
   export const defaultLayer = layer.pipe(Layer.provide(Bus.layer), Layer.provide(Config.defaultLayer))
+  const { runPromise } = makeRuntime(Service, defaultLayer)
+
+  export async function trigger<
+    Name extends TriggerName,
+    Input = Parameters<Required<Hooks>[Name]>[0],
+    Output = Parameters<Required<Hooks>[Name]>[1],
+  >(name: Name, input: Input, output: Output): Promise<Output> {
+    return runPromise((svc) => svc.trigger(name, input, output))
+  }
+
+  export async function list(): Promise<Hooks[]> {
+    return runPromise((svc) => svc.list())
+  }
+
+  export async function init() {
+    return runPromise((svc) => svc.init())
+  }
+
+  export async function config(): Promise<Config.Info> {
+    return runPromise((svc) => svc.config())
+  }
 }
