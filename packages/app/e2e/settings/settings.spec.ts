@@ -88,10 +88,20 @@ test("changing theme persists in localStorage", async ({ page, gotoSession }) =>
     return document.documentElement.getAttribute("data-theme")
   })
   const currentTheme = (await select.locator('[data-slot="select-select-trigger-value"]').textContent())?.trim() ?? ""
-
-  await select.locator('[data-slot="select-select-trigger"]').click()
-
+  const trigger = select.locator('[data-slot="select-select-trigger"]')
   const items = page.locator('[data-slot="select-select-item"]')
+
+  await trigger.click()
+  const open = await expect
+    .poll(async () => (await items.count()) > 0, { timeout: 5_000 })
+    .toBe(true)
+    .then(() => true)
+    .catch(() => false)
+  if (!open) {
+    await trigger.click()
+    await expect.poll(async () => (await items.count()) > 0, { timeout: 10_000 }).toBe(true)
+  }
+  await expect(items.first()).toBeVisible()
   const count = await items.count()
   expect(count).toBeGreaterThan(1)
 

@@ -4,20 +4,6 @@ export type ClientOptions = {
   baseUrl: `${string}://${string}` | (string & {})
 }
 
-export type EventInstallationUpdated = {
-  type: "installation.updated"
-  properties: {
-    version: string
-  }
-}
-
-export type EventInstallationUpdateAvailable = {
-  type: "installation.update-available"
-  properties: {
-    version: string
-  }
-}
-
 export type Project = {
   id: string
   worktree: string
@@ -45,6 +31,20 @@ export type Project = {
 export type EventProjectUpdated = {
   type: "project.updated"
   properties: Project
+}
+
+export type EventInstallationUpdated = {
+  type: "installation.updated"
+  properties: {
+    version: string
+  }
+}
+
+export type EventInstallationUpdateAvailable = {
+  type: "installation.update-available"
+  properties: {
+    version: string
+  }
 }
 
 export type EventServerInstanceDisposed = {
@@ -964,9 +964,9 @@ export type EventSessionDeleted = {
 }
 
 export type Event =
+  | EventProjectUpdated
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
-  | EventProjectUpdated
   | EventServerInstanceDisposed
   | EventServerConnected
   | EventGlobalDisposed
@@ -3815,6 +3815,7 @@ export type SessionCommandResponse = SessionCommandResponses[keyof SessionComman
 
 export type SessionShellData = {
   body?: {
+    messageID?: string
     agent: string
     model?: {
       providerID: string
