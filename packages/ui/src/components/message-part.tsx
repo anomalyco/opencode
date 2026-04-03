@@ -1143,15 +1143,31 @@ function CodeBlock(props: { text: string; lang?: string }) {
   const lines = createMemo(() => props.text.trimEnd().split("\n"))
   const collapsible = createMemo(() => lines().length > COLLAPSE_LINES)
   const [open, setOpen] = createSignal(false)
+  const [copied, setCopied] = createSignal(false)
   const preview = createMemo(() => lines().slice(0, COLLAPSE_LINES).join("\n"))
   const extra = createMemo(() => lines().length - COLLAPSE_LINES)
   const i18n = useI18n()
 
+  const copy = async () => {
+    await navigator.clipboard.writeText(props.text.trimEnd())
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   return (
     <div data-slot="user-message-code-block">
-      <Show when={props.lang}>
-        <span data-slot="user-message-code-lang">{props.lang}</span>
-      </Show>
+      <div data-slot="user-message-code-header">
+        <span data-slot="user-message-code-lang">{props.lang ?? ""}</span>
+        <IconButton
+          icon={copied() ? "check" : "copy"}
+          size="small"
+          variant="ghost"
+          aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+          data-slot="user-message-code-copy"
+          data-copied={copied() || undefined}
+          onClick={copy}
+        />
+      </div>
       <pre>
         <code>{collapsible() && !open() ? preview() : props.text.trimEnd()}</code>
       </pre>

@@ -160,6 +160,30 @@
       overflow: hidden;
       white-space: normal;
 
+      [data-slot="user-message-code-header"] {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 3px 6px 3px 10px;
+        background: var(--surface-stronger);
+        border-bottom: 1px solid var(--border-weak-base);
+        min-height: 24px;
+      }
+
+      [data-slot="user-message-code-lang"] {
+        font-size: 0.75em;
+        color: var(--text-weak);
+      }
+
+      [data-slot="user-message-code-copy"] {
+        opacity: 0;
+        transition: opacity 0.15s ease;
+
+        &[data-copied] {
+          opacity: 1;
+        }
+      }
+
       pre {
         margin: 0;
         padding: 8px 10px;
@@ -174,13 +198,8 @@
         }
       }
 
-      [data-slot="user-message-code-lang"] {
-        display: block;
-        padding: 3px 10px;
-        font-size: 0.75em;
-        color: var(--text-weak);
-        background: var(--surface-stronger);
-        border-bottom: 1px solid var(--border-weak-base);
+      &:hover [data-slot="user-message-code-copy"] {
+        opacity: 1;
       }
 
       [data-slot="user-message-code-toggle"] {
