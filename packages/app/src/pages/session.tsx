@@ -347,6 +347,7 @@ export default function Page() {
     scroll: {
       overflow: false,
       bottom: true,
+      jump: false,
     },
   })
 
@@ -1247,13 +1248,17 @@ export default function Page() {
   let scrollStateTarget: HTMLDivElement | undefined
   let fillFrame: number | undefined
 
+  const jumpThreshold = (el: HTMLDivElement) => Math.max(400, el.clientHeight)
+
   const updateScrollState = (el: HTMLDivElement) => {
     const max = el.scrollHeight - el.clientHeight
+    const distance = max - el.scrollTop
     const overflow = max > 1
-    const bottom = !overflow || el.scrollTop >= max - 2
+    const bottom = !overflow || distance <= 2
+    const jump = overflow && distance > jumpThreshold(el)
 
-    if (ui.scroll.overflow === overflow && ui.scroll.bottom === bottom) return
-    setUi("scroll", { overflow, bottom })
+    if (ui.scroll.overflow === overflow && ui.scroll.bottom === bottom && ui.scroll.jump === jump) return
+    setUi("scroll", { overflow, bottom, jump })
   }
 
   const scheduleScrollState = (el: HTMLDivElement) => {
