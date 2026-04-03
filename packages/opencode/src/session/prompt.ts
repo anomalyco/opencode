@@ -1590,7 +1590,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           template = template + "\n\n" + input.arguments
         }
 
-        template = yield* replaceCommandShell(template, session.directory)
+        template = yield* Effect.promise(() => replaceCommandShell(template, session.directory))
         template = template.trim()
 
         const taskModel = yield* Effect.gen(function* () {
