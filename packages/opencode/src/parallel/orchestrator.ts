@@ -799,12 +799,72 @@ export namespace Orchestrator {
     const afterWait = await PlanStore.get(planID)
     const active = inflight(afterWait.workers)
     if (active.length > 0) {
+      // Detailed analysis of why workers are still "active"
+      const statusCounts = afterWait.workers.reduce((acc, w) => {
+        acc[w.status] = (acc[w.status] || 0) + 1
+        return acc
+      }, {} as Record<string, number>)
+      
+      const unresolvedWorkers = unresolved(afterWait.workers)
+      const blockedWorkers = afterWait.workers.filter((w) => w.status === "blocked")
+      const runningWorkers = afterWait.workers.filter((w) => w.status === "running")
+      const spawningWorkers = afterWait.workers.filter((w) => w.status === "spawning")
+      const pendingWorkers = afterWait.workers.filter((w) => w.status === "pending")
+      
+      log.error("workers still active after wait; detailed breakdown before kill", {
+        planID,
+        activeCount: active.length,
+        totalWorkers: afterWait.workers.length,
+        statusBreakdown: statusCounts,
+        activeWorkerDetails: {
+          running: {
+            count: runningWorkers.length,
+            workers: runningWorkers.map((w) => ({
+              subtaskID: w.subtaskID,
+              status: w.status,
+              startedAt: w.startedAt,
+              duration: w.startedAt ? Date.now() - w.startedAt.getTime() : null,
+              error: w.error?.substring(0, 200)
+            })),
+            whyActive: "still executing task code"
+          },
+          spawning: {
+            count: spawningWorkers.length,
+            workers: spawningWorkers.map((w) => ({
+              subtaskID: w.subtaskID,
+              status: w.status,
+              startedAt: w.startedAt
+            })),
+            whyActive: "initialization/startup in progress"
+          },
+          pending: {
+            count: pendingWorkers.length,
+            workers: pendingWorkers.map((w) => ({
+              subtaskID: w.subtaskID,
+              status: w.status
+            })),
+            whyActive: "waiting for dependencies or wave scheduling"
+          }
+        },
+        blockedWorkers: {
+          count: blockedWorkers.length,
+          workers: blockedWorkers.map((w) => ({
+            subtaskID: w.subtaskID,
+            status: w.status,
+            error: w.error?.substring(0, 200)
+          })),
+          note: "blocked workers are NOT considered 'active' by inflight(), but may indicate dependency issues"
+        },
+        unresolvedCount: unresolvedWorkers.length,
+        resolvedCount: afterWait.workers.length - unresolvedWorkers.length
+      })
+      
       await fail(
         planID,
         issue({
           code: "workers_incomplete",
           stage: "running",
-          message: `Workers still active after wait: ${active.length}`,
+          message: `Workers still active after wait: ${active.length} (running: ${runningWorkers.length}, spawning: ${spawningWorkers.length}, pending: ${pendingWorkers.length})`,
         }),
       )
       Metrics.recordPlanOutcome("failed")
