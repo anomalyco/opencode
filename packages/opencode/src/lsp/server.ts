@@ -2019,7 +2019,7 @@ export namespace LSPServer {
         }
 
         if (platform !== "win32") {
-          await $`chmod +x ${bin}`.quiet().nothrow()
+          await fs.chmod(bin, 0o755).catch(() => {})
         }
 
         log.info("installed buf", { bin })
