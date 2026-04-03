@@ -1,7 +1,7 @@
 import { UserMessage } from "@opencode-ai/sdk/v2"
+import { Tooltip } from "@kobalte/core/tooltip"
 import { ComponentProps, For, Match, Show, splitProps, Switch } from "solid-js"
 import { DiffChanges } from "./diff-changes"
-import { Tooltip } from "./tooltip"
 import { useI18n } from "../context/i18n"
 
 export function MessageNav(
@@ -70,20 +70,15 @@ export function MessageNav(
   return (
     <Switch>
       <Match when={local.size === "compact"}>
-        <Tooltip
-          openDelay={0}
-          placement="right-start"
-          gutter={-40}
-          shift={-10}
-          overlap
-          contentClass="message-nav-tooltip"
-          value={
-            <div data-slot="message-nav-tooltip-content">
-              <MessageNav {...props} size="normal" class="" />
-            </div>
-          }
-        >
-          {content()}
+        <Tooltip openDelay={0} closeDelay={0} placement="right" gutter={-40} shift={-10} overlap>
+          <Tooltip.Trigger as="div">{content()}</Tooltip.Trigger>
+          <Tooltip.Portal>
+            <Tooltip.Content class="message-nav-tooltip">
+              <div data-slot="message-nav-tooltip-content">
+                <MessageNav {...props} size="normal" class="" />
+              </div>
+            </Tooltip.Content>
+          </Tooltip.Portal>
         </Tooltip>
       </Match>
       <Match when={local.size === "normal"}>{content()}</Match>
