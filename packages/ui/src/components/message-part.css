@@ -154,7 +154,7 @@
 
     [data-slot="user-message-code-block"] {
       display: block;
-      margin: 4px 0;
+      margin: 4px 0 8px;
       border: 1px solid var(--border-weak-base);
       border-radius: 6px;
       overflow: hidden;
