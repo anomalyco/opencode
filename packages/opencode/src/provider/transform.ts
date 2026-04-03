@@ -6,6 +6,7 @@ import type { Provider } from "./provider"
 import type { ModelsDev } from "./models"
 import { iife } from "@/util/iife"
 import { Flag } from "@/flag/flag"
+import { parseToolCalls } from "./adapter"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -1042,5 +1043,30 @@ export namespace ProviderTransform {
     }
 
     return schema as JSONSchema7
+  }
+
+  /**
+   * Transform llama.cpp response to OpenAI-compatible format.
+   * When tool_calls array is empty but content contains tool calling patterns,
+   * parse and convert them to standard tool_calls format.
+   */
+  export function llmResponse(response: any): any {
+    if (!response?.choices?.length) return response
+
+    for (const choice of response.choices) {
+      const message = choice.message ?? {}
+      const content = message.content ?? ""
+
+      if (!message.tool_calls?.length && content) {
+        const toolCalls = parseToolCalls(content)
+        if (toolCalls) {
+          message.tool_calls = toolCalls
+          message.content = null
+          choice.finish_reason = "tool_calls"
+        }
+      }
+    }
+
+    return response
   }
 }

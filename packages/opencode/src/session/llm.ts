@@ -7,6 +7,7 @@ import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, json
 import { mergeDeep, pipe } from "remeda"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 import { ProviderTransform } from "@/provider/transform"
+import { parseToolCalls } from "@/provider/adapter"
 import { Config } from "@/config/config"
 import { Instance } from "@/project/instance"
 import type { Agent } from "@/agent/agent"
@@ -264,6 +265,20 @@ export namespace LLM {
         })
       },
       async experimental_repairToolCall(failed) {
+        // 1. Try Universal Tool Call Adapter first
+        const parsed = parseToolCalls(failed.toolCall.input as string)
+        if (parsed && parsed.length > 0) {
+          l.info("adapter repaired tool call", {
+            tool: parsed[0].function.name,
+          })
+          return {
+            ...failed.toolCall,
+            toolName: parsed[0].function.name,
+            input: parsed[0].function.arguments,
+          }
+        }
+
+        // 2. Existing fallback: case-insensitive match
         const lower = failed.toolCall.toolName.toLowerCase()
         if (lower !== failed.toolCall.toolName && tools[lower]) {
           l.info("repairing tool call", {
