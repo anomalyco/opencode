@@ -4,6 +4,7 @@ import { useMutation } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
 import { DockPrompt } from "@opencode-ai/ui/dock-prompt"
 import { Icon } from "@opencode-ai/ui/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Markdown } from "@opencode-ai/ui/markdown"
 import { showToast } from "@opencode-ai/ui/toast"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
@@ -421,6 +422,30 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     focus(pickFocus(tab))
   }
 
+  const copy = () => {
+    const text = question()?.question ?? ""
+    if (!text) return
+
+    const body = typeof document === "undefined" ? undefined : document.body
+    if (body) {
+      const textarea = document.createElement("textarea")
+      textarea.value = text
+      textarea.setAttribute("readonly", "")
+      textarea.style.position = "fixed"
+      textarea.style.opacity = "0"
+      textarea.style.pointerEvents = "none"
+      body.appendChild(textarea)
+      textarea.select()
+      const copied = document.execCommand("copy")
+      body.removeChild(textarea)
+      if (copied) return
+    }
+
+    const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard
+    if (!clipboard?.writeText) return
+    clipboard.writeText(text).catch(() => {})
+  }
+
   return (
     <DockPrompt
       kind="question"
@@ -430,6 +455,15 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
         <>
           <div data-slot="question-header-title">{summary()}</div>
           <div data-slot="question-progress">
+            <IconButton
+              type="button"
+              icon="copy"
+              size="small"
+              variant="ghost"
+              aria-label={language.t("ui.message.copy")}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={copy}
+            />
             <For each={questions()}>
               {(_, i) => (
                 <button

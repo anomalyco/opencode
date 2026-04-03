@@ -1,0 +1,53 @@
+name: release-cli-linux-amd64
+
+"on":
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+      - "!vscode-v*"
+      - "!github-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Fetch tags
+        run: git fetch --force --tags
+
+      - name: Ensure tag is on master
+        run: |
+          git fetch --force origin master
+          if ! git branch -r --contains "$GITHUB_SHA" | grep -q "origin/master"; then
+            echo "Tag commit is not contained in origin/master: $GITHUB_SHA"
+            exit 1
+          fi
+
+      - name: Create release if missing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$GITHUB_REF_NAME"
+          if gh release view "$tag"; then
+            exit 0
+          fi
+          gh release create "$tag" --title "$tag" --generate-notes
+
+      - name: Build CLI (linux/amd64)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENCODE_RELEASE: "1"
+        run: |
+          version="$GITHUB_REF_NAME"
+          version="${version#v}"
+          export OPENCODE_VERSION="$version"
+          ./packages/opencode/script/build.ts --single

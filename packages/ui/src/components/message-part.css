@@ -700,6 +700,10 @@
 [data-component="write-content"],
 [data-component="todos"],
 [data-component="diagnostics"],
+:is([data-component="question-prompt"], [data-component="dock-prompt"][data-kind="question"]) [data-slot="question-text"],
+:is([data-component="question-prompt"], [data-component="dock-prompt"][data-kind="question"]) [data-slot="question-hint"],
+[data-component="question-answers"] [data-slot="question-text"],
+[data-component="question-answers"] [data-slot="answer-text"],
 .error-card {
   -webkit-user-select: text;
   user-select: text;
