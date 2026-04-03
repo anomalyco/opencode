@@ -27,45 +27,37 @@ describe("Tool.define", () => {
     await tool.init()
     await tool.init()
 
-    // The original object's execute should never be overwritten
     expect(original.execute).toBe(originalExecute)
   })
 
   test("object-defined tool does not accumulate wrapper layers across init() calls", async () => {
-    let executeCalls = 0
+    let calls = 0
 
     const tool = Tool.define(
       "test-tool",
-      makeTool("test", () => executeCalls++),
+      makeTool("test", () => calls++),
     )
 
-    // Call init() many times to simulate many agentic steps
     for (let i = 0; i < 100; i++) {
       await tool.init()
     }
 
-    // Resolve the tool and call execute
     const resolved = await tool.init()
-    executeCalls = 0
+    calls = 0
 
-    // Capture the stack trace inside execute to measure wrapper depth
-    let stackInsideExecute = ""
-    const origExec = resolved.execute
+    let stack = ""
+    const exec = resolved.execute
     resolved.execute = async (args: any, ctx: any) => {
-      const result = await origExec.call(resolved, args, ctx)
-      const err = new Error()
-      stackInsideExecute = err.stack || ""
+      const result = await exec.call(resolved, args, ctx)
+      stack = new Error().stack || ""
       return result
     }
 
     await resolved.execute(defaultArgs, {} as any)
-    expect(executeCalls).toBe(1)
+    expect(calls).toBe(1)
 
-    // Count how many times tool.ts appears in the stack.
-    // With the fix: 1 wrapper layer (from the most recent init()).
-    // Without the fix: 101 wrapper layers from accumulated closures.
-    const toolTsFrames = stackInsideExecute.split("\n").filter((l) => l.includes("tool.ts")).length
-    expect(toolTsFrames).toBeLessThan(5)
+    const frames = stack.split("\n").filter((l) => l.includes("tool.ts")).length
+    expect(frames).toBeLessThan(5)
   })
 
   test("function-defined tool returns fresh objects and is unaffected", async () => {
@@ -74,7 +66,6 @@ describe("Tool.define", () => {
     const first = await tool.init()
     const second = await tool.init()
 
-    // Function-defined tools return distinct objects each time
     expect(first).not.toBe(second)
   })
 
@@ -84,7 +75,6 @@ describe("Tool.define", () => {
     const first = await tool.init()
     const second = await tool.init()
 
-    // Each init() should return a separate object so wrappers don't accumulate
     expect(first).not.toBe(second)
   })
 

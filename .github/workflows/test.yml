@@ -15,6 +15,7 @@ concurrency:
 
 permissions:
   contents: read
+  checks: write
 
 jobs:
   unit:
@@ -45,13 +46,38 @@ jobs:
           git config --global user.email "bot@opencode.ai"
           git config --global user.name "opencode"
 
+      - name: Cache Turbo
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/turbo
+          key: turbo-${{ runner.os }}-${{ hashFiles('turbo.json', '**/package.json') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('turbo.json', '**/package.json') }}-
+            turbo-${{ runner.os }}-
+
       - name: Run unit tests
-        run: bun turbo test
+        run: bun turbo test:ci
         env:
-          # Bun 1.3.11 intermittently crashes on Windows during test teardown
-          # inside the native @parcel/watcher binding. Unit CI does not rely on
-          # the live watcher backend there, so disable it for that platform.
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
+
+      - name: Publish unit reports
+        if: always()
+        uses: mikepenz/action-junit-report@v6
+        with:
+          report_paths: packages/*/.artifacts/unit/junit.xml
+          check_name: "unit results (${{ matrix.settings.name }})"
+          detailed_summary: true
+          include_time_in_summary: true
+          fail_on_failure: false
+
+      - name: Upload unit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-${{ matrix.settings.name }}-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: packages/*/.artifacts/unit/junit.xml
 
   e2e:
     name: e2e (${{ matrix.settings.name }})

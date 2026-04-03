@@ -139,11 +139,6 @@ export const SettingsGeneral: Component = () => {
     { value: "dark", label: language.t("theme.scheme.dark") },
   ])
 
-  const followupOptions = createMemo((): { value: "queue" | "steer"; label: string }[] => [
-    { value: "queue", label: language.t("settings.general.row.followup.option.queue") },
-    { value: "steer", label: language.t("settings.general.row.followup.option.steer") },
-  ])
-
   const languageOptions = createMemo(() =>
     language.locales.map((locale) => ({
       value: locale,
@@ -240,24 +235,6 @@ export const SettingsGeneral: Component = () => {
               onChange={(checked) => settings.general.setEditToolPartsExpanded(checked)}
             />
           </div>
-        </SettingsRow>
-
-        <SettingsRow
-          title={language.t("settings.general.row.followup.title")}
-          description={language.t("settings.general.row.followup.description")}
-        >
-          <Select
-            data-action="settings-followup"
-            options={followupOptions()}
-            current={followupOptions().find((o) => o.value === settings.general.followup())}
-            value={(o) => o.value}
-            label={(o) => o.label}
-            onSelect={(option) => option && settings.general.setFollowup(option.value)}
-            variant="secondary"
-            size="small"
-            triggerVariant="settings"
-            triggerStyle={{ "min-width": "180px" }}
-          />
         </SettingsRow>
       </SettingsList>
     </div>
