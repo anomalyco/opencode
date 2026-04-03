@@ -52,6 +52,10 @@ export namespace FileIgnore {
     // Coverage/test outputs
     "**/coverage/**",
     "**/.nyc_output/**",
+
+    // Secrets
+    "**/.env",
+    "**/.env.*",
   ]
 
   export const PATTERNS = [...FILES, ...FOLDERS]
