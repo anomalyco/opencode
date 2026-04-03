@@ -72,6 +72,7 @@ export namespace SessionRevert {
         if (!rev) return session
 
         rev.snapshot = session.revert?.snapshot ?? (yield* snap.track())
+        if (session.revert?.snapshot) yield* snap.restore(session.revert.snapshot)
         yield* snap.revert(patches)
         if (rev.snapshot) rev.diff = yield* snap.diff(rev.snapshot as string)
         const range = all.filter((msg) => msg.info.id >= rev!.messageID)

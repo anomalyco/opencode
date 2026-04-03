@@ -33,6 +33,7 @@ import { Effect, Layer, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { Env } from "../env"
+import { Question } from "../question"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -42,8 +43,11 @@ export namespace ToolRegistry {
   }
 
   export interface Interface {
-    readonly register: (tool: Tool.Info) => Effect.Effect<void>
     readonly ids: () => Effect.Effect<string[]>
+    readonly named: {
+      task: Tool.Info
+      read: Tool.Info
+    }
     readonly tools: (
       model: { providerID: ProviderID; modelID: ModelID },
       agent?: Agent.Info,
@@ -52,11 +56,14 @@ export namespace ToolRegistry {
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/ToolRegistry") {}
 
-  export const layer: Layer.Layer<Service, never, Config.Service | Plugin.Service> = Layer.effect(
+  export const layer: Layer.Layer<Service, never, Config.Service | Plugin.Service | Question.Service> = Layer.effect(
     Service,
     Effect.gen(function* () {
       const config = yield* Config.Service
       const plugin = yield* Plugin.Service
+
+      const build = <T extends Tool.Info>(tool: T | Effect.Effect<T, never, any>) =>
+        Effect.isEffect(tool) ? tool : Effect.succeed(tool)
 
       const state = yield* InstanceState.make<State>(
         Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -112,41 +119,50 @@ export namespace ToolRegistry {
         }),
       )
 
+      const invalid = yield* build(InvalidTool)
+      const ask = yield* build(QuestionTool)
+      const bash = yield* build(BashTool)
+      const read = yield* build(ReadTool)
+      const glob = yield* build(GlobTool)
+      const grep = yield* build(GrepTool)
+      const edit = yield* build(EditTool)
+      const write = yield* build(WriteTool)
+      const task = yield* build(TaskTool)
+      const fetch = yield* build(WebFetchTool)
+      const todo = yield* build(TodoWriteTool)
+      const search = yield* build(WebSearchTool)
+      const code = yield* build(CodeSearchTool)
+      const skill = yield* build(SkillTool)
+      const patch = yield* build(ApplyPatchTool)
+      const lsp = yield* build(LspTool)
+      const batch = yield* build(BatchTool)
+      const plan = yield* build(PlanExitTool)
+
       const all = Effect.fn("ToolRegistry.all")(function* (custom: Tool.Info[]) {
         const cfg = yield* config.get()
         const question = ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
 
         return [
-          InvalidTool,
-          ...(question ? [QuestionTool] : []),
-          BashTool,
-          ReadTool,
-          GlobTool,
-          GrepTool,
-          EditTool,
-          WriteTool,
-          TaskTool,
-          WebFetchTool,
-          TodoWriteTool,
-          WebSearchTool,
-          CodeSearchTool,
-          SkillTool,
-          ApplyPatchTool,
-          ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
-          ...(cfg.experimental?.batch_tool === true ? [BatchTool] : []),
-          ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool] : []),
+          invalid,
+          ...(question ? [ask] : []),
+          bash,
+          read,
+          glob,
+          grep,
+          edit,
+          write,
+          task,
+          fetch,
+          todo,
+          search,
+          code,
+          skill,
+          patch,
+          ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [lsp] : []),
+          ...(cfg.experimental?.batch_tool === true ? [batch] : []),
+          ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [plan] : []),
           ...custom,
         ]
-      })
-
-      const register = Effect.fn("ToolRegistry.register")(function* (tool: Tool.Info) {
-        const s = yield* InstanceState.get(state)
-        const idx = s.custom.findIndex((t) => t.id === tool.id)
-        if (idx >= 0) {
-          s.custom.splice(idx, 1, tool)
-          return
-        }
-        s.custom.push(tool)
       })
 
       const ids = Effect.fn("ToolRegistry.ids")(function* () {
@@ -196,12 +212,18 @@ export namespace ToolRegistry {
         )
       })
 
-      return Service.of({ register, ids, tools })
+      return Service.of({ ids, named: { task, read }, tools })
     }),
   )
 
   export const defaultLayer = Layer.unwrap(
-    Effect.sync(() => layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(Plugin.defaultLayer))),
+    Effect.sync(() =>
+      layer.pipe(
+        Layer.provide(Config.defaultLayer),
+        Layer.provide(Plugin.defaultLayer),
+        Layer.provide(Question.defaultLayer),
+      ),
+    ),
   )
 
   const { runPromise } = makeRuntime(Service, defaultLayer)

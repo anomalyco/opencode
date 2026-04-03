@@ -38,6 +38,7 @@ import { MCP } from "../../src/mcp"
 import { Permission } from "../../src/permission"
 import { Plugin } from "../../src/plugin"
 import { Provider as ProviderSvc } from "../../src/provider/provider"
+import { Question } from "../../src/question"
 import { SessionCompaction } from "../../src/session/compaction"
 import { Instruction } from "../../src/session/instruction"
 import { SessionProcessor } from "../../src/session/processor"
@@ -124,7 +125,8 @@ function makeHttp() {
     AppFileSystem.defaultLayer,
     status,
   ).pipe(Layer.provideMerge(infra))
-  const registry = ToolRegistry.layer.pipe(Layer.provideMerge(deps))
+  const question = Question.layer.pipe(Layer.provideMerge(deps))
+  const registry = ToolRegistry.layer.pipe(Layer.provideMerge(question), Layer.provideMerge(deps))
   const trunc = Truncate.layer.pipe(Layer.provideMerge(deps))
   const proc = SessionProcessor.layer.pipe(Layer.provideMerge(deps))
   const compact = SessionCompaction.layer.pipe(Layer.provideMerge(proc), Layer.provideMerge(deps))
