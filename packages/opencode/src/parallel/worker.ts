@@ -925,6 +925,7 @@ export namespace WorkerManager {
         .map((worker) => worker.subtaskID),
     )
     const running = new Set<SubtaskID>()
+    const blocked = new Set<SubtaskID>()
     const phaseMode = plan.approvalMode === "phase" || plan.approvalMode === "manual"
 
     // Wave-aware readiness: in auto mode, respect wave ordering
@@ -945,7 +946,7 @@ export namespace WorkerManager {
 
     function getReadySubtasks(): Subtask[] {
       return plan.subtasks.filter((st) => {
-        if (completed.has(st.id) || failed.has(st.id) || running.has(st.id)) {
+        if (completed.has(st.id) || failed.has(st.id) || running.has(st.id) || blocked.has(st.id)) {
           return false
         }
         if (allowed && !allowed.has(st.id)) return false
@@ -956,8 +957,20 @@ export namespace WorkerManager {
         const hasFailedDependency = Array.from(deps).some((dep) => failed.has(dep))
         if (hasFailedDependency) {
           // Mark this worker as blocked since a dependency failed
+          blocked.add(st.id)
           updateWorker(plan.id, st.id, { status: "blocked" }).catch((err) => {
             log.warn("failed to mark worker as blocked", { subtaskID: st.id, error: err })
+          })
+          return false
+        }
+
+        // Check if any dependency is blocked (deadlock detection for chain dependencies)
+        const hasBlockedDependency = Array.from(deps).some((dep) => blocked.has(dep))
+        if (hasBlockedDependency) {
+          // This subtask is deadlocked - all its dependencies are blocked/failed
+          blocked.add(st.id)
+          updateWorker(plan.id, st.id, { status: "blocked", error: "Deadlock: dependency chain failed" }).catch((err) => {
+            log.warn("failed to mark worker as deadlocked", { subtaskID: st.id, error: err })
           })
           return false
         }
@@ -1045,9 +1058,41 @@ export namespace WorkerManager {
       throw new Error(last)
     }
 
+    // Track consecutive calls with no progress for deadlock detection
+    let noProgressCount = 0
+    const DEADLOCK_THRESHOLD = 3
+
     async function spawnNextBatch(): Promise<void> {
       const ready = getReadySubtasks()
-      if (ready.length === 0) return
+      if (ready.length === 0) {
+        // Check for deadlock: no ready tasks but there are remaining subtasks
+        const remaining = plan.subtasks.filter(
+          (st) => !completed.has(st.id) && !failed.has(st.id) && !running.has(st.id) && !blocked.has(st.id),
+        )
+        if (remaining.length > 0) {
+          noProgressCount++
+          if (noProgressCount >= DEADLOCK_THRESHOLD) {
+            // Deadlock detected: mark all remaining as blocked
+            log.warn("deadlock detected: marking remaining subtasks as blocked", {
+              planID: plan.id,
+              remainingCount: remaining.length,
+              subtaskIDs: remaining.map((st) => st.id),
+            })
+            for (const st of remaining) {
+              blocked.add(st.id)
+              await updateWorker(plan.id, st.id, { status: "blocked", error: "Deadlock: dependency chain failed" }).catch(
+                (err) => {
+                  log.warn("failed to mark worker as deadlocked", { subtaskID: st.id, error: err })
+                },
+              )
+            }
+          }
+        }
+        return
+      }
+
+      // Reset progress counter when we have ready tasks
+      noProgressCount = 0
 
       const availableSlots = maxWorkers ? maxWorkers - running.size : Infinity
       if (availableSlots <= 0) return
@@ -1160,9 +1205,9 @@ export namespace WorkerManager {
     }
 
     // Check for dependency failures - apply graceful degradation
-    const blocked: { subtaskID: SubtaskID; error: string }[] = []
+    const blockedWorkers: { subtaskID: SubtaskID; error: string }[] = []
     for (const st of plan.subtasks) {
-      if (!completed.has(st.id) && !failed.has(st.id)) {
+      if (!completed.has(st.id) && !failed.has(st.id) && !blocked.has(st.id)) {
         const failedDeps = st.dependencies.filter((dep) => failed.has(dep))
         if (failedDeps.length === 0) continue
         const succeededDeps = st.dependencies.filter((dep) => completed.has(dep))
@@ -1172,31 +1217,32 @@ export namespace WorkerManager {
             failedDeps: failedDeps.length,
             succeededDeps: succeededDeps.length,
           })
-          blocked.push({
+          blockedWorkers.push({
             subtaskID: st.id,
             error: `Degraded: ${failedDeps.length}/${st.dependencies.length} dependency(s) failed (${succeededDeps.length} succeeded)`,
           })
         } else {
-          blocked.push({ subtaskID: st.id, error: "Blocked: dependency failed" })
+          blockedWorkers.push({ subtaskID: st.id, error: "Blocked: dependency failed" })
         }
       }
     }
 
-    if (blocked.length > 0) {
-      for (const item of blocked) {
-        await updateWorker(plan.id, item.subtaskID, { status: "failed", error: item.error }).catch((err) => {
+    if (blockedWorkers.length > 0) {
+      for (const item of blockedWorkers) {
+        blocked.add(item.subtaskID)
+        await updateWorker(plan.id, item.subtaskID, { status: "blocked", error: item.error }).catch((err) => {
           log.warn("failed to mark worker as blocked", { subtaskID: item.subtaskID, error: err })
         })
       }
     }
 
     const allFailedOrBlocked = plan.subtasks.every(
-      (st) => failed.has(st.id) || blocked.some((b) => b.subtaskID === st.id),
+      (st) => failed.has(st.id) || blocked.has(st.id),
     )
     if (allFailedOrBlocked) {
       throw new Error("All workers failed to spawn or were blocked by failed dependencies")
     }
-    if (plan.subtasks.length > 0 && completed.size === 0 && failed.size === 0 && blocked.length === 0) {
+    if (plan.subtasks.length > 0 && completed.size === 0 && failed.size === 0 && blocked.size === 0) {
       throw new Error("No ready subtasks to spawn. Check dependency graph.")
     }
 
@@ -1205,7 +1251,7 @@ export namespace WorkerManager {
       durationMs: Date.now() - spawnStartTime,
       completed: completed.size,
       failed: failed.size,
-      blocked: blocked.length,
+      blocked: blocked.size,
     })
   }
 
