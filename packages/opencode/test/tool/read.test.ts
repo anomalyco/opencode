@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import { Effect } from "effect"
 import path from "path"
-import { ReadTool } from "../../src/tool/read"
 import { Instance } from "../../src/project/instance"
+import { ReadTool as ReadToolFx } from "../../src/tool/read"
+import { Tool } from "../../src/tool/tool"
 import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 import { Permission } from "../../src/permission"
@@ -23,6 +25,18 @@ const ctx = {
   messages: [],
   metadata: () => {},
   ask: async () => {},
+}
+
+const ReadTool = {
+  init: async () => ({
+    execute: (args: Tool.InferParameters<typeof ReadToolFx>, ctx: Tool.Context) =>
+      Effect.runPromise(
+        ReadToolFx.pipe(
+          Effect.flatMap((tool) => Effect.promise(() => tool.init())),
+          Effect.flatMap((tool) => Effect.promise(() => tool.execute(args, ctx))),
+        ),
+      ),
+  }),
 }
 
 const full = (p: string) => (process.platform === "win32" ? Filesystem.normalizePath(p) : p)
