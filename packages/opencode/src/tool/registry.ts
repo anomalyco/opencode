@@ -137,10 +137,10 @@ export namespace ToolRegistry {
       const lsp = yield* build(LspTool)
       const batch = yield* build(BatchTool)
       const plan = yield* build(PlanExitTool)
-
       const all = Effect.fn("ToolRegistry.all")(function* (custom: Tool.Info[]) {
         const cfg = yield* config.get()
         const question = ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
+        const ask = question ? yield* build(QuestionTool) : undefined
 
         return [
           invalid,
