@@ -1,4 +1,4 @@
-import { createMemo, For, Match, Switch } from "solid-js"
+import { createEffect, createMemo, For, Match, Switch } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
 import { Logo } from "@opencode-ai/ui/logo"
 import { useLayout } from "@/context/layout"
@@ -23,6 +23,14 @@ export default function Home() {
   const server = useServer()
   const language = useLanguage()
   const homedir = createMemo(() => sync.data.path.home)
+
+  createEffect(() => {
+    if (!sync.ready) return
+    const directory = sync.data.path.directory
+    if (directory) {
+      openProject(directory)
+    }
+  })
   const recent = createMemo(() => {
     return sync.data.project
       .slice()
