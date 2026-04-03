@@ -1,4 +1,3 @@
-import { type SQLiteBunDatabase } from "drizzle-orm/bun-sqlite"
 import { migrate } from "drizzle-orm/bun-sqlite/migrator"
 import { type SQLiteTransaction } from "drizzle-orm/sqlite-core"
 export * from "drizzle-orm"
@@ -9,7 +8,7 @@ import { Log } from "../util/log"
 import { NamedError } from "@opencode-ai/util/error"
 import z from "zod"
 import path from "path"
-import { readFileSync, readdirSync, existsSync } from "fs"
+import { readFileSync, readdirSync, existsSync, mkdirSync } from "fs"
 import { Flag } from "../flag/flag"
 import { CHANNEL } from "../installation/meta"
 import { InstanceState } from "@/effect/instance-state"
@@ -45,9 +44,66 @@ export namespace Database {
 
   export type Transaction = SQLiteTransaction<"sync", void>
 
-  type Client = SQLiteBunDatabase
+  type Client = ReturnType<typeof init> & {
+    $client: {
+      close(): void
+    }
+  }
+
+  type Entry = {
+    db: Client
+    at: number
+  }
 
   type Journal = { sql: string; timestamp: number; name: string }[]
+
+  const limit = 50
+
+  const cache = new Map<string, Entry>()
+
+  const schema = [
+    `CREATE TABLE IF NOT EXISTS message (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      time_created INTEGER,
+      time_updated INTEGER,
+      data TEXT NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS message_session_time_created_id_idx ON message (session_id, time_created, id)`,
+    `CREATE TABLE IF NOT EXISTS part (
+      id TEXT PRIMARY KEY,
+      message_id TEXT NOT NULL REFERENCES message(id) ON DELETE CASCADE,
+      session_id TEXT NOT NULL,
+      time_created INTEGER,
+      time_updated INTEGER,
+      data TEXT NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS part_message_id_id_idx ON part (message_id, id)`,
+    `CREATE INDEX IF NOT EXISTS part_session_idx ON part (session_id)`,
+    `CREATE TABLE IF NOT EXISTS todo (
+      session_id TEXT NOT NULL,
+      content TEXT NOT NULL,
+      status TEXT NOT NULL,
+      priority TEXT NOT NULL,
+      position INTEGER NOT NULL,
+      time_created INTEGER,
+      time_updated INTEGER,
+      PRIMARY KEY (session_id, position)
+    )`,
+    `CREATE INDEX IF NOT EXISTS todo_session_idx ON todo (session_id)`,
+    `CREATE TABLE IF NOT EXISTS event_sequence (
+      aggregate_id TEXT NOT NULL PRIMARY KEY,
+      seq INTEGER NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS event (
+      id TEXT PRIMARY KEY,
+      aggregate_id TEXT NOT NULL REFERENCES event_sequence(aggregate_id) ON DELETE CASCADE,
+      seq INTEGER NOT NULL,
+      type TEXT NOT NULL,
+      data TEXT NOT NULL,
+      origin TEXT
+    )`,
+  ]
 
   function time(tag: string) {
     const match = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/.exec(tag)
@@ -67,19 +123,36 @@ export namespace Database {
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name)
 
-    const sql = dirs
-      .map((name) => {
-        const file = path.join(dir, name, "migration.sql")
-        if (!existsSync(file)) return
-        return {
+    const sql = dirs.flatMap((name) => {
+      const file = path.join(dir, name, "migration.sql")
+      if (!existsSync(file)) return []
+      return [
+        {
           sql: readFileSync(file, "utf-8"),
           timestamp: time(name),
           name,
-        }
-      })
-      .filter(Boolean) as Journal
+        },
+      ]
+    })
 
     return sql.sort((a, b) => a.timestamp - b.timestamp)
+  }
+
+  function pragma(db: Client) {
+    db.run("PRAGMA journal_mode = WAL")
+    db.run("PRAGMA synchronous = NORMAL")
+    db.run("PRAGMA busy_timeout = 5000")
+    db.run("PRAGMA cache_size = -64000")
+    db.run("PRAGMA foreign_keys = ON")
+    db.run("PRAGMA wal_checkpoint(PASSIVE)")
+  }
+
+  function evict() {
+    if (cache.size <= limit) return
+    const item = [...cache.entries()].sort((a, b) => a[1].at - b[1].at)[0]
+    if (!item) return
+    item[1].db.$client.close()
+    cache.delete(item[0])
   }
 
   export const Client = lazy(() => {
@@ -87,12 +160,7 @@ export namespace Database {
 
     const db = init(Path)
 
-    db.run("PRAGMA journal_mode = WAL")
-    db.run("PRAGMA synchronous = NORMAL")
-    db.run("PRAGMA busy_timeout = 5000")
-    db.run("PRAGMA cache_size = -64000")
-    db.run("PRAGMA foreign_keys = ON")
-    db.run("PRAGMA wal_checkpoint(PASSIVE)")
+    pragma(db)
 
     // Apply schema migrations
     const entries =
@@ -115,7 +183,41 @@ export namespace Database {
     return db
   })
 
+  export const sessionDir = iife(() => path.join(Global.Path.data, "sessions"))
+
+  export function session(id: string) {
+    if (!/^[a-zA-Z0-9_-]+$/.test(id)) throw new Error(`invalid session id: ${id}`)
+    const item = cache.get(id)
+    if (item) {
+      item.at = Date.now()
+      return item.db
+    }
+
+    mkdirSync(sessionDir, { recursive: true })
+    const file = path.join(sessionDir, id + ".db")
+    const fresh = !existsSync(file)
+    const db = init(file)
+    pragma(db)
+
+    if (fresh) {
+      for (const sql of schema) db.run(sql)
+    }
+
+    cache.set(id, { db, at: Date.now() })
+    evict()
+    return db
+  }
+
+  export function closeSession(id: string) {
+    const item = cache.get(id)
+    if (!item) return
+    item.db.$client.close()
+    cache.delete(id)
+  }
+
   export function close() {
+    for (const item of cache.values()) item.db.$client.close()
+    cache.clear()
     Client().$client.close()
     Client.reset()
   }

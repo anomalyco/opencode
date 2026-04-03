@@ -1,5 +1,6 @@
 import { Slug } from "@opencode-ai/util/slug"
 import path from "path"
+import { unlinkSync } from "fs"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
@@ -152,6 +153,7 @@ export namespace Session {
         archived: z.number().optional(),
       }),
       permission: Permission.Ruleset.optional(),
+      originMachine: z.string().optional(),
       revert: z
         .object({
           messageID: MessageID.zod,
@@ -403,6 +405,14 @@ export namespace Session {
 
         yield* Effect.sync(() => SyncEvent.run(Event.Created, { sessionID: result.id, info: result }))
 
+        if (!input.parentID) {
+          try {
+            Database.session(result.id)
+          } catch (e) {
+            log.error("failed to create per-tree db", { error: e })
+          }
+        }
+
         const cfg = yield* config.get()
         if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto")) {
           yield* share(result.id).pipe(Effect.ignore, Effect.forkIn(scope))
@@ -469,6 +479,18 @@ export namespace Session {
             SyncEvent.run(Event.Deleted, { sessionID, info: session })
             SyncEvent.remove(sessionID)
           })
+          // Cleanup per-tree DB for root sessions
+          if (!session.parentID) {
+            try {
+              Database.closeSession(sessionID)
+              const dir = Database.sessionDir
+              for (const ext of [".db", ".db-wal", ".db-shm"]) {
+                try {
+                  unlinkSync(path.join(dir, sessionID + ext))
+                } catch {}
+              }
+            } catch {}
+          }
         } catch (e) {
           log.error(e)
         }
@@ -592,12 +614,13 @@ export namespace Session {
         )
       })
 
-      const messages = Effect.fn("Session.messages")(function* (input: { sessionID: SessionID; limit?: number }) {
-        if (input.limit) {
-          return MessageV2.page({ sessionID: input.sessionID, limit: input.limit }).items
-        }
-        return Array.from(MessageV2.stream(input.sessionID)).reverse()
-      })
+      const messages = Effect.fn("Session.messages")((input: { sessionID: SessionID; limit?: number }) =>
+        Effect.succeed(
+          input.limit
+            ? MessageV2.page({ sessionID: input.sessionID, limit: input.limit }).items
+            : Array.from(MessageV2.stream(input.sessionID)).reverse(),
+        ),
+      )
 
       const removeMessage = Effect.fn("Session.removeMessage")(function* (input: {
         sessionID: SessionID
