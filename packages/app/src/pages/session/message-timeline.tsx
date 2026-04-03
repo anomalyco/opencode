@@ -259,6 +259,25 @@ export function MessageTimeline(props: {
     }
   }
 
+  const tailWindow = (ids: string[], root: HTMLDivElement) => {
+    let end = ids.length
+    let covered = 0
+    const target = root.clientHeight + windowOverscan
+    while (end > 0 && covered < target) {
+      end -= 1
+      covered += estimateTurnHeight(ids[end]!)
+    }
+
+    let top = 0
+    for (let i = 0; i < end; i++) top += estimateTurnHeight(ids[i]!)
+    return {
+      start: end,
+      end: ids.length,
+      top,
+      bottom: 0,
+    }
+  }
+
   const buildWindow = () => {
     const root = viewport
     const ids = rendered()
@@ -271,25 +290,7 @@ export function MessageTimeline(props: {
       }
     }
 
-    if (props.live) {
-      let end = ids.length
-      let bottom = 0
-      let covered = 0
-      const target = root.clientHeight + windowOverscan
-      while (end > 0 && covered < target) {
-        end -= 1
-        covered += estimateTurnHeight(ids[end]!)
-      }
-
-      let top = 0
-      for (let i = 0; i < end; i++) top += estimateTurnHeight(ids[i]!)
-      return {
-        start: end,
-        end: ids.length,
-        top,
-        bottom,
-      }
-    }
+    if (props.live || props.scroll.bottom) return tailWindow(ids, root)
 
     const min = Math.max(0, root.scrollTop - windowOverscan)
     const max = root.scrollTop + root.clientHeight + windowOverscan
@@ -359,7 +360,7 @@ export function MessageTimeline(props: {
       nextBottom: next.bottom,
     })
     setWindowed(next)
-    if (props.live) {
+    if (props.live || props.scroll.bottom) {
       requestAnimationFrame(() => {
         const root = viewport
         if (!root) return
