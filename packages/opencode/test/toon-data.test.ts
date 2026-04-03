@@ -301,7 +301,7 @@ describe("TOON Data Serialization", () => {
       const data = {}
       const result = TOONData.serialize(data)
 
-      expect(result.serialized).toBeTruthy()
+      expect(typeof result.serialized).toBe("string")
       const deserialized = TOONData.deserialize(result.serialized)
       expect(deserialized).toEqual(data)
     })

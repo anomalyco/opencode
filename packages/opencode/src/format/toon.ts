@@ -195,7 +195,15 @@ export namespace TOON {
     const markers = new Map<number, string>()
 
     for (let i = 0; i < sentences.length; i++) {
-      const normalized = sentences[i].toLowerCase().trim()
+      const normalized = sentences[i]
+        .toLowerCase()
+        .trim()
+        .replace(/[.!?;]+$/, "")
+        .replace(/__code_block_\d+__/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+
+      if (!normalized) continue
 
       if (phrases.has(normalized)) {
         const firstIndex = phrases.get(normalized)
