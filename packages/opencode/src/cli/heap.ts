@@ -56,12 +56,4 @@ export namespace Heap {
     }, MINUTE)
     timer.unref?.()
   }
-
-  export function stop() {
-    if (!timer) return
-    clearInterval(timer)
-    timer = undefined
-    lock = false
-    armed = true
-  }
 }

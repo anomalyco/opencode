@@ -90,7 +90,7 @@ export namespace Flag {
 
 // Dynamic getter for OPENCODE_AUTO_HEAP_SNAPSHOT
 // This must be evaluated at access time, not module load time,
-// because tests may set this env var at runtime.
+// because external tooling may set this env var at runtime.
 Object.defineProperty(Flag, "OPENCODE_AUTO_HEAP_SNAPSHOT", {
   get() {
     return truthy("OPENCODE_AUTO_HEAP_SNAPSHOT")
