@@ -245,7 +245,7 @@ export namespace LLM {
               return { result: "", error: `Unknown tool: ${toolName}` }
             }
             try {
-              const result = await t.execute!(JSON.parse(argsJson), {
+              const result = await t.execute!(parseWorkflowToolArgs(argsJson), {
                 toolCallId: _requestID,
                 messages: input.messages,
                 abortSignal: input.abort,
@@ -422,14 +422,14 @@ export namespace LLM {
 
   export const layer = live.pipe(Layer.provide(Permission.defaultLayer))
 
-  export const defaultLayer = Layer.suspend(() =>
-    layer.pipe(
-      Layer.provide(Auth.defaultLayer),
-      Layer.provide(Config.defaultLayer),
-      Layer.provide(Provider.defaultLayer),
-      Layer.provide(Plugin.defaultLayer),
-    ),
-  )
+export const defaultLayer = Layer.suspend(() =>
+  layer.pipe(
+    Layer.provide(Auth.defaultLayer),
+    Layer.provide(Config.defaultLayer),
+    Layer.provide(Provider.defaultLayer),
+    Layer.provide(Plugin.defaultLayer),
+  ),
+)
 
   function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" | "user">) {
     const disabled = Permission.disabled(
@@ -449,5 +449,49 @@ export namespace LLM {
       }
     }
     return false
+  }
+
+  function parseCandidate(text: string) {
+    const parsed = JSON.parse(text)
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("Tool arguments must be a JSON object")
+    }
+    return parsed as Record<string, unknown>
+  }
+
+  export function parseWorkflowToolArgs(input: string) {
+    const text = input.trim()
+    const rawErr = (() => {
+      try {
+        return parseCandidate(text)
+      } catch (err) {
+        return err
+      }
+    })()
+    if (!(rawErr instanceof Error)) return rawErr
+
+    const fence = /```(?:json)?\s*([\s\S]*?)\s*```/gi
+    for (const match of text.matchAll(fence)) {
+      const body = match[1]?.trim()
+      if (!body) continue
+      try {
+        return parseCandidate(body)
+      } catch {
+        continue
+      }
+    }
+
+    const first = text.indexOf("{")
+    const last = text.lastIndexOf("}")
+    if (first >= 0 && last > first) {
+      const body = text.slice(first, last + 1).trim()
+      try {
+        return parseCandidate(body)
+      } catch {
+        // no-op, throw below
+      }
+    }
+
+    throw rawErr
   }
 }

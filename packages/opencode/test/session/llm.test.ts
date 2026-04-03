@@ -119,6 +119,25 @@ describe("session.llm.hasToolCalls", () => {
   })
 })
 
+describe("session.llm.parseWorkflowToolArgs", () => {
+  test("parses strict json object", () => {
+    expect(LLM.parseWorkflowToolArgs('{"path":"a.txt"}')).toEqual({ path: "a.txt" })
+  })
+
+  test("parses fenced json object", () => {
+    expect(LLM.parseWorkflowToolArgs('```json\n{"path":"a.txt"}\n```')).toEqual({ path: "a.txt" })
+  })
+
+  test("parses json object wrapped in prose", () => {
+    const input = 'Use this args payload:\n```json\n{"path":"a.txt","old":"x","new":"y"}\n```\nThanks.'
+    expect(LLM.parseWorkflowToolArgs(input)).toEqual({ path: "a.txt", old: "x", new: "y" })
+  })
+
+  test("rejects non-object json", () => {
+    expect(() => LLM.parseWorkflowToolArgs('[1,2,3]')).toThrow("Tool arguments must be a JSON object")
+  })
+})
+
 type Capture = {
   url: URL
   headers: Headers
