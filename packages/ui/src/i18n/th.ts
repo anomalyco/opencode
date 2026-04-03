@@ -158,4 +158,7 @@ export const dict = {
   "ui.toolErrorCard.copyError": "คัดลอกข้อผิดพลาด",
   "ui.message.duration.seconds": "{{count}}วิ",
   "ui.message.duration.minutesSeconds": "{{minutes}}นาที {{seconds}}วิ",
+
+  "ui.message.codeBlock.showMore": "แสดงอีก {{count}} บรรทัด",
+  "ui.message.codeBlock.showLess": "แสดงน้อยลง",
 }

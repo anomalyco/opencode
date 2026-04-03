@@ -157,4 +157,7 @@ export const dict = {
   "ui.toolErrorCard.copyError": "오류 복사",
   "ui.message.duration.seconds": "{{count}}초",
   "ui.message.duration.minutesSeconds": "{{minutes}}분 {{seconds}}초",
+
+  "ui.message.codeBlock.showMore": "{{count}}줄 더 보기",
+  "ui.message.codeBlock.showLess": "접기",
 }

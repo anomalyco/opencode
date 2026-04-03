@@ -156,4 +156,7 @@ export const dict = {
   "ui.toolErrorCard.copyError": "エラーをコピー",
   "ui.message.duration.seconds": "{{count}}秒",
   "ui.message.duration.minutesSeconds": "{{minutes}}分 {{seconds}}秒",
+
+  "ui.message.codeBlock.showMore": "さらに{{count}}行を表示",
+  "ui.message.codeBlock.showLess": "折りたたむ",
 }
