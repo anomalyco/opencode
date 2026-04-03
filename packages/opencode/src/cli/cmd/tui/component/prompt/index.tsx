@@ -130,12 +130,6 @@ export function Prompt(props: PromptProps) {
     if (!props.disabled) input.cursorColor = theme.text
   })
 
-  const lastUserMessage = createMemo(() => {
-    if (!props.sessionID) return undefined
-    const messages = sync.data.message[props.sessionID]
-    if (!messages) return undefined
-    return messages.findLast((m) => m.role === "user")
-  })
 
   const usage = createMemo(() => {
     if (!props.sessionID) return
@@ -183,26 +177,6 @@ export function Prompt(props: PromptProps) {
     ),
   )
 
-  // Initialize agent/model/variant from last user message when session changes
-  let syncedSessionID: string | undefined
-  createEffect(() => {
-    const sessionID = props.sessionID
-    const msg = lastUserMessage()
-
-    if (sessionID !== syncedSessionID) {
-      if (!sessionID || !msg) return
-
-      syncedSessionID = sessionID
-
-      // Only set agent if it's a primary agent (not a subagent)
-      const isPrimaryAgent = local.agent.list().some((x) => x.name === msg.agent)
-      if (msg.agent && isPrimaryAgent) {
-        local.agent.set(msg.agent)
-        if (msg.model) local.model.set(msg.model)
-        if (msg.variant) local.model.variant.set(msg.variant)
-      }
-    }
-  })
 
   command.register(() => {
     return [
