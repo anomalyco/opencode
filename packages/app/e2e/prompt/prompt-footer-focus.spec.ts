@@ -1,3 +1,4 @@
+import type { Locator, Page } from "@playwright/test"
 import { test, expect } from "../fixtures"
 import { promptAgentSelector, promptModelSelector, promptSelector } from "../selectors"
 
@@ -8,11 +9,7 @@ type Probe = {
   agents?: Array<{ name: string }>
 }
 
-type ProbePage = {
-  evaluate: (fn: () => Probe | null) => Promise<Probe | null>
-}
-
-async function probe(page: ProbePage): Promise<Probe | null> {
+async function probe(page: Page): Promise<Probe | null> {
   return page.evaluate(() => {
     const win = window as Window & {
       __opencode_e2e?: {
@@ -25,19 +22,28 @@ async function probe(page: ProbePage): Promise<Probe | null> {
   })
 }
 
-async function state(page: ProbePage) {
+async function state(page: Page) {
   const value = await probe(page)
   if (!value) throw new Error("Failed to resolve model selection probe")
   return value
 }
 
-test("agent select returns focus to the prompt", async ({ page, gotoSession }) => {
-  await gotoSession()
-
+async function ready(page: Page) {
   const prompt = page.locator(promptSelector)
   await prompt.click()
   await expect(prompt).toBeFocused()
   await prompt.pressSequentially("focus")
+  return prompt
+}
+
+async function body(prompt: Locator) {
+  return prompt.evaluate((el) => (el as HTMLElement).innerText)
+}
+
+test("agent select returns focus to the prompt", async ({ page, gotoSession }) => {
+  await gotoSession()
+
+  const prompt = await ready(page)
 
   const info = await state(page)
   const next = info.agents?.map((item) => item.name).find((name) => name !== info.agent)
@@ -55,16 +61,13 @@ test("agent select returns focus to the prompt", async ({ page, gotoSession }) =
   )
   await expect(prompt).toBeFocused()
   await prompt.pressSequentially(" agent")
-  await expect.poll(() => prompt.evaluate((el) => (el as HTMLElement).innerText)).toContain("focus agent")
+  await expect.poll(() => body(prompt)).toContain("focus agent")
 })
 
 test("model select returns focus to the prompt", async ({ page, gotoSession }) => {
   await gotoSession()
 
-  const prompt = page.locator(promptSelector)
-  await prompt.click()
-  await expect(prompt).toBeFocused()
-  await prompt.pressSequentially("focus")
+  const prompt = await ready(page)
 
   const info = await state(page)
   const key = info.model ? `${info.model.providerID}:${info.model.modelID}` : null
@@ -81,5 +84,5 @@ test("model select returns focus to the prompt", async ({ page, gotoSession }) =
   await expect(page.locator(`${promptModelSelector} [data-action="prompt-model"] span`).first()).toHaveText(next.name)
   await expect(prompt).toBeFocused()
   await prompt.pressSequentially(" model")
-  await expect.poll(() => prompt.evaluate((el) => (el as HTMLElement).innerText)).toContain("focus model")
+  await expect.poll(() => body(prompt)).toContain("focus model")
 })
