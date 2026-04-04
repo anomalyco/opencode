@@ -12,7 +12,6 @@ import DESCRIPTION from "./read.txt"
 import { Instance } from "../project/instance"
 import { assertExternalDirectory } from "./external-directory"
 import { Instruction } from "../session/instruction"
-import { Filesystem } from "../util/filesystem"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -78,7 +77,9 @@ export const ReadTool = Tool.defineEffect(
     })
 
     const warm = Effect.fn("ReadTool.warm")(function* (filepath: string, sessionID: Tool.Context["sessionID"]) {
-      yield* lsp.touchFile(filepath, false)
+      yield* Effect.sync(() => {
+        void Effect.runFork(lsp.touchFile(filepath, false))
+      })
       yield* time.read(sessionID, filepath)
     })
 
@@ -92,7 +93,7 @@ export const ReadTool = Tool.defineEffect(
         filepath = path.resolve(Instance.directory, filepath)
       }
       if (process.platform === "win32") {
-        filepath = Filesystem.normalizePath(filepath)
+        filepath = AppFileSystem.normalizePath(filepath)
       }
       const title = path.relative(Instance.worktree, filepath)
 
@@ -146,7 +147,7 @@ export const ReadTool = Tool.defineEffect(
 
       const loaded = yield* instruction.resolve(ctx.messages, filepath, ctx.messageID)
 
-      const mime = Filesystem.mimeType(filepath)
+      const mime = AppFileSystem.mimeType(filepath)
       const isImage = mime.startsWith("image/") && mime !== "image/svg+xml" && mime !== "image/vnd.fastbidsheet"
       const isPdf = mime === "application/pdf"
       if (isImage || isPdf) {

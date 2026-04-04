@@ -240,7 +240,7 @@ Once individual tools are effectified, change `Tool.Info` (`tool/tool.ts`) so `i
 Until the tool interface itself returns `Effect`, use this transitional pattern for migrated tools:
 
 - `Tool.defineEffect(...)` should `yield*` the services the tool depends on and close over them in the returned tool definition.
-- Keep the bridge at the Promise boundary only. In the temporary `async execute(...)` implementation, call service methods with `await Effect.runPromise(...)` instead of falling back to static async facades.
+- Keep the bridge at the Promise boundary only. Prefer a single `Effect.runPromise(...)` in the temporary `async execute(...)` implementation, and move the inner logic into `Effect.fn(...)` helpers instead of scattering `runPromise` islands through the tool body.
 - If a tool starts requiring new services, wire them into `ToolRegistry.defaultLayer` so production callers resolve the same dependencies as tests.
 
 Tool tests should use the existing Effect helpers in `packages/opencode/test/lib/effect.ts`:
