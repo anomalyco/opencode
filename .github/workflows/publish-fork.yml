@@ -195,21 +195,18 @@ jobs:
           git commit -m "Update xcsh to ${tag}"
           git push
 
-      - name: Publish SDK to npm
+      - name: Publish SDK and Plugin to npm
         if: env.NPM_TOKEN != ''
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          XCSH_VERSION: ${{ steps.version.outputs.version }}
+          XCSH_CHANNEL: latest
         run: |
           echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
-          version="${{ steps.version.outputs.version }}"
 
           cd packages/sdk/js
-          bun tsc
-          npm version "$version" --no-git-tag-version --allow-same-version
-          bun pm pack && npm publish *.tgz --tag latest --access public
+          bun ./script/publish.ts
           cd ../../..
 
           cd packages/plugin
-          bun tsc
-          npm version "$version" --no-git-tag-version --allow-same-version
-          bun pm pack && npm publish *.tgz --tag latest --access public
+          bun ./script/publish.ts
