@@ -2237,7 +2237,6 @@ export default function ConfigPage() {
     if (server.current?.integration === "openclaw" && !state.claw.enabled) {
       const key = server.lastNonOpenclaw
       if (key) {
-        console.info("[config] switching away from openclaw before disable", { from: server.key, to: key })
         server.setActive(key)
       }
     }

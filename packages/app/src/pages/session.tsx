@@ -365,7 +365,6 @@ export default function Page() {
       })
       .catch((error) => {
         if (vcsRun.get(mode) !== run) return
-        console.debug("[session-review] failed to load vcs diff", { mode, error })
         setVcs("diff", mode, [])
         setVcs("ready", mode, true)
       })

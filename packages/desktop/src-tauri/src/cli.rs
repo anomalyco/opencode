@@ -557,15 +557,11 @@ pub fn serve(
         ("OPENCODE_SERVER_USERNAME", "opencode".to_string()),
         ("OPENCODE_SERVER_PASSWORD", password.to_string()),
     ];
-    let level = if cfg!(debug_assertions) {
-        "DEBUG"
-    } else {
-        "WARN"
-    };
+    let level = "WARN";
 
     let (events, child) = spawn_command(
         app,
-        format!("--print-logs --log-level {level} serve --hostname {hostname} --port {port}").as_str(),
+        format!("--log-level {level} serve --hostname {hostname} --port {port}").as_str(),
         &envs,
     )
     .map_err(|e| format!("Failed to spawn opencode: {e}"))?;
@@ -575,12 +571,8 @@ pub fn serve(
         events
             .for_each(move |event| {
                 match event {
-                    CommandEvent::Stdout(line) => {
-                        tracing::info!("{line}");
-                    }
-                    CommandEvent::Stderr(line) => {
-                        tracing::info!("{line}");
-                    }
+                    CommandEvent::Stdout(_) => {}
+                    CommandEvent::Stderr(_) => {}
                     CommandEvent::Error(err) => {
                         tracing::error!("{err}");
                     }
@@ -629,12 +621,10 @@ pub fn serve_openclaw(
     let level = std::env::var("OPENCODE_OPENCLAW_LOG_LEVEL")
         .ok()
         .filter(|x| !x.trim().is_empty())
-        .unwrap_or_else(|| "INFO".to_string());
-
-    tracing::info!(%level, "Using OpenClaw adapter log level");
+        .unwrap_or_else(|| "WARN".to_string());
 
     let cmd = format!(
-        "--print-logs --log-level {level} openclaw-serve --hostname {hostname} --port {port} --gateway-url {gateway_url}"
+        "--log-level {level} openclaw-serve --hostname {hostname} --port {port} --gateway-url {gateway_url}"
     );
 
     let (events, child) =
@@ -645,12 +635,8 @@ pub fn serve_openclaw(
         events
             .for_each(move |event| {
                 match event {
-                    CommandEvent::Stdout(line) => {
-                        tracing::info!("{line}");
-                    }
-                    CommandEvent::Stderr(line) => {
-                        tracing::info!("{line}");
-                    }
+                    CommandEvent::Stdout(_) => {}
+                    CommandEvent::Stderr(_) => {}
                     CommandEvent::Error(err) => {
                         tracing::error!("{err}");
                     }

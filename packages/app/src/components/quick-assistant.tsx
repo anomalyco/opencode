@@ -398,14 +398,6 @@ export function QuickAssistant() {
         const message = items.map((item) => item.info).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
         const local = store.message[id] ?? []
         const next = mergeMessages(local, message)
-        if (local.length > 0 && next.length > message.length) {
-          console.debug("[quick-assistant] preserved optimistic messages during history sync", {
-            sessionID: id,
-            local: local.length,
-            fetched: message.length,
-            merged: next.length,
-          })
-        }
         batch(() => {
           setStore("message", id, reconcile(next, { key: "id" }))
           for (const item of items) {
