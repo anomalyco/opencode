@@ -1743,9 +1743,27 @@ ToolRegistry.register({
     const handleCopy = async () => {
       const content = text()
       if (!content) return
-      await navigator.clipboard.writeText(content)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+
+      try {
+        // Prefer modern clipboard API first
+        if (navigator.clipboard) {
+          await navigator.clipboard.writeText(content)
+        } else {
+          // Fallback to execCommand for non-secure contexts (HTTP environments)
+          const textArea = document.createElement('textarea')
+          textArea.value = content
+          textArea.style.position = 'fixed'
+          textArea.style.opacity = '0'
+          document.body.appendChild(textArea)
+          textArea.select()
+          document.execCommand('copy')
+          document.body.removeChild(textArea)
+        }
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      } catch (err) {
+        console.error("Copy failed:", err)
+      }
     }
 
     return (
