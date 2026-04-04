@@ -1469,6 +1469,7 @@ export namespace Config {
             consoleState: {
               consoleManagedProviders: Array.from(consoleManagedProviders),
               activeOrgName,
+              switchableOrgCount: 0,
             },
           }
         })

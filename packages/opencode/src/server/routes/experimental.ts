@@ -54,7 +54,11 @@ export const ExperimentalRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        return c.json(await Config.getConsoleState())
+        const [consoleState, groups] = await Promise.all([Config.getConsoleState(), Account.orgsByAccount()])
+        return c.json({
+          ...consoleState,
+          switchableOrgCount: groups.reduce((count, group) => count + group.orgs.length, 0),
+        })
       },
     )
     .get(

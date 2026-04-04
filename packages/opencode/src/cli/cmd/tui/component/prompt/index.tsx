@@ -96,6 +96,7 @@ export function Prompt(props: PromptProps) {
   const shell = createMemo(() => props.placeholders?.shell ?? [])
   const [auto, setAuto] = createSignal<AutocompleteRef>()
   const activeOrgName = createMemo(() => sync.data.console_state.activeOrgName)
+  const canSwitchOrgs = createMemo(() => sync.data.console_state.switchableOrgCount > 1)
   const currentProviderLabel = createMemo(() => {
     const current = local.model.current()
     const provider = local.model.parsed().provider
@@ -1118,7 +1119,13 @@ export function Prompt(props: PromptProps) {
                 <box flexDirection="row" gap={1} alignItems="center">
                   {props.right}
                   <Show when={activeOrgName()}>
-                    <text fg={theme.textMuted} onMouseUp={() => command.trigger("console.org.switch")}>
+                    <text
+                      fg={theme.textMuted}
+                      onMouseUp={() => {
+                        if (!canSwitchOrgs()) return
+                        command.trigger("console.org.switch")
+                      }}
+                    >
                       {`${CONSOLE_MANAGED_ICON} ${activeOrgName()}`}
                     </text>
                   </Show>

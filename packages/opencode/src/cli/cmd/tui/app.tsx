@@ -630,19 +630,23 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
       category: "Provider",
     },
-    {
-      title: "Switch org",
-      value: "console.org.switch",
-      suggested: Boolean(sync.data.console_state.activeOrgName),
-      slash: {
-        name: "org",
-        aliases: ["orgs", "switch-org"],
-      },
-      onSelect: () => {
-        dialog.replace(() => <DialogConsoleOrg />)
-      },
-      category: "Provider",
-    },
+    ...(sync.data.console_state.switchableOrgCount > 1
+      ? [
+          {
+            title: "Switch org",
+            value: "console.org.switch",
+            suggested: Boolean(sync.data.console_state.activeOrgName),
+            slash: {
+              name: "org",
+              aliases: ["orgs", "switch-org"],
+            },
+            onSelect: () => {
+              dialog.replace(() => <DialogConsoleOrg />)
+            },
+            category: "Provider",
+          },
+        ]
+      : []),
     {
       title: "View status",
       keybind: "status_view",
