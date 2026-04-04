@@ -471,17 +471,64 @@ export const layer = Layer.effect(
     return s[sessionID].abort.signal
   }
 
-  export function cancel(sessionID: string) {
+  async function finalizeAbort(sessionID: SessionID) {
+    const now = Date.now()
+
+    for await (const item of MessageV2.stream(sessionID)) {
+      if (item.info.role !== "assistant") continue
+
+      let dirty = false
+
+      for (const part of item.parts) {
+        if (part.type !== "tool") continue
+        if (part.state.status !== "pending" && part.state.status !== "running") continue
+
+        dirty = true
+        await Session.updatePart({
+          ...part,
+          state: {
+            status: "error",
+            input: part.state.input,
+            error: "Tool execution aborted",
+            metadata: "metadata" in part.state ? part.state.metadata : undefined,
+            time: {
+              start: part.state.status === "running" ? part.state.time.start : now,
+              end: now,
+            },
+          },
+        } satisfies MessageV2.ToolPart)
+      }
+
+      if (typeof item.info.time.completed === "number") continue
+
+      dirty = true
+      await Session.updateMessage({
+        ...item.info,
+        time: {
+          ...item.info.time,
+          completed: now,
+        },
+      })
+
+      if (dirty) {
+        log.info("finalize abort", {
+          sessionID,
+          messageID: item.info.id,
+        })
+      }
+    }
+  }
+
+  export async function cancel(sessionID: SessionID) {
     log.info("cancel", { sessionID })
     const s = state()
     const match = s[sessionID]
-    if (!match) {
-      SessionStatus.set(sessionID, { type: "idle" })
-      return
+    if (match) {
+      match.abort.abort()
+      delete s[sessionID]
     }
-    match.abort.abort()
-    delete s[sessionID]
-    SessionStatus.set(sessionID, { type: "idle" })
+    await finalizeAbort(sessionID)
+    await SessionStatus.set(sessionID, { type: "idle" })
     return
   }
 

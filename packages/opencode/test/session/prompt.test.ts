@@ -31,30 +31,9 @@ import { SessionSummary } from "../../src/session/summary"
 import { Instruction } from "../../src/session/instruction"
 import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
-import { SessionRevert } from "../../src/session/revert"
-import { SessionRunState } from "../../src/session/run-state"
-import { MessageID, PartID, SessionID } from "../../src/session/schema"
-import { SessionStatus } from "../../src/session/status"
-import { SessionV2 } from "../../src/v2/session"
-import { Skill } from "../../src/skill"
-import { SystemPrompt } from "../../src/session/system"
-import { Shell } from "../../src/shell/shell"
-import { Snapshot } from "../../src/snapshot"
-import { ToolRegistry } from "@/tool/registry"
-import { Truncate } from "@/tool/truncate"
-import * as Log from "@opencode-ai/core/util/log"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import * as Database from "../../src/storage/db"
-import { Ripgrep } from "../../src/file/ripgrep"
-import { Format } from "../../src/format"
-import { Reference } from "../../src/reference/reference"
-import { RepositoryCache } from "../../src/reference/repository-cache"
-import { TestInstance } from "../fixture/fixture"
-import { awaitWithTimeout, pollWithTimeout, testEffect } from "../lib/effect"
-import { reply, TestLLMServer } from "../lib/llm-server"
-import { SyncEvent } from "@/sync"
-import { RuntimeFlags } from "@/effect/runtime-flags"
-import { EventV2Bridge } from "@/event-v2-bridge"
+import { Log } from "../../src/util/log"
+import { tmpdir } from "../fixture/fixture"
+import { MessageID, PartID } from "../../src/session/schema"
 
 void Log.init({ print: false })
 
@@ -2335,7 +2314,85 @@ noLLMServer.instance(
           expect(err.data.message).toContain('Command not found: "nonexistent-command-xyz"')
           expect(err.data.message).toContain("init")
         }
-      }
-    }),
-  30_000,
-)
+      },
+    })
+  }, 30000)
+})
+
+describe("session.prompt abort cleanup", () => {
+  test("finalizes running tool parts and active assistant messages on cancel", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const user = await Session.updateMessage({
+          id: MessageID.ascending(),
+          sessionID: session.id,
+          role: "user",
+          time: { created: Date.now() },
+          agent: "build",
+          model: { providerID: ProviderID.make("openai"), modelID: ModelID.make("gpt-5.4") },
+          tools: {},
+          mode: "",
+        } as unknown as MessageV2.User)
+
+        const assistantID = MessageID.ascending()
+        await Session.updateMessage({
+          id: assistantID,
+          sessionID: session.id,
+          role: "assistant",
+          parentID: user.id,
+          time: { created: Date.now() },
+          agent: "build",
+          providerID: ProviderID.make("openai"),
+          modelID: ModelID.make("gpt-5.4"),
+          mode: "build",
+          path: { cwd: tmp.path, root: tmp.path },
+          cost: 0,
+          tokens: {
+            input: 0,
+            output: 0,
+            reasoning: 0,
+            cache: { read: 0, write: 0 },
+          },
+        } as unknown as MessageV2.Assistant)
+
+        await Session.updatePart({
+          id: PartID.ascending(),
+          messageID: assistantID,
+          sessionID: session.id,
+          type: "tool",
+          callID: "call-running",
+          tool: "grep",
+          state: {
+            status: "running",
+            input: { pattern: "skill-force-eval", path: "/Users/lelouch" },
+            time: { start: Date.now() - 10 },
+          },
+        } satisfies MessageV2.ToolPart)
+
+        await SessionPrompt.cancel(session.id)
+
+        const stored = await MessageV2.get({
+          sessionID: session.id,
+          messageID: assistantID,
+        })
+        const tool = stored.parts.find((part) => part.type === "tool")
+
+        expect(stored.info.role).toBe("assistant")
+        if (stored.info.role !== "assistant") throw new Error("expected assistant")
+        expect(typeof stored.info.time.completed).toBe("number")
+        expect(tool?.type).toBe("tool")
+        if (!tool || tool.type !== "tool") throw new Error("expected tool part")
+        expect(tool.state.status).toBe("error")
+        if (tool.state.status !== "error") throw new Error("expected error tool state")
+        expect(tool.state.error).toBe("Tool execution aborted")
+        expect(typeof tool.state.time.end).toBe("number")
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+})
