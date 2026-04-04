@@ -27,7 +27,8 @@ const CHANNEL = await (async () => {
   if (env.XCSH_CHANNEL) return env.XCSH_CHANNEL
   if (env.XCSH_BUMP) return "latest"
   if (env.XCSH_VERSION && !env.XCSH_VERSION.startsWith("0.0.0-")) return "latest"
-  return await $`git branch --show-current`.text().then((x) => x.trim())
+  const branch = await $`git branch --show-current`.text().then((x) => x.trim())
+  return branch === "main" ? "latest" : branch
 })()
 const IS_PREVIEW = CHANNEL !== "latest"
 

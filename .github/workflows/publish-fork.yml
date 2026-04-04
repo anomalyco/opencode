@@ -3,12 +3,11 @@ name: publish-fork
 on:
   push:
     branches:
-      - dev
+      - main
     paths:
       - "packages/xcsh/src/**"
       - "packages/xcsh/test/**"
       - ".github/workflows/publish-fork.yml"
-  workflow_call:
   workflow_dispatch:
 
 permissions:
@@ -26,7 +25,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: dev
+          ref: main
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 

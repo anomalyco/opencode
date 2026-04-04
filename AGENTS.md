@@ -1,8 +1,9 @@
 - To regenerate the JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
 - ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE.
-- The default branch in this repo is `dev`.
-- Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.
+- The default branch in this repo is `main`. `dev` is the integration branch; `main` is the stable release branch.
+- For diffs, use `origin/main` (stable) or `origin/dev` (integration).
 - Prefer automation: execute requested actions without confirmation unless blocked by missing info or safety/irreversibility.
+- This is a fork of [anomalyco/opencode](https://github.com/anomalyco/opencode). Upstream sync is manual — see `UPSTREAM-SYNC.md` for the process. Sync position is tracked in `.github/UPSTREAM_SYNC_POSITION`.
 
 ## Style Guide
 

@@ -1,0 +1,6 @@
+# Last synced upstream (anomalyco/opencode) commit
+# Updated manually during each upstream sync cycle
+LAST_SYNCED_SHA=6dfb30448c82725b82b5c88f9ec4390c35c52a7f
+LAST_SYNCED_DATE=2026-04-02
+UPSTREAM_REPO=anomalyco/opencode
+UPSTREAM_BRANCH=dev
