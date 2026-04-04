@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
+import { afterEach, describe, expect, mock, test } from "bun:test"
 import { APICallError } from "ai"
 import { Cause, Effect, Exit, Layer, ManagedRuntime } from "effect"
 import * as Stream from "effect/Stream"
@@ -20,9 +20,9 @@ import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import type { Provider } from "../../src/provider/provider"
-import * as ProviderModule from "../../src/provider/provider"
 import * as SessionProcessorModule from "../../src/session/processor"
 import { Snapshot } from "../../src/snapshot"
+import { ProviderTest } from "../fake/provider"
 
 Log.init({ print: false })
 
@@ -64,6 +64,8 @@ function createModel(opts: {
     options: {},
   } as Provider.Model
 }
+
+const wide = () => ProviderTest.fake({ model: createModel({ context: 100_000, output: 32_000 }) })
 
 async function user(sessionID: SessionID, text: string) {
   const msg = await Session.updateMessage({
@@ -162,10 +164,11 @@ function layer(result: "continue" | "compact") {
   )
 }
 
-function runtime(result: "continue" | "compact", plugin = Plugin.defaultLayer) {
+function runtime(result: "continue" | "compact", plugin = Plugin.defaultLayer, provider = ProviderTest.fake()) {
   const bus = Bus.layer
   return ManagedRuntime.make(
     Layer.mergeAll(SessionCompaction.layer, bus).pipe(
+      Layer.provide(provider.layer),
       Layer.provide(Session.defaultLayer),
       Layer.provide(layer(result)),
       Layer.provide(Agent.defaultLayer),
@@ -198,16 +201,17 @@ function llm() {
   }
 }
 
-function liveRuntime(layer: Layer.Layer<LLM.Service>) {
+function liveRuntime(layer: Layer.Layer<LLM.Service>, provider = ProviderTest.fake()) {
   const bus = Bus.layer
   const status = SessionStatus.layer.pipe(Layer.provide(bus))
   const processor = SessionProcessorModule.SessionProcessor.layer
   return ManagedRuntime.make(
     Layer.mergeAll(SessionCompaction.layer.pipe(Layer.provide(processor)), processor, bus, status).pipe(
+      Layer.provide(provider.layer),
       Layer.provide(Session.defaultLayer),
       Layer.provide(Snapshot.defaultLayer),
       Layer.provide(layer),
-      Layer.provide(Permission.layer),
+      Layer.provide(Permission.defaultLayer),
       Layer.provide(Agent.defaultLayer),
       Layer.provide(Plugin.defaultLayer),
       Layer.provide(status),
@@ -544,14 +548,12 @@ describe("session.compaction.process", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        spyOn(ProviderModule.Provider, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
-
         const session = await Session.create({})
         const msg = await user(session.id, "hello")
         const msgs = await Session.messages({ sessionID: session.id })
         const done = defer()
         let seen = false
-        const rt = runtime("continue")
+        const rt = runtime("continue", Plugin.defaultLayer, wide())
         let unsub: (() => void) | undefined
         try {
           unsub = await rt.runPromise(
@@ -596,11 +598,9 @@ describe("session.compaction.process", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        spyOn(ProviderModule.Provider, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
-
         const session = await Session.create({})
         const msg = await user(session.id, "hello")
-        const rt = runtime("compact")
+        const rt = runtime("compact", Plugin.defaultLayer, wide())
         try {
           const msgs = await Session.messages({ sessionID: session.id })
           const result = await rt.runPromise(
@@ -636,11 +636,9 @@ describe("session.compaction.process", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        spyOn(ProviderModule.Provider, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
-
         const session = await Session.create({})
         const msg = await user(session.id, "hello")
-        const rt = runtime("continue")
+        const rt = runtime("continue", Plugin.defaultLayer, wide())
         try {
           const msgs = await Session.messages({ sessionID: session.id })
           const result = await rt.runPromise(
@@ -678,8 +676,6 @@ describe("session.compaction.process", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        spyOn(ProviderModule.Provider, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
-
         const session = await Session.create({})
         await user(session.id, "root")
         const replay = await user(session.id, "image")
@@ -693,7 +689,7 @@ describe("session.compaction.process", () => {
           url: "https://example.com/cat.png",
         })
         const msg = await user(session.id, "current")
-        const rt = runtime("continue")
+        const rt = runtime("continue", Plugin.defaultLayer, wide())
         try {
           const msgs = await Session.messages({ sessionID: session.id })
           const result = await rt.runPromise(
@@ -728,13 +724,11 @@ describe("session.compaction.process", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        spyOn(ProviderModule.Provider, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
-
         const session = await Session.create({})
         await user(session.id, "earlier")
         const msg = await user(session.id, "current")
 
-        const rt = runtime("continue")
+        const rt = runtime("continue", Plugin.defaultLayer, wide())
         try {
           const msgs = await Session.messages({ sessionID: session.id })
           const result = await rt.runPromise(
@@ -790,13 +784,11 @@ describe("session.compaction.process", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        spyOn(ProviderModule.Provider, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
-
         const session = await Session.create({})
         const msg = await user(session.id, "hello")
         const msgs = await Session.messages({ sessionID: session.id })
         const abort = new AbortController()
-        const rt = liveRuntime(stub.layer)
+        const rt = liveRuntime(stub.layer, wide())
         let off: (() => void) | undefined
         let run: Promise<"continue" | "stop"> | undefined
         try {
@@ -866,13 +858,11 @@ describe("session.compaction.process", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        spyOn(ProviderModule.Provider, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
-
         const session = await Session.create({})
         const msg = await user(session.id, "hello")
         const msgs = await Session.messages({ sessionID: session.id })
         const abort = new AbortController()
-        const rt = runtime("continue", plugin(ready))
+        const rt = runtime("continue", plugin(ready), wide())
         let run: Promise<"continue" | "stop"> | undefined
         try {
           run = rt
@@ -970,11 +960,9 @@ describe("session.compaction.process", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        spyOn(ProviderModule.Provider, "getModel").mockResolvedValue(createModel({ context: 100_000, output: 32_000 }))
-
         const session = await Session.create({})
         const msg = await user(session.id, "hello")
-        const rt = liveRuntime(stub.layer)
+        const rt = liveRuntime(stub.layer, wide())
         try {
           const msgs = await Session.messages({ sessionID: session.id })
           await rt.runPromise(

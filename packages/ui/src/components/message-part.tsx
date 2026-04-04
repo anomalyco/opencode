@@ -230,6 +230,19 @@ function createPacedValue(getValue: () => string, live?: () => boolean) {
   return value
 }
 
+function PacedMarkdown(props: { text: string; cacheKey: string; streaming: boolean }) {
+  const value = createPacedValue(
+    () => props.text,
+    () => props.streaming,
+  )
+
+  return (
+    <Show when={value()}>
+      <Markdown text={value()} cacheKey={props.cacheKey} streaming={props.streaming} />
+    </Show>
+  )
+}
+
 function relativizeProjectPath(path: string, directory?: string) {
   if (!path) return ""
   if (!directory) return path
@@ -1373,8 +1386,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const streaming = createMemo(
     () => props.message.role === "assistant" && typeof (props.message as AssistantMessage).time.completed !== "number",
   )
-  const displayText = () => (part().text ?? "").trim()
-  const throttledText = createPacedValue(displayText, streaming)
+  const text = () => (part().text ?? "").trim()
   const isLastTextPart = createMemo(() => {
     const last = (data.store.part?.[props.message.id] ?? [])
       .filter((item): item is TextPart => item?.type === "text" && !!item.text?.trim())
@@ -1390,7 +1402,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const [copied, setCopied] = createSignal(false)
 
   const handleCopy = async () => {
-    const content = displayText()
+    const content = text()
     if (!content) return
     await navigator.clipboard.writeText(content)
     setCopied(true)
@@ -1398,10 +1410,12 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   }
 
   return (
-    <Show when={throttledText()}>
+    <Show when={text()}>
       <div data-component="text-part">
         <div data-slot="text-part-body">
-          <Markdown text={throttledText()} cacheKey={part().id} streaming={streaming()} />
+          <Show when={streaming()} fallback={<Markdown text={text()} cacheKey={part().id} streaming={false} />}>
+            <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
+          </Show>
         </div>
         <Show when={showCopy()}>
           <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
@@ -1437,12 +1451,13 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
     () => props.message.role === "assistant" && typeof (props.message as AssistantMessage).time.completed !== "number",
   )
   const text = () => part().text.trim()
-  const throttledText = createPacedValue(text, streaming)
 
   return (
-    <Show when={throttledText()}>
+    <Show when={text()}>
       <div data-component="reasoning-part">
-        <Markdown text={throttledText()} cacheKey={part().id} streaming={streaming()} />
+        <Show when={streaming()} fallback={<Markdown text={text()} cacheKey={part().id} streaming={false} />}>
+          <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
+        </Show>
       </div>
     </Show>
   )

@@ -341,10 +341,6 @@ export namespace Installation {
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
-  export async function info(): Promise<Info> {
-    return runPromise((svc) => svc.info())
-  }
-
   export async function method(): Promise<Method> {
     return runPromise((svc) => svc.method())
   }

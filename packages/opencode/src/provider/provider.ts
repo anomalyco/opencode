@@ -5,7 +5,7 @@ import { Config } from "../config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
 import { Log } from "../util/log"
-import { BunProc } from "../bun"
+import { Npm } from "../npm"
 import { Hash } from "../util/hash"
 import { Plugin } from "../plugin"
 import { NamedError } from "@opencode-ai/util/error"
@@ -44,6 +44,7 @@ import { createGateway } from "@ai-sdk/gateway"
 import { createTogetherAI } from "@ai-sdk/togetherai"
 import { createPerplexity } from "@ai-sdk/perplexity"
 import { createVercel } from "@ai-sdk/vercel"
+import { createVenice } from "venice-ai-sdk-provider"
 import {
   createGitLab,
   VERSION as GITLAB_PROVIDER_VERSION,
@@ -113,6 +114,12 @@ export namespace Provider {
     })
   }
 
+  function e2eURL() {
+    const url = Env.get("OPENCODE_E2E_LLM_URL")
+    if (typeof url !== "string" || url === "") return
+    return url
+  }
+
   type BundledSDK = {
     languageModel(modelId: string): LanguageModelV3
   }
@@ -139,12 +146,13 @@ export namespace Provider {
     "@ai-sdk/vercel": createVercel,
     "gitlab-ai-provider": createGitLab,
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
+    "venice-ai-sdk-provider": createVenice,
   }
 
   type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
   type CustomVarsLoader = (options: Record<string, any>) => Record<string, string>
   type CustomDiscoverModels = () => Promise<Record<string, Model>>
-  type CustomLoader = (provider: Info) => Promise<{
+  type CustomLoader = (provider: Info) => Effect.Effect<{
     autoload: boolean
     getModel?: CustomModelLoader
     vars?: CustomVarsLoader
@@ -152,626 +160,629 @@ export namespace Provider {
     discoverModels?: CustomDiscoverModels
   }>
 
+  type CustomDep = {
+    auth: (id: string) => Effect.Effect<Auth.Info | undefined>
+    config: () => Effect.Effect<Config.Info>
+  }
+
   function useLanguageModel(sdk: any) {
     return sdk.responses === undefined && sdk.chat === undefined
   }
 
-  const CUSTOM_LOADERS: Record<string, CustomLoader> = {
-    async anthropic() {
-      return {
-        autoload: false,
-        options: {
-          headers: {
-            "anthropic-beta": "interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+  function custom(dep: CustomDep): Record<string, CustomLoader> {
+    return {
+      anthropic: () =>
+        Effect.succeed({
+          autoload: false,
+          options: {
+            headers: {
+              "anthropic-beta": "interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+            },
           },
-        },
-      }
-    },
-    async opencode(input) {
-      const hasKey = await (async () => {
+        }),
+      opencode: Effect.fnUntraced(function* (input: Info) {
         const env = Env.all()
-        if (input.env.some((item) => env[item])) return true
-        if (await Auth.get(input.id)) return true
-        const config = await Config.get()
-        if (config.provider?.["opencode"]?.options?.apiKey) return true
-        return false
-      })()
+        const hasKey = iife(() => {
+          if (input.env.some((item) => env[item])) return true
+          return false
+        })
+        const ok =
+          hasKey ||
+          Boolean(yield* dep.auth(input.id)) ||
+          Boolean((yield* dep.config()).provider?.["opencode"]?.options?.apiKey)
 
-      if (!hasKey) {
-        for (const [key, value] of Object.entries(input.models)) {
-          if (value.cost.input === 0) continue
-          delete input.models[key]
+        if (!ok) {
+          for (const [key, value] of Object.entries(input.models)) {
+            if (value.cost.input === 0) continue
+            delete input.models[key]
+          }
         }
-      }
 
-      return {
-        autoload: Object.keys(input.models).length > 0,
-        options: hasKey ? {} : { apiKey: "public" },
-      }
-    },
-    openai: async () => {
-      return {
-        autoload: false,
-        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          return sdk.responses(modelID)
-        },
-        options: {},
-      }
-    },
-    xai: async () => {
-      return {
-        autoload: false,
-        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          return sdk.responses(modelID)
-        },
-        options: {},
-      }
-    },
-    "github-copilot": async () => {
-      return {
-        autoload: false,
-        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
-          return shouldUseCopilotResponsesApi(modelID) ? sdk.responses(modelID) : sdk.chat(modelID)
-        },
-        options: {},
-      }
-    },
-    azure: async (provider) => {
-      const resource = iife(() => {
-        const name = provider.options?.resourceName
-        if (typeof name === "string" && name.trim() !== "") return name
-        return Env.get("AZURE_RESOURCE_NAME")
-      })
-
-      return {
-        autoload: false,
-        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
-          if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
-          if (options?.["useCompletionUrls"]) {
-            return sdk.chat(modelID)
-          } else {
-            return sdk.responses(modelID)
-          }
-        },
-        options: {},
-        vars(_options) {
-          return {
-            ...(resource && { AZURE_RESOURCE_NAME: resource }),
-          }
-        },
-      }
-    },
-    "azure-cognitive-services": async () => {
-      const resourceName = Env.get("AZURE_COGNITIVE_SERVICES_RESOURCE_NAME")
-      return {
-        autoload: false,
-        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
-          if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
-          if (options?.["useCompletionUrls"]) {
-            return sdk.chat(modelID)
-          } else {
-            return sdk.responses(modelID)
-          }
-        },
-        options: {
-          baseURL: resourceName ? `https://${resourceName}.cognitiveservices.azure.com/openai` : undefined,
-        },
-      }
-    },
-    "amazon-bedrock": async () => {
-      const config = await Config.get()
-      const providerConfig = config.provider?.["amazon-bedrock"]
-
-      const auth = await Auth.get("amazon-bedrock")
-
-      // Region precedence: 1) config file, 2) env var, 3) default
-      const configRegion = providerConfig?.options?.region
-      const envRegion = Env.get("AWS_REGION")
-      const defaultRegion = configRegion ?? envRegion ?? "us-east-1"
-
-      // Profile: config file takes precedence over env var
-      const configProfile = providerConfig?.options?.profile
-      const envProfile = Env.get("AWS_PROFILE")
-      const profile = configProfile ?? envProfile
-
-      const awsAccessKeyId = Env.get("AWS_ACCESS_KEY_ID")
-
-      // TODO: Using process.env directly because Env.set only updates a process.env shallow copy,
-      // until the scope of the Env API is clarified (test only or runtime?)
-      const awsBearerToken = iife(() => {
-        const envToken = process.env.AWS_BEARER_TOKEN_BEDROCK
-        if (envToken) return envToken
-        if (auth?.type === "api") {
-          process.env.AWS_BEARER_TOKEN_BEDROCK = auth.key
-          return auth.key
+        return {
+          autoload: Object.keys(input.models).length > 0,
+          options: ok ? {} : { apiKey: "public" },
         }
-        return undefined
-      })
+      }),
+      openai: () =>
+        Effect.succeed({
+          autoload: false,
+          async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+            return sdk.responses(modelID)
+          },
+          options: {},
+        }),
+      xai: () =>
+        Effect.succeed({
+          autoload: false,
+          async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+            return sdk.responses(modelID)
+          },
+          options: {},
+        }),
+      "github-copilot": () =>
+        Effect.succeed({
+          autoload: false,
+          async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+            if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
+            return shouldUseCopilotResponsesApi(modelID) ? sdk.responses(modelID) : sdk.chat(modelID)
+          },
+          options: {},
+        }),
+      azure: (provider) => {
+        const resource = iife(() => {
+          const name = provider.options?.resourceName
+          if (typeof name === "string" && name.trim() !== "") return name
+          return Env.get("AZURE_RESOURCE_NAME")
+        })
 
-      const awsWebIdentityTokenFile = Env.get("AWS_WEB_IDENTITY_TOKEN_FILE")
+        return Effect.succeed({
+          autoload: false,
+          async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
+            if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
+            if (options?.["useCompletionUrls"]) {
+              return sdk.chat(modelID)
+            } else {
+              return sdk.responses(modelID)
+            }
+          },
+          options: {},
+          vars(_options) {
+            return {
+              ...(resource && { AZURE_RESOURCE_NAME: resource }),
+            }
+          },
+        })
+      },
+      "azure-cognitive-services": () => {
+        const resourceName = Env.get("AZURE_COGNITIVE_SERVICES_RESOURCE_NAME")
+        return Effect.succeed({
+          autoload: false,
+          async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
+            if (useLanguageModel(sdk)) return sdk.languageModel(modelID)
+            if (options?.["useCompletionUrls"]) {
+              return sdk.chat(modelID)
+            } else {
+              return sdk.responses(modelID)
+            }
+          },
+          options: {
+            baseURL: resourceName ? `https://${resourceName}.cognitiveservices.azure.com/openai` : undefined,
+          },
+        })
+      },
+      "amazon-bedrock": Effect.fnUntraced(function* () {
+        const providerConfig = (yield* dep.config()).provider?.["amazon-bedrock"]
+        const auth = yield* dep.auth("amazon-bedrock")
 
-      const containerCreds = Boolean(
-        process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI || process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI,
-      )
+        // Region precedence: 1) config file, 2) env var, 3) default
+        const configRegion = providerConfig?.options?.region
+        const envRegion = Env.get("AWS_REGION")
+        const defaultRegion = configRegion ?? envRegion ?? "us-east-1"
 
-      if (!profile && !awsAccessKeyId && !awsBearerToken && !awsWebIdentityTokenFile && !containerCreds)
-        return { autoload: false }
+        // Profile: config file takes precedence over env var
+        const configProfile = providerConfig?.options?.profile
+        const envProfile = Env.get("AWS_PROFILE")
+        const profile = configProfile ?? envProfile
 
-      const providerOptions: AmazonBedrockProviderSettings = {
-        region: defaultRegion,
-      }
+        const awsAccessKeyId = Env.get("AWS_ACCESS_KEY_ID")
 
-      // Only use credential chain if no bearer token exists
-      // Bearer token takes precedence over credential chain (profiles, access keys, IAM roles, web identity tokens)
-      if (!awsBearerToken) {
-        // Build credential provider options (only pass profile if specified)
-        const credentialProviderOptions = profile ? { profile } : {}
+        // TODO: Using process.env directly because Env.set only updates a process.env shallow copy,
+        // until the scope of the Env API is clarified (test only or runtime?)
+        const awsBearerToken = iife(() => {
+          const envToken = process.env.AWS_BEARER_TOKEN_BEDROCK
+          if (envToken) return envToken
+          if (auth?.type === "api") {
+            process.env.AWS_BEARER_TOKEN_BEDROCK = auth.key
+            return auth.key
+          }
+          return undefined
+        })
 
-        providerOptions.credentialProvider = fromNodeProviderChain(credentialProviderOptions)
-      }
+        const awsWebIdentityTokenFile = Env.get("AWS_WEB_IDENTITY_TOKEN_FILE")
 
-      // Add custom endpoint if specified (endpoint takes precedence over baseURL)
-      const endpoint = providerConfig?.options?.endpoint ?? providerConfig?.options?.baseURL
-      if (endpoint) {
-        providerOptions.baseURL = endpoint
-      }
+        const containerCreds = Boolean(
+          process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI || process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI,
+        )
 
-      return {
-        autoload: true,
-        options: providerOptions,
-        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
-          // Skip region prefixing if model already has a cross-region inference profile prefix
-          // Models from models.dev may already include prefixes like us., eu., global., etc.
-          const crossRegionPrefixes = ["global.", "us.", "eu.", "jp.", "apac.", "au."]
-          if (crossRegionPrefixes.some((prefix) => modelID.startsWith(prefix))) {
+        if (!profile && !awsAccessKeyId && !awsBearerToken && !awsWebIdentityTokenFile && !containerCreds)
+          return { autoload: false }
+
+        const providerOptions: AmazonBedrockProviderSettings = {
+          region: defaultRegion,
+        }
+
+        // Only use credential chain if no bearer token exists
+        // Bearer token takes precedence over credential chain (profiles, access keys, IAM roles, web identity tokens)
+        if (!awsBearerToken) {
+          // Build credential provider options (only pass profile if specified)
+          const credentialProviderOptions = profile ? { profile } : {}
+
+          providerOptions.credentialProvider = fromNodeProviderChain(credentialProviderOptions)
+        }
+
+        // Add custom endpoint if specified (endpoint takes precedence over baseURL)
+        const endpoint = providerConfig?.options?.endpoint ?? providerConfig?.options?.baseURL
+        if (endpoint) {
+          providerOptions.baseURL = endpoint
+        }
+
+        return {
+          autoload: true,
+          options: providerOptions,
+          async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
+            // Skip region prefixing if model already has a cross-region inference profile prefix
+            // Models from models.dev may already include prefixes like us., eu., global., etc.
+            const crossRegionPrefixes = ["global.", "us.", "eu.", "jp.", "apac.", "au."]
+            if (crossRegionPrefixes.some((prefix) => modelID.startsWith(prefix))) {
+              return sdk.languageModel(modelID)
+            }
+
+            // Region resolution precedence (highest to lowest):
+            // 1. options.region from opencode.json provider config
+            // 2. defaultRegion from AWS_REGION environment variable
+            // 3. Default "us-east-1" (baked into defaultRegion)
+            const region = options?.region ?? defaultRegion
+
+            let regionPrefix = region.split("-")[0]
+
+            switch (regionPrefix) {
+              case "us": {
+                const modelRequiresPrefix = [
+                  "nova-micro",
+                  "nova-lite",
+                  "nova-pro",
+                  "nova-premier",
+                  "nova-2",
+                  "claude",
+                  "deepseek",
+                ].some((m) => modelID.includes(m))
+                const isGovCloud = region.startsWith("us-gov")
+                if (modelRequiresPrefix && !isGovCloud) {
+                  modelID = `${regionPrefix}.${modelID}`
+                }
+                break
+              }
+              case "eu": {
+                const regionRequiresPrefix = [
+                  "eu-west-1",
+                  "eu-west-2",
+                  "eu-west-3",
+                  "eu-north-1",
+                  "eu-central-1",
+                  "eu-south-1",
+                  "eu-south-2",
+                ].some((r) => region.includes(r))
+                const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "llama3", "pixtral"].some((m) =>
+                  modelID.includes(m),
+                )
+                if (regionRequiresPrefix && modelRequiresPrefix) {
+                  modelID = `${regionPrefix}.${modelID}`
+                }
+                break
+              }
+              case "ap": {
+                const isAustraliaRegion = ["ap-southeast-2", "ap-southeast-4"].includes(region)
+                const isTokyoRegion = region === "ap-northeast-1"
+                if (
+                  isAustraliaRegion &&
+                  ["anthropic.claude-sonnet-4-5", "anthropic.claude-haiku"].some((m) => modelID.includes(m))
+                ) {
+                  regionPrefix = "au"
+                  modelID = `${regionPrefix}.${modelID}`
+                } else if (isTokyoRegion) {
+                  // Tokyo region uses jp. prefix for cross-region inference
+                  const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "nova-pro"].some((m) =>
+                    modelID.includes(m),
+                  )
+                  if (modelRequiresPrefix) {
+                    regionPrefix = "jp"
+                    modelID = `${regionPrefix}.${modelID}`
+                  }
+                } else {
+                  // Other APAC regions use apac. prefix
+                  const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "nova-pro"].some((m) =>
+                    modelID.includes(m),
+                  )
+                  if (modelRequiresPrefix) {
+                    regionPrefix = "apac"
+                    modelID = `${regionPrefix}.${modelID}`
+                  }
+                }
+                break
+              }
+            }
+
             return sdk.languageModel(modelID)
-          }
-
-          // Region resolution precedence (highest to lowest):
-          // 1. options.region from opencode.json provider config
-          // 2. defaultRegion from AWS_REGION environment variable
-          // 3. Default "us-east-1" (baked into defaultRegion)
-          const region = options?.region ?? defaultRegion
-
-          let regionPrefix = region.split("-")[0]
-
-          switch (regionPrefix) {
-            case "us": {
-              const modelRequiresPrefix = [
-                "nova-micro",
-                "nova-lite",
-                "nova-pro",
-                "nova-premier",
-                "nova-2",
-                "claude",
-                "deepseek",
-              ].some((m) => modelID.includes(m))
-              const isGovCloud = region.startsWith("us-gov")
-              if (modelRequiresPrefix && !isGovCloud) {
-                modelID = `${regionPrefix}.${modelID}`
-              }
-              break
-            }
-            case "eu": {
-              const regionRequiresPrefix = [
-                "eu-west-1",
-                "eu-west-2",
-                "eu-west-3",
-                "eu-north-1",
-                "eu-central-1",
-                "eu-south-1",
-                "eu-south-2",
-              ].some((r) => region.includes(r))
-              const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "llama3", "pixtral"].some((m) =>
-                modelID.includes(m),
-              )
-              if (regionRequiresPrefix && modelRequiresPrefix) {
-                modelID = `${regionPrefix}.${modelID}`
-              }
-              break
-            }
-            case "ap": {
-              const isAustraliaRegion = ["ap-southeast-2", "ap-southeast-4"].includes(region)
-              const isTokyoRegion = region === "ap-northeast-1"
-              if (
-                isAustraliaRegion &&
-                ["anthropic.claude-sonnet-4-5", "anthropic.claude-haiku"].some((m) => modelID.includes(m))
-              ) {
-                regionPrefix = "au"
-                modelID = `${regionPrefix}.${modelID}`
-              } else if (isTokyoRegion) {
-                // Tokyo region uses jp. prefix for cross-region inference
-                const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "nova-pro"].some((m) =>
-                  modelID.includes(m),
-                )
-                if (modelRequiresPrefix) {
-                  regionPrefix = "jp"
-                  modelID = `${regionPrefix}.${modelID}`
-                }
-              } else {
-                // Other APAC regions use apac. prefix
-                const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "nova-pro"].some((m) =>
-                  modelID.includes(m),
-                )
-                if (modelRequiresPrefix) {
-                  regionPrefix = "apac"
-                  modelID = `${regionPrefix}.${modelID}`
-                }
-              }
-              break
-            }
-          }
-
-          return sdk.languageModel(modelID)
-        },
-      }
-    },
-    openrouter: async () => {
-      return {
-        autoload: false,
-        options: {
-          headers: {
-            "HTTP-Referer": "https://opencode.ai/",
-            "X-Title": "opencode",
           },
-        },
-      }
-    },
-    vercel: async () => {
-      return {
-        autoload: false,
-        options: {
-          headers: {
-            "http-referer": "https://opencode.ai/",
-            "x-title": "opencode",
-          },
-        },
-      }
-    },
-    "google-vertex": async (provider) => {
-      const project =
-        provider.options?.project ??
-        Env.get("GOOGLE_CLOUD_PROJECT") ??
-        Env.get("GCP_PROJECT") ??
-        Env.get("GCLOUD_PROJECT")
-
-      const location = String(
-        provider.options?.location ??
-          Env.get("GOOGLE_VERTEX_LOCATION") ??
-          Env.get("GOOGLE_CLOUD_LOCATION") ??
-          Env.get("VERTEX_LOCATION") ??
-          "us-central1",
-      )
-
-      const autoload = Boolean(project)
-      if (!autoload) return { autoload: false }
-      return {
-        autoload: true,
-        vars(_options: Record<string, any>) {
-          const endpoint = location === "global" ? "aiplatform.googleapis.com" : `${location}-aiplatform.googleapis.com`
-          return {
-            ...(project && { GOOGLE_VERTEX_PROJECT: project }),
-            GOOGLE_VERTEX_LOCATION: location,
-            GOOGLE_VERTEX_ENDPOINT: endpoint,
-          }
-        },
-        options: {
-          project,
-          location,
-          fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
-            const auth = new GoogleAuth()
-            const client = await auth.getApplicationDefault()
-            const token = await client.credential.getAccessToken()
-
-            const headers = new Headers(init?.headers)
-            headers.set("Authorization", `Bearer ${token.token}`)
-
-            return fetch(input, { ...init, headers })
-          },
-        },
-        async getModel(sdk: any, modelID: string) {
-          const id = String(modelID).trim()
-          return sdk.languageModel(id)
-        },
-      }
-    },
-    "google-vertex-anthropic": async () => {
-      const project = Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
-      const location = Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "global"
-      const autoload = Boolean(project)
-      if (!autoload) return { autoload: false }
-      return {
-        autoload: true,
-        options: {
-          project,
-          location,
-        },
-        async getModel(sdk: any, modelID) {
-          const id = String(modelID).trim()
-          return sdk.languageModel(id)
-        },
-      }
-    },
-    "sap-ai-core": async () => {
-      const auth = await Auth.get("sap-ai-core")
-      // TODO: Using process.env directly because Env.set only updates a shallow copy (not process.env),
-      // until the scope of the Env API is clarified (test only or runtime?)
-      const envServiceKey = iife(() => {
-        const envAICoreServiceKey = process.env.AICORE_SERVICE_KEY
-        if (envAICoreServiceKey) return envAICoreServiceKey
-        if (auth?.type === "api") {
-          process.env.AICORE_SERVICE_KEY = auth.key
-          return auth.key
         }
-        return undefined
-      })
-      const deploymentId = process.env.AICORE_DEPLOYMENT_ID
-      const resourceGroup = process.env.AICORE_RESOURCE_GROUP
-
-      return {
-        autoload: !!envServiceKey,
-        options: envServiceKey ? { deploymentId, resourceGroup } : {},
-        async getModel(sdk: any, modelID: string) {
-          return sdk(modelID)
-        },
-      }
-    },
-    zenmux: async () => {
-      return {
-        autoload: false,
-        options: {
-          headers: {
-            "HTTP-Referer": "https://opencode.ai/",
-            "X-Title": "opencode",
+      }),
+      openrouter: () =>
+        Effect.succeed({
+          autoload: false,
+          options: {
+            headers: {
+              "HTTP-Referer": "https://opencode.ai/",
+              "X-Title": "opencode",
+            },
           },
-        },
-      }
-    },
-    gitlab: async (input) => {
-      const instanceUrl = Env.get("GITLAB_INSTANCE_URL") || "https://gitlab.com"
+        }),
+      vercel: () =>
+        Effect.succeed({
+          autoload: false,
+          options: {
+            headers: {
+              "http-referer": "https://opencode.ai/",
+              "x-title": "opencode",
+            },
+          },
+        }),
+      "google-vertex": (provider) => {
+        const project =
+          provider.options?.project ??
+          Env.get("GOOGLE_CLOUD_PROJECT") ??
+          Env.get("GCP_PROJECT") ??
+          Env.get("GCLOUD_PROJECT")
 
-      const auth = await Auth.get(input.id)
-      const apiKey = await (async () => {
-        if (auth?.type === "oauth") return auth.access
-        if (auth?.type === "api") return auth.key
-        return Env.get("GITLAB_TOKEN")
-      })()
+        const location = String(
+          provider.options?.location ??
+            Env.get("GOOGLE_VERTEX_LOCATION") ??
+            Env.get("GOOGLE_CLOUD_LOCATION") ??
+            Env.get("VERTEX_LOCATION") ??
+            "us-central1",
+        )
 
-      const config = await Config.get()
-      const providerConfig = config.provider?.["gitlab"]
-
-      const aiGatewayHeaders = {
-        "User-Agent": `opencode/${Installation.VERSION} gitlab-ai-provider/${GITLAB_PROVIDER_VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
-        "anthropic-beta": "context-1m-2025-08-07",
-        ...(providerConfig?.options?.aiGatewayHeaders || {}),
-      }
-
-      const featureFlags = {
-        duo_agent_platform_agentic_chat: true,
-        duo_agent_platform: true,
-        ...(providerConfig?.options?.featureFlags || {}),
-      }
-
-      return {
-        autoload: !!apiKey,
-        options: {
-          instanceUrl,
-          apiKey,
-          aiGatewayHeaders,
-          featureFlags,
-        },
-        async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string, options?: Record<string, any>) {
-          if (modelID.startsWith("duo-workflow-")) {
-            const workflowRef = options?.workflowRef as string | undefined
-            // Use the static mapping if it exists, otherwise use duo-workflow with selectedModelRef
-            const sdkModelID = isWorkflowModel(modelID) ? modelID : "duo-workflow"
-            const model = sdk.workflowChat(sdkModelID, {
-              featureFlags,
-            })
-            if (workflowRef) {
-              model.selectedModelRef = workflowRef
+        const autoload = Boolean(project)
+        if (!autoload) return Effect.succeed({ autoload: false })
+        return Effect.succeed({
+          autoload: true,
+          vars(_options: Record<string, any>) {
+            const endpoint =
+              location === "global" ? "aiplatform.googleapis.com" : `${location}-aiplatform.googleapis.com`
+            return {
+              ...(project && { GOOGLE_VERTEX_PROJECT: project }),
+              GOOGLE_VERTEX_LOCATION: location,
+              GOOGLE_VERTEX_ENDPOINT: endpoint,
             }
-            return model
+          },
+          options: {
+            project,
+            location,
+            fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+              const auth = new GoogleAuth()
+              const client = await auth.getApplicationDefault()
+              const token = await client.credential.getAccessToken()
+
+              const headers = new Headers(init?.headers)
+              headers.set("Authorization", `Bearer ${token.token}`)
+
+              return fetch(input, { ...init, headers })
+            },
+          },
+          async getModel(sdk: any, modelID: string) {
+            const id = String(modelID).trim()
+            return sdk.languageModel(id)
+          },
+        })
+      },
+      "google-vertex-anthropic": () => {
+        const project = Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
+        const location = Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "global"
+        const autoload = Boolean(project)
+        if (!autoload) return Effect.succeed({ autoload: false })
+        return Effect.succeed({
+          autoload: true,
+          options: {
+            project,
+            location,
+          },
+          async getModel(sdk: any, modelID) {
+            const id = String(modelID).trim()
+            return sdk.languageModel(id)
+          },
+        })
+      },
+      "sap-ai-core": Effect.fnUntraced(function* () {
+        const auth = yield* dep.auth("sap-ai-core")
+        // TODO: Using process.env directly because Env.set only updates a shallow copy (not process.env),
+        // until the scope of the Env API is clarified (test only or runtime?)
+        const envServiceKey = iife(() => {
+          const envAICoreServiceKey = process.env.AICORE_SERVICE_KEY
+          if (envAICoreServiceKey) return envAICoreServiceKey
+          if (auth?.type === "api") {
+            process.env.AICORE_SERVICE_KEY = auth.key
+            return auth.key
           }
-          return sdk.agenticChat(modelID, {
+          return undefined
+        })
+        const deploymentId = process.env.AICORE_DEPLOYMENT_ID
+        const resourceGroup = process.env.AICORE_RESOURCE_GROUP
+
+        return {
+          autoload: !!envServiceKey,
+          options: envServiceKey ? { deploymentId, resourceGroup } : {},
+          async getModel(sdk: any, modelID: string) {
+            return sdk(modelID)
+          },
+        }
+      }),
+      zenmux: () =>
+        Effect.succeed({
+          autoload: false,
+          options: {
+            headers: {
+              "HTTP-Referer": "https://opencode.ai/",
+              "X-Title": "opencode",
+            },
+          },
+        }),
+      gitlab: Effect.fnUntraced(function* (input: Info) {
+        const instanceUrl = Env.get("GITLAB_INSTANCE_URL") || "https://gitlab.com"
+
+        const auth = yield* dep.auth(input.id)
+        const apiKey = yield* Effect.sync(() => {
+          if (auth?.type === "oauth") return auth.access
+          if (auth?.type === "api") return auth.key
+          return Env.get("GITLAB_TOKEN")
+        })
+
+        const providerConfig = (yield* dep.config()).provider?.["gitlab"]
+
+        const aiGatewayHeaders = {
+          "User-Agent": `opencode/${Installation.VERSION} gitlab-ai-provider/${GITLAB_PROVIDER_VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
+          "anthropic-beta": "context-1m-2025-08-07",
+          ...(providerConfig?.options?.aiGatewayHeaders || {}),
+        }
+
+        const featureFlags = {
+          duo_agent_platform_agentic_chat: true,
+          duo_agent_platform: true,
+          ...(providerConfig?.options?.featureFlags || {}),
+        }
+
+        return {
+          autoload: !!apiKey,
+          options: {
+            instanceUrl,
+            apiKey,
             aiGatewayHeaders,
             featureFlags,
-          })
-        },
-        async discoverModels(): Promise<Record<string, Model>> {
-          if (!apiKey) {
-            log.info("gitlab model discovery skipped: no apiKey")
-            return {}
-          }
-
-          try {
-            const token = apiKey
-            const getHeaders = (): Record<string, string> =>
-              auth?.type === "api" ? { "PRIVATE-TOKEN": token } : { Authorization: `Bearer ${token}` }
-
-            log.info("gitlab model discovery starting", { instanceUrl })
-            const result = await discoverWorkflowModels(
-              { instanceUrl, getHeaders },
-              { workingDirectory: Instance.directory },
-            )
-
-            if (!result.models.length) {
-              log.info("gitlab model discovery skipped: no models found", {
-                project: result.project
-                  ? {
-                      id: result.project.id,
-                      path: result.project.pathWithNamespace,
-                    }
-                  : null,
+          },
+          async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string, options?: Record<string, any>) {
+            if (modelID.startsWith("duo-workflow-")) {
+              const workflowRef = options?.workflowRef as string | undefined
+              // Use the static mapping if it exists, otherwise use duo-workflow with selectedModelRef
+              const sdkModelID = isWorkflowModel(modelID) ? modelID : "duo-workflow"
+              const model = sdk.workflowChat(sdkModelID, {
+                featureFlags,
               })
+              if (workflowRef) {
+                model.selectedModelRef = workflowRef
+              }
+              return model
+            }
+            return sdk.agenticChat(modelID, {
+              aiGatewayHeaders,
+              featureFlags,
+            })
+          },
+          async discoverModels(): Promise<Record<string, Model>> {
+            if (!apiKey) {
+              log.info("gitlab model discovery skipped: no apiKey")
               return {}
             }
 
-            const models: Record<string, Model> = {}
-            for (const m of result.models) {
-              if (!input.models[m.id]) {
-                models[m.id] = {
-                  id: ModelID.make(m.id),
-                  providerID: ProviderID.make("gitlab"),
-                  name: `Agent Platform (${m.name})`,
-                  family: "",
-                  api: {
-                    id: m.id,
-                    url: instanceUrl,
-                    npm: "gitlab-ai-provider",
-                  },
-                  status: "active",
-                  headers: {},
-                  options: { workflowRef: m.ref },
-                  cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-                  limit: { context: m.context, output: m.output },
-                  capabilities: {
-                    temperature: false,
-                    reasoning: true,
-                    attachment: true,
-                    toolcall: true,
-                    input: {
-                      text: true,
-                      audio: false,
-                      image: true,
-                      video: false,
-                      pdf: true,
+            try {
+              const token = apiKey
+              const getHeaders = (): Record<string, string> =>
+                auth?.type === "api" ? { "PRIVATE-TOKEN": token } : { Authorization: `Bearer ${token}` }
+
+              log.info("gitlab model discovery starting", { instanceUrl })
+              const result = await discoverWorkflowModels(
+                { instanceUrl, getHeaders },
+                { workingDirectory: Instance.directory },
+              )
+
+              if (!result.models.length) {
+                log.info("gitlab model discovery skipped: no models found", {
+                  project: result.project
+                    ? {
+                        id: result.project.id,
+                        path: result.project.pathWithNamespace,
+                      }
+                    : null,
+                })
+                return {}
+              }
+
+              const models: Record<string, Model> = {}
+              for (const m of result.models) {
+                if (!input.models[m.id]) {
+                  models[m.id] = {
+                    id: ModelID.make(m.id),
+                    providerID: ProviderID.make("gitlab"),
+                    name: `Agent Platform (${m.name})`,
+                    family: "",
+                    api: {
+                      id: m.id,
+                      url: instanceUrl,
+                      npm: "gitlab-ai-provider",
                     },
-                    output: {
-                      text: true,
-                      audio: false,
-                      image: false,
-                      video: false,
-                      pdf: false,
+                    status: "active",
+                    headers: {},
+                    options: { workflowRef: m.ref },
+                    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+                    limit: { context: m.context, output: m.output },
+                    capabilities: {
+                      temperature: false,
+                      reasoning: true,
+                      attachment: true,
+                      toolcall: true,
+                      input: {
+                        text: true,
+                        audio: false,
+                        image: true,
+                        video: false,
+                        pdf: true,
+                      },
+                      output: {
+                        text: true,
+                        audio: false,
+                        image: false,
+                        video: false,
+                        pdf: false,
+                      },
+                      interleaved: false,
                     },
-                    interleaved: false,
-                  },
-                  release_date: "",
-                  variants: {},
+                    release_date: "",
+                    variants: {},
+                  }
                 }
               }
+
+              log.info("gitlab model discovery complete", {
+                count: Object.keys(models).length,
+                models: Object.keys(models),
+              })
+              return models
+            } catch (e) {
+              log.warn("gitlab model discovery failed", { error: e })
+              return {}
             }
-
-            log.info("gitlab model discovery complete", {
-              count: Object.keys(models).length,
-              models: Object.keys(models),
-            })
-            return models
-          } catch (e) {
-            log.warn("gitlab model discovery failed", { error: e })
-            return {}
-          }
-        },
-      }
-    },
-    "cloudflare-workers-ai": async (input) => {
-      const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID")
-      if (!accountId) return { autoload: false }
-
-      const apiKey = await iife(async () => {
-        const envToken = Env.get("CLOUDFLARE_API_KEY")
-        if (envToken) return envToken
-        const auth = await Auth.get(input.id)
-        if (auth?.type === "api") return auth.key
-        return undefined
-      })
-
-      return {
-        autoload: !!apiKey,
-        options: {
-          apiKey,
-        },
-        async getModel(sdk: any, modelID: string) {
-          return sdk.languageModel(modelID)
-        },
-        vars(_options) {
-          return {
-            CLOUDFLARE_ACCOUNT_ID: accountId,
-          }
-        },
-      }
-    },
-    "cloudflare-ai-gateway": async (input) => {
-      const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID")
-      const gateway = Env.get("CLOUDFLARE_GATEWAY_ID")
-
-      if (!accountId || !gateway) return { autoload: false }
-
-      // Get API token from env or auth - required for authenticated gateways
-      const apiToken = await (async () => {
-        const envToken = Env.get("CLOUDFLARE_API_TOKEN") || Env.get("CF_AIG_TOKEN")
-        if (envToken) return envToken
-        const auth = await Auth.get(input.id)
-        if (auth?.type === "api") return auth.key
-        return undefined
-      })()
-
-      if (!apiToken) {
-        throw new Error(
-          "CLOUDFLARE_API_TOKEN (or CF_AIG_TOKEN) is required for Cloudflare AI Gateway. " +
-            "Set it via environment variable or run `opencode auth cloudflare-ai-gateway`.",
-        )
-      }
-
-      // Use official ai-gateway-provider package (v2.x for AI SDK v5 compatibility)
-      const { createAiGateway } = await import("ai-gateway-provider")
-      const { createUnified } = await import("ai-gateway-provider/providers/unified")
-
-      const metadata = iife(() => {
-        if (input.options?.metadata) return input.options.metadata
-        try {
-          return JSON.parse(input.options?.headers?.["cf-aig-metadata"])
-        } catch {
-          return undefined
+          },
         }
-      })
-      const opts = {
-        metadata,
-        cacheTtl: input.options?.cacheTtl,
-        cacheKey: input.options?.cacheKey,
-        skipCache: input.options?.skipCache,
-        collectLog: input.options?.collectLog,
-      }
+      }),
+      "cloudflare-workers-ai": Effect.fnUntraced(function* (input: Info) {
+        const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID")
+        if (!accountId) return { autoload: false }
 
-      const aigateway = createAiGateway({
-        accountId,
-        gateway,
-        apiKey: apiToken,
-        ...(Object.values(opts).some((v) => v !== undefined) ? { options: opts } : {}),
-      })
-      const unified = createUnified()
+        const apiKey = yield* Effect.gen(function* () {
+          const envToken = Env.get("CLOUDFLARE_API_KEY")
+          if (envToken) return envToken
+          const auth = yield* dep.auth(input.id)
+          if (auth?.type === "api") return auth.key
+          return undefined
+        })
 
-      return {
-        autoload: true,
-        async getModel(_sdk: any, modelID: string, _options?: Record<string, any>) {
-          // Model IDs use Unified API format: provider/model (e.g., "anthropic/claude-sonnet-4-5")
-          return aigateway(unified(modelID))
-        },
-        options: {},
-      }
-    },
-    cerebras: async () => {
-      return {
-        autoload: false,
-        options: {
-          headers: {
-            "X-Cerebras-3rd-Party-Integration": "opencode",
+        return {
+          autoload: !!apiKey,
+          options: {
+            apiKey,
+            headers: {
+              "User-Agent": `opencode/${Installation.VERSION} cloudflare-workers-ai (${os.platform()} ${os.release()}; ${os.arch()})`,
+            },
           },
-        },
-      }
-    },
-    kilo: async () => {
-      return {
-        autoload: false,
-        options: {
-          headers: {
-            "HTTP-Referer": "https://opencode.ai/",
-            "X-Title": "opencode",
+          async getModel(sdk: any, modelID: string) {
+            return sdk.languageModel(modelID)
           },
-        },
-      }
-    },
+          vars(_options) {
+            return {
+              CLOUDFLARE_ACCOUNT_ID: accountId,
+            }
+          },
+        }
+      }),
+      "cloudflare-ai-gateway": Effect.fnUntraced(function* (input: Info) {
+        const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID")
+        const gateway = Env.get("CLOUDFLARE_GATEWAY_ID")
+
+        if (!accountId || !gateway) return { autoload: false }
+
+        // Get API token from env or auth - required for authenticated gateways
+        const apiToken = yield* Effect.gen(function* () {
+          const envToken = Env.get("CLOUDFLARE_API_TOKEN") || Env.get("CF_AIG_TOKEN")
+          if (envToken) return envToken
+          const auth = yield* dep.auth(input.id)
+          if (auth?.type === "api") return auth.key
+          return undefined
+        })
+
+        if (!apiToken) {
+          throw new Error(
+            "CLOUDFLARE_API_TOKEN (or CF_AIG_TOKEN) is required for Cloudflare AI Gateway. " +
+              "Set it via environment variable or run `opencode auth cloudflare-ai-gateway`.",
+          )
+        }
+
+        // Use official ai-gateway-provider package (v2.x for AI SDK v5 compatibility)
+        const { createAiGateway } = yield* Effect.promise(() => import("ai-gateway-provider"))
+        const { createUnified } = yield* Effect.promise(() => import("ai-gateway-provider/providers/unified"))
+
+        const metadata = iife(() => {
+          if (input.options?.metadata) return input.options.metadata
+          try {
+            return JSON.parse(input.options?.headers?.["cf-aig-metadata"])
+          } catch {
+            return undefined
+          }
+        })
+        const opts = {
+          metadata,
+          cacheTtl: input.options?.cacheTtl,
+          cacheKey: input.options?.cacheKey,
+          skipCache: input.options?.skipCache,
+          collectLog: input.options?.collectLog,
+          headers: {
+            "User-Agent": `opencode/${Installation.VERSION} cloudflare-ai-gateway (${os.platform()} ${os.release()}; ${os.arch()})`,
+          },
+        }
+
+        const aigateway = createAiGateway({
+          accountId,
+          gateway,
+          apiKey: apiToken,
+          ...(Object.values(opts).some((v) => v !== undefined) ? { options: opts } : {}),
+        })
+        const unified = createUnified()
+
+        return {
+          autoload: true,
+          async getModel(_sdk: any, modelID: string, _options?: Record<string, any>) {
+            // Model IDs use Unified API format: provider/model (e.g., "anthropic/claude-sonnet-4-5")
+            return aigateway(unified(modelID))
+          },
+          options: {},
+        }
+      }),
+      cerebras: () =>
+        Effect.succeed({
+          autoload: false,
+          options: {
+            headers: {
+              "X-Cerebras-3rd-Party-Integration": "opencode",
+            },
+          },
+        }),
+      kilo: () =>
+        Effect.succeed({
+          autoload: false,
+          options: {
+            headers: {
+              "HTTP-Referer": "https://opencode.ai/",
+              "X-Title": "opencode",
+            },
+          },
+        }),
+    }
   }
 
   export const Model = z
@@ -961,27 +972,19 @@ export namespace Provider {
     }
   }
 
-  const layer: Layer.Layer<Service, never, Config.Service | Auth.Service> = Layer.effect(
+  const layer: Layer.Layer<Service, never, Config.Service | Auth.Service | Plugin.Service> = Layer.effect(
     Service,
     Effect.gen(function* () {
       const config = yield* Config.Service
       const auth = yield* Auth.Service
+      const plugin = yield* Plugin.Service
 
-      const cache = yield* InstanceState.make<State>(() =>
+      const state = yield* InstanceState.make<State>(() =>
         Effect.gen(function* () {
           using _ = log.time("state")
           const cfg = yield* config.get()
           const modelsDev = yield* Effect.promise(() => ModelsDev.get())
           const database = mapValues(modelsDev, fromModelsDevProvider)
-
-          const disabled = new Set(cfg.disabled_providers ?? [])
-          const enabled = cfg.enabled_providers ? new Set(cfg.enabled_providers) : null
-
-          function isProviderAllowed(providerID: ProviderID): boolean {
-            if (enabled && !enabled.has(providerID)) return false
-            if (disabled.has(providerID)) return false
-            return true
-          }
 
           const providers: Record<ProviderID, Info> = {} as Record<ProviderID, Info>
           const languages = new Map<string, LanguageModelV3>()
@@ -995,10 +998,12 @@ export namespace Provider {
           const discoveryLoaders: {
             [providerID: string]: CustomDiscoverModels
           } = {}
+          const dep = {
+            auth: (id: string) => auth.get(id).pipe(Effect.orDie),
+            config: () => config.get(),
+          }
 
           log.info("init")
-
-          const configProviders = Object.entries(cfg.provider ?? {})
 
           function mergeProvider(providerID: ProviderID, provider: Partial<Info>) {
             const existing = providers[providerID]
@@ -1011,6 +1016,20 @@ export namespace Provider {
             if (!match) return
             // @ts-expect-error
             providers[providerID] = mergeDeep(match, provider)
+          }
+
+          // load plugins first so config() hook runs before reading cfg.provider
+          const plugins = yield* plugin.list()
+
+          // now read config providers - includes any modifications from plugin config() hook
+          const configProviders = Object.entries(cfg.provider ?? {})
+          const disabled = new Set(cfg.disabled_providers ?? [])
+          const enabled = cfg.enabled_providers ? new Set(cfg.enabled_providers) : null
+
+          function isProviderAllowed(providerID: ProviderID): boolean {
+            if (enabled && !enabled.has(providerID)) return false
+            if (disabled.has(providerID)) return false
+            return true
           }
 
           // extend database from config
@@ -1085,6 +1104,7 @@ export namespace Provider {
                 options: mergeDeep(existingModel?.options ?? {}, model.options ?? {}),
                 limit: {
                   context: model.limit?.context ?? existingModel?.limit?.context ?? 0,
+                  input: model.limit?.input ?? existingModel?.limit?.input,
                   output: model.limit?.output ?? existingModel?.limit?.output ?? 0,
                 },
                 headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
@@ -1128,25 +1148,28 @@ export namespace Provider {
             }
           }
 
-          const plugins = yield* Effect.promise(() => Plugin.list())
+          // plugin auth loader - database now has entries for config providers
           for (const plugin of plugins) {
             if (!plugin.auth) continue
             const providerID = ProviderID.make(plugin.auth.provider)
             if (disabled.has(providerID)) continue
 
-            const pluginAuth = yield* auth.get(providerID).pipe(Effect.orDie)
-            if (!pluginAuth) continue
+            const stored = yield* auth.get(providerID).pipe(Effect.orDie)
+            if (!stored) continue
             if (!plugin.auth.loader) continue
 
             const options = yield* Effect.promise(() =>
-              plugin.auth!.loader!(() => Auth.get(providerID) as any, database[plugin.auth!.provider]),
+              plugin.auth!.loader!(
+                () => Effect.runPromise(auth.get(providerID).pipe(Effect.orDie)) as any,
+                database[plugin.auth!.provider],
+              ),
             )
             const opts = options ?? {}
             const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
             mergeProvider(providerID, patch)
           }
 
-          for (const [id, fn] of Object.entries(CUSTOM_LOADERS)) {
+          for (const [id, fn] of Object.entries(custom(dep))) {
             const providerID = ProviderID.make(id)
             if (disabled.has(providerID)) continue
             const data = database[providerID]
@@ -1154,7 +1177,7 @@ export namespace Provider {
               log.error("Provider does not exist in model list " + providerID)
               continue
             }
-            const result = yield* Effect.promise(() => fn(data))
+            const result = yield* fn(data)
             if (result && (result.autoload || providers[providerID])) {
               if (result.getModel) modelLoaders[providerID] = result.getModel
               if (result.vars) varsLoaders[providerID] = result.vars
@@ -1167,7 +1190,7 @@ export namespace Provider {
             }
           }
 
-          // load config
+          // load config - re-apply with updated data
           for (const [id, provider] of configProviders) {
             const providerID = ProviderID.make(id)
             const partial: Partial<Info> = { source: "config" }
@@ -1175,6 +1198,49 @@ export namespace Provider {
             if (provider.name) partial.name = provider.name
             if (provider.options) partial.options = provider.options
             mergeProvider(providerID, partial)
+          }
+
+          const gitlab = ProviderID.make("gitlab")
+          if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
+            yield* Effect.promise(async () => {
+              try {
+                const discovered = await discoveryLoaders[gitlab]()
+                for (const [modelID, model] of Object.entries(discovered)) {
+                  if (!providers[gitlab].models[modelID]) {
+                    providers[gitlab].models[modelID] = model
+                  }
+                }
+              } catch (e) {
+                log.warn("state discovery error", { id: "gitlab", error: e })
+              }
+            })
+          }
+
+          for (const hook of plugins) {
+            const p = hook.provider
+            const models = p?.models
+            if (!p || !models) continue
+
+            const providerID = ProviderID.make(p.id)
+            if (disabled.has(providerID)) continue
+
+            const provider = providers[providerID]
+            if (!provider) continue
+            const pluginAuth = yield* auth.get(providerID).pipe(Effect.orDie)
+
+            provider.models = yield* Effect.promise(async () => {
+              const next = await models(provider, { auth: pluginAuth })
+              return Object.fromEntries(
+                Object.entries(next).map(([id, model]) => [
+                  id,
+                  {
+                    ...model,
+                    id: ModelID.make(id),
+                    providerID,
+                  },
+                ]),
+              )
+            })
           }
 
           for (const [id, provider] of Object.entries(providers)) {
@@ -1221,22 +1287,6 @@ export namespace Provider {
             log.info("found", { providerID })
           }
 
-          const gitlab = ProviderID.make("gitlab")
-          if (discoveryLoaders[gitlab] && providers[gitlab]) {
-            yield* Effect.promise(async () => {
-              try {
-                const discovered = await discoveryLoaders[gitlab]()
-                for (const [modelID, model] of Object.entries(discovered)) {
-                  if (!providers[gitlab].models[modelID]) {
-                    providers[gitlab].models[modelID] = model
-                  }
-                }
-              } catch (e) {
-                log.warn("state discovery error", { id: "gitlab", error: e })
-              }
-            })
-          }
-
           return {
             models: languages,
             providers,
@@ -1247,7 +1297,7 @@ export namespace Provider {
         }),
       )
 
-      const list = Effect.fn("Provider.list")(() => InstanceState.use(cache, (s) => s.providers))
+      const list = Effect.fn("Provider.list")(() => InstanceState.use(state, (s) => s.providers))
 
       async function resolveSDK(model: Model, s: State) {
         try {
@@ -1364,7 +1414,9 @@ export namespace Provider {
 
           let installedPath: string
           if (!model.api.npm.startsWith("file://")) {
-            installedPath = await BunProc.install(model.api.npm, "latest")
+            const item = await Npm.add(model.api.npm)
+            if (!item.entrypoint) throw new Error(`Package ${model.api.npm} has no import entrypoint`)
+            installedPath = item.entrypoint
           } else {
             log.info("loading local provider", { pkg: model.api.npm })
             installedPath = model.api.npm
@@ -1385,11 +1437,11 @@ export namespace Provider {
       }
 
       const getProvider = Effect.fn("Provider.getProvider")((providerID: ProviderID) =>
-        InstanceState.use(cache, (s) => s.providers[providerID]),
+        InstanceState.use(state, (s) => s.providers[providerID]),
       )
 
       const getModel = Effect.fn("Provider.getModel")(function* (providerID: ProviderID, modelID: ModelID) {
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         const provider = s.providers[providerID]
         if (!provider) {
           const available = Object.keys(s.providers)
@@ -1407,11 +1459,22 @@ export namespace Provider {
       })
 
       const getLanguage = Effect.fn("Provider.getLanguage")(function* (model: Model) {
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         const key = `${model.providerID}/${model.id}`
         if (s.models.has(key)) return s.models.get(key)!
 
         return yield* Effect.promise(async () => {
+          const url = e2eURL()
+          if (url) {
+            const language = createOpenAICompatible({
+              name: model.providerID,
+              apiKey: "test-key",
+              baseURL: url,
+            }).chatModel(model.api.id)
+            s.models.set(key, language)
+            return language
+          }
+
           const provider = s.providers[model.providerID]
           const sdk = await resolveSDK(model, s)
 
@@ -1439,7 +1502,7 @@ export namespace Provider {
       })
 
       const closest = Effect.fn("Provider.closest")(function* (providerID: ProviderID, query: string[]) {
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         const provider = s.providers[providerID]
         if (!provider) return undefined
         for (const item of query) {
@@ -1458,7 +1521,7 @@ export namespace Provider {
           return yield* getModel(parsed.providerID, parsed.modelID)
         }
 
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         const provider = s.providers[providerID]
         if (!provider) return undefined
 
@@ -1510,7 +1573,7 @@ export namespace Provider {
         const cfg = yield* config.get()
         if (cfg.model) return parseModel(cfg.model)
 
-        const s = yield* InstanceState.get(cache)
+        const s = yield* InstanceState.get(state)
         const recent = yield* Effect.promise(() =>
           Filesystem.readJson<{
             recent?: { providerID: ProviderID; modelID: ModelID }[]
@@ -1541,10 +1604,15 @@ export namespace Provider {
     }),
   )
 
-  const { runPromise } = makeRuntime(
-    Service,
-    layer.pipe(Layer.provide(Config.defaultLayer), Layer.provide(Auth.defaultLayer)),
+  export const defaultLayer = Layer.suspend(() =>
+    layer.pipe(
+      Layer.provide(Config.defaultLayer),
+      Layer.provide(Auth.defaultLayer),
+      Layer.provide(Plugin.defaultLayer),
+    ),
   )
+
+  const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export async function list() {
     return runPromise((svc) => svc.list())
