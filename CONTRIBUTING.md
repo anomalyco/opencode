@@ -85,6 +85,7 @@ During development, `bun dev` is the local equivalent of the built `opencode` co
 bun dev --help           # Show all available commands
 bun dev serve            # Start headless API server
 bun dev web              # Start server + open web interface
+bun run dev:server-web   # Start local server + local web app
 bun dev <directory>      # Start TUI in specific directory
 
 # Production
@@ -112,14 +113,29 @@ bun dev serve --port 8080
 
 To test UI changes during development:
 
-1. **First, start the OpenCode server** (see [Running the API Server](#running-the-api-server) section above)
-2. **Then run the web app:**
+1. For the hosted web interface workflow, run:
 
 ```bash
-bun run --cwd packages/app dev
+bun dev web
 ```
 
-This starts a local dev server at http://localhost:5173 (or similar port shown in output). Most UI changes can be tested here, but the server must be running for full functionality.
+This starts the backend and opens the hosted/proxied web interface. It is convenient for using the web client, but local app UI changes will not show there.
+
+2. For local full-stack web app development, run:
+
+```bash
+bun run dev:server-web
+```
+
+This starts a local backend and a local Vite app on free ports, waits for the app to be ready, and opens it in your browser automatically.
+
+3. You can pass arguments through to either process:
+
+```bash
+bun run dev:server-web -- --server --hostname 127.0.0.1 --web --host 0.0.0.0
+```
+
+Pass backend flags after `--server` and app flags after `--web`. If either side omits `--port`, the launcher picks a free port automatically and wires the app to the chosen backend.
 
 ### Running the Desktop App
 
