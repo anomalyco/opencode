@@ -1,6 +1,8 @@
-import { For, Match, Show, Switch, createEffect, createMemo, onCleanup, type JSX } from "solid-js"
+import { For, Match, Show, Switch, createEffect, createMemo, on, onCleanup, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
+import { Button } from "@opencode-ai/ui/button"
+import { Dialog } from "@opencode-ai/ui/dialog"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
@@ -19,9 +21,18 @@ import { useCommand } from "@/context/command"
 import { useFile, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
+import { useSettings } from "@/context/settings"
+import { useSync } from "@/context/sync"
+import { DesignPreview } from "@/components/design-preview"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
-import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type Sizing } from "@/pages/session/helpers"
+import {
+  DESIGN_TAB,
+  createOpenSessionFileTab,
+  createSessionTabs,
+  getTabReorderIndex,
+  type Sizing,
+} from "@/pages/session/helpers"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
@@ -37,13 +48,16 @@ export function SessionSidePanel(props: {
   focusReviewDiff: (path: string) => void
   reviewSnap: boolean
   size: Sizing
+  onDesignComment?: (input: { file: string; line: number; comment: string; component?: string }) => void
 }) {
   const layout = useLayout()
+  const settings = useSettings()
+  const sync = useSync()
   const file = useFile()
   const language = useLanguage()
   const command = useCommand()
   const dialog = useDialog()
-  const { sessionKey, tabs, view } = useSessionLayout()
+  const { params, sessionKey, tabs, view } = useSessionLayout()
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
 
@@ -124,11 +138,58 @@ export function SessionSidePanel(props: {
     normalizeTab,
     review: reviewTab,
     hasReview: props.canReview,
+    special: [DESIGN_TAB],
+    closableSpecial: [],
   })
   const contextOpen = tabState.contextOpen
   const openedTabs = tabState.openedTabs
   const activeTab = tabState.activeTab
   const activeFileTab = tabState.activeFileTab
+  const designReady = createMemo(() => settings.general.previewEnabled())
+  let probe = 0
+
+  const enablePreview = () => {
+    dialog.close()
+    settings.general.setPreviewEnabled(true)
+    settings.general.setPreviewPrompted(true)
+    openReviewPanel()
+    if (activeTab() !== DESIGN_TAB) tabs().setActive(DESIGN_TAB)
+  }
+
+  const skipPreview = () => {
+    dialog.close()
+    settings.general.setPreviewEnabled(false)
+    settings.general.setPreviewPrompted(true)
+  }
+
+  const showPrompt = () => {
+    dialog.show(
+      () => (
+        <Dialog title={language.t("session.preview.prompt.title")} class="w-full max-w-[520px] mx-auto">
+          <div class="flex flex-col gap-6 p-6 pt-0">
+            <div class="text-14-regular text-text-weak">{language.t("session.preview.prompt.description")}</div>
+            <div class="flex justify-end gap-2">
+              <Button variant="ghost" size="large" onClick={skipPreview}>
+                {language.t("session.preview.prompt.action.notNow")}
+              </Button>
+              <Button variant="primary" size="large" onClick={enablePreview}>
+                {language.t("session.preview.prompt.action.enable")}
+              </Button>
+            </div>
+          </div>
+        </Dialog>
+      ),
+      () => {
+        if (settings.general.previewPrompted()) return
+        settings.general.setPreviewPrompted(true)
+      },
+    )
+  }
+
+  const onPreviewTab = () => {
+    openReviewPanel()
+    if (activeTab() !== DESIGN_TAB) tabs().setActive(DESIGN_TAB)
+  }
 
   const fileTreeTab = () => layout.fileTree.tab()
 
@@ -145,6 +206,17 @@ export function SessionSidePanel(props: {
   const [store, setStore] = createStore({
     activeDraggable: undefined as string | undefined,
   })
+
+  const openFileAt = (path: string, line: number) => {
+    const tab = file.tab(path)
+    const range: SelectedLineRange = { start: line, end: line }
+    tabs().open(tab)
+    tabs().setActive(tab)
+    file.setSelectedLines(path, range)
+    void file.load(path).then(() => file.setSelectedLines(path, range))
+    openReviewPanel()
+    layout.fileTree.setTab("all")
+  }
 
   const handleDragStart = (event: unknown) => {
     const id = getDraggableId(event)
@@ -186,6 +258,41 @@ export function SessionSidePanel(props: {
         }, {}),
     })
   })
+
+  createEffect(
+    on(
+      () => params.dir,
+      () => {
+        if (!isDesktop()) return
+        if (designReady()) return
+        if (settings.general.previewPrompted()) return
+        const run = ++probe
+        let live = true
+        onCleanup(() => {
+          live = false
+          probe++
+        })
+        const list = [".tsx", ".jsx", ".html", ".css", ".vue", ".svelte", ".astro"]
+        Promise.any(
+          list.map((item) =>
+            file.searchFiles(item).then((rows) => {
+              if (rows.length > 0) return true
+              throw new Error("no-hit")
+            }),
+          ),
+        )
+          .then(() => {
+            if (!live) return
+            if (run !== probe) return
+            if (designReady()) return
+            if (settings.general.previewPrompted()) return
+            showPrompt()
+          })
+          .catch(() => {})
+      },
+      { defer: true },
+    ),
+  )
 
   return (
     <Show when={isDesktop()}>
@@ -266,10 +373,15 @@ export function SessionSidePanel(props: {
                           </div>
                         </Tabs.Trigger>
                       </Show>
+                      <Tabs.Trigger value={DESIGN_TAB} onClick={onPreviewTab}>
+                        <div class="flex items-center gap-2">
+                          <div>{language.t("session.tab.preview")}</div>
+                        </div>
+                      </Tabs.Trigger>
                       <SortableProvider ids={openedTabs()}>
                         <For each={openedTabs()}>{(tab) => <SortableTab tab={tab} onTabClose={tabs().close} />}</For>
                       </SortableProvider>
-                      <div class="bg-background-stronger h-full shrink-0 sticky right-0 z-10 flex items-center justify-center pr-3">
+                      <div class="bg-background-stronger h-full shrink-0 sticky right-0 z-10 flex items-center justify-center gap-1 pr-3">
                         <TooltipKeybind
                           title={language.t("command.file.open")}
                           keybind={command.keybind("file.open")}
@@ -320,6 +432,45 @@ export function SessionSidePanel(props: {
                       </Show>
                     </Tabs.Content>
                   </Show>
+
+                  <Tabs.Content
+                    value={DESIGN_TAB}
+                    forceMount
+                    class="flex flex-col h-full overflow-hidden contain-strict"
+                    classList={{ hidden: activeTab() !== DESIGN_TAB }}
+                  >
+                    <Show
+                      when={designReady()}
+                      fallback={
+                        <div class="h-full flex items-center justify-center p-6">
+                          <div class="max-w-[420px] w-full flex flex-col gap-4 rounded-lg border border-border-weaker-base bg-background-stronger p-4">
+                            <div class="text-14-medium text-text-strong">
+                              {language.t("session.preview.disabled.title")}
+                            </div>
+                            <div class="text-13-regular text-text-weak">
+                              {language.t("session.preview.disabled.description")}
+                            </div>
+                            <div class="flex items-center gap-2">
+                              <Button size="small" variant="primary" onClick={enablePreview}>
+                                {language.t("session.preview.disabled.action.enable")}
+                              </Button>
+                              <Show when={!settings.general.previewPrompted()}>
+                                <Button size="small" variant="ghost" onClick={showPrompt}>
+                                  {language.t("session.preview.disabled.action.learn")}
+                                </Button>
+                              </Show>
+                            </div>
+                          </div>
+                        </div>
+                      }
+                    >
+                      <DesignPreview
+                        active={activeTab() === DESIGN_TAB && reviewOpen() && designReady()}
+                        onOpenFile={openFileAt}
+                        onComment={props.onDesignComment}
+                      />
+                    </Show>
+                  </Tabs.Content>
 
                   <Show when={activeFileTab()} keyed>
                     {(tab) => <FileTabContent tab={tab} />}

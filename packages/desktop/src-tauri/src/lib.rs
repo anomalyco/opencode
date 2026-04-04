@@ -399,7 +399,8 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             design_webview::design_bridge,
             design_index::build_design_index,
             design_index::update_design_index,
-            design_index::query_design_index
+            design_index::query_design_index,
+            design_index::query_design_usage_index
         ])
         .events(tauri_specta::collect_events![
             LoadingWindowComplete,

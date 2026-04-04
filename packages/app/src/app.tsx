@@ -111,7 +111,9 @@ function SessionProviders(props: ParentProps) {
     <TerminalProvider>
       <FileProvider>
         <PromptProvider>
-          <CommentsProvider>{props.children}</CommentsProvider>
+          <CommentsProvider>
+            {props.children}
+          </CommentsProvider>
         </PromptProvider>
       </FileProvider>
     </TerminalProvider>

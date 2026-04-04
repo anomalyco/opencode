@@ -15,6 +15,15 @@ import { createResolver, type Hit } from "@/components/design-preview/resolve"
 
 const INJECT = createInjectionScript()
 
+type Source = {
+  file?: string
+  line?: number
+  column?: number
+  component?: string
+  owner?: string
+  _debug?: string[]
+}
+
 export type DesignElementInfo = {
   tag: string
   id?: string
@@ -25,11 +34,17 @@ export type DesignElementInfo = {
   path: string
   rect: { x: number; y: number; width: number; height: number }
   computedStyles?: Record<string, string>
-  source?: { file?: string; line?: number; column?: number; component?: string; _debug?: string[] }
+  source?: Source
+  definition?: Source
   searchHint?: string[]
   summary?: string
   framework?: string
 }
+
+type Query = Pick<
+  DesignElementInfo,
+  "component" | "classes" | "source" | "definition" | "ancestry" | "textContent" | "searchHint"
+>
 
 type Viewport = "desktop" | "tablet" | "mobile"
 
@@ -51,9 +66,11 @@ const cfg = {
   health: 5000,
   poll: 2000,
   minConfidence: 0.3,
+  minUsageConfidence: 0.6,
 }
 
 export type DesignPreviewProps = {
+  active?: boolean
   onOpenFile?: (path: string, line: number) => void
   onElementSelect?: (info: DesignElementInfo | undefined) => void
   onComment?: (input: { file: string; line: number; comment: string; component?: string }) => void
@@ -85,6 +102,7 @@ export function DesignPreview(props: DesignPreviewProps) {
   let observer: ResizeObserver | undefined
   let lastCmd = 0
   let webviewOpen = false
+  let opening = false
   let raf = 0
   let rev = 0
   let last: { x: number; y: number; width: number; height: number } | undefined
@@ -117,13 +135,19 @@ export function DesignPreview(props: DesignPreviewProps) {
 
   const active = createMemo(() => !!store.size || store.viewport !== "desktop")
   const preset = createMemo(() => store.size ?? VIEWPORTS[store.viewport])
+  const shown = createMemo(() => props.active ?? true)
   const supported = createMemo(() => !!platform.createDesignWebview)
   const bump = () => ++rev
+  const parked = { x: -10_000, y: -10_000, width: 1, height: 1 }
   const script = (name: string, arg?: string) => {
     return arg === undefined ? `window.${name} && window.${name}()` : `window.${name} && window.${name}(${arg})`
   }
   const run = (input: string) => platform.evalDesignWebview?.(input)
   const lookup = createResolver(files, sdk.client)
+  const select = (info: DesignElementInfo | undefined) => {
+    setStore("selected", info)
+    props.onElementSelect?.(info)
+  }
 
   const syncInspect = () => {
     if (!webviewOpen) return
@@ -158,14 +182,18 @@ export function DesignPreview(props: DesignPreviewProps) {
 
   const openWebview = async (target: string) => {
     if (!platform.createDesignWebview) return
+    if (webviewOpen || opening) return
     const r = getRect()
     if (r.width <= 0 || r.height <= 0) return
-    await platform.createDesignWebview(target, r.x, r.y, r.width, r.height, INJECT)
+    opening = true
+    await platform.createDesignWebview(target, r.x, r.y, r.width, r.height, INJECT).finally(() => {
+      opening = false
+    })
     webviewOpen = true
     last = r
     listed = ""
     setStore("status", "connected")
-    startFollow()
+    if (shown()) startFollow()
     syncSize()
     setTimeout(() => {
       sendWhitelist()
@@ -183,9 +211,17 @@ export function DesignPreview(props: DesignPreviewProps) {
 
   const syncSizeNow = () => {
     raf = 0
-    if (!webviewOpen || !platform.resizeDesignWebview) return
-    const r = getRect()
-    if (r.width <= 0 || r.height <= 0) return
+    if (!webviewOpen) {
+      const target = url()
+      if (!shown() || !target) return
+      const r = getRect()
+      if (r.width <= 0 || r.height <= 0) return
+      void openWebview(target)
+      return
+    }
+    if (!platform.resizeDesignWebview) return
+    const r = shown() ? getRect() : parked
+    if (shown() && (r.width <= 0 || r.height <= 0)) return
     if (same(r)) return
     last = r
     platform.resizeDesignWebview(r.x, r.y, r.width, r.height)
@@ -204,13 +240,13 @@ export function DesignPreview(props: DesignPreviewProps) {
     if (poke) clearTimeout(poke)
     if (reopen) clearTimeout(reopen)
     if (target !== url()) {
-      setStore("selected", undefined)
+      select(undefined)
       setStore("notes", [])
     }
     setUrl(target)
     layout.design.setUrl(target)
     await closeWebview()
-    await openWebview(target)
+    if (shown()) await openWebview(target)
   }
 
   const refresh = async () => {
@@ -222,7 +258,7 @@ export function DesignPreview(props: DesignPreviewProps) {
     if (poke) clearTimeout(poke)
     if (reopen) clearTimeout(reopen)
     await closeWebview()
-    await openWebview(target)
+    if (shown()) await openWebview(target)
   }
 
   const disconnect = async () => {
@@ -237,7 +273,7 @@ export function DesignPreview(props: DesignPreviewProps) {
     layout.design.setUrl("")
     setStore("status", "disconnected")
     setStore("framework", undefined)
-    setStore("selected", undefined)
+    select(undefined)
     setStore("notes", [])
   }
 
@@ -354,6 +390,8 @@ export function DesignPreview(props: DesignPreviewProps) {
 
   const idxCache = new Map<string, Hit | null>()
   const idxRun = new Map<string, Promise<Hit | null>>()
+  const usageCache = new Map<string, Hit | null>()
+  const usageRun = new Map<string, Promise<Hit | null>>()
   let cache = 0
 
   const queryIndex = async (comp: string | null | undefined, classes: string | undefined): Promise<Hit | null> => {
@@ -393,52 +431,251 @@ export function DesignPreview(props: DesignPreviewProps) {
     return run
   }
 
-  const setResolved = (info: DesignElementInfo, hit: Hit) => {
-    const next = {
-      ...info,
-      component: hit.comp ?? info.component ?? info.source?.component,
-      source: {
-        ...info.source,
-        file: hit.file,
-        line: hit.line,
-        component: hit.comp ?? info.component ?? info.source?.component,
-      },
-    } satisfies DesignElementInfo
-    if (store.selected?.path === info.path) setStore("selected", next)
-    return next
+  const queryUsageIndex = async (info: Query): Promise<Hit | null> => {
+    if (!platform.queryDesignUsageIndex) return null
+    const root = sdk.directory
+    if (!root) return null
+    const comp = info.component ?? info.source?.component ?? info.definition?.component
+    if (!comp) return null
+    const chain = info.ancestry ?? []
+    const idx = chain.indexOf(comp)
+    const owners = (idx === -1 ? chain : chain.slice(idx + 1)).filter(
+      (name, pos, all) => !!name && all.indexOf(name) === pos,
+    )
+    const key = `${root}\n${comp}\n${owners.join("\n")}`
+    if (usageCache.has(key)) return usageCache.get(key) ?? null
+    const pending = usageRun.get(key)
+    if (pending) return pending
+    const ver = cache
+    const run = platform
+      .queryDesignUsageIndex(root, comp, owners.length ? owners : null)
+      .then(
+        (result) => {
+          if (ver !== cache) return null
+          if (result && result.confidence >= cfg.minUsageConfidence) {
+            const hit = {
+              file: result.file,
+              line: result.line,
+              comp,
+              owner: result.owner ?? owners[0],
+            }
+            usageCache.set(key, hit)
+            console.log(
+              "[Design] Rust usage hit:",
+              result.file,
+              "line:",
+              result.line,
+              "owner:",
+              result.owner,
+              "confidence:",
+              result.confidence,
+            )
+            return hit
+          }
+          usageCache.set(key, null)
+          return null
+        },
+        () => {
+          if (ver !== cache) return null
+          usageCache.set(key, null)
+          return null
+        },
+      )
+      .finally(() => {
+        usageRun.delete(key)
+      })
+    usageRun.set(key, run)
+    return run
+  }
+
+  const sameSource = (a?: Source, b?: Source) => {
+    const af = a?.file ? lookup.normalizePath(a.file) : undefined
+    const bf = b?.file ? lookup.normalizePath(b.file) : undefined
+    if (!af || !bf) return false
+    return af === bf && (a?.line ?? 1) === (b?.line ?? 1)
+  }
+
+  const withSource = (src: Source | undefined, comp: string | undefined): Source | undefined => {
+    if (!src) return undefined
+    return {
+      ...src,
+      file: src.file ? lookup.normalizePath(src.file) : undefined,
+      component: comp ?? src.component,
+    }
+  }
+
+  const setLocation = (info: DesignElementInfo, slot: "source" | "definition", hit: Hit): DesignElementInfo => {
+    const comp = hit.comp ?? info.component ?? info.source?.component ?? info.definition?.component
+    const src = {
+      ...(slot === "source" ? info.source : info.definition),
+      file: hit.file,
+      line: hit.line,
+      component: comp,
+      owner: hit.owner,
+    }
+    return slot === "source" ? { ...info, component: comp, source: src } : { ...info, component: comp, definition: src }
+  }
+
+  const prime = (info: DesignElementInfo): DesignElementInfo => {
+    const comp = info.component ?? info.source?.component ?? info.definition?.component
+    const source = withSource(info.source, comp)
+    const definition = withSource(info.definition, comp)
+    if (!source?.file) return { ...info, component: comp, source, definition }
+    if (!lookup.isSourceFile(source.file)) {
+      return { ...info, component: comp, source: undefined, definition }
+    }
+    if (comp && lookup.fileDefinesComponent(source.file, comp)) {
+      return {
+        ...info,
+        component: comp,
+        source: undefined,
+        definition: definition ?? source,
+      }
+    }
+    return { ...info, component: comp, source, definition }
   }
 
   const openHit = (hit: Hit) => {
     props.onOpenFile?.(hit.file, hit.line)
+    select(undefined)
     return true
   }
 
-  const openResolved = (info: DesignElementInfo, hit: Hit) => {
-    setResolved(info, hit)
-    return openHit(hit)
+  const sourceLabel = (src: Source | undefined) => {
+    if (!src?.file) return ""
+    return `${src.file.split(/[\\/]/).pop()}:${src.line ?? 1}`
   }
 
-  const locate = async (info: DesignElementInfo): Promise<Hit | null> => {
-    const comp = info.component ?? info.source?.component
-    const idx = await queryIndex(comp, info.classes)
-    if (idx) return idx
+  const usageText = (src: Source | undefined, comp: string | undefined) => {
+    if (!src?.owner || src.owner === comp) return "Go to usage"
+    return `Go to usage in ${src.owner}`
+  }
+
+  const locateUsage = async (info: Query): Promise<Hit | null> => {
+    const comp = info.component ?? info.source?.component ?? info.definition?.component
+    if (!comp) return null
     const chain = info.ancestry ?? []
-    for (const name of chain) {
-      const next = await queryIndex(name, undefined)
-      if (next) return next
+    const idx = chain.indexOf(comp)
+    const owner = idx === -1 ? chain[1] : chain[idx + 1]
+    const file = info.source?.file ? lookup.normalizePath(info.source.file) : undefined
+    if (file && lookup.isSourceFile(file) && !lookup.fileDefinesComponent(file, comp)) {
+      return { file, line: info.source?.line ?? 1, comp, owner }
+    }
+    const rust = await queryUsageIndex(info)
+    if (rust) {
+      const exact = await lookup.findTag(rust.file, comp, {
+        text: info.textContent,
+        search: info.searchHint,
+        classes: info.classes,
+      })
+      if (exact) return { ...exact, owner: rust.owner }
+      return rust
+    }
+    const names = (idx === -1 ? chain : chain.slice(idx + 1)).filter(
+      (name, pos, all) => !!name && all.indexOf(name) === pos,
+    )
+    for (const name of names) {
+      const hits = await Promise.all([lookup.findDefinition(name), queryIndex(name, undefined)])
+      const files = hits.flatMap((hit) => {
+        if (!hit?.file) return []
+        const file = lookup.normalizePath(hit.file)
+        if (!lookup.isSourceFile(file)) return []
+        return [file]
+      })
+      if (!files.length) continue
+      const hit = await lookup.findTagInFiles(files, comp, {
+        text: info.textContent,
+        search: info.searchHint,
+        classes: info.classes,
+      })
+      if (hit) return { ...hit, owner: name }
+    }
+    return lookup.findUsage(comp)
+  }
+
+  const locateDefinition = async (info: Query): Promise<Hit | null> => {
+    const comp = info.component ?? info.source?.component ?? info.definition?.component
+    if (comp) {
+      const idx = await queryIndex(comp, info.classes)
+      if (idx) return idx
+      return lookup.findDefinition(comp)
+    }
+    for (const name of info.ancestry ?? []) {
+      const idx = await queryIndex(name, undefined)
+      if (idx) return idx
       const def = await lookup.findDefinition(name)
       if (def) return def
     }
-    return lookup.grepFallback(info)
+    return null
   }
 
-  const openComp = async (name: string) => {
-    const idx = await queryIndex(name, undefined)
-    if (idx) return openHit(idx)
-    const def = await lookup.findDefinition(name)
-    if (def) return openHit(def)
-    const use = await lookup.findUsage(name)
+  const enrich = async (info: DesignElementInfo, all = true) => {
+    let next = prime(info)
+    if (!next.source) {
+      const hit = await locateUsage(next)
+      if (hit) next = setLocation(next, "source", hit)
+    }
+    if (!next.source) {
+      const hit = await lookup.grepFallback(next)
+      if (hit) next = setLocation(next, "source", hit)
+    }
+    if (all && !next.definition) {
+      const hit = await locateDefinition(next)
+      if (hit && !sameSource(next.source, { file: hit.file, line: hit.line })) {
+        next = setLocation(next, "definition", hit)
+      }
+    }
+    if (!next.source && next.definition?.file) {
+      next = { ...next, source: { ...next.definition } }
+    }
+    if (next.definition && sameSource(next.source, next.definition)) {
+      next = { ...next, definition: undefined }
+    }
+    return next
+  }
+
+  const openUsage = async (info: DesignElementInfo) => {
+    const next = await enrich(info, false)
+    const comp = next.component ?? next.source?.component ?? next.definition?.component
+    const file = next.source?.file ? lookup.normalizePath(next.source.file) : undefined
+    if (file && lookup.isSourceFile(file)) {
+      return openHit({ file, line: next.source?.line ?? 1, comp })
+    }
+    const def = next.definition?.file ? lookup.normalizePath(next.definition.file) : undefined
+    if (def && lookup.isSourceFile(def)) {
+      return openHit({ file: def, line: next.definition?.line ?? 1, comp })
+    }
+    return false
+  }
+
+  const openSelection = async (info: DesignElementInfo) => {
+    const next = await enrich(info)
+    const comp = next.component ?? next.source?.component ?? next.definition?.component
+    const def = next.definition?.file ? lookup.normalizePath(next.definition.file) : undefined
+    if (def && lookup.isSourceFile(def)) {
+      return openHit({ file: def, line: next.definition?.line ?? 1, comp })
+    }
+    const file = next.source?.file ? lookup.normalizePath(next.source.file) : undefined
+    if (file && lookup.isSourceFile(file) && (!comp || lookup.fileDefinesComponent(file, comp))) {
+      return openHit({ file, line: next.source?.line ?? 1, comp })
+    }
+    if (file && lookup.isSourceFile(file)) {
+      return openHit({ file, line: next.source?.line ?? 1, comp })
+    }
+    return false
+  }
+
+  const openNode = async (name: string) => {
+    const chain = store.selected?.ancestry ?? []
+    const idx = chain.indexOf(name)
+    const info: Query =
+      name === store.selected?.component
+        ? store.selected
+        : { component: name, ancestry: idx === -1 ? [name] : chain.slice(idx) }
+    const use = await locateUsage(info)
     if (use) return openHit(use)
+    const def = await locateDefinition(info)
+    if (def) return openHit(def)
     return false
   }
 
@@ -446,6 +683,8 @@ export function DesignPreview(props: DesignPreviewProps) {
     cache++
     idxCache.clear()
     idxRun.clear()
+    usageCache.clear()
+    usageRun.clear()
     lookup.reset()
   }
 
@@ -503,62 +742,22 @@ export function DesignPreview(props: DesignPreviewProps) {
   }
 
   const handleDesignEvent = (e: { payload: string | DesignElementInfo }) => {
-    const info = parsePayload(e)
-    if (!info) return
+    const raw = parsePayload(e)
+    if (!raw) return
     const token = ++picked
 
-    const src = info.source
-    if (src?._debug) {
-      console.log("[Design] fiber debug:", src._debug.join(" → "))
+    if (raw.source?._debug) {
+      console.log("[Design] fiber debug:", raw.source._debug.join(" → "))
     }
 
-    setStore("selected", info)
-    props.onElementSelect?.(info)
+    const info = prime(raw)
+    select(info)
 
-    const comp = info.component ?? src?.component
-    const file = src?.file ? lookup.normalizePath(src.file) : undefined
-    const direct = (hit: Hit) => {
-      if (token !== picked) return false
-      return openResolved(info, hit)
-    }
-
-    // Library/node_modules source — strip it and find user code instead
-    if (file && !lookup.isSourceFile(file)) {
-      console.log("[Design] Source is library/bundled:", file, "for", comp, "— using index/grep to find user code")
-      info.source = undefined
-      setStore("selected", { ...info })
-      locate(info).then((hit) => {
-        if (hit) direct(hit)
-      })
-      return
-    }
-
-    // User source file, but it's the call site (e.g. home-client.tsx for <Header />), not the definition
-    if (comp && file && lookup.isSourceFile(file) && !lookup.fileDefinesComponent(file, comp)) {
-      console.log("[Design] Source", file, "is call site for", comp, "— checking index then searching")
-      locate(info).then((hit) => {
-        if (hit) {
-          direct(hit)
-          return
-        }
-        console.log("[Design] Definition not found, falling back to call site:", file)
-        direct({ file, line: src?.line ?? 1, comp })
-      })
-      return
-    }
-
-    if (file && lookup.isSourceFile(file)) {
-      console.log("[Design] Opening file:", file, "line:", src?.line, "component:", comp)
-      direct({ file, line: src?.line ?? 1, comp })
-      return
-    }
-
-    locate(info).then((hit) => {
-      if (hit) {
-        direct(hit)
-        return
-      }
-      console.log("[Design] No valid source for:", info.tag, comp ?? info.classes)
+    enrich(info).then((next) => {
+      if (token !== picked) return
+      select(next)
+      if (next.source?.file || next.definition?.file) return
+      console.log("[Design] No valid source for:", info.tag, info.component ?? info.classes)
     })
   }
 
@@ -749,15 +948,10 @@ export function DesignPreview(props: DesignPreviewProps) {
                   ...raw,
                   component: store.selected.component ?? raw.component,
                   source: store.selected.source ?? raw.source,
+                  definition: store.selected.definition ?? raw.definition,
                 }
               : raw
-          const file = info.source?.file ? lookup.normalizePath(info.source.file) : undefined
-          const comp = info.component ?? info.source?.component
-          const hit =
-            !file || !lookup.isSourceFile(file) || (comp ? !lookup.fileDefinesComponent(file, comp) : false)
-              ? await locate(info)
-              : null
-          const next = hit ? setResolved(info, hit) : info
+          const next = await enrich(info, false)
           setStore("notes", (prev) => [...prev, note(next, text)])
 
           const path = next.source?.file ? lookup.normalizePath(next.source.file) : undefined
@@ -772,20 +966,32 @@ export function DesignPreview(props: DesignPreviewProps) {
           console.log("[Design] comment-submit error:", err)
         }
       })
+      const u6 = await listen("design:open-selected", async (e: { payload: string | DesignElementInfo }) => {
+        const raw = parsePayload(e)
+        if (!raw) return
+        const info =
+          store.selected?.path === raw.path
+            ? {
+                ...raw,
+                component: store.selected.component ?? raw.component,
+                source: store.selected.source ?? raw.source,
+                definition: store.selected.definition ?? raw.definition,
+              }
+            : raw
+        void openSelection(info)
+      })
       unlisten = () => {
         u1()
         u2()
         u3()
         u4()
         u5()
+        u6()
       }
     }
 
     if (!url()) detect()
-    else {
-      check()
-      if (url()) openWebview(url())
-    }
+    else check()
     buildIndex()
   })
 
@@ -820,7 +1026,7 @@ export function DesignPreview(props: DesignPreviewProps) {
         changed.clear()
         rustNames = []
         resetCache()
-        setStore("selected", undefined)
+        select(undefined)
         setStore("notes", [])
         sendWhitelist()
         if (sdk.directory) {
@@ -830,6 +1036,26 @@ export function DesignPreview(props: DesignPreviewProps) {
         detect()
       },
       { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => [shown(), url()] as const,
+      ([next, target]) => {
+        if (!target) return
+        if (!next) {
+          stopFollow()
+          syncSize()
+          return
+        }
+        if (!webviewOpen) {
+          void openWebview(target)
+          return
+        }
+        startFollow()
+        syncSize()
+      },
     ),
   )
 
@@ -1053,7 +1279,7 @@ export function DesignPreview(props: DesignPreviewProps) {
                           "text-purple-400 font-medium": name === el().component,
                           "text-text-weak hover:underline": name !== el().component,
                         }}
-                        onClick={() => void openComp(name)}
+                        onClick={() => void openNode(name)}
                         title={`Navigate to ${name}`}
                       >
                         {name}
@@ -1084,32 +1310,37 @@ export function DesignPreview(props: DesignPreviewProps) {
                 })()}
                 {">"}
               </span>
-              <Show when={el().source?.file}>
-                {(file) => {
-                  const src = el().source!
-                  const comp = el().component ?? src.component
-                  const norm = lookup.normalizePath(file())
-                  const isDef = !comp || lookup.fileDefinesComponent(norm, comp)
-                  return (
-                    <button
-                      class="text-text-weak hover:text-text-strong underline shrink-0"
-                      title={isDef ? norm : `Call site: ${norm} — click to find ${comp} definition`}
-                      onClick={() => {
-                        if (comp && !isDef) {
-                          openComp(comp).then((found) => {
-                            if (!found) props.onOpenFile?.(norm, src.line ?? 1)
-                          })
-                        } else {
-                          props.onOpenFile?.(norm, src.line ?? 1)
-                        }
-                      }}
-                    >
-                      {isDef ? file().split("/").pop() : comp}
-                      {isDef ? `:${src.line ?? 1}` : ""}
-                    </button>
-                  )
-                }}
-              </Show>
+              {(() => {
+                const src = el().source
+                const def = el().definition
+                const comp = el().component ?? src?.component ?? def?.component
+                const file = src?.file ? lookup.normalizePath(src.file) : undefined
+                const use = !!file && !!comp && !lookup.fileDefinesComponent(file, comp)
+                const main = def?.file ? def : src
+                const text = def?.file || (!use && src?.file) ? "Go to definition" : usageText(src, comp)
+                return (
+                  <>
+                    <Show when={main?.file}>
+                      <button
+                        class="text-text-weak hover:text-text-strong underline shrink-0"
+                        title={main?.file}
+                        onClick={() => void openSelection(el())}
+                      >
+                        {`${text} (${sourceLabel(main)})`}
+                      </button>
+                    </Show>
+                    <Show when={use && src?.file}>
+                      <button
+                        class="text-text-weak hover:text-text-strong underline shrink-0"
+                        title={src?.file}
+                        onClick={() => void openUsage(el())}
+                      >
+                        {`${usageText(src, comp)} (${sourceLabel(src)})`}
+                      </button>
+                    </Show>
+                  </>
+                )
+              })()}
               <Show when={el().textContent}>
                 <span class="text-text-weaker text-11-regular truncate max-w-32" title={el().textContent}>
                   "{el().textContent}"
@@ -1127,8 +1358,7 @@ export function DesignPreview(props: DesignPreviewProps) {
                   class="size-5"
                   aria-label="Clear selection"
                   onClick={() => {
-                    setStore("selected", undefined)
-                    props.onElementSelect?.(undefined)
+                    select(undefined)
                   }}
                 />
               </div>

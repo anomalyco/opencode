@@ -522,6 +522,17 @@ export const dict = {
   "session.tab.session": "Session",
   "session.tab.review": "Review",
   "session.tab.context": "Context",
+  "session.tab.preview": "Preview",
+  "session.preview.prompt.title": "Are you building UI right now?",
+  "session.preview.prompt.description":
+    "Preview helps you inspect components, open source locations, and leave design comments while working on interface code.",
+  "session.preview.prompt.action.enable": "Enable preview",
+  "session.preview.prompt.action.notNow": "Not now",
+  "session.preview.disabled.title": "Preview is disabled",
+  "session.preview.disabled.description":
+    "Enable Preview to inspect UI elements directly from this session. You can change this later in Settings > General.",
+  "session.preview.disabled.action.enable": "Enable preview",
+  "session.preview.disabled.action.learn": "What is this?",
   "session.panel.reviewAndFiles": "Review and files",
   "session.review.filesChanged": "{{count}} Files Changed",
   "session.review.change.one": "Change",
@@ -755,6 +766,8 @@ export const dict = {
 
   "settings.general.row.releaseNotes.title": "Release notes",
   "settings.general.row.releaseNotes.description": "Show What's New popups after updates",
+  "settings.general.row.preview.title": "Preview panel",
+  "settings.general.row.preview.description": "Enable the always-on Preview tab for UI inspection",
 
   "settings.updates.row.startup.title": "Check for updates on startup",
   "settings.updates.row.startup.description": "Automatically check for updates when OpenCode launches",

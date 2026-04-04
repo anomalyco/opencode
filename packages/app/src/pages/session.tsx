@@ -43,6 +43,7 @@ import { useTerminal } from "@/context/terminal"
 import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
 import {
+  DESIGN_TAB,
   createOpenReviewFile,
   createSessionTabs,
   createSizing,
@@ -57,7 +58,6 @@ import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
-import { DesignPreview } from "@/components/design-preview"
 import { Identifier } from "@/utils/id"
 import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
@@ -441,6 +441,8 @@ export default function Page() {
     normalizeTab,
     review: reviewTab,
     hasReview: canReview,
+    special: [DESIGN_TAB],
+    closableSpecial: [],
   })
   const contextOpen = tabState.contextOpen
   const openedTabs = tabState.openedTabs
@@ -1936,7 +1938,7 @@ export default function Page() {
           }}
         >
           <div class="flex-1 min-h-0 overflow-hidden relative">
-            <div class="size-full" style={{ display: layout.design.opened() ? "none" : undefined }}>
+            <div class="size-full">
               <Switch>
                 <Match when={params.id}>
                   <Show when={messagesReady()}>
@@ -1987,29 +1989,6 @@ export default function Page() {
                 </Match>
               </Switch>
             </div>
-            <Show when={layout.design.opened()}>
-              <DesignPreview
-                onOpenFile={(path, line) => {
-                  console.log("[Design] session.onOpenFile called:", path, "line:", line)
-                  const tab = file.tab(path)
-                  const range: SelectedLineRange = { start: line, end: line }
-                  tabs().open(tab)
-                  tabs().setActive(tab)
-                  file.setSelectedLines(path, range)
-                  void file.load(path).then(() => file.setSelectedLines(path, range))
-                  if (!view().reviewPanel.opened()) view().reviewPanel.open()
-                  layout.fileTree.setTab("all")
-                }}
-                onComment={(input) => {
-                  addCommentToContext({
-                    file: input.file,
-                    selection: { start: input.line, end: input.line },
-                    comment: input.comment,
-                    origin: "design",
-                  })
-                }}
-              />
-            </Show>
           </div>
 
           <SessionComposerRegion
@@ -2090,6 +2069,14 @@ export default function Page() {
           focusReviewDiff={focusReviewDiff}
           reviewSnap={ui.reviewSnap}
           size={size}
+          onDesignComment={(input) => {
+            addCommentToContext({
+              file: input.file,
+              selection: { start: input.line, end: input.line },
+              comment: input.comment,
+              origin: "design",
+            })
+          }}
         />
       </div>
 

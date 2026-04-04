@@ -178,4 +178,46 @@ describe("createSessionTabs", () => {
       dispose()
     })
   })
+
+  test("keeps preview special tabs non-closable", () => {
+    createRoot((dispose) => {
+      const [state] = createStore({
+        active: "design" as string | undefined,
+        all: ["design"],
+      })
+      const tabs = createMemo(() => ({ active: () => state.active, all: () => state.all }))
+      const result = createSessionTabs({
+        tabs,
+        pathFromTab: () => undefined,
+        normalizeTab: (tab) => tab,
+        special: ["design"],
+        closableSpecial: [],
+      })
+
+      expect(result.activeTab()).toBe("design")
+      expect(result.closableTab()).toBeUndefined()
+      dispose()
+    })
+  })
+
+  test("prefers context fallback before special preview tab", () => {
+    createRoot((dispose) => {
+      const [state] = createStore({
+        active: undefined as string | undefined,
+        all: ["context", "design"],
+      })
+      const tabs = createMemo(() => ({ active: () => state.active, all: () => state.all }))
+      const result = createSessionTabs({
+        tabs,
+        pathFromTab: () => undefined,
+        normalizeTab: (tab) => tab,
+        special: ["design"],
+        closableSpecial: [],
+      })
+
+      expect(result.activeTab()).toBe("context")
+      expect(result.closableTab()).toBe("context")
+      dispose()
+    })
+  })
 })

@@ -210,6 +210,7 @@ export function FileTabContent(props: { tab: string }) {
     tab: () => props.tab,
     view,
   })
+  let hold = 0
 
   const selectionPreview = (source: string, selection: FileSelection) => {
     return previewSelectedLines(source, {
@@ -397,7 +398,15 @@ export function FileTabContent(props: { tab: string }) {
     const restore = (loaded && !prev.loaded) || (ready && !prev.ready) || (active && loaded && !prev.active)
     prev = { loaded, ready, active }
     if (!restore) return
+    if (Date.now() < hold) return
     scrollSync.queueRestore()
+  })
+
+  createEffect(() => {
+    const range = selectedLines()
+    if (!range) return
+    if (range.start !== range.end) return
+    hold = Date.now() + 800
   })
 
   const renderFile = (source: string) => (
@@ -415,6 +424,7 @@ export function FileTabContent(props: { tab: string }) {
         selectedLines={activeSelection()}
         commentedLines={commentedLines()}
         onRendered={() => {
+          if (Date.now() < hold) return
           scrollSync.queueRestore()
         }}
         annotations={commentsUi.annotations()}

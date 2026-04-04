@@ -112,6 +112,13 @@ export type Platform = {
     component: string | null,
     classes: string[] | null,
   ): Promise<{ file: string; line: number; confidence: number } | null>
+
+  /** Query the design usage index for JSX callsite match (desktop only) */
+  queryDesignUsageIndex?(
+    root: string,
+    component: string,
+    owners: string[] | null,
+  ): Promise<{ file: string; line: number; owner?: string | null; confidence: number } | null>
 }
 
 export type DisplayBackend = "auto" | "wayland"

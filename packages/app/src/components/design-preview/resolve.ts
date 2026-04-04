@@ -4,6 +4,7 @@ export type Hit = {
   file: string
   line: number
   comp?: string
+  owner?: string
 }
 
 type Match = {
@@ -13,6 +14,15 @@ type Match = {
 
 type Files = {
   normalize(input: string): string
+  load(input: string): Promise<void>
+  get(input: string):
+    | {
+        content?: {
+          type: string
+          content?: string
+        }
+      }
+    | undefined
 }
 
 type Client = {
@@ -24,9 +34,20 @@ type Client = {
 type Info = {
   component?: string
   source?: { component?: string }
+  definition?: { component?: string }
   textContent?: string
   searchHint?: string[]
   classes?: string
+}
+
+type TagOpts = {
+  text?: string
+  search?: string[]
+  classes?: string
+}
+
+type TagHit = Hit & {
+  score: number
 }
 
 export function createResolver(files: Files, client: Client) {
@@ -36,7 +57,13 @@ export function createResolver(files: Files, client: Client) {
   const defRun = new Map<string, Promise<Hit | null>>()
   const useCache = new Map<string, Hit | null>()
   const useRun = new Map<string, Promise<Hit | null>>()
+  const fileCache = new Map<string, string | null>()
+  const fileRun = new Map<string, Promise<string | null>>()
+  const tagCache = new Map<string, TagHit | null>()
+  const tagRun = new Map<string, Promise<TagHit | null>>()
   let rev = 0
+
+  const escape = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
   const normalizePath = (file: string) => {
     return files.normalize(
@@ -89,6 +116,134 @@ export function createResolver(files: Files, client: Client) {
     if (name === "index") return true
     if (["page", "layout", "template", "loading", "error", "not-found"].includes(name)) return true
     return false
+  }
+
+  const readText = async (input: string) => {
+    const file = normalizePath(input)
+    if (fileCache.has(file)) return fileCache.get(file) ?? null
+    const pending = fileRun.get(file)
+    if (pending) return pending
+    const cur = rev
+    const run = files
+      .load(file)
+      .then(() => {
+        if (cur !== rev) return null
+        const content = files.get(file)?.content
+        const text = content?.type === "text" && typeof content.content === "string" ? content.content : null
+        fileCache.set(file, text)
+        return text
+      })
+      .catch(() => {
+        if (cur !== rev) return null
+        fileCache.set(file, null)
+        return null
+      })
+      .finally(() => {
+        fileRun.delete(file)
+      })
+    fileRun.set(file, run)
+    return run
+  }
+
+  const scanTag = async (input: string, comp: string, opts?: TagOpts): Promise<TagHit | null> => {
+    const file = normalizePath(input)
+    const terms = [
+      opts?.text?.trim(),
+      ...(opts?.search ?? []).map((item) => (item.startsWith("#") ? item.slice(1) : item).trim()),
+      ...pickClasses(opts?.classes),
+    ].filter((item, idx, all): item is string => !!item && item.length > 1 && all.indexOf(item) === idx)
+    const key = `${file}\n${comp}\n${terms.join("\n")}`
+    if (tagCache.has(key)) return tagCache.get(key) ?? null
+    const pending = tagRun.get(key)
+    if (pending) return pending
+    const cur = rev
+    const run = readText(file)
+      .then((text) => {
+        if (cur !== rev) return null
+        if (!text) {
+          tagCache.set(key, null)
+          return null
+        }
+        const out: { index: number; line: number }[] = []
+        const re = new RegExp(`<${escape(comp)}(?=[\\s>/])`, "g")
+        let line = 1
+        let last = 0
+        let match: RegExpExecArray | null
+        while ((match = re.exec(text))) {
+          line += text.slice(last, match.index).split("\n").length - 1
+          out.push({ index: match.index, line })
+          last = match.index
+          if (match.index === re.lastIndex) re.lastIndex++
+        }
+        if (!out.length) {
+          if (cur !== rev) return null
+          tagCache.set(key, null)
+          return null
+        }
+        const focus = opts?.text?.trim()?.toLowerCase()
+        const score = (item: { index: number; line: number }) => {
+          const open = text.indexOf(">", item.index)
+          const end =
+            open === -1
+              ? Math.min(text.length, item.index + 1600)
+              : /\/\>\s*$/.test(text.slice(item.index, open + 1))
+                ? open + 1
+                : (() => {
+                    const close = text.indexOf(`</${comp}>`, open + 1)
+                    return close === -1 ? Math.min(text.length, item.index + 1600) : close + comp.length + 3
+                  })()
+          const area = text.slice(item.index, end).toLowerCase()
+          return terms.reduce((sum, term) => {
+            const low = term.toLowerCase()
+            if (!area.includes(low)) return sum
+            return sum + (low === focus ? 8 : low.length > 4 ? 3 : 2)
+          }, 0)
+        }
+        const chosen = out.slice(1).reduce<{ index: number; line: number; score: number }>(
+          (best, item) => {
+            const next = score(item)
+            if (next > best.score) return { ...item, score: next }
+            return best
+          },
+          { ...out[0], score: score(out[0]) },
+        )
+        const hit = {
+          file,
+          line: chosen.line,
+          comp,
+          score: chosen.score,
+        }
+        if (cur !== rev) return null
+        tagCache.set(key, hit)
+        console.log("[Design] Found <" + comp + "> in:", file, "line:", hit.line)
+        return hit
+      })
+      .finally(() => {
+        tagRun.delete(key)
+      })
+    tagRun.set(key, run)
+    return run
+  }
+
+  const findTag = async (input: string, comp: string, opts?: TagOpts): Promise<Hit | null> => {
+    const hit = await scanTag(input, comp, opts)
+    if (!hit) return null
+    return { file: hit.file, line: hit.line, comp: hit.comp }
+  }
+
+  const findTagInFiles = async (inputs: string[], comp: string, opts?: TagOpts): Promise<Hit | null> => {
+    const seen = new Set<string>()
+    let best: TagHit | null = null
+    for (const input of inputs) {
+      const file = normalizePath(input)
+      if (seen.has(file)) continue
+      seen.add(file)
+      const hit = await scanTag(file, comp, opts)
+      if (!hit) continue
+      if (!best || hit.score > best.score) best = hit
+    }
+    if (!best) return null
+    return { file: best.file, line: best.line, comp: best.comp }
   }
 
   const findDefinition = async (comp: string): Promise<Hit | null> => {
@@ -198,12 +353,12 @@ export function createResolver(files: Files, client: Client) {
   }
 
   const grepFallback = async (info: Info): Promise<Hit | null> => {
-    const comp = info.component ?? info.source?.component
+    const comp = info.component ?? info.source?.component ?? info.definition?.component
     if (comp) {
-      const def = await findDefinition(comp)
-      if (def) return def
       const use = await findUsage(comp)
       if (use) return use
+      const def = await findDefinition(comp)
+      if (def) return def
     }
     if (info.textContent) {
       const text = await findByText(info.textContent)
@@ -240,12 +395,18 @@ export function createResolver(files: Files, client: Client) {
     defRun.clear()
     useCache.clear()
     useRun.clear()
+    fileCache.clear()
+    fileRun.clear()
+    tagCache.clear()
+    tagRun.clear()
   }
 
   return {
     normalizePath,
     isSourceFile,
     fileDefinesComponent,
+    findTag,
+    findTagInFiles,
     findDefinition,
     findUsage,
     grepFallback,

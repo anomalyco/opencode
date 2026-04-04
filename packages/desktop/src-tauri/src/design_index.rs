@@ -1,4 +1,5 @@
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
+use rayon::prelude::*;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -22,10 +23,27 @@ pub struct QueryResult {
     pub confidence: f32,
 }
 
+#[derive(Debug, Clone, serde::Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageQueryResult {
+    pub file: String,
+    pub line: u32,
+    pub owner: Option<String>,
+    pub confidence: f32,
+}
+
+#[derive(Debug, Clone)]
+struct UsageEntry {
+    file: String,
+    line: u32,
+    owner: Option<String>,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Index {
     components: HashMap<String, Vec<IndexEntry>>,
     classes: HashMap<String, Vec<IndexEntry>>,
+    usages: HashMap<String, Vec<UsageEntry>>,
     names: Vec<String>,
 }
 
@@ -74,6 +92,11 @@ fn class_re() -> &'static Regex {
 fn class_expr_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new(r#"class(?:Name)?\s*=\s*\{[^}]*["'`]([^"'`]+)["'`]"#).unwrap())
+}
+
+fn usage_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"<([A-Z][A-Za-z0-9_]*)\b").unwrap())
 }
 
 fn should_skip(entry: &std::fs::DirEntry) -> bool {
@@ -189,6 +212,74 @@ fn push_component(idx: &mut Index, rel: &str, name: &str, line: u32) {
     });
 }
 
+fn push_usage(idx: &mut Index, rel: &str, name: &str, owner: Option<&str>, line: u32) {
+    let entries = idx.usages.entry(name.to_string()).or_default();
+    if entries
+        .iter()
+        .any(|entry| entry.file == rel && entry.line == line && entry.owner.as_deref() == owner)
+    {
+        return;
+    }
+    entries.push(UsageEntry {
+        file: rel.to_string(),
+        line,
+        owner: owner.map(|item| item.to_string()),
+    });
+}
+
+fn push_owner(owners: &mut Vec<(u32, bool, String)>, line: u32, name: &str, explicit: bool) {
+    if let Some(item) = owners
+        .iter_mut()
+        .find(|(item_line, _, item_name)| *item_line == line && item_name == name)
+    {
+        if explicit {
+            item.1 = true;
+        }
+        return;
+    }
+    owners.push((line, explicit, name.to_string()));
+}
+
+fn usage_enabled(path: &Path, content: &str) -> bool {
+    let ext = path
+        .extension()
+        .and_then(|item| item.to_str())
+        .map(|item| item.to_ascii_lowercase());
+    match ext.as_deref() {
+        Some("tsx") | Some("jsx") | Some("vue") | Some("svelte") => true,
+        Some("js") => content.contains("</") || content.contains("/>") || content.contains("React.createElement"),
+        _ => false,
+    }
+}
+
+fn usage_ok(content: &str, at: usize) -> bool {
+    if at == 0 {
+        return true;
+    }
+    let prev = content.as_bytes()[at - 1];
+    !prev.is_ascii_alphanumeric()
+        && prev != b'_'
+        && prev != b'.'
+        && prev != b')'
+        && prev != b']'
+        && prev != b'"'
+        && prev != b'\''
+        && prev != b'`'
+}
+
+fn owner_at<'a>(owners: &'a [(u32, bool, String)], line: u32) -> Option<&'a str> {
+    owners
+        .iter()
+        .filter(|(item, _, _)| *item <= line)
+        .max_by(|(left_line, left_explicit, _), (right_line, right_explicit, _)| {
+            left_line
+                .cmp(right_line)
+                .then_with(|| left_explicit.cmp(right_explicit))
+        })
+        .or_else(|| owners.first())
+        .map(|(_, _, name)| name.as_str())
+}
+
 fn trim(idx: &mut Index, rel: &str) {
     idx.components.retain(|_, entries| {
         entries.retain(|entry| entry.file != rel);
@@ -198,6 +289,40 @@ fn trim(idx: &mut Index, rel: &str) {
         entries.retain(|entry| entry.file != rel);
         !entries.is_empty()
     });
+    idx.usages.retain(|_, entries| {
+        entries.retain(|entry| entry.file != rel);
+        !entries.is_empty()
+    });
+}
+
+fn trim_prefix(idx: &mut Index, rel: &str) {
+    idx.components.retain(|_, entries| {
+        entries.retain(|entry| entry.file != rel && !entry.file.starts_with(&(rel.to_string() + "/")));
+        !entries.is_empty()
+    });
+    idx.classes.retain(|_, entries| {
+        entries.retain(|entry| entry.file != rel && !entry.file.starts_with(&(rel.to_string() + "/")));
+        !entries.is_empty()
+    });
+    idx.usages.retain(|_, entries| {
+        entries.retain(|entry| entry.file != rel && !entry.file.starts_with(&(rel.to_string() + "/")));
+        !entries.is_empty()
+    });
+}
+
+fn merge(dst: &mut Index, mut src: Index) {
+    for (name, mut entries) in src.components.drain() {
+        dst.components
+            .entry(name)
+            .or_default()
+            .append(&mut entries);
+    }
+    for (name, mut entries) in src.classes.drain() {
+        dst.classes.entry(name).or_default().append(&mut entries);
+    }
+    for (name, mut entries) in src.usages.drain() {
+        dst.usages.entry(name).or_default().append(&mut entries);
+    }
 }
 
 fn sync(idx: &mut Index) {
@@ -227,6 +352,7 @@ fn parse(path: &Path, root: &Path, idx: &mut Index) {
         .unwrap_or(&content);
     let lines = lines(&content);
     let mut comp = None;
+    let mut owners = Vec::<(u32, bool, String)>::new();
 
     // Extract exported component names
     for cap in comp_re().captures_iter(slice) {
@@ -235,6 +361,7 @@ fn parse(path: &Path, root: &Path, idx: &mut Index) {
             comp = Some(name.clone());
         }
         let line = line(&lines, cap.get(0).unwrap().start());
+        push_owner(&mut owners, line, &name, true);
         push_component(idx, &rel, &name, line);
     }
 
@@ -244,6 +371,7 @@ fn parse(path: &Path, root: &Path, idx: &mut Index) {
             comp = Some(name.clone());
         }
         let line = line(&lines, cap.get(0).unwrap().start());
+        push_owner(&mut owners, line, &name, true);
         push_component(idx, &rel, &name, line);
     }
 
@@ -253,6 +381,7 @@ fn parse(path: &Path, root: &Path, idx: &mut Index) {
             comp = Some(name.clone());
         }
         let line = line(&lines, cap.get(0).unwrap().start());
+        push_owner(&mut owners, line, &name, true);
         push_component(idx, &rel, &name, line);
     }
 
@@ -263,9 +392,12 @@ fn parse(path: &Path, root: &Path, idx: &mut Index) {
             if comp.is_none() {
                 comp = Some(name.clone());
             }
+            push_owner(&mut owners, 1, &name, false);
             push_component(idx, &rel, &name, 1);
         }
     }
+
+    owners.sort_by(|left, right| left.0.cmp(&right.0).then_with(|| right.1.cmp(&left.1)));
 
     // Extract class / className strings
     let mut add = |raw: &str, line: u32| {
@@ -292,6 +424,22 @@ fn parse(path: &Path, root: &Path, idx: &mut Index) {
         let line = line(&lines, cap.get(0).unwrap().start());
         add(&cap[1], line);
     }
+
+    if !usage_enabled(path, &content) {
+        return;
+    }
+
+    let usage = content.as_str();
+    for cap in usage_re().captures_iter(usage) {
+        let Some(mat) = cap.get(0) else {
+            continue;
+        };
+        if !usage_ok(usage, mat.start()) {
+            continue;
+        }
+        let line = line(&lines, mat.start());
+        push_usage(idx, &rel, &cap[1], owner_at(&owners, line), line);
+    }
 }
 
 fn build(root: &Path) -> Index {
@@ -299,28 +447,71 @@ fn build(root: &Path) -> Index {
     let ignore = matcher(root);
     scan_dir(root, root, ignore.as_ref(), &mut files);
 
-    let mut idx = Index::default();
-    for file in &files {
-        parse(file, root, &mut idx);
-    }
+    let mut idx = files
+        .par_iter()
+        .map(|path| {
+            let mut next = Index::default();
+            parse(path, root, &mut next);
+            next
+        })
+        .reduce(Index::default, |mut left, right| {
+            merge(&mut left, right);
+            left
+        });
     sync(&mut idx);
     idx
 }
 
 fn apply(idx: &mut Index, root: &Path, paths: &[String]) {
     let ignore = matcher(root);
+    let mut files = Vec::<PathBuf>::new();
+    let mut rels = Vec::<String>::new();
     for raw in paths {
-        let Some((path, rel)) = resolve(root, raw) else {
+        let Some((path, item)) = resolve(root, raw) else {
             continue;
         };
-        trim(idx, &rel);
         if blocked(root, &path, path.is_dir(), ignore.as_ref()) {
+            trim_prefix(idx, &item);
             continue;
         }
         if path.is_file() && has_ext(&path) {
-            parse(&path, root, idx);
+            trim(idx, &item);
+            files.push(path);
+            rels.push(item);
+            continue;
         }
+        if path.is_dir() {
+            trim_prefix(idx, &item);
+            let start = files.len();
+            scan_dir(&path, root, ignore.as_ref(), &mut files);
+            rels.extend(files[start..].iter().map(|next| rel(next, root)));
+            continue;
+        }
+        trim_prefix(idx, &item);
     }
+
+    let mut seen = HashSet::new();
+    files.retain(|path| seen.insert(path.to_string_lossy().to_string()));
+
+    rels.sort();
+    rels.dedup();
+    for rel in &rels {
+        trim(idx, rel);
+    }
+
+    let next = files
+        .par_iter()
+        .map(|path| {
+            let mut out = Index::default();
+            parse(path, root, &mut out);
+            out
+        })
+        .reduce(Index::default, |mut left, right| {
+            merge(&mut left, right);
+            left
+        });
+    merge(idx, next);
+
     sync(idx);
 }
 
@@ -399,6 +590,56 @@ fn query(idx: &Index, component: Option<&str>, classes: Option<&[String]>) -> Op
     }
 
     None
+}
+
+fn query_usage(idx: &Index, component: &str, owners: Option<&[String]>) -> Option<UsageQueryResult> {
+    let entries = idx.usages.get(component)?;
+    if entries.is_empty() {
+        return None;
+    }
+
+    if let Some(names) = owners {
+        let allow = names
+            .iter()
+            .enumerate()
+            .map(|(idx, name)| (name.as_str(), idx as u32))
+            .collect::<HashMap<_, _>>();
+        let best = entries
+            .iter()
+            .filter_map(|entry| {
+                let owner = entry.owner.as_deref()?;
+                let rank = allow.get(owner).copied()?;
+                Some((rank, entry))
+            })
+            .min_by(|(left_rank, left), (right_rank, right)| {
+                left_rank
+                    .cmp(right_rank)
+                    .then_with(|| left.file.cmp(&right.file))
+                    .then_with(|| left.line.cmp(&right.line))
+            });
+        if let Some((rank, entry)) = best {
+            let total = names.len().max(1) as f32;
+            let confidence = (1.0 - (rank as f32 / total)).max(0.2);
+            return Some(UsageQueryResult {
+                file: entry.file.clone(),
+                line: entry.line,
+                owner: entry.owner.clone(),
+                confidence,
+            });
+        }
+        return None;
+    }
+
+    if entries.len() > 1 {
+        return None;
+    }
+    let best = entries.first()?;
+    Some(UsageQueryResult {
+        file: best.file.clone(),
+        line: best.line,
+        owner: best.owner.clone(),
+        confidence: 0.6,
+    })
 }
 
 #[cfg(test)]
@@ -520,6 +761,31 @@ mod tests {
     }
 
     #[test]
+    fn apply_removes_deleted_directory_entries() {
+        let root = temp();
+        write(
+            &root,
+            "src/sections/Hero.tsx",
+            "export default function Hero() { return <div className=\"hero\" /> }\n",
+        );
+        write(
+            &root,
+            "src/sections/Footer.tsx",
+            "export default function Footer() { return <div className=\"footer\" /> }\n",
+        );
+
+        let mut idx = build(&root);
+        fs::remove_dir_all(root.join("src/sections")).unwrap();
+        apply(&mut idx, &root, &["src/sections".to_string()]);
+        fs::remove_dir_all(&root).unwrap();
+
+        assert!(idx.components.get("Hero").is_none());
+        assert!(idx.components.get("Footer").is_none());
+        assert!(idx.classes.get("hero").is_none());
+        assert!(idx.classes.get("footer").is_none());
+    }
+
+    #[test]
     fn query_dedupes_class_hits_per_file() {
         let root = temp();
         write(
@@ -608,6 +874,172 @@ mod tests {
 
         assert!(idx.components.get("Hero").is_some());
         assert!(idx.components.get("Leak").is_none());
+    }
+
+    #[test]
+    fn parse_extracts_component_usages() {
+        let root = temp();
+        write(
+            &root,
+            "src/sections/Hero.tsx",
+            "export default function Hero() { return <GridSection><Button /></GridSection> }\n",
+        );
+
+        let idx = build(&root);
+        fs::remove_dir_all(&root).unwrap();
+
+        let usages = idx.usages.get("Button").unwrap();
+        assert_eq!(usages[0].file, "src/sections/Hero.tsx");
+        assert_eq!(usages[0].owner.as_deref(), Some("Hero"));
+    }
+
+    #[test]
+    fn parse_ignores_ts_generics_for_usage() {
+        let root = temp();
+        write(
+            &root,
+            "src/lib/api.ts",
+            "export function run() { return fetcher<ButtonPayload>() }\n",
+        );
+
+        let idx = build(&root);
+        fs::remove_dir_all(&root).unwrap();
+
+        assert!(idx.usages.get("ButtonPayload").is_none());
+    }
+
+    #[test]
+    fn parse_tracks_usage_owner_per_scope() {
+        let root = temp();
+        write(
+            &root,
+            "src/sections/Mixed.tsx",
+            "export function Hero() { return <Button>Hero CTA</Button> }\nexport function Footer() { return <Button>Footer CTA</Button> }\n",
+        );
+
+        let idx = build(&root);
+        fs::remove_dir_all(&root).unwrap();
+
+        let usages = idx.usages.get("Button").unwrap();
+        let hero = usages
+            .iter()
+            .find(|entry| entry.line == 1)
+            .and_then(|entry| entry.owner.as_deref());
+        let footer = usages
+            .iter()
+            .find(|entry| entry.line == 2)
+            .and_then(|entry| entry.owner.as_deref());
+        assert_eq!(hero, Some("Hero"));
+        assert_eq!(footer, Some("Footer"));
+    }
+
+    #[test]
+    fn parse_extracts_usage_from_jsx_js() {
+        let root = temp();
+        write(
+            &root,
+            "src/sections/Hero.js",
+            "export function Hero(){return <Button>Go</Button>}\n",
+        );
+
+        let idx = build(&root);
+        fs::remove_dir_all(&root).unwrap();
+
+        let usages = idx.usages.get("Button").unwrap();
+        assert_eq!(usages[0].owner.as_deref(), Some("Hero"));
+    }
+
+    #[test]
+    fn query_usage_prefers_owner_rank() {
+        let idx = Index {
+            usages: HashMap::from([(
+                "Button".to_string(),
+                vec![
+                    UsageEntry {
+                        file: "src/sections/Services.tsx".to_string(),
+                        line: 10,
+                        owner: Some("Services".to_string()),
+                    },
+                    UsageEntry {
+                        file: "src/sections/Hero.tsx".to_string(),
+                        line: 20,
+                        owner: Some("Hero".to_string()),
+                    },
+                ],
+            )]),
+            ..Default::default()
+        };
+
+        let out = query_usage(
+            &idx,
+            "Button",
+            Some(&["GridSection".to_string(), "Hero".to_string(), "Services".to_string()]),
+        )
+        .unwrap();
+        assert_eq!(out.file, "src/sections/Hero.tsx");
+        assert_eq!(out.owner.as_deref(), Some("Hero"));
+    }
+
+    #[test]
+    fn query_usage_returns_none_when_owner_filter_misses() {
+        let idx = Index {
+            usages: HashMap::from([(
+                "Button".to_string(),
+                vec![UsageEntry {
+                    file: "src/sections/Hero.tsx".to_string(),
+                    line: 20,
+                    owner: Some("Hero".to_string()),
+                }],
+            )]),
+            ..Default::default()
+        };
+
+        let out = query_usage(&idx, "Button", Some(&["Layout".to_string()]));
+        assert!(out.is_none());
+    }
+
+    #[test]
+    fn query_usage_returns_none_when_unfiltered_is_ambiguous() {
+        let idx = Index {
+            usages: HashMap::from([(
+                "Button".to_string(),
+                vec![
+                    UsageEntry {
+                        file: "src/sections/Hero.tsx".to_string(),
+                        line: 20,
+                        owner: Some("Hero".to_string()),
+                    },
+                    UsageEntry {
+                        file: "src/sections/Footer.tsx".to_string(),
+                        line: 5,
+                        owner: Some("Footer".to_string()),
+                    },
+                ],
+            )]),
+            ..Default::default()
+        };
+
+        let out = query_usage(&idx, "Button", None);
+        assert!(out.is_none());
+    }
+
+    #[test]
+    fn query_usage_returns_single_unfiltered_hit() {
+        let idx = Index {
+            usages: HashMap::from([(
+                "Button".to_string(),
+                vec![UsageEntry {
+                    file: "src/sections/Hero.tsx".to_string(),
+                    line: 20,
+                    owner: Some("Hero".to_string()),
+                }],
+            )]),
+            ..Default::default()
+        };
+
+        let out = query_usage(&idx, "Button", None).unwrap();
+        assert_eq!(out.file, "src/sections/Hero.tsx");
+        assert!((out.confidence - 0.6).abs() < f32::EPSILON);
     }
 }
 
@@ -722,4 +1154,24 @@ pub fn query_design_index(
     };
 
     Ok(query(idx, component.as_deref(), classes.as_deref()))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn query_design_usage_index(
+    app: AppHandle,
+    root: String,
+    component: String,
+    owners: Option<Vec<String>>,
+) -> Result<Option<UsageQueryResult>, String> {
+    let state = app.state::<DesignIndexState>();
+    let lock = state
+        .0
+        .lock()
+        .map_err(|e: std::sync::PoisonError<_>| e.to_string())?;
+    let Some(idx) = lock.get(&root) else {
+        return Ok(None);
+    };
+
+    Ok(query_usage(idx, &component, owners.as_deref()))
 }

@@ -120,15 +120,22 @@ type MouseHit = {
   side?: DiffSelectionSide
 }
 
+type SelectionOpts = {
+  root?: ShadowRoot
+  text?: Range
+  reveal?: boolean
+}
+
 type ViewerConfig = {
   enableLineSelection: () => boolean
   selectedLines: () => SelectedLineRange | null | undefined
   commentedLines: () => SelectedLineRange[]
   onLineSelectionEnd: (range: SelectedLineRange | null) => void
+  revealSelectedLines?: () => boolean
 
   // mode-specific callbacks
   lineFromMouseEvent: (event: MouseEvent) => MouseHit
-  setSelectedLines: (range: SelectedLineRange | null, preserve?: { root: ShadowRoot; text: Range }) => void
+  setSelectedLines: (range: SelectedLineRange | null, opts?: SelectionOpts) => void
   updateSelection: (preserveTextSelection: boolean) => void
   buildDragSelection: () => SelectedLineRange | undefined
   buildClickSelection: () => SelectedLineRange | undefined
@@ -281,7 +288,7 @@ function useFileViewer(config: ViewerConfig) {
   })
 
   createEffect(() => {
-    config.setSelectedLines(config.selectedLines() ?? null)
+    config.setSelectedLines(config.selectedLines() ?? null, { reveal: config.revealSelectedLines?.() === true })
   })
 
   createEffect(() => {
@@ -360,6 +367,7 @@ type ModeConfig = {
   selectedLines: () => SelectedLineRange | null | undefined
   commentedLines: () => SelectedLineRange[] | undefined
   onLineSelectionEnd: (range: SelectedLineRange | null) => void
+  revealSelectedLines?: () => boolean
 }
 
 type RenderTarget = {
@@ -382,6 +390,7 @@ function useModeViewer(config: ModeConfig, adapter: ModeAdapter) {
     selectedLines: config.selectedLines,
     commentedLines: () => config.commentedLines() ?? [],
     onLineSelectionEnd: config.onLineSelectionEnd,
+    revealSelectedLines: config.revealSelectedLines,
     ...adapter,
   })
 }
@@ -675,6 +684,8 @@ function ViewerShell(props: {
 function TextViewer<T>(props: TextFileProps<T>) {
   let instance: PierreFile<T> | VirtualizedFile<T> | undefined
   let viewer!: Viewer
+  let reveal = false
+  let revealFrame: number | undefined
 
   const [local, others] = splitProps(props, textKeys)
 
@@ -711,12 +722,36 @@ function TextViewer<T>(props: TextFileProps<T>) {
 
   const lineFromMouseEvent = (event: MouseEvent): MouseHit => mouseHit(event, parseLine)
 
-  const applySelection = (range: SelectedLineRange | null) => {
+  const showSelection = (range: SelectedLineRange | null, tries = 3) => {
+    if (revealFrame !== undefined) cancelAnimationFrame(revealFrame)
+    revealFrame = undefined
+    if (!range) return
+    const line = Math.min(range.start, range.end)
+    if (line < 1 || line !== Math.max(range.start, range.end)) return
+
+    const run = (left: number) => {
+      revealFrame = requestAnimationFrame(() => {
+        revealFrame = undefined
+        const root = viewer.getRoot()
+        const target = root?.querySelector(`[data-line="${line}"]`)
+        if (target instanceof HTMLElement) {
+          target.scrollIntoView({ block: "nearest", inline: "nearest" })
+          return
+        }
+        if (left > 0) run(left - 1)
+      })
+    }
+
+    run(tries)
+  }
+
+  const applySelection = (range: SelectedLineRange | null, opts?: SelectionOpts) => {
     const current = instance
     if (!current) return false
 
     if (virtual()) {
       current.setSelectedLines(range)
+      if (opts?.reveal) showSelection(range)
       return true
     }
 
@@ -751,12 +786,15 @@ function TextViewer<T>(props: TextFileProps<T>) {
     })()
 
     current.setSelectedLines(normalized)
+    if (opts?.reveal) showSelection(normalized)
     return true
   }
 
-  const setSelectedLines = (range: SelectedLineRange | null) => {
+  const setSelectedLines = (range: SelectedLineRange | null, opts?: SelectionOpts) => {
     viewer.lastSelection = range
-    applySelection(range)
+    reveal = opts?.reveal === true
+    if (applySelection(range, { reveal })) reveal = false
+    restoreShadowTextSelection(opts?.root, opts?.text)
   }
 
   const adapter: ModeAdapter = {
@@ -798,6 +836,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
       selectedLines: () => local.selectedLines,
       commentedLines: () => local.commentedLines,
       onLineSelectionEnd: (range) => local.onLineSelectionEnd?.(range),
+      revealSelectedLines: () => true,
     },
     adapter,
   )
@@ -823,7 +862,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
         return root.querySelectorAll("[data-line]").length >= lineCount()
       },
       onReady: () => {
-        applySelection(viewer.lastSelection)
+        if (applySelection(viewer.lastSelection, { reveal })) reveal = false
         viewer.find.refresh({ reset: true })
         local.onRendered?.()
       },
@@ -878,6 +917,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
     instance?.cleanUp()
     instance = undefined
     virtuals.cleanup()
+    if (revealFrame !== undefined) cancelAnimationFrame(revealFrame)
   })
 
   return <ViewerShell mode="text" viewer={viewer} class={local.class} classList={local.classList} />
@@ -899,7 +939,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
 
   const lineFromMouseEvent = (event: MouseEvent): MouseHit => mouseHit(event, findDiffLineNumber, diffMouseSide)
 
-  const setSelectedLines = (range: SelectedLineRange | null, preserve?: { root: ShadowRoot; text: Range }) => {
+  const setSelectedLines = (range: SelectedLineRange | null, opts?: SelectionOpts) => {
     const active = instance
     if (!active) return
 
@@ -911,7 +951,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
 
     viewer.lastSelection = fixed
     active.setSelectedLines(fixed)
-    restoreShadowTextSelection(preserve?.root, preserve?.text)
+    restoreShadowTextSelection(opts?.root, opts?.text)
   }
 
   const adapter: ModeAdapter = {

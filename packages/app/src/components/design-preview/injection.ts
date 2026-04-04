@@ -30,6 +30,15 @@ export function createInjectionScript(): string {
     commentBtn.addEventListener('mouseleave', function() { commentBtn.style.background = '#7c3aed'; commentBtn.style.borderColor = '#7c3aed'; });
     document.body.appendChild(commentBtn);
 
+    var openBtn = document.createElement('button');
+    openBtn.id = '__opencode_open_btn';
+    openBtn.textContent = 'Open';
+    openBtn.style.cssText = 'position:fixed;z-index:2147483647;display:none;align-items:center;justify-content:center;height:28px;min-width:46px;border-radius:6px;border:2px solid rgba(255,255,255,0.16);background:rgba(17,17,17,0.94);color:#ffffff;cursor:pointer;padding:0 8px;box-sizing:border-box;box-shadow:0 2px 10px rgba(0,0,0,0.5);transition:background 0.1s,border-color 0.1s;font:600 11px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;white-space:nowrap;appearance:none;-webkit-appearance:none;';
+    openBtn.title = 'Open';
+    openBtn.addEventListener('mouseenter', function() { openBtn.style.background = '#27272a'; openBtn.style.borderColor = 'rgba(255,255,255,0.28)'; });
+    openBtn.addEventListener('mouseleave', function() { openBtn.style.background = 'rgba(17,17,17,0.94)'; openBtn.style.borderColor = 'rgba(255,255,255,0.16)'; });
+    document.body.appendChild(openBtn);
+
     var commentBox = document.createElement('div');
     commentBox.id = '__opencode_comment_box';
     commentBox.style.cssText = 'position:fixed;z-index:2147483647;display:none;width:320px;max-width:calc(100vw - 16px);border-radius:14px;border:1px solid rgba(255,255,255,0.08);background:rgba(23,23,23,0.98);box-shadow:0 16px 48px rgba(0,0,0,0.45);padding:8px;box-sizing:border-box;';
@@ -61,7 +70,7 @@ export function createInjectionScript(): string {
     commentActions.appendChild(commentSubmit);
 
     function isOverlay(el) {
-      return el === overlay || el === selected || el === label || el === commentBtn || el === commentBox || (el && el.closest && (el.closest('#__opencode_comment_btn') || el.closest('#__opencode_comment_box')));
+      return el === overlay || el === selected || el === label || el === commentBtn || el === openBtn || el === commentBox || (el && el.closest && (el.closest('#__opencode_comment_btn') || el.closest('#__opencode_open_btn') || el.closest('#__opencode_comment_box')));
     }
 
     function domPath(el) {
@@ -836,6 +845,7 @@ export function createInjectionScript(): string {
     var hoverX = 0;
     var hoverY = 0;
     var hoverFrame = 0;
+    var syncFrame = 0;
     var inspectMode = true;
     document.body.style.cursor = 'crosshair';
 
@@ -854,9 +864,24 @@ export function createInjectionScript(): string {
       hideCommentBox();
       currentEl = el;
       currentInfo = readInfo(el, true);
-      showOverlay(el, selected);
-      positionCommentBtn(el);
+      syncSelection();
       return currentInfo;
+    }
+
+    function syncSelection() {
+      if (!inspectMode || !currentEl) return;
+      currentInfo = readInfo(currentEl);
+      showOverlay(currentEl, selected);
+      positionActionBtns(currentEl);
+      if (commentBox.style.display === 'block') positionCommentBox(currentEl);
+    }
+
+    function queueSelection() {
+      if (syncFrame) return;
+      syncFrame = requestAnimationFrame(function() {
+        syncFrame = 0;
+        syncSelection();
+      });
     }
 
     function applyHover() {
@@ -898,24 +923,21 @@ export function createInjectionScript(): string {
     // Exposed for main webview to call via eval_design_webview
     window.__opencode_set_inspect_mode = function(enabled) {
       inspectMode = !!enabled;
-      if (!inspectMode) {
-        hoverEl = null;
-        overlay.style.display = 'none';
-        selected.style.display = 'none';
-        label.style.display = 'none';
-        commentBtn.style.display = 'none';
-        hideCommentBox(false);
-        document.body.style.cursor = '';
-      } else {
-        document.body.style.cursor = 'crosshair';
-        if (mapDirty || !mapBuilt) queueMap();
-        if (currentEl) {
-          showOverlay(currentEl, selected);
-          positionCommentBtn(currentEl);
-          if (commentBox.style.display === 'block') positionCommentBox(currentEl);
+        if (!inspectMode) {
+          hoverEl = null;
+          overlay.style.display = 'none';
+          selected.style.display = 'none';
+          label.style.display = 'none';
+          commentBtn.style.display = 'none';
+          openBtn.style.display = 'none';
+          hideCommentBox(false);
+          document.body.style.cursor = '';
+        } else {
+          document.body.style.cursor = 'crosshair';
+          if (mapDirty || !mapBuilt) queueMap();
+          syncSelection();
         }
-      }
-    };
+      };
 
     window.__opencode_clear_selection = function() {
       currentEl = null;
@@ -925,6 +947,9 @@ export function createInjectionScript(): string {
       overlay.style.display = 'none';
       label.style.display = 'none';
       commentBtn.style.display = 'none';
+      openBtn.style.display = 'none';
+      if (syncFrame) cancelAnimationFrame(syncFrame);
+      syncFrame = 0;
       hideCommentBox();
     };
 
@@ -950,7 +975,10 @@ export function createInjectionScript(): string {
         resolvedSources[keys[i]] = map[keys[i]];
         delete unresolvedNames[keys[i]];
       }
-      if (currentEl) currentInfo = info(currentEl);
+      if (currentEl) {
+        currentInfo = readInfo(currentEl, true);
+        queueSelection();
+      }
       console.log('[Design] Resolved', keys.length, 'component sources from main webview');
     };
 
@@ -961,12 +989,7 @@ export function createInjectionScript(): string {
 
     window.__opencode_sync = function() {
       if (!inspectMode) return;
-      if (currentEl) {
-        currentInfo = readInfo(currentEl);
-        showOverlay(currentEl, selected);
-        positionCommentBtn(currentEl);
-        if (commentBox.style.display === 'block') positionCommentBox(currentEl);
-      }
+      syncSelection();
       if (hoverEl) {
         showOverlay(hoverEl, overlay);
         showLabel(hoverEl);
@@ -1018,17 +1041,26 @@ export function createInjectionScript(): string {
       label.style.display = 'block';
     }
 
-    function positionCommentBtn(el) {
+    function positionActionBtns(el) {
       if (!inspectMode) return;
       var rect = el.getBoundingClientRect();
-      var left = rect.right + 6;
-      if (left + 32 > window.innerWidth) left = Math.max(4, rect.left - 34);
-      var top = Math.min(Math.max(4, rect.top), window.innerHeight - 32);
+      var pad = 4;
+      var gap = 6;
+      var size = 28;
+      var wide = Math.max(46, openBtn.offsetWidth || 46);
+      var total = size + gap + wide;
+      var left = Math.min(Math.max(pad, rect.right - total), Math.max(pad, window.innerWidth - total - pad));
+      var top = rect.top - size - gap;
+      if (top < pad) top = rect.top + gap;
+      top = Math.min(Math.max(pad, top), Math.max(pad, window.innerHeight - size - pad));
       commentBtn.style.left = left + 'px';
       commentBtn.style.top = top + 'px';
       commentBtn.style.display = 'flex';
       commentBtn.style.alignItems = 'center';
       commentBtn.style.justifyContent = 'center';
+      openBtn.style.left = (left + size + gap) + 'px';
+      openBtn.style.top = top + 'px';
+      openBtn.style.display = 'flex';
     }
 
     function hideCommentBox(clear) {
@@ -1128,6 +1160,15 @@ export function createInjectionScript(): string {
       showCommentBox(currentEl);
     });
 
+    openBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!currentEl) return;
+      var data = readInfo(currentEl, true);
+      if (!data) return;
+      post('open-selected', data);
+    });
+
     document.addEventListener('mousemove', function(e) {
       hoverX = e.clientX;
       hoverY = e.clientY;
@@ -1141,31 +1182,17 @@ export function createInjectionScript(): string {
       label.style.display = 'none';
     }, true);
 
-    // Hide hover overlay on scroll, reposition selected overlay
-    var scrollTimer;
+    // Hide hover overlay on scroll, reposition selected overlay immediately
     window.addEventListener('scroll', function() {
       hoverEl = null;
       overlay.style.display = 'none';
       label.style.display = 'none';
-      if (inspectMode && currentEl) {
-        clearTimeout(scrollTimer);
-        scrollTimer = setTimeout(function() {
-          if (inspectMode && currentEl) {
-            showOverlay(currentEl, selected);
-            positionCommentBtn(currentEl);
-            if (commentBox.style.display === 'block') positionCommentBox(currentEl);
-          }
-        }, 50);
-      }
+      queueSelection();
     }, true);
 
     // Reposition selected overlay + comment button on window resize
     window.addEventListener('resize', function() {
-      if (inspectMode && currentEl) {
-        showOverlay(currentEl, selected);
-        positionCommentBtn(currentEl);
-        if (commentBox.style.display === 'block') positionCommentBox(currentEl);
-      }
+      queueSelection();
     });
 
     document.addEventListener('click', function(e) {
@@ -1185,7 +1212,7 @@ export function createInjectionScript(): string {
       if (currentEl && styles) {
         Object.assign(currentEl.style, styles);
         currentInfo = info(currentEl);
-        showOverlay(currentEl, selected);
+        syncSelection();
       }
     };
 

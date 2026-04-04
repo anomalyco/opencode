@@ -401,6 +401,9 @@ const createPlatform = (): Platform => {
     async queryDesignIndex(root: string, component: string | null, classes: string[] | null) {
       return await commands.queryDesignIndex(root, component, classes)
     },
+    async queryDesignUsageIndex(root: string, component: string, owners: string[] | null) {
+      return await commands.queryDesignUsageIndex(root, component, owners)
+    },
 
     async readClipboardImage() {
       const image = await readImage().catch(() => null)

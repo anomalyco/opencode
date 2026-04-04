@@ -5,6 +5,8 @@ import { same } from "@/utils/same"
 
 const emptyTabs: string[] = []
 
+export const DESIGN_TAB = "design"
+
 type Tabs = {
   active: Accessor<string | undefined>
   all: Accessor<string[]>
@@ -16,6 +18,8 @@ type TabsInput = {
   normalizeTab: (tab: string) => string
   review?: Accessor<boolean>
   hasReview?: Accessor<boolean>
+  special?: readonly string[]
+  closableSpecial?: readonly string[]
 }
 
 export const getSessionKey = (dir: string | undefined, id: string | undefined) => `${dir ?? ""}${id ? `/${id}` : ""}`
@@ -23,6 +27,10 @@ export const getSessionKey = (dir: string | undefined, id: string | undefined) =
 export const createSessionTabs = (input: TabsInput) => {
   const review = input.review ?? (() => false)
   const hasReview = input.hasReview ?? (() => false)
+  const special = input.special ?? emptyTabs
+  const closable = input.closableSpecial ?? special
+  const isSpecial = (tab: string) => special.includes(tab)
+  const isClosable = (tab: string) => closable.includes(tab)
   const contextOpen = createMemo(() => input.tabs().active() === "context" || input.tabs().all().includes("context"))
   const openedTabs = createMemo(
     () => {
@@ -31,7 +39,7 @@ export const createSessionTabs = (input: TabsInput) => {
         .tabs()
         .all()
         .flatMap((tab) => {
-          if (tab === "context" || tab === "review") return []
+          if (tab === "context" || tab === "review" || isSpecial(tab)) return []
           const value = input.pathFromTab(tab) ? input.normalizeTab(tab) : tab
           if (seen.has(value)) return []
           seen.add(value)
@@ -45,12 +53,15 @@ export const createSessionTabs = (input: TabsInput) => {
     const active = input.tabs().active()
     if (active === "context") return active
     if (active === "review" && review()) return active
+    if (active && isSpecial(active)) return active
     if (active && input.pathFromTab(active)) return input.normalizeTab(active)
 
     const first = openedTabs()[0]
     if (first) return first
     if (contextOpen()) return "context"
     if (review() && hasReview()) return "review"
+    const special = input.tabs().all().find(isSpecial)
+    if (special) return special
     return "empty"
   })
   const activeFileTab = createMemo(() => {
@@ -61,6 +72,7 @@ export const createSessionTabs = (input: TabsInput) => {
   const closableTab = createMemo(() => {
     const active = activeTab()
     if (active === "context") return active
+    if (isSpecial(active)) return isClosable(active) ? active : undefined
     if (!openedTabs().includes(active)) return
     return active
   })
@@ -112,13 +124,14 @@ export const createOpenReviewFile = (input: {
     batch(() => {
       input.showAllFiles()
       const maybePromise = input.loadFile(path)
-      const open = () => {
-        const tab = input.tabForPath(path)
-        input.openTab(tab)
-        input.setActive(tab)
+      const tab = input.tabForPath(path)
+      input.openTab(tab)
+      input.setActive(tab)
+      if (maybePromise instanceof Promise) {
+        maybePromise.catch((err) => {
+          console.warn("[Session] Failed to load review file", path, err)
+        })
       }
-      if (maybePromise instanceof Promise) maybePromise.then(open)
-      else open()
     })
   }
 }

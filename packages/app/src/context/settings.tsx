@@ -22,6 +22,8 @@ export interface Settings {
   general: {
     autoSave: boolean
     releaseNotes: boolean
+    previewEnabled: boolean
+    previewPrompted: boolean
     followup: "queue" | "steer"
     showReasoningSummaries: boolean
     shellToolPartsExpanded: boolean
@@ -88,6 +90,8 @@ const defaultSettings: Settings = {
   general: {
     autoSave: true,
     releaseNotes: true,
+    previewEnabled: false,
+    previewPrompted: false,
     followup: "steer",
     showReasoningSummaries: false,
     shellToolPartsExpanded: false,
@@ -154,6 +158,14 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         releaseNotes: withFallback(() => store.general?.releaseNotes, defaultSettings.general.releaseNotes),
         setReleaseNotes(value: boolean) {
           setStore("general", "releaseNotes", value)
+        },
+        previewEnabled: withFallback(() => store.general?.previewEnabled, defaultSettings.general.previewEnabled),
+        setPreviewEnabled(value: boolean) {
+          setStore("general", "previewEnabled", value)
+        },
+        previewPrompted: withFallback(() => store.general?.previewPrompted, defaultSettings.general.previewPrompted),
+        setPreviewPrompted(value: boolean) {
+          setStore("general", "previewPrompted", value)
         },
         followup: withFallback(
           () => (store.general?.followup === "queue" ? "steer" : store.general?.followup),

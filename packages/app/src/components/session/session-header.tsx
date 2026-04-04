@@ -435,25 +435,6 @@ export function SessionHeader() {
                 </TooltipKeybind>
 
                 <div class="hidden md:flex items-center gap-1 shrink-0">
-                  <Tooltip placement="bottom" value="Design Preview">
-                    <Button
-                      variant="ghost"
-                      class="titlebar-icon w-8 h-6 p-0 box-border"
-                      onClick={() => layout.design.toggle()}
-                      aria-label="Design Preview"
-                      aria-expanded={layout.design.opened()}
-                    >
-                      <Icon
-                        size="small"
-                        name="eye"
-                        classList={{
-                          "text-icon-strong": layout.design.opened(),
-                          "text-icon-weak": !layout.design.opened(),
-                        }}
-                      />
-                    </Button>
-                  </Tooltip>
-
                   <TooltipKeybind
                     title={language.t("command.review.toggle")}
                     keybind={command.keybind("review.toggle")}

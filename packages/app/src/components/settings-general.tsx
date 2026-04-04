@@ -241,6 +241,21 @@ export const SettingsGeneral: Component = () => {
         </SettingsRow>
 
         <SettingsRow
+          title={language.t("settings.general.row.preview.title")}
+          description={language.t("settings.general.row.preview.description")}
+        >
+          <div data-action="settings-preview">
+            <Switch
+              checked={settings.general.previewEnabled()}
+              onChange={(checked) => {
+                settings.general.setPreviewEnabled(checked)
+                if (checked) settings.general.setPreviewPrompted(true)
+              }}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
           title={language.t("settings.general.row.reasoningSummaries.title")}
           description={language.t("settings.general.row.reasoningSummaries.description")}
         >

@@ -30,7 +30,13 @@ export const commands = {
 	file: string,
 	line: number,
 	confidence: number,
-} | null>("query_design_index", { root, component, classes }),
+	} | null>("query_design_index", { root, component, classes }),
+	queryDesignUsageIndex: (root: string, component: string, owners: string[] | null) => __TAURI_INVOKE<{
+	file: string,
+	line: number,
+	owner: string | null,
+	confidence: number,
+	} | null>("query_design_usage_index", { root, component, owners }),
 };
 
 /** Events */
@@ -82,4 +88,3 @@ function makeEvent<T>(name: string) {
 
     return Object.assign(fn, base);
 }
-
