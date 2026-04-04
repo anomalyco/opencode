@@ -203,10 +203,13 @@ jobs:
           XCSH_CHANNEL: latest
         run: |
           echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+          version="${{ steps.version.outputs.version }}"
 
           cd packages/sdk/js
+          npm version "$version" --no-git-tag-version --allow-same-version
           bun ./script/publish.ts
           cd ../../..
 
           cd packages/plugin
+          npm version "$version" --no-git-tag-version --allow-same-version
           bun ./script/publish.ts
