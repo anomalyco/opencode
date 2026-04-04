@@ -1,0 +1,153 @@
+---
+title: Go
+description: Lavprisabonnement til åbne kodningsmodeller.
+---
+
+import config from "../../../../config.mjs"
+export const console = config.console
+export const email = `mailto:${config.email}`
+
+OpenCode Go er et lavprisabonnement — **$5 for din første måned**, derefter **$10/måned** — der giver dig pålidelig adgang til populære åbne kodningsmodeller.
+
+:::note
+OpenCode Go er i øjeblikket i beta.
+:::
+
+Go fungerer som enhver anden udbyder i OpenCode. Du abonnerer på OpenCode Go og
+får din API-nøgle. Det er **helt valgfrit**, og du behøver ikke at bruge det for at
+bruge OpenCode.
+
+Det er primært designet til internationale brugere, med modeller hostet i USA, EU og Singapore for at sikre stabil global adgang.
+
+---
+
+## Baggrund
+
+Åbne modeller er blevet rigtig gode. De opnår nu en ydeevne, der er tæt på
+proprietære modeller til kodningsopgaver. Og fordi mange udbydere kan levere dem
+konkurrencedygtigt, er de som regel langt billigere.
+
+Det kan dog være svært at få pålidelig adgang til dem med lav latenstid. Udbydere
+varierer i kvalitet og tilgængelighed.
+
+:::tip
+Vi testede en udvalgt gruppe af modeller og udbydere, der fungerer godt med OpenCode.
+:::
+
+For at løse dette, gjorde vi et par ting:
+
+1. Vi testede en udvalgt gruppe af åbne modeller og talte med deres teams om, hvordan man
+   bedst kører dem.
+2. Derefter arbejdede vi med nogle få udbydere for at sikre, at disse blev leveret
+   korrekt.
+3. Til sidst benchmarkede vi kombinationen af model og udbyder, og kom frem til
+   en liste, som vi trygt kan anbefale.
+
+OpenCode Go giver dig adgang til disse modeller for **$5 for din første måned**, derefter **$10/måned**.
+
+---
+
+## Sådan fungerer det
+
+OpenCode Go fungerer som enhver anden udbyder i OpenCode.
+
+1. Du logger ind på **<a href={console}>OpenCode Zen</a>**, abonnerer på Go, og
+   kopierer din API-nøgle.
+2. Du kører kommandoen `/connect` i TUI'en, vælger `OpenCode Go`, og indsætter
+   din API-nøgle.
+3. Kør `/models` i TUI'en for at se listen over tilgængelige modeller gennem Go.
+
+:::note
+Kun ét medlem per arbejdsområde kan abonnere på OpenCode Go.
+:::
+
+Den nuværende liste over modeller inkluderer:
+
+- **GLM-5**
+- **Kimi K2.5**
+- **MiMo-V2-Pro**
+- **MiMo-V2-Omni**
+- **MiniMax M2.5**
+- **MiniMax M2.7**
+
+Listen over modeller kan ændre sig, efterhånden som vi tester og tilføjer nye.
+
+---
+
+## Forbrugsgrænser
+
+OpenCode Go inkluderer følgende grænser:
+
+- **5-timers grænse** — forbrug for $12
+- **Ugentlig grænse** — forbrug for $30
+- **Månedlig grænse** — forbrug for $60
+
+Grænserne er defineret i dollarværdi. Det betyder, at dit faktiske antal anmodninger afhænger af den model, du bruger. Billigere modeller som MiniMax M2.5 tillader flere anmodninger, mens dyrere modeller som GLM-5 tillader færre.
+
+Tabellen nedenfor giver et estimeret antal anmodninger baseret på typiske Go-forbrugsmønstre:
+
+|                         | GLM-5 | Kimi K2.5 | MiMo-V2-Pro | MiMo-V2-Omni | MiniMax M2.7 | MiniMax M2.5 |
+| ----------------------- | ----- | --------- | ----------- | ------------ | ------------ | ------------ |
+| anmodninger pr. 5 timer | 1.150 | 1.850     | 1.290       | 2.150        | 14.000       | 20.000       |
+| anmodninger pr. uge     | 2.880 | 4.630     | 3.225       | 5.450        | 35.000       | 50.000       |
+| anmodninger pr. måned   | 5.750 | 9.250     | 6.450       | 10.900       | 70.000       | 100.000      |
+
+Estimaterne er baseret på observerede gennemsnitlige anmodningsmønstre:
+
+- GLM-5 — 700 input, 52.000 cachelagrede, 150 output-tokens pr. anmodning
+- Kimi K2.5 — 870 input, 55.000 cachelagrede, 200 output-tokens pr. anmodning
+- MiniMax M2.7/M2.5 — 300 input, 55.000 cachelagrede, 125 output-tokens pr. anmodning
+- MiMo-V2-Pro — 350 input, 41.000 cachelagrede, 250 output-tokens pr. anmodning
+- MiMo-V2-Omni — 1000 input, 60.000 cachelagrede, 140 output-tokens pr. anmodning
+
+Du kan spore dit nuværende forbrug i **<a href={console}>konsollen</a>**.
+
+:::tip
+Hvis du når forbrugsgrænsen, kan du fortsætte med at bruge de gratis modeller.
+:::
+
+Forbrugsgrænser kan ændre sig, efterhånden som vi lærer af tidlig brug og feedback.
+
+---
+
+### Forbrug ud over grænserne
+
+Hvis du også har kredit på din Zen-saldo, kan du aktivere indstillingen **Use balance**
+i konsollen. Når den er aktiveret, vil Go falde tilbage på din Zen-saldo,
+når du har nået dine forbrugsgrænser, i stedet for at blokere anmodninger.
+
+---
+
+## Endpoints
+
+Du kan også få adgang til Go-modeller gennem følgende API-endpoints.
+
+| Model        | Model ID     | Endpoint                                         | AI SDK Package              |
+| ------------ | ------------ | ------------------------------------------------ | --------------------------- |
+| GLM-5        | glm-5        | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.5    | kimi-k2.5    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2-Pro  | mimo-v2-pro  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2-Omni | mimo-v2-omni | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiniMax M2.7 | minimax-m2.7 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| MiniMax M2.5 | minimax-m2.5 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+
+Dit [model id](/docs/config/#models) i din OpenCode config
+bruger formatet `opencode-go/<model-id>`. For eksempel for Kimi K2.5, vil du
+bruge `opencode-go/kimi-k2.5` i din config.
+
+---
+
+## Privatliv
+
+Planen er primært designet til internationale brugere med modeller hostet i US, EU og Singapore for stabil global adgang. Vores udbydere følger en zero-retention-policy og bruger ikke dine data til modeltræning.
+
+---
+
+## Mål
+
+Vi skabte OpenCode Go for at:
+
+1. Gøre AI-kodning **tilgængelig** for flere mennesker med et lavprisabonnement.
+2. Give **pålidelig** adgang til de bedste åbne kodningsmodeller.
+3. Kuratere modeller, der er **testet og benchmarkede** til brug med kodningsagenter.
+4. Undgå **lock-in** ved også at lade dig bruge enhver anden udbyder med OpenCode.

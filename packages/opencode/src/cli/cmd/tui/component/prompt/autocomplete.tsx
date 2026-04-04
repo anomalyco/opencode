@@ -1,10 +1,13 @@
 import type { BoxRenderable, TextareaRenderable, KeyEvent, ScrollBoxRenderable } from "@opentui/core"
+import { pathToFileURL } from "bun"
 import fuzzysort from "fuzzysort"
 import { firstBy } from "remeda"
 import { createMemo, createResource, createEffect, onMount, onCleanup, Index, Show, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
+import { getScrollAcceleration } from "../../util/scroll"
+import { useTuiConfig } from "../../context/tui-config"
 import { useTheme, selectedForeground } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
 import { useCommandDialog } from "@tui/component/dialog-command"
@@ -80,6 +83,7 @@ export function Autocomplete(props: {
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
   const frecency = useFrecency()
+  const tuiConfig = useTuiConfig()
 
   const [store, setStore] = createStore({
     index: 0,
@@ -246,17 +250,18 @@ export function Autocomplete(props: {
         const width = props.anchor().width - 4
         options.push(
           ...sortedFiles.map((item): AutocompleteOption => {
-            let url = `file://${process.cwd()}/${item}`
+            const baseDir = (sync.data.path.directory || process.cwd()).replace(/\/+$/, "")
+            const fullPath = `${baseDir}/${item}`
+            const urlObj = pathToFileURL(fullPath)
             let filename = item
             if (lineRange && !item.endsWith("/")) {
               filename = `${item}#${lineRange.startLine}${lineRange.endLine ? `-${lineRange.endLine}` : ""}`
-              const urlObj = new URL(url)
               urlObj.searchParams.set("start", String(lineRange.startLine))
               if (lineRange.endLine !== undefined) {
                 urlObj.searchParams.set("end", String(lineRange.endLine))
               }
-              url = urlObj.toString()
             }
+            const url = urlObj.href
 
             const isDir = item.endsWith("/")
             return {
@@ -603,6 +608,7 @@ export function Autocomplete(props: {
   })
 
   let scroll: ScrollBoxRenderable
+  const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
 
   return (
     <box
@@ -620,6 +626,7 @@ export function Autocomplete(props: {
         backgroundColor={theme.backgroundMenu}
         height={height()}
         scrollbarOptions={{ visible: false }}
+        scrollAcceleration={scrollAcceleration()}
       >
         <Index
           each={options()}

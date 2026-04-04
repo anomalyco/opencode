@@ -14,15 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "create": false,
-        "title": "OpenCode",
-        "url": "/",
-        "decorations": true,
-        "dragDropEnabled": false,
-        "zoomHotkeysEnabled": false,
-        "titleBarStyle": "Overlay",
-        "hiddenTitle": true,
-        "trafficLightPosition": { "x": 12.0, "y": 18.0 }
+        "create": false
       }
     ],
     "withGlobalTauri": true,
@@ -53,6 +45,10 @@
       "entitlements": "./entitlements.plist"
     },
     "windows": {
+      "signCommand": {
+        "cmd": "powershell",
+        "args": ["-ExecutionPolicy", "Bypass", "-File", "../../../script/sign-windows.ps1", "%1"]
+      },
       "nsis": {
         "installerIcon": "icons/dev/icon.ico",
         "headerImage": "assets/nsis-header.bmp",
