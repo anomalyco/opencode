@@ -4,15 +4,9 @@ import { useSDK } from "@tui/context/sdk"
 import { useDialog } from "@tui/ui/dialog"
 import { useToast } from "@tui/ui/toast"
 import { useTheme } from "@tui/context/theme"
+import type { ExperimentalConsoleListOrgsResponse } from "@opencode-ai/sdk/v2"
 
-type OrgOption = {
-  accountID: string
-  accountEmail: string
-  accountUrl: string
-  orgID: string
-  orgName: string
-  active: boolean
-}
+type OrgOption = ExperimentalConsoleListOrgsResponse["orgs"][number]
 
 const accountHost = (url: string) => {
   try {

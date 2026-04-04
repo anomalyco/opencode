@@ -31,13 +31,11 @@ export function createDialogProviderOptions() {
   const toast = useToast()
   const { theme } = useTheme()
   const options = createMemo(() => {
-    const consoleManagedProviders = new Set(sync.data.console_state.consoleManagedProviders)
-
     return pipe(
       sync.data.provider_next.all,
       sortBy((x) => PROVIDER_PRIORITY[x.id] ?? 99),
       map((provider) => {
-        const consoleManaged = isConsoleManagedProvider(consoleManagedProviders, provider.id)
+        const consoleManaged = isConsoleManagedProvider(sync.data.console_state.consoleManagedProviders, provider.id)
         const connected = sync.data.provider_next.connected.includes(provider.id)
 
         return {

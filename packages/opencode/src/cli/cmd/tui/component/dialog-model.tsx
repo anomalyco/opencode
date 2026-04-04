@@ -34,7 +34,6 @@ export function DialogModel(props: { providerID?: string }) {
     const showSections = showExtra() && needle.length === 0
     const favorites = connected() ? local.model.favorite() : []
     const recents = local.model.recent()
-    const consoleManagedProviders = new Set(sync.data.console_state.consoleManagedProviders)
 
     function toOptions(items: typeof favorites, category: string) {
       if (!showSections) return []
@@ -48,7 +47,11 @@ export function DialogModel(props: { providerID?: string }) {
             key: item,
             value: { providerID: provider.id, modelID: model.id },
             title: model.name ?? item.modelID,
-            description: consoleManagedProviderLabel(consoleManagedProviders, provider.id, provider.name),
+            description: consoleManagedProviderLabel(
+              sync.data.console_state.consoleManagedProviders,
+              provider.id,
+              provider.name,
+            ),
             category,
             disabled: provider.id === "opencode" && model.id.includes("-nano"),
             footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
@@ -87,7 +90,7 @@ export function DialogModel(props: { providerID?: string }) {
               ? "(Favorite)"
               : undefined,
             category: connected()
-              ? consoleManagedProviderLabel(consoleManagedProviders, provider.id, provider.name)
+              ? consoleManagedProviderLabel(sync.data.console_state.consoleManagedProviders, provider.id, provider.name)
               : undefined,
             disabled: provider.id === "opencode" && model.includes("-nano"),
             footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,

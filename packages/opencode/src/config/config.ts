@@ -1051,8 +1051,7 @@ export namespace Config {
     config: Info
     directories: string[]
     deps: Promise<void>[]
-    consoleManagedProviders: string[]
-    activeOrgName?: string
+    consoleState: ConsoleState
   }
 
   export interface Interface {
@@ -1467,8 +1466,10 @@ export namespace Config {
             config: result,
             directories,
             deps,
-            consoleManagedProviders: Array.from(consoleManagedProviders),
-            activeOrgName,
+            consoleState: {
+              consoleManagedProviders: Array.from(consoleManagedProviders),
+              activeOrgName,
+            },
           }
         })
 
@@ -1487,10 +1488,7 @@ export namespace Config {
         })
 
         const getConsoleState = Effect.fn("Config.getConsoleState")(function* () {
-          return yield* InstanceState.use(state, (s) => ({
-            consoleManagedProviders: s.consoleManagedProviders,
-            activeOrgName: s.activeOrgName,
-          }))
+          return yield* InstanceState.use(state, (s) => s.consoleState)
         })
 
         const waitForDependencies = Effect.fn("Config.waitForDependencies")(function* () {

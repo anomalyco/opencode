@@ -377,7 +377,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       const blockingRequests: Promise<unknown>[] = [
         providersPromise,
         providerListPromise,
-        consoleStatePromise,
         agentsPromise,
         configPromise,
         ...(args.continue ? [sessionListPromise] : []),
@@ -423,6 +422,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           // non-blocking
           Promise.all([
             ...(args.continue ? [] : [sessionListPromise.then((sessions) => setStore("session", reconcile(sessions)))]),
+            consoleStatePromise.then((consoleState) => setStore("console_state", reconcile(consoleState))),
             sdk.client.command.list().then((x) => setStore("command", reconcile(x.data ?? []))),
             sdk.client.lsp.status().then((x) => setStore("lsp", reconcile(x.data!))),
             sdk.client.mcp.status().then((x) => setStore("mcp", reconcile(x.data!))),
