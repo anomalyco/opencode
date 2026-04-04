@@ -875,6 +875,16 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     exit()
   })
 
+  sdk.event.on("installation.updated", async (evt) => {
+    const version = evt.properties.version
+
+    await DialogAlert.show(
+      dialog,
+      "Update Complete",
+      `Successfully updated to OpenCode v${version}. The new version will be used the next time you start opencode.`,
+    )
+  })
+
   const plugin = createMemo(() => {
     if (!ready()) return
     if (route.data.type !== "plugin") return
