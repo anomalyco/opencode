@@ -1698,9 +1698,16 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         return result
       })
 
+      const SIDE_QUESTION_INSTRUCTIONS = [
+        "This is a side question from the user. The main agent is NOT interrupted.",
+        "Answer using only what is already in the conversation context — you have NO tools.",
+        "Keep answers extremely concise — one or two sentences when possible.",
+        "Answer in a single response with no follow-up turns.",
+        "Do NOT suggest running commands or re-asking in the main conversation.",
+        "If the information is not in the conversation context, say so briefly.",
+      ].join("\n")
+
       const ask = Effect.fn("SessionPrompt.ask")(function* (input: AskInput) {
-        const ag = yield* agents.get("ask")
-        if (!ag) throw new Error("ask agent not found")
         const mdl = yield* provider.getModel(input.providerID, input.modelID)
         const history = yield* sessions.messages({ sessionID: input.sessionID })
         const msgs = yield* MessageV2.toModelMessagesEffect(history, mdl)
@@ -1712,18 +1719,25 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               sessionID: input.sessionID,
               role: "user" as const,
               time: { created: Date.now() },
-              agent: "ask",
+              agent: "build",
               model: { providerID: input.providerID, modelID: input.modelID },
             }
-        // Include environment context so the model knows about the project
-        const envSystem = yield* Effect.promise(() => SystemPrompt.environment(mdl))
-        const system = [
-          ...(ag.prompt ? [ag.prompt] : []),
-          ...envSystem,
-        ]
+        // Use the main agent's system prompt so the prefix matches the main
+        // conversation's cache key, enabling prompt cache hits.
+        const streamAgent = (yield* agents.get(userInfo.agent)) ?? (yield* agents.get("build"))
+        if (!streamAgent) throw new Error("no agent available for /ask")
+        const [skills, env, instructions] = yield* Effect.all([
+          Effect.promise(() => SystemPrompt.skills(streamAgent)),
+          Effect.promise(() => SystemPrompt.environment(mdl)),
+          instruction.system().pipe(Effect.orDie),
+        ])
+        const system = [...env, ...(skills ? [skills] : []), ...instructions]
+        // Wrap the side-question instructions + question in the user message so
+        // the system prefix stays identical to the main conversation.
+        const wrappedQuestion = `<side-question>\n${SIDE_QUESTION_INSTRUCTIONS}\n\nQuestion: ${input.question}\n</side-question>`
         const text = yield* Effect.promise(async (signal) => {
           const result = await LLM.stream({
-            agent: ag,
+            agent: streamAgent,
             user: userInfo,
             system,
             small: false,
@@ -1736,7 +1750,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               ...msgs,
               {
                 role: "user" as const,
-                content: input.question,
+                content: wrappedQuestion,
               },
             ],
           })
