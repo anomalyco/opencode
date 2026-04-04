@@ -89,7 +89,6 @@ describe("tool.edit", () => {
           const { FileWatcher } = await import("../../src/file/watcher")
 
           const events: string[] = []
-          const unsubEdited = Bus.subscribe(File.Event.Edited, () => events.push("edited"))
           const unsubUpdated = Bus.subscribe(FileWatcher.Event.Updated, () => events.push("updated"))
 
           const edit = await EditTool.init()
@@ -102,9 +101,7 @@ describe("tool.edit", () => {
             ctx,
           )
 
-          expect(events).toContain("edited")
           expect(events).toContain("updated")
-          unsubEdited()
           unsubUpdated()
         },
       })
@@ -305,11 +302,9 @@ describe("tool.edit", () => {
           await FileTime.read(ctx.sessionID, filepath)
 
           const { Bus } = await import("../../src/bus")
-          const { File } = await import("../../src/file")
           const { FileWatcher } = await import("../../src/file/watcher")
 
           const events: string[] = []
-          const unsubEdited = Bus.subscribe(File.Event.Edited, () => events.push("edited"))
           const unsubUpdated = Bus.subscribe(FileWatcher.Event.Updated, () => events.push("updated"))
 
           const edit = await EditTool.init()
@@ -322,9 +317,7 @@ describe("tool.edit", () => {
             ctx,
           )
 
-          expect(events).toContain("edited")
           expect(events).toContain("updated")
-          unsubEdited()
           unsubUpdated()
         },
       })

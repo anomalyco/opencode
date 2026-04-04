@@ -181,7 +181,7 @@ test("symlink handling", async () => {
   })
 })
 
-test("large file handling", async () => {
+test("file under size limit handling", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
     directory: tmp.path,
@@ -192,6 +192,23 @@ test("large file handling", async () => {
       await Filesystem.write(`${tmp.path}/large.txt`, "x".repeat(1024 * 1024))
 
       expect((await Snapshot.patch(before!)).files).toContain(fwd(tmp.path, "large.txt"))
+    },
+  })
+})
+
+test("large added files are skipped", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      await Filesystem.write(`${tmp.path}/huge.txt`, new Uint8Array(2 * 1024 * 1024 + 1))
+
+      expect((await Snapshot.patch(before!)).files).toEqual([])
+      expect(await Snapshot.diff(before!)).toBe("")
+      expect(await Snapshot.track()).toBe(before)
     },
   })
 })
@@ -965,6 +982,98 @@ test("diffFull with new file additions", async () => {
   })
 })
 
+test("diffFull with a large interleaved mixed diff", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const ids = Array.from({ length: 60 }, (_, i) => i.toString().padStart(3, "0"))
+      const mod = ids.map((id) => fwd(tmp.path, "mix", `${id}-mod.txt`))
+      const del = ids.map((id) => fwd(tmp.path, "mix", `${id}-del.txt`))
+      const add = ids.map((id) => fwd(tmp.path, "mix", `${id}-add.txt`))
+      const bin = ids.map((id) => fwd(tmp.path, "mix", `${id}-bin.bin`))
+
+      await $`mkdir -p ${tmp.path}/mix`.quiet()
+      await Promise.all([
+        ...mod.map((file, i) => Filesystem.write(file, `before-${ids[i]}-é\n🙂\nline`)),
+        ...del.map((file, i) => Filesystem.write(file, `gone-${ids[i]}\n你好`)),
+        ...bin.map((file, i) => Filesystem.write(file, new Uint8Array([0, i, 255, i % 251]))),
+      ])
+
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      await Promise.all([
+        ...mod.map((file, i) => Filesystem.write(file, `after-${ids[i]}-é\n🚀\nline`)),
+        ...add.map((file, i) => Filesystem.write(file, `new-${ids[i]}\nこんにちは`)),
+        ...bin.map((file, i) => Filesystem.write(file, new Uint8Array([9, i, 8, i % 251]))),
+        ...del.map((file) => fs.rm(file)),
+      ])
+
+      const after = await Snapshot.track()
+      expect(after).toBeTruthy()
+
+      const diffs = await Snapshot.diffFull(before!, after!)
+      expect(diffs).toHaveLength(ids.length * 4)
+
+      const map = new Map(diffs.map((item) => [item.file, item]))
+      for (let i = 0; i < ids.length; i++) {
+        const m = map.get(fwd("mix", `${ids[i]}-mod.txt`))
+        expect(m).toBeDefined()
+        expect(m!.before).toBe(`before-${ids[i]}-é\n🙂\nline`)
+        expect(m!.after).toBe(`after-${ids[i]}-é\n🚀\nline`)
+        expect(m!.status).toBe("modified")
+
+        const d = map.get(fwd("mix", `${ids[i]}-del.txt`))
+        expect(d).toBeDefined()
+        expect(d!.before).toBe(`gone-${ids[i]}\n你好`)
+        expect(d!.after).toBe("")
+        expect(d!.status).toBe("deleted")
+
+        const a = map.get(fwd("mix", `${ids[i]}-add.txt`))
+        expect(a).toBeDefined()
+        expect(a!.before).toBe("")
+        expect(a!.after).toBe(`new-${ids[i]}\nこんにちは`)
+        expect(a!.status).toBe("added")
+
+        const b = map.get(fwd("mix", `${ids[i]}-bin.bin`))
+        expect(b).toBeDefined()
+        expect(b!.before).toBe("")
+        expect(b!.after).toBe("")
+        expect(b!.additions).toBe(0)
+        expect(b!.deletions).toBe(0)
+        expect(b!.status).toBe("modified")
+      }
+    },
+  })
+})
+
+test("diffFull preserves git diff order across batch boundaries", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const ids = Array.from({ length: 140 }, (_, i) => i.toString().padStart(3, "0"))
+
+      await $`mkdir -p ${tmp.path}/order`.quiet()
+      await Promise.all(ids.map((id) => Filesystem.write(`${tmp.path}/order/${id}.txt`, `before-${id}`)))
+
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      await Promise.all(ids.map((id) => Filesystem.write(`${tmp.path}/order/${id}.txt`, `after-${id}`)))
+
+      const after = await Snapshot.track()
+      expect(after).toBeTruthy()
+
+      const expected = ids.map((id) => `order/${id}.txt`)
+
+      const diffs = await Snapshot.diffFull(before!, after!)
+      expect(diffs.map((item) => item.file)).toEqual(expected)
+    },
+  })
+})
+
 test("diffFull with file modifications", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
@@ -1213,6 +1322,83 @@ test("revert with overlapping files across patches uses first patch hash", async
 
       const content = await fs.readFile(`${tmp.path}/shared.txt`, "utf-8")
       expect(content).toBe("v1")
+    },
+  })
+})
+
+test("revert preserves patch order when the same hash appears again", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await $`mkdir -p ${tmp.path}/foo`.quiet()
+      await Filesystem.write(`${tmp.path}/foo/bar`, "v1")
+      await Filesystem.write(`${tmp.path}/a.txt`, "v1")
+
+      const snap1 = await Snapshot.track()
+      expect(snap1).toBeTruthy()
+
+      await $`rm -rf ${tmp.path}/foo`.quiet()
+      await Filesystem.write(`${tmp.path}/foo`, "v2")
+      await Filesystem.write(`${tmp.path}/a.txt`, "v2")
+
+      const snap2 = await Snapshot.track()
+      expect(snap2).toBeTruthy()
+
+      await $`rm -rf ${tmp.path}/foo`.quiet()
+      await Filesystem.write(`${tmp.path}/a.txt`, "v3")
+
+      await Snapshot.revert([
+        { hash: snap1!, files: [fwd(tmp.path, "a.txt")] },
+        { hash: snap2!, files: [fwd(tmp.path, "foo")] },
+        { hash: snap1!, files: [fwd(tmp.path, "foo", "bar")] },
+      ])
+
+      expect(await fs.readFile(`${tmp.path}/a.txt`, "utf-8")).toBe("v1")
+      expect((await fs.stat(`${tmp.path}/foo`)).isDirectory()).toBe(true)
+      expect(await fs.readFile(`${tmp.path}/foo/bar`, "utf-8")).toBe("v1")
+    },
+  })
+})
+
+test("revert handles large mixed batches across chunk boundaries", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const base = Array.from({ length: 140 }, (_, i) => fwd(tmp.path, "batch", `${i}.txt`))
+      const fresh = Array.from({ length: 140 }, (_, i) => fwd(tmp.path, "fresh", `${i}.txt`))
+
+      await $`mkdir -p ${tmp.path}/batch ${tmp.path}/fresh`.quiet()
+      await Promise.all(base.map((file, i) => Filesystem.write(file, `base-${i}`)))
+
+      const snap = await Snapshot.track()
+      expect(snap).toBeTruthy()
+
+      await Promise.all(base.map((file, i) => Filesystem.write(file, `next-${i}`)))
+      await Promise.all(fresh.map((file, i) => Filesystem.write(file, `fresh-${i}`)))
+
+      const patch = await Snapshot.patch(snap!)
+      expect(patch.files.length).toBe(base.length + fresh.length)
+
+      await Snapshot.revert([patch])
+
+      await Promise.all(
+        base.map(async (file, i) => {
+          expect(await fs.readFile(file, "utf-8")).toBe(`base-${i}`)
+        }),
+      )
+
+      await Promise.all(
+        fresh.map(async (file) => {
+          expect(
+            await fs
+              .access(file)
+              .then(() => true)
+              .catch(() => false),
+          ).toBe(false)
+        }),
+      )
     },
   })
 })
