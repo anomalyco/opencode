@@ -140,7 +140,7 @@ describe("ProviderTransform.options - setCacheKey", () => {
     expect(result.promptCacheKey).toBe(sessionID)
   })
 
-  test("should set previousResponseId for github-copilot sdk models", () => {
+  test("should not set previousResponseId for github-copilot sdk models", () => {
     const copilotModel = {
       ...mockModel,
       providerID: "github-copilot",
@@ -156,7 +156,7 @@ describe("ProviderTransform.options - setCacheKey", () => {
       providerOptions: {},
       previousResponseId: "resp_123",
     })
-    expect(result.previousResponseId).toBe("resp_123")
+    expect(result.previousResponseId).toBeUndefined()
   })
 
   test("should not set previousResponseId for non-openai sdk models", () => {

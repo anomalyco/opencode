@@ -792,10 +792,7 @@ export namespace ProviderTransform {
       result["promptCacheKey"] = input.sessionID
     }
 
-    if (
-      input.previousResponseId &&
-      (input.model.api.npm === "@ai-sdk/openai" || input.model.api.npm === "@ai-sdk/github-copilot")
-    ) {
+    if (input.previousResponseId && input.model.api.npm === "@ai-sdk/openai") {
       result["previousResponseId"] = input.previousResponseId
     }
 
