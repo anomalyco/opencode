@@ -171,7 +171,11 @@ describe("tool.write", () => {
           // On Unix systems, check permissions
           if (process.platform !== "win32") {
             const stats = await fs.stat(filepath)
-            expect(stats.mode & 0o777).toBe(0o644)
+            const mode = stats.mode & 0o777
+            // File should be readable by all, writable by owner (umask may allow group write)
+            expect(mode & 0o400).toBe(0o400) // owner read
+            expect(mode & 0o200).toBe(0o200) // owner write
+            expect(mode & 0o044).toBe(0o044) // group/others read
           }
         },
       })
