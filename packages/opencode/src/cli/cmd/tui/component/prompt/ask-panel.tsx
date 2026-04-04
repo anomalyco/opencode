@@ -20,7 +20,7 @@ export const initialAskPanelState: AskPanelState = {
 }
 
 export function AskPanel(props: { state: Accessor<AskPanelState> }) {
-  const { theme } = useTheme()
+  const { theme, syntax } = useTheme()
 
   return (
     <Show when={props.state().visible}>
@@ -49,9 +49,15 @@ export function AskPanel(props: { state: Accessor<AskPanelState> }) {
           <text fg={theme.error}>{props.state().error}</text>
         </Show>
         <Show when={!props.state().loading && !props.state().error && props.state().response}>
-          <text fg={theme.text} wrapMode="word" width="100%">
-            {props.state().response}
-          </text>
+          <code
+            filetype="markdown"
+            drawUnstyledText={false}
+            streaming={false}
+            syntaxStyle={syntax()}
+            content={props.state().response}
+            conceal={false}
+            fg={theme.text}
+          />
         </Show>
         <text fg={theme.textMuted} marginTop={1}>
           space to dismiss
