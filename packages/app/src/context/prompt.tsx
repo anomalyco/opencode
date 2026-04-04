@@ -192,12 +192,6 @@ function createPromptSession(dir: string, id: string | undefined) {
     },
     set(prompt: Prompt, cursorPosition?: number) {
       const next = clonePrompt(prompt)
-      console.log("[DEBUG PromptSession.set]", {
-        sessionKey: `${dir}:${id ?? WORKSPACE_KEY}`,
-        promptLength: next.length,
-        promptText: next.map((p) => ("content" in p ? p.content : "")).join(""),
-        cursorPosition,
-      })
       batch(() => {
         setStore("prompt", next)
         if (cursorPosition !== undefined) setStore("cursor", cursorPosition)

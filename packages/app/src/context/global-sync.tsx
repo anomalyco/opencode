@@ -80,11 +80,21 @@ function createGlobalSync() {
     config: {},
     reload: undefined,
   })
+  const [loaded, setLoaded] = createStore({ dir: {} as Record<string, true> })
 
   let active = true
   let projectWritten = false
   let bootedAt = 0
   let bootingRoot = false
+  const trace = (event: string, extra?: Record<string, unknown>) => {
+    if (!import.meta.env.DEV) return
+    console.debug("[project-load]", {
+      scope: "global-sync",
+      event,
+      at: Date.now(),
+      ...extra,
+    })
+  }
 
   onCleanup(() => {
     active = false
@@ -185,10 +195,25 @@ function createGlobalSync() {
 
   async function loadSessions(directory: string, opts?: { silent?: boolean }) {
     const pending = sessionLoads.get(directory)
-    if (pending) return pending
+    if (pending) {
+      trace("loadSessions.skip", {
+        directory,
+        why: "pending",
+        silent: !!opts?.silent,
+      })
+      return pending
+    }
 
     children.pin(directory)
     const [store, setStore] = children.child(directory, { bootstrap: false })
+    trace("loadSessions.start", {
+      directory,
+      silent: !!opts?.silent,
+      status: store.status,
+      sessions: store.sessions,
+      count: store.session.length,
+      path: store.path.directory,
+    })
     setStore("sessions", "loading")
     setStore("session_error", undefined)
     const meta = sessionMeta.get(directory)
@@ -203,6 +228,13 @@ function createGlobalSync() {
       }
       setStore("sessions", "ready")
       setStore("session_error", undefined)
+      trace("loadSessions.skip", {
+        directory,
+        why: "cached",
+        limit: meta.limit,
+        storeLimit: store.limit,
+        count: store.session.length,
+      })
       children.unpin(directory)
       return
     }
@@ -237,12 +269,24 @@ function createGlobalSync() {
         sessionMeta.set(directory, { limit })
         setStore("sessions", "ready")
         setStore("session_error", undefined)
+        setLoaded("dir", directory, true)
+        trace("loadSessions.done", {
+          directory,
+          fetched: nonArchived.length,
+          count: sessions.length,
+        })
       })
       .catch((err) => {
         console.error("Failed to load sessions", err)
         setStore("sessions", "idle")
         const note = permissionNotice(err, language.t, "session")
         setStore("session_error", note)
+        trace("loadSessions.error", {
+          directory,
+          silent: !!opts?.silent,
+          note,
+          error: err instanceof Error ? err.message : String(err),
+        })
         if (opts?.silent || note) return
         const project = getFilename(directory)
         const title =
@@ -267,13 +311,25 @@ function createGlobalSync() {
   async function bootstrapInstance(directory: string) {
     if (!directory) return
     const pending = booting.get(directory)
-    if (pending) return pending
+    if (pending) {
+      trace("bootstrap.skip", {
+        directory,
+        why: "pending",
+      })
+      return pending
+    }
 
     children.pin(directory)
     const promise = (async () => {
       const child = children.ensureChild(directory)
       const cache = children.vcsCache.get(directory)
       if (!cache) return
+      trace("bootstrap.start", {
+        directory,
+        status: child[0].status,
+        sessions: child[0].sessions,
+        path: child[0].path.directory,
+      })
       const sdk = sdkFor(directory)
       await bootstrapDirectory({
         directory,
@@ -287,6 +343,14 @@ function createGlobalSync() {
         setStore: child[1],
         vcsCache: cache,
         translate: language.t,
+      })
+      setLoaded("dir", directory, true)
+      trace("bootstrap.done", {
+        directory,
+        status: child[0].status,
+        sessions: child[0].sessions,
+        path: child[0].path.directory,
+        project: child[0].project,
       })
     })()
 
@@ -372,6 +436,9 @@ function createGlobalSync() {
     on(
       () => globalSDK.version,
       () => {
+        trace("server.switch.reset", {
+          dirs: Object.keys(children.children),
+        })
         for (const key of Array.from(booting.keys())) booting.delete(key)
         for (const key of Array.from(sessionLoads.keys())) sessionLoads.delete(key)
         sessionMeta.clear()
@@ -428,6 +495,9 @@ function createGlobalSync() {
     },
     get error() {
       return globalStore.error
+    },
+    loaded(directory: string) {
+      return !!loaded.dir[directory]
     },
     child: children.child,
     peek: children.peek,

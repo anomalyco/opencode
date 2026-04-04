@@ -24,12 +24,7 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
   const notification = useNotification()
   const permission = usePermission()
   const dirs = createMemo(() => [props.project.worktree, ...(props.project.sandboxes ?? [])])
-  const loaded = createMemo(() =>
-    dirs().some((directory) => {
-      const [store] = globalSync.peek(directory, { bootstrap: false })
-      return !!store.path.directory
-    }),
-  )
+  const loaded = createMemo(() => dirs().some((directory) => globalSync.loaded(directory)))
   const unseenCount = createMemo(() =>
     dirs().reduce((total, directory) => total + notification.project.unseenCount(directory), 0),
   )

@@ -132,6 +132,17 @@ export default function Layout(props: ParentProps) {
   const server = useServer()
   const notification = useNotification()
   const permission = usePermission()
+  const trace = (event: string, extra?: Record<string, unknown>) => {
+    if (!import.meta.env.DEV) return
+    console.debug("[project-load]", {
+      scope: "page-layout",
+      event,
+      at: Date.now(),
+      currentDir: currentDir(),
+      currentProject: currentProject()?.worktree,
+      ...extra,
+    })
+  }
   const navigate = useNavigate()
   setNavigate(navigate)
   const providers = useProviders()
@@ -1406,13 +1417,19 @@ export default function Layout(props: ParentProps) {
         server.list.find((item) => item.integration !== "openclaw")
       if (!local) return
       const key = ServerConnection.key(local)
-      server.setActive(key)
+      trace("openOpenclaw.return-local", {
+        to: key,
+      })
       const last = server.projects.lastFor?.(key) ?? globalSync.data.project[0]?.worktree
+      trace("openOpenclaw.return-local.last", {
+        to: key,
+        last,
+      })
       if (!last) {
         navigate("/")
         return
       }
-      layout.projects.open(last)
+      server.projects.openFor?.(key, last)
       void navigateToProject(last)
       return
     }
@@ -2309,6 +2326,12 @@ export default function Layout(props: ParentProps) {
     on(
       () => [visibleSessionDirs(), currentDir(), autoselecting.loading] as const,
       ([dirs, dir, selecting]) => {
+        trace("visibleSessionDirs.effect", {
+          dirs,
+          dir,
+          selecting,
+          started,
+        })
         if (selecting) return
         if (dirs.length === 0) return
 
@@ -2317,6 +2340,10 @@ export default function Layout(props: ParentProps) {
           if (!dir) return
           const [child] = globalSync.child(dir, { bootstrap: false })
           if (child.sessions === "ready" || child.sessions === "loading") return
+          trace("visibleSessionDirs.load", {
+            directory: dir,
+            reason: "startup",
+          })
           globalSync.project.loadSessions(dir, { silent: true })
           return
         }
@@ -2324,6 +2351,10 @@ export default function Layout(props: ParentProps) {
         for (const directory of dirs) {
           const [child] = globalSync.child(directory, { bootstrap: false })
           if (child.sessions === "ready" || child.sessions === "loading") continue
+          trace("visibleSessionDirs.load", {
+            directory,
+            reason: "visible",
+          })
           globalSync.project.loadSessions(directory, { silent: true })
         }
       },

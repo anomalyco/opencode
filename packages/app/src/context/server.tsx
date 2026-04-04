@@ -136,6 +136,16 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       lastNonOpenclaw: props.defaultServer,
       healthy: undefined as boolean | undefined,
     })
+    const trace = (event: string, extra?: Record<string, unknown>) => {
+      if (!import.meta.env.DEV) return
+      console.debug("[project-load]", {
+        scope: "server",
+        event,
+        at: Date.now(),
+        active: state.active,
+        ...extra,
+      })
+    }
 
     const healthy = () => state.healthy
 
@@ -165,6 +175,10 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     }
 
     function setActive(input: ServerConnection.Key) {
+      trace("setActive", {
+        from: state.active,
+        to: input,
+      })
       if (state.active !== input) setState("active", input)
     }
 
@@ -277,6 +291,11 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           if (!key) return
           const current = projectsFor()
           if (current.find((x) => x.worktree === directory)) return
+          trace("projects.open", {
+            key,
+            directory,
+            count: current.length,
+          })
           setStore("projects", key, [{ worktree: directory, expanded: true }, ...current])
         },
         openFor(input: ServerConnection.Key | undefined, directory: string) {
@@ -369,6 +388,10 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         touch(directory: string) {
           const key = origin()
           if (!key) return
+          trace("projects.touch", {
+            key,
+            directory,
+          })
           setStore("lastProject", key, directory)
         },
         touchFor(input: ServerConnection.Key | undefined, directory: string) {

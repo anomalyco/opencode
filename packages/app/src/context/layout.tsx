@@ -636,6 +636,16 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         open(directory: string) {
           const root = rootFor(directory)
           if (server.projects.list().find((x) => x.worktree === root)) return
+          if (import.meta.env.DEV) {
+            console.debug("[project-load]", {
+              scope: "layout",
+              event: "projects.open",
+              at: Date.now(),
+              directory,
+              root,
+              server: server.key,
+            })
+          }
           globalSync.project.loadSessions(root)
           server.projects.open(root)
         },
