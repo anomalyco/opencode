@@ -1,27 +1,271 @@
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Popover } from "@opencode-ai/ui/popover"
-import { Suspense, createMemo, createSignal, lazy, Show } from "solid-js"
+import { Switch } from "@opencode-ai/ui/switch"
+import { Tabs } from "@opencode-ai/ui/tabs"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { useMutation } from "@tanstack/solid-query"
+import { showToast } from "@opencode-ai/ui/toast"
+import { useNavigate } from "@solidjs/router"
+import { type Accessor, createEffect, createMemo, createSignal, For, type JSXElement, onCleanup, Show } from "solid-js"
+import { createStore, reconcile } from "solid-js/store"
+import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
 import { useLanguage } from "@/context/language"
 import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 
-const Body = lazy(() => import("./status-popover-body").then((x) => ({ default: x.StatusPopoverBody })))
+const pollMs = 10_000
+
+const stem = (value: string) => value.replace(/\.(?:ts|js|mjs|cjs|mts|cts)$/i, "")
+
+const file = (value: string) => {
+  if (!value.startsWith("file://")) return value
+  try {
+    const url = new URL(value)
+    const path = decodeURIComponent(url.pathname)
+    if (!url.hostname) return path
+    return `//${url.hostname}${path}`
+  } catch {
+    return value
+  }
+}
+
+const base = (value: string) => file(value).split(/[\\/]/).at(-1) ?? value
+
+const project = (value: string) => {
+  const list = file(value).split(/[\\/]/).filter(Boolean)
+  const low = list.map((part) => part.toLowerCase())
+  const i = list.lastIndexOf(".opencode")
+  if (i > 0 && (low[i + 1] === "plugin" || low[i + 1] === "plugins")) return list[i - 1]
+
+  const config = low.lastIndexOf(".config")
+  if (config >= 0 && low[config + 1] === "opencode" && (low[config + 2] === "plugin" || low[config + 2] === "plugins"))
+    return "global"
+
+  const roam = low.lastIndexOf("roaming")
+  if (roam > 0 && low[roam - 1] === "appdata" && low[roam + 1] === "opencode" && (low[roam + 2] === "plugin" || low[roam + 2] === "plugins"))
+    return "global"
+
+  const local = low.lastIndexOf("local")
+  if (local > 0 && low[local - 1] === "appdata" && low[local + 1] === "opencode" && (low[local + 2] === "plugin" || low[local + 2] === "plugins"))
+    return "global"
+
+  return undefined
+}
+
+const plug = (value: string) => {
+  const next = file(value)
+  if (value.startsWith("file://") || next !== value || value.includes("/") || value.includes("\\")) return stem(base(next))
+  const at = value.lastIndexOf("@")
+  if (at > 0) return value.slice(0, at)
+  return value
+}
+
+const item = (value: string) => {
+  const name = plug(value)
+  const group = project(value)
+  return {
+    name,
+    project: group && group !== name ? group : undefined,
+    value,
+  }
+}
+
+const pluginEmptyMessage = (value: string, file: string): JSXElement => {
+  const parts = value.split(file)
+  if (parts.length === 1) return value
+  return (
+    <>
+      {parts[0]}
+      <code class="bg-surface-raised-base px-1.5 py-0.5 rounded-sm text-text-base">{file}</code>
+      {parts.slice(1).join(file)}
+    </>
+  )
+}
+
+const listServersByHealth = (
+  list: ServerConnection.Any[],
+  active: ServerConnection.Key | undefined,
+  status: Record<ServerConnection.Key, ServerHealth | undefined>,
+) => {
+  if (!list.length) return list
+  const order = new Map(list.map((url, index) => [url, index] as const))
+  const rank = (value?: ServerHealth) => {
+    if (value?.healthy === true) return 0
+    if (value?.healthy === false) return 2
+    return 1
+  }
+
+  return list.slice().sort((a, b) => {
+    if (ServerConnection.key(a) === active) return -1
+    if (ServerConnection.key(b) === active) return 1
+    const diff = rank(status[ServerConnection.key(a)]) - rank(status[ServerConnection.key(b)])
+    if (diff !== 0) return diff
+    return (order.get(a) ?? 0) - (order.get(b) ?? 0)
+  })
+}
+
+const useServerHealth = (servers: Accessor<ServerConnection.Any[]>, enabled: Accessor<boolean>) => {
+  const checkServerHealth = useCheckServerHealth()
+  const [status, setStatus] = createStore({} as Record<ServerConnection.Key, ServerHealth | undefined>)
+
+  createEffect(() => {
+    if (!enabled()) {
+      setStatus(reconcile({}))
+      return
+    }
+    const list = servers()
+    let dead = false
+
+    const refresh = async () => {
+      const results: Record<string, ServerHealth> = {}
+      await Promise.all(
+        list.map(async (conn) => {
+          results[ServerConnection.key(conn)] = await checkServerHealth(conn.http)
+        }),
+      )
+      if (dead) return
+      setStatus(reconcile(results))
+    }
+
+    void refresh()
+    const id = setInterval(() => void refresh(), pollMs)
+    onCleanup(() => {
+      dead = true
+      clearInterval(id)
+    })
+  })
+
+  return status
+}
+
+const useDefaultServerKey = (
+  get: (() => string | Promise<string | null | undefined> | null | undefined) | undefined,
+) => {
+  const [state, setState] = createStore({
+    url: undefined as string | undefined,
+    tick: 0,
+  })
+
+  createEffect(() => {
+    state.tick
+    let dead = false
+    const result = get?.()
+    if (!result) {
+      setState("url", undefined)
+      onCleanup(() => {
+        dead = true
+      })
+      return
+    }
+
+    if (result instanceof Promise) {
+      void result.then((next) => {
+        if (dead) return
+        setState("url", next ? normalizeServerUrl(next) : undefined)
+      })
+      onCleanup(() => {
+        dead = true
+      })
+      return
+    }
+
+    setState("url", normalizeServerUrl(result))
+    onCleanup(() => {
+      dead = true
+    })
+  })
+
+  return {
+    key: () => {
+      const u = state.url
+      if (!u) return
+      return ServerConnection.key({ type: "http", http: { url: u } })
+    },
+    refresh: () => setState("tick", (value) => value + 1),
+  }
+}
+
+const useMcpToggleMutation = () => {
+  const sync = useSync()
+  const sdk = useSDK()
+  const language = useLanguage()
+
+  return useMutation(() => ({
+    mutationFn: async (name: string) => {
+      const status = sync.data.mcp[name]
+      await (status?.status === "connected" ? sdk.client.mcp.disconnect({ name }) : sdk.client.mcp.connect({ name }))
+      const result = await sdk.client.mcp.status()
+      if (result.data) sync.set("mcp", result.data)
+    },
+    onError: (err) => {
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description: err instanceof Error ? err.message : String(err),
+      })
+    },
+  }))
+}
 
 export function StatusPopover() {
   const language = useLanguage()
   const server = useServer()
   const sync = useSync()
   const [shown, setShown] = createSignal(false)
-  const ready = createMemo(() => server.healthy() === false || sync.data.mcp_ready)
-  const mcpIssue = createMemo(() => {
-    const mcp = Object.values(sync.data.mcp ?? {})
-    const failed = mcp.some((item) => item.status === "failed" || item.status === "needs_client_registration")
-    const warn = mcp.some((item) => item.status === "needs_auth")
-    if (failed) return "critical" as const
-    if (warn) return "warning" as const
+  let dialogRun = 0
+  let dialogDead = false
+  onCleanup(() => {
+    dialogDead = true
+    dialogRun += 1
+  })
+  const servers = createMemo(() => {
+    const current = server.current
+    const list = server.list
+    if (!current) return list
+    if (list.every((item) => ServerConnection.key(item) !== ServerConnection.key(current))) return [current, ...list]
+    return [current, ...list.filter((item) => ServerConnection.key(item) !== ServerConnection.key(current))]
+  })
+  const health = useServerHealth(servers, shown)
+  const sortedServers = createMemo(() => listServersByHealth(servers(), server.key, health))
+  const toggleMcp = useMcpToggleMutation()
+  const defaultServer = useDefaultServerKey(platform.getDefaultServer)
+  const mcpNames = createMemo(() => Object.keys(sync.data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
+  const mcpStatus = (name: string) => sync.data.mcp?.[name]?.status
+  const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
+  const lspItems = createMemo(() => sync.data.lsp ?? [])
+  const lspCount = createMemo(() => lspItems().length)
+  const plugins = createMemo(() => (sync.data.config.plugin ?? []).map(item))
+  const pluginCount = createMemo(() => plugins().length)
+  const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))
+  const overallHealthy = createMemo(() => {
+    const serverHealthy = server.healthy() === true
+    const anyMcpIssue = mcpNames().some((name) => {
+      const status = mcpStatus(name)
+      return status !== "connected" && status !== "disabled"
+    })
+    return serverHealthy && !anyMcpIssue
   })
   const healthy = createMemo(() => server.healthy() === true && !mcpIssue())
+
+  const copy = (value: string) => {
+    void navigator.clipboard.writeText(value).then(
+      () => {
+        showToast({
+          variant: "success",
+          icon: "circle-check",
+          title: language.t("session.share.copy.copied"),
+          description: value,
+        })
+      },
+      (err: unknown) => {
+        showToast({
+          title: language.t("common.requestFailed"),
+          description: err instanceof Error ? err.message : String(err),
+        })
+      },
+    )
+  }
 
   return (
     <Popover
@@ -51,16 +295,19 @@ export function StatusPopover() {
           />
         </div>
       }
-      class="[&_[data-slot=popover-body]]:p-0 w-[360px] max-w-[calc(100vw-40px)] bg-transparent border-0 shadow-none rounded-xl"
+      class="[&_[data-slot=popover-body]]:p-0 w-[min(720px,calc(100vw-40px))] max-w-[calc(100vw-40px)] bg-transparent border-0 shadow-none rounded-xl"
       gutter={4}
       placement="bottom-end"
       shift={-168}
     >
-      <Show when={shown()}>
-        <Suspense
-          fallback={
-            <div class="w-[360px] h-14 rounded-xl bg-background-strong shadow-[var(--shadow-lg-border-base)]" />
-          }
+      <div class="flex items-center gap-1 w-[min(720px,calc(100vw-40px))] rounded-xl shadow-[var(--shadow-lg-border-base)]">
+        <Tabs
+          aria-label={language.t("status.popover.ariaLabel")}
+          class="tabs bg-background-strong rounded-xl overflow-hidden"
+          data-component="tabs"
+          data-active="servers"
+          defaultValue="servers"
+          variant="alt"
         >
           <Tabs.List data-slot="tablist" class="bg-transparent border-b-0 px-4 pt-2 pb-0 gap-4 h-10">
             <Tabs.Trigger value="servers" data-slot="tab" class="text-12-regular">
@@ -280,10 +527,32 @@ export function StatusPopover() {
                 >
                   <For each={plugins()}>
                     {(plugin) => (
-                      <div class="flex items-center gap-2 w-full px-2 py-1">
-                        <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
-                        <span class="text-14-regular text-text-base truncate">{plugin}</span>
-                      </div>
+                      <Tooltip
+                        class="w-full"
+                        value={<span class="font-mono text-12-regular whitespace-nowrap">{plugin.value}</span>}
+                        contentStyle={{ "max-width": "none" }}
+                      >
+                        <div class="flex items-center gap-2 w-full px-2 py-1 rounded-md hover:bg-surface-raised-base-hover">
+                          <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
+                          <div class="flex-1 min-w-0 text-14-regular text-text-base truncate">
+                            {plugin.name}
+                            <Show when={plugin.project}>
+                              <span class="text-text-weak"> {" | "}{plugin.project}</span>
+                            </Show>
+                          </div>
+                          <Button
+                            size="small"
+                            variant="ghost"
+                            icon="copy"
+                            class="shrink-0"
+                            aria-label={language.t("session.header.open.copyPath")}
+                            onClick={(event: MouseEvent) => {
+                              event.stopPropagation()
+                              copy(plugin.value)
+                            }}
+                          />
+                        </div>
+                      </Tooltip>
                     )}
                   </For>
                 </Show>
