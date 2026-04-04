@@ -19,6 +19,7 @@ import { init as initSqlite } from "#db"
 import { DIALECT } from "./dialect-detect"
 
 declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number; name: string }[] | undefined
+declare const OPENCODE_PG_MIGRATIONS: { sql: string; timestamp: number; name: string }[] | undefined
 
 export const NotFoundError = NamedError.create(
   "NotFoundError",
@@ -93,12 +94,33 @@ export namespace Database {
     const { init } = await import("./db.pg")
     const db = init(url)
 
-    // Apply Postgres migrations from folder
-    const migrationsDir = path.join(import.meta.dirname, "../../migration-pg")
-    if (existsSync(migrationsDir)) {
+    if (!Flag.OPENCODE_SKIP_MIGRATIONS) {
       const { migrate } = await import("drizzle-orm/postgres-js/migrator")
-      log.info("applying postgres migrations", { dir: migrationsDir })
-      await migrate(db as any, { migrationsFolder: migrationsDir })
+
+      if (typeof OPENCODE_PG_MIGRATIONS !== "undefined" && OPENCODE_PG_MIGRATIONS.length > 0) {
+        // Bundled mode: write migrations to a temp directory for the migrator
+        const os = await import("os")
+        const fs = await import("fs")
+        const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-pg-migrations-"))
+        try {
+          for (const entry of OPENCODE_PG_MIGRATIONS) {
+            const migDir = path.join(tmpDir, entry.name)
+            fs.mkdirSync(migDir, { recursive: true })
+            fs.writeFileSync(path.join(migDir, "migration.sql"), entry.sql)
+          }
+          log.info("applying bundled postgres migrations", { count: OPENCODE_PG_MIGRATIONS.length })
+          await migrate(db as any, { migrationsFolder: tmpDir })
+        } finally {
+          fs.rmSync(tmpDir, { recursive: true, force: true })
+        }
+      } else {
+        // Dev mode: read migrations from folder
+        const migrationsDir = path.join(import.meta.dirname, "../../migration-pg")
+        if (existsSync(migrationsDir)) {
+          log.info("applying postgres migrations from folder", { dir: migrationsDir })
+          await migrate(db as any, { migrationsFolder: migrationsDir })
+        }
+      }
     }
 
     // Cast to Client (SQLiteBunDatabase) for type compat — safe at runtime

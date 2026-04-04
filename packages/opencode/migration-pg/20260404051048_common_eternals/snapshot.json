@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "5e03cac4-86b6-45d1-940c-8cd8fe5a20f8",
+  "id": "e7116b69-5378-40ee-a8fc-327b71a06b0e",
   "prevIds": [
     "00000000-0000-0000-0000-000000000000"
   ],
@@ -85,7 +85,7 @@
       "schema": "public"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
@@ -189,7 +189,7 @@
       "table": "account"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": false,
       "dimensions": 0,
@@ -202,7 +202,7 @@
       "table": "account"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
@@ -215,7 +215,7 @@
       "table": "account"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
@@ -280,7 +280,7 @@
       "table": "control_account"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": false,
       "dimensions": 0,
@@ -306,7 +306,7 @@
       "table": "control_account"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
@@ -319,7 +319,7 @@
       "table": "control_account"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
@@ -501,7 +501,7 @@
       "table": "project"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
@@ -514,7 +514,7 @@
       "table": "project"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
@@ -527,7 +527,7 @@
       "table": "project"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": false,
       "dimensions": 0,
@@ -592,7 +592,7 @@
       "table": "message"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
@@ -605,7 +605,7 @@
       "table": "message"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
@@ -670,7 +670,7 @@
       "table": "part"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
@@ -683,7 +683,7 @@
       "table": "part"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
@@ -722,7 +722,7 @@
       "table": "permission"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
@@ -735,7 +735,7 @@
       "table": "permission"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
@@ -878,7 +878,7 @@
       "table": "session"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": false,
       "dimensions": 0,
@@ -891,7 +891,7 @@
       "table": "session"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": false,
       "dimensions": 0,
@@ -904,7 +904,7 @@
       "table": "session"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": false,
       "dimensions": 0,
@@ -956,7 +956,7 @@
       "table": "session"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
@@ -969,7 +969,7 @@
       "table": "session"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
@@ -982,7 +982,7 @@
       "table": "session"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": false,
       "dimensions": 0,
@@ -995,7 +995,7 @@
       "table": "session"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": false,
       "dimensions": 0,
@@ -1060,7 +1060,7 @@
       "table": "todo"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
@@ -1073,7 +1073,7 @@
       "table": "todo"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
@@ -1086,7 +1086,7 @@
       "table": "todo"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
@@ -1151,7 +1151,7 @@
       "table": "session_share"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
@@ -1164,7 +1164,7 @@
       "table": "session_share"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
@@ -1190,7 +1190,7 @@
       "table": "event_sequence"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
@@ -1229,7 +1229,7 @@
       "table": "event"
     },
     {
-      "type": "integer",
+      "type": "bigint",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
