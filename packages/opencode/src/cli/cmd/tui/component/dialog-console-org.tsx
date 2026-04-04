@@ -13,6 +13,17 @@ type OrgOption = {
   active: boolean
 }
 
+const accountHost = (url: string) => {
+  try {
+    return new URL(url).host
+  } catch {
+    return url
+  }
+}
+
+const accountLabel = (item: Pick<OrgOption, "accountEmail" | "accountUrl">) =>
+  `${item.accountEmail}  ${accountHost(item.accountUrl)}`
+
 export function DialogConsoleOrg() {
   const sdk = useSDK()
   const dialog = useDialog()
@@ -49,19 +60,19 @@ export function DialogConsoleOrg() {
 
     return listed
       .toSorted((a, b) => {
-        if (a.active !== b.active) return a.active ? -1 : 1
+        const activeAccountA = a.active ? 0 : 1
+        const activeAccountB = b.active ? 0 : 1
+        if (activeAccountA !== activeAccountB) return activeAccountA - activeAccountB
+
+        const accountCompare = accountLabel(a).localeCompare(accountLabel(b))
+        if (accountCompare !== 0) return accountCompare
+
         return a.orgName.localeCompare(b.orgName)
       })
       .map((item) => ({
         title: item.orgName,
         value: item,
-        description: `${item.accountEmail} · ${(() => {
-          try {
-            return new URL(item.accountUrl).host
-          } catch {
-            return item.accountUrl
-          }
-        })()}`,
+        category: accountLabel(item),
         onSelect: async () => {
           if (item.active) {
             dialog.clear()
