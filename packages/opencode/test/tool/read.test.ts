@@ -49,17 +49,20 @@ const init = Effect.fn("ReadToolTest.init")(function* () {
   return yield* Effect.promise(() => info.init())
 })
 
+const run = Effect.fn("ReadToolTest.run")(function* (
+  args: Tool.InferParameters<typeof ReadTool>,
+  next: Tool.Context = ctx,
+) {
+  const tool = yield* init()
+  return yield* Effect.promise(() => tool.execute(args, next))
+})
+
 const exec = Effect.fn("ReadToolTest.exec")(function* (
   dir: string,
   args: Tool.InferParameters<typeof ReadTool>,
   next: Tool.Context = ctx,
 ) {
-  return yield* provideInstance(dir)(
-    Effect.gen(function* () {
-      const tool = yield* init()
-      return yield* Effect.promise(() => tool.execute(args, next))
-    }),
-  )
+  return yield* provideInstance(dir)(run(args, next))
 })
 
 const fail = Effect.fn("ReadToolTest.fail")(function* (
@@ -86,6 +89,18 @@ const load = Effect.fn("ReadToolTest.load")(function* (p: string) {
   const fs = yield* AppFileSystem.Service
   return yield* fs.readFileString(p)
 })
+const asks = () => {
+  const items: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+  return {
+    items,
+    next: {
+      ...ctx,
+      ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
+        items.push(req)
+      },
+    },
+  }
+}
 
 describe("tool.read external_directory permission", () => {
   it.live("allows reading absolute path inside project directory", () =>
@@ -114,16 +129,10 @@ describe("tool.read external_directory permission", () => {
       const dir = yield* tmpdirScoped({ git: true })
       yield* put(path.join(outer, "secret.txt"), "secret data")
 
-      const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
-      const next = {
-        ...ctx,
-        ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
-          requests.push(req)
-        },
-      }
+      const { items, next } = asks()
 
       yield* exec(dir, { filePath: path.join(outer, "secret.txt") }, next)
-      const ext = requests.find((item) => item.permission === "external_directory")
+      const ext = items.find((item) => item.permission === "external_directory")
       expect(ext).toBeDefined()
       expect(ext!.patterns).toContain(glob(path.join(outer, "*")))
     }),
@@ -135,13 +144,7 @@ describe("tool.read external_directory permission", () => {
         const dir = yield* tmpdirScoped({ git: true })
         yield* put(path.join(dir, "test.txt"), "hello world")
 
-        const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
-        const next = {
-          ...ctx,
-          ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
-            requests.push(req)
-          },
-        }
+        const { items, next } = asks()
         const target = path.join(dir, "test.txt")
         const alt = target
           .replace(/^[A-Za-z]:/, "")
@@ -149,7 +152,7 @@ describe("tool.read external_directory permission", () => {
           .toLowerCase()
 
         yield* exec(dir, { filePath: alt }, next)
-        const read = requests.find((item) => item.permission === "read")
+        const read = items.find((item) => item.permission === "read")
         expect(read).toBeDefined()
         expect(read!.patterns).toEqual([full(target)])
       }),
@@ -162,16 +165,10 @@ describe("tool.read external_directory permission", () => {
       const dir = yield* tmpdirScoped({ git: true })
       yield* put(path.join(outer, "external", "a.txt"), "a")
 
-      const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
-      const next = {
-        ...ctx,
-        ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
-          requests.push(req)
-        },
-      }
+      const { items, next } = asks()
 
       yield* exec(dir, { filePath: path.join(outer, "external") }, next)
-      const ext = requests.find((item) => item.permission === "external_directory")
+      const ext = items.find((item) => item.permission === "external_directory")
       expect(ext).toBeDefined()
       expect(ext!.patterns).toContain(glob(path.join(outer, "external", "*")))
     }),
@@ -181,16 +178,10 @@ describe("tool.read external_directory permission", () => {
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
 
-      const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
-      const next = {
-        ...ctx,
-        ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
-          requests.push(req)
-        },
-      }
+      const { items, next } = asks()
 
       yield* fail(dir, { filePath: "../outside.txt" }, next)
-      const ext = requests.find((item) => item.permission === "external_directory")
+      const ext = items.find((item) => item.permission === "external_directory")
       expect(ext).toBeDefined()
     }),
   )
@@ -200,16 +191,10 @@ describe("tool.read external_directory permission", () => {
       const dir = yield* tmpdirScoped({ git: true })
       yield* put(path.join(dir, "internal.txt"), "internal content")
 
-      const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
-      const next = {
-        ...ctx,
-        ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
-          requests.push(req)
-        },
-      }
+      const { items, next } = asks()
 
       yield* exec(dir, { filePath: path.join(dir, "internal.txt") }, next)
-      const ext = requests.find((item) => item.permission === "external_directory")
+      const ext = items.find((item) => item.permission === "external_directory")
       expect(ext).toBeUndefined()
     }),
   )
@@ -234,29 +219,31 @@ describe("tool.read env file permissions", () => {
             const dir = yield* tmpdirScoped()
             yield* put(path.join(dir, filename), "content")
 
-            const info = yield* provideInstance(dir)(
+            const asked = yield* provideInstance(dir)(
               Effect.gen(function* () {
                 const agent = yield* Agent.Service
-                return yield* agent.get(agentName)
+                const info = yield* agent.get(agentName)
+                let asked = false
+                const next = {
+                  ...ctx,
+                  ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
+                    for (const pattern of req.patterns) {
+                      const rule = Permission.evaluate(req.permission, pattern, info.permission)
+                      if (rule.action === "ask" && req.permission === "read") {
+                        asked = true
+                      }
+                      if (rule.action === "deny") {
+                        throw new Permission.DeniedError({ ruleset: info.permission })
+                      }
+                    }
+                  },
+                }
+
+                yield* run({ filePath: path.join(dir, filename) }, next)
+                return asked
               }),
             )
-            let asked = false
-            const next = {
-              ...ctx,
-              ask: async (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) => {
-                for (const pattern of req.patterns) {
-                  const rule = Permission.evaluate(req.permission, pattern, info.permission)
-                  if (rule.action === "ask" && req.permission === "read") {
-                    asked = true
-                  }
-                  if (rule.action === "deny") {
-                    throw new Permission.DeniedError({ ruleset: info.permission })
-                  }
-                }
-              },
-            }
 
-            yield* exec(dir, { filePath: path.join(dir, filename) }, next)
             expect(asked).toBe(shouldAsk)
           }),
         )
