@@ -241,9 +241,13 @@ jobs:
             await resolve('packages/plugin/package.json', '$npm_version', '$npm_version')
           "
 
+          # Build SDK dist (compile existing src, skip OpenAPI regeneration)
           cd packages/sdk/js
+          bun tsc
           bun ./script/publish.ts
           cd ../../..
 
+          # Build and publish plugin
           cd packages/plugin
+          bun tsc
           bun ./script/publish.ts
