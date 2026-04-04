@@ -75,17 +75,7 @@ export const ExperimentalRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const [accounts, active] = await Promise.all([Account.list(), Account.active()])
-        const groups = await Promise.all(
-          accounts.map(async (account) => {
-            try {
-              const orgs = await Account.orgs(account.id)
-              return { account, orgs }
-            } catch {
-              return { account, orgs: [] }
-            }
-          }),
-        )
+        const [groups, active] = await Promise.all([Account.orgsByAccount(), Account.active()])
 
         const orgs = groups.flatMap((group) =>
           group.orgs.map((org) => ({

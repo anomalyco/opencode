@@ -301,17 +301,15 @@ export namespace Account {
 
       const orgsByAccount = Effect.fn("Account.orgsByAccount")(function* () {
         const accounts = yield* repo.list()
-        const [errors, results] = yield* Effect.partition(
+        return yield* Effect.forEach(
           accounts,
-          (account) => orgs(account.id).pipe(Effect.map((orgs) => ({ account, orgs }))),
+          (account) =>
+            orgs(account.id).pipe(
+              Effect.catch(() => Effect.succeed([] as readonly Org[])),
+              Effect.map((orgs) => ({ account, orgs })),
+            ),
           { concurrency: 3 },
         )
-        for (const error of errors) {
-          yield* Effect.logWarning("failed to fetch orgs for account").pipe(
-            Effect.annotateLogs({ error: String(error) }),
-          )
-        }
-        return results
       })
 
       const orgs = Effect.fn("Account.orgs")(function* (accountID: AccountID) {
