@@ -3,6 +3,7 @@ import { DialogSelect } from "@tui/ui/dialog-select"
 import { useSDK } from "@tui/context/sdk"
 import { useDialog } from "@tui/ui/dialog"
 import { useToast } from "@tui/ui/toast"
+import { useTheme } from "@tui/context/theme"
 
 type OrgOption = {
   accountID: string
@@ -28,6 +29,7 @@ export function DialogConsoleOrg() {
   const sdk = useSDK()
   const dialog = useDialog()
   const toast = useToast()
+  const { theme } = useTheme()
 
   const [orgs] = createResource(async () => {
     const result = await sdk.client.experimental.console.listOrgs({}, { throwOnError: true })
@@ -73,6 +75,12 @@ export function DialogConsoleOrg() {
         title: item.orgName,
         value: item,
         category: accountLabel(item),
+        categoryView: (
+          <box flexDirection="row" gap={2}>
+            <text fg={theme.accent}>{item.accountEmail}</text>
+            <text fg={theme.textMuted}>{accountHost(item.accountUrl)}</text>
+          </box>
+        ),
         onSelect: async () => {
           if (item.active) {
             dialog.clear()
