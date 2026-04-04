@@ -14,9 +14,11 @@ import { PoeAuthPlugin } from "opencode-poe-auth"
 import { Effect, Layer, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRunPromise } from "@/effect/run-service"
+import { Instance } from "@/project/instance"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
+  const pending = new Map<string, Promise<void>>()
 
   type Item = {
     name: string
@@ -247,6 +249,21 @@ export namespace Plugin {
   }
 
   export async function init() {
-    return runPromise((svc) => svc.init())
+    const dir = Instance.directory
+    const task = pending.get(dir)
+    if (task) return
+
+    const next = runPromise((svc) => svc.init())
+      .catch((err) => {
+        log.error("plugin preload failed", {
+          directory: dir,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      })
+      .finally(() => {
+        if (pending.get(dir) === next) pending.delete(dir)
+      })
+
+    pending.set(dir, next)
   }
 }

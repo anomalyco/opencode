@@ -18,6 +18,7 @@ const cache = new Map<string, Promise<Shape>>()
 const disposal = {
   all: undefined as Promise<void> | undefined,
 }
+const log = Log.create({ service: "instance" })
 
 function emit(directory: string) {
   GlobalBus.emit("event", {
@@ -33,6 +34,7 @@ function emit(directory: string) {
 
 function boot(input: { directory: string; init?: () => Promise<any>; project?: Project.Info; worktree?: string }) {
   return iife(async () => {
+    const at = Date.now()
     const ctx =
       input.project && input.worktree
         ? {
@@ -45,8 +47,30 @@ function boot(input: { directory: string; init?: () => Promise<any>; project?: P
             worktree: sandbox,
             project,
           }))
+    log.info("instance.boot", {
+      directory: input.directory,
+      projectID: ctx.project.id,
+      vcs: ctx.project.vcs,
+      duration: Date.now() - at,
+      phase: "context",
+    })
+    const bt = Date.now()
     await context.provide(ctx, async () => {
       await input.init?.()
+    })
+    log.info("instance.boot", {
+      directory: input.directory,
+      projectID: ctx.project.id,
+      vcs: ctx.project.vcs,
+      duration: Date.now() - bt,
+      phase: "bootstrap",
+    })
+    log.info("instance.boot", {
+      directory: input.directory,
+      projectID: ctx.project.id,
+      vcs: ctx.project.vcs,
+      duration: Date.now() - at,
+      phase: "total",
     })
     return ctx
   })
@@ -66,7 +90,7 @@ export const Instance = {
     const directory = Filesystem.resolve(input.directory)
     let existing = cache.get(directory)
     if (!existing) {
-      Log.Default.info("creating instance", { directory })
+      log.info("instance.create", { directory, cache: "miss" })
       existing = track(
         directory,
         boot({
@@ -74,6 +98,8 @@ export const Instance = {
           init: input.init,
         }),
       )
+    } else {
+      log.info("instance.create", { directory, cache: "hit" })
     }
     const ctx = await existing
     return context.provide(ctx, async () => {

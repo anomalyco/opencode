@@ -491,6 +491,7 @@ export namespace Session {
     search?: string
     limit?: number
   }) {
+    const at = Date.now()
     const project = Instance.project
     const conditions = [eq(SessionTable.project_id, project.id)]
 
@@ -521,6 +522,16 @@ export namespace Session {
         .limit(limit)
         .all(),
     )
+    log.info("session.list", {
+      projectID: project.id,
+      directory: input?.directory ?? Instance.directory,
+      workspaceID: WorkspaceContext.workspaceID,
+      roots: input?.roots,
+      search: input?.search,
+      limit,
+      count: rows.length,
+      duration: Date.now() - at,
+    })
     for (const row of rows) {
       yield fromRow(row)
     }

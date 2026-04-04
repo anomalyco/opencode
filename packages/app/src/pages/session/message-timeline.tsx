@@ -169,24 +169,6 @@ export function MessageTimeline(props: {
   const language = useLanguage()
   const { params, sessionKey } = useSessionKey()
   const platform = usePlatform()
-  const debugTimeline = (event: string, extra?: Record<string, unknown>) => {
-    if (!import.meta.env.DEV) return
-    console.debug("[timeline-debug]", {
-      event,
-      at: Date.now(),
-      sessionID: params.id,
-      rendered: rendered().length,
-      canWindow: canWindow(),
-      start: windowed.start,
-      end: windowed.end,
-      top: windowed.top,
-      bottom: windowed.bottom,
-      scrollTop: viewport?.scrollTop,
-      clientHeight: viewport?.clientHeight,
-      scrollHeight: viewport?.scrollHeight,
-      ...extra,
-    })
-  }
   let viewport: HTMLDivElement | undefined
   let windowFrame: number | undefined
   let bottomFrame: number | undefined
@@ -352,14 +334,6 @@ export function MessageTimeline(props: {
     const next = syncWindow(buildWindow(), anchor?.id)
     if (sameWindow(next)) return
 
-    debugTimeline("window:apply", {
-      anchor: anchor?.id,
-      anchorTop: anchor?.top,
-      nextStart: next.start,
-      nextEnd: next.end,
-      nextTop: next.top,
-      nextBottom: next.bottom,
-    })
     setWindowed(next)
     if (props.live || props.scroll.bottom) {
       requestAnimationFrame(() => {
@@ -385,7 +359,6 @@ export function MessageTimeline(props: {
       const box = root.getBoundingClientRect()
       const top = node.getBoundingClientRect().top - box.top
       const delta = top - anchor.top
-      debugTimeline("window:correct", { anchor: anchor.id, delta, nodeTop: top })
       if (Math.abs(delta) <= 1) return
       root.scrollTop += delta
       props.onScheduleScrollState(root)
@@ -424,7 +397,6 @@ export function MessageTimeline(props: {
       for (const id of turnHeights.keys()) {
         if (!ids.has(id)) turnHeights.delete(id)
       }
-      debugTimeline("rendered:change")
       scheduleWindow()
     }),
   )
@@ -432,7 +404,6 @@ export function MessageTimeline(props: {
   createEffect(() => {
     if (canWindow()) return
     const ids = rendered()
-    debugTimeline("window:disable", { reason: "working" })
     setWindowed({
       start: 0,
       end: ids.length,
@@ -443,7 +414,6 @@ export function MessageTimeline(props: {
 
   createEffect(() => {
     if (!canWindow()) return
-    debugTimeline("window:enable")
     scheduleWindow()
   })
 

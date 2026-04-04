@@ -245,11 +245,20 @@ export function SessionHeader() {
   const [openRequest, setOpenRequest] = createStore({
     app: undefined as OpenApp | undefined,
   })
+  const pref = createMemo(() => {
+    if (prefs.app === "finder") {
+      return { id: "finder", label: language.t(fileManager().label), icon: fileManager().icon } as const
+    }
+    const app = apps().find((item) => item.id === prefs.app)
+    if (!app) return
+    return { ...app, label: language.t(app.label) } as const
+  })
 
   const canOpen = createMemo(() => platform.platform === "desktop" && !!platform.openPath && server.isLocal())
   const current = createMemo(
     () =>
       options().find((o) => o.id === prefs.app) ??
+      pref() ??
       options()[0] ??
       ({ id: "finder", label: fileManager().label, icon: fileManager().icon } as const),
   )

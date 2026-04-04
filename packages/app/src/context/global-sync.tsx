@@ -86,15 +86,10 @@ function createGlobalSync() {
   let projectWritten = false
   let bootedAt = 0
   let bootingRoot = false
-  const trace = (event: string, extra?: Record<string, unknown>) => {
-    if (!import.meta.env.DEV) return
-    console.debug("[project-load]", {
-      scope: "global-sync",
-      event,
-      at: Date.now(),
-      ...extra,
-    })
-  }
+  let prevServer = server.current?.integration
+  const claw = "/openclaw"
+  const isolated = (directory: string) => server.current?.integration === "openclaw" && directory !== claw
+  const trace = (_event: string, _extra?: Record<string, unknown>) => {}
 
   onCleanup(() => {
     active = false
@@ -194,6 +189,14 @@ function createGlobalSync() {
   }
 
   async function loadSessions(directory: string, opts?: { silent?: boolean }) {
+    if (isolated(directory)) {
+      trace("loadSessions.skip", {
+        directory,
+        why: "openclaw-isolated",
+        silent: !!opts?.silent,
+      })
+      return
+    }
     const pending = sessionLoads.get(directory)
     if (pending) {
       trace("loadSessions.skip", {
@@ -310,6 +313,13 @@ function createGlobalSync() {
 
   async function bootstrapInstance(directory: string) {
     if (!directory) return
+    if (isolated(directory)) {
+      trace("bootstrap.skip", {
+        directory,
+        why: "openclaw-isolated",
+      })
+      return
+    }
     const pending = booting.get(directory)
     if (pending) {
       trace("bootstrap.skip", {
@@ -368,6 +378,7 @@ function createGlobalSync() {
     const recent = bootingRoot || Date.now() - bootedAt < 1500
 
     if (directory === "global") {
+      if (server.current?.integration === "openclaw") return
       applyGlobalEvent({
         event,
         project: globalStore.project,
@@ -380,12 +391,14 @@ function createGlobalSync() {
       if (event.type === "server.connected" || event.type === "global.disposed") {
         if (recent) return
         for (const directory of Object.keys(children.children)) {
+          if (!loaded.dir[directory]) continue
           queue.push(directory)
         }
       }
       return
     }
 
+    if (isolated(directory)) return
     const existing = children.children[directory]
     if (!existing) return
     children.mark(directory)
@@ -436,13 +449,27 @@ function createGlobalSync() {
     on(
       () => globalSDK.version,
       () => {
+        const nextServer = server.current?.integration
+        const openclawSwitch =
+          (prevServer === "openclaw" && nextServer !== "openclaw") ||
+          (prevServer !== "openclaw" && nextServer === "openclaw")
+        prevServer = nextServer
+        const dirs = openclawSwitch ? ["/openclaw"] : Object.keys(children.children)
         trace("server.switch.reset", {
-          dirs: Object.keys(children.children),
+          openclawSwitch,
+          dirs,
         })
-        for (const key of Array.from(booting.keys())) booting.delete(key)
-        for (const key of Array.from(sessionLoads.keys())) sessionLoads.delete(key)
-        sessionMeta.clear()
-        for (const directory of Object.keys(children.children)) {
+        if (openclawSwitch) {
+          booting.delete(claw)
+          sessionLoads.delete(claw)
+          sessionMeta.delete(claw)
+        } else {
+          for (const key of Array.from(booting.keys())) booting.delete(key)
+          for (const key of Array.from(sessionLoads.keys())) sessionLoads.delete(key)
+          sessionMeta.clear()
+        }
+        for (const directory of dirs) {
+          if (!children.children[directory]) continue
           // Mounted views can keep references to child stores across a server switch.
           // Reset the store in place and drop cached clients so the next bootstrap/load
           // repopulates it from the newly active backend instead of stale OpenClaw data.
@@ -453,7 +480,7 @@ function createGlobalSync() {
         }
         setGlobalStore("reload", undefined)
         setVersion((x) => x + 1)
-        void bootstrap()
+        if (!openclawSwitch) void bootstrap()
       },
     ),
   )

@@ -557,10 +557,15 @@ pub fn serve(
         ("OPENCODE_SERVER_USERNAME", "opencode".to_string()),
         ("OPENCODE_SERVER_PASSWORD", password.to_string()),
     ];
+    let level = if cfg!(debug_assertions) {
+        "DEBUG"
+    } else {
+        "WARN"
+    };
 
     let (events, child) = spawn_command(
         app,
-        format!("--print-logs --log-level WARN serve --hostname {hostname} --port {port}").as_str(),
+        format!("--print-logs --log-level {level} serve --hostname {hostname} --port {port}").as_str(),
         &envs,
     )
     .map_err(|e| format!("Failed to spawn opencode: {e}"))?;

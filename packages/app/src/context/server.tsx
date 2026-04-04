@@ -136,16 +136,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       lastNonOpenclaw: props.defaultServer,
       healthy: undefined as boolean | undefined,
     })
-    const trace = (event: string, extra?: Record<string, unknown>) => {
-      if (!import.meta.env.DEV) return
-      console.debug("[project-load]", {
-        scope: "server",
-        event,
-        at: Date.now(),
-        active: state.active,
-        ...extra,
-      })
-    }
+    const trace = (_event: string, _extra?: Record<string, unknown>) => {}
 
     const healthy = () => state.healthy
 

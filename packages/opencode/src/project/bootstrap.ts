@@ -13,15 +13,51 @@ import { Log } from "@/util/log"
 import { ShareNext } from "@/share/share-next"
 
 export async function InstanceBootstrap() {
-  Log.Default.info("bootstrapping", { directory: Instance.directory })
-  await Plugin.init()
+  const log = Log.create({ service: "instance.bootstrap" })
+  const all = Date.now()
+  const run = async (name: string, fn: () => Promise<unknown> | unknown) => {
+    const at = Date.now()
+    await fn()
+    log.info("instance.bootstrap", {
+      directory: Instance.directory,
+      projectID: Instance.project.id,
+      step: name,
+      duration: Date.now() - at,
+    })
+  }
+
+  log.info("instance.bootstrap", {
+    directory: Instance.directory,
+    projectID: Instance.project.id,
+    step: "start",
+  })
+  const pluginAt = Date.now()
+  void Plugin.init()
+  log.info("instance.bootstrap", {
+    directory: Instance.directory,
+    projectID: Instance.project.id,
+    step: "plugin_background",
+    duration: Date.now() - pluginAt,
+  })
   ShareNext.init()
-  Format.init()
-  await LSP.init()
-  File.init()
-  FileWatcher.init()
-  Vcs.init()
-  Snapshot.init()
+  log.info("instance.bootstrap", {
+    directory: Instance.directory,
+    projectID: Instance.project.id,
+    step: "share",
+    duration: 0,
+  })
+  await run("format", () => Format.init())
+  await run("lsp", () => LSP.init())
+  await run("file", () => File.init())
+  await run("watcher", () => FileWatcher.init())
+  await run("vcs", () => Vcs.init())
+  await run("snapshot", () => Snapshot.init())
+  log.info("instance.bootstrap", {
+    directory: Instance.directory,
+    projectID: Instance.project.id,
+    step: "total",
+    duration: Date.now() - all,
+  })
 
   Bus.subscribe(Command.Event.Executed, async (payload) => {
     if (payload.properties.name === Command.Default.INIT) {

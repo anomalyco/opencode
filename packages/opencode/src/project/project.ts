@@ -163,14 +163,22 @@ export namespace Project {
       })
 
       const fromDirectory = Effect.fn("Project.fromDirectory")(function* (directory: string) {
-        log.info("fromDirectory", { directory })
+        const all = Date.now()
+        log.info("project.discover", { directory, phase: "start" })
 
         // Phase 1: discover git info
         type DiscoveryResult = { id: ProjectID; worktree: string; sandbox: string; vcs: Info["vcs"] }
 
         const data: DiscoveryResult = yield* Effect.gen(function* () {
+          const at = Date.now()
           const dotgitMatches = yield* fsys.up({ targets: [".git"], start: directory }).pipe(Effect.orDie)
           const dotgit = dotgitMatches[0]
+          log.info("project.discover", {
+            directory,
+            phase: "find_git",
+            found: !!dotgit,
+            duration: Date.now() - at,
+          })
 
           if (!dotgit) {
             return {
@@ -194,7 +202,14 @@ export namespace Project {
             }
           }
 
+          const commonAt = Date.now()
           const commonDir = yield* git(["rev-parse", "--git-common-dir"], { cwd: sandbox })
+          log.info("project.discover", {
+            directory,
+            phase: "git_common_dir",
+            code: commonDir.code,
+            duration: Date.now() - commonAt,
+          })
           if (commonDir.code !== 0) {
             return {
               id: id ?? ProjectID.global,
@@ -213,12 +228,20 @@ export namespace Project {
           }
 
           if (!id) {
+            const rootAt = Date.now()
             const revList = yield* git(["rev-list", "--max-parents=0", "HEAD"], { cwd: sandbox })
             const roots = revList.text
               .split("\n")
               .filter(Boolean)
               .map((x) => x.trim())
               .toSorted()
+            log.info("project.discover", {
+              directory,
+              phase: "git_root_commit",
+              code: revList.code,
+              count: roots.length,
+              duration: Date.now() - rootAt,
+            })
 
             id = roots[0] ? ProjectID.make(roots[0]) : undefined
             if (id) {
@@ -230,7 +253,14 @@ export namespace Project {
             return { id: ProjectID.global, worktree: sandbox, sandbox, vcs: "git" as const }
           }
 
+          const topAt = Date.now()
           const topLevel = yield* git(["rev-parse", "--show-toplevel"], { cwd: sandbox })
+          log.info("project.discover", {
+            directory,
+            phase: "git_top_level",
+            code: topLevel.code,
+            duration: Date.now() - topAt,
+          })
           if (topLevel.code !== 0) {
             return {
               id,
@@ -243,8 +273,18 @@ export namespace Project {
 
           return { id, sandbox, worktree, vcs: "git" as const }
         })
+        log.info("project.discover", {
+          directory,
+          phase: "git_done",
+          projectID: data.id,
+          vcs: data.vcs,
+          worktree: data.worktree,
+          sandbox: data.sandbox,
+          duration: Date.now() - all,
+        })
 
         // Phase 2: upsert
+        const dbAt = Date.now()
         const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, data.id)).get())
         const existing = row
           ? fromRow(row)
@@ -319,8 +359,22 @@ export namespace Project {
               .run(),
           )
         }
+        log.info("project.discover", {
+          directory,
+          phase: "db_done",
+          projectID: result.id,
+          vcs: result.vcs,
+          duration: Date.now() - dbAt,
+        })
 
         yield* emitUpdated(result)
+        log.info("project.discover", {
+          directory,
+          phase: "total",
+          projectID: result.id,
+          vcs: result.vcs,
+          duration: Date.now() - all,
+        })
         return { project: result, sandbox: data.sandbox }
       })
 

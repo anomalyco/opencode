@@ -382,6 +382,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     const [colors, setColors] = createStore<Record<string, AvatarColorKey>>({})
     const colorRequested = new Map<string, AvatarColorKey>()
+    const colorBooted = new Set<string>()
 
     function pickAvailableColor(used: Set<string>): AvatarColorKey {
       const available = AVATAR_COLOR_KEYS.filter((c) => !used.has(c))
@@ -534,6 +535,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     })
 
     createEffect(() => {
+      if (server.current?.integration === "openclaw") return
       const projects = enriched()
       if (projects.length === 0) return
 
@@ -566,6 +568,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         if (project.icon?.color) continue
         const worktree = project.worktree
         const existing = colors[worktree] ?? (cachedColors?.get(worktree) as AvatarColorKey | undefined)
+        if (!existing && colorBooted.has(worktree)) continue
         const color = existing ?? pickAvailableColor(used)
         if (!colors[worktree]) {
           used.add(color)
@@ -587,6 +590,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const requested = colorRequested.get(worktree)
         if (requested === color) continue
         colorRequested.set(worktree, color)
+        colorBooted.add(worktree)
 
         if (project.id === "global") {
           globalSync.project.meta(worktree, { icon: { color } })
@@ -636,16 +640,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         open(directory: string) {
           const root = rootFor(directory)
           if (server.projects.list().find((x) => x.worktree === root)) return
-          if (import.meta.env.DEV) {
-            console.debug("[project-load]", {
-              scope: "layout",
-              event: "projects.open",
-              at: Date.now(),
-              directory,
-              root,
-              server: server.key,
-            })
-          }
           globalSync.project.loadSessions(root)
           server.projects.open(root)
         },
