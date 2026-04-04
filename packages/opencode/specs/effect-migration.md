@@ -255,7 +255,7 @@ Individual tools, ordered by value:
 
 - [ ] `apply_patch.ts` — HIGH: multi-step orchestration, error accumulation, Bus events
 - [ ] `bash.ts` — HIGH: shell orchestration, quoting, timeout handling, output capture
-- [ ] `read.ts` — HIGH: streaming I/O, readline, binary detection → FileSystem + Stream
+- [x] `read.ts` — HIGH: streaming I/O, readline, binary detection → FileSystem + Stream
 - [ ] `edit.ts` — HIGH: multi-step diff/format/publish pipeline, FileWatcher lock
 - [ ] `grep.ts` — MEDIUM: spawns ripgrep → ChildProcessSpawner, timeout handling
 - [ ] `write.ts` — MEDIUM: permission checks, diagnostics polling, Bus events
