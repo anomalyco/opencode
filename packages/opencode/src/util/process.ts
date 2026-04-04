@@ -1,6 +1,7 @@
 import { type ChildProcess } from "child_process"
 import launch from "cross-spawn"
 import { buffer } from "node:stream/consumers"
+import { errorMessage } from "./error"
 
 export namespace Process {
   export type Stdio = "inherit" | "pipe" | "ignore"
@@ -136,14 +137,18 @@ export namespace Process {
         return {
           code: 1,
           stdout: Buffer.alloc(0),
-          stderr: Buffer.from(err instanceof Error ? err.message : String(err)),
+          stderr: Buffer.from(errorMessage(err)),
         }
       })
     if (out.code === 0 || opts.nothrow) return out
     throw new RunFailedError(cmd, out.code, out.stdout, out.stderr)
   }
 
+  // Duplicated in `packages/sdk/js/src/process.ts` because the SDK cannot import
+  // `opencode` without creating a cycle. Keep both copies in sync.
   export async function stop(proc: ChildProcess) {
+    if (proc.exitCode !== null || proc.signalCode !== null) return
+
     if (process.platform !== "win32" || !proc.pid) {
       proc.kill()
       return

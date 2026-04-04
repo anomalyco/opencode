@@ -137,4 +137,4 @@ OpenCode 内置两种 Agent，可用 `Tab` 键快速切换：
 
 ---
 
-**加入我们的社区** [飞书](https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=de8k6664-1b5e-43f2-8efd-21d6772647b5&qr_code=true) | [X.com](https://x.com/opencode)
+**加入我们的社区** [飞书](https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=738j8655-cd59-4633-a30a-1124e0096789&qr_code=true) | [X.com](https://x.com/opencode)

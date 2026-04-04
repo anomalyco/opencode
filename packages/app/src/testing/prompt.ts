@@ -10,6 +10,13 @@ export type PromptProbeState = {
   selects: number
 }
 
+export type PromptSendState = {
+  started: number
+  count: number
+  sessionID?: string
+  directory?: string
+}
+
 export const promptEnabled = () => {
   if (typeof window === "undefined") return false
   return (window as E2EWindow).__opencode_e2e?.prompt?.enabled === true
@@ -52,5 +59,25 @@ export const promptProbe = {
     const state = root()
     if (!state) return
     state.current = undefined
+  },
+  start() {
+    const state = root()
+    if (!state) return
+    state.sent = {
+      started: (state.sent?.started ?? 0) + 1,
+      count: state.sent?.count ?? 0,
+      sessionID: state.sent?.sessionID,
+      directory: state.sent?.directory,
+    }
+  },
+  submit(input: { sessionID: string; directory: string }) {
+    const state = root()
+    if (!state) return
+    state.sent = {
+      started: state.sent?.started ?? 0,
+      count: (state.sent?.count ?? 0) + 1,
+      sessionID: input.sessionID,
+      directory: input.directory,
+    }
   },
 }
