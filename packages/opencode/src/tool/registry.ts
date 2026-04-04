@@ -36,6 +36,10 @@ import { Env } from "../env"
 import { Agent as AgentSvc } from "../agent/agent"
 import { Question } from "../question"
 import { Todo } from "../session/todo"
+import { LSP } from "../lsp"
+import { FileTime } from "../file/time"
+import { Instruction } from "../session/instruction"
+import { AppFileSystem } from "../filesystem"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -61,7 +65,15 @@ export namespace ToolRegistry {
   export const layer: Layer.Layer<
     Service,
     never,
-    Config.Service | Plugin.Service | Question.Service | Todo.Service | AgentSvc.Service
+    | Config.Service
+    | Plugin.Service
+    | Question.Service
+    | Todo.Service
+    | AgentSvc.Service
+    | LSP.Service
+    | FileTime.Service
+    | Instruction.Service
+    | AppFileSystem.Service
   > = Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -230,6 +242,10 @@ export namespace ToolRegistry {
         Layer.provide(AgentSvc.defaultLayer),
         Layer.provide(Question.defaultLayer),
         Layer.provide(Todo.defaultLayer),
+        Layer.provide(LSP.defaultLayer),
+        Layer.provide(FileTime.defaultLayer),
+        Layer.provide(Instruction.defaultLayer),
+        Layer.provide(AppFileSystem.defaultLayer),
       ),
     ),
   )
