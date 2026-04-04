@@ -40,7 +40,6 @@ import gruvboxThemeJson from "./themes/gruvbox.json"
 import auraThemeJson from "./themes/aura.json"
 import abyssThemeJson from "./themes/abyss.json"
 import zenburnThemeJson from "./themes/zenburn.json"
-import abyssThemeJson from "./themes/abyss.json"
 
 export const oc2Theme = oc2ThemeJson as DesktopTheme
 export const amoledTheme = amoledThemeJson as DesktopTheme
@@ -83,7 +82,6 @@ export const gruvboxTheme = gruvboxThemeJson as DesktopTheme
 export const auraTheme = auraThemeJson as DesktopTheme
 export const abyssTheme = abyssThemeJson as DesktopTheme
 export const zenburnTheme = zenburnThemeJson as DesktopTheme
-export const abyssTheme = abyssThemeJson as DesktopTheme
 
 export const DEFAULT_THEMES: Record<string, DesktopTheme> = {
   "oc-2": oc2Theme,
