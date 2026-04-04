@@ -579,7 +579,7 @@ export function Session() {
           .then(async (r) => {
             if (!r.ok) {
               const body = await r.json().catch(() => null)
-              throw new Error(body?.message ?? `Continue failed: ${r.status}`)
+              throw new Error(body?.data?.message ?? `Continue failed: ${r.status}`)
             }
           })
           .catch((e) =>

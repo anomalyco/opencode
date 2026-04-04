@@ -680,6 +680,16 @@ export function Prompt(props: PromptProps) {
     } else if (
       inputText.startsWith("/") &&
       iife(() => {
+        const name = inputText.split("\n")[0].split(" ")[0].slice(1)
+        const match = command.slashes().find((s) => s.display === "/" + name || s.aliases?.includes("/" + name))
+        if (match) match.onSelect()
+        return !!match
+      })
+    ) {
+      // slash command dispatched inside the iife above
+    } else if (
+      inputText.startsWith("/") &&
+      iife(() => {
         const firstLine = inputText.split("\n")[0]
         const command = firstLine.split(" ")[0].slice(1)
         return sync.data.command.some((x) => x.name === command)
