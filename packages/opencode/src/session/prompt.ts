@@ -1744,6 +1744,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         })
         return text
           .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+          .replace(/<[^>]+:tool_call>[\s\S]*?<\/[^>]+:tool_call>\s*/g, "")
           .trim()
       })
 
