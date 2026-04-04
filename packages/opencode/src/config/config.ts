@@ -792,6 +792,7 @@ export namespace Config {
         .record(
           z.string(),
           ModelsDev.Model.partial().extend({
+            disabled: z.boolean().optional().describe("Hide this model from the model picker"),
             variants: z
               .record(
                 z.string(),
