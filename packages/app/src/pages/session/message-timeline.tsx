@@ -189,6 +189,7 @@ export function MessageTimeline(props: {
   }
   let viewport: HTMLDivElement | undefined
   let windowFrame: number | undefined
+  let bottomFrame: number | undefined
   const turnHeights = new Map<string, number>()
 
   const rendered = createMemo(() => props.renderedUserMessages.map((message) => message.id))
@@ -360,7 +361,7 @@ export function MessageTimeline(props: {
       nextBottom: next.bottom,
     })
     setWindowed(next)
-    if (props.live) {
+    if (props.live || props.scroll.bottom) {
       requestAnimationFrame(() => {
         const root = viewport
         if (!root) return
@@ -446,8 +447,32 @@ export function MessageTimeline(props: {
     scheduleWindow()
   })
 
+  createEffect(() => {
+    if (!isWorking()) return
+    if (!props.live && !props.scroll.bottom) return
+
+    const step = () => {
+      bottomFrame = undefined
+      const root = viewport
+      if (!root) return
+      if (!isWorking()) return
+      if (!props.live && !props.scroll.bottom) return
+      root.scrollTop = root.scrollHeight
+      props.onScheduleScrollState(root)
+      bottomFrame = requestAnimationFrame(step)
+    }
+
+    bottomFrame = requestAnimationFrame(step)
+
+    onCleanup(() => {
+      if (bottomFrame !== undefined) cancelAnimationFrame(bottomFrame)
+      bottomFrame = undefined
+    })
+  })
+
   onCleanup(() => {
     if (windowFrame !== undefined) cancelAnimationFrame(windowFrame)
+    if (bottomFrame !== undefined) cancelAnimationFrame(bottomFrame)
   })
 
   const activeMessageID = createMemo(() => {
