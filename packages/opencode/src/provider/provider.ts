@@ -986,15 +986,6 @@ export namespace Provider {
           const modelsDev = yield* Effect.promise(() => ModelsDev.get())
           const database = mapValues(modelsDev, fromModelsDevProvider)
 
-          const disabled = new Set(cfg.disabled_providers ?? [])
-          const enabled = cfg.enabled_providers ? new Set(cfg.enabled_providers) : null
-
-          function isProviderAllowed(providerID: ProviderID): boolean {
-            if (enabled && !enabled.has(providerID)) return false
-            if (disabled.has(providerID)) return false
-            return true
-          }
-
           const providers: Record<ProviderID, Info> = {} as Record<ProviderID, Info>
           const languages = new Map<string, LanguageModelV3>()
           const modelLoaders: {
@@ -1032,6 +1023,14 @@ export namespace Provider {
 
           // now read config providers - includes any modifications from plugin config() hook
           const configProviders = Object.entries(cfg.provider ?? {})
+          const disabled = new Set(cfg.disabled_providers ?? [])
+          const enabled = cfg.enabled_providers ? new Set(cfg.enabled_providers) : null
+
+          function isProviderAllowed(providerID: ProviderID): boolean {
+            if (enabled && !enabled.has(providerID)) return false
+            if (disabled.has(providerID)) return false
+            return true
+          }
 
           // extend database from config
           for (const [providerID, provider] of configProviders) {

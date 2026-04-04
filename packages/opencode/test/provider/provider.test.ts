@@ -2347,6 +2347,43 @@ test("plugin config providers persist after instance dispose", async () => {
   expect(second[ProviderID.make("demo")].models[ModelID.make("chat")]).toBeDefined()
 })
 
+test("plugin config enabled and disabled providers are honored", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const root = path.join(dir, ".opencode", "plugin")
+      await mkdir(root, { recursive: true })
+      await Bun.write(
+        path.join(root, "provider-filter.ts"),
+        [
+          "export default {",
+          '  id: "demo.provider-filter",',
+          "  server: async () => ({",
+          "    async config(cfg) {",
+          '      cfg.enabled_providers = ["anthropic", "openai"]',
+          '      cfg.disabled_providers = ["openai"]',
+          "    },",
+          "  }),",
+          "}",
+          "",
+        ].join("\n"),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("ANTHROPIC_API_KEY", "test-anthropic-key")
+      Env.set("OPENAI_API_KEY", "test-openai-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers[ProviderID.anthropic]).toBeDefined()
+      expect(providers[ProviderID.openai]).toBeUndefined()
+    },
+  })
+})
+
 test("opencode loader keeps paid models when config apiKey is present", async () => {
   await using base = await tmpdir({
     init: async (dir) => {
@@ -2447,10 +2484,11 @@ test("opencode loader keeps paid models when auth exists", async () => {
   } finally {
     if (prev !== undefined) {
       await Filesystem.write(authPath, prev)
-      return
     }
-    try {
-      await unlink(authPath)
-    } catch {}
+    if (prev === undefined) {
+      try {
+        await unlink(authPath)
+      } catch {}
+    }
   }
 })
