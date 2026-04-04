@@ -102,7 +102,7 @@ export namespace SyncEvent {
     return [def, func as ProjectorFunc]
   }
 
-  function process<Def extends Definition>(def: Def, event: Event<Def>, options: { publish: boolean }) {
+  async function process<Def extends Definition>(def: Def, event: Event<Def>, options: { publish: boolean }) {
     if (projectors == null) {
       throw new Error("No projectors available. Call `SyncEvent.init` to install projectors")
     }
@@ -114,7 +114,7 @@ export namespace SyncEvent {
 
     // idempotent: need to ignore any events already logged
 
-    Database.transaction((tx) => {
+    await Database.transaction((tx) => {
       projector(tx, event.data)
 
       if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
@@ -139,20 +139,18 @@ export namespace SyncEvent {
           .run()
       }
 
-      Database.effect(() => {
+      Database.effect(async () => {
         Bus.emit("event", {
           def,
           event,
         })
 
         if (options?.publish) {
-          const result = convertEvent(def.type, event.data)
-          if (result instanceof Promise) {
-            result.then((data) => {
-              ProjectBus.publish({ type: def.type, properties: def.schema }, data)
-            })
-          } else {
-            ProjectBus.publish({ type: def.type, properties: def.schema }, result)
+          try {
+            const result = await convertEvent(def.type, event.data)
+            await ProjectBus.publish({ type: def.type, properties: def.schema }, result)
+          } catch {
+            // Instance context may be gone after fiber interruption; ignore.
           }
         }
       })
@@ -165,13 +163,13 @@ export namespace SyncEvent {
   //   and it validets all the sequence ids
   // * when loading events from db, apply zod validation to ensure shape
 
-  export function replay(event: SerializedEvent, options?: { republish: boolean }) {
+  export async function replay(event: SerializedEvent, options?: { republish: boolean }) {
     const def = registry.get(event.type)
     if (!def) {
       throw new Error(`Unknown event type: ${event.type}`)
     }
 
-    const row = Database.use((db) =>
+    const row = await Database.use((db) =>
       db
         .select({ seq: EventSequenceTable.seq })
         .from(EventSequenceTable)
@@ -189,10 +187,10 @@ export namespace SyncEvent {
       throw new Error(`Sequence mismatch for aggregate "${event.aggregateID}": expected ${expected}, got ${event.seq}`)
     }
 
-    process(def, event, { publish: !!options?.republish })
+    await process(def, event, { publish: !!options?.republish })
   }
 
-  export function run<Def extends Definition>(def: Def, data: Event<Def>["data"]) {
+  export async function run<Def extends Definition>(def: Def, data: Event<Def>["data"]) {
     const agg = (data as Record<string, string>)[def.aggregate]
     // This should never happen: we've enforced it via typescript in
     // the definition
@@ -207,8 +205,8 @@ export namespace SyncEvent {
     // Note that this is an "immediate" transaction which is critical.
     // We need to make sure we can safely read and write with nothing
     // else changing the data from under us
-    Database.transaction(
-      (tx) => {
+    await Database.transaction(
+      async (tx) => {
         const id = EventID.ascending()
         const row = tx
           .select({ seq: EventSequenceTable.seq })
@@ -218,7 +216,7 @@ export namespace SyncEvent {
         const seq = row?.seq != null ? row.seq + 1 : 0
 
         const event = { id, seq, aggregateID: agg, data }
-        process(def, event, { publish: true })
+        await process(def, event, { publish: true })
       },
       {
         behavior: "immediate",
@@ -226,8 +224,8 @@ export namespace SyncEvent {
     )
   }
 
-  export function remove(aggregateID: string) {
-    Database.transaction((tx) => {
+  export async function remove(aggregateID: string) {
+    await Database.transaction((tx) => {
       tx.delete(EventSequenceTable).where(eq(EventSequenceTable.aggregate_id, aggregateID)).run()
       tx.delete(EventTable).where(eq(EventTable.aggregate_id, aggregateID)).run()
     })

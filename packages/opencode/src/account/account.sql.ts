@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, primaryKey } from "drizzle-orm/sqlite-core"
+import { table as sqliteTable, text, integer, primaryKey } from "../storage/dialect"
 
 import { type AccessToken, type AccountID, type OrgID, type RefreshToken } from "./schema"
 import { Timestamps } from "../storage/schema.sql"

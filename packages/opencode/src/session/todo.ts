@@ -40,7 +40,7 @@ export namespace Todo {
       const bus = yield* Bus.Service
 
       const update = Effect.fn("Todo.update")(function* (input: { sessionID: SessionID; todos: Info[] }) {
-        yield* Effect.sync(() =>
+        yield* Effect.promise(() =>
           Database.transaction((db) => {
             db.delete(TodoTable).where(eq(TodoTable.session_id, input.sessionID)).run()
             if (input.todos.length === 0) return
@@ -61,7 +61,7 @@ export namespace Todo {
       })
 
       const get = Effect.fn("Todo.get")(function* (sessionID: SessionID) {
-        const rows = yield* Effect.sync(() =>
+        const rows = yield* Effect.promise(() =>
           Database.use((db) =>
             db
               .select()

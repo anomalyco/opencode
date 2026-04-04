@@ -7,6 +7,7 @@ import { cmd } from "./cmd"
 import { JsonMigration } from "../../storage/json-migration"
 import { EOL } from "os"
 import { errorMessage } from "../../util/error"
+import { DIALECT } from "../../storage/dialect-detect"
 
 const QueryCommand = cmd({
   command: "$0 [query]",
@@ -25,6 +26,10 @@ const QueryCommand = cmd({
       })
   },
   handler: async (args: { query?: string; format: string }) => {
+    if (DIALECT !== "sqlite") {
+      UI.error("The 'db' command is only available with SQLite databases. Use your database's native CLI for Postgres.")
+      process.exit(1)
+    }
     const query = args.query as string | undefined
     if (query) {
       const db = new BunDatabase(Database.Path, { readonly: true })

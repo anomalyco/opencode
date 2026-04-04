@@ -1,4 +1,4 @@
-import { sqliteTable, text } from "drizzle-orm/sqlite-core"
+import { table as sqliteTable, text } from "../storage/dialect"
 import { SessionTable } from "../session/session.sql"
 import { Timestamps } from "../storage/schema.sql"
 

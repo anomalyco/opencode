@@ -8,10 +8,10 @@ import { Database, eq } from "@/storage/db"
 export function initProjectors() {
   SyncEvent.init({
     projectors: sessionProjectors,
-    convertEvent: (type, data) => {
+    convertEvent: async (type, data) => {
       if (type === "session.updated") {
         const id = (data as z.infer<typeof Session.Event.Updated.schema>).sessionID
-        const row = Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
+        const row = await Database.use((db) => db.select().from(SessionTable).where(eq(SessionTable.id, id)).get())
 
         if (!row) return data
 
