@@ -74,10 +74,7 @@ export function DialogSessionList() {
         setToDelete(undefined)
       }}
       onSelect={(option) => {
-        route.navigate({
-          type: "session",
-          sessionID: option.value,
-        })
+        sdk.client.tui.selectSession({ body: { sessionID: option.value } })
         dialog.clear()
       }}
       keybind={[
