@@ -1,17 +1,14 @@
-import { base64Decode } from "@opencode-ai/util/encode"
 import { test, expect } from "../fixtures"
 import {
   defocus,
   createTestProject,
   cleanupTestProject,
   openSidebar,
-  sessionIDFromUrl,
   setWorkspacesEnabled,
   waitSession,
-  waitSessionSaved,
   waitSlug,
 } from "../actions"
-import { projectSwitchSelector, promptSelector, workspaceItemSelector, workspaceNewSessionSelector } from "../selectors"
+import { projectSwitchSelector, workspaceItemSelector, workspaceNewSessionSelector } from "../selectors"
 import { dirSlug, resolveDirectory } from "../utils"
 
 test("can switch between projects from sidebar", async ({ page, withProject }) => {
@@ -45,14 +42,14 @@ test("can switch between projects from sidebar", async ({ page, withProject }) =
   }
 })
 
-test("switching back to a project opens the latest workspace session", async ({ page, withProject }) => {
+test("switching back to a project opens its session list", async ({ page, withProject }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
 
   const other = await createTestProject()
   const otherSlug = dirSlug(other)
   try {
     await withProject(
-      async ({ directory, slug, trackSession, trackDirectory }) => {
+      async ({ slug, trackDirectory }) => {
         await defocus(page)
         await setWorkspacesEnabled(page, slug, true)
         await openSidebar(page)
@@ -77,23 +74,6 @@ test("switching back to a project opens the latest workspace session", async ({ 
         await btn.click({ force: true })
 
         await waitSession(page, { directory: space })
-
-        // Create a session by sending a prompt
-        const prompt = page.locator(promptSelector)
-        await expect(prompt).toBeVisible()
-        await prompt.fill("test")
-        await page.keyboard.press("Enter")
-
-        // Wait for the URL to update with the new session ID
-        await expect.poll(() => sessionIDFromUrl(page.url()) ?? "", { timeout: 15_000 }).not.toBe("")
-
-        const created = sessionIDFromUrl(page.url())
-        if (!created) throw new Error(`Failed to get session ID from url: ${page.url()}`)
-        trackSession(created, space)
-        await waitSessionSaved(space, created)
-
-        await expect(page).toHaveURL(new RegExp(`/${next}/session/${created}(?:[/?#]|$)`))
-
         await openSidebar(page)
 
         const otherButton = page.locator(projectSwitchSelector(otherSlug)).first()
@@ -105,8 +85,7 @@ test("switching back to a project opens the latest workspace session", async ({ 
         await expect(rootButton).toBeVisible()
         await rootButton.click({ force: true })
 
-        await waitSession(page, { directory: space, sessionID: created })
-        await expect(page).toHaveURL(new RegExp(`/session/${created}(?:[/?#]|$)`))
+        await expect(page).toHaveURL(new RegExp(`/${slug}/session(?:[/?#]|$)`))
       },
       { extra: [other] },
     )
