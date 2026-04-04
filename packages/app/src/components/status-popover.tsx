@@ -4,6 +4,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { Popover } from "@opencode-ai/ui/popover"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Tabs } from "@opencode-ai/ui/tabs"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useMutation } from "@tanstack/solid-query"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useNavigate } from "@solidjs/router"
@@ -18,6 +19,61 @@ import { useSync } from "@/context/sync"
 import { useCheckServerHealth, type ServerHealth } from "@/utils/server-health"
 
 const pollMs = 10_000
+
+const stem = (value: string) => value.replace(/\.(?:ts|js|mjs|cjs|mts|cts)$/i, "")
+
+const file = (value: string) => {
+  if (!value.startsWith("file://")) return value
+  try {
+    const url = new URL(value)
+    const path = decodeURIComponent(url.pathname)
+    if (!url.hostname) return path
+    return `//${url.hostname}${path}`
+  } catch {
+    return value
+  }
+}
+
+const base = (value: string) => file(value).split(/[\\/]/).at(-1) ?? value
+
+const project = (value: string) => {
+  const list = file(value).split(/[\\/]/).filter(Boolean)
+  const low = list.map((part) => part.toLowerCase())
+  const i = list.lastIndexOf(".opencode")
+  if (i > 0 && (low[i + 1] === "plugin" || low[i + 1] === "plugins")) return list[i - 1]
+
+  const config = low.lastIndexOf(".config")
+  if (config >= 0 && low[config + 1] === "opencode" && (low[config + 2] === "plugin" || low[config + 2] === "plugins"))
+    return "global"
+
+  const roam = low.lastIndexOf("roaming")
+  if (roam > 0 && low[roam - 1] === "appdata" && low[roam + 1] === "opencode" && (low[roam + 2] === "plugin" || low[roam + 2] === "plugins"))
+    return "global"
+
+  const local = low.lastIndexOf("local")
+  if (local > 0 && low[local - 1] === "appdata" && low[local + 1] === "opencode" && (low[local + 2] === "plugin" || low[local + 2] === "plugins"))
+    return "global"
+
+  return undefined
+}
+
+const plug = (value: string) => {
+  const next = file(value)
+  if (value.startsWith("file://") || next !== value || value.includes("/") || value.includes("\\")) return stem(base(next))
+  const at = value.lastIndexOf("@")
+  if (at > 0) return value.slice(0, at)
+  return value
+}
+
+const item = (value: string) => {
+  const name = plug(value)
+  const group = project(value)
+  return {
+    name,
+    project: group && group !== name ? group : undefined,
+    value,
+  }
+}
 
 const pluginEmptyMessage = (value: string, file: string): JSXElement => {
   const parts = value.split(file)
@@ -187,7 +243,7 @@ export function StatusPopover() {
   const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
   const lspItems = createMemo(() => sync.data.lsp ?? [])
   const lspCount = createMemo(() => lspItems().length)
-  const plugins = createMemo(() => sync.data.config.plugin ?? [])
+  const plugins = createMemo(() => (sync.data.config.plugin ?? []).map(item))
   const pluginCount = createMemo(() => plugins().length)
   const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))
   const overallHealthy = createMemo(() => {
@@ -198,6 +254,25 @@ export function StatusPopover() {
     })
     return serverHealthy && !anyMcpIssue
   })
+
+  const copy = (value: string) => {
+    void navigator.clipboard.writeText(value).then(
+      () => {
+        showToast({
+          variant: "success",
+          icon: "circle-check",
+          title: language.t("session.share.copy.copied"),
+          description: value,
+        })
+      },
+      (err: unknown) => {
+        showToast({
+          title: language.t("common.requestFailed"),
+          description: err instanceof Error ? err.message : String(err),
+        })
+      },
+    )
+  }
 
   return (
     <Popover
@@ -225,12 +300,12 @@ export function StatusPopover() {
           />
         </div>
       }
-      class="[&_[data-slot=popover-body]]:p-0 w-[360px] max-w-[calc(100vw-40px)] bg-transparent border-0 shadow-none rounded-xl"
+      class="[&_[data-slot=popover-body]]:p-0 w-[min(720px,calc(100vw-40px))] max-w-[calc(100vw-40px)] bg-transparent border-0 shadow-none rounded-xl"
       gutter={4}
       placement="bottom-end"
       shift={-168}
     >
-      <div class="flex items-center gap-1 w-[360px] rounded-xl shadow-[var(--shadow-lg-border-base)]">
+      <div class="flex items-center gap-1 w-[min(720px,calc(100vw-40px))] rounded-xl shadow-[var(--shadow-lg-border-base)]">
         <Tabs
           aria-label={language.t("status.popover.ariaLabel")}
           class="tabs bg-background-strong rounded-xl overflow-hidden"
@@ -417,10 +492,32 @@ export function StatusPopover() {
                 >
                   <For each={plugins()}>
                     {(plugin) => (
-                      <div class="flex items-center gap-2 w-full px-2 py-1">
-                        <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
-                        <span class="text-14-regular text-text-base truncate">{plugin}</span>
-                      </div>
+                      <Tooltip
+                        class="w-full"
+                        value={<span class="font-mono text-12-regular whitespace-nowrap">{plugin.value}</span>}
+                        contentStyle={{ "max-width": "none" }}
+                      >
+                        <div class="flex items-center gap-2 w-full px-2 py-1 rounded-md hover:bg-surface-raised-base-hover">
+                          <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
+                          <div class="flex-1 min-w-0 text-14-regular text-text-base truncate">
+                            {plugin.name}
+                            <Show when={plugin.project}>
+                              <span class="text-text-weak"> {" | "}{plugin.project}</span>
+                            </Show>
+                          </div>
+                          <Button
+                            size="small"
+                            variant="ghost"
+                            icon="copy"
+                            class="shrink-0"
+                            aria-label={language.t("session.header.open.copyPath")}
+                            onClick={(event: MouseEvent) => {
+                              event.stopPropagation()
+                              copy(plugin.value)
+                            }}
+                          />
+                        </div>
+                      </Tooltip>
                     )}
                   </For>
                 </Show>
