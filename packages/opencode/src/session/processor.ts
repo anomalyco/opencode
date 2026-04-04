@@ -512,7 +512,7 @@ export namespace SessionProcessor {
         Layer.provide(Snapshot.defaultLayer),
         Layer.provide(Agent.defaultLayer),
         Layer.provide(LLM.defaultLayer),
-        Layer.provide(Permission.layer),
+        Layer.provide(Permission.defaultLayer),
         Layer.provide(Plugin.defaultLayer),
         Layer.provide(SessionStatus.layer.pipe(Layer.provide(Bus.layer))),
         Layer.provide(Bus.layer),
