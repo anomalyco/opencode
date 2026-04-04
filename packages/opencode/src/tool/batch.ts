@@ -7,20 +7,22 @@ import DESCRIPTION from "./batch.txt"
 const DISALLOWED = new Set(["batch"])
 const FILTERED_FROM_SUGGESTIONS = new Set(["invalid", "patch", ...DISALLOWED])
 
+const Parameters = z.object({
+  tool_calls: z
+    .array(
+      z.object({
+        tool: z.string().describe("The name of the tool to execute"),
+        parameters: z.object({}).loose().describe("Parameters for the tool"),
+      }),
+    )
+    .min(1, "Provide at least one tool call")
+    .describe("Array of tool calls to execute in parallel"),
+})
+
 export const BatchTool = Tool.define("batch", async () => {
   return {
     description: DESCRIPTION,
-    parameters: z.object({
-      tool_calls: z
-        .array(
-          z.object({
-            tool: z.string().describe("The name of the tool to execute"),
-            parameters: z.object({}).loose().describe("Parameters for the tool"),
-          }),
-        )
-        .min(1, "Provide at least one tool call")
-        .describe("Array of tool calls to execute in parallel"),
-    }),
+    parameters: Parameters,
     formatValidationError(error) {
       const formattedErrors = error.issues
         .map((issue) => {

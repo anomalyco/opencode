@@ -6,6 +6,10 @@ import { Skill } from "../skill"
 import { Ripgrep } from "../file/ripgrep"
 import { iife } from "@/util/iife"
 
+const Parameters = z.object({
+  name: z.string().describe("The name of the skill from available_skills"),
+})
+
 export const SkillTool = Tool.define("skill", async (ctx) => {
   const list = await Skill.available(ctx?.agent)
 
@@ -33,14 +37,10 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
     .join(", ")
   const hint = examples.length > 0 ? ` (e.g., ${examples}, ...)` : ""
 
-  const parameters = z.object({
-    name: z.string().describe(`The name of the skill from available_skills${hint}`),
-  })
-
   return {
     description,
-    parameters,
-    async execute(params: z.infer<typeof parameters>, ctx) {
+    parameters: Parameters,
+    async execute(params: z.infer<typeof Parameters>, ctx) {
       const skill = await Skill.get(params.name)
 
       if (!skill) {
