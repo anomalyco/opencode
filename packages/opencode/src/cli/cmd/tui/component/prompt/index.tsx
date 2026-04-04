@@ -599,6 +599,24 @@ export function Prompt(props: PromptProps) {
     },
   ])
 
+  command.register(() => [
+    {
+      title: "Ask a side question",
+      value: "prompt.ask",
+      description: "Ask a quick question without interrupting the current task",
+      category: "Prompt",
+      suggested: true,
+      slash: {
+        name: "ask",
+      },
+      onSelect: () => {
+        input.clear()
+        input.insertText("/ask ")
+        input.cursorOffset = 5
+      },
+    },
+  ])
+
   async function submit() {
     if (props.disabled) return
     if (autocomplete?.visible) return
@@ -993,10 +1011,10 @@ export function Prompt(props: PromptProps) {
                   e.preventDefault()
                   return
                 }
-                // Dismiss ask panel on Escape, Enter, or Space
+                // Dismiss ask panel on Enter or Space
                 if (askPanel().visible) {
                   const name = e.name?.toLowerCase()
-                  if (name === "space") {
+                  if (name === "space" || name === "return") {
                     if (askPanel().loading) {
                       askAbort?.abort()
                     }

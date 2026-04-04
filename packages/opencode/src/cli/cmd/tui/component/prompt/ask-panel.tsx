@@ -60,7 +60,7 @@ export function AskPanel(props: { state: Accessor<AskPanelState> }) {
           />
         </Show>
         <text fg={theme.textMuted} marginTop={1}>
-          space to dismiss
+          enter or space to dismiss
         </text>
       </box>
     </Show>
