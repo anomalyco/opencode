@@ -1,9 +1,9 @@
 ---
 title: Dodaci
-description: Napišite vlastite dodatke za proširenje OpenCode.
+description: Napišite vlastite dodatke za proširenje xcsh.
 ---
 
-Dodaci vam omogućavaju da proširite OpenCode spajanjem na različite događaje i prilagođavanjem ponašanja. Možete kreirati dodatke za dodavanje novih funkcija, integraciju sa eksternim uslugama ili izmenu zadanog ponašanja OpenCode.
+Dodaci vam omogućavaju da proširite xcsh spajanjem na različite događaje i prilagođavanjem ponašanja. Možete kreirati dodatke za dodavanje novih funkcija, integraciju sa eksternim uslugama ili izmenu zadanog ponašanja xcsh.
 Za primjere, pogledajte [plugins](/docs/ecosystem#plugins) kreirane od strane zajednice.
 
 ---
@@ -16,8 +16,8 @@ Postoje dva načina za učitavanje dodataka.
 
 Postavite JavaScript ili TypeScript datoteke u direktorij dodataka.
 
-- `.opencode/plugins/` - Dodaci na nivou projekta
-- `~/.config/opencode/plugins/` - Globalni dodaci
+- `.xcsh/plugins/` - Dodaci na nivou projekta
+- `~/.config/xcsh/plugins/` - Globalni dodaci
   Datoteke u ovim direktorijumima se automatski učitavaju pri pokretanju.
 
 ---
@@ -26,10 +26,10 @@ Postavite JavaScript ili TypeScript datoteke u direktorij dodataka.
 
 Navedite npm pakete u vašoj konfiguracijskoj datoteci.
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
+  "plugin": ["xcsh-helicone-session", "xcsh-wakatime", "@my-org/custom-plugin"]
 }
 ```
 
@@ -40,7 +40,7 @@ Pregledajte dostupne dodatke u [ecosystem](/docs/ecosystem#plugins).
 
 ### Kako se instaliraju dodaci
 
-**npm dodaci** se instaliraju automatski pomoću Bun pri pokretanju. Paketi i njihove zavisnosti su keširani u `~/.cache/opencode/node_modules/`.
+**npm dodaci** se instaliraju automatski pomoću Bun pri pokretanju. Paketi i njihove zavisnosti su keširani u `~/.cache/xcsh/node_modules/`.
 **Lokalni dodaci** se učitavaju direktno iz direktorija dodataka. Da biste koristili vanjske pakete, morate kreirati `package.json` unutar svog konfiguracijskog direktorija (pogledajte [Zavisnosti](#dependencies)) ili objaviti dodatak na npm i [dodati ga u svoju konfiguraciju](/docs/config#plugins).
 
 ---
@@ -49,10 +49,10 @@ Pregledajte dostupne dodatke u [ecosystem](/docs/ecosystem#plugins).
 
 Dodaci se učitavaju iz svih izvora i svi zakačnjaci rade u nizu. Redoslijed učitavanja je:
 
-1. Globalna konfiguracija (`~/.config/opencode/opencode.json`)
-2. Konfiguracija projekta (`opencode.json`)
-3. Globalni direktorij dodataka (`~/.config/opencode/plugins/`)
-4. Direktorij dodataka projekta (`.opencode/plugins/`)
+1. Globalna konfiguracija (`~/.config/xcsh/xcsh.json`)
+2. Konfiguracija projekta (`xcsh.json`)
+3. Globalni direktorij dodataka (`~/.config/xcsh/plugins/`)
+4. Direktorij dodataka projekta (`.xcsh/plugins/`)
    Duplicirani npm paketi sa istim imenom i verzijom se učitavaju jednom. Međutim, lokalni dodatak i npm dodatak sa sličnim nazivima se učitavaju odvojeno.
 
 ---
@@ -68,7 +68,7 @@ funkcije. Svaka funkcija prima objekt konteksta i vraća hooks objekt.
 
 Lokalni dodaci i prilagođeni alati mogu koristiti vanjske npm pakete. Dodajte `package.json` u svoj konfiguracijski direktorij sa zavisnostima koje su vam potrebne.
 
-```json title=".opencode/package.json"
+```json title=".xcsh/package.json"
 {
   "dependencies": {
     "shescape": "^2.1.0"
@@ -76,9 +76,9 @@ Lokalni dodaci i prilagođeni alati mogu koristiti vanjske npm pakete. Dodajte `
 }
 ```
 
-OpenCode pokreće `bun install` pri pokretanju da ih instalira. Vaši dodaci i alati ih zatim mogu uvesti.
+xcsh pokreće `bun install` pri pokretanju da ih instalira. Vaši dodaci i alati ih zatim mogu uvesti.
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".xcsh/plugins/my-plugin.ts"
 import { escape } from "shescape"
 
 export const MyPlugin = async (ctx) => {
@@ -96,7 +96,7 @@ export const MyPlugin = async (ctx) => {
 
 ### Osnovna struktura
 
-```js title=".opencode/plugins/example.js"
+```js title=".xcsh/plugins/example.js"
 export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
   console.log("Plugin initialized!")
 
@@ -121,7 +121,7 @@ Funkcija dodatka prima:
 Za TypeScript dodatke, možete uvesti tipove iz paketa dodataka:
 
 ```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@f5xc-salesdemos/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
@@ -204,19 +204,19 @@ Dodaci se mogu pretplatiti na događaje kao što je prikazano ispod u odjeljku P
 
 ## Primjeri
 
-Evo nekoliko primjera dodataka koje možete koristiti za proširenje OpenCode.
+Evo nekoliko primjera dodataka koje možete koristiti za proširenje xcsh.
 
 ### Slanje obavještenja
 
 Pošaljite obavještenja kada se dogode određeni događaji:
 
-```js title=".opencode/plugins/notification.js"
+```js title=".xcsh/plugins/notification.js"
 export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
   return {
     event: async ({ event }) => {
       // Send notification on session completion
       if (event.type === "session.idle") {
-        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+        await $`osascript -e 'display notification "Session completed!" with title "xcsh"'`
       }
     },
   }
@@ -232,9 +232,9 @@ Ako alat dodatka koristi isto ime kao ugrađeni alat, alat dodatka ima prednost.
 
 ### .env zaštita
 
-Spriječite opencode da čita `.env` fajlove:
+Spriječite xcsh da čita `.env` fajlove:
 
-```javascript title=".opencode/plugins/env-protection.js"
+```javascript title=".xcsh/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
   return {
     "tool.execute.before": async (input, output) => {
@@ -252,7 +252,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 Ubacite varijable okruženja u sva izvršavanja ljuske (AI alati i korisnički terminali):
 
-```javascript title=".opencode/plugins/inject-env.js"
+```javascript title=".xcsh/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {
   return {
     "shell.env": async (input, output) => {
@@ -267,10 +267,10 @@ export const InjectEnvPlugin = async () => {
 
 ### Prilagođeni alati
 
-Dodaci također mogu dodati prilagođene alate u opencode:
+Dodaci također mogu dodati prilagođene alate u xcsh:
 
-```ts title=".opencode/plugins/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
+```ts title=".xcsh/plugins/custom-tools.ts"
+import { type Plugin, tool } from "@f5xc-salesdemos/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
@@ -290,12 +290,12 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-Pomoćnik `tool` kreira prilagođeni alat koji opencode može pozvati. Uzima funkciju Zod sheme i vraća definiciju alata sa:
+Pomoćnik `tool` kreira prilagođeni alat koji xcsh može pozvati. Uzima funkciju Zod sheme i vraća definiciju alata sa:
 
 - `description`: Šta alat radi
 - `args`: Zod šema za argumente alata
 - `execute`: Funkcija koja se pokreće kada se pozove alat
-  Vaši prilagođeni alati će biti dostupni za opencode zajedno sa ugrađenim alatima.
+  Vaši prilagođeni alati će biti dostupni za xcsh zajedno sa ugrađenim alatima.
 
 ---
 
@@ -303,7 +303,7 @@ Pomoćnik `tool` kreira prilagođeni alat koji opencode može pozvati. Uzima fun
 
 Koristite `client.app.log()` umjesto `console.log` za strukturirano bilježenje:
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".xcsh/plugins/my-plugin.ts"
 export const MyPlugin = async ({ client }) => {
   await client.app.log({
     body: {
@@ -316,14 +316,14 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-Nivoi su: `debug`, `info`, `warn`, `error`. Pogledajte [SDK dokumentaciju](https://opencode.ai/docs/sdk) za detalje.
+Nivoi su: `debug`, `info`, `warn`, `error`. Pogledajte [SDK dokumentaciju](https://f5xc-salesdemos.github.io/xcsh/docs/sdk) za detalje.
 
 ### Kuke za sažimanje
 
 Prilagodite kontekst uključen kada se sesija zbije:
 
-```ts title=".opencode/plugins/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+```ts title=".xcsh/plugins/compaction.ts"
+import type { Plugin } from "@f5xc-salesdemos/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
@@ -345,8 +345,8 @@ Include any state that should persist across compaction:
 `experimental.session.compacting` kuka se aktivira prije nego što LLM generira sažetak nastavka. Koristite ga za ubacivanje konteksta specifičnog za domenu koji bi zadani prompt za sažimanje propustio.
 Također možete u potpunosti zamijeniti prompt za sabijanje postavljanjem `output.prompt`:
 
-```ts title=".opencode/plugins/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+```ts title=".xcsh/plugins/custom-compaction.ts"
+import type { Plugin } from "@f5xc-salesdemos/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
   return {

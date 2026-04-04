@@ -1,13 +1,13 @@
 ---
 title: SDK
-description: opencode 伺服器的型別安全 JS 用戶端。
+description: xcsh 伺服器的型別安全 JS 用戶端。
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-opencode JS/TS SDK 提供了一個型別安全的用戶端，用於與伺服器進行互動。
-您可以用它來建構整合方案，並以程式化方式控制 opencode。
+xcsh JS/TS SDK 提供了一個型別安全的用戶端，用於與伺服器進行互動。
+您可以用它來建構整合方案，並以程式化方式控制 xcsh。
 
 [了解更多](/docs/server)關於伺服器的運作原理。如需範例，請查看社群建構的[專案](/docs/ecosystem#projects)。
 
@@ -18,17 +18,17 @@ opencode JS/TS SDK 提供了一個型別安全的用戶端，用於與伺服器�
 從 npm 安裝 SDK：
 
 ```bash
-npm install @opencode-ai/sdk
+npm install @f5xc-salesdemos/sdk
 ```
 
 ---
 
 ## 建立用戶端
 
-建立一個 opencode 實例：
+建立一個 xcsh 實例：
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createOpencode } from "@f5xc-salesdemos/sdk"
 
 const { client } = await createOpencode()
 ```
@@ -49,12 +49,12 @@ const { client } = await createOpencode()
 
 ## 設定
 
-您可以傳入一個設定物件來自訂行為。實例仍然會讀取您的 `opencode.json`，但您可以透過內嵌方式覆寫或新增設定：
+您可以傳入一個設定物件來自訂行為。實例仍然會讀取您的 `xcsh.json`，但您可以透過內嵌方式覆寫或新增設定：
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createOpencode } from "@f5xc-salesdemos/sdk"
 
-const opencode = await createOpencode({
+const xcsh = await createOpencode({
   hostname: "127.0.0.1",
   port: 4096,
   config: {
@@ -62,17 +62,17 @@ const opencode = await createOpencode({
   },
 })
 
-console.log(`Server running at ${opencode.server.url}`)
+console.log(`Server running at ${xcsh.server.url}`)
 
-opencode.server.close()
+xcsh.server.close()
 ```
 
 ## 僅用戶端模式
 
-如果您已經有一個正在執行的 opencode 實例，可以建立一個用戶端實例來連線：
+如果您已經有一個正在執行的 xcsh 實例，可以建立一個用戶端實例來連線：
 
 ```javascript
-import { createOpencodeClient } from "@opencode-ai/sdk"
+import { createOpencodeClient } from "@f5xc-salesdemos/sdk"
 
 const client = createOpencodeClient({
   baseUrl: "http://localhost:4096",
@@ -96,7 +96,7 @@ const client = createOpencodeClient({
 SDK 包含所有 API 型別的 TypeScript 定義。您可以直接匯入它們：
 
 ```typescript
-import type { Session, Message, Part } from "@opencode-ai/sdk"
+import type { Session, Message, Part } from "@f5xc-salesdemos/sdk"
 ```
 
 所有型別均根據伺服器的 OpenAPI 規範產生，可在<a href={typesUrl}>型別檔案</a>中查看。
@@ -376,7 +376,7 @@ await client.session.prompt({
 ```javascript
 // 搜尋和讀取檔案
 const textResults = await client.find.text({
-  query: { pattern: "function.*opencode" },
+  query: { pattern: "function.*xcsh" },
 })
 
 const files = await client.find.files({

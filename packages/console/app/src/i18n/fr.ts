@@ -44,8 +44,8 @@ export const dict = {
   "notFound.docs": "Documentation",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
-  "notFound.logoLightAlt": "opencode logo light",
-  "notFound.logoDarkAlt": "opencode logo dark",
+  "notFound.logoLightAlt": "xcsh logo light",
+  "notFound.logoDarkAlt": "xcsh logo dark",
 
   "user.logout": "Se déconnecter",
 
@@ -85,7 +85,7 @@ export const dict = {
 
   "temp.title": "OpenCode | Agent de code IA conçu pour le terminal",
   "temp.hero.title": "L'agent de code IA conçu pour le terminal",
-  "temp.zen": "OpenCode Zen",
+  "temp.zen": "xcsh Zen",
   "temp.getStarted": "Commencer",
   "temp.feature.native.title": "TUI Native",
   "temp.feature.native.body": "Une interface terminal native, réactive et thémable",
@@ -96,8 +96,8 @@ export const dict = {
   "temp.feature.models.afterLink": ", y compris les modèles locaux",
   "temp.screenshot.caption": "OpenCode TUI avec le thème tokyonight",
   "temp.screenshot.alt": "OpenCode TUI avec le thème tokyonight",
-  "temp.logoLightAlt": "opencode logo light",
-  "temp.logoDarkAlt": "opencode logo dark",
+  "temp.logoLightAlt": "xcsh logo light",
+  "temp.logoDarkAlt": "xcsh logo dark",
 
   "home.banner.badge": "Nouveau",
   "home.banner.text": "Application desktop disponible en bêta",
@@ -189,12 +189,12 @@ export const dict = {
     "Zen vous donne accès à un ensemble sélectionné de modèles d'IA que OpenCode a testés et benchmarkés spécifiquement pour les agents de code. Plus besoin de vous soucier des variations de performance et de qualité selon les fournisseurs : utilisez des modèles validés qui fonctionnent.",
   "home.zenCta.link": "En savoir plus sur Zen",
 
-  "zen.title": "OpenCode Zen | Un ensemble sélectionné de modèles fiables et optimisés pour les agents de code",
+  "zen.title": "xcsh Zen | Un ensemble sélectionné de modèles fiables et optimisés pour les agents de code",
   "zen.hero.title": "Modèles fiables et optimisés pour les agents de code",
   "zen.hero.body":
     "Zen vous donne accès à un ensemble sélectionné de modèles d'IA que OpenCode a testés et benchmarkés spécifiquement pour les agents de code. Plus besoin de vous soucier des variations de performance et de qualité selon les fournisseurs : utilisez des modèles validés qui fonctionnent.",
 
-  "zen.faq.q1": "Qu'est-ce que OpenCode Zen ?",
+  "zen.faq.q1": "Qu'est-ce que xcsh Zen ?",
   "zen.faq.a1":
     "Zen est un ensemble sélectionné de modèles d'IA testés et benchmarkés pour les agents de code, créé par l'équipe derrière OpenCode.",
   "zen.faq.q2": "Qu'est-ce qui rend Zen plus précis ?",
@@ -649,7 +649,7 @@ export const dict = {
   "workspace.lite.subscription.useBalance":
     "Utilisez votre solde disponible après avoir atteint les limites d'utilisation",
   "workspace.lite.subscription.selectProvider":
-    'Sélectionnez "OpenCode Go" comme fournisseur dans votre configuration opencode pour utiliser les modèles Go.',
+    'Sélectionnez "OpenCode Go" comme fournisseur dans votre configuration xcsh pour utiliser les modèles Go.',
   "workspace.lite.black.message":
     "Vous êtes actuellement abonné à OpenCode Black ou sur liste d'attente. Veuillez d'abord vous désabonner si vous souhaitez passer à Go.",
   "workspace.lite.other.message":

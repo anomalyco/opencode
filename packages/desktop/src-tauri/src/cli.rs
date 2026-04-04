@@ -40,8 +40,8 @@ impl CommandWrapper for WinCreationFlags {
     }
 }
 
-const CLI_INSTALL_DIR: &str = ".opencode/bin";
-const CLI_BINARY_NAME: &str = "opencode";
+const CLI_INSTALL_DIR: &str = ".xcsh/bin";
+const CLI_BINARY_NAME: &str = "xcsh";
 const SHELL_ENV_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(serde::Deserialize, Debug)]
@@ -115,7 +115,7 @@ pub fn get_sidecar_path(app: &tauri::AppHandle) -> std::path::PathBuf {
         .expect("Failed to get current binary")
         .parent()
         .expect("Failed to get parent dir")
-        .join("opencode-cli")
+        .join("xcsh-cli")
 }
 
 fn is_cli_installed() -> bool {
@@ -138,7 +138,7 @@ pub fn install_cli(app: tauri::AppHandle) -> Result<String, String> {
         return Err("Sidecar binary not found".to_string());
     }
 
-    let temp_script = std::env::temp_dir().join("opencode-install.sh");
+    let temp_script = std::env::temp_dir().join("xcsh-install.sh");
     std::fs::write(&temp_script, INSTALL_SCRIPT)
         .map_err(|e| format!("Failed to write install script: {}", e))?;
 
@@ -400,10 +400,10 @@ pub fn spawn_command(
             let version = app.package_info().version.to_string();
             let mut script = vec![
                 "set -e".to_string(),
-                "BIN=\"$HOME/.opencode/bin/opencode\"".to_string(),
+                "BIN=\"$HOME/.xcsh/bin/xcsh\"".to_string(),
                 "if [ ! -x \"$BIN\" ]; then".to_string(),
                 format!(
-                    "  curl -fsSL https://opencode.ai/install | bash -s -- --version {} --no-modify-path",
+                    "  curl -fsSL https://f5xc-salesdemos.github.io/xcsh/install | bash -s -- --version {} --no-modify-path",
                     shell_escape(&version)
                 ),
                 "fi".to_string(),
@@ -560,7 +560,7 @@ pub fn serve(
     tracing::info!(port, "Spawning sidecar");
 
     let envs = [
-        ("OPENCODE_SERVER_USERNAME", "opencode".to_string()),
+        ("OPENCODE_SERVER_USERNAME", "xcsh".to_string()),
         ("OPENCODE_SERVER_PASSWORD", password.to_string()),
     ];
 
@@ -569,7 +569,7 @@ pub fn serve(
         format!("--print-logs --log-level WARN serve --hostname {hostname} --port {port}").as_str(),
         &envs,
     )
-    .expect("Failed to spawn opencode");
+    .expect("Failed to spawn xcsh");
 
     let mut exit_tx = Some(exit_tx);
     tokio::spawn(

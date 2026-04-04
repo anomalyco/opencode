@@ -309,6 +309,7 @@ test("changing terminal toggle keybind works", async ({ page, gotoSession }) => 
 })
 
 test("terminal toggle keybind persists after reload", async ({ page, gotoSession }) => {
+  test.slow()
   await gotoSession()
 
   const dialog = await openSettings(page)

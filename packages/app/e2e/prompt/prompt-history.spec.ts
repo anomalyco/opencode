@@ -1,4 +1,4 @@
-import type { ToolPart } from "@opencode-ai/sdk/v2/client"
+import type { ToolPart } from "@f5xc-salesdemos/sdk/v2/client"
 import type { Page } from "@playwright/test"
 import { test, expect } from "../fixtures"
 import { assistantText } from "../actions"

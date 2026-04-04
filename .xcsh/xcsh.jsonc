@@ -1,0 +1,18 @@
+{
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
+  "provider": {
+    "opencode": {
+      "options": {},
+    },
+  },
+  "permission": {
+    "edit": {
+      "packages/xcsh/migration/*": "deny",
+    },
+  },
+  "mcp": {},
+  "tools": {
+    "github-triage": false,
+    "github-pr-search": false,
+  },
+}

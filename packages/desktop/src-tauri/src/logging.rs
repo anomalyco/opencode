@@ -15,7 +15,7 @@ pub fn init(log_dir: &Path) -> WorkerGuard {
     cleanup(log_dir);
 
     let timestamp = chrono::Local::now().format("%Y-%m-%d_%H-%M-%S");
-    let filename = format!("opencode-desktop_{timestamp}.log");
+    let filename = format!("xcsh-desktop_{timestamp}.log");
     let log_path = log_dir.join(&filename);
 
     LOG_PATH
@@ -27,9 +27,9 @@ pub fn init(log_dir: &Path) -> WorkerGuard {
 
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         if cfg!(debug_assertions) {
-            EnvFilter::new("opencode_lib=debug,opencode_desktop=debug,sidecar=debug")
+            EnvFilter::new("xcsh_lib=debug,xcsh_desktop=debug,sidecar=debug")
         } else {
-            EnvFilter::new("opencode_lib=info,opencode_desktop=info,sidecar=info")
+            EnvFilter::new("xcsh_lib=info,xcsh_desktop=info,sidecar=info")
         }
     });
 

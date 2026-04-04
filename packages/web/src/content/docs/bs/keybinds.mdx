@@ -3,11 +3,11 @@ title: Prečice tipki
 description: Prilagodite svoje veze tipki.
 ---
 
-OpenCode ima listu veza tipki koje možete prilagoditi putem `tui.json`.
+xcsh ima listu veza tipki koje možete prilagoditi putem `tui.json`.
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/tui.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -108,7 +108,7 @@ OpenCode ima listu veza tipki koje možete prilagoditi putem `tui.json`.
 
 ## Leader tipka
 
-OpenCode koristi `leader` (vodeću) tipku za većinu povezivanja tipki. Ovo izbjegava sukobe u vašem terminalu.
+xcsh koristi `leader` (vodeću) tipku za većinu povezivanja tipki. Ovo izbjegava sukobe u vašem terminalu.
 
 Prema zadanim postavkama, `ctrl+x` je vodeća tipka i većina radnji zahtijeva da prvo pritisnete vodeću tipku, a zatim i prečicu. Na primjer, da biste započeli novu sesiju, prvo pritisnite `ctrl+x`, a zatim pritisnite `n`.
 
@@ -122,7 +122,7 @@ Možete onemogućiti spajanje tipki dodavanjem ključa u `tui.json` s vrijednoš
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/tui.json",
   "keybinds": {
     "session_compact": "none"
   }
@@ -133,7 +133,7 @@ Možete onemogućiti spajanje tipki dodavanjem ključa u `tui.json` s vrijednoš
 
 ## Prečice za radnu površinu
 
-Unos prompta aplikacije OpenCode za desktop podržava uobičajene prečice u stilu Readline/Emacs za uređivanje teksta. One su ugrađene i trenutno se ne mogu konfigurirati putem `opencode.json`.
+Unos prompta aplikacije xcsh za desktop podržava uobičajene prečice u stilu Readline/Emacs za uređivanje teksta. One su ugrađene i trenutno se ne mogu konfigurirati putem `xcsh.json`.
 
 | Prečica  | Akcija                                           |
 | -------- | ------------------------------------------------ |

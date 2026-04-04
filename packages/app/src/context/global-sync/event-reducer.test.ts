@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { Message, Part, PermissionRequest, Project, QuestionRequest, Session } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part, PermissionRequest, Project, QuestionRequest, Session } from "@f5xc-salesdemos/sdk/v2/client"
 import { createStore } from "solid-js/store"
 import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./event-reducer"
 import type { State } from "./types"

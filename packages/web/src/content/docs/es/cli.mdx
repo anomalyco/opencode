@@ -1,30 +1,30 @@
 ---
 title: CLI
-description: Opciones y comandos de la CLI de OpenCode.
+description: Opciones y comandos de la CLI de xcsh.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-La CLI de OpenCode de forma predeterminada inicia el [TUI](/docs/tui) cuando se ejecuta sin ningún argumento.
+La CLI de xcsh de forma predeterminada inicia el [TUI](/docs/tui) cuando se ejecuta sin ningún argumento.
 
 ```bash
-opencode
+xcsh
 ```
 
-Pero también acepta comandos como se documenta en esta página. Esto le permite interactuar con OpenCode mediante programación.
+Pero también acepta comandos como se documenta en esta página. Esto le permite interactuar con xcsh mediante programación.
 
 ```bash
-opencode run "Explain how closures work in JavaScript"
+xcsh run "Explain how closures work in JavaScript"
 ```
 
 ---
 
 ### tui
 
-Inicie la interfaz de usuario del terminal OpenCode.
+Inicie la interfaz de usuario del terminal xcsh.
 
 ```bash
-opencode [project]
+xcsh [project]
 ```
 
 #### Opciones
@@ -44,36 +44,36 @@ opencode [project]
 
 ## Comandos
 
-La CLI de OpenCode también tiene los siguientes comandos.
+La CLI de xcsh también tiene los siguientes comandos.
 
 ---
 
 ### agent
 
-Administrar agentes para OpenCode.
+Administrar agentes para xcsh.
 
 ```bash
-opencode agent [command]
+xcsh agent [command]
 ```
 
 ---
 
 ### attach
 
-Conecte una terminal a un servidor backend OpenCode que ya se esté ejecutando y iniciado mediante los comandos `serve` o `web`.
+Conecte una terminal a un servidor backend xcsh que ya se esté ejecutando y iniciado mediante los comandos `serve` o `web`.
 
 ```bash
-opencode attach [url]
+xcsh attach [url]
 ```
 
-Esto permite usar TUI con un backend remoto OpenCode. Por ejemplo:
+Esto permite usar TUI con un backend remoto xcsh. Por ejemplo:
 
 ```bash
 # Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
+xcsh web --port 4096 --hostname 0.0.0.0
 
 # In another terminal, attach the TUI to the running backend
-opencode attach http://10.20.30.40:4096
+xcsh attach http://10.20.30.40:4096
 ```
 
 #### Opciones
@@ -90,7 +90,7 @@ opencode attach http://10.20.30.40:4096
 Cree un nuevo agente con configuración personalizada.
 
 ```bash
-opencode agent create
+xcsh agent create
 ```
 
 Este comando lo guiará en la creación de un nuevo agente con un mensaje del sistema personalizado y una configuración de herramientas.
@@ -102,7 +102,7 @@ Este comando lo guiará en la creación de un nuevo agente con un mensaje del si
 Enumere todos los agentes disponibles.
 
 ```bash
-opencode agent list
+xcsh agent list
 ```
 
 ---
@@ -112,20 +112,20 @@ opencode agent list
 Comando para administrar credenciales e iniciar sesión para proveedores.
 
 ```bash
-opencode auth [command]
+xcsh auth [command]
 ```
 
 ---
 
 #### login
 
-OpenCode funciona con la lista de proveedores en [Models.dev](https://models.dev), por lo que puede usar `opencode auth login` para configurar las claves API para cualquier proveedor que desee utilizar. Esto se almacena en `~/.local/share/opencode/auth.json`.
+xcsh funciona con la lista de proveedores en [Models.dev](https://models.dev), por lo que puede usar `xcsh auth login` para configurar las claves API para cualquier proveedor que desee utilizar. Esto se almacena en `~/.local/share/xcsh/auth.json`.
 
 ```bash
-opencode auth login
+xcsh auth login
 ```
 
-Cuando se inicia OpenCode, carga los proveedores desde el archivo de credenciales. Y si hay claves definidas en sus entornos o un archivo `.env` en su proyecto.
+Cuando se inicia xcsh, carga los proveedores desde el archivo de credenciales. Y si hay claves definidas en sus entornos o un archivo `.env` en su proyecto.
 
 ---
 
@@ -134,13 +134,13 @@ Cuando se inicia OpenCode, carga los proveedores desde el archivo de credenciale
 Enumera todos los proveedores autenticados tal como están almacenados en el archivo de credenciales.
 
 ```bash
-opencode auth list
+xcsh auth list
 ```
 
 O la versión corta.
 
 ```bash
-opencode auth ls
+xcsh auth ls
 ```
 
 ---
@@ -150,7 +150,7 @@ opencode auth ls
 Cierra tu sesión de un proveedor eliminándolo del archivo de credenciales.
 
 ```bash
-opencode auth logout
+xcsh auth logout
 ```
 
 ---
@@ -160,7 +160,7 @@ opencode auth logout
 Administre el agente GitHub para la automatización del repositorio.
 
 ```bash
-opencode github [command]
+xcsh github [command]
 ```
 
 ---
@@ -170,7 +170,7 @@ opencode github [command]
 Instale el agente GitHub en su repositorio.
 
 ```bash
-opencode github install
+xcsh github install
 ```
 
 Esto configura el flujo de trabajo de acciones GitHub necesario y lo guía a través del proceso de configuración. [Más información](/docs/github).
@@ -182,7 +182,7 @@ Esto configura el flujo de trabajo de acciones GitHub necesario y lo guía a tra
 Ejecute el agente GitHub. Esto se usa normalmente en acciones GitHub.
 
 ```bash
-opencode github run
+xcsh github run
 ```
 
 ##### Opciones
@@ -199,7 +199,7 @@ opencode github run
 Administrar servidores de protocolo de contexto modelo.
 
 ```bash
-opencode mcp [command]
+xcsh mcp [command]
 ```
 
 ---
@@ -209,7 +209,7 @@ opencode mcp [command]
 Agregue un servidor MCP a su configuración.
 
 ```bash
-opencode mcp add
+xcsh mcp add
 ```
 
 Este comando lo guiará para agregar un servidor MCP local o remoto.
@@ -221,13 +221,13 @@ Este comando lo guiará para agregar un servidor MCP local o remoto.
 Enumere todos los servidores MCP configurados y su estado de conexión.
 
 ```bash
-opencode mcp list
+xcsh mcp list
 ```
 
 O utilice la versión corta.
 
 ```bash
-opencode mcp ls
+xcsh mcp ls
 ```
 
 ---
@@ -237,7 +237,7 @@ opencode mcp ls
 Autentíquese con un servidor MCP habilitado para OAuth.
 
 ```bash
-opencode mcp auth [name]
+xcsh mcp auth [name]
 ```
 
 Si no proporciona un nombre de servidor, se le pedirá que seleccione entre los servidores compatibles con OAuth disponibles.
@@ -245,13 +245,13 @@ Si no proporciona un nombre de servidor, se le pedirá que seleccione entre los 
 También puede enumerar los servidores compatibles con OAuth y su estado de autenticación.
 
 ```bash
-opencode mcp auth list
+xcsh mcp auth list
 ```
 
 O utilice la versión corta.
 
 ```bash
-opencode mcp auth ls
+xcsh mcp auth ls
 ```
 
 ---
@@ -261,7 +261,7 @@ opencode mcp auth ls
 Elimine las credenciales OAuth para un servidor MCP.
 
 ```bash
-opencode mcp logout [name]
+xcsh mcp logout [name]
 ```
 
 ---
@@ -271,7 +271,7 @@ opencode mcp logout [name]
 Depurar problemas de conexión OAuth para un servidor MCP.
 
 ```bash
-opencode mcp debug <name>
+xcsh mcp debug <name>
 ```
 
 ---
@@ -281,7 +281,7 @@ opencode mcp debug <name>
 Enumere todos los modelos disponibles de los proveedores configurados.
 
 ```bash
-opencode models [provider]
+xcsh models [provider]
 ```
 
 Este comando muestra todos los modelos disponibles en sus proveedores configurados en el formato `provider/model`.
@@ -291,7 +291,7 @@ Esto es útil para determinar el nombre exacto del modelo que se usará en [su c
 Opcionalmente, puede pasar un ID de proveedor para filtrar modelos por ese proveedor.
 
 ```bash
-opencode models anthropic
+xcsh models anthropic
 ```
 
 #### Opciones
@@ -301,36 +301,36 @@ opencode models anthropic
 | `--refresh` | Actualizar la caché de modelos desde models.dev                             |
 | `--verbose` | Utilice una salida del modelo más detallada (incluye metadatos como costos) |
 
-Utilice el indicador `--refresh` para actualizar la lista de modelos almacenados en caché. Esto es útil cuando se han agregado nuevos modelos a un proveedor y desea verlos en OpenCode.
+Utilice el indicador `--refresh` para actualizar la lista de modelos almacenados en caché. Esto es útil cuando se han agregado nuevos modelos a un proveedor y desea verlos en xcsh.
 
 ```bash
-opencode models --refresh
+xcsh models --refresh
 ```
 
 ---
 
 ### run
 
-Ejecute opencode en modo no interactivo pasando un mensaje directamente.
+Ejecute xcsh en modo no interactivo pasando un mensaje directamente.
 
 ```bash
-opencode run [message..]
+xcsh run [message..]
 ```
 
 Esto es útil para secuencias de comandos, automatización o cuando desea una respuesta rápida sin iniciar el TUI completo. Por ejemplo.
 
-```bash "opencode run"
-opencode run Explain the use of context in Go
+```bash "xcsh run"
+xcsh run Explain the use of context in Go
 ```
 
-También puede conectarse a una instancia `opencode serve` en ejecución para evitar tiempos de arranque en frío del servidor MCP en cada ejecución:
+También puede conectarse a una instancia `xcsh serve` en ejecución para evitar tiempos de arranque en frío del servidor MCP en cada ejecución:
 
 ```bash
 # Start a headless server in one terminal
-opencode serve
+xcsh serve
 
 # In another terminal, run commands that attach to it
-opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+xcsh run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
 #### Opciones
@@ -347,20 +347,20 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | `--file`     | `-f`  | Archivo(s) para adjuntar al mensaje                                                 |
 | `--format`   |       | Formato: predeterminado (formateado) o json (eventos JSON sin formato)              |
 | `--title`    |       | Título de la sesión (utiliza un mensaje truncado si no se proporciona ningún valor) |
-| `--attach`   |       | Adjuntar a un servidor opencode en ejecución (por ejemplo, http://localhost:4096)   |
+| `--attach`   |       | Adjuntar a un servidor xcsh en ejecución (por ejemplo, http://localhost:4096)   |
 | `--port`     |       | Puerto para el servidor local (el puerto predeterminado es aleatorio)               |
 
 ---
 
 ### serve
 
-Inicie un servidor OpenCode sin cabeza para acceso API. Consulte los [documentos del servidor](/docs/server) para conocer la interfaz HTTP completa.
+Inicie un servidor xcsh sin cabeza para acceso API. Consulte los [documentos del servidor](/docs/server) para conocer la interfaz HTTP completa.
 
 ```bash
-opencode serve
+xcsh serve
 ```
 
-Esto inicia un servidor HTTP que proporciona acceso API a la funcionalidad opencode sin la interfaz TUI. Configure `OPENCODE_SERVER_PASSWORD` para habilitar la autenticación básica HTTP (el nombre de usuario predeterminado es `opencode`).
+Esto inicia un servidor HTTP que proporciona acceso API a la funcionalidad xcsh sin la interfaz TUI. Configure `OPENCODE_SERVER_PASSWORD` para habilitar la autenticación básica HTTP (el nombre de usuario predeterminado es `xcsh`).
 
 #### Opciones
 
@@ -375,20 +375,20 @@ Esto inicia un servidor HTTP que proporciona acceso API a la funcionalidad openc
 
 ### session
 
-Administrar OpenCode sesiones.
+Administrar xcsh sesiones.
 
 ```bash
-opencode session [command]
+xcsh session [command]
 ```
 
 ---
 
 #### list
 
-Enumere todas las sesiones OpenCode.
+Enumere todas las sesiones xcsh.
 
 ```bash
-opencode session list
+xcsh session list
 ```
 
 ##### Opciones
@@ -402,10 +402,10 @@ opencode session list
 
 ### stats
 
-Muestre el uso de tokens y las estadísticas de costos para sus sesiones OpenCode.
+Muestre el uso de tokens y las estadísticas de costos para sus sesiones xcsh.
 
 ```bash
-opencode stats
+xcsh stats
 ```
 
 #### Opciones
@@ -424,7 +424,7 @@ opencode stats
 Exportar datos de la sesión como JSON.
 
 ```bash
-opencode export [sessionID]
+xcsh export [sessionID]
 ```
 
 Si no proporciona una ID de sesión, se le pedirá que seleccione entre las sesiones disponibles.
@@ -433,30 +433,30 @@ Si no proporciona una ID de sesión, se le pedirá que seleccione entre las sesi
 
 ### import
 
-Importe datos de sesión desde un archivo JSON o una URL compartida OpenCode.
+Importe datos de sesión desde un archivo JSON o una URL compartida xcsh.
 
 ```bash
-opencode import <file>
+xcsh import <file>
 ```
 
-Puede importar desde un archivo local o una URL compartida OpenCode.
+Puede importar desde un archivo local o una URL compartida xcsh.
 
 ```bash
-opencode import session.json
-opencode import https://opncd.ai/s/abc123
+xcsh import session.json
+xcsh import https://opncd.ai/s/abc123
 ```
 
 ---
 
 ### web
 
-Inicie un servidor OpenCode sin cabeza con una interfaz web.
+Inicie un servidor xcsh sin cabeza con una interfaz web.
 
 ```bash
-opencode web
+xcsh web
 ```
 
-Esto inicia un servidor HTTP y abre un navegador web para acceder a OpenCode a través de una interfaz web. Configure `OPENCODE_SERVER_PASSWORD` para habilitar la autenticación básica HTTP (el nombre de usuario predeterminado es `opencode`).
+Esto inicia un servidor HTTP y abre un navegador web para acceder a xcsh a través de una interfaz web. Configure `OPENCODE_SERVER_PASSWORD` para habilitar la autenticación básica HTTP (el nombre de usuario predeterminado es `xcsh`).
 
 #### Opciones
 
@@ -474,7 +474,7 @@ Esto inicia un servidor HTTP y abre un navegador web para acceder a OpenCode a t
 Inicie un servidor ACP (Agent Client Protocol).
 
 ```bash
-opencode acp
+xcsh acp
 ```
 
 Este comando inicia un servidor ACP que se comunica a través de stdin/stdout usando nd-JSON.
@@ -491,10 +491,10 @@ Este comando inicia un servidor ACP que se comunica a través de stdin/stdout us
 
 ### uninstall
 
-Desinstale OpenCode y elimine todos los archivos relacionados.
+Desinstale xcsh y elimine todos los archivos relacionados.
 
 ```bash
-opencode uninstall
+xcsh uninstall
 ```
 
 #### Opciones
@@ -510,22 +510,22 @@ opencode uninstall
 
 ### upgrade
 
-Actualiza opencode a la última versión o a una versión específica.
+Actualiza xcsh a la última versión o a una versión específica.
 
 ```bash
-opencode upgrade [target]
+xcsh upgrade [target]
 ```
 
 Para actualizar a la última versión.
 
 ```bash
-opencode upgrade
+xcsh upgrade
 ```
 
 Para actualizar a una versión específica.
 
 ```bash
-opencode upgrade v0.1.48
+xcsh upgrade v0.1.48
 ```
 
 #### Opciones
@@ -538,7 +538,7 @@ opencode upgrade v0.1.48
 
 ## Opciones globales
 
-La CLI de OpenCode toma las siguientes banderas globales.
+La CLI de xcsh toma las siguientes banderas globales.
 
 | Opción         | Corta | Descripción                                  |
 | -------------- | ----- | -------------------------------------------- |
@@ -551,7 +551,7 @@ La CLI de OpenCode toma las siguientes banderas globales.
 
 ## Variables de entorno
 
-OpenCode se puede configurar mediante variables de entorno.
+xcsh se puede configurar mediante variables de entorno.
 
 | Variable                              | Type     | Description                                                                     |
 | ------------------------------------- | -------- | ------------------------------------------------------------------------------- |
@@ -577,7 +577,7 @@ OpenCode se puede configurar mediante variables de entorno.
 | `OPENCODE_CLIENT`                     | cadena   | Identificador de cliente (por defecto `cli`)                                    |
 | `OPENCODE_ENABLE_EXA`                 | booleano | Habilitar las herramientas de búsqueda web de Exa                               |
 | `OPENCODE_SERVER_PASSWORD`            | cadena   | Habilite la autenticación básica para `serve`/`web`                             |
-| `OPENCODE_SERVER_USERNAME`            | cadena   | Anular el nombre de usuario de autenticación básica (predeterminado `opencode`) |
+| `OPENCODE_SERVER_USERNAME`            | cadena   | Anular el nombre de usuario de autenticación básica (predeterminado `xcsh`) |
 | `OPENCODE_MODELS_URL`                 | cadena   | URL personalizada para buscar la configuración de modelos                       |
 
 ---

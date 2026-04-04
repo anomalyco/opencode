@@ -7,13 +7,13 @@ import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Go est un abonnement à bas coût — **5 $ pour votre premier mois**, puis **10 $/mois** — qui vous donne un accès fiable aux modèles de codage ouverts populaires.
+xcsh Go est un abonnement à bas coût — **5 $ pour votre premier mois**, puis **10 $/mois** — qui vous donne un accès fiable aux modèles de codage ouverts populaires.
 
 :::note
-OpenCode Go est actuellement en version bêta.
+xcsh Go est actuellement en version bêta.
 :::
 
-Go fonctionne comme n'importe quel autre fournisseur dans OpenCode. Vous vous abonnez à OpenCode Go et obtenez votre clé d'API. C'est **totalement facultatif** et vous n'avez pas besoin de l'utiliser pour utiliser OpenCode.
+Go fonctionne comme n'importe quel autre fournisseur dans xcsh. Vous vous abonnez à xcsh Go et obtenez votre clé d'API. C'est **totalement facultatif** et vous n'avez pas besoin de l'utiliser pour utiliser xcsh.
 
 Il est conçu principalement pour les utilisateurs internationaux, avec des modèles hébergés aux États-Unis, dans l'UE et à Singapour pour un accès mondial stable.
 
@@ -26,7 +26,7 @@ Les modèles ouverts sont devenus vraiment performants. Ils atteignent désormai
 Cependant, obtenir un accès fiable et à faible latence à ces modèles peut être difficile. Les fournisseurs varient en qualité et en disponibilité.
 
 :::tip
-Nous avons testé un groupe sélectionné de modèles et de fournisseurs qui fonctionnent bien avec OpenCode.
+Nous avons testé un groupe sélectionné de modèles et de fournisseurs qui fonctionnent bien avec xcsh.
 :::
 
 Pour remédier à cela, nous avons fait plusieurs choses :
@@ -35,20 +35,20 @@ Pour remédier à cela, nous avons fait plusieurs choses :
 2. Nous avons ensuite travaillé avec quelques fournisseurs pour nous assurer qu'ils étaient correctement servis.
 3. Enfin, nous avons évalué les performances de la combinaison modèle/fournisseur et avons dressé une liste que nous nous sentons à l'aise de recommander.
 
-OpenCode Go vous donne accès à ces modèles pour **5 $ pour votre premier mois**, puis **10 $/mois**.
+xcsh Go vous donne accès à ces modèles pour **5 $ pour votre premier mois**, puis **10 $/mois**.
 
 ---
 
 ## Comment ça marche
 
-OpenCode Go fonctionne comme n'importe quel autre fournisseur dans OpenCode.
+xcsh Go fonctionne comme n'importe quel autre fournisseur dans xcsh.
 
-1. Vous vous connectez à **<a href={console}>OpenCode Zen</a>**, vous vous abonnez à Go et copiez votre clé d'API.
-2. Vous exécutez la commande `/connect` dans la TUI, sélectionnez `OpenCode Go` et collez votre clé d'API.
+1. Vous vous connectez à **<a href={console}>xcsh Zen</a>**, vous vous abonnez à Go et copiez votre clé d'API.
+2. Vous exécutez la commande `/connect` dans la TUI, sélectionnez `xcsh Go` et collez votre clé d'API.
 3. Exécutez `/models` dans la TUI pour voir la liste des modèles disponibles via Go.
 
 :::note
-Un seul membre par espace de travail peut s'abonner à OpenCode Go.
+Un seul membre par espace de travail peut s'abonner à xcsh Go.
 :::
 
 La liste actuelle des modèles comprend :
@@ -66,7 +66,7 @@ La liste des modèles peut changer au fur et à mesure que nous en testons et en
 
 ## Limites d'utilisation
 
-OpenCode Go inclut les limites suivantes :
+xcsh Go inclut les limites suivantes :
 
 - **Limite de 5 heures** — 12 $ d'utilisation
 - **Limite hebdomadaire** — 30 $ d'utilisation
@@ -112,14 +112,14 @@ Vous pouvez également accéder aux modèles Go via les points de terminaison d'
 
 | Modèle       | ID de modèle | Point de terminaison                             | Package AI SDK              |
 | ------------ | ------------ | ------------------------------------------------ | --------------------------- |
-| GLM-5        | glm-5        | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Kimi K2.5    | kimi-k2.5    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2-Pro  | mimo-v2-pro  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2-Omni | mimo-v2-omni | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiniMax M2.7 | minimax-m2.7 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| MiniMax M2.5 | minimax-m2.5 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| GLM-5        | glm-5        | `https://f5xc-salesdemos.github.io/xcsh/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.5    | kimi-k2.5    | `https://f5xc-salesdemos.github.io/xcsh/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2-Pro  | mimo-v2-pro  | `https://f5xc-salesdemos.github.io/xcsh/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2-Omni | mimo-v2-omni | `https://f5xc-salesdemos.github.io/xcsh/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiniMax M2.7 | minimax-m2.7 | `https://f5xc-salesdemos.github.io/xcsh/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| MiniMax M2.5 | minimax-m2.5 | `https://f5xc-salesdemos.github.io/xcsh/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
-L'[ID de modèle](/docs/config/#models) dans votre configuration OpenCode utilise le format `opencode-go/<model-id>`. Par exemple, pour Kimi K2.5, vous utiliseriez `opencode-go/kimi-k2.5` dans votre configuration.
+L'[ID de modèle](/docs/config/#models) dans votre configuration xcsh utilise le format `xcsh-go/<model-id>`. Par exemple, pour Kimi K2.5, vous utiliseriez `xcsh-go/kimi-k2.5` dans votre configuration.
 
 ---
 
@@ -131,9 +131,9 @@ Cette offre est conçue avant tout pour les utilisateurs internationaux, avec de
 
 ## Objectifs
 
-Nous avons créé OpenCode Go pour :
+Nous avons créé xcsh Go pour :
 
 1. Rendre le codage par IA **accessible** à un plus grand nombre de personnes avec un abonnement à bas coût.
 2. Fournir un accès **fiable** aux meilleurs modèles de codage ouverts.
 3. Sélectionner des modèles qui sont **testés et évalués** pour une utilisation en tant qu'agent de codage.
-4. N'avoir **aucun verrouillage exclusif** en vous permettant d'utiliser n'importe quel autre fournisseur avec OpenCode également.
+4. N'avoir **aucun verrouillage exclusif** en vous permettant d'utiliser n'importe quel autre fournisseur avec xcsh également.

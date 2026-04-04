@@ -101,8 +101,8 @@ export function createMenu(deps: Deps) {
     {
       label: "Help",
       submenu: [
-        { label: "OpenCode Documentation", click: () => shell.openExternal("https://opencode.ai/docs") },
-        { label: "Support Forum", click: () => shell.openExternal("https://discord.com/invite/opencode") },
+        { label: "OpenCode Documentation", click: () => shell.openExternal("https://f5xc-salesdemos.github.io/xcsh/docs") },
+        { label: "Support Forum", click: () => shell.openExternal("https://discord.com/invite/xcsh") },
         { type: "separator" },
         { type: "separator" },
         {

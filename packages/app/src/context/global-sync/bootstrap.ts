@@ -9,10 +9,10 @@ import type {
   QuestionRequest,
   Session,
   Todo,
-} from "@opencode-ai/sdk/v2/client"
-import { showToast } from "@opencode-ai/ui/toast"
-import { getFilename } from "@opencode-ai/util/path"
-import { retry } from "@opencode-ai/util/retry"
+} from "@f5xc-salesdemos/sdk/v2/client"
+import { showToast } from "@f5xc-salesdemos/ui/toast"
+import { getFilename } from "@f5xc-salesdemos/util/path"
+import { retry } from "@f5xc-salesdemos/util/retry"
 import { batch } from "solid-js"
 import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { State, VcsCache } from "./types"
@@ -115,7 +115,7 @@ export async function bootstrapGlobal(input: {
         input.globalSDK.project.list().then((x) => {
           const projects = (x.data ?? [])
             .filter((p) => !!p?.id)
-            .filter((p) => !!p.worktree && !p.worktree.includes("opencode-test"))
+            .filter((p) => !!p.worktree && !p.worktree.includes("xcsh-test"))
             .slice()
             .sort((a, b) => cmp(a.id, b.id))
           input.setGlobalStore("project", projects)

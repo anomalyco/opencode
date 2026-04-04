@@ -9,8 +9,8 @@ if (!dir) throw new Error("LATEST_YML_DIR is required")
 const repo = process.env.GH_REPO
 if (!repo) throw new Error("GH_REPO is required")
 
-const version = process.env.OPENCODE_VERSION
-if (!version) throw new Error("OPENCODE_VERSION is required")
+const version = process.env.XCSH_VERSION
+if (!version) throw new Error("XCSH_VERSION is required")
 
 type FileEntry = {
   url: string

@@ -6,9 +6,9 @@ import type {
   ProviderAuthResponse,
   ProviderListResponse,
   Todo,
-} from "@opencode-ai/sdk/v2/client"
-import { showToast } from "@opencode-ai/ui/toast"
-import { getFilename } from "@opencode-ai/util/path"
+} from "@f5xc-salesdemos/sdk/v2/client"
+import { showToast } from "@f5xc-salesdemos/ui/toast"
+import { getFilename } from "@f5xc-salesdemos/util/path"
 import { createContext, getOwner, onCleanup, onMount, type ParentProps, untrack, useContext } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"

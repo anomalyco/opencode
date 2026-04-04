@@ -175,7 +175,7 @@ export function initI18n(): Promise<Locale> {
   if (cached) return cached
 
   const promise = (async () => {
-    const store = await Store.load("opencode.global.dat").catch(() => null)
+    const store = await Store.load("xcsh.global.dat").catch(() => null)
     if (!store) return state.locale
 
     const raw = await store.get("language").catch(() => null)

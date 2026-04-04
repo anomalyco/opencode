@@ -1,6 +1,6 @@
-import type { Todo } from "@opencode-ai/sdk/v2"
+import type { Todo } from "@f5xc-salesdemos/sdk/v2"
 
-export const composerEvent = "opencode:e2e:composer"
+export const composerEvent = "xcsh:e2e:composer"
 
 export type ComposerDriverState = {
   live?: boolean
@@ -21,7 +21,7 @@ type ComposerState = {
 }
 
 export type ComposerWindow = Window & {
-  __opencode_e2e?: {
+  __xcsh_e2e?: {
     composer?: {
       enabled?: boolean
       sessions?: Record<string, ComposerState>
@@ -36,12 +36,12 @@ const clone = (driver: ComposerDriverState) => ({
 
 export const composerEnabled = () => {
   if (typeof window === "undefined") return false
-  return (window as ComposerWindow).__opencode_e2e?.composer?.enabled === true
+  return (window as ComposerWindow).__xcsh_e2e?.composer?.enabled === true
 }
 
 const root = () => {
   if (!composerEnabled()) return
-  const state = (window as ComposerWindow).__opencode_e2e?.composer
+  const state = (window as ComposerWindow).__xcsh_e2e?.composer
   if (!state) return
   state.sessions ??= {}
   return state.sessions

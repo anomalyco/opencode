@@ -8,8 +8,8 @@ import type {
   Session,
   SessionStatus,
   Todo,
-} from "@opencode-ai/sdk/v2/client"
-import { Binary } from "@opencode-ai/util/binary"
+} from "@f5xc-salesdemos/sdk/v2/client"
+import { Binary } from "@f5xc-salesdemos/util/binary"
 import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import { dropSessionCaches } from "./session-cache"
 import { trimSessions } from "./session-trim"

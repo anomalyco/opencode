@@ -321,9 +321,9 @@ export class Global extends HeyApiClient {
   }
 
   /**
-   * Upgrade opencode
+   * Upgrade xcsh
    *
-   * Upgrade opencode to the specified version or latest if not specified.
+   * Upgrade xcsh to the specified version or latest if not specified.
    */
   public upgrade<ThrowOnError extends boolean = false>(
     parameters?: {

@@ -15,7 +15,7 @@ type TerminalProbeControl = {
 }
 
 export type E2EWindow = Window & {
-  __opencode_e2e?: {
+  __xcsh_e2e?: {
     model?: {
       enabled?: boolean
       current?: ModelProbeState
@@ -43,7 +43,7 @@ const seed = (): TerminalProbeState => ({
 
 const root = () => {
   if (typeof window === "undefined") return
-  const state = (window as E2EWindow).__opencode_e2e?.terminal
+  const state = (window as E2EWindow).__xcsh_e2e?.terminal
   if (!state?.enabled) return
   return state
 }

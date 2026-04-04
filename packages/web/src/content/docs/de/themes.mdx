@@ -3,9 +3,9 @@ title: Themes
 description: Waehle ein eingebautes Theme oder erstelle eins.
 ---
 
-Mit OpenCode kannst du ein eingebautes Theme waehlen, ein an dein Terminal angepasstes Theme nutzen oder ein eigenes Theme definieren.
+Mit xcsh kannst du ein eingebautes Theme waehlen, ein an dein Terminal angepasstes Theme nutzen oder ein eigenes Theme definieren.
 
-Standardmaessig verwendet OpenCode das `opencode`-Theme.
+Standardmaessig verwendet xcsh das `xcsh`-Theme.
 
 ---
 
@@ -24,7 +24,7 @@ Ohne truecolor werden Farben weniger exakt dargestellt oder auf eine 256-Farben-
 
 ## Eingebaute Themes
 
-OpenCode liefert mehrere eingebaute Themes mit.
+xcsh liefert mehrere eingebaute Themes mit.
 
 | Name                   | Description                                                                  |
 | ---------------------- | ---------------------------------------------------------------------------- |
@@ -55,7 +55,7 @@ Im Gegensatz zu Themes mit festen Farben gilt beim _system_-Theme:
 
 Das System-Theme ist ideal fuer Nutzer, die:
 
-- OpenCode optisch ans Terminal anpassen wollen
+- xcsh optisch ans Terminal anpassen wollen
 - eigene Terminal-Farbschemata nutzen
 - ein konsistentes Erscheinungsbild in Terminal-Apps bevorzugen
 
@@ -65,9 +65,9 @@ Das System-Theme ist ideal fuer Nutzer, die:
 
 Du kannst ein Theme ueber `/theme` auswaehlen oder direkt in der [Konfiguration](/docs/config) setzen.
 
-```json title="opencode.json" {3}
+```json title="xcsh.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "theme": "tokyonight"
 }
 ```
@@ -76,7 +76,7 @@ Du kannst ein Theme ueber `/theme` auswaehlen oder direkt in der [Konfiguration]
 
 ## Eigene Themes
 
-OpenCode unterstuetzt ein flexibles JSON-basiertes Theme-System.
+xcsh unterstuetzt ein flexibles JSON-basiertes Theme-System.
 Damit lassen sich Themes einfach erstellen und anpassen.
 
 ---
@@ -86,9 +86,9 @@ Damit lassen sich Themes einfach erstellen und anpassen.
 Themes werden aus mehreren Verzeichnissen in folgender Reihenfolge geladen, wobei spaetere Verzeichnisse fruehere ueberschreiben:
 
 1. **Eingebaute Themes** - Diese sind im Binary eingebettet
-2. **Benutzer-Config-Verzeichnis** - Definiert in `~/.config/opencode/themes/*.json` oder `$XDG_CONFIG_HOME/opencode/themes/*.json`
-3. **Projekt-Root-Verzeichnis** - Definiert in `<project-root>/.opencode/themes/*.json`
-4. **Aktuelles Arbeitsverzeichnis** - Definiert in `./.opencode/themes/*.json`
+2. **Benutzer-Config-Verzeichnis** - Definiert in `~/.config/xcsh/themes/*.json` oder `$XDG_CONFIG_HOME/xcsh/themes/*.json`
+3. **Projekt-Root-Verzeichnis** - Definiert in `<project-root>/.xcsh/themes/*.json`
+4. **Aktuelles Arbeitsverzeichnis** - Definiert in `./.xcsh/themes/*.json`
 
 Wenn mehrere Verzeichnisse ein Theme mit demselben Namen enthalten, wird das Theme aus dem Verzeichnis mit der hoeheren Prioritaet verwendet.
 
@@ -101,15 +101,15 @@ Um ein eigenes Theme zu erstellen, lege eine JSON-Datei in einem der Theme-Verze
 Fuer benutzerweite Themes:
 
 ```bash no-frame
-mkdir -p ~/.config/opencode/themes
-vim ~/.config/opencode/themes/my-theme.json
+mkdir -p ~/.config/xcsh/themes
+vim ~/.config/xcsh/themes/my-theme.json
 ```
 
 Und fuer projektspezifische Themes:
 
 ```bash no-frame
-mkdir -p .opencode/themes
-vim .opencode/themes/my-theme.json
+mkdir -p .xcsh/themes
+vim .xcsh/themes/my-theme.json
 ```
 
 ---
@@ -147,7 +147,7 @@ Hier ist ein Beispiel fuer ein eigenes Theme:
 
 ```json title="my-theme.json"
 {
-  "$schema": "https://opencode.ai/theme.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/theme.json",
   "defs": {
     "nord0": "#2E3440",
     "nord1": "#3B4252",

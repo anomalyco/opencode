@@ -1214,7 +1214,7 @@ export type Config = {
     diff_style?: "auto" | "stacked"
   }
   /**
-   * Command configuration, see https://opencode.ai/docs/commands
+   * Command configuration, see https://f5xc-salesdemos.github.io/xcsh/docs/commands
    */
   command?: {
     [key: string]: {
@@ -1271,7 +1271,7 @@ export type Config = {
     [key: string]: AgentConfig | undefined
   }
   /**
-   * Agent configuration, see https://opencode.ai/docs/agent
+   * Agent configuration, see https://f5xc-salesdemos.github.io/xcsh/docs/agent
    */
   agent?: {
     plan?: AgentConfig

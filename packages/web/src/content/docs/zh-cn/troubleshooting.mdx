@@ -3,7 +3,7 @@ title: 故障排除
 description: 常见问题及其解决方法。
 ---
 
-要调试 OpenCode 的问题，请先检查其存储在磁盘上的日志和本地数据。
+要调试 xcsh 的问题，请先检查其存储在磁盘上的日志和本地数据。
 
 ---
 
@@ -11,21 +11,21 @@ description: 常见问题及其解决方法。
 
 日志文件写入位置：
 
-- **macOS/Linux**: `~/.local/share/opencode/log/`
-- **Windows**: 按 `WIN+R` 并粘贴 `%USERPROFILE%\.local\share\opencode\log`
+- **macOS/Linux**: `~/.local/share/xcsh/log/`
+- **Windows**: 按 `WIN+R` 并粘贴 `%USERPROFILE%\.local\share\xcsh\log`
 
 日志文件以时间戳命名（例如 `2025-01-09T123456.log`），并保留最近的 10 个日志文件。
 
-你可以通过 `--log-level` 命令行选项设置日志级别以获取更详细的调试信息。例如：`opencode --log-level DEBUG`。
+你可以通过 `--log-level` 命令行选项设置日志级别以获取更详细的调试信息。例如：`xcsh --log-level DEBUG`。
 
 ---
 
 ## 存储
 
-OpenCode 将会话数据和其他应用数据存储在磁盘上：
+xcsh 将会话数据和其他应用数据存储在磁盘上：
 
-- **macOS/Linux**: `~/.local/share/opencode/`
-- **Windows**: 按 `WIN+R` 并粘贴 `%USERPROFILE%\.local\share\opencode`
+- **macOS/Linux**: `~/.local/share/xcsh/`
+- **Windows**: 按 `WIN+R` 并粘贴 `%USERPROFILE%\.local\share\xcsh`
 
 该目录包含：
 
@@ -39,13 +39,13 @@ OpenCode 将会话数据和其他应用数据存储在磁盘上：
 
 ## 桌面应用
 
-OpenCode Desktop 会在后台运行一个本地 OpenCode 服务器（即 `opencode-cli` 附属进程）。大多数问题是由插件异常、缓存损坏或错误的服务器设置引起的。
+xcsh Desktop 会在后台运行一个本地 xcsh 服务器（即 `xcsh-cli` 附属进程）。大多数问题是由插件异常、缓存损坏或错误的服务器设置引起的。
 
 ### 快速检查
 
 - 完全退出并重新启动应用。
 - 如果应用显示错误页面，请点击**重新启动**并复制错误详情。
-- 仅限 macOS：`OpenCode` 菜单 -> **Reload Webview**（当 UI 空白或冻结时有效）。
+- 仅限 macOS：`xcsh` 菜单 -> **Reload Webview**（当 UI 空白或冻结时有效）。
 
 ---
 
@@ -57,28 +57,28 @@ OpenCode Desktop 会在后台运行一个本地 OpenCode 服务器（即 `openco
 
 打开你的全局配置文件，查找 `plugin` 键。
 
-- **macOS/Linux**: `~/.config/opencode/opencode.jsonc`（或 `~/.config/opencode/opencode.json`）
-- **macOS/Linux**（旧版安装）: `~/.local/share/opencode/opencode.jsonc`
-- **Windows**: 按 `WIN+R` 并粘贴 `%USERPROFILE%\.config\opencode\opencode.jsonc`
+- **macOS/Linux**: `~/.config/xcsh/xcsh.jsonc`（或 `~/.config/xcsh/xcsh.json`）
+- **macOS/Linux**（旧版安装）: `~/.local/share/xcsh/xcsh.jsonc`
+- **Windows**: 按 `WIN+R` 并粘贴 `%USERPROFILE%\.config\xcsh\xcsh.jsonc`
 
 如果你配置了插件，请通过移除该键或将其设置为空数组来临时禁用它们：
 
 ```jsonc
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "plugin": [],
 }
 ```
 
 #### 检查插件目录
 
-OpenCode 还可以从磁盘加载本地插件。临时将这些插件移走（或重命名文件夹），然后重新启动桌面应用：
+xcsh 还可以从磁盘加载本地插件。临时将这些插件移走（或重命名文件夹），然后重新启动桌面应用：
 
 - **全局插件**
-  - **macOS/Linux**: `~/.config/opencode/plugins/`
-  - **Windows**: 按 `WIN+R` 并粘贴 `%USERPROFILE%\.config\opencode\plugins`
+  - **macOS/Linux**: `~/.config/xcsh/plugins/`
+  - **Windows**: 按 `WIN+R` 并粘贴 `%USERPROFILE%\.config\xcsh\plugins`
 - **项目插件**（仅当你使用了项目级配置时）
-  - `<your-project>/.opencode/plugins/`
+  - `<your-project>/.xcsh/plugins/`
 
 如果应用恢复正常，请逐个重新启用插件，找出导致问题的那个。
 
@@ -86,22 +86,22 @@ OpenCode 还可以从磁盘加载本地插件。临时将这些插件移走（�
 
 ### 清除缓存
 
-如果禁用插件没有帮助（或插件安装卡住了），请清除缓存以便 OpenCode 重新构建。
+如果禁用插件没有帮助（或插件安装卡住了），请清除缓存以便 xcsh 重新构建。
 
-1. 完全退出 OpenCode Desktop。
+1. 完全退出 xcsh Desktop。
 2. 删除缓存目录：
 
-- **macOS**: Finder -> `Cmd+Shift+G` -> 粘贴 `~/.cache/opencode`
-- **Linux**: 删除 `~/.cache/opencode`（或运行 `rm -rf ~/.cache/opencode`）
-- **Windows**: 按 `WIN+R` 并粘贴 `%USERPROFILE%\.cache\opencode`
+- **macOS**: Finder -> `Cmd+Shift+G` -> 粘贴 `~/.cache/xcsh`
+- **Linux**: 删除 `~/.cache/xcsh`（或运行 `rm -rf ~/.cache/xcsh`）
+- **Windows**: 按 `WIN+R` 并粘贴 `%USERPROFILE%\.cache\xcsh`
 
-3. 重新启动 OpenCode Desktop。
+3. 重新启动 xcsh Desktop。
 
 ---
 
 ### 修复服务器连接问题
 
-OpenCode Desktop 可以启动自己的本地服务器（默认行为），也可以连接到你配置的服务器 URL。
+xcsh Desktop 可以启动自己的本地服务器（默认行为），也可以连接到你配置的服务器 URL。
 
 如果你看到**"Connection Failed"**对话框（或应用始终停留在启动画面），请检查自定义服务器 URL。
 
@@ -111,7 +111,7 @@ OpenCode Desktop 可以启动自己的本地服务器（默认行为），也可
 
 #### 从配置中移除 `server.port` / `server.hostname`
 
-如果你的 `opencode.json(c)` 包含 `server` 部分，请临时移除该部分并重新启动桌面应用。
+如果你的 `xcsh.json(c)` 包含 `server` 部分，请临时移除该部分并重新启动桌面应用。
 
 #### 检查环境变量
 
@@ -132,21 +132,21 @@ OpenCode Desktop 可以启动自己的本地服务器（默认行为），也可
 
 ### Windows: WebView2 运行时
 
-在 Windows 上，OpenCode Desktop 需要 Microsoft Edge **WebView2 Runtime**。如果应用打开后是空白窗口或无法启动，请安装或更新 WebView2 后重试。
+在 Windows 上，xcsh Desktop 需要 Microsoft Edge **WebView2 Runtime**。如果应用打开后是空白窗口或无法启动，请安装或更新 WebView2 后重试。
 
 ---
 
 ### Windows: 常见性能问题
 
-如果你在 Windows 上遇到性能缓慢、文件访问问题或终端问题，请尝试使用 [WSL (Windows Subsystem for Linux)](/docs/windows-wsl)。WSL 提供了一个 Linux 环境，能更好地与 OpenCode 的功能兼容。
+如果你在 Windows 上遇到性能缓慢、文件访问问题或终端问题，请尝试使用 [WSL (Windows Subsystem for Linux)](/docs/windows-wsl)。WSL 提供了一个 Linux 环境，能更好地与 xcsh 的功能兼容。
 
 ---
 
 ### 通知不显示
 
-OpenCode Desktop 仅在以下情况下显示系统通知：
+xcsh Desktop 仅在以下情况下显示系统通知：
 
-- 在操作系统设置中已为 OpenCode 启用通知，且
+- 在操作系统设置中已为 xcsh 启用通知，且
 - 应用窗口未处于焦点状态。
 
 ---
@@ -155,11 +155,11 @@ OpenCode Desktop 仅在以下情况下显示系统通知：
 
 如果应用无法启动且你无法从 UI 内部清除设置，请重置桌面应用的保存状态。
 
-1. 退出 OpenCode Desktop。
-2. 找到并删除以下文件（它们位于 OpenCode Desktop 应用数据目录中）：
+1. 退出 xcsh Desktop。
+2. 找到并删除以下文件（它们位于 xcsh Desktop 应用数据目录中）：
 
-- `opencode.settings.dat`（桌面默认服务器 URL）
-- `opencode.global.dat` 和 `opencode.workspace.*.dat`（UI 状态，如最近的服务器/项目）
+- `xcsh.settings.dat`（桌面默认服务器 URL）
+- `xcsh.global.dat` 和 `xcsh.workspace.*.dat`（UI 状态，如最近的服务器/项目）
 
 快速找到该目录：
 
@@ -171,13 +171,13 @@ OpenCode Desktop 仅在以下情况下显示系统通知：
 
 ## 获取帮助
 
-如果你遇到 OpenCode 的问题：
+如果你遇到 xcsh 的问题：
 
 1. **在 GitHub 上报告问题**
 
    报告 Bug 或请求功能的最佳方式是通过我们的 GitHub 仓库：
 
-   [**github.com/f5xc-salesdemos/opencode/issues**](https://github.com/f5xc-salesdemos/opencode/issues)
+   [**github.com/f5xc-salesdemos/xcsh/issues**](https://github.com/f5xc-salesdemos/xcsh/issues)
 
    在创建新 Issue 之前，请先搜索已有的 Issue，看看你的问题是否已被报告。
 
@@ -185,7 +185,7 @@ OpenCode Desktop 仅在以下情况下显示系统通知：
 
    如需实时帮助和社区讨论，请加入我们的 Discord 服务器：
 
-   [**opencode.ai/discord**](https://opencode.ai/discord)
+   [**f5xc-salesdemos.github.io/xcsh/discord**](https://f5xc-salesdemos.github.io/xcsh/discord)
 
 ---
 
@@ -195,11 +195,11 @@ OpenCode Desktop 仅在以下情况下显示系统通知：
 
 ---
 
-### OpenCode 无法启动
+### xcsh 无法启动
 
 1. 检查日志中的错误消息
 2. 尝试使用 `--print-logs` 运行以在终端中查看输出
-3. 使用 `opencode upgrade` 确保你使用的是最新版本
+3. 使用 `xcsh upgrade` 确保你使用的是最新版本
 
 ---
 
@@ -224,9 +224,9 @@ OpenCode Desktop 仅在以下情况下显示系统通知：
 
 - `openai/gpt-4.1`
 - `openrouter/google/gemini-2.5-flash`
-- `opencode/kimi-k2`
+- `xcsh/kimi-k2`
 
-要查看你有权访问哪些模型，请运行 `opencode models`
+要查看你有权访问哪些模型，请运行 `xcsh models`
 
 ---
 
@@ -240,10 +240,10 @@ OpenCode Desktop 仅在以下情况下显示系统通知：
 2. 如果问题仍然存在，请尝试清除已存储的配置：
 
    ```bash
-   rm -rf ~/.local/share/opencode
+   rm -rf ~/.local/share/xcsh
    ```
 
-   在 Windows 上，按 `WIN+R` 并删除：`%USERPROFILE%\.local\share\opencode`
+   在 Windows 上，按 `WIN+R` 并删除：`%USERPROFILE%\.local\share\xcsh`
 
 3. 在 TUI 中使用 `/connect` 命令重新与提供商进行身份验证。
 
@@ -251,21 +251,21 @@ OpenCode Desktop 仅在以下情况下显示系统通知：
 
 ### AI_APICallError 和提供商包问题
 
-如果你遇到 API 调用错误，可能是由于提供商包过期导致的。OpenCode 会根据需要动态安装提供商包（OpenAI、Anthropic、Google 等）并将它们缓存到本地。
+如果你遇到 API 调用错误，可能是由于提供商包过期导致的。xcsh 会根据需要动态安装提供商包（OpenAI、Anthropic、Google 等）并将它们缓存到本地。
 
 要解决提供商包问题：
 
 1. 清除提供商包缓存：
 
    ```bash
-   rm -rf ~/.cache/opencode
+   rm -rf ~/.cache/xcsh
    ```
 
-   在 Windows 上，按 `WIN+R` 并删除：`%USERPROFILE%\.cache\opencode`
+   在 Windows 上，按 `WIN+R` 并删除：`%USERPROFILE%\.cache\xcsh`
 
-2. 重新启动 OpenCode 以重新安装最新的提供商包
+2. 重新启动 xcsh 以重新安装最新的提供商包
 
-这将强制 OpenCode 下载最新版本的提供商包，通常可以解决模型参数和 API 变更带来的兼容性问题。
+这将强制 xcsh 下载最新版本的提供商包，通常可以解决模型参数和 API 变更带来的兼容性问题。
 
 ---
 
@@ -296,4 +296,4 @@ Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
 export DISPLAY=:99.0
 ```
 
-OpenCode 会检测你是否正在使用 Wayland 并优先使用 `wl-clipboard`，否则将按以下顺序尝试查找剪贴板工具：`xclip` 和 `xsel`。
+xcsh 会检测你是否正在使用 Wayland 并优先使用 `wl-clipboard`，否则将按以下顺序尝试查找剪贴板工具：`xclip` 和 `xsel`。

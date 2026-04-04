@@ -16,7 +16,7 @@ const samples = [
   {
     tool: "apply_patch",
     error:
-      "apply_patch verification failed: Failed to find expected lines in /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/session-turn.tsx",
+      "apply_patch verification failed: Failed to find expected lines in /Users/davidhill/Documents/Local/xcsh/packages/ui/src/components/session-turn.tsx",
   },
   {
     tool: "bash",
@@ -25,7 +25,7 @@ const samples = [
   {
     tool: "read",
     error:
-      "read File not found: /Users/davidhill/Documents/Local/opencode/packages/ui/src/components/does-not-exist.tsx",
+      "read File not found: /Users/davidhill/Documents/Local/xcsh/packages/ui/src/components/does-not-exist.tsx",
   },
   {
     tool: "glob",

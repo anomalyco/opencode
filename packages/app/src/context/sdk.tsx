@@ -1,5 +1,5 @@
-import type { Event } from "@opencode-ai/sdk/v2/client"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import type { Event } from "@f5xc-salesdemos/sdk/v2/client"
+import { createSimpleContext } from "@f5xc-salesdemos/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { type Accessor, createEffect, createMemo, onCleanup } from "solid-js"
 import { useGlobalSDK } from "./global-sdk"

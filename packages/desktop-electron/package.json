@@ -1,13 +1,13 @@
 {
-  "name": "@opencode-ai/desktop-electron",
+  "name": "@f5xc-salesdemos/desktop-electron",
   "private": true,
   "version": "1.3.13",
   "type": "module",
   "license": "MIT",
-  "homepage": "https://opencode.ai",
+  "homepage": "https://f5xc-salesdemos.github.io/xcsh",
   "author": {
     "name": "OpenCode",
-    "email": "hello@opencode.ai"
+    "email": "hello@f5xc-salesdemos.github.io/xcsh"
   },
   "scripts": {
     "typecheck": "tsgo -b",
@@ -24,8 +24,8 @@
   },
   "main": "./out/main/index.js",
   "dependencies": {
-    "@opencode-ai/app": "workspace:*",
-    "@opencode-ai/ui": "workspace:*",
+    "@f5xc-salesdemos/app": "workspace:*",
+    "@f5xc-salesdemos/ui": "workspace:*",
     "@solid-primitives/i18n": "2.2.1",
     "@solid-primitives/storage": "catalog:",
     "@solidjs/meta": "catalog:",

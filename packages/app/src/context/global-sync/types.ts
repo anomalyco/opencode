@@ -16,7 +16,7 @@ import type {
   SessionStatus,
   Todo,
   VcsInfo,
-} from "@opencode-ai/sdk/v2/client"
+} from "@f5xc-salesdemos/sdk/v2/client"
 import type { Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
 

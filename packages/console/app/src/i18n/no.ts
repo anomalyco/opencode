@@ -37,14 +37,14 @@ export const dict = {
   "email.subscribe": "Abonner",
   "email.success": "Nesten ferdig - sjekk innboksen din og bekreft e-postadressen",
 
-  "notFound.title": "Ikke funnet | opencode",
+  "notFound.title": "Ikke funnet | xcsh",
   "notFound.heading": "404 - Side ikke funnet",
   "notFound.home": "Hjem",
   "notFound.docs": "Dokumentasjon",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
-  "notFound.logoLightAlt": "opencode logo lys",
-  "notFound.logoDarkAlt": "opencode logo mørk",
+  "notFound.logoLightAlt": "xcsh logo lys",
+  "notFound.logoDarkAlt": "xcsh logo mørk",
 
   "user.logout": "Logg ut",
 
@@ -85,21 +85,21 @@ export const dict = {
 
   "home.title": "OpenCode | Den åpne kildekode AI-kodingsagenten",
 
-  "temp.title": "opencode | AI-kodingsagent bygget for terminalen",
+  "temp.title": "xcsh | AI-kodingsagent bygget for terminalen",
   "temp.hero.title": "AI-kodingsagenten bygget for terminalen",
-  "temp.zen": "opencode zen",
+  "temp.zen": "xcsh zen",
   "temp.getStarted": "Kom i gang",
   "temp.feature.native.title": "Native TUI",
   "temp.feature.native.body": "Et responsivt, native terminal-brukergrensesnitt som kan temes",
   "temp.feature.zen.beforeLink": "En",
   "temp.feature.zen.link": "kuratert liste over modeller",
-  "temp.feature.zen.afterLink": "levert av opencode",
+  "temp.feature.zen.afterLink": "levert av xcsh",
   "temp.feature.models.beforeLink": "Støtter 75+ LLM-leverandører gjennom",
   "temp.feature.models.afterLink": ", inkludert lokale modeller",
-  "temp.screenshot.caption": "opencode TUI med tokyonight-tema",
-  "temp.screenshot.alt": "opencode TUI med tokyonight-tema",
-  "temp.logoLightAlt": "opencode logo lys",
-  "temp.logoDarkAlt": "opencode logo mørk",
+  "temp.screenshot.caption": "xcsh TUI med tokyonight-tema",
+  "temp.screenshot.alt": "xcsh TUI med tokyonight-tema",
+  "temp.logoLightAlt": "xcsh logo lys",
+  "temp.logoDarkAlt": "xcsh logo mørk",
 
   "home.banner.badge": "Ny",
   "home.banner.text": "Desktop-app tilgjengelig i beta",
@@ -189,12 +189,12 @@ export const dict = {
     "Zen gir deg tilgang til et håndplukket sett med AI-modeller som OpenCode har testet og benchmarked spesielt for kodeagenter. Du slipper å bekymre deg for ujevn ytelse og kvalitet på tvers av leverandører; bruk validerte modeller som fungerer.",
   "home.zenCta.link": "Les om Zen",
 
-  "zen.title": "OpenCode Zen | Et kuratert sett med pålitelige, optimaliserte modeller for kodeagenter",
+  "zen.title": "xcsh Zen | Et kuratert sett med pålitelige, optimaliserte modeller for kodeagenter",
   "zen.hero.title": "Pålitelige optimaliserte modeller for kodeagenter",
   "zen.hero.body":
     "Zen gir deg tilgang til et kuratert sett med AI-modeller som OpenCode har testet og benchmarked spesielt for kodeagenter. Du slipper å bekymre deg for ujevn ytelse og kvalitet; bruk validerte modeller som fungerer.",
 
-  "zen.faq.q1": "Hva er OpenCode Zen?",
+  "zen.faq.q1": "Hva er xcsh Zen?",
   "zen.faq.a1":
     "Zen er et kuratert sett med AI-modeller testet og benchmarked for kodeagenter, laget av teamet bak OpenCode.",
   "zen.faq.q2": "Hva gjør Zen mer presis?",
@@ -441,15 +441,15 @@ export const dict = {
     "Få tilgang til modeller konfigurert for optimal ytelse – ingen nedgraderinger eller ruting til billigere leverandører.",
   "workspace.newUser.feature.lockin.title": "Ingen innlåsing",
   "workspace.newUser.feature.lockin.body":
-    "Bruk Zen med hvilken som helst kodeagent, og fortsett å bruke andre leverandører med opencode når du vil.",
+    "Bruk Zen med hvilken som helst kodeagent, og fortsett å bruke andre leverandører med xcsh når du vil.",
   "workspace.newUser.copyApiKey": "Kopier API-nøkkel",
   "workspace.newUser.copyKey": "Kopier nøkkel",
   "workspace.newUser.copied": "Kopiert!",
   "workspace.newUser.step.enableBilling": "Aktiver fakturering",
   "workspace.newUser.step.login.before": "Kjør",
-  "workspace.newUser.step.login.after": "og velg opencode",
+  "workspace.newUser.step.login.after": "og velg xcsh",
   "workspace.newUser.step.pasteKey": "Lim inn API-nøkkelen",
-  "workspace.newUser.step.models.before": "Start opencode og kjør",
+  "workspace.newUser.step.models.before": "Start xcsh og kjør",
   "workspace.newUser.step.models.after": "for å velge en modell",
 
   "workspace.models.title": "Modeller",
@@ -495,10 +495,10 @@ export const dict = {
   "workspace.cost.subscriptionShort": "sub",
 
   "workspace.keys.title": "API-nøkler",
-  "workspace.keys.subtitle": "Administrer API-nøklene dine for å få tilgang til opencode-tjenester.",
+  "workspace.keys.subtitle": "Administrer API-nøklene dine for å få tilgang til xcsh-tjenester.",
   "workspace.keys.create": "Opprett API-nøkkel",
   "workspace.keys.placeholder": "Skriv inn navn på nøkkel",
-  "workspace.keys.empty": "Opprett en opencode Gateway API-nøkkel",
+  "workspace.keys.empty": "Opprett en xcsh Gateway API-nøkkel",
   "workspace.keys.table.name": "Navn",
   "workspace.keys.table.key": "Nøkkel",
   "workspace.keys.table.createdBy": "Opprettet av",
@@ -640,7 +640,7 @@ export const dict = {
   "workspace.lite.subscription.resetsIn": "Nullstilles om",
   "workspace.lite.subscription.useBalance": "Bruk din tilgjengelige saldo etter å ha nådd bruksgrensene",
   "workspace.lite.subscription.selectProvider":
-    'Velg "OpenCode Go" som leverandør i opencode-konfigurasjonen din for å bruke Go-modeller.',
+    'Velg "OpenCode Go" som leverandør i xcsh-konfigurasjonen din for å bruke Go-modeller.',
   "workspace.lite.black.message":
     "Du abonnerer for øyeblikket på OpenCode Black eller står på venteliste. Vennligst avslutt abonnementet først hvis du vil bytte til Go.",
   "workspace.lite.other.message":

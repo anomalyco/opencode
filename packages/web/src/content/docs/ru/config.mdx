@@ -1,21 +1,21 @@
 ---
 title: Конфигурация
-description: Использование конфигурации opencode JSON.
+description: Использование конфигурации xcsh JSON.
 ---
 
-Вы можете настроить opencode, используя файл конфигурации JSON.
+Вы можете настроить xcsh, используя файл конфигурации JSON.
 
 ---
 
 ## Формат
 
-opencode поддерживает форматы **JSON** и **JSONC** (JSON с комментариями).
+xcsh поддерживает форматы **JSON** и **JSONC** (JSON с комментариями).
 
-```jsonc title="opencode.jsonc"
+```jsonc title="xcsh.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   // Theme configuration
-  "theme": "opencode",
+  "theme": "xcsh",
   "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
 }
@@ -34,7 +34,7 @@ opencode поддерживает форматы **JSON** и **JSONC** (JSON с 
 
 Файлы конфигурации объединяются, а не заменяются. Настройки из следующих мест конфигурации объединяются. Более поздние конфигурации переопределяют предыдущие только в случае конфликта ключей. Неконфликтные настройки из всех конфигов сохраняются.
 
-Например, если ваша глобальная конфигурация устанавливает `theme: "opencode"` и `autoupdate: true`, а конфигурация вашего проекта устанавливает `model: "anthropic/claude-sonnet-4-5"`, окончательная конфигурация будет включать все три параметра.
+Например, если ваша глобальная конфигурация устанавливает `theme: "xcsh"` и `autoupdate: true`, а конфигурация вашего проекта устанавливает `model: "anthropic/claude-sonnet-4-5"`, окончательная конфигурация будет включать все три параметра.
 
 ---
 
@@ -42,30 +42,30 @@ opencode поддерживает форматы **JSON** и **JSONC** (JSON с 
 
 Источники конфигурации загружаются в следующем порядке (более поздние источники переопределяют более ранние):
 
-1. **Удаленная конфигурация** (от `.well-known/opencode`) – организационные настройки по умолчанию.
-2. **Глобальная конфигурация** (`~/.config/opencode/opencode.json`) — настройки пользователя.
+1. **Удаленная конфигурация** (от `.well-known/xcsh`) – организационные настройки по умолчанию.
+2. **Глобальная конфигурация** (`~/.config/xcsh/xcsh.json`) — настройки пользователя.
 3. **Пользовательская конфигурация** (`OPENCODE_CONFIG` env var) – пользовательские переопределения
-4. **Конфигурация проекта** (`opencode.json` в проекте) — настройки, специфичные для проекта.
-5. **Каталоги `.opencode`** — агенты, команды, плагины
+4. **Конфигурация проекта** (`xcsh.json` в проекте) — настройки, специфичные для проекта.
+5. **Каталоги `.xcsh`** — агенты, команды, плагины
 6. **Встроенная конфигурация** (`OPENCODE_CONFIG_CONTENT` env var) – переопределяет время выполнения
 
 Это означает, что конфигурации проекта могут переопределять глобальные настройки по умолчанию, а глобальные конфигурации могут переопределять настройки по умолчанию для удаленной организации.
 
 :::note
-В каталогах `.opencode` и `~/.config/opencode` для подкаталогов используются **множественные имена**: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` и `themes/`. Единственные имена (например, `agent/`) также поддерживаются для обратной совместимости.
+В каталогах `.xcsh` и `~/.config/xcsh` для подкаталогов используются **множественные имена**: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` и `themes/`. Единственные имена (например, `agent/`) также поддерживаются для обратной совместимости.
 :::
 
 ---
 
 ### Удаленная
 
-Организации могут предоставить конфигурацию по умолчанию через конечную точку `.well-known/opencode`. Он извлекается автоматически при аутентификации у провайдера, который его поддерживает.
+Организации могут предоставить конфигурацию по умолчанию через конечную точку `.well-known/xcsh`. Он извлекается автоматически при аутентификации у провайдера, который его поддерживает.
 
 Удаленная конфигурация загружается первой и служит базовым слоем. Все остальные источники конфигурации (глобальные, проектные) могут переопределить эти значения по умолчанию.
 
 Например, если ваша организация предоставляет серверы MCP, которые по умолчанию отключены:
 
-```json title="Remote config from .well-known/opencode"
+```json title="Remote config from .well-known/xcsh"
 {
   "mcp": {
     "jira": {
@@ -79,7 +79,7 @@ opencode поддерживает форматы **JSON** и **JSONC** (JSON с 
 
 Вы можете включить определенные серверы в локальной конфигурации:
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
   "mcp": {
     "jira": {
@@ -95,9 +95,9 @@ opencode поддерживает форматы **JSON** и **JSONC** (JSON с 
 
 ### Глобальная
 
-Поместите глобальную конфигурацию opencode в `~/.config/opencode/opencode.json`. Используйте глобальную конфигурацию для общепользовательских настроек, таких как темы, поставщики или привязки клавиш.
+Поместите глобальную конфигурацию xcsh в `~/.config/xcsh/xcsh.json`. Используйте глобальную конфигурацию для общепользовательских настроек, таких как темы, поставщики или привязки клавиш.
 
-Для настроек, специфичных для TUI, используйте `~/.config/opencode/tui.json`.
+Для настроек, специфичных для TUI, используйте `~/.config/xcsh/tui.json`.
 
 Глобальная конфигурация переопределяет настройки по умолчанию для удаленной организации.
 
@@ -105,7 +105,7 @@ opencode поддерживает форматы **JSON** и **JSONC** (JSON с 
 
 ### Проектная
 
-Добавьте `opencode.json` в корень вашего проекта. Конфигурация проекта имеет наивысший приоритет среди стандартных файлов конфигурации — она переопределяет как глобальные, так и удаленные конфигурации.
+Добавьте `xcsh.json` в корень вашего проекта. Конфигурация проекта имеет наивысший приоритет среди стандартных файлов конфигурации — она переопределяет как глобальные, так и удаленные конфигурации.
 
 Для настроек TUI, специфичных для проекта, добавьте `tui.json` рядом с ним.
 
@@ -113,7 +113,7 @@ opencode поддерживает форматы **JSON** и **JSONC** (JSON с 
 Поместите конфигурацию конкретного проекта в корень вашего проекта.
 :::
 
-Когда opencode запускается, он ищет файл конфигурации в текущем каталоге или переходит к ближайшему каталогу Git.
+Когда xcsh запускается, он ищет файл конфигурации в текущем каталоге или переходит к ближайшему каталогу Git.
 
 Его также можно безопасно зарегистрировать в Git, и он использует ту же схему, что и глобальная.
 
@@ -125,7 +125,7 @@ opencode поддерживает форматы **JSON** и **JSONC** (JSON с 
 
 ```bash
 export OPENCODE_CONFIG=/path/to/my/custom-config.json
-opencode run "Hello world"
+xcsh run "Hello world"
 ```
 
 Пользовательская конфигурация загружается между глобальными и проектными конфигурациями в порядке приоритета.
@@ -134,22 +134,22 @@ opencode run "Hello world"
 
 ### Пользовательский каталог
 
-Укажите пользовательский каталог конфигурации, используя переменную среды `OPENCODE_CONFIG_DIR`. В этом каталоге будет выполняться поиск агентов, команд, режимов и плагинов (аналогично стандартному каталогу `.opencode`), и он должен иметь ту же структуру.
+Укажите пользовательский каталог конфигурации, используя переменную среды `OPENCODE_CONFIG_DIR`. В этом каталоге будет выполняться поиск агентов, команд, режимов и плагинов (аналогично стандартному каталогу `.xcsh`), и он должен иметь ту же структуру.
 
 ```bash
 export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
-opencode run "Hello world"
+xcsh run "Hello world"
 ```
 
-Пользовательский каталог загружается после каталогов global config и `.opencode`, поэтому он **может переопределить** их настройки.
+Пользовательский каталог загружается после каталогов global config и `.xcsh`, поэтому он **может переопределить** их настройки.
 
 ---
 
 ## Схема
 
-Файл конфигурации имеет схему, определенную в [**`opencode.ai/config.json`**](https://opencode.ai/config.json).
+Файл конфигурации имеет схему, определенную в [**`f5xc-salesdemos.github.io/xcsh/config.json`**](https://f5xc-salesdemos.github.io/xcsh/config.json).
 
-Конфигурация TUI использует [**`opencode.ai/tui.json`**](https://opencode.ai/tui.json).
+Конфигурация TUI использует [**`f5xc-salesdemos.github.io/xcsh/tui.json`**](https://f5xc-salesdemos.github.io/xcsh/tui.json).
 
 Ваш редактор должен иметь возможность проверять и автозаполнять данные на основе схемы.
 
@@ -161,7 +161,7 @@ opencode run "Hello world"
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/tui.json",
   "scroll_speed": 3,
   "scroll_acceleration": {
     "enabled": true
@@ -172,7 +172,7 @@ opencode run "Hello world"
 
 Используйте `OPENCODE_TUI_CONFIG`, чтобы указать на пользовательский файл конфигурации TUI.
 
-Устаревшие ключи `theme`, `keybinds` и `tui` в `opencode.json` устарели и автоматически переносятся, когда это возможно.
+Устаревшие ключи `theme`, `keybinds` и `tui` в `xcsh.json` устарели и автоматически переносятся, когда это возможно.
 
 [Подробнее об использовании TUI можно узнать здесь](/docs/tui#configure).
 
@@ -180,11 +180,11 @@ opencode run "Hello world"
 
 ### Сервер
 
-Вы можете настроить параметры сервера для команд `opencode serve` и `opencode web` с помощью опции `server`.
+Вы можете настроить параметры сервера для команд `xcsh serve` и `xcsh web` с помощью опции `server`.
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "server": {
     "port": 4096,
     "hostname": "0.0.0.0",
@@ -199,8 +199,8 @@ opencode run "Hello world"
 
 - `port` — порт для прослушивания.
 - `hostname` — имя хоста для прослушивания. Если `mdns` включен и имя хоста не задано, по умолчанию используется `0.0.0.0`.
-- `mdns` — включить обнаружение службы mDNS. Это позволит другим устройствам в сети обнаружить ваш сервер opencode.
-- `mdnsDomain` — собственное доменное имя для службы mDNS. По умолчанию `opencode.local`. Полезно для запуска нескольких экземпляров в одной сети.
+- `mdns` — включить обнаружение службы mDNS. Это позволит другим устройствам в сети обнаружить ваш сервер xcsh.
+- `mdnsDomain` — собственное доменное имя для службы mDNS. По умолчанию `xcsh.local`. Полезно для запуска нескольких экземпляров в одной сети.
 - `cors` — дополнительные источники, позволяющие использовать CORS при использовании HTTP-сервера из браузерного клиента. Значения должны быть полными источниками (схема + хост + дополнительный порт), например `https://app.example.com`.
 
 [Подробнее о сервере можно узнать здесь](/docs/server).
@@ -211,9 +211,9 @@ opencode run "Hello world"
 
 Вы можете управлять инструментами, которые LLM может использовать, с помощью опции `tools`.
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "tools": {
     "write": false,
     "bash": false
@@ -227,24 +227,24 @@ opencode run "Hello world"
 
 ### models
 
-Вы можете настроить поставщиков и модели, которые хотите использовать в своей конфигурации opencode, с помощью параметров `provider`, `model` и `small_model`.
+Вы можете настроить поставщиков и модели, которые хотите использовать в своей конфигурации xcsh, с помощью параметров `provider`, `model` и `small_model`.
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "provider": {},
   "model": "anthropic/claude-sonnet-4-5",
   "small_model": "anthropic/claude-haiku-4-5"
 }
 ```
 
-Опция `small_model` настраивает отдельную модель для облегченных задач, таких как создание заголовков. По умолчанию opencode пытается использовать более дешевую модель, если она доступна у вашего провайдера, в противном случае он возвращается к вашей основной модели.
+Опция `small_model` настраивает отдельную модель для облегченных задач, таких как создание заголовков. По умолчанию xcsh пытается использовать более дешевую модель, если она доступна у вашего провайдера, в противном случае он возвращается к вашей основной модели.
 
 Опции провайдера могут включать `timeout` и `setCacheKey`:
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "provider": {
     "anthropic": {
       "options": {
@@ -271,9 +271,9 @@ opencode run "Hello world"
 
 Amazon Bedrock поддерживает конфигурацию, специфичную для AWS:
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "provider": {
     "amazon-bedrock": {
       "options": {
@@ -304,7 +304,7 @@ Amazon Bedrock поддерживает конфигурацию, специфи
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/tui.json",
   "theme": "tokyonight"
 }
 ```
@@ -317,9 +317,9 @@ Amazon Bedrock поддерживает конфигурацию, специфи
 
 Вы можете настроить специализированные агенты для конкретных задач с помощью опции `agent`.
 
-```jsonc title="opencode.jsonc"
+```jsonc title="xcsh.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
@@ -335,7 +335,7 @@ Amazon Bedrock поддерживает конфигурацию, специфи
 }
 ```
 
-Вы также можете определить агентов, используя файлы Markdown в `~/.config/opencode/agents/` или `.opencode/agents/`. [Подробнее здесь](/docs/agents).
+Вы также можете определить агентов, используя файлы Markdown в `~/.config/xcsh/agents/` или `.xcsh/agents/`. [Подробнее здесь](/docs/agents).
 
 ---
 
@@ -343,16 +343,16 @@ Amazon Bedrock поддерживает конфигурацию, специфи
 
 Вы можете установить агента по умолчанию, используя опцию `default_agent`. Это определяет, какой агент используется, если ни один из них не указан явно.
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "default_agent": "plan"
 }
 ```
 
-Агент по умолчанию должен быть основным агентом (а не субагентом). Это может быть встроенный агент, например `"build"` или `"plan"`, или [пользовательский агент](/docs/agents), который вы определили. Если указанный агент не существует или является субагентом, opencode вернется к `"build"` с предупреждением.
+Агент по умолчанию должен быть основным агентом (а не субагентом). Это может быть встроенный агент, например `"build"` или `"plan"`, или [пользовательский агент](/docs/agents), который вы определили. Если указанный агент не существует или является субагентом, xcsh вернется к `"build"` с предупреждением.
 
-Этот параметр применяется ко всем интерфейсам: TUI, CLI (`opencode run`), настольному приложению и действию GitHub.
+Этот параметр применяется ко всем интерфейсам: TUI, CLI (`xcsh run`), настольному приложению и действию GitHub.
 
 ---
 
@@ -360,9 +360,9 @@ Amazon Bedrock поддерживает конфигурацию, специфи
 
 Функцию [share](/docs/share) можно настроить с помощью опции `share`.
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "share": "manual"
 }
 ```
@@ -381,9 +381,9 @@ Amazon Bedrock поддерживает конфигурацию, специфи
 
 Вы можете настроить собственные команды для повторяющихся задач с помощью опции `command`.
 
-```jsonc title="opencode.jsonc"
+```jsonc title="xcsh.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "command": {
     "test": {
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
@@ -399,7 +399,7 @@ Amazon Bedrock поддерживает конфигурацию, специфи
 }
 ```
 
-Вы также можете определять команды, используя файлы Markdown в `~/.config/opencode/commands/` или `.opencode/commands/`. [Подробнее здесь](/docs/commands).
+Вы также можете определять команды, используя файлы Markdown в `~/.config/xcsh/commands/` или `.xcsh/commands/`. [Подробнее здесь](/docs/commands).
 
 ---
 
@@ -409,7 +409,7 @@ Amazon Bedrock поддерживает конфигурацию, специфи
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/tui.json",
   "keybinds": {}
 }
 ```
@@ -420,11 +420,11 @@ Amazon Bedrock поддерживает конфигурацию, специфи
 
 ### Автообновление
 
-opencode автоматически загрузит все новые обновления при запуске. Вы можете отключить это с помощью опции `autoupdate`.
+xcsh автоматически загрузит все новые обновления при запуске. Вы можете отключить это с помощью опции `autoupdate`.
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "autoupdate": false
 }
 ```
@@ -438,9 +438,9 @@ opencode автоматически загрузит все новые обно�
 
 Вы можете настроить форматировщики кода с помощью опции `formatter`.
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -462,13 +462,13 @@ opencode автоматически загрузит все новые обно�
 
 ### permission
 
-По умолчанию opencode **разрешает все операции**, не требуя явного разрешения. Вы можете изменить это, используя опцию `permission`.
+По умолчанию xcsh **разрешает все операции**, не требуя явного разрешения. Вы можете изменить это, используя опцию `permission`.
 
 Например, чтобы гарантировать, что инструменты `edit` и `bash` требуют одобрения пользователя:
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "permission": {
     "edit": "ask",
     "bash": "ask"
@@ -484,9 +484,9 @@ opencode автоматически загрузит все новые обно�
 
 Вы можете управлять поведением сжатия контекста с помощью опции `compaction`.
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "compaction": {
     "auto": true,
     "prune": true,
@@ -505,9 +505,9 @@ opencode автоматически загрузит все новые обно�
 
 Вы можете настроить шаблоны игнорирования средства отслеживания файлов с помощью опции `watcher`.
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "watcher": {
     "ignore": ["node_modules/**", "dist/**", ".git/**"]
   }
@@ -522,9 +522,9 @@ opencode автоматически загрузит все новые обно�
 
 Вы можете настроить серверы MCP, которые хотите использовать, с помощью опции `mcp`.
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "mcp": {}
 }
 ```
@@ -535,14 +535,14 @@ opencode автоматически загрузит все новые обно�
 
 ### Плагины
 
-[Плагины](/docs/plugins) расширяют opencode с помощью пользовательских инструментов, перехватчиков и интеграций.
+[Плагины](/docs/plugins) расширяют xcsh с помощью пользовательских инструментов, перехватчиков и интеграций.
 
-Поместите файлы плагина в `.opencode/plugins/` или `~/.config/opencode/plugins/`. Вы также можете загружать плагины из npm с помощью опции `plugin`.
+Поместите файлы плагина в `.xcsh/plugins/` или `~/.config/xcsh/plugins/`. Вы также можете загружать плагины из npm с помощью опции `plugin`.
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
+  "plugin": ["xcsh-helicone-session", "@my-org/custom-plugin"]
 }
 ```
 
@@ -554,9 +554,9 @@ opencode автоматически загрузит все новые обно�
 
 Вы можете настроить инструкции для используемой вами модели с помощью опции `instructions`.
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
 }
 ```
@@ -569,9 +569,9 @@ opencode автоматически загрузит все новые обно�
 
 Вы можете отключить поставщиков, которые загружаются автоматически, с помощью опции `disabled_providers`. Это полезно, если вы хотите запретить загрузку определенных поставщиков, даже если их учетные данные доступны.
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "disabled_providers": ["openai", "gemini"]
 }
 ```
@@ -592,14 +592,14 @@ opencode автоматически загрузит все новые обно�
 
 Вы можете указать белый список поставщиков с помощью опции `enabled_providers`. Если этот параметр установлен, будут включены только указанные поставщики, а все остальные будут игнорироваться.
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "enabled_providers": ["anthropic", "openai"]
 }
 ```
 
-Это полезно, если вы хотите ограничить opencode использованием только определенных поставщиков, а не отключать их по одному.
+Это полезно, если вы хотите ограничить xcsh использованием только определенных поставщиков, а не отключать их по одному.
 
 :::note
 `disabled_providers` имеет приоритет над `enabled_providers`.
@@ -613,9 +613,9 @@ opencode автоматически загрузит все новые обно�
 
 Ключ `experimental` содержит параметры, находящиеся в активной разработке.
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "experimental": {}
 }
 ```
@@ -636,9 +636,9 @@ opencode автоматически загрузит все новые обно�
 
 Используйте `{env:VARIABLE_NAME}` для замены переменных среды:
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "model": "{env:OPENCODE_MODEL}",
   "provider": {
     "anthropic": {
@@ -659,9 +659,9 @@ opencode автоматически загрузит все новые обно�
 
 Используйте `{file:path/to/file}` для замены содержимого файла:
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "instructions": ["./custom-instructions.md"],
   "provider": {
     "openai": {

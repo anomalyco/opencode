@@ -1,4 +1,4 @@
-import { sampledChecksum } from "@opencode-ai/util/encode"
+import { sampledChecksum } from "@f5xc-salesdemos/util/encode"
 import {
   DEFAULT_VIRTUAL_FILE_METRICS,
   type DiffLineAnnotation,

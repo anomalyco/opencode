@@ -3,11 +3,11 @@ title: Tastebindinger
 description: Tilpas dine nøglebindinger.
 ---
 
-OpenCode har en liste over nøglebindinger, som du kan tilpasse gennem `tui.json`.
+xcsh har en liste over nøglebindinger, som du kan tilpasse gennem `tui.json`.
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/tui.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -108,7 +108,7 @@ OpenCode har en liste over nøglebindinger, som du kan tilpasse gennem `tui.json
 
 ## Ledertast
 
-OpenCode bruger en `leader` nøgle til de fleste smagsbindinger. Dette undgår konflikter i din terminal.
+xcsh bruger en `leader` nøgle til de fleste smagsbindinger. Dette undgår konflikter i din terminal.
 
 Som standard er `ctrl+x` ledertasten, og de fleste handlinger kræver, at du først trykker på ledertasten og derefter genvejen. For eksempel, for at starte en ny session, skal du først trykke på `ctrl+x` og derefter trykke på `n`.
 
@@ -122,7 +122,7 @@ Du kan deaktivere en nøglebinding ved at tilføje nøglen til `tui.json` med v�
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/tui.json",
   "keybinds": {
     "session_compact": "none"
   }
@@ -133,7 +133,7 @@ Du kan deaktivere en nøglebinding ved at tilføje nøglen til `tui.json` med v�
 
 ## Genveje til skrivebordsprompt
 
-OpenCode desktop app prompt input understøtter almindelige Readline/Emacs-style genveje til redigering af tekst. Disse er indbyggede og i øjeblikket ikke konfigurerede via `opencode.json`.
+xcsh desktop app prompt input understøtter almindelige Readline/Emacs-style genveje til redigering af tekst. Disse er indbyggede og i øjeblikket ikke konfigurerede via `xcsh.json`.
 
 | Genvej   | Håndtering                                  |
 | -------- | ------------------------------------------- |

@@ -1,30 +1,30 @@
 ---
 title: Провайдеры
-description: Использование любого провайдера LLM в opencode.
+description: Использование любого провайдера LLM в xcsh.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 
-opencode использует [AI SDK](https://ai-sdk.dev/) и [Models.dev](https://models.dev) для поддержки **более 75 поставщиков LLM** и поддерживает запуск локальных моделей.
+xcsh использует [AI SDK](https://ai-sdk.dev/) и [Models.dev](https://models.dev) для поддержки **более 75 поставщиков LLM** и поддерживает запуск локальных моделей.
 
 Чтобы добавить провайдера, вам необходимо:
 
 1. Добавьте ключи API для провайдера с помощью команды `/connect`.
-2. Настройте провайдера в вашей конфигурации opencode.
+2. Настройте провайдера в вашей конфигурации xcsh.
 
 ---
 
 ### Учетные данные
 
 Когда вы добавляете ключи API провайдера с помощью команды `/connect`, они сохраняются
-в `~/.local/share/opencode/auth.json`.
+в `~/.local/share/xcsh/auth.json`.
 
 ---
 
 ### Настройка
 
-Вы можете настроить поставщиков через раздел `provider` в вашем opencode.
+Вы можете настроить поставщиков через раздел `provider` в вашем xcsh.
 конфиг.
 
 ---
@@ -33,9 +33,9 @@ opencode использует [AI SDK](https://ai-sdk.dev/) и [Models.dev](http
 
 Вы можете настроить базовый URL-адрес для любого провайдера, установив параметр `baseURL`. Это полезно при использовании прокси-сервисов или пользовательских конечных точек.
 
-```json title="opencode.json" {6}
+```json title="xcsh.json" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "provider": {
     "anthropic": {
       "options": {
@@ -48,16 +48,16 @@ opencode использует [AI SDK](https://ai-sdk.dev/) и [Models.dev](http
 
 ---
 
-## OpenCode Zen
+## xcsh Zen
 
-OpenCode Zen — это список моделей, предоставленный командой opencode, которые были
-протестировано и проверено на хорошую работу с opencode. [Подробнее](/docs/zen).
+xcsh Zen — это список моделей, предоставленный командой xcsh, которые были
+протестировано и проверено на хорошую работу с xcsh. [Подробнее](/docs/zen).
 
 :::tip
-Если вы новичок, мы рекомендуем начать с OpenCode Zen.
+Если вы новичок, мы рекомендуем начать с xcsh Zen.
 :::
 
-1. Запустите команду `/connect` в TUI, выберите `OpenCode Zen` и перейдите по адресу [opencode.ai/auth](https://opencode.ai/zen).
+1. Запустите команду `/connect` в TUI, выберите `xcsh Zen` и перейдите по адресу [f5xc-salesdemos.github.io/xcsh/auth](https://f5xc-salesdemos.github.io/xcsh/zen).
 
    ```txt
    /connect
@@ -80,16 +80,16 @@ OpenCode Zen — это список моделей, предоставленн�
    /models
    ```
 
-Он работает как любой другой поставщик в opencode и его использование совершенно необязательно.
+Он работает как любой другой поставщик в xcsh и его использование совершенно необязательно.
 
 ---
 
-## OpenCode Go
+## xcsh Go
 
-OpenCode Go — это недорогой план подписки, обеспечивающий надежный доступ к популярным открытым моделям кодирования, предоставляемым командой opencode, которые были
-протестированы и проверены на хорошую работу с opencode.
+xcsh Go — это недорогой план подписки, обеспечивающий надежный доступ к популярным открытым моделям кодирования, предоставляемым командой xcsh, которые были
+протестированы и проверены на хорошую работу с xcsh.
 
-1. Запустите команду `/connect` в TUI, выберите `OpenCode Go` и перейдите по адресу [opencode.ai/auth](https://opencode.ai/zen).
+1. Запустите команду `/connect` в TUI, выберите `xcsh Go` и перейдите по адресу [f5xc-salesdemos.github.io/xcsh/auth](https://f5xc-salesdemos.github.io/xcsh/zen).
 
    ```txt
    /connect
@@ -112,7 +112,7 @@ OpenCode Go — это недорогой план подписки, обесп�
    /models
    ```
 
-Он работает как любой другой поставщик в opencode и его использование совершенно необязательно.
+Он работает как любой другой поставщик в xcsh и его использование совершенно необязательно.
 
 ---
 
@@ -155,7 +155,7 @@ OpenCode Go — это недорогой план подписки, обесп�
 
 ### Amazon Bedrock
 
-Чтобы использовать Amazon Bedrock с opencode:
+Чтобы использовать Amazon Bedrock с xcsh:
 
 1. Перейдите в **Каталог моделей** в консоли Amazon Bedrock и запросите
    доступ к нужным моделям.
@@ -168,17 +168,17 @@ OpenCode Go — это недорогой план подписки, обесп�
 
    #### Переменные среды (быстрый старт)
 
-   Установите одну из этих переменных среды при запуске opencode:
+   Установите одну из этих переменных среды при запуске xcsh:
 
    ```bash
    # Option 1: Using AWS access keys
-   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY opencode
+   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY xcsh
 
    # Option 2: Using named AWS profile
-   AWS_PROFILE=my-profile opencode
+   AWS_PROFILE=my-profile xcsh
 
    # Option 3: Using Bedrock bearer token
-   AWS_BEARER_TOKEN_BEDROCK=XXX opencode
+   AWS_BEARER_TOKEN_BEDROCK=XXX xcsh
    ```
 
    Или добавьте их в свой профиль bash:
@@ -190,11 +190,11 @@ OpenCode Go — это недорогой план подписки, обесп�
 
    #### Файл конфигурации (рекомендуется)
 
-   Для конкретной или постоянной конфигурации проекта используйте `opencode.json`:
+   Для конкретной или постоянной конфигурации проекта используйте `xcsh.json`:
 
-   ```json title="opencode.json"
+   ```json title="xcsh.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
      "provider": {
        "amazon-bedrock": {
          "options": {
@@ -219,9 +219,9 @@ OpenCode Go — это недорогой план подписки, обесп�
 
    Если вы используете конечные точки VPC для Bedrock:
 
-   ```json title="opencode.json"
+   ```json title="xcsh.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
      "provider": {
        "amazon-bedrock": {
          "options": {
@@ -263,9 +263,9 @@ OpenCode Go — это недорогой план подписки, обесп�
 :::note
 Для пользовательских профилей вывода используйте имя модели и поставщика в ключе и задайте для свойства `id` значение arn. Это обеспечивает правильное кэширование:
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "provider": {
     "amazon-bedrock": {
       // ...
@@ -310,7 +310,7 @@ OpenCode Go — это недорогой план подписки, обесп�
    ```
 
 :::info
-Использование вашей подписки Claude Pro/Max в opencode официально не поддерживается [Anthropic](https://anthropic.com).
+Использование вашей подписки Claude Pro/Max в xcsh официально не поддерживается [Anthropic](https://anthropic.com).
 :::
 
 ##### Использование ключей API
@@ -334,7 +334,7 @@ OpenCode Go — это недорогой план подписки, обесп�
 2. Перейдите в [Azure AI Foundry](https://ai.azure.com/) и разверните модель.
 
    :::примечание
-   Для правильной работы opencode имя развертывания должно совпадать с именем модели.
+   Для правильной работы xcsh имя развертывания должно совпадать с именем модели.
    :::
 
 3. Запустите команду `/connect` и найдите **Azure**.
@@ -355,7 +355,7 @@ OpenCode Go — это недорогой план подписки, обесп�
 5. Задайте имя ресурса как переменную среды:
 
    ```bash
-   AZURE_RESOURCE_NAME=XXX opencode
+   AZURE_RESOURCE_NAME=XXX xcsh
    ```
 
    Или добавьте его в свой профиль bash:
@@ -381,7 +381,7 @@ OpenCode Go — это недорогой план подписки, обесп�
 2. Перейдите в [Azure AI Foundry](https://ai.azure.com/) и разверните модель.
 
    :::примечание
-   Для правильной работы opencode имя развертывания должно совпадать с именем модели.
+   Для правильной работы xcsh имя развертывания должно совпадать с именем модели.
    :::
 
 3. Запустите команду `/connect` и найдите **Azure Cognitive Services**.
@@ -402,7 +402,7 @@ OpenCode Go — это недорогой план подписки, обесп�
 5. Задайте имя ресурса как переменную среды:
 
    ```bash
-   AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX opencode
+   AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX xcsh
    ```
 
    Или добавьте его в свой профиль bash:
@@ -513,11 +513,11 @@ Cloudflare AI Gateway позволяет вам получать доступ к
    /models
    ```
 
-   Вы также можете добавлять модели через конфигурацию opencode.
+   Вы также можете добавлять модели через конфигурацию xcsh.
 
-   ```json title="opencode.json"
+   ```json title="xcsh.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
      "provider": {
        "cloudflare-ai-gateway": {
          "models": {
@@ -693,7 +693,7 @@ GitLab Duo предоставляет агентский чат на базе и
    #### Использование токена личного доступа
    1. Перейдите в [Настройки пользователя GitLab > Токены доступа](https://gitlab.com/-/user_settings/personal_access_tokens).
    2. Нажмите **Добавить новый токен**.
-   3. Имя: `OpenCode`, Области применения: `api`
+   3. Имя: `xcsh`, Области применения: `api`
    4. Скопируйте токен (начинается с `glpat-`)
    5. Введите его в терминал
 
@@ -710,20 +710,20 @@ GitLab Duo предоставляет агентский чат на базе и
 
 :::note
 Вы также можете указать переменную среды «GITLAB_TOKEN», если не хотите.
-для хранения токена в хранилище аутентификации opencode.
+для хранения токена в хранилище аутентификации xcsh.
 :::
 
 ##### Самостоятельная GitLab
 
 :::note[примечание о соответствии]
-opencode использует небольшую модель для некоторых задач ИИ, таких как создание заголовка сеанса.
-По умолчанию он настроен на использование gpt-5-nano, размещенного на Zen. Чтобы заблокировать opencode
+xcsh использует небольшую модель для некоторых задач ИИ, таких как создание заголовка сеанса.
+По умолчанию он настроен на использование gpt-5-nano, размещенного на Zen. Чтобы заблокировать xcsh
 чтобы использовать только свой собственный экземпляр, размещенный на GitLab, добавьте следующее в свой
-`opencode.json` файл. Также рекомендуется отключить совместное использование сеансов.
+`xcsh.json` файл. Также рекомендуется отключить совместное использование сеансов.
 
 ```json
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "small_model": "gitlab/duo-chat-haiku-4-5",
   "share": "disabled"
 }
@@ -777,15 +777,15 @@ URL обратного вызова `http://127.0.0.1:8080/callback` и след
 export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 ```
 
-Дополнительная документация на домашней странице [opencode-gitlab-auth](https://www.npmjs.com/package/opencode-gitlab-auth).
+Дополнительная документация на домашней странице [xcsh-gitlab-auth](https://www.npmjs.com/package/xcsh-gitlab-auth).
 
 ##### Конфигурация
 
-Настройте через `opencode.json`:
+Настройте через `xcsh.json`:
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "provider": {
     "gitlab": {
       "options": {
@@ -800,10 +800,10 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 Чтобы получить доступ к инструментам GitLab (мерж-реквесты, задачи, конвейеры, CI/CD и т. д.):
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-gitlab-plugin"]
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
+  "plugin": ["xcsh-gitlab-plugin"]
 }
 ```
 
@@ -850,7 +850,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ### Google Vertex AI
 
-Чтобы использовать Google Vertex AI с opencode:
+Чтобы использовать Google Vertex AI с xcsh:
 
 1. Перейдите в **Model Garden** в Google Cloud Console и проверьте
    модели, доступные в вашем регионе.
@@ -866,10 +866,10 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
      - `GOOGLE_APPLICATION_CREDENTIALS`: путь к ключевому файлу JSON вашего сервисного аккаунта.
      - Аутентификация через CLI gcloud: `gcloud auth application-default login`.
 
-   Установите их во время запуска opencode.
+   Установите их во время запуска xcsh.
 
    ```bash
-   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id xcsh
    ```
 
    Или добавьте их в свой профиль bash.
@@ -979,13 +979,13 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 #### Дополнительные конфигурации
 
-Если вы видите функцию или модель от Helicone, которая не настраивается автоматически через opencode, вы всегда можете настроить ее самостоятельно.
+Если вы видите функцию или модель от Helicone, которая не настраивается автоматически через xcsh, вы всегда можете настроить ее самостоятельно.
 
 Вот [Справочник моделей Helicone](https://helicone.ai/models), он понадобится вам, чтобы получить идентификаторы моделей, которые вы хотите добавить.
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/xcsh/xcsh.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "provider": {
     "helicone": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1011,9 +1011,9 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 Helicone поддерживает пользовательские заголовки для таких функций, как кэширование, отслеживание пользователей и управление сеансами. Добавьте их в конфигурацию вашего провайдера, используя `options.headers`:
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/xcsh/xcsh.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "provider": {
     "helicone": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1022,7 +1022,7 @@ Helicone поддерживает пользовательские заголо�
         "baseURL": "https://ai-gateway.helicone.ai",
         "headers": {
           "Helicone-Cache-Enabled": "true",
-          "Helicone-User-Id": "opencode",
+          "Helicone-User-Id": "xcsh",
         },
       },
     },
@@ -1032,21 +1032,21 @@ Helicone поддерживает пользовательские заголо�
 
 ##### Отслеживание сеансов
 
-Функция Helicone [Sessions](https://docs.helicone.ai/features/sessions) позволяет группировать связанные запросы LLM вместе. Используйте плагин [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session), чтобы автоматически регистрировать каждый диалог opencode как сеанс в Helicone.
+Функция Helicone [Sessions](https://docs.helicone.ai/features/sessions) позволяет группировать связанные запросы LLM вместе. Используйте плагин [xcsh-helicone-session](https://github.com/H2Shami/xcsh-helicone-session), чтобы автоматически регистрировать каждый диалог xcsh как сеанс в Helicone.
 
 ```bash
-npm install -g opencode-helicone-session
+npm install -g xcsh-helicone-session
 ```
 
 Добавьте его в свою конфигурацию.
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "plugin": ["opencode-helicone-session"]
+  "plugin": ["xcsh-helicone-session"]
 }
 ```
 
-Плагин вставляет в ваши запросы заголовки `Helicone-Session-Id` и `Helicone-Session-Name`. На странице «Сеансы» Helicone вы увидите каждый диалог opencode, указанный как отдельный сеанс.
+Плагин вставляет в ваши запросы заголовки `Helicone-Session-Id` и `Helicone-Session-Name`. На странице «Сеансы» Helicone вы увидите каждый диалог xcsh, указанный как отдельный сеанс.
 
 ##### Общие разъемы Helicone
 
@@ -1063,11 +1063,11 @@ npm install -g opencode-helicone-session
 
 ### llama.cpp
 
-Вы можете настроить opencode для использования локальных моделей с помощью [утилиты llama-server llama.cpp's](https://github.com/ggml-org/llama.cpp)
+Вы можете настроить xcsh для использования локальных моделей с помощью [утилиты llama-server llama.cpp's](https://github.com/ggml-org/llama.cpp)
 
-```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
+```json title="xcsh.json" "llama.cpp" {5, 6, 8, 10-15}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "provider": {
     "llama.cpp": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1130,11 +1130,11 @@ IO.NET предлагает 17 моделей, оптимизированных 
 
 ### LM Studio
 
-Вы можете настроить opencode для использования локальных моделей через LM Studio.
+Вы можете настроить xcsh для использования локальных моделей через LM Studio.
 
-```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
+```json title="xcsh.json" "lmstudio" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "provider": {
     "lmstudio": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1247,15 +1247,15 @@ IO.NET предлагает 17 моделей, оптимизированных 
 
 ### Ollama
 
-Вы можете настроить opencode для использования локальных моделей через Ollama.
+Вы можете настроить xcsh для использования локальных моделей через Ollama.
 
 :::tip
-Ollama может автоматически настроиться для opencode. Подробности см. в документации по интеграции Ollama](https://docs.ollama.com/integrations/opencode).
+Ollama может автоматически настроиться для xcsh. Подробности см. в документации по интеграции Ollama](https://docs.ollama.com/integrations/xcsh).
 :::
 
-```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
+```json title="xcsh.json" "ollama" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "provider": {
     "ollama": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1289,13 +1289,13 @@ Ollama может автоматически настроиться для openc
 
 ### Ollama Cloud
 
-Чтобы использовать Ollama Cloud с opencode:
+Чтобы использовать Ollama Cloud с xcsh:
 
 1. Перейдите на [https://ollama.com/](https://ollama.com/) и войдите в систему или создайте учетную запись.
 
 2. Перейдите в **Настройки** > **Ключи** и нажмите **Добавить ключ API**, чтобы создать новый ключ API.
 
-3. Скопируйте ключ API для использования в opencode.
+3. Скопируйте ключ API для использования в xcsh.
 
 4. Запустите команду `/connect` и найдите **Ollama Cloud**.
 
@@ -1312,7 +1312,7 @@ Ollama может автоматически настроиться для openc
    └ enter
    ```
 
-6. **Важно**. Перед использованием облачных моделей в opencode необходимо получить информацию о модели локально:
+6. **Важно**. Перед использованием облачных моделей в xcsh необходимо получить информацию о модели локально:
 
    ```bash
    ollama pull gpt-oss:20b-cloud
@@ -1359,19 +1359,19 @@ Ollama может автоматически настроиться для openc
 
 ---
 
-### OpenCode Zen
+### xcsh Zen
 
-OpenCode Zen — это список протестированных и проверенных моделей, предоставленный командой opencode. [Подробнее](/docs/zen).
+xcsh Zen — это список протестированных и проверенных моделей, предоставленный командой xcsh. [Подробнее](/docs/zen).
 
-1. Войдите в систему **<a href={console}>OpenCode Zen</a>** и нажмите **Создать ключ API**.
+1. Войдите в систему **<a href={console}>xcsh Zen</a>** и нажмите **Создать ключ API**.
 
-2. Запустите команду `/connect` и найдите **OpenCode Zen**.
+2. Запустите команду `/connect` и найдите **xcsh Zen**.
 
    ```txt
    /connect
    ```
 
-3. Введите свой ключ API opencode.
+3. Введите свой ключ API xcsh.
 
    ```txt
    ┌ API key
@@ -1413,11 +1413,11 @@ OpenCode Zen — это список протестированных и про�
    /models
    ```
 
-   Вы также можете добавить дополнительные модели через конфигурацию opencode.
+   Вы также можете добавить дополнительные модели через конфигурацию xcsh.
 
-   ```json title="opencode.json" {6}
+   ```json title="xcsh.json" {6}
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
      "provider": {
        "openrouter": {
          "models": {
@@ -1428,11 +1428,11 @@ OpenCode Zen — это список протестированных и про�
    }
    ```
 
-5. Вы также можете настроить их через конфигурацию opencode. Вот пример указания провайдера
+5. Вы также можете настроить их через конфигурацию xcsh. Вот пример указания провайдера
 
-   ```json title="opencode.json"
+   ```json title="xcsh.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
      "provider": {
        "openrouter": {
          "models": {
@@ -1480,7 +1480,7 @@ SAP AI Core предоставляет доступ к более чем 40 мо
    Или установите переменную среды `AICORE_SERVICE_KEY`:
 
    ```bash
-   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
+   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' xcsh
    ```
 
    Или добавьте его в свой профиль bash:
@@ -1492,7 +1492,7 @@ SAP AI Core предоставляет доступ к более чем 40 мо
 4. При необходимости укажите идентификатор развертывания и группу ресурсов:
 
    ```bash
-   AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group opencode
+   AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group xcsh
    ```
 
    :::note
@@ -1569,7 +1569,7 @@ STACKIT AI Model Serving предоставляет полностью упра�
 
 ### Scaleway
 
-Чтобы использовать [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/) с opencode:
+Чтобы использовать [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/) с xcsh:
 
 1. Перейдите к [Настройки IAM консоли Scaleway](https://console.scaleway.com/iam/api-keys), чтобы сгенерировать новый ключ API.
 
@@ -1677,11 +1677,11 @@ Vercel AI Gateway позволяет получать доступ к модел
    /models
    ```
 
-Вы также можете настраивать модели через конфигурацию opencode. Ниже приведен пример указания порядка маршрутизации поставщика.
+Вы также можете настраивать модели через конфигурацию xcsh. Ниже приведен пример указания порядка маршрутизации поставщика.
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "provider": {
     "vercel": {
       "models": {
@@ -1787,11 +1787,11 @@ Vercel AI Gateway позволяет получать доступ к модел
    /models
    ```
 
-   Вы также можете добавить дополнительные модели через конфигурацию opencode.
+   Вы также можете добавить дополнительные модели через конфигурацию xcsh.
 
-   ```json title="opencode.json" {6}
+   ```json title="xcsh.json" {6}
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
      "provider": {
        "zenmux": {
          "models": {
@@ -1848,18 +1848,18 @@ Vercel AI Gateway позволяет получать доступ к модел
 
    ┌  Add credential
    │
-   ▲  This only stores a credential for myprovider - you will need to configure it in opencode.json, check the docs for examples.
+   ▲  This only stores a credential for myprovider - you will need to configure it in xcsh.json, check the docs for examples.
    │
    ◇  Enter your API key
    │  sk-...
    └
    ```
 
-4. Создайте или обновите файл `opencode.json` в каталоге вашего проекта:
+4. Создайте или обновите файл `xcsh.json` в каталоге вашего проекта:
 
-   ```json title="opencode.json" ""myprovider"" {5-15}
+   ```json title="xcsh.json" ""myprovider"" {5-15}
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
      "provider": {
        "myprovider": {
          "npm": "@ai-sdk/openai-compatible",
@@ -1895,9 +1895,9 @@ Vercel AI Gateway позволяет получать доступ к модел
 
 Ниже приведен пример настройки параметров `apiKey`, `headers` и модели `limit`.
 
-```json title="opencode.json" {9,11,17-20}
+```json title="xcsh.json" {9,11,17-20}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "provider": {
     "myprovider": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1930,7 +1930,7 @@ Vercel AI Gateway позволяет получать доступ к модел
 - **limit.context**: Максимальное количество входных токенов, которые принимает модель.
 - **limit.output**: Максимальное количество токенов, которые может сгенерировать модель.
 
-Поля `limit` позволяют opencode понять, сколько контекста у вас осталось. Стандартные поставщики автоматически извлекают их из models.dev.
+Поля `limit` позволяют xcsh понять, сколько контекста у вас осталось. Стандартные поставщики автоматически извлекают их из models.dev.
 
 ---
 
@@ -1938,12 +1938,12 @@ Vercel AI Gateway позволяет получать доступ к модел
 
 Если у вас возникли проблемы с настройкой провайдера, проверьте следующее:
 
-1. **Проверьте настройку аутентификации**: запустите `opencode auth list`, чтобы проверить, верны ли учетные данные.
+1. **Проверьте настройку аутентификации**: запустите `xcsh auth list`, чтобы проверить, верны ли учетные данные.
    для провайдера добавлены в ваш конфиг.
 
    Это не относится к таким поставщикам, как Amazon Bedrock, которые для аутентификации полагаются на переменные среды.
 
-2. Для пользовательских поставщиков проверьте конфигурацию opencode и:
-   - Убедитесь, что идентификатор провайдера, используемый в команде `/connect`, соответствует идентификатору в вашей конфигурации opencode.
+2. Для пользовательских поставщиков проверьте конфигурацию xcsh и:
+   - Убедитесь, что идентификатор провайдера, используемый в команде `/connect`, соответствует идентификатору в вашей конфигурации xcsh.
    - Для провайдера используется правильный пакет npm. Например, используйте `@ai-sdk/cerebras` для Cerebras. А для всех других поставщиков, совместимых с OpenAI, используйте `@ai-sdk/openai-compatible`.
    - Убедитесь, что в поле `options.baseURL` используется правильная конечная точка API.

@@ -303,8 +303,8 @@ export default function Share(props: {
             <h1 data-component="header-title">{store.info?.title}</h1>
             <div data-component="header-details">
               <ul data-component="header-stats">
-                <li title={props.messages.opencode_version} data-slot="item">
-                  <div data-slot="icon" title={props.messages.opencode_name}>
+                <li title={props.messages.xcsh_version} data-slot="item">
+                  <div data-slot="icon" title={props.messages.xcsh_name}>
                     <IconOpencode width={16} height={16} />
                   </div>
                   <Show when={store.info?.version} fallback="v0.0.1">

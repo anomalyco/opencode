@@ -3,11 +3,11 @@ title: Tastebindinger
 description: Tilpass tastebindingene dine.
 ---
 
-OpenCode har en liste over tastebindinger som du kan tilpasse gjennom `tui.json`.
+xcsh har en liste over tastebindinger som du kan tilpasse gjennom `tui.json`.
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/tui.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -108,7 +108,7 @@ OpenCode har en liste over tastebindinger som du kan tilpasse gjennom `tui.json`
 
 ## Leader-tast
 
-OpenCode bruker en `leader`-tast for de fleste tastebindinger. Dette unngår konflikter i terminalen din.
+xcsh bruker en `leader`-tast for de fleste tastebindinger. Dette unngår konflikter i terminalen din.
 
 Som standard er `ctrl+x` ledertasten, og de fleste handlinger krever at du først trykker på ledertasten og deretter snarveien. For å starte en ny økt, trykker du for eksempel først `ctrl+x` og deretter `n`.
 
@@ -122,7 +122,7 @@ Du kan deaktivere en tastebinding ved å legge til tasten til `tui.json` med en 
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/tui.json",
   "keybinds": {
     "session_compact": "none"
   }
@@ -133,7 +133,7 @@ Du kan deaktivere en tastebinding ved å legge til tasten til `tui.json` med en 
 
 ## Snarveier i skrivebordsappen
 
-Prompt-feltet for OpenCode-skrivebordsappen støtter vanlige snarveier i Readline/Emacs-stil for redigering av tekst. Disse er innebygd og foreløpig ikke konfigurerbare via `opencode.json`.
+Prompt-feltet for xcsh-skrivebordsappen støtter vanlige snarveier i Readline/Emacs-stil for redigering av tekst. Disse er innebygd og foreløpig ikke konfigurerbare via `xcsh.json`.
 
 | Snarvei  | Handling                                 |
 | -------- | ---------------------------------------- |

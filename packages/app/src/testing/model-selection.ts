@@ -40,7 +40,7 @@ export type ModelProbeState = {
 }
 
 export type ModelWindow = Window & {
-  __opencode_e2e?: {
+  __xcsh_e2e?: {
     model?: {
       enabled?: boolean
       current?: ModelProbeState
@@ -65,16 +65,16 @@ let active: symbol | undefined
 
 export const modelEnabled = () => {
   if (typeof window === "undefined") return false
-  return (window as ModelWindow).__opencode_e2e?.model?.enabled === true
+  return (window as ModelWindow).__xcsh_e2e?.model?.enabled === true
 }
 
 const root = () => {
   if (!modelEnabled()) return
-  return (window as ModelWindow).__opencode_e2e?.model
+  return (window as ModelWindow).__xcsh_e2e?.model
 }
 
 export const modelProbe = {
-  bind(id: symbol, input: NonNullable<NonNullable<ModelWindow["__opencode_e2e"]>["model"]>["controls"]) {
+  bind(id: symbol, input: NonNullable<NonNullable<ModelWindow["__xcsh_e2e"]>["model"]>["controls"]) {
     const state = root()
     if (!state) return
     active = id

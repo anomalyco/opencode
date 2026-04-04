@@ -7,7 +7,7 @@ test("dropping text/plain file: uri inserts a file pill", async ({ page, gotoSes
   const prompt = page.locator(promptSelector)
   await prompt.click()
 
-  const path = process.platform === "win32" ? "C:\\opencode-e2e-drop.txt" : "/tmp/opencode-e2e-drop.txt"
+  const path = process.platform === "win32" ? "C:\\xcsh-e2e-drop.txt" : "/tmp/xcsh-e2e-drop.txt"
   const dt = await page.evaluateHandle((text) => {
     const dt = new DataTransfer()
     dt.setData("text/plain", text)

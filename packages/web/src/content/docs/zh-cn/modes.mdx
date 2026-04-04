@@ -4,12 +4,12 @@ description: 不同模式适用于不同的使用场景。
 ---
 
 :::caution
-模式现在通过 opencode 配置中的 `agent` 选项进行配置。`mode` 选项已废弃。[了解更多](/docs/agents)。
+模式现在通过 xcsh 配置中的 `agent` 选项进行配置。`mode` 选项已废弃。[了解更多](/docs/agents)。
 :::
 
-opencode 中的模式允许你为不同的使用场景自定义行为、工具和提示词。
+xcsh 中的模式允许你为不同的使用场景自定义行为、工具和提示词。
 
-opencode 自带两种内置模式：**build** 和 **plan**。你可以自定义这些模式，也可以通过 opencode 配置创建自己的模式。
+xcsh 自带两种内置模式：**build** 和 **plan**。你可以自定义这些模式，也可以通过 xcsh 配置创建自己的模式。
 
 你可以在会话中切换模式，也可以在配置文件中进行配置。
 
@@ -17,7 +17,7 @@ opencode 自带两种内置模式：**build** 和 **plan**。你可以自定义�
 
 ## 内置模式
 
-opencode 自带两种内置模式。
+xcsh 自带两种内置模式。
 
 ---
 
@@ -32,7 +32,7 @@ Build 是启用了所有工具的**默认**模式。这是进行开发工作的�
 Plan 是一种为规划和分析设计的受限模式。在 plan 模式下，以下工具默认被禁用：
 
 - `write` - 无法创建新文件
-- `edit` - 无法修改现有文件，但位于 `.opencode/plans/*.md` 的文件除外，用于详细说明计划本身
+- `edit` - 无法修改现有文件，但位于 `.xcsh/plans/*.md` 的文件除外，用于详细说明计划本身
 - `patch` - 无法应用补丁
 - `bash` - 无法执行 shell 命令
 
@@ -54,11 +54,11 @@ Plan 是一种为规划和分析设计的受限模式。在 plan 模式下，以
 
 ### JSON 配置
 
-在 `opencode.json` 配置文件中配置模式：
+在 `xcsh.json` 配置文件中配置模式：
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "mode": {
     "build": {
       "model": "anthropic/claude-sonnet-4-20250514",
@@ -85,10 +85,10 @@ Plan 是一种为规划和分析设计的受限模式。在 plan 模式下，以
 
 你还可以使用 Markdown 文件定义模式。将文件放置在以下位置：
 
-- 全局：`~/.config/opencode/modes/`
-- 项目：`.opencode/modes/`
+- 全局：`~/.config/xcsh/modes/`
+- 项目：`.xcsh/modes/`
 
-```markdown title="~/.config/opencode/modes/review.md"
+```markdown title="~/.config/xcsh/modes/review.md"
 ---
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.1
@@ -118,7 +118,7 @@ Markdown 文件名即为模式名称（例如，`review.md` 创建一个名为 `
 
 使用 `model` 配置可以覆盖该模式的默认模型。这对于针对不同任务使用不同模型非常有用。例如，规划时使用更快的模型，实现时使用更强大的模型。
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
   "mode": {
     "plan": {
@@ -134,7 +134,7 @@ Markdown 文件名即为模式名称（例如，`review.md` 创建一个名为 `
 
 使用 `temperature` 配置控制 AI 响应的随机性和创造性。较低的值使响应更加集中和确定性，较高的值则增加创造性和多样性。
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
   "mode": {
     "plan": {
@@ -153,7 +153,7 @@ Markdown 文件名即为模式名称（例如，`review.md` 创建一个名为 `
 - **0.3-0.5**：兼顾稳定性与创造力的平衡型响应，适合一般开发任务
 - **0.6-1.0**：更具创造性和多样性的响应，适合头脑风暴和探索性工作
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
   "mode": {
     "analyze": {
@@ -171,7 +171,7 @@ Markdown 文件名即为模式名称（例如，`review.md` 创建一个名为 `
 }
 ```
 
-如果未指定温度，opencode 将使用模型特定的默认值（大多数模型通常为 0，Qwen 模型为 0.55）。
+如果未指定温度，xcsh 将使用模型特定的默认值（大多数模型通常为 0，Qwen 模型为 0.55）。
 
 ---
 
@@ -179,7 +179,7 @@ Markdown 文件名即为模式名称（例如，`review.md` 创建一个名为 `
 
 使用 `prompt` 配置为模式指定自定义系统提示词文件。提示词文件应包含针对该模式用途的具体指令。
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
   "mode": {
     "review": {
@@ -189,7 +189,7 @@ Markdown 文件名即为模式名称（例如，`review.md` 创建一个名为 `
 }
 ```
 
-此路径相对于配置文件所在位置。因此，全局 opencode 配置和项目特定配置均可使用。
+此路径相对于配置文件所在位置。因此，全局 xcsh 配置和项目特定配置均可使用。
 
 ---
 
@@ -243,9 +243,9 @@ Markdown 文件名即为模式名称（例如，`review.md` 创建一个名为 `
 
 ### 使用 JSON 配置
 
-```json title="opencode.json" {4-14}
+```json title="xcsh.json" {4-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "mode": {
     "docs": {
       "prompt": "{file:./prompts/documentation.txt}",
@@ -264,9 +264,9 @@ Markdown 文件名即为模式名称（例如，`review.md` 创建一个名为 `
 
 ### 使用 Markdown 文件
 
-在 `.opencode/modes/` 中创建项目特定的模式文件，或在 `~/.config/opencode/modes/` 中创建全局模式文件：
+在 `.xcsh/modes/` 中创建项目特定的模式文件，或在 `~/.config/xcsh/modes/` 中创建全局模式文件：
 
-```markdown title=".opencode/modes/debug.md"
+```markdown title=".xcsh/modes/debug.md"
 ---
 temperature: 0.1
 tools:
@@ -290,7 +290,7 @@ Focus on:
 Do not make any changes to files. Only investigate and report.
 ```
 
-```markdown title="~/.config/opencode/modes/refactor.md"
+```markdown title="~/.config/xcsh/modes/refactor.md"
 ---
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.2

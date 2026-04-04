@@ -37,14 +37,14 @@ export const dict = {
   "email.subscribe": "Iscriviti",
   "email.success": "Quasi fatto, controlla la posta in arrivo e conferma il tuo indirizzo email",
 
-  "notFound.title": "Non trovato | opencode",
+  "notFound.title": "Non trovato | xcsh",
   "notFound.heading": "404 - Pagina non trovata",
   "notFound.home": "Home",
   "notFound.docs": "Documentazione",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
-  "notFound.logoLightAlt": "logo chiaro di opencode",
-  "notFound.logoDarkAlt": "logo scuro di opencode",
+  "notFound.logoLightAlt": "logo chiaro di xcsh",
+  "notFound.logoDarkAlt": "logo scuro di xcsh",
 
   "user.logout": "Esci",
 
@@ -85,21 +85,21 @@ export const dict = {
 
   "home.title": "OpenCode | L'agente di coding IA open source",
 
-  "temp.title": "opencode | Agente di coding IA costruito per il terminale",
+  "temp.title": "xcsh | Agente di coding IA costruito per il terminale",
   "temp.hero.title": "L'agente di coding IA costruito per il terminale",
-  "temp.zen": "opencode zen",
+  "temp.zen": "xcsh zen",
   "temp.getStarted": "Inizia",
   "temp.feature.native.title": "TUI Nativa",
   "temp.feature.native.body": "Un'interfaccia terminale reattiva, nativa e personalizzabile",
   "temp.feature.zen.beforeLink": "Una",
   "temp.feature.zen.link": "lista curata di modelli",
-  "temp.feature.zen.afterLink": "fornita da opencode",
+  "temp.feature.zen.afterLink": "fornita da xcsh",
   "temp.feature.models.beforeLink": "Supporta 75+ provider LLM tramite",
   "temp.feature.models.afterLink": ", inclusi modelli locali",
   "temp.screenshot.caption": "OpenCode TUI con il tema tokyonight",
   "temp.screenshot.alt": "OpenCode TUI con tema tokyonight",
-  "temp.logoLightAlt": "logo chiaro di opencode",
-  "temp.logoDarkAlt": "logo scuro di opencode",
+  "temp.logoLightAlt": "logo chiaro di xcsh",
+  "temp.logoDarkAlt": "logo scuro di xcsh",
 
   "home.banner.badge": "Nuovo",
   "home.banner.text": "App desktop disponibile in beta",
@@ -189,12 +189,12 @@ export const dict = {
     "Zen ti dà accesso a una selezione di modelli di IA che OpenCode ha testato e benchmarkato specificamente per agenti di coding. Niente più preoccupazioni per prestazioni e qualità incoerenti tra provider: usa modelli validati che funzionano.",
   "home.zenCta.link": "Scopri Zen",
 
-  "zen.title": "OpenCode Zen | Una selezione curata di modelli affidabili e ottimizzati per agenti di coding",
+  "zen.title": "xcsh Zen | Una selezione curata di modelli affidabili e ottimizzati per agenti di coding",
   "zen.hero.title": "Accedi a modelli affidabili e ottimizzati per agenti di coding",
   "zen.hero.body":
     "Zen ti dà accesso a una selezione di modelli di IA che OpenCode ha testato e benchmarkato specificamente per agenti di coding. Niente più preoccupazioni per prestazioni e qualità incoerenti tra provider: usa modelli validati che funzionano.",
 
-  "zen.faq.q1": "Cos'è OpenCode Zen?",
+  "zen.faq.q1": "Cos'è xcsh Zen?",
   "zen.faq.a1":
     "Zen è un set curato di modelli di IA testati e benchmarkati per agenti di coding, creato dal team dietro OpenCode.",
   "zen.faq.q2": "Cosa rende Zen più accurato?",
@@ -442,15 +442,15 @@ export const dict = {
     "Accedi a modelli configurati per prestazioni ottimali - nessun downgrade o instradamento verso provider più economici.",
   "workspace.newUser.feature.lockin.title": "Nessun lock-in",
   "workspace.newUser.feature.lockin.body":
-    "Usa Zen con qualsiasi agente di coding, e continua a usare altri provider con opencode quando vuoi.",
+    "Usa Zen con qualsiasi agente di coding, e continua a usare altri provider con xcsh quando vuoi.",
   "workspace.newUser.copyApiKey": "Copia chiave API",
   "workspace.newUser.copyKey": "Copia Chiave",
   "workspace.newUser.copied": "Copiato!",
   "workspace.newUser.step.enableBilling": "Abilita fatturazione",
   "workspace.newUser.step.login.before": "Esegui",
-  "workspace.newUser.step.login.after": "e seleziona opencode",
+  "workspace.newUser.step.login.after": "e seleziona xcsh",
   "workspace.newUser.step.pasteKey": "Incolla la tua chiave API",
-  "workspace.newUser.step.models.before": "Avvia opencode ed esegui",
+  "workspace.newUser.step.models.before": "Avvia xcsh ed esegui",
   "workspace.newUser.step.models.after": "per selezionare un modello",
 
   "workspace.models.title": "Modelli",
@@ -496,10 +496,10 @@ export const dict = {
   "workspace.cost.subscriptionShort": "sub",
 
   "workspace.keys.title": "Chiavi API",
-  "workspace.keys.subtitle": "Gestisci le tue chiavi API per accedere ai servizi opencode.",
+  "workspace.keys.subtitle": "Gestisci le tue chiavi API per accedere ai servizi xcsh.",
   "workspace.keys.create": "Crea Chiave API",
   "workspace.keys.placeholder": "Inserisci nome chiave",
-  "workspace.keys.empty": "Crea una chiave API opencode Gateway",
+  "workspace.keys.empty": "Crea una chiave API xcsh Gateway",
   "workspace.keys.table.name": "Nome",
   "workspace.keys.table.key": "Chiave",
   "workspace.keys.table.createdBy": "Creato da",
@@ -641,7 +641,7 @@ export const dict = {
   "workspace.lite.subscription.resetsIn": "Si resetta tra",
   "workspace.lite.subscription.useBalance": "Usa il tuo saldo disponibile dopo aver raggiunto i limiti di utilizzo",
   "workspace.lite.subscription.selectProvider":
-    'Seleziona "OpenCode Go" come provider nella tua configurazione opencode per utilizzare i modelli Go.',
+    'Seleziona "OpenCode Go" come provider nella tua configurazione xcsh per utilizzare i modelli Go.',
   "workspace.lite.black.message":
     "Attualmente sei abbonato a OpenCode Black o sei in lista d'attesa. Annulla l'iscrizione prima se desideri passare a Go.",
   "workspace.lite.other.message":

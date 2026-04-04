@@ -4,14 +4,14 @@ description: Ulike moduser for forskjellige brukstilfeller.
 ---
 
 :::caution
-Moduser konfigureres nå gjennom alternativet `agent` i OpenCode-konfigurasjonen.
+Moduser konfigureres nå gjennom alternativet `agent` i xcsh-konfigurasjonen.
 Alternativet `mode` er nå utdatert. [Finn ut mer](/docs/agents).
 :::
 
-Moduser i OpenCode lar deg tilpasse oppførselen, verktøyene og prompter for ulike brukstilfeller.
+Moduser i xcsh lar deg tilpasse oppførselen, verktøyene og prompter for ulike brukstilfeller.
 
 Den kommer med to innebygde moduser: **bygg** og **plan**. Du kan tilpasse
-disse eller konfigurer din egen gjennom OpenCode-konfigurasjonen.
+disse eller konfigurer din egen gjennom xcsh-konfigurasjonen.
 
 Du kan bytte mellom moduser under en økt eller konfigurere dem i konfigurasjonsfilen din.
 
@@ -19,7 +19,7 @@ Du kan bytte mellom moduser under en økt eller konfigurere dem i konfigurasjons
 
 ## Innebygd
 
-OpenCode kommer med to innebygde moduser.
+xcsh kommer med to innebygde moduser.
 
 ---
 
@@ -34,7 +34,7 @@ Bygg er **standard**-modusen med alle verktøy aktivert. Dette er standardmoduse
 En begrenset modus designet for planlegging og analyse. I planmodus er følgende verktøy deaktivert som standard:
 
 - `write` - Kan ikke opprette nye filer
-- `edit` - Kan ikke endre eksisterende filer, bortsett fra filer som ligger på `.opencode/plans/*.md` for å detaljere selve planen
+- `edit` - Kan ikke endre eksisterende filer, bortsett fra filer som ligger på `.xcsh/plans/*.md` for å detaljere selve planen
 - `patch` - Kan ikke bruke patcher
 - `bash` - Kan ikke utføre shell-kommandoer
 
@@ -56,11 +56,11 @@ Du kan tilpasse de innebygde modusene eller opprette din egen gjennom konfiguras
 
 ### JSON-konfigurasjon
 
-Konfigurer moduser i din `opencode.json` konfigurasjonsfil:
+Konfigurer moduser i din `xcsh.json` konfigurasjonsfil:
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "mode": {
     "build": {
       "model": "anthropic/claude-sonnet-4-20250514",
@@ -87,10 +87,10 @@ Konfigurer moduser i din `opencode.json` konfigurasjonsfil:
 
 Du kan også definere moduser ved hjelp av markdown-filer. Plasser dem i:
 
-- Globalt: `~/.config/opencode/modes/`
-- Prosjekt: `.opencode/modes/`
+- Globalt: `~/.config/xcsh/modes/`
+- Prosjekt: `.xcsh/modes/`
 
-```markdown title="~/.config/opencode/modes/review.md"
+```markdown title="~/.config/xcsh/modes/review.md"
 ---
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.1
@@ -120,7 +120,7 @@ La oss se på disse konfigurasjonsalternativene i detalj.
 
 Bruk `model`-konfigurasjonen for å overstyre standardmodellen for denne modusen. Nyttig for å bruke forskjellige modeller optimalisert for forskjellige oppgaver. For eksempel en raskere modell for planlegging, en mer kapabel modell for implementering.
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
   "mode": {
     "plan": {
@@ -136,7 +136,7 @@ Bruk `model`-konfigurasjonen for å overstyre standardmodellen for denne modusen
 
 Kontroller tilfeldigheten og kreativiteten til AI-ens svar med `temperature`-konfigurasjonen. Lavere verdier gjør svarene mer fokuserte og deterministiske, mens høyere verdier øker kreativiteten og variasjonen.
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
   "mode": {
     "plan": {
@@ -155,7 +155,7 @@ Temperaturverdier varierer vanligvis fra 0,0 til 1,0:
 - **0.3-0.5**: Balanserte svar med litt kreativitet, bra for generelle utviklingsoppgaver
 - **0.6-1.0**: Mer kreative og varierte svar, nyttig for idédugnad og utforskning
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
   "mode": {
     "analyze": {
@@ -173,7 +173,7 @@ Temperaturverdier varierer vanligvis fra 0,0 til 1,0:
 }
 ```
 
-Hvis ingen temperatur er spesifisert, bruker OpenCode modellspesifikke standardinnstillinger (vanligvis 0 for de fleste modeller, 0,55 for Qwen-modeller).
+Hvis ingen temperatur er spesifisert, bruker xcsh modellspesifikke standardinnstillinger (vanligvis 0 for de fleste modeller, 0,55 for Qwen-modeller).
 
 ---
 
@@ -181,7 +181,7 @@ Hvis ingen temperatur er spesifisert, bruker OpenCode modellspesifikke standardi
 
 Angi en tilpasset systemprompt-fil for denne modusen med `prompt`-konfigurasjonen. Prompt-filen skal inneholde instruksjoner som er spesifikke for modusens formål.
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
   "mode": {
     "review": {
@@ -191,7 +191,7 @@ Angi en tilpasset systemprompt-fil for denne modusen med `prompt`-konfigurasjone
 }
 ```
 
-Denne banen er relativ til der konfigurasjonsfilen er plassert. Så dette fungerer for både den globale OpenCode-konfigurasjonen og den prosjektspesifikke konfigurasjonen.
+Denne banen er relativ til der konfigurasjonsfilen er plassert. Så dette fungerer for både den globale xcsh-konfigurasjonen og den prosjektspesifikke konfigurasjonen.
 
 ---
 
@@ -245,9 +245,9 @@ Du kan opprette dine egne tilpassede moduser ved å legge dem til i konfigurasjo
 
 ### Bruke JSON-konfigurasjon
 
-```json title="opencode.json" {4-14}
+```json title="xcsh.json" {4-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "mode": {
     "docs": {
       "prompt": "{file:./prompts/documentation.txt}",
@@ -266,9 +266,9 @@ Du kan opprette dine egne tilpassede moduser ved å legge dem til i konfigurasjo
 
 ### Bruke markdown-filer
 
-Opprett modusfiler i `.opencode/modes/` for prosjektspesifikke moduser eller `~/.config/opencode/modes/` for globale moduser:
+Opprett modusfiler i `.xcsh/modes/` for prosjektspesifikke moduser eller `~/.config/xcsh/modes/` for globale moduser:
 
-```markdown title=".opencode/modes/debug.md"
+```markdown title=".xcsh/modes/debug.md"
 ---
 temperature: 0.1
 tools:
@@ -292,7 +292,7 @@ Focus on:
 Do not make any changes to files. Only investigate and report.
 ```
 
-```markdown title="~/.config/opencode/modes/refactor.md"
+```markdown title="~/.config/xcsh/modes/refactor.md"
 ---
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.2

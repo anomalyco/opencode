@@ -4,7 +4,7 @@ description: Verwalte, welche Tools ein LLM nutzen darf.
 ---
 
 Tools erlauben dem LLM Aktionen in deiner Codebasis.
-OpenCode bringt eingebaute Tools mit und laesst sich ueber [Custom Tools](/docs/custom-tools) oder [MCP-Server](/docs/mcp-servers) erweitern.
+xcsh bringt eingebaute Tools mit und laesst sich ueber [Custom Tools](/docs/custom-tools) oder [MCP-Server](/docs/mcp-servers) erweitern.
 
 Standardmaessig sind alle Tools **aktiviert** und brauchen keine Freigabe.
 Das Verhalten steuerst du ueber [Berechtigungen](/docs/permissions).
@@ -16,9 +16,9 @@ Das Verhalten steuerst du ueber [Berechtigungen](/docs/permissions).
 Nutze das Feld `permission`, um Tool-Verhalten zu steuern.
 Pro Tool kannst du erlauben, verbieten oder eine Rueckfrage verlangen.
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "permission": {
     "edit": "deny",
     "bash": "ask",
@@ -30,9 +30,9 @@ Pro Tool kannst du erlauben, verbieten oder eine Rueckfrage verlangen.
 Mit Wildcards kannst du mehrere Tools auf einmal steuern.
 Zum Beispiel, um fuer alle Tools eines MCP-Servers eine Freigabe zu verlangen:
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "permission": {
     "mymcp_*": "ask"
   }
@@ -45,7 +45,7 @@ Zum Beispiel, um fuer alle Tools eines MCP-Servers eine Freigabe zu verlangen:
 
 ## Eingebaut
 
-Hier sind alle in OpenCode verfuegbaren eingebauten Tools.
+Hier sind alle in xcsh verfuegbaren eingebauten Tools.
 
 ---
 
@@ -53,9 +53,9 @@ Hier sind alle in OpenCode verfuegbaren eingebauten Tools.
 
 Fuehrt Shell-Befehle in deiner Projektumgebung aus.
 
-```json title="opencode.json" {4}
+```json title="xcsh.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "permission": {
     "bash": "allow"
   }
@@ -70,9 +70,9 @@ Damit kann das LLM Terminal-Befehle wie `npm install`, `git status` oder andere 
 
 Bearbeitet bestehende Dateien ueber exakte String-Ersetzungen.
 
-```json title="opencode.json" {4}
+```json title="xcsh.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "permission": {
     "edit": "allow"
   }
@@ -88,9 +88,9 @@ Es ist der zentrale Weg, wie das LLM Code aendert.
 
 Erstellt neue Dateien oder ueberschreibt bestehende Dateien.
 
-```json title="opencode.json" {4}
+```json title="xcsh.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "permission": {
     "edit": "allow"
   }
@@ -111,9 +111,9 @@ Das Tool `write` wird ueber die Berechtigung `edit` gesteuert.
 
 Liest Dateiinhalte aus deiner Codebasis.
 
-```json title="opencode.json" {4}
+```json title="xcsh.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "permission": {
     "read": "allow"
   }
@@ -128,9 +128,9 @@ Dieses Tool liest Dateien und gibt deren Inhalt zurueck. Es unterstuetzt das Les
 
 Durchsucht Dateiinhalte mit regulaeren Ausdruecken.
 
-```json title="opencode.json" {4}
+```json title="xcsh.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "permission": {
     "grep": "allow"
   }
@@ -145,9 +145,9 @@ Schnelle Inhaltssuche in deiner Codebasis. Unterstuetzt volle Regex-Syntax und F
 
 Findet Dateien per Musterabgleich.
 
-```json title="opencode.json" {4}
+```json title="xcsh.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "permission": {
     "glob": "allow"
   }
@@ -162,9 +162,9 @@ Sucht nach Dateien mit Glob-Mustern wie `**/*.js` oder `src/**/*.ts`. Gibt passe
 
 Listet Dateien und Verzeichnisse in einem Pfad auf.
 
-```json title="opencode.json" {4}
+```json title="xcsh.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "permission": {
     "list": "allow"
   }
@@ -183,9 +183,9 @@ Interagiere mit deinen konfigurierten LSP-Servern fuer Code-Intelligence-Feature
 Dieses Tool ist nur verfuegbar, wenn `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (oder `OPENCODE_EXPERIMENTAL=true`) gesetzt ist.
 :::
 
-```json title="opencode.json" {4}
+```json title="xcsh.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "permission": {
     "lsp": "allow"
   }
@@ -202,9 +202,9 @@ Um verfuegbare LSP-Server fuer dein Projekt zu konfigurieren, siehe [LSP-Server]
 
 Wendet Patches auf Dateien an.
 
-```json title="opencode.json" {4}
+```json title="xcsh.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "permission": {
     "edit": "allow"
   }
@@ -223,9 +223,9 @@ Das Tool `patch` wird ueber die Berechtigung `edit` gesteuert, welche alle Datei
 
 Laedt einen [Skill](/docs/skills) (eine `SKILL.md`-Datei) und gibt dessen Inhalt in der Unterhaltung zurueck.
 
-```json title="opencode.json" {4}
+```json title="xcsh.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "permission": {
     "skill": "allow"
   }
@@ -238,9 +238,9 @@ Laedt einen [Skill](/docs/skills) (eine `SKILL.md`-Datei) und gibt dessen Inhalt
 
 Verwaltet Todo-Listen waehrend Coding-Sessions.
 
-```json title="opencode.json" {4}
+```json title="xcsh.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "permission": {
     "todowrite": "allow"
   }
@@ -259,9 +259,9 @@ Dieses Tool ist fuer Sub-Agenten standardmaessig deaktiviert, kann aber manuell 
 
 Ruft Webinhalte ab.
 
-```json title="opencode.json" {4}
+```json title="xcsh.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "permission": {
     "webfetch": "allow"
   }
@@ -277,19 +277,19 @@ Erlaubt dem LLM, Webseiten abzurufen und zu lesen. Nuetzlich zum Nachschlagen vo
 Durchsucht das Web nach Informationen.
 
 :::note
-Dieses Tool ist nur verfuegbar, wenn der OpenCode-Provider genutzt wird oder die Umgebungsvariable `OPENCODE_ENABLE_EXA` auf einen 'truthy' Wert (z. B. `true` oder `1`) gesetzt ist.
+Dieses Tool ist nur verfuegbar, wenn der xcsh-Provider genutzt wird oder die Umgebungsvariable `OPENCODE_ENABLE_EXA` auf einen 'truthy' Wert (z. B. `true` oder `1`) gesetzt ist.
 
-Zum Aktivieren beim Start von OpenCode:
+Zum Aktivieren beim Start von xcsh:
 
 ```bash
-OPENCODE_ENABLE_EXA=1 opencode
+OPENCODE_ENABLE_EXA=1 xcsh
 ```
 
 :::
 
-```json title="opencode.json" {4}
+```json title="xcsh.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "permission": {
     "websearch": "allow"
   }
@@ -310,9 +310,9 @@ Nutze `websearch` zum Finden von Informationen (Discovery) und `webfetch` zum Ab
 
 Stellt dem Benutzer waehrend der Ausfuehrung Fragen.
 
-```json title="opencode.json" {4}
+```json title="xcsh.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "permission": {
     "question": "allow"
   }

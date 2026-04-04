@@ -13,7 +13,7 @@ if (!Script.preview) {
     .text()
     .catch(() => "No notable changes")
   const dir = process.env.RUNNER_TEMP ?? "/tmp"
-  const notesFile = `${dir}/opencode-release-notes.txt`
+  const notesFile = `${dir}/xcsh-release-notes.txt`
   await Bun.write(notesFile, body)
   await $`gh release create v${Script.version} -d --title "v${Script.version}" --notes-file ${notesFile}`
   const release = await $`gh release view v${Script.version} --json tagName,databaseId`.json()

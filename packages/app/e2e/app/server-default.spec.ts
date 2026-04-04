@@ -2,7 +2,7 @@ import { test, expect } from "../fixtures"
 import { serverNamePattern, serverUrls } from "../utils"
 import { closeDialog, clickMenuItem } from "../actions"
 
-const DEFAULT_SERVER_URL_KEY = "opencode.settings.dat:defaultServerUrl"
+const DEFAULT_SERVER_URL_KEY = "xcsh.settings.dat:defaultServerUrl"
 
 test("can set a default server on web", async ({ page, gotoSession }) => {
   await page.addInitScript((key: string) => {

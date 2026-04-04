@@ -1,19 +1,19 @@
 {
   "$schema": "https://v2-8-13.turborepo.dev/schema.json",
-  "globalEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
-  "globalPassThroughEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
+  "globalEnv": ["CI", "XCSH_DISABLE_SHARE"],
+  "globalPassThroughEnv": ["CI", "XCSH_DISABLE_SHARE"],
   "tasks": {
     "typecheck": {},
     "build": {
       "dependsOn": [],
       "outputs": ["dist/**"]
     },
-    "opencode#test": {
+    "@f5xc-salesdemos/xcsh#test": {
       "dependsOn": ["^build"],
       "outputs": [],
       "passThroughEnv": ["*"]
     },
-    "@opencode-ai/app#test": {
+    "@f5xc-salesdemos/app#test": {
       "dependsOn": ["^build"],
       "outputs": []
     }

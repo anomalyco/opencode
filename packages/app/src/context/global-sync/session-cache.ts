@@ -6,7 +6,7 @@ import type {
   QuestionRequest,
   SessionStatus,
   Todo,
-} from "@opencode-ai/sdk/v2/client"
+} from "@f5xc-salesdemos/sdk/v2/client"
 
 export const SESSION_CACHE_LIMIT = 40
 

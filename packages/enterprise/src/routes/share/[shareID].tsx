@@ -1,32 +1,32 @@
-import { FileDiff, Message, Model, Part, Session, SessionStatus, UserMessage } from "@opencode-ai/sdk/v2"
-import { SessionTurn } from "@opencode-ai/ui/session-turn"
-import { SessionReview } from "@opencode-ai/ui/session-review"
-import { DataProvider } from "@opencode-ai/ui/context"
-import { FileComponentProvider } from "@opencode-ai/ui/context/file"
-import { WorkerPoolProvider } from "@opencode-ai/ui/context/worker-pool"
+import { FileDiff, Message, Model, Part, Session, SessionStatus, UserMessage } from "@f5xc-salesdemos/sdk/v2"
+import { SessionTurn } from "@f5xc-salesdemos/ui/session-turn"
+import { SessionReview } from "@f5xc-salesdemos/ui/session-review"
+import { DataProvider } from "@f5xc-salesdemos/ui/context"
+import { FileComponentProvider } from "@f5xc-salesdemos/ui/context/file"
+import { WorkerPoolProvider } from "@f5xc-salesdemos/ui/context/worker-pool"
 import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, createSignal, ErrorBoundary, For, Match, Show, Switch } from "solid-js"
 import { Share } from "~/core/share"
-import { Logo, Mark } from "@opencode-ai/ui/logo"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { iife } from "@opencode-ai/util/iife"
-import { Binary } from "@opencode-ai/util/binary"
-import { NamedError } from "@opencode-ai/util/error"
+import { Logo, Mark } from "@f5xc-salesdemos/ui/logo"
+import { IconButton } from "@f5xc-salesdemos/ui/icon-button"
+import { ProviderIcon } from "@f5xc-salesdemos/ui/provider-icon"
+import { iife } from "@f5xc-salesdemos/util/iife"
+import { Binary } from "@f5xc-salesdemos/util/binary"
+import { NamedError } from "@f5xc-salesdemos/util/error"
 import { DateTime } from "luxon"
 import { createStore } from "solid-js/store"
 import z from "zod"
 import NotFound from "../[...404]"
-import { Tabs } from "@opencode-ai/ui/tabs"
-import { MessageNav } from "@opencode-ai/ui/message-nav"
-import { FileSSR } from "@opencode-ai/ui/file-ssr"
+import { Tabs } from "@f5xc-salesdemos/ui/tabs"
+import { MessageNav } from "@f5xc-salesdemos/ui/message-nav"
+import { FileSSR } from "@f5xc-salesdemos/ui/file-ssr"
 import { clientOnly } from "@solidjs/start"
 import { Meta, Title } from "@solidjs/meta"
 import { Base64 } from "js-base64"
 import { getRequestEvent } from "solid-js/web"
 
 const ClientOnlyWorkerPoolProvider = clientOnly(() =>
-  import("@opencode-ai/ui/pierre/worker").then((m) => ({
+  import("@f5xc-salesdemos/ui/pierre/worker").then((m) => ({
     default: (props: { children: any }) => (
       <WorkerPoolProvider pools={m.getWorkerPools()}>{props.children}</WorkerPoolProvider>
     ),
@@ -165,7 +165,7 @@ export default function () {
               modelParam = "unknown"
             }
             const version = `v${info().version}`
-            return `https://social-cards.sst.dev/opencode-share/${encodedTitle}.png?model=${modelParam}&version=${version}&id=${data().shareID}`
+            return `https://social-cards.sst.dev/xcsh-share/${encodedTitle}.png?model=${modelParam}&version=${version}&id=${data().shareID}`
           })
 
           return (
@@ -173,7 +173,7 @@ export default function () {
               <Show when={info().title}>
                 <Title>{info().title} | OpenCode</Title>
               </Show>
-              <Meta name="description" content="opencode - The AI coding agent built for the terminal." />
+              <Meta name="description" content="xcsh - The AI coding agent built for the terminal." />
               <Meta property="og:image" content={ogImage()} />
               <Meta name="twitter:image" content={ogImage()} />
               <ClientOnlyWorkerPoolProvider>
@@ -260,7 +260,7 @@ export default function () {
                         <div class="relative bg-background-stronger w-screen h-screen overflow-hidden flex flex-col">
                           <header class="h-12 px-6 py-2 flex items-center justify-between self-stretch bg-background-base border-b border-border-weak-base">
                             <div class="">
-                              <a href="https://opencode.ai">
+                              <a href="https://f5xc-salesdemos.github.io/xcsh">
                                 <Mark />
                               </a>
                             </div>
@@ -274,7 +274,7 @@ export default function () {
                               />
                               <IconButton
                                 as={"a"}
-                                href="https://opencode.ai/discord"
+                                href="https://f5xc-salesdemos.github.io/xcsh/discord"
                                 target="_blank"
                                 icon="discord"
                                 variant="ghost"

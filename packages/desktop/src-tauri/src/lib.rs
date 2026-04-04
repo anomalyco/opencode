@@ -307,7 +307,7 @@ pub fn run() {
 
     #[cfg(all(target_os = "macos", not(debug_assertions)))]
     let _ = std::process::Command::new("killall")
-        .arg("opencode-cli")
+        .arg("xcsh-cli")
         .output();
 
     let mut builder = tauri::Builder::default()
@@ -437,7 +437,7 @@ async fn initialize(app: AppHandle) {
     let (ready_tx, ready_rx) = oneshot::channel();
     let _ = ready_tx.send(ServerReadyData {
         url: url.clone(),
-        username: Some("opencode".to_string()),
+        username: Some("xcsh".to_string()),
         password: Some(password),
     });
     app.manage(SidecarReady(ready_rx.shared()));

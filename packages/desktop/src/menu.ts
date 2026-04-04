@@ -158,11 +158,11 @@ export async function createMenu(trigger: (id: string) => void) {
         items: [
           // missing native macos search
           await MenuItem.new({
-            action: () => openUrl("https://opencode.ai/docs"),
+            action: () => openUrl("https://f5xc-salesdemos.github.io/xcsh/docs"),
             text: t("desktop.menu.help.documentation"),
           }),
           await MenuItem.new({
-            action: () => openUrl("https://discord.com/invite/opencode"),
+            action: () => openUrl("https://discord.com/invite/xcsh"),
             text: t("desktop.menu.help.supportForum"),
           }),
           await PredefinedMenuItem.new({

@@ -1,4 +1,4 @@
-import { base64Decode } from "@opencode-ai/util/encode"
+import { base64Decode } from "@f5xc-salesdemos/util/encode"
 import { test, expect } from "../fixtures"
 import {
   defocus,

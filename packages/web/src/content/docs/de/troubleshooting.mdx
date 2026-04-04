@@ -3,7 +3,7 @@ title: Fehlerbehebung
 description: Haeufige Probleme und schnelle Loesungen.
 ---
 
-Wenn OpenCode Probleme macht, starte mit Logs und lokal gespeicherten Daten auf der Festplatte.
+Wenn xcsh Probleme macht, starte mit Logs und lokal gespeicherten Daten auf der Festplatte.
 
 ---
 
@@ -11,21 +11,21 @@ Wenn OpenCode Probleme macht, starte mit Logs und lokal gespeicherten Daten auf 
 
 Logdateien werden hier gespeichert:
 
-- **macOS/Linux**: `~/.local/share/opencode/log/`
-- **Windows**: Druecke `WIN+R` und fuege ein: `%USERPROFILE%\.local\share\opencode\log`
+- **macOS/Linux**: `~/.local/share/xcsh/log/`
+- **Windows**: Druecke `WIN+R` und fuege ein: `%USERPROFILE%\.local\share\xcsh\log`
 
 Dateinamen enthalten Zeitstempel (z. B. `2025-01-09T123456.log`) und es bleiben die letzten 10 Logs erhalten.
 
-Mit `--log-level` bekommst du detailliertere Diagnoseinfos, z. B. `opencode --log-level DEBUG`.
+Mit `--log-level` bekommst du detailliertere Diagnoseinfos, z. B. `xcsh --log-level DEBUG`.
 
 ---
 
 ## Speicher
 
-opencode speichert Sitzungs- und App-Daten auf der Festplatte unter:
+xcsh speichert Sitzungs- und App-Daten auf der Festplatte unter:
 
-- **macOS/Linux**: `~/.local/share/opencode/`
-- **Windows**: Druecke `WIN+R` und fuege ein: `%USERPROFILE%\.local\share\opencode`
+- **macOS/Linux**: `~/.local/share/xcsh/`
+- **Windows**: Druecke `WIN+R` und fuege ein: `%USERPROFILE%\.local\share\xcsh`
 
 Dieses Verzeichnis enthaelt:
 
@@ -39,14 +39,14 @@ Dieses Verzeichnis enthaelt:
 
 ## Desktop-App
 
-OpenCode Desktop startet im Hintergrund einen lokalen OpenCode-Server (`opencode-cli`-Sidecar).
+xcsh Desktop startet im Hintergrund einen lokalen xcsh-Server (`xcsh-cli`-Sidecar).
 Viele Probleme kommen von fehlerhaften Plugins, kaputtem Cache oder falschen Server-Einstellungen.
 
 ### Schnellchecks
 
 - App komplett beenden und neu starten
 - Bei Fehlerbildschirm **Restart** klicken und Details kopieren
-- Nur macOS: `OpenCode`-Menue -> **Reload Webview** (hilft bei leerer/eingefrorener UI)
+- Nur macOS: `xcsh`-Menue -> **Reload Webview** (hilft bei leerer/eingefrorener UI)
 
 ---
 
@@ -58,28 +58,28 @@ Wenn die Desktop-App beim Start abstuerzt, haengt oder sich seltsam verhaelt, de
 
 Oeffne deine globale Konfigurationsdatei und suche nach dem `plugin`-Schluessel.
 
-- **macOS/Linux**: `~/.config/opencode/opencode.jsonc` (oder `~/.config/opencode/opencode.json`)
-- **macOS/Linux** (aeltere Installationen): `~/.local/share/opencode/opencode.jsonc`
-- **Windows**: Druecke `WIN+R` und fuege ein: `%USERPROFILE%\.config\opencode\opencode.jsonc`
+- **macOS/Linux**: `~/.config/xcsh/xcsh.jsonc` (oder `~/.config/xcsh/xcsh.json`)
+- **macOS/Linux** (aeltere Installationen): `~/.local/share/xcsh/xcsh.jsonc`
+- **Windows**: Druecke `WIN+R` und fuege ein: `%USERPROFILE%\.config\xcsh\xcsh.jsonc`
 
 Wenn du Plugins konfiguriert hast, deaktiviere sie voruebergehend, indem du den Schluessel entfernst oder auf ein leeres Array setzt:
 
 ```jsonc
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "plugin": [],
 }
 ```
 
 #### Plugin-Verzeichnisse prüfen
 
-OpenCode kann auch lokale Plugins von der Festplatte laden. Verschiebe diese voruebergehend (oder benenne den Ordner um) und starte die Desktop-App neu:
+xcsh kann auch lokale Plugins von der Festplatte laden. Verschiebe diese voruebergehend (oder benenne den Ordner um) und starte die Desktop-App neu:
 
 - **Globale Plugins**
-  - **macOS/Linux**: `~/.config/opencode/plugins/`
-  - **Windows**: Druecke `WIN+R` und fuege ein: `%USERPROFILE%\.config\opencode\plugins`
+  - **macOS/Linux**: `~/.config/xcsh/plugins/`
+  - **Windows**: Druecke `WIN+R` und fuege ein: `%USERPROFILE%\.config\xcsh\plugins`
 - **Projekt-Plugins** (nur bei projektspezifischer Konfig)
-  - `<your-project>/.opencode/plugins/`
+  - `<your-project>/.xcsh/plugins/`
 
 Wenn die App wieder funktioniert, aktiviere Plugins nacheinander, um den Verursacher zu finden.
 
@@ -87,22 +87,22 @@ Wenn die App wieder funktioniert, aktiviere Plugins nacheinander, um den Verursa
 
 ### Cache leeren
 
-Wenn das Deaktivieren von Plugins nicht hilft (oder eine Plugin-Installation haengt), leere den Cache, damit OpenCode ihn neu aufbauen kann.
+Wenn das Deaktivieren von Plugins nicht hilft (oder eine Plugin-Installation haengt), leere den Cache, damit xcsh ihn neu aufbauen kann.
 
-1. Beende OpenCode Desktop komplett.
+1. Beende xcsh Desktop komplett.
 2. Loesche das Cache-Verzeichnis:
 
-- **macOS**: Finder -> `Cmd+Shift+G` -> einfuegen: `~/.cache/opencode`
-- **Linux**: loesche `~/.cache/opencode` (oder fuehre aus: `rm -rf ~/.cache/opencode`)
-- **Windows**: Druecke `WIN+R` und fuege ein: `%USERPROFILE%\.cache\opencode`
+- **macOS**: Finder -> `Cmd+Shift+G` -> einfuegen: `~/.cache/xcsh`
+- **Linux**: loesche `~/.cache/xcsh` (oder fuehre aus: `rm -rf ~/.cache/xcsh`)
+- **Windows**: Druecke `WIN+R` und fuege ein: `%USERPROFILE%\.cache\xcsh`
 
-3. Starte OpenCode Desktop neu.
+3. Starte xcsh Desktop neu.
 
 ---
 
 ### Server-Verbindungsprobleme beheben
 
-OpenCode Desktop kann entweder einen eigenen lokalen Server starten (Standard) oder sich mit einer konfigurierten Server-URL verbinden.
+xcsh Desktop kann entweder einen eigenen lokalen Server starten (Standard) oder sich mit einer konfigurierten Server-URL verbinden.
 
 Wenn du einen **"Connection Failed"**-Dialog siehst (oder die App beim Splash-Screen haengen bleibt), pruefe auf eine benutzerdefinierte Server-URL.
 
@@ -112,7 +112,7 @@ Klicke im Startbildschirm auf den Servernamen (mit dem Statuspunkt), um die Serv
 
 #### `server.port` / `server.hostname` aus Konfiguration entfernen
 
-Wenn deine `opencode.json(c)` einen `server`-Abschnitt enthaelt, entferne ihn voruebergehend und starte die Desktop-App neu.
+Wenn deine `xcsh.json(c)` einen `server`-Abschnitt enthaelt, entferne ihn voruebergehend und starte die Desktop-App neu.
 
 #### Umgebungsvariablen prüfen
 
@@ -133,21 +133,21 @@ Unter Linux koennen manche Wayland-Setups leere Fenster oder Compositor-Fehler v
 
 ### Windows: WebView2-Laufzeit
 
-Unter Windows benoetigt OpenCode Desktop die Microsoft Edge **WebView2 Runtime**. Wenn die App ein leeres Fenster zeigt oder nicht startet, installiere/aktualisiere WebView2 und versuche es erneut.
+Unter Windows benoetigt xcsh Desktop die Microsoft Edge **WebView2 Runtime**. Wenn die App ein leeres Fenster zeigt oder nicht startet, installiere/aktualisiere WebView2 und versuche es erneut.
 
 ---
 
 ### Windows: Allgemeine Performance-Probleme
 
-Wenn du langsame Performance, Dateizugriffsprobleme oder Terminal-Probleme unter Windows hast, versuche [WSL (Windows Subsystem for Linux)](/docs/windows-wsl). WSL bietet eine Linux-Umgebung, die nahtloser mit OpenCode-Features funktioniert.
+Wenn du langsame Performance, Dateizugriffsprobleme oder Terminal-Probleme unter Windows hast, versuche [WSL (Windows Subsystem for Linux)](/docs/windows-wsl). WSL bietet eine Linux-Umgebung, die nahtloser mit xcsh-Features funktioniert.
 
 ---
 
 ### Benachrichtigungen werden nicht angezeigt
 
-OpenCode Desktop zeigt Systembenachrichtigungen nur wenn:
+xcsh Desktop zeigt Systembenachrichtigungen nur wenn:
 
-- Benachrichtigungen fuer OpenCode in den OS-Einstellungen aktiviert sind, und
+- Benachrichtigungen fuer xcsh in den OS-Einstellungen aktiviert sind, und
 - das App-Fenster nicht fokussiert ist.
 
 ---
@@ -156,11 +156,11 @@ OpenCode Desktop zeigt Systembenachrichtigungen nur wenn:
 
 Wenn die App nicht startet und du Einstellungen nicht in der UI loeschen kannst, setze den gespeicherten Zustand der Desktop-App zurueck.
 
-1. Beende OpenCode Desktop.
-2. Finde und loesche diese Dateien (im App-Data-Verzeichnis von OpenCode Desktop):
+1. Beende xcsh Desktop.
+2. Finde und loesche diese Dateien (im App-Data-Verzeichnis von xcsh Desktop):
 
-- `opencode.settings.dat` (desktop default server URL)
-- `opencode.global.dat` und `opencode.workspace.*.dat` (UI state like recent servers/projects)
+- `xcsh.settings.dat` (desktop default server URL)
+- `xcsh.global.dat` und `xcsh.workspace.*.dat` (UI state like recent servers/projects)
 
 So findest du das Verzeichnis schnell:
 
@@ -172,13 +172,13 @@ So findest du das Verzeichnis schnell:
 
 ## Hilfe bekommen
 
-Wenn du Probleme mit OpenCode hast:
+Wenn du Probleme mit xcsh hast:
 
 1. **Probleme auf GitHub melden**
 
    Bugs und Feature-Wuensche meldest du am besten im GitHub-Repository:
 
-   [**github.com/f5xc-salesdemos/opencode/issues**](https://github.com/f5xc-salesdemos/opencode/issues)
+   [**github.com/f5xc-salesdemos/xcsh/issues**](https://github.com/f5xc-salesdemos/xcsh/issues)
 
    Suche vor dem Erstellen nach bestehenden Issues, damit Duplikate vermieden werden.
 
@@ -186,7 +186,7 @@ Wenn du Probleme mit OpenCode hast:
 
    Fuer schnelle Hilfe und Austausch in der Community:
 
-   [**opencode.ai/discord**](https://opencode.ai/discord)
+   [**f5xc-salesdemos.github.io/xcsh/discord**](https://f5xc-salesdemos.github.io/xcsh/discord)
 
 ---
 
@@ -196,11 +196,11 @@ Hier sind typische Fehlerbilder und wie du sie loest.
 
 ---
 
-### OpenCode startet nicht
+### xcsh startet nicht
 
 1. Pruefe die Logs auf Fehlermeldungen
 2. Versuche den Start mit `--print-logs`, um Ausgaben im Terminal zu sehen
-3. Stelle sicher, dass du die neueste Version hast: `opencode upgrade`
+3. Stelle sicher, dass du die neueste Version hast: `xcsh upgrade`
 
 ---
 
@@ -225,9 +225,9 @@ Beispiele:
 
 - `openai/gpt-4.1`
 - `openrouter/google/gemini-2.5-flash`
-- `opencode/kimi-k2`
+- `xcsh/kimi-k2`
 
-Um zu sehen, auf welche Modelle du Zugriff hast, fuehre `opencode models` aus.
+Um zu sehen, auf welche Modelle du Zugriff hast, fuehre `xcsh models` aus.
 
 ---
 
@@ -241,10 +241,10 @@ Zur Loesung:
 2. Wenn das Problem besteht, versuche deine gespeicherte Konfiguration zu loeschen:
 
    ```bash
-   rm -rf ~/.local/share/opencode
+   rm -rf ~/.local/share/xcsh
    ```
 
-   Unter Windows druecke `WIN+R` und loesche: `%USERPROFILE%\.local\share\opencode`
+   Unter Windows druecke `WIN+R` und loesche: `%USERPROFILE%\.local\share\xcsh`
 
 3. Authentifiziere dich erneut beim Provider mit dem `/connect`-Befehl in der TUI.
 
@@ -252,21 +252,21 @@ Zur Loesung:
 
 ### AI_APICallError und Provider-Paket-Probleme
 
-Wenn du API-Call-Fehler erhaeltst, kann das an veralteten Provider-Paketen liegen. opencode installiert Provider-Pakete (OpenAI, Anthropic, Google, etc.) dynamisch bei Bedarf und cached sie lokal.
+Wenn du API-Call-Fehler erhaeltst, kann das an veralteten Provider-Paketen liegen. xcsh installiert Provider-Pakete (OpenAI, Anthropic, Google, etc.) dynamisch bei Bedarf und cached sie lokal.
 
 Um Provider-Paket-Probleme zu loesen:
 
 1. Leere den Provider-Paket-Cache:
 
    ```bash
-   rm -rf ~/.cache/opencode
+   rm -rf ~/.cache/xcsh
    ```
 
-   Unter Windows druecke `WIN+R` und loesche: `%USERPROFILE%\.cache\opencode`
+   Unter Windows druecke `WIN+R` und loesche: `%USERPROFILE%\.cache\xcsh`
 
-2. Starte opencode neu, um die neuesten Provider-Pakete zu installieren
+2. Starte xcsh neu, um die neuesten Provider-Pakete zu installieren
 
-Dies zwingt opencode, die neuesten Versionen der Provider-Pakete herunterzuladen, was oft Kompatibilitaetsprobleme mit Modellparametern und API-Aenderungen loest.
+Dies zwingt xcsh, die neuesten Versionen der Provider-Pakete herunterzuladen, was oft Kompatibilitaetsprobleme mit Modellparametern und API-Aenderungen loest.
 
 ---
 
@@ -297,4 +297,4 @@ Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
 export DISPLAY=:99.0
 ```
 
-opencode erkennt, ob du Wayland nutzt und bevorzugt `wl-clipboard`, sonst versucht es `xclip` und `xsel` (in dieser Reihenfolge).
+xcsh erkennt, ob du Wayland nutzt und bevorzugt `wl-clipboard`, sonst versucht es `xclip` und `xsel` (in dieser Reihenfolge).

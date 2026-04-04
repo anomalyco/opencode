@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://opencode.ai">
+  <a href="https://f5xc-salesdemos.github.io/xcsh">
     <picture>
       <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
       <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
@@ -9,7 +9,7 @@
 </p>
 <p align="center">AI-агент для програмування з відкритим кодом.</p>
 <p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+  <a href="https://f5xc-salesdemos.github.io/xcsh/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
   <a href="https://github.com/f5xc-salesdemos/xcsh/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/f5xc-salesdemos/xcsh/publish.yml?style=flat-square&branch=dev" /></a>
 </p>
@@ -39,7 +39,7 @@
   <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://f5xc-salesdemos.github.io/xcsh)
 
 ---
 
@@ -47,7 +47,7 @@
 
 ```bash
 # YOLO
-curl -fsSL https://opencode.ai/install | bash
+curl -fsSL https://f5xc-salesdemos.github.io/xcsh/install | bash
 
 # Менеджери пакетів
 npm i -g opencode-ai@latest        # або bun/pnpm/yarn
@@ -66,7 +66,7 @@ nix run nixpkgs#opencode           # або github:f5xc-salesdemos/xcsh для �
 
 ### Десктопний застосунок (BETA)
 
-OpenCode також доступний як десктопний застосунок. Завантажуйте напряму зі [сторінки релізів](https://github.com/f5xc-salesdemos/xcsh/releases) або [opencode.ai/download](https://opencode.ai/download).
+OpenCode також доступний як десктопний застосунок. Завантажуйте напряму зі [сторінки релізів](https://github.com/f5xc-salesdemos/xcsh/releases) або [f5xc-salesdemos.github.io/xcsh/download](https://f5xc-salesdemos.github.io/xcsh/download).
 
 | Платформа             | Завантаження                          |
 | --------------------- | ------------------------------------- |
@@ -93,8 +93,8 @@ scoop bucket add extras; scoop install extras/opencode-desktop
 
 ```bash
 # Приклади
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://f5xc-salesdemos.github.io/xcsh/install | bash
+XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://f5xc-salesdemos.github.io/xcsh/install | bash
 ```
 
 ### Агенти
@@ -110,11 +110,11 @@ OpenCode містить два вбудовані агенти, між яким�
 Також доступний допоміжний агент **general** для складного пошуку та багатокрокових завдань.
 Він використовується всередині системи й може бути викликаний у повідомленнях через `@general`.
 
-Дізнайтеся більше про [agents](https://opencode.ai/docs/agents).
+Дізнайтеся більше про [agents](https://f5xc-salesdemos.github.io/xcsh/docs/agents).
 
 ### Документація
 
-Щоб дізнатися більше про налаштування OpenCode, [**перейдіть до нашої документації**](https://opencode.ai/docs).
+Щоб дізнатися більше про налаштування OpenCode, [**перейдіть до нашої документації**](https://f5xc-salesdemos.github.io/xcsh/docs).
 
 ### Внесок
 
@@ -132,7 +132,7 @@ OpenCode містить два вбудовані агенти, між яким�
 За можливостями це дуже схоже на Claude Code. Ось ключові відмінності:
 
 - 100% open source
-- Немає прив'язки до конкретного провайдера. Ми рекомендуємо моделі, які надаємо через [OpenCode Zen](https://opencode.ai/zen), але OpenCode також працює з Claude, OpenAI, Google і навіть локальними моделями. З розвитком моделей різниця між ними зменшуватиметься, а ціни падатимуть, тому незалежність від провайдера має значення.
+- Немає прив'язки до конкретного провайдера. Ми рекомендуємо моделі, які надаємо через [OpenCode Zen](https://f5xc-salesdemos.github.io/xcsh/zen), але OpenCode також працює з Claude, OpenAI, Google і навіть локальними моделями. З розвитком моделей різниця між ними зменшуватиметься, а ціни падатимуть, тому незалежність від провайдера має значення.
 - Підтримка LSP з коробки
 - Фокус на TUI. OpenCode створено користувачами neovim та авторами [terminal.shop](https://terminal.shop); ми й надалі розширюватимемо межі можливого в терміналі.
 - Клієнт-серверна архітектура. Наприклад, це дає змогу запускати OpenCode на вашому комп'ютері й керувати ним віддалено з мобільного застосунку, тобто TUI-фронтенд - лише один із можливих клієнтів.

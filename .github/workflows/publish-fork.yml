@@ -5,8 +5,8 @@ on:
     branches:
       - dev
     paths:
-      - "packages/opencode/src/**"
-      - "packages/opencode/test/**"
+      - "packages/xcsh/src/**"
+      - "packages/xcsh/test/**"
       - ".github/workflows/publish-fork.yml"
   workflow_call:
   workflow_dispatch:
@@ -38,7 +38,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          base=$(gh api repos/anomalyco/opencode/releases/latest --jq '.tag_name' | sed 's/^v//')
+          base=$(gh api repos/anomalyco/xcsh/releases/latest --jq '.tag_name' | sed 's/^v//')
           echo "Upstream base: $base"
 
           existing=$(gh release list --limit 100 --json tagName \
@@ -52,21 +52,21 @@ jobs:
           echo "Auto-resolved version: $version (base=$base, existing=$existing)"
 
       - name: Build binaries
-        working-directory: packages/opencode
+        working-directory: packages/xcsh
         env:
-          OPENCODE_VERSION: ${{ steps.version.outputs.version }}
-          OPENCODE_CHANNEL: latest
+          XCSH_VERSION: ${{ steps.version.outputs.version }}
+          XCSH_CHANNEL: latest
         run: bun run build
 
       - name: Run tests
-        working-directory: packages/opencode
+        working-directory: packages/xcsh
         run: bun test test/provider/transform.test.ts --timeout 60000
 
       - name: Typecheck
         run: bun turbo typecheck
 
       - name: Package binaries
-        working-directory: packages/opencode/dist
+        working-directory: packages/xcsh/dist
         run: |
           for dir in xcsh-darwin-arm64 xcsh-darwin-x64; do
             (cd "$dir/bin" && zip -r "../../${dir}.zip" xcsh)
@@ -77,7 +77,7 @@ jobs:
 
       - name: Compute SHA256 checksums
         id: sha
-        working-directory: packages/opencode/dist
+        working-directory: packages/xcsh/dist
         run: |
           echo "darwin_arm64=$(sha256sum xcsh-darwin-arm64.zip | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
           echo "darwin_x64=$(sha256sum xcsh-darwin-x64.zip | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
@@ -123,10 +123,10 @@ jobs:
           EOF
           )" \
             --latest \
-            packages/opencode/dist/xcsh-darwin-arm64.zip \
-            packages/opencode/dist/xcsh-darwin-x64.zip \
-            packages/opencode/dist/xcsh-linux-arm64.tar.gz \
-            packages/opencode/dist/xcsh-linux-x64.tar.gz
+            packages/xcsh/dist/xcsh-darwin-arm64.zip \
+            packages/xcsh/dist/xcsh-darwin-x64.zip \
+            packages/xcsh/dist/xcsh-linux-arm64.tar.gz \
+            packages/xcsh/dist/xcsh-linux-x64.tar.gz
 
       - name: Update Homebrew tap
         env:

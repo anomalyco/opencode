@@ -1,9 +1,9 @@
 ---
 title: 插件
-description: 编写自己的插件来扩展 OpenCode。
+description: 编写自己的插件来扩展 xcsh。
 ---
 
-插件允许你通过挂钩各种事件和自定义行为来扩展 OpenCode。你可以创建插件来添加新功能、集成外部服务，或修改 OpenCode 的默认行为。
+插件允许你通过挂钩各种事件和自定义行为来扩展 xcsh。你可以创建插件来添加新功能、集成外部服务，或修改 xcsh 的默认行为。
 
 如需了解示例，请查看社区创建的[插件](/docs/ecosystem#plugins)。
 
@@ -19,8 +19,8 @@ description: 编写自己的插件来扩展 OpenCode。
 
 将 JavaScript 或 TypeScript 文件放置在插件目录中。
 
-- `.opencode/plugins/` - 项目级插件
-- `~/.config/opencode/plugins/` - 全局插件
+- `.xcsh/plugins/` - 项目级插件
+- `~/.config/xcsh/plugins/` - 全局插件
 
 这些目录中的文件会在启动时自动加载。
 
@@ -30,10 +30,10 @@ description: 编写自己的插件来扩展 OpenCode。
 
 在配置文件中指定 npm 包。
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
+  "plugin": ["xcsh-helicone-session", "xcsh-wakatime", "@my-org/custom-plugin"]
 }
 ```
 
@@ -45,7 +45,7 @@ description: 编写自己的插件来扩展 OpenCode。
 
 ### 插件的安装方式
 
-**npm 插件**在启动时使用 Bun 自动安装。包及其依赖项会缓存在 `~/.cache/opencode/node_modules/` 中。
+**npm 插件**在启动时使用 Bun 自动安装。包及其依赖项会缓存在 `~/.cache/xcsh/node_modules/` 中。
 
 **本地插件**直接从插件目录加载。如果需要使用外部包，你必须在配置目录中创建 `package.json`（参见[依赖项](#dependencies)），或者将插件发布到 npm 并[将其添加到配置中](/docs/config#plugins)。
 
@@ -55,10 +55,10 @@ description: 编写自己的插件来扩展 OpenCode。
 
 插件从所有来源加载，所有钩子按顺序执行。加载顺序为：
 
-1. 全局配置 (`~/.config/opencode/opencode.json`)
-2. 项目配置 (`opencode.json`)
-3. 全局插件目录 (`~/.config/opencode/plugins/`)
-4. 项目插件目录 (`.opencode/plugins/`)
+1. 全局配置 (`~/.config/xcsh/xcsh.json`)
+2. 项目配置 (`xcsh.json`)
+3. 全局插件目录 (`~/.config/xcsh/plugins/`)
+4. 项目插件目录 (`.xcsh/plugins/`)
 
 名称和版本相同的重复 npm 包只会加载一次。但本地插件和名称相似的 npm 插件会分别独立加载。
 
@@ -74,7 +74,7 @@ description: 编写自己的插件来扩展 OpenCode。
 
 本地插件和自定义工具可以使用外部 npm 包。在配置目录中添加一个 `package.json`，列出所需的依赖项。
 
-```json title=".opencode/package.json"
+```json title=".xcsh/package.json"
 {
   "dependencies": {
     "shescape": "^2.1.0"
@@ -82,9 +82,9 @@ description: 编写自己的插件来扩展 OpenCode。
 }
 ```
 
-OpenCode 会在启动时运行 `bun install` 来安装这些依赖项。之后你的插件和工具就可以导入它们了。
+xcsh 会在启动时运行 `bun install` 来安装这些依赖项。之后你的插件和工具就可以导入它们了。
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".xcsh/plugins/my-plugin.ts"
 import { escape } from "shescape"
 
 export const MyPlugin = async (ctx) => {
@@ -102,7 +102,7 @@ export const MyPlugin = async (ctx) => {
 
 ### 基本结构
 
-```js title=".opencode/plugins/example.js"
+```js title=".xcsh/plugins/example.js"
 export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
   console.log("Plugin initialized!")
 
@@ -117,7 +117,7 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 - `project`：当前项目信息。
 - `directory`：当前工作目录。
 - `worktree`：git 工作树路径。
-- `client`：用于与 AI 交互的 OpenCode SDK 客户端。
+- `client`：用于与 AI 交互的 xcsh SDK 客户端。
 - `$`：Bun 的 [Shell API](https://bun.com/docs/runtime/shell)，用于执行命令。
 
 ---
@@ -127,7 +127,7 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 对于 TypeScript 插件，你可以从插件包中导入类型：
 
 ```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@f5xc-salesdemos/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
@@ -210,7 +210,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 ## 示例
 
-以下是一些可用于扩展 OpenCode 的插件示例。
+以下是一些可用于扩展 xcsh 的插件示例。
 
 ---
 
@@ -218,13 +218,13 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 在特定事件发生时发送通知：
 
-```js title=".opencode/plugins/notification.js"
+```js title=".xcsh/plugins/notification.js"
 export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
   return {
     event: async ({ event }) => {
       // Send notification on session completion
       if (event.type === "session.idle") {
-        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+        await $`osascript -e 'display notification "Session completed!" with title "xcsh"'`
       }
     },
   }
@@ -234,16 +234,16 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 这里使用 `osascript` 在 macOS 上运行 AppleScript 来发送通知。
 
 :::note
-如果你使用 OpenCode 桌面应用，它可以在响应就绪或会话出错时自动发送系统通知。
+如果你使用 xcsh 桌面应用，它可以在响应就绪或会话出错时自动发送系统通知。
 :::
 
 ---
 
 ### .env 保护
 
-阻止 OpenCode 读取 `.env` 文件：
+阻止 xcsh 读取 `.env` 文件：
 
-```javascript title=".opencode/plugins/env-protection.js"
+```javascript title=".xcsh/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
   return {
     "tool.execute.before": async (input, output) => {
@@ -261,7 +261,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 将环境变量注入所有 Shell 执行（AI 工具和用户终端）：
 
-```javascript title=".opencode/plugins/inject-env.js"
+```javascript title=".xcsh/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {
   return {
     "shell.env": async (input, output) => {
@@ -276,10 +276,10 @@ export const InjectEnvPlugin = async () => {
 
 ### 自定义工具
 
-插件还可以为 OpenCode 添加自定义工具：
+插件还可以为 xcsh 添加自定义工具：
 
-```ts title=".opencode/plugins/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
+```ts title=".xcsh/plugins/custom-tools.ts"
+import { type Plugin, tool } from "@f5xc-salesdemos/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
@@ -299,13 +299,13 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-`tool` 辅助函数用于创建 OpenCode 可调用的自定义工具。它接受一个 Zod schema 函数，并返回一个工具定义，包含：
+`tool` 辅助函数用于创建 xcsh 可调用的自定义工具。它接受一个 Zod schema 函数，并返回一个工具定义，包含：
 
 - `description`：工具的功能描述
 - `args`：工具参数的 Zod schema
 - `execute`：工具被调用时执行的函数
 
-你的自定义工具将与内置工具一起在 OpenCode 中可用。
+你的自定义工具将与内置工具一起在 xcsh 中可用。
 
 :::note
 如果插件工具与内置工具使用相同的名称，则优先使用插件工具。
@@ -317,7 +317,7 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 
 使用 `client.app.log()` 代替 `console.log` 进行结构化日志记录：
 
-```ts title=".opencode/plugins/my-plugin.ts"
+```ts title=".xcsh/plugins/my-plugin.ts"
 export const MyPlugin = async ({ client }) => {
   await client.app.log({
     body: {
@@ -330,7 +330,7 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-日志级别：`debug`、`info`、`warn`、`error`。详情请参阅 [SDK 文档](https://opencode.ai/docs/sdk)。
+日志级别：`debug`、`info`、`warn`、`error`。详情请参阅 [SDK 文档](https://f5xc-salesdemos.github.io/xcsh/docs/sdk)。
 
 ---
 
@@ -338,8 +338,8 @@ export const MyPlugin = async ({ client }) => {
 
 自定义会话压缩时包含的上下文：
 
-```ts title=".opencode/plugins/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+```ts title=".xcsh/plugins/compaction.ts"
+import type { Plugin } from "@f5xc-salesdemos/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
@@ -362,8 +362,8 @@ Include any state that should persist across compaction:
 
 你还可以通过设置 `output.prompt` 来完全替换压缩提示词：
 
-```ts title=".opencode/plugins/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+```ts title=".xcsh/plugins/custom-compaction.ts"
+import type { Plugin } from "@f5xc-salesdemos/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
   return {

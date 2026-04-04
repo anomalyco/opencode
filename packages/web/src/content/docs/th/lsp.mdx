@@ -1,15 +1,15 @@
 ---
 title: LSP เซิร์ฟเวอร์
-description: OpenCode ทำงานร่วมกับเซิร์ฟเวอร์ LSP ของคุณ
+description: xcsh ทำงานร่วมกับเซิร์ฟเวอร์ LSP ของคุณ
 ---
 
-OpenCode ทำงานร่วมกับ Language Server Protocol (LSP) เพื่อช่วยให้ LLM โต้ตอบกับโค้ดเบสของคุณ ใช้การวินิจฉัยเพื่อให้ข้อเสนอแนะไปยัง LLM
+xcsh ทำงานร่วมกับ Language Server Protocol (LSP) เพื่อช่วยให้ LLM โต้ตอบกับโค้ดเบสของคุณ ใช้การวินิจฉัยเพื่อให้ข้อเสนอแนะไปยัง LLM
 
 ---
 
 ## บิวท์อิน
 
-OpenCode มาพร้อมกับเซิร์ฟเวอร์ LSP ในตัวหลายตัวสำหรับภาษายอดนิยม:
+xcsh มาพร้อมกับเซิร์ฟเวอร์ LSP ในตัวหลายตัวสำหรับภาษายอดนิยม:
 
 | LSP เซิร์ฟเวอร์    | ส่วนขยาย                                                            | ความต้องการ                                             |
 | ------------------ | ------------------------------------------------------------------- | ------------------------------------------------------- |
@@ -57,7 +57,7 @@ OpenCode มาพร้อมกับเซิร์ฟเวอร์ LSP ใ
 
 ## มันทำงานอย่างไร
 
-เมื่อ opencode เปิดไฟล์ มันจะ:
+เมื่อ xcsh เปิดไฟล์ มันจะ:
 
 1. ตรวจสอบนามสกุลไฟล์กับเซิร์ฟเวอร์ LSP ที่เปิดใช้งานทั้งหมด
 2. เริ่มเซิร์ฟเวอร์ LSP ที่เหมาะสมหากยังไม่ได้ทำงาน
@@ -66,11 +66,11 @@ OpenCode มาพร้อมกับเซิร์ฟเวอร์ LSP ใ
 
 ## กำหนดค่า
 
-You can customize LSP servers through the `lsp` section in your opencode config.
+You can customize LSP servers through the `lsp` section in your xcsh config.
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "lsp": {}
 }
 ```
@@ -93,9 +93,9 @@ You can customize LSP servers through the `lsp` section in your opencode config.
 
 ใช้คุณสมบัติ `env` เพื่อตั้งค่าตัวแปรสภาพแวดล้อมเมื่อเริ่มต้นเซิร์ฟเวอร์ LSP:
 
-```json title="opencode.json" {5-7}
+```json title="xcsh.json" {5-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "lsp": {
     "rust": {
       "env": {
@@ -112,9 +112,9 @@ You can customize LSP servers through the `lsp` section in your opencode config.
 
 ใช้คุณสมบัติ `initialization` เพื่อส่งตัวเลือกการเริ่มต้นไปยังเซิร์ฟเวอร์ LSP นี่คือการตั้งค่าเฉพาะเซิร์ฟเวอร์ที่ส่งระหว่างคำขอ LSP `initialize`:
 
-```json title="opencode.json" {5-9}
+```json title="xcsh.json" {5-9}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "lsp": {
     "typescript": {
       "initialization": {
@@ -137,18 +137,18 @@ You can customize LSP servers through the `lsp` section in your opencode config.
 
 หากต้องการปิดการใช้งานเซิร์ฟเวอร์ **ทั้งหมด** LSP ทั่วโลก ให้ตั้งค่า `lsp` เป็น `false`:
 
-```json title="opencode.json" {3}
+```json title="xcsh.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "lsp": false
 }
 ```
 
 หากต้องการปิดการใช้งานเซิร์ฟเวอร์ **เฉพาะ** LSP ให้ตั้งค่า `disabled` เป็น `true`:
 
-```json title="opencode.json" {5}
+```json title="xcsh.json" {5}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "lsp": {
     "typescript": {
       "disabled": true
@@ -163,9 +163,9 @@ You can customize LSP servers through the `lsp` section in your opencode config.
 
 คุณสามารถเพิ่มเซิร์ฟเวอร์ LSP แบบกำหนดเองได้โดยระบุคำสั่งและนามสกุลไฟล์:
 
-```json title="opencode.json" {4-7}
+```json title="xcsh.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "lsp": {
     "custom-lsp": {
       "command": ["custom-lsp-server", "--stdio"],

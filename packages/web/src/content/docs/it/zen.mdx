@@ -1,21 +1,21 @@
 ---
 title: Zen
-description: Lista curata di modelli fornita da OpenCode.
+description: Lista curata di modelli fornita da xcsh.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Zen è un elenco di modelli testati e verificati forniti dal team di OpenCode.
+xcsh Zen è un elenco di modelli testati e verificati forniti dal team di xcsh.
 
 :::note
-OpenCode Zen è attualmente in beta.
+xcsh Zen è attualmente in beta.
 :::
 
-Zen funziona come qualsiasi altro provider in OpenCode. Accedi a OpenCode Zen e ottieni
+Zen funziona come qualsiasi altro provider in xcsh. Accedi a xcsh Zen e ottieni
 la tua chiave API. È **completamente opzionale** e non ti serve usarlo per usare
-OpenCode.
+xcsh.
 
 ---
 
@@ -26,7 +26,7 @@ questi modelli funzionano bene come agenti di coding. Inoltre, la maggior parte 
 configurata in modo molto diverso; quindi ottieni prestazioni e qualità molto diverse.
 
 :::tip
-Abbiamo testato un gruppo selezionato di modelli e provider che funzionano bene con OpenCode.
+Abbiamo testato un gruppo selezionato di modelli e provider che funzionano bene con xcsh.
 :::
 
 Quindi, se usi un modello tramite qualcosa come OpenRouter, non puoi mai essere
@@ -41,17 +41,17 @@ Per risolvere questo problema, abbiamo fatto un paio di cose:
 3. Infine, abbiamo fatto benchmark della combinazione modello/provider e creato
    un elenco che ci sentiamo di raccomandare.
 
-OpenCode Zen è un gateway AI che ti dà accesso a questi modelli.
+xcsh Zen è un gateway AI che ti dà accesso a questi modelli.
 
 ---
 
 ## Come funziona
 
-OpenCode Zen funziona come qualsiasi altro provider in OpenCode.
+xcsh Zen funziona come qualsiasi altro provider in xcsh.
 
-1. Accedi a **<a href={console}>OpenCode Zen</a>**, aggiungi i dettagli di fatturazione,
+1. Accedi a **<a href={console}>xcsh Zen</a>**, aggiungi i dettagli di fatturazione,
    e copia la tua chiave API.
-2. Esegui il comando `/connect` nella TUI, seleziona OpenCode Zen, e incolla la tua chiave API.
+2. Esegui il comando `/connect` nella TUI, seleziona xcsh Zen, e incolla la tua chiave API.
 3. Esegui `/models` nella TUI per vedere l'elenco dei modelli che raccomandiamo.
 
 Ti viene addebitato ogni richiesta e puoi aggiungere credito al tuo account.
@@ -64,44 +64,44 @@ Puoi anche accedere ai nostri modelli tramite i seguenti endpoint API.
 
 | Modello               | Model ID              | Endpoint                                           | Pacchetto AI SDK            |
 | --------------------- | --------------------- | -------------------------------------------------- | --------------------------- |
-| GPT 5.4               | gpt-5.4               | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.4 Pro           | gpt-5.4-pro           | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.4 Mini          | gpt-5.4-mini          | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.4 Nano          | gpt-5.4-nano          | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.3 Codex         | gpt-5.3-codex         | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.3 Codex Spark   | gpt-5.3-codex-spark   | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.2               | gpt-5.2               | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.2 Codex         | gpt-5.2-codex         | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.1               | gpt-5.1               | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.1 Codex         | gpt-5.1-codex         | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.1 Codex Max     | gpt-5.1-codex-max     | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.1 Codex Mini    | gpt-5.1-codex-mini    | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5                 | gpt-5                 | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5 Codex           | gpt-5-codex           | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5 Nano            | gpt-5-nano            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| Claude Opus 4.6       | claude-opus-4-6       | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Opus 4.5       | claude-opus-4-5       | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Opus 4.1       | claude-opus-4-1       | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Sonnet 4.6     | claude-sonnet-4-6     | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Sonnet 4.5     | claude-sonnet-4-5     | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Sonnet 4       | claude-sonnet-4       | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Haiku 4.5      | claude-haiku-4-5      | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Haiku 3.5      | claude-3-5-haiku      | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Gemini 3.1 Pro        | gemini-3.1-pro        | `https://opencode.ai/zen/v1/models/gemini-3.1-pro` | `@ai-sdk/google`            |
-| Gemini 3 Flash        | gemini-3-flash        | `https://opencode.ai/zen/v1/models/gemini-3-flash` | `@ai-sdk/google`            |
-| MiniMax M2.5          | minimax-m2.5          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| MiniMax M2.5 Free     | minimax-m2.5-free     | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| GLM 5                 | glm-5                 | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Kimi K2.5             | kimi-k2.5             | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Big Pickle            | big-pickle            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| MiMo V2 Pro Free      | mimo-v2-pro-free      | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| MiMo V2 Omni Free     | mimo-v2-omni-free     | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Qwen3.6 Plus Free     | qwen3.6-plus-free     | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Nemotron 3 Super Free | nemotron-3-super-free | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| GPT 5.4               | gpt-5.4               | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.4 Pro           | gpt-5.4-pro           | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.4 Mini          | gpt-5.4-mini          | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.4 Nano          | gpt-5.4-nano          | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.3 Codex         | gpt-5.3-codex         | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.3 Codex Spark   | gpt-5.3-codex-spark   | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.2               | gpt-5.2               | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.2 Codex         | gpt-5.2-codex         | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1               | gpt-5.1               | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex         | gpt-5.1-codex         | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex Max     | gpt-5.1-codex-max     | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex Mini    | gpt-5.1-codex-mini    | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5                 | gpt-5                 | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5 Codex           | gpt-5-codex           | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5 Nano            | gpt-5-nano            | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/responses`             | `@ai-sdk/openai`            |
+| Claude Opus 4.6       | claude-opus-4-6       | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.5       | claude-opus-4-5       | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.1       | claude-opus-4-1       | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Sonnet 4.6     | claude-sonnet-4-6     | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Sonnet 4.5     | claude-sonnet-4-5     | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Sonnet 4       | claude-sonnet-4       | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Haiku 4.5      | claude-haiku-4-5      | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Haiku 3.5      | claude-3-5-haiku      | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Gemini 3.1 Pro        | gemini-3.1-pro        | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/models/gemini-3.1-pro` | `@ai-sdk/google`            |
+| Gemini 3 Flash        | gemini-3-flash        | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/models/gemini-3-flash` | `@ai-sdk/google`            |
+| MiniMax M2.5          | minimax-m2.5          | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| MiniMax M2.5 Free     | minimax-m2.5-free     | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| GLM 5                 | glm-5                 | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2.5             | kimi-k2.5             | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Big Pickle            | big-pickle            | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| MiMo V2 Pro Free      | mimo-v2-pro-free      | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| MiMo V2 Omni Free     | mimo-v2-omni-free     | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Qwen3.6 Plus Free     | qwen3.6-plus-free     | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Nemotron 3 Super Free | nemotron-3-super-free | `https://f5xc-salesdemos.github.io/xcsh/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 
-Il [model id](/docs/config/#models) nella config di OpenCode
-usa il formato `opencode/<model-id>`. Per esempio, per GPT 5.3 Codex, useresti
-`opencode/gpt-5.3-codex` nella tua config.
+Il [model id](/docs/config/#models) nella config di xcsh
+usa il formato `xcsh/<model-id>`. Per esempio, per GPT 5.3 Codex, useresti
+`xcsh/gpt-5.3-codex` nella tua config.
 
 ---
 
@@ -110,7 +110,7 @@ usa il formato `opencode/<model-id>`. Per esempio, per GPT 5.3 Codex, useresti
 Puoi recuperare l'elenco completo dei modelli disponibili e i relativi metadati da:
 
 ```
-https://opencode.ai/zen/v1/models
+https://f5xc-salesdemos.github.io/xcsh/zen/v1/models
 ```
 
 ---
@@ -168,12 +168,12 @@ Le commissioni della carta di credito vengono trasferite al costo (4.4% + $0.30 
 
 I modelli gratuiti:
 
-- MiniMax M2.5 Free è disponibile su OpenCode per un periodo limitato. Il team usa questo periodo per raccogliere feedback e migliorare il modello.
-- MiMo V2 Pro Free è disponibile su OpenCode per un periodo limitato. Il team usa questo periodo per raccogliere feedback e migliorare il modello.
-- MiMo V2 Omni Free è disponibile su OpenCode per un periodo limitato. Il team usa questo periodo per raccogliere feedback e migliorare il modello.
-- Qwen3.6 Plus Free è disponibile su OpenCode per un periodo limitato. Il team usa questo periodo per raccogliere feedback e migliorare il modello.
-- Nemotron 3 Super Free è disponibile su OpenCode per un periodo limitato. Il team usa questo periodo per raccogliere feedback e migliorare il modello.
-- Big Pickle è un modello stealth che è gratuito su OpenCode per un periodo limitato. Il team usa questo periodo per raccogliere feedback e migliorare il modello.
+- MiniMax M2.5 Free è disponibile su xcsh per un periodo limitato. Il team usa questo periodo per raccogliere feedback e migliorare il modello.
+- MiMo V2 Pro Free è disponibile su xcsh per un periodo limitato. Il team usa questo periodo per raccogliere feedback e migliorare il modello.
+- MiMo V2 Omni Free è disponibile su xcsh per un periodo limitato. Il team usa questo periodo per raccogliere feedback e migliorare il modello.
+- Qwen3.6 Plus Free è disponibile su xcsh per un periodo limitato. Il team usa questo periodo per raccogliere feedback e migliorare il modello.
+- Nemotron 3 Super Free è disponibile su xcsh per un periodo limitato. Il team usa questo periodo per raccogliere feedback e migliorare il modello.
+- Big Pickle è un modello stealth che è gratuito su xcsh per un periodo limitato. Il team usa questo periodo per raccogliere feedback e migliorare il modello.
 
 <a href={email}>Contattaci</a> se hai domande.
 
@@ -274,9 +274,9 @@ e vuoi usare quella invece di quella fornita da Zen.
 
 ## Obiettivi
 
-Abbiamo creato OpenCode Zen per:
+Abbiamo creato xcsh Zen per:
 
 1. Fare **benchmark** dei migliori modelli/provider per agenti di coding.
 2. Avere accesso alle opzioni di **massima qualità** e non degradare le prestazioni né instradare verso provider più economici.
 3. Trasferire eventuali **riduzioni di prezzo** vendendo al costo; quindi l'unico markup serve a coprire le nostre commissioni di elaborazione.
-4. Non avere **lock-in** permettendoti di usarlo con qualsiasi altro agente di coding. E permettendoti sempre di usare anche qualsiasi altro provider con OpenCode.
+4. Non avere **lock-in** permettendoti di usarlo con qualsiasi altro agente di coding. E permettendoti sempre di usare anche qualsiasi altro provider con xcsh.

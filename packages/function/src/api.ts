@@ -320,7 +320,7 @@ export default new Hono<{ Bindings: Env }>()
     return c.json({ token: installationAuth.token })
   })
   /**
-   * Used by the GitHub action to get GitHub installation access token given user PAT token (used when testing `opencode github run` locally)
+   * Used by the GitHub action to get GitHub installation access token given user PAT token (used when testing `xcsh github run` locally)
    */
   .post("/exchange_github_app_token_with_pat", async (c) => {
     const body = await c.req.json<{ owner: string; repo: string }>()
@@ -370,7 +370,7 @@ export default new Hono<{ Bindings: Env }>()
     }
   })
   /**
-   * Used by the opencode CLI to check if the GitHub app is installed
+   * Used by the xcsh CLI to check if the GitHub app is installed
    */
   .get("/get_github_app_installation", async (c) => {
     const owner = c.req.query("owner")

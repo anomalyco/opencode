@@ -43,8 +43,8 @@ export const dict = {
   "notFound.docs": "ドキュメント",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
-  "notFound.logoLightAlt": "opencodeのロゴ（ライト）",
-  "notFound.logoDarkAlt": "opencodeのロゴ（ダーク）",
+  "notFound.logoLightAlt": "xcshのロゴ（ライト）",
+  "notFound.logoDarkAlt": "xcshのロゴ（ダーク）",
 
   "user.logout": "ログアウト",
 
@@ -87,7 +87,7 @@ export const dict = {
 
   "temp.title": "OpenCode | ターミナル向けに構築されたAIコーディングエージェント",
   "temp.hero.title": "ターミナル向けに構築されたAIコーディングエージェント",
-  "temp.zen": "OpenCode Zen",
+  "temp.zen": "xcsh Zen",
   "temp.getStarted": "はじめる",
   "temp.feature.native.title": "ネイティブ TUI",
   "temp.feature.native.body": "レスポンシブでネイティブ、テーマ変更可能なターミナルUI",
@@ -98,8 +98,8 @@ export const dict = {
   "temp.feature.models.afterLink": "を通じて75以上のLLMプロバイダーをサポート",
   "temp.screenshot.caption": "tokyonight テーマを使用した OpenCode TUI",
   "temp.screenshot.alt": "tokyonight テーマの OpenCode TUI",
-  "temp.logoLightAlt": "opencodeのロゴ（ライト）",
-  "temp.logoDarkAlt": "opencodeのロゴ（ダーク）",
+  "temp.logoLightAlt": "xcshのロゴ（ライト）",
+  "temp.logoDarkAlt": "xcshのロゴ（ダーク）",
 
   "home.banner.badge": "新着",
   "home.banner.text": "デスクトップアプリのベータ版が利用可能",
@@ -188,12 +188,12 @@ export const dict = {
     "Zenは、OpenCodeがコーディングエージェント向けにテスト・ベンチマーク済みのAIモデルを厳選して提供します。プロバイダー間の性能・品質のブレを気にせず、検証済みのモデルを利用できます。",
   "home.zenCta.link": "Zenについて知る",
 
-  "zen.title": "OpenCode Zen | コーディングエージェント向けの信頼できる最適化モデル",
+  "zen.title": "xcsh Zen | コーディングエージェント向けの信頼できる最適化モデル",
   "zen.hero.title": "コーディングエージェント向けの信頼できる最適化モデル",
   "zen.hero.body":
     "Zenは、OpenCodeがコーディングエージェント向けにテスト・ベンチマーク済みのAIモデルを厳選して提供します。プロバイダー間の性能・品質のブレを気にせず、検証済みのモデルを利用できます。",
 
-  "zen.faq.q1": "OpenCode Zenとは？",
+  "zen.faq.q1": "xcsh Zenとは？",
   "zen.faq.a1":
     "Zenは、OpenCodeのチームが作成した、コーディングエージェント向けにテスト・ベンチマークされたAIモデルの厳選セットです。",
   "zen.faq.q2": "Zenはなぜ精度が高いのですか？",
@@ -641,7 +641,7 @@ export const dict = {
   "workspace.lite.subscription.resetsIn": "リセットまで",
   "workspace.lite.subscription.useBalance": "利用限度額に達したら利用可能な残高を使用する",
   "workspace.lite.subscription.selectProvider":
-    "Go モデルを使用するには、opencode の設定で「OpenCode Go」をプロバイダーとして選択してください。",
+    "Go モデルを使用するには、xcsh の設定で「OpenCode Go」をプロバイダーとして選択してください。",
   "workspace.lite.black.message":
     "現在 OpenCode Black を購読中、またはウェイティングリストに登録されています。Go に切り替える場合は、先に登録を解除してください。",
   "workspace.lite.other.message":

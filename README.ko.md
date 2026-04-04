@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://opencode.ai">
+  <a href="https://f5xc-salesdemos.github.io/xcsh">
     <picture>
       <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
       <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
@@ -9,7 +9,7 @@
 </p>
 <p align="center">오픈 소스 AI 코딩 에이전트.</p>
 <p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+  <a href="https://f5xc-salesdemos.github.io/xcsh/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
   <a href="https://github.com/f5xc-salesdemos/xcsh/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/f5xc-salesdemos/xcsh/publish.yml?style=flat-square&branch=dev" /></a>
 </p>
@@ -39,7 +39,7 @@
   <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://f5xc-salesdemos.github.io/xcsh)
 
 ---
 
@@ -47,7 +47,7 @@
 
 ```bash
 # YOLO
-curl -fsSL https://opencode.ai/install | bash
+curl -fsSL https://f5xc-salesdemos.github.io/xcsh/install | bash
 
 # 패키지 매니저
 npm i -g opencode-ai@latest        # bun/pnpm/yarn 도 가능
@@ -66,7 +66,7 @@ nix run nixpkgs#opencode           # 또는 github:f5xc-salesdemos/xcsh 로 최�
 
 ### 데스크톱 앱 (BETA)
 
-OpenCode 는 데스크톱 앱으로도 제공됩니다. [releases page](https://github.com/f5xc-salesdemos/xcsh/releases) 에서 직접 다운로드하거나 [opencode.ai/download](https://opencode.ai/download) 를 이용하세요.
+OpenCode 는 데스크톱 앱으로도 제공됩니다. [releases page](https://github.com/f5xc-salesdemos/xcsh/releases) 에서 직접 다운로드하거나 [f5xc-salesdemos.github.io/xcsh/download](https://f5xc-salesdemos.github.io/xcsh/download) 를 이용하세요.
 
 | 플랫폼                | 다운로드                              |
 | --------------------- | ------------------------------------- |
@@ -93,8 +93,8 @@ scoop bucket add extras; scoop install extras/opencode-desktop
 
 ```bash
 # 예시
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://f5xc-salesdemos.github.io/xcsh/install | bash
+XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://f5xc-salesdemos.github.io/xcsh/install | bash
 ```
 
 ### Agents
@@ -110,11 +110,11 @@ OpenCode 에는 내장 에이전트 2개가 있으며 `Tab` 키로 전환할 수
 또한 복잡한 검색과 여러 단계 작업을 위한 **general** 서브 에이전트가 포함되어 있습니다.
 내부적으로 사용되며, 메시지에서 `@general` 로 호출할 수 있습니다.
 
-[agents](https://opencode.ai/docs/agents) 에 대해 더 알아보세요.
+[agents](https://f5xc-salesdemos.github.io/xcsh/docs/agents) 에 대해 더 알아보세요.
 
 ### 문서
 
-OpenCode 설정에 대한 자세한 내용은 [**문서**](https://opencode.ai/docs) 를 참고하세요.
+OpenCode 설정에 대한 자세한 내용은 [**문서**](https://f5xc-salesdemos.github.io/xcsh/docs) 를 참고하세요.
 
 ### 기여하기
 
@@ -131,7 +131,7 @@ OpenCode 와 관련된 프로젝트를 진행하면서 이름에 "opencode"(예:
 기능 면에서는 Claude Code 와 매우 유사합니다. 주요 차이점은 다음과 같습니다.
 
 - 100% 오픈 소스
-- 특정 제공자에 묶여 있지 않습니다. [OpenCode Zen](https://opencode.ai/zen) 을 통해 제공하는 모델을 권장하지만, OpenCode 는 Claude, OpenAI, Google 또는 로컬 모델과도 사용할 수 있습니다. 모델이 발전하면서 격차는 줄고 가격은 내려가므로 provider-agnostic 인 것이 중요합니다.
+- 특정 제공자에 묶여 있지 않습니다. [OpenCode Zen](https://f5xc-salesdemos.github.io/xcsh/zen) 을 통해 제공하는 모델을 권장하지만, OpenCode 는 Claude, OpenAI, Google 또는 로컬 모델과도 사용할 수 있습니다. 모델이 발전하면서 격차는 줄고 가격은 내려가므로 provider-agnostic 인 것이 중요합니다.
 - 기본으로 제공되는 LSP 지원
 - TUI 에 집중. OpenCode 는 neovim 사용자와 [terminal.shop](https://terminal.shop) 제작자가 만들었으며, 터미널에서 가능한 것의 한계를 밀어붙입니다.
 - 클라이언트/서버 아키텍처. 예를 들어 OpenCode 를 내 컴퓨터에서 실행하면서 모바일 앱으로 원격 조작할 수 있습니다. 즉, TUI 프런트엔드는 가능한 여러 클라이언트 중 하나일 뿐입니다.

@@ -1,22 +1,22 @@
 ---
 title: TUI
-description: Korištenje korisničkog interfejsa OpenCode terminala.
+description: Korištenje korisničkog interfejsa xcsh terminala.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode pruža interaktivni terminalski interfejs ili TUI za rad na vašim projektima sa LLM.
+xcsh pruža interaktivni terminalski interfejs ili TUI za rad na vašim projektima sa LLM.
 
-Pokretanje OpenCode pokreće TUI za trenutni direktorij.
+Pokretanje xcsh pokreće TUI za trenutni direktorij.
 
 ```bash
-opencode
+xcsh
 ```
 
 Ili ga možete pokrenuti za određeni radni direktorij.
 
 ```bash
-opencode /path/to/project
+xcsh /path/to/project
 ```
 
 Kada uđete u TUI, možete to zatražiti porukom.
@@ -57,7 +57,7 @@ Izlaz naredbe se dodaje u razgovor kao rezultat alata.
 
 ## Naredbe
 
-Kada koristite OpenCode TUI, možete upisati `/` nakon čega slijedi ime komande da biste brzo izvršili radnje. na primjer:
+Kada koristite xcsh TUI, možete upisati `/` nakon čega slijedi ime komande da biste brzo izvršili radnje. na primjer:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ Ovdje su sve dostupne komande kose crte:
 
 ### connect
 
-Dodajte provajdera u OpenCode. Omogućava vam da odaberete između dostupnih provajdera i dodate njihove API ključeve.
+Dodajte provajdera u xcsh. Omogućava vam da odaberete između dostupnih provajdera i dodate njihove API ključeve.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ Otvorite vanjski uređivač za sastavljanje poruka. Koristi editor postavljen u 
 
 ### exit
 
-Izađite iz OpenCode. _Aliases_: `/quit`, `/q`
+Izađite iz xcsh. _Aliases_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -362,8 +362,8 @@ Možete prilagoditi TUI ponašanje putem `tui.json` (ili `tui.jsonc`).
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
-  "theme": "opencode",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/tui.json",
+  "theme": "xcsh",
   "keybinds": {
     "leader": "ctrl+x"
   },
@@ -375,7 +375,7 @@ Možete prilagoditi TUI ponašanje putem `tui.json` (ili `tui.jsonc`).
 }
 ```
 
-Ovo je odvojeno od `opencode.json`, koji konfiguriše ponašanje servera/izvršavanja.
+Ovo je odvojeno od `xcsh.json`, koji konfiguriše ponašanje servera/izvršavanja.
 
 ### Opcije
 

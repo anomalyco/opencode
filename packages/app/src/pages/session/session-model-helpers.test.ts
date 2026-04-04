@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { UserMessage } from "@opencode-ai/sdk/v2"
+import type { UserMessage } from "@f5xc-salesdemos/sdk/v2"
 import { resetSessionModel, syncSessionModel } from "./session-model-helpers"
 
 const message = (input?: Partial<Pick<UserMessage, "agent" | "model" | "variant">>) =>

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { Agent } from "@opencode-ai/sdk/v2/client"
+import type { Agent } from "@f5xc-salesdemos/sdk/v2/client"
 import { normalizeAgentList } from "./utils"
 
 const agent = (name = "build") =>

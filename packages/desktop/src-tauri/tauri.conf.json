@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "OpenCode Dev",
-  "identifier": "ai.opencode.desktop.dev",
+  "identifier": "ai.xcsh.desktop.dev",
   "mainBinaryName": "OpenCode",
   "version": "../package.json",
   "build": {
@@ -33,7 +33,7 @@
     ],
     "active": true,
     "targets": ["deb", "rpm", "dmg", "nsis", "app"],
-    "externalBin": ["sidecars/opencode-cli"],
+    "externalBin": ["sidecars/xcsh-cli"],
     "linux": {
       "rpm": {
         "compression": {
@@ -59,7 +59,7 @@
   "plugins": {
     "deep-link": {
       "desktop": {
-        "schemes": ["opencode"]
+        "schemes": ["xcsh"]
       }
     }
   }

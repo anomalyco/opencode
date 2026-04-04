@@ -1,22 +1,22 @@
 ---
 title: TUI
-description: Arbeite mit OpenCode in der Terminal-Oberflaeche.
+description: Arbeite mit xcsh in der Terminal-Oberflaeche.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode bietet eine interaktive Terminaloberflaeche (TUI), um mit einem LLM an deinen Projekten zu arbeiten.
+xcsh bietet eine interaktive Terminaloberflaeche (TUI), um mit einem LLM an deinen Projekten zu arbeiten.
 
-Ohne weitere Argumente startet OpenCode die TUI im aktuellen Verzeichnis.
+Ohne weitere Argumente startet xcsh die TUI im aktuellen Verzeichnis.
 
 ```bash
-opencode
+xcsh
 ```
 
 Oder du startest sie fuer ein bestimmtes Arbeitsverzeichnis.
 
 ```bash
-opencode /path/to/project
+xcsh /path/to/project
 ```
 
 In der TUI kannst du direkt mit einer Nachricht prompten.
@@ -58,7 +58,7 @@ Die Ausgabe landet als Tool-Ergebnis in der Unterhaltung.
 
 ## Befehle
 
-In der OpenCode-TUI kannst du `/` plus Befehlsnamen eingeben, um Aktionen schnell auszufuehren.
+In der xcsh-TUI kannst du `/` plus Befehlsnamen eingeben, um Aktionen schnell auszufuehren.
 Zum Beispiel:
 
 ```bash frame="none"
@@ -74,7 +74,7 @@ Hier sind alle verfuegbaren Slash-Commands:
 
 ### connect
 
-Fuegt einen Provider zu OpenCode hinzu. Erlaubt die Auswahl aus verfuegbaren Providern und das Hinzufuegen ihrer API-Keys.
+Fuegt einen Provider zu xcsh hinzu. Erlaubt die Auswahl aus verfuegbaren Providern und das Hinzufuegen ihrer API-Keys.
 
 ```bash frame="none"
 /connect
@@ -120,7 +120,7 @@ Oeffnet externen Editor zum Verfassen von Nachrichten. Nutzt den in der `EDITOR`
 
 ### exit
 
-Beendet OpenCode. _Aliase_: `/quit`, `/q`
+Beendet xcsh. _Aliase_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -359,8 +359,8 @@ Du kannst das Verhalten der TUI ueber die Datei `tui.json` (oder `tui.jsonc`) an
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
-  "theme": "opencode",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/tui.json",
+  "theme": "xcsh",
   "keybinds": {
     "leader": "ctrl+x"
   },
@@ -372,7 +372,7 @@ Du kannst das Verhalten der TUI ueber die Datei `tui.json` (oder `tui.jsonc`) an
 }
 ```
 
-Dies ist getrennt von `opencode.json`, welche das Server-/Runtime-Verhalten konfiguriert.
+Dies ist getrennt von `xcsh.json`, welche das Server-/Runtime-Verhalten konfiguriert.
 
 ### Optionen
 

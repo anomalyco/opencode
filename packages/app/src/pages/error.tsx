@@ -1,11 +1,11 @@
-import { TextField } from "@opencode-ai/ui/text-field"
-import { Logo } from "@opencode-ai/ui/logo"
-import { Button } from "@opencode-ai/ui/button"
+import { TextField } from "@f5xc-salesdemos/ui/text-field"
+import { Logo } from "@f5xc-salesdemos/ui/logo"
+import { Button } from "@f5xc-salesdemos/ui/button"
 import { Component, Show, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Icon } from "@f5xc-salesdemos/ui/icon"
 import type { E2EWindow } from "@/testing/terminal"
 
 export type InitError = {
@@ -229,7 +229,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
 
   onMount(() => {
     const win = window as E2EWindow
-    if (!win.__opencode_e2e) return
+    if (!win.__xcsh_e2e) return
     const detail = formatError(props.error, language.t)
     console.error(`[e2e:error-boundary] ${window.location.pathname}\n${detail}`)
   })
@@ -309,7 +309,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
             <button
               type="button"
               class="flex items-center text-text-interactive-base gap-1"
-              onClick={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+              onClick={() => platform.openLink("https://f5xc-salesdemos.github.io/xcsh/desktop-feedback")}
             >
               <div>{language.t("error.page.report.discord")}</div>
               <Icon name="discord" class="text-text-interactive-base" />

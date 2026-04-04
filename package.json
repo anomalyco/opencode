@@ -1,12 +1,12 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "opencode",
+  "name": "xcsh",
   "description": "AI-powered development tool",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.3.11",
   "scripts": {
-    "dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
+    "dev": "bun run --cwd packages/xcsh --conditions=browser src/index.ts",
     "dev:desktop": "bun --cwd packages/desktop tauri dev",
     "dev:web": "bun --cwd packages/app dev",
     "dev:console": "ulimit -n 10240 2>/dev/null; bun run --cwd packages/console/app dev",
@@ -85,9 +85,9 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.933.0",
-    "@opencode-ai/plugin": "workspace:*",
-    "@opencode-ai/script": "workspace:*",
-    "@opencode-ai/sdk": "workspace:*",
+    "@f5xc-salesdemos/plugin": "workspace:*",
+    "@f5xc-salesdemos/script": "workspace:*",
+    "@f5xc-salesdemos/sdk": "workspace:*",
     "typescript": "catalog:"
   },
   "repository": {
@@ -110,7 +110,9 @@
   ],
   "overrides": {
     "@types/bun": "catalog:",
-    "@types/node": "catalog:"
+    "@types/node": "catalog:",
+    "@opencode-ai/plugin": "$@f5xc-salesdemos/plugin",
+    "@opencode-ai/sdk": "$@f5xc-salesdemos/sdk"
   },
   "patchedDependencies": {
     "@standard-community/standard-openapi@0.2.9": "patches/@standard-community%2Fstandard-openapi@0.2.9.patch",

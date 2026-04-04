@@ -12,7 +12,7 @@ import type {
   SessionStatus,
   Workspace,
   Config as SdkConfig,
-} from "@opencode-ai/sdk/v2"
+} from "@f5xc-salesdemos/sdk/v2"
 import type { CliRenderer, ParsedKey, RGBA } from "@opentui/core"
 import type { JSX, SolidPlugin } from "@opentui/solid"
 import type { Config as PluginConfig, PluginOptions } from "./index.js"

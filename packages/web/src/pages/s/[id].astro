@@ -48,8 +48,8 @@ const messages = {
   error_id_not_found: tx("share.error_id_not_found"),
   error_api_url_not_found: tx("share.error_api_url_not_found"),
   error_connection_failed: tx("share.error_connection_failed"),
-  opencode_version: tx("share.opencode_version"),
-  opencode_name: tx("share.opencode_name"),
+  xcsh_version: tx("share.xcsh_version"),
+  xcsh_name: tx("share.xcsh_name"),
   models: tx("share.models"),
   cost: tx("share.cost"),
   input_tokens: tx("share.input_tokens"),
@@ -106,7 +106,7 @@ const modelParam =
       ? encodeURIComponent(`${modelsArray[0]} & ${modelsArray[1]}`)
       : encodeURIComponent(`${modelsArray[0]} & ${modelsArray.length - 1} others`)
 
-const ogImage = `${config.socialCard}/opencode-share/${encodedTitle}.png?model=${modelParam}&version=${version}&id=${id}`
+const ogImage = `${config.socialCard}/xcsh-share/${encodedTitle}.png?model=${modelParam}&version=${version}&id=${id}`
 ---
 <StarlightPage
   hasSidebar={false}

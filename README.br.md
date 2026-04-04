@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://opencode.ai">
+  <a href="https://f5xc-salesdemos.github.io/xcsh">
     <picture>
       <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
       <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
@@ -9,7 +9,7 @@
 </p>
 <p align="center">O agente de programação com IA de código aberto.</p>
 <p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+  <a href="https://f5xc-salesdemos.github.io/xcsh/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
   <a href="https://github.com/f5xc-salesdemos/xcsh/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/f5xc-salesdemos/xcsh/publish.yml?style=flat-square&branch=dev" /></a>
 </p>
@@ -39,7 +39,7 @@
   <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://f5xc-salesdemos.github.io/xcsh)
 
 ---
 
@@ -47,7 +47,7 @@
 
 ```bash
 # YOLO
-curl -fsSL https://opencode.ai/install | bash
+curl -fsSL https://f5xc-salesdemos.github.io/xcsh/install | bash
 
 # Gerenciadores de pacotes
 npm i -g opencode-ai@latest        # ou bun/pnpm/yarn
@@ -66,7 +66,7 @@ nix run nixpkgs#opencode           # ou github:f5xc-salesdemos/xcsh para a branc
 
 ### App desktop (BETA)
 
-O OpenCode também está disponível como aplicativo desktop. Baixe diretamente pela [página de releases](https://github.com/f5xc-salesdemos/xcsh/releases) ou em [opencode.ai/download](https://opencode.ai/download).
+O OpenCode também está disponível como aplicativo desktop. Baixe diretamente pela [página de releases](https://github.com/f5xc-salesdemos/xcsh/releases) ou em [f5xc-salesdemos.github.io/xcsh/download](https://f5xc-salesdemos.github.io/xcsh/download).
 
 | Plataforma            | Download                              |
 | --------------------- | ------------------------------------- |
@@ -93,8 +93,8 @@ O script de instalação respeita a seguinte ordem de prioridade para o caminho 
 
 ```bash
 # Exemplos
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://f5xc-salesdemos.github.io/xcsh/install | bash
+XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://f5xc-salesdemos.github.io/xcsh/install | bash
 ```
 
 ### Agents
@@ -110,11 +110,11 @@ O OpenCode inclui dois agents integrados, que você pode alternar com a tecla `T
 Também há um subagent **general** para buscas complexas e tarefas em várias etapas.
 Ele é usado internamente e pode ser invocado com `@general` nas mensagens.
 
-Saiba mais sobre [agents](https://opencode.ai/docs/agents).
+Saiba mais sobre [agents](https://f5xc-salesdemos.github.io/xcsh/docs/agents).
 
 ### Documentação
 
-Para mais informações sobre como configurar o OpenCode, [**veja nossa documentação**](https://opencode.ai/docs).
+Para mais informações sobre como configurar o OpenCode, [**veja nossa documentação**](https://f5xc-salesdemos.github.io/xcsh/docs).
 
 ### Contribuir
 
@@ -131,7 +131,7 @@ Se você estiver trabalhando em um projeto relacionado ao OpenCode e estiver usa
 É muito parecido com o Claude Code em termos de capacidade. Aqui estão as principais diferenças:
 
 - 100% open source
-- Não está acoplado a nenhum provedor. Embora recomendemos os modelos que oferecemos pelo [OpenCode Zen](https://opencode.ai/zen); o OpenCode pode ser usado com Claude, OpenAI, Google ou até modelos locais. À medida que os modelos evoluem, as diferenças diminuem e os preços caem, então ser provider-agnostic é importante.
+- Não está acoplado a nenhum provedor. Embora recomendemos os modelos que oferecemos pelo [OpenCode Zen](https://f5xc-salesdemos.github.io/xcsh/zen); o OpenCode pode ser usado com Claude, OpenAI, Google ou até modelos locais. À medida que os modelos evoluem, as diferenças diminuem e os preços caem, então ser provider-agnostic é importante.
 - Suporte a LSP pronto para uso
 - Foco em TUI. O OpenCode é construído por usuários de neovim e pelos criadores do [terminal.shop](https://terminal.shop); vamos levar ao limite o que é possível no terminal.
 - Arquitetura cliente/servidor. Isso, por exemplo, permite executar o OpenCode no seu computador enquanto você o controla remotamente por um aplicativo mobile. Isso significa que o frontend TUI é apenas um dos possíveis clientes.

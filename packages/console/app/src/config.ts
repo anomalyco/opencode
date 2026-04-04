@@ -3,7 +3,7 @@
  */
 export const config = {
   // Base URL
-  baseUrl: "https://opencode.ai",
+  baseUrl: "https://f5xc-salesdemos.github.io/xcsh",
 
   // GitHub
   github: {
@@ -16,8 +16,8 @@ export const config = {
 
   // Social links
   social: {
-    twitter: "https://x.com/opencode",
-    discord: "https://discord.gg/opencode",
+    twitter: "https://x.com/xcsh",
+    discord: "https://discord.gg/xcsh",
   },
 
   // Static stats (used on landing page)

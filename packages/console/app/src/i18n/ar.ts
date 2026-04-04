@@ -37,14 +37,14 @@ export const dict = {
   "email.subscribe": "اشتراك",
   "email.success": "تبقّت خطوة واحدة: تحقق من بريدك وأكّد عنوانك",
 
-  "notFound.title": "غير موجود | opencode",
+  "notFound.title": "غير موجود | xcsh",
   "notFound.heading": "404 - الصفحة غير موجودة",
   "notFound.home": "الرئيسية",
   "notFound.docs": "الوثائق",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
-  "notFound.logoLightAlt": "شعار opencode الفاتح",
-  "notFound.logoDarkAlt": "شعار opencode الداكن",
+  "notFound.logoLightAlt": "شعار xcsh الفاتح",
+  "notFound.logoDarkAlt": "شعار xcsh الداكن",
 
   "user.logout": "تسجيل الخروج",
 
@@ -85,21 +85,21 @@ export const dict = {
 
   "home.title": "OpenCode | وكيل برمجة بالذكاء الاصطناعي مفتوح المصدر",
 
-  "temp.title": "opencode | وكيل برمجة بالذكاء الاصطناعي مبني للطرفية",
+  "temp.title": "xcsh | وكيل برمجة بالذكاء الاصطناعي مبني للطرفية",
   "temp.hero.title": "وكيل البرمجة بالذكاء الاصطناعي المبني للطرفية",
-  "temp.zen": "opencode zen",
+  "temp.zen": "xcsh zen",
   "temp.getStarted": "ابدأ",
   "temp.feature.native.title": "واجهة طرفية أصلية",
   "temp.feature.native.body": "واجهة مستخدم طرفية سريعة الاستجابة، أصلية، وقابلة للتخصيص",
   "temp.feature.zen.beforeLink": "قائمة",
   "temp.feature.zen.link": "منسقة من النماذج",
-  "temp.feature.zen.afterLink": "مقدمة من opencode",
+  "temp.feature.zen.afterLink": "مقدمة من xcsh",
   "temp.feature.models.beforeLink": "يدعم أكثر من 75 مزود LLM من خلال",
   "temp.feature.models.afterLink": "، بما في ذلك النماذج المحلية",
   "temp.screenshot.caption": "واجهة OpenCode الطرفية مع سمة tokyonight",
   "temp.screenshot.alt": "واجهة OpenCode الطرفية بسمة tokyonight",
-  "temp.logoLightAlt": "شعار opencode الفاتح",
-  "temp.logoDarkAlt": "شعار opencode الداكن",
+  "temp.logoLightAlt": "شعار xcsh الفاتح",
+  "temp.logoDarkAlt": "شعار xcsh الداكن",
 
   "home.banner.badge": "جديد",
   "home.banner.text": "تطبيق سطح المكتب متاح بنسخة تجريبية",
@@ -187,12 +187,12 @@ export const dict = {
     "يمنحك Zen الوصول إلى مجموعة مختارة بعناية من نماذج الذكاء الاصطناعي التي اختبرها OpenCode وقاس أداءها خصيصًا لوكلاء البرمجة. لا حاجة للقلق بشأن اختلاف الأداء والجودة بين المزودين، استخدم نماذج محققة تعمل بكفاءة.",
   "home.zenCta.link": "تعرف على Zen",
 
-  "zen.title": "OpenCode Zen | مجموعة منسقة من النماذج المحسنة والموثوقة لوكلاء البرمجة",
+  "zen.title": "xcsh Zen | مجموعة منسقة من النماذج المحسنة والموثوقة لوكلاء البرمجة",
   "zen.hero.title": "نماذج محسنة وموثوقة لوكلاء البرمجة",
   "zen.hero.body":
     "يمنحك Zen الوصول إلى مجموعة منسقة من نماذج الذكاء الاصطناعي التي اختبرها OpenCode وقاس أداءها خصيصًا لوكلاء البرمجة. لا حاجة للقلق بشأن اختلاف الأداء والجودة، استخدم نماذج محققة تعمل بكفاءة.",
 
-  "zen.faq.q1": "ما هو OpenCode Zen؟",
+  "zen.faq.q1": "ما هو xcsh Zen؟",
   "zen.faq.a1":
     "Zen هو مجموعة منسقة من نماذج الذكاء الاصطناعي التي تم اختبارها وقياس أدائها لوكلاء البرمجة، أنشأها الفريق المطور لـ OpenCode.",
   "zen.faq.q2": "ما الذي يجعل Zen أكثر دقة؟",
@@ -435,15 +435,15 @@ export const dict = {
     "الوصول إلى النماذج التي تم تكوينها لتحقيق الأداء الأمثل - لا تقليل للجودة أو توجيه إلى موفري خدمة أرخص.",
   "workspace.newUser.feature.lockin.title": "لا قيود على المزود",
   "workspace.newUser.feature.lockin.body":
-    "استخدم Zen مع أي وكيل برمجة، واستمر في استخدام موفرين آخرين مع opencode وقتما تشاء.",
+    "استخدم Zen مع أي وكيل برمجة، واستمر في استخدام موفرين آخرين مع xcsh وقتما تشاء.",
   "workspace.newUser.copyApiKey": "نسخ مفتاح API",
   "workspace.newUser.copyKey": "نسخ المفتاح",
   "workspace.newUser.copied": "تم النسخ!",
   "workspace.newUser.step.enableBilling": "تمكين الفوترة",
   "workspace.newUser.step.login.before": "شغّل",
-  "workspace.newUser.step.login.after": "واختر opencode",
+  "workspace.newUser.step.login.after": "واختر xcsh",
   "workspace.newUser.step.pasteKey": "الصق مفتاح API الخاص بك",
-  "workspace.newUser.step.models.before": "ابدأ opencode ثم نفّذ",
+  "workspace.newUser.step.models.before": "ابدأ xcsh ثم نفّذ",
   "workspace.newUser.step.models.after": "لاختيار نموذج",
 
   "workspace.models.title": "النماذج",
@@ -489,10 +489,10 @@ export const dict = {
   "workspace.cost.subscriptionShort": "اشتراك",
 
   "workspace.keys.title": "مفاتيح API",
-  "workspace.keys.subtitle": "إدارة مفاتيح API الخاصة بك للوصول إلى خدمات opencode.",
+  "workspace.keys.subtitle": "إدارة مفاتيح API الخاصة بك للوصول إلى خدمات xcsh.",
   "workspace.keys.create": "إنشاء مفتاح API",
   "workspace.keys.placeholder": "أدخل اسم المفتاح",
-  "workspace.keys.empty": "أنشئ مفتاح API لبوابة opencode",
+  "workspace.keys.empty": "أنشئ مفتاح API لبوابة xcsh",
   "workspace.keys.table.name": "الاسم",
   "workspace.keys.table.key": "المفتاح",
   "workspace.keys.table.createdBy": "تم الإنشاء بواسطة",
@@ -633,7 +633,7 @@ export const dict = {
   "workspace.lite.subscription.resetsIn": "إعادة تعيين في",
   "workspace.lite.subscription.useBalance": "استخدم رصيدك المتوفر بعد الوصول إلى حدود الاستخدام",
   "workspace.lite.subscription.selectProvider":
-    'اختر "OpenCode Go" كمزود في إعدادات opencode الخاصة بك لاستخدام نماذج Go.',
+    'اختر "OpenCode Go" كمزود في إعدادات xcsh الخاصة بك لاستخدام نماذج Go.',
   "workspace.lite.black.message":
     "أنت مشترك حاليًا في OpenCode Black أو في قائمة الانتظار. يرجى إلغاء الاشتراك أولاً إذا كنت ترغب في التبديل إلى Go.",
   "workspace.lite.other.message":

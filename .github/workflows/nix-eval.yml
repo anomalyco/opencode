@@ -38,7 +38,7 @@ jobs:
           nix flake show --all-systems
 
           SYSTEMS="x86_64-linux aarch64-linux x86_64-darwin aarch64-darwin"
-          PACKAGES="opencode"
+          PACKAGES="xcsh"
           # TODO: move 'desktop' to PACKAGES when #11755 is fixed
           OPTIONAL_PACKAGES="desktop"
 

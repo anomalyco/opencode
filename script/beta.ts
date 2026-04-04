@@ -3,7 +3,7 @@
 import { $ } from "bun"
 import fs from "fs/promises"
 
-const model = "opencode/gpt-5.3-codex"
+const model = "xcsh/gpt-5.3-codex"
 
 interface PR {
   number: number
@@ -61,7 +61,7 @@ async function typecheck() {
   console.log("  Running typecheck...")
 
   try {
-    await $`bun typecheck`.cwd("packages/opencode")
+    await $`bun typecheck`.cwd("packages/xcsh")
     return true
   } catch (err) {
     console.log(`Typecheck failed: ${err}`)
@@ -73,7 +73,7 @@ async function build() {
   console.log("  Running final build smoke check...")
 
   try {
-    await $`./script/build.ts --single`.cwd("packages/opencode")
+    await $`./script/build.ts --single`.cwd("packages/xcsh")
     return true
   } catch (err) {
     console.log(`Build failed: ${err}`)
@@ -96,7 +96,7 @@ async function install() {
 }
 
 async function fix(pr: PR, files: string[], prs: PR[], applied: number[], idx: number) {
-  console.log(`  Trying to auto-resolve ${files.length} conflict(s) with opencode...`)
+  console.log(`  Trying to auto-resolve ${files.length} conflict(s) with xcsh...`)
 
   const done = lines(prs.filter((x) => applied.includes(x.number)))
   const next = lines(prs.slice(idx + 1))
@@ -113,7 +113,7 @@ async function fix(pr: PR, files: string[], prs: PR[], applied: number[], idx: n
     "If bun.lock is conflicted, do not hand-merge it. Delete bun.lock and run bun install after the code conflicts are resolved.",
     "If a PR already deleted a file/directory, do not re-add it, instead apply changes in the new semantic location.",
     "If a PR already changed an import, keep that change.",
-    "After resolving the conflicts, run `bun typecheck` in `packages/opencode`.",
+    "After resolving the conflicts, run `bun typecheck` in `packages/xcsh`.",
     "If typecheck fails, you may also update any files reported by typecheck.",
     "Keep any non-conflict edits narrowly scoped to restoring a valid merged state for the current PR batch.",
     "Fix any merge-caused typecheck errors before finishing.",
@@ -122,9 +122,9 @@ async function fix(pr: PR, files: string[], prs: PR[], applied: number[], idx: n
   ].join("\n")
 
   try {
-    await $`opencode run -m ${model} ${prompt}`
+    await $`xcsh run -m ${model} ${prompt}`
   } catch (err) {
-    console.log(`  opencode failed: ${err}`)
+    console.log(`  xcsh failed: ${err}`)
     return false
   }
 
@@ -138,25 +138,25 @@ async function fix(pr: PR, files: string[], prs: PR[], applied: number[], idx: n
 
   if (!(await typecheck())) return false
 
-  console.log("  Conflicts resolved with opencode")
+  console.log("  Conflicts resolved with xcsh")
   return true
 }
 
 async function smoke(prs: PR[], applied: number[]) {
-  console.log("\nRunning final smoke check with opencode...")
+  console.log("\nRunning final smoke check with xcsh...")
 
   const done = lines(prs.filter((x) => applied.includes(x.number)))
   const prompt = [
     "The beta merge batch is complete.",
     `Merged PRs on HEAD:\n${done}`,
-    "Run `bun typecheck` in `packages/opencode`.",
-    "Run `./script/build.ts --single` in `packages/opencode`.",
+    "Run `bun typecheck` in `packages/xcsh`.",
+    "Run `./script/build.ts --single` in `packages/xcsh`.",
     "Fix any merge-caused issues until both commands pass.",
     "Do not create a commit.",
   ].join("\n")
 
   try {
-    await $`opencode run -m ${model} ${prompt}`
+    await $`xcsh run -m ${model} ${prompt}`
   } catch (err) {
     console.log(`Smoke fix failed: ${err}`)
     return false

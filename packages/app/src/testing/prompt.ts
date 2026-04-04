@@ -19,12 +19,12 @@ export type PromptSendState = {
 
 export const promptEnabled = () => {
   if (typeof window === "undefined") return false
-  return (window as E2EWindow).__opencode_e2e?.prompt?.enabled === true
+  return (window as E2EWindow).__xcsh_e2e?.prompt?.enabled === true
 }
 
 const root = () => {
   if (!promptEnabled()) return
-  return (window as E2EWindow).__opencode_e2e?.prompt
+  return (window as E2EWindow).__xcsh_e2e?.prompt
 }
 
 export const promptProbe = {

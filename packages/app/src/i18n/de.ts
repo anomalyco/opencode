@@ -124,13 +124,13 @@ export const dict = {
   "provider.connect.apiKey.label": "{{provider}} API-Schlüssel",
   "provider.connect.apiKey.placeholder": "API-Schlüssel",
   "provider.connect.apiKey.required": "API-Schlüssel ist erforderlich",
-  "provider.connect.opencodeZen.line1":
-    "OpenCode Zen bietet Ihnen Zugriff auf eine kuratierte Auswahl zuverlässiger, optimierter Modelle für Coding-Agenten.",
-  "provider.connect.opencodeZen.line2":
+  "provider.connect.xcshZen.line1":
+    "xcsh Zen bietet Ihnen Zugriff auf eine kuratierte Auswahl zuverlässiger, optimierter Modelle für Coding-Agenten.",
+  "provider.connect.xcshZen.line2":
     "Mit einem einzigen API-Schlüssel erhalten Sie Zugriff auf Modelle wie Claude, GPT, Gemini, GLM und mehr.",
-  "provider.connect.opencodeZen.visit.prefix": "Besuchen Sie ",
-  "provider.connect.opencodeZen.visit.link": "opencode.ai/zen",
-  "provider.connect.opencodeZen.visit.suffix": ", um Ihren API-Schlüssel zu erhalten.",
+  "provider.connect.xcshZen.visit.prefix": "Besuchen Sie ",
+  "provider.connect.xcshZen.visit.link": "f5xc-salesdemos.github.io/xcsh/zen",
+  "provider.connect.xcshZen.visit.suffix": ", um Ihren API-Schlüssel zu erhalten.",
   "provider.connect.oauth.code.visit.prefix": "Besuchen Sie ",
   "provider.connect.oauth.code.visit.link": "diesen Link",
   "provider.connect.oauth.code.visit.suffix":
@@ -278,7 +278,7 @@ export const dict = {
   "dialog.mcp.description": "{{enabled}} von {{total}} aktiviert",
   "dialog.mcp.empty": "Keine MCPs konfiguriert",
   "dialog.lsp.empty": "LSPs automatisch nach Dateityp erkannt",
-  "dialog.plugins.empty": "In opencode.json konfigurierte Plugins",
+  "dialog.plugins.empty": "In xcsh.json konfigurierte Plugins",
   "mcp.status.connected": "verbunden",
   "mcp.status.failed": "fehlgeschlagen",
   "mcp.status.needs_auth": "benötigt Authentifizierung",
@@ -428,7 +428,7 @@ export const dict = {
   "error.chain.responseBody": "Antwort-Body:\n{{body}}",
   "error.chain.didYouMean": "Meinten Sie: {{suggestions}}",
   "error.chain.modelNotFound": "Modell nicht gefunden: {{provider}}/{{model}}",
-  "error.chain.checkConfig": "Überprüfen Sie Ihre Konfiguration (opencode.json) auf Anbieter-/Modellnamen",
+  "error.chain.checkConfig": "Überprüfen Sie Ihre Konfiguration (xcsh.json) auf Anbieter-/Modellnamen",
   "error.chain.mcpFailed":
     'MCP-Server "{{name}}" fehlgeschlagen. Hinweis: OpenCode unterstützt noch keine MCP-Authentifizierung.',
   "error.chain.providerAuthFailed": "Anbieter-Authentifizierung fehlgeschlagen ({{provider}}): {{message}}",

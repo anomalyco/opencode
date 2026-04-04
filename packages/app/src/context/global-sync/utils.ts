@@ -1,4 +1,4 @@
-import type { Agent, Project, ProviderListResponse } from "@opencode-ai/sdk/v2/client"
+import type { Agent, Project, ProviderListResponse } from "@f5xc-salesdemos/sdk/v2/client"
 
 export const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 

@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { Button } from "@opencode-ai/ui/button"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { Dialog } from "@f5xc-salesdemos/ui/dialog"
+import { Button } from "@f5xc-salesdemos/ui/button"
+import { useDialog } from "@f5xc-salesdemos/ui/context/dialog"
 import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 

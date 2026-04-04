@@ -43,8 +43,8 @@ export const dict = {
   "notFound.docs": "문서",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
-  "notFound.logoLightAlt": "opencode 밝은 로고",
-  "notFound.logoDarkAlt": "opencode 어두운 로고",
+  "notFound.logoLightAlt": "xcsh 밝은 로고",
+  "notFound.logoDarkAlt": "xcsh 어두운 로고",
 
   "user.logout": "로그아웃",
 
@@ -87,7 +87,7 @@ export const dict = {
 
   "temp.title": "OpenCode | 터미널을 위해 만들어진 AI 코딩 에이전트",
   "temp.hero.title": "터미널을 위해 만들어진 AI 코딩 에이전트",
-  "temp.zen": "OpenCode Zen",
+  "temp.zen": "xcsh Zen",
   "temp.getStarted": "시작하기",
   "temp.feature.native.title": "네이티브 TUI",
   "temp.feature.native.body": "반응형, 네이티브, 테마 적용 가능한 터미널 UI",
@@ -98,8 +98,8 @@ export const dict = {
   "temp.feature.models.afterLink": "를 통해 75개 이상의 LLM 제공자 지원",
   "temp.screenshot.caption": "tokyonight 테마가 적용된 OpenCode TUI",
   "temp.screenshot.alt": "tokyonight 테마가 적용된 OpenCode TUI",
-  "temp.logoLightAlt": "opencode 밝은 로고",
-  "temp.logoDarkAlt": "opencode 어두운 로고",
+  "temp.logoLightAlt": "xcsh 밝은 로고",
+  "temp.logoDarkAlt": "xcsh 어두운 로고",
 
   "home.banner.badge": "신규",
   "home.banner.text": "데스크톱 앱 베타 버전 출시",
@@ -187,12 +187,12 @@ export const dict = {
     "Zen은 OpenCode가 코딩 에이전트를 위해 특별히 테스트하고 벤치마킹한 엄선된 AI 모델 세트에 대한 액세스를 제공합니다. 제공자 간의 일관되지 않은 성능과 품질에 대해 걱정할 필요 없이, 검증된 모델을 사용하세요.",
   "home.zenCta.link": "Zen 알아보기",
 
-  "zen.title": "OpenCode Zen | 코딩 에이전트를 위한 신뢰할 수 있고 최적화된 모델 세트",
+  "zen.title": "xcsh Zen | 코딩 에이전트를 위한 신뢰할 수 있고 최적화된 모델 세트",
   "zen.hero.title": "코딩 에이전트를 위한 신뢰할 수 있고 최적화된 모델",
   "zen.hero.body":
     "Zen은 OpenCode가 코딩 에이전트를 위해 특별히 테스트하고 벤치마킹한 엄선된 AI 모델 세트에 대한 액세스를 제공합니다. 일관되지 않은 성능과 품질에 대해 걱정할 필요 없이, 검증된 모델을 사용하세요.",
 
-  "zen.faq.q1": "OpenCode Zen이란 무엇인가요?",
+  "zen.faq.q1": "xcsh Zen이란 무엇인가요?",
   "zen.faq.a1": "Zen은 OpenCode 팀이 코딩 에이전트를 위해 테스트하고 벤치마킹한 엄선된 AI 모델 세트입니다.",
   "zen.faq.q2": "Zen은 왜 더 정확한가요?",
   "zen.faq.a2":
@@ -633,7 +633,7 @@ export const dict = {
   "workspace.lite.subscription.resetsIn": "초기화까지 남은 시간:",
   "workspace.lite.subscription.useBalance": "사용 한도 도달 후에는 보유 잔액 사용",
   "workspace.lite.subscription.selectProvider":
-    'Go 모델을 사용하려면 opencode 설정에서 "OpenCode Go"를 공급자로 선택하세요.',
+    'Go 모델을 사용하려면 xcsh 설정에서 "OpenCode Go"를 공급자로 선택하세요.',
   "workspace.lite.black.message":
     "현재 OpenCode Black을 구독 중이거나 대기 명단에 등록되어 있습니다. Go로 전환하려면 먼저 구독을 취소해 주세요.",
   "workspace.lite.other.message":

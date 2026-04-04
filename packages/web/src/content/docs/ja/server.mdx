@@ -1,19 +1,19 @@
 ---
 title: サーバー
-description: HTTP 経由で OpenCode サーバーと通信します。
+description: HTTP 経由で xcsh サーバーと通信します。
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-`opencode serve` コマンドは、OpenCode クライアントが使用できる OpenAPI エンドポイントを公開するヘッドレス HTTP サーバーを実行します。
+`xcsh serve` コマンドは、xcsh クライアントが使用できる OpenAPI エンドポイントを公開するヘッドレス HTTP サーバーを実行します。
 
 ---
 
 ### 使用法
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+xcsh serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### オプション
@@ -23,36 +23,36 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--port`        | リッスンするポート                | `4096`           |
 | `--hostname`    | リッスンするホスト名              | `127.0.0.1`      |
 | `--mdns`        | mDNS 検出を有効にする             | `false`          |
-| `--mdns-domain` | mDNS サービスのカスタムドメイン名 | `opencode.local` |
+| `--mdns-domain` | mDNS サービスのカスタムドメイン名 | `xcsh.local` |
 | `--cors`        | 許可する追加のブラウザーオリジン  | `[]`             |
 
 `--cors` は複数回渡すことができます。
 
 ```bash
-opencode serve --cors http://localhost:5173 --cors https://app.example.com
+xcsh serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
 ---
 
 ### 認証
 
-HTTP 基本認証でサーバーを保護するには、`OPENCODE_SERVER_PASSWORD` を設定します。ユーザー名はデフォルトで `opencode` になるか、`OPENCODE_SERVER_USERNAME` を設定してオーバーライドします。これは、`opencode serve` と `opencode web` の両方に当てはまります。
+HTTP 基本認証でサーバーを保護するには、`OPENCODE_SERVER_PASSWORD` を設定します。ユーザー名はデフォルトで `xcsh` になるか、`OPENCODE_SERVER_USERNAME` を設定してオーバーライドします。これは、`xcsh serve` と `xcsh web` の両方に当てはまります。
 
 ```bash
-OPENCODE_SERVER_PASSWORD=your-password opencode serve
+OPENCODE_SERVER_PASSWORD=your-password xcsh serve
 ```
 
 ---
 
 ### 仕組み
 
-`opencode` を実行すると、TUI とサーバーが起動します。 TUI はサーバーと通信するクライアントです。サーバーは OpenAPI 3.1 仕様のエンドポイントを公開します。このエンドポイントは、[SDK](/docs/sdk) を使用してアクセスできます。
+`xcsh` を実行すると、TUI とサーバーが起動します。 TUI はサーバーと通信するクライアントです。サーバーは OpenAPI 3.1 仕様のエンドポイントを公開します。このエンドポイントは、[SDK](/docs/sdk) を使用してアクセスできます。
 
 :::tip
-OpenCode サーバーを使用して、プログラムで OpenCode と対話します。
+xcsh サーバーを使用して、プログラムで xcsh と対話します。
 :::
 
-`opencode serve` を実行してスタンドアロンサーバーを起動できます。すでに OpenCode TUI を実行している場合でも、`opencode serve` は新しいサーバーを起動します。
+`xcsh serve` を実行してスタンドアロンサーバーを起動できます。すでに xcsh TUI を実行している場合でも、`xcsh serve` は新しいサーバーを起動します。
 
 ---
 
@@ -60,7 +60,7 @@ OpenCode サーバーを使用して、プログラムで OpenCode と対話し�
 
 TUI を起動すると、ポートとホスト名がランダムに割り当てられます。代わりに、`--hostname` と `--port` [フラグ](/docs/cli) を使用して固定できます。次に、これを使用してサーバーに接続します。
 
-[`/tui`](#tui) エンドポイントは、サーバー経由で TUI を駆動するために使用できます。たとえば、プロンプトを事前入力したり、実行したりできます。この設定は、OpenCode [IDE](/docs/ide) プラグインによって使用されます。
+[`/tui`](#tui) エンドポイントは、サーバー経由で TUI を駆動するために使用できます。たとえば、プロンプトを事前入力したり、実行したりできます。この設定は、xcsh [IDE](/docs/ide) プラグインによって使用されます。
 
 ---
 
@@ -78,7 +78,7 @@ http://<hostname>:<port>/doc
 
 ## API
 
-OpenCode サーバーは次の API を公開します。
+xcsh サーバーは次の API を公開します。
 
 ---
 

@@ -1,30 +1,30 @@
 ---
 title: CLI
-description: OpenCode CLI options and commands.
+description: xcsh CLI options and commands.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-The OpenCode CLI by default starts the [TUI](/docs/tui) when run without any arguments.
+The xcsh CLI by default starts the [TUI](/docs/tui) when run without any arguments.
 
 ```bash
-opencode
+xcsh
 ```
 
-But it also accepts commands as documented on this page. This allows you to interact with OpenCode programmatically.
+But it also accepts commands as documented on this page. This allows you to interact with xcsh programmatically.
 
 ```bash
-opencode run "Explain how closures work in JavaScript"
+xcsh run "Explain how closures work in JavaScript"
 ```
 
 ---
 
 ### tui
 
-Start the OpenCode terminal user interface.
+Start the xcsh terminal user interface.
 
 ```bash
-opencode [project]
+xcsh [project]
 ```
 
 #### Flags
@@ -44,36 +44,36 @@ opencode [project]
 
 ## Commands
 
-The OpenCode CLI also has the following commands.
+The xcsh CLI also has the following commands.
 
 ---
 
 ### agent
 
-Manage agents for OpenCode.
+Manage agents for xcsh.
 
 ```bash
-opencode agent [command]
+xcsh agent [command]
 ```
 
 ---
 
 ### attach
 
-Attach a terminal to an already running OpenCode backend server started via `serve` or `web` commands.
+Attach a terminal to an already running xcsh backend server started via `serve` or `web` commands.
 
 ```bash
-opencode attach [url]
+xcsh attach [url]
 ```
 
-This allows using the TUI with a remote OpenCode backend. For example:
+This allows using the TUI with a remote xcsh backend. For example:
 
 ```bash
 # Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
+xcsh web --port 4096 --hostname 0.0.0.0
 
 # In another terminal, attach the TUI to the running backend
-opencode attach http://10.20.30.40:4096
+xcsh attach http://10.20.30.40:4096
 ```
 
 #### Flags
@@ -90,7 +90,7 @@ opencode attach http://10.20.30.40:4096
 Create a new agent with custom configuration.
 
 ```bash
-opencode agent create
+xcsh agent create
 ```
 
 This command will guide you through creating a new agent with a custom system prompt and tool configuration.
@@ -102,7 +102,7 @@ This command will guide you through creating a new agent with a custom system pr
 List all available agents.
 
 ```bash
-opencode agent list
+xcsh agent list
 ```
 
 ---
@@ -112,20 +112,20 @@ opencode agent list
 Command to manage credentials and login for providers.
 
 ```bash
-opencode auth [command]
+xcsh auth [command]
 ```
 
 ---
 
 #### login
 
-OpenCode is powered by the provider list at [Models.dev](https://models.dev), so you can use `opencode auth login` to configure API keys for any provider you'd like to use. This is stored in `~/.local/share/opencode/auth.json`.
+xcsh is powered by the provider list at [Models.dev](https://models.dev), so you can use `xcsh auth login` to configure API keys for any provider you'd like to use. This is stored in `~/.local/share/xcsh/auth.json`.
 
 ```bash
-opencode auth login
+xcsh auth login
 ```
 
-When OpenCode starts up it loads the providers from the credentials file. And if there are any keys defined in your environments or a `.env` file in your project.
+When xcsh starts up it loads the providers from the credentials file. And if there are any keys defined in your environments or a `.env` file in your project.
 
 ---
 
@@ -134,13 +134,13 @@ When OpenCode starts up it loads the providers from the credentials file. And if
 Lists all the authenticated providers as stored in the credentials file.
 
 ```bash
-opencode auth list
+xcsh auth list
 ```
 
 Or the short version.
 
 ```bash
-opencode auth ls
+xcsh auth ls
 ```
 
 ---
@@ -150,7 +150,7 @@ opencode auth ls
 Logs you out of a provider by clearing it from the credentials file.
 
 ```bash
-opencode auth logout
+xcsh auth logout
 ```
 
 ---
@@ -160,7 +160,7 @@ opencode auth logout
 Manage the GitHub agent for repository automation.
 
 ```bash
-opencode github [command]
+xcsh github [command]
 ```
 
 ---
@@ -170,7 +170,7 @@ opencode github [command]
 Install the GitHub agent in your repository.
 
 ```bash
-opencode github install
+xcsh github install
 ```
 
 This sets up the necessary GitHub Actions workflow and guides you through the configuration process. [Learn more](/docs/github).
@@ -182,7 +182,7 @@ This sets up the necessary GitHub Actions workflow and guides you through the co
 Run the GitHub agent. This is typically used in GitHub Actions.
 
 ```bash
-opencode github run
+xcsh github run
 ```
 
 ##### Flags
@@ -199,7 +199,7 @@ opencode github run
 Manage Model Context Protocol servers.
 
 ```bash
-opencode mcp [command]
+xcsh mcp [command]
 ```
 
 ---
@@ -209,7 +209,7 @@ opencode mcp [command]
 Add an MCP server to your configuration.
 
 ```bash
-opencode mcp add
+xcsh mcp add
 ```
 
 This command will guide you through adding either a local or remote MCP server.
@@ -221,13 +221,13 @@ This command will guide you through adding either a local or remote MCP server.
 List all configured MCP servers and their connection status.
 
 ```bash
-opencode mcp list
+xcsh mcp list
 ```
 
 Or use the short version.
 
 ```bash
-opencode mcp ls
+xcsh mcp ls
 ```
 
 ---
@@ -237,7 +237,7 @@ opencode mcp ls
 Authenticate with an OAuth-enabled MCP server.
 
 ```bash
-opencode mcp auth [name]
+xcsh mcp auth [name]
 ```
 
 If you don't provide a server name, you'll be prompted to select from available OAuth-capable servers.
@@ -245,13 +245,13 @@ If you don't provide a server name, you'll be prompted to select from available 
 You can also list OAuth-capable servers and their authentication status.
 
 ```bash
-opencode mcp auth list
+xcsh mcp auth list
 ```
 
 Or use the short version.
 
 ```bash
-opencode mcp auth ls
+xcsh mcp auth ls
 ```
 
 ---
@@ -261,7 +261,7 @@ opencode mcp auth ls
 Remove OAuth credentials for an MCP server.
 
 ```bash
-opencode mcp logout [name]
+xcsh mcp logout [name]
 ```
 
 ---
@@ -271,7 +271,7 @@ opencode mcp logout [name]
 Debug OAuth connection issues for an MCP server.
 
 ```bash
-opencode mcp debug <name>
+xcsh mcp debug <name>
 ```
 
 ---
@@ -281,7 +281,7 @@ opencode mcp debug <name>
 List all available models from configured providers.
 
 ```bash
-opencode models [provider]
+xcsh models [provider]
 ```
 
 This command displays all models available across your configured providers in the format `provider/model`.
@@ -291,7 +291,7 @@ This is useful for figuring out the exact model name to use in [your config](/do
 You can optionally pass a provider ID to filter models by that provider.
 
 ```bash
-opencode models anthropic
+xcsh models anthropic
 ```
 
 #### Flags
@@ -301,36 +301,36 @@ opencode models anthropic
 | `--refresh` | Refresh the models cache from models.dev                     |
 | `--verbose` | Use more verbose model output (includes metadata like costs) |
 
-Use the `--refresh` flag to update the cached model list. This is useful when new models have been added to a provider and you want to see them in OpenCode.
+Use the `--refresh` flag to update the cached model list. This is useful when new models have been added to a provider and you want to see them in xcsh.
 
 ```bash
-opencode models --refresh
+xcsh models --refresh
 ```
 
 ---
 
 ### run
 
-Run opencode in non-interactive mode by passing a prompt directly.
+Run xcsh in non-interactive mode by passing a prompt directly.
 
 ```bash
-opencode run [message..]
+xcsh run [message..]
 ```
 
 This is useful for scripting, automation, or when you want a quick answer without launching the full TUI. For example.
 
-```bash "opencode run"
-opencode run Explain the use of context in Go
+```bash "xcsh run"
+xcsh run Explain the use of context in Go
 ```
 
-You can also attach to a running `opencode serve` instance to avoid MCP server cold boot times on every run:
+You can also attach to a running `xcsh serve` instance to avoid MCP server cold boot times on every run:
 
 ```bash
 # Start a headless server in one terminal
-opencode serve
+xcsh serve
 
 # In another terminal, run commands that attach to it
-opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+xcsh run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
 #### Flags
@@ -347,20 +347,20 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | `--file`     | `-f`  | File(s) to attach to message                                            |
 | `--format`   |       | Format: default (formatted) or json (raw JSON events)                   |
 | `--title`    |       | Title for the session (uses truncated prompt if no value provided)      |
-| `--attach`   |       | Attach to a running opencode server (e.g., http://localhost:4096)       |
+| `--attach`   |       | Attach to a running xcsh server (e.g., http://localhost:4096)       |
 | `--port`     |       | Port for the local server (defaults to random port)                     |
 
 ---
 
 ### serve
 
-Start a headless OpenCode server for API access. Check out the [server docs](/docs/server) for the full HTTP interface.
+Start a headless xcsh server for API access. Check out the [server docs](/docs/server) for the full HTTP interface.
 
 ```bash
-opencode serve
+xcsh serve
 ```
 
-This starts an HTTP server that provides API access to opencode functionality without the TUI interface. Set `OPENCODE_SERVER_PASSWORD` to enable HTTP basic auth (username defaults to `opencode`).
+This starts an HTTP server that provides API access to xcsh functionality without the TUI interface. Set `OPENCODE_SERVER_PASSWORD` to enable HTTP basic auth (username defaults to `xcsh`).
 
 #### Flags
 
@@ -375,20 +375,20 @@ This starts an HTTP server that provides API access to opencode functionality wi
 
 ### session
 
-Manage OpenCode sessions.
+Manage xcsh sessions.
 
 ```bash
-opencode session [command]
+xcsh session [command]
 ```
 
 ---
 
 #### list
 
-List all OpenCode sessions.
+List all xcsh sessions.
 
 ```bash
-opencode session list
+xcsh session list
 ```
 
 ##### Flags
@@ -402,10 +402,10 @@ opencode session list
 
 ### stats
 
-Show token usage and cost statistics for your OpenCode sessions.
+Show token usage and cost statistics for your xcsh sessions.
 
 ```bash
-opencode stats
+xcsh stats
 ```
 
 #### Flags
@@ -424,7 +424,7 @@ opencode stats
 Export session data as JSON.
 
 ```bash
-opencode export [sessionID]
+xcsh export [sessionID]
 ```
 
 If you don't provide a session ID, you'll be prompted to select from available sessions.
@@ -433,30 +433,30 @@ If you don't provide a session ID, you'll be prompted to select from available s
 
 ### import
 
-Import session data from a JSON file or OpenCode share URL.
+Import session data from a JSON file or xcsh share URL.
 
 ```bash
-opencode import <file>
+xcsh import <file>
 ```
 
-You can import from a local file or an OpenCode share URL.
+You can import from a local file or an xcsh share URL.
 
 ```bash
-opencode import session.json
-opencode import https://opncd.ai/s/abc123
+xcsh import session.json
+xcsh import https://opncd.ai/s/abc123
 ```
 
 ---
 
 ### web
 
-Start a headless OpenCode server with a web interface.
+Start a headless xcsh server with a web interface.
 
 ```bash
-opencode web
+xcsh web
 ```
 
-This starts an HTTP server and opens a web browser to access OpenCode through a web interface. Set `OPENCODE_SERVER_PASSWORD` to enable HTTP basic auth (username defaults to `opencode`).
+This starts an HTTP server and opens a web browser to access xcsh through a web interface. Set `OPENCODE_SERVER_PASSWORD` to enable HTTP basic auth (username defaults to `xcsh`).
 
 #### Flags
 
@@ -474,7 +474,7 @@ This starts an HTTP server and opens a web browser to access OpenCode through a 
 Start an ACP (Agent Client Protocol) server.
 
 ```bash
-opencode acp
+xcsh acp
 ```
 
 This command starts an ACP server that communicates via stdin/stdout using nd-JSON.
@@ -491,10 +491,10 @@ This command starts an ACP server that communicates via stdin/stdout using nd-JS
 
 ### uninstall
 
-Uninstall OpenCode and remove all related files.
+Uninstall xcsh and remove all related files.
 
 ```bash
-opencode uninstall
+xcsh uninstall
 ```
 
 #### Flags
@@ -510,22 +510,22 @@ opencode uninstall
 
 ### upgrade
 
-Updates opencode to the latest version or a specific version.
+Updates xcsh to the latest version or a specific version.
 
 ```bash
-opencode upgrade [target]
+xcsh upgrade [target]
 ```
 
 To upgrade to the latest version.
 
 ```bash
-opencode upgrade
+xcsh upgrade
 ```
 
 To upgrade to a specific version.
 
 ```bash
-opencode upgrade v0.1.48
+xcsh upgrade v0.1.48
 ```
 
 #### Flags
@@ -538,7 +538,7 @@ opencode upgrade v0.1.48
 
 ## Global Flags
 
-The opencode CLI takes the following global flags.
+The xcsh CLI takes the following global flags.
 
 | Flag           | Short | Description                          |
 | -------------- | ----- | ------------------------------------ |
@@ -551,7 +551,7 @@ The opencode CLI takes the following global flags.
 
 ## Environment variables
 
-OpenCode can be configured using environment variables.
+xcsh can be configured using environment variables.
 
 | Variable                              | Type    | Description                                       |
 | ------------------------------------- | ------- | ------------------------------------------------- |
@@ -578,7 +578,7 @@ OpenCode can be configured using environment variables.
 | `OPENCODE_CLIENT`                     | string  | Client identifier (defaults to `cli`)             |
 | `OPENCODE_ENABLE_EXA`                 | boolean | Enable Exa web search tools                       |
 | `OPENCODE_SERVER_PASSWORD`            | string  | Enable basic auth for `serve`/`web`               |
-| `OPENCODE_SERVER_USERNAME`            | string  | Override basic auth username (default `opencode`) |
+| `OPENCODE_SERVER_USERNAME`            | string  | Override basic auth username (default `xcsh`) |
 | `OPENCODE_MODELS_URL`                 | string  | Custom URL for fetching models configuration      |
 
 ---

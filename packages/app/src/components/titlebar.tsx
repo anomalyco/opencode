@@ -1,11 +1,11 @@
 import { createEffect, createMemo, onCleanup, Show, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Icon } from "@opencode-ai/ui/icon"
-import { Button } from "@opencode-ai/ui/button"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { useTheme } from "@opencode-ai/ui/theme/context"
+import { IconButton } from "@f5xc-salesdemos/ui/icon-button"
+import { Icon } from "@f5xc-salesdemos/ui/icon"
+import { Button } from "@f5xc-salesdemos/ui/button"
+import { Tooltip, TooltipKeybind } from "@f5xc-salesdemos/ui/tooltip"
+import { useTheme } from "@f5xc-salesdemos/ui/theme/context"
 
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
@@ -286,11 +286,11 @@ export function Titlebar() {
             </Show>
           </div>
         </div>
-        <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
+        <div id="xcsh-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
       </div>
 
       <div class="min-w-0 flex items-center justify-center pointer-events-none">
-        <div id="opencode-titlebar-center" class="pointer-events-auto min-w-0 flex justify-center w-fit max-w-full" />
+        <div id="xcsh-titlebar-center" class="pointer-events-auto min-w-0 flex justify-center w-fit max-w-full" />
       </div>
 
       <div
@@ -301,7 +301,7 @@ export function Titlebar() {
         data-tauri-drag-region
         onMouseDown={drag}
       >
-        <div id="opencode-titlebar-right" class="flex items-center gap-1 shrink-0 justify-end" />
+        <div id="xcsh-titlebar-right" class="flex items-center gap-1 shrink-0 justify-end" />
         <Show when={windows()}>
           {!tauriApi() && <div class="w-36 shrink-0" />}
           <div data-tauri-decorum-tb class="flex flex-row" />

@@ -1,22 +1,22 @@
 ---
 title: TUI
-description: 使用 OpenCode 终端用户界面。
+description: 使用 xcsh 终端用户界面。
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode 提供了一个交互式终端界面（TUI），用于配合 LLM 处理您的项目。
+xcsh 提供了一个交互式终端界面（TUI），用于配合 LLM 处理您的项目。
 
-运行 OpenCode 即可启动当前目录的 TUI。
+运行 xcsh 即可启动当前目录的 TUI。
 
 ```bash
-opencode
+xcsh
 ```
 
 或者您可以为指定的工作目录启动它。
 
 ```bash
-opencode /path/to/project
+xcsh /path/to/project
 ```
 
 进入 TUI 后，您可以输入消息进行提示。
@@ -57,7 +57,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## 命令
 
-使用 OpenCode TUI 时，您可以输入 `/` 后跟命令名称来快速执行操作。例如：
+使用 xcsh TUI 时，您可以输入 `/` 后跟命令名称来快速执行操作。例如：
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### connect
 
-将提供商添加到 OpenCode。允许您从可用的提供商中选择并添加其 API 密钥。
+将提供商添加到 xcsh。允许您从可用的提供商中选择并添加其 API 密钥。
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### exit
 
-退出 OpenCode。_别名_：`/quit`、`/q`
+退出 xcsh。_别名_：`/quit`、`/q`
 
 ```bash frame="none"
 /exit
@@ -352,11 +352,11 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## 配置
 
-您可以通过 OpenCode 配置文件自定义 TUI 行为。
+您可以通过 xcsh 配置文件自定义 TUI 行为。
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "tui": {
     "scroll_speed": 3,
     "scroll_acceleration": {

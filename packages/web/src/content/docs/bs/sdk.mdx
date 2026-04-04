@@ -1,13 +1,13 @@
 ---
 title: SDK
-description: Type-safe JS klijent za opencode server.
+description: Type-safe JS klijent za xcsh server.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-opencode JS/TS SDK pruza type-safe klijent za interakciju sa serverom.
-Koristite ga za izradu integracija i programsko upravljanje opencode-om.
+xcsh JS/TS SDK pruza type-safe klijent za interakciju sa serverom.
+Koristite ga za izradu integracija i programsko upravljanje xcsh-om.
 
 [Saznajte vise](/docs/server) kako server radi. Za primjere pogledajte [projects](/docs/ecosystem#projects) koje je napravila zajednica.
 
@@ -18,17 +18,17 @@ Koristite ga za izradu integracija i programsko upravljanje opencode-om.
 Instalirajte SDK sa npm-a:
 
 ```bash
-npm install @opencode-ai/sdk
+npm install @f5xc-salesdemos/sdk
 ```
 
 ---
 
 ## Kreiranje klijenta
 
-Kreirajte instancu opencode:
+Kreirajte instancu xcsh:
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createOpencode } from "@f5xc-salesdemos/sdk"
 
 const { client } = await createOpencode()
 ```
@@ -49,12 +49,12 @@ Ovo pokrece i server i klijent
 
 ## Konfiguracija
 
-Mozete proslijediti konfiguracijski objekat za prilagodavanje ponasanja. Instanca i dalje ucitava `opencode.json`, ali konfiguraciju mozete nadjacati ili dodati inline:
+Mozete proslijediti konfiguracijski objekat za prilagodavanje ponasanja. Instanca i dalje ucitava `xcsh.json`, ali konfiguraciju mozete nadjacati ili dodati inline:
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createOpencode } from "@f5xc-salesdemos/sdk"
 
-const opencode = await createOpencode({
+const xcsh = await createOpencode({
   hostname: "127.0.0.1",
   port: 4096,
   config: {
@@ -62,17 +62,17 @@ const opencode = await createOpencode({
   },
 })
 
-console.log(`Server running at ${opencode.server.url}`)
+console.log(`Server running at ${xcsh.server.url}`)
 
-opencode.server.close()
+xcsh.server.close()
 ```
 
 ## Samo klijent
 
-Ako vec imate pokrenutu opencode instancu, mozete napraviti klijentsku instancu i povezati se na nju:
+Ako vec imate pokrenutu xcsh instancu, mozete napraviti klijentsku instancu i povezati se na nju:
 
 ```javascript
-import { createOpencodeClient } from "@opencode-ai/sdk"
+import { createOpencodeClient } from "@f5xc-salesdemos/sdk"
 
 const client = createOpencodeClient({
   baseUrl: "http://localhost:4096",
@@ -96,7 +96,7 @@ const client = createOpencodeClient({
 SDK ukljucuje TypeScript definicije za sve API tipove. Uvezite ih direktno:
 
 ```typescript
-import type { Session, Message, Part } from "@opencode-ai/sdk"
+import type { Session, Message, Part } from "@f5xc-salesdemos/sdk"
 ```
 
 Svi tipovi su generisani iz OpenAPI specifikacije servera i dostupni u <a href={typesUrl}>types datoteci</a>.
@@ -376,7 +376,7 @@ await client.session.prompt({
 ```javascript
 // Search and read files
 const textResults = await client.find.text({
-  query: { pattern: "function.*opencode" },
+  query: { pattern: "function.*xcsh" },
 })
 
 const files = await client.find.files({

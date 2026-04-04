@@ -1,68 +1,68 @@
 ---
 title: GitLab
-description: Utilice OpenCode en problemas GitLab y solicitudes de fusión.
+description: Utilice xcsh en problemas GitLab y solicitudes de fusión.
 ---
 
-OpenCode se integra con su flujo de trabajo GitLab a través de su canal de CI/CD GitLab o con GitLab Duo.
+xcsh se integra con su flujo de trabajo GitLab a través de su canal de CI/CD GitLab o con GitLab Duo.
 
-En ambos casos, OpenCode se ejecutará en tus corredores GitLab.
+En ambos casos, xcsh se ejecutará en tus corredores GitLab.
 
 ---
 
 ## GitLab CI
 
-OpenCode funciona en una tubería GitLab normal. Puede integrarlo en una canalización como un [componente de CI](https://docs.gitlab.com/ee/ci/components/)
+xcsh funciona en una tubería GitLab normal. Puede integrarlo en una canalización como un [componente de CI](https://docs.gitlab.com/ee/ci/components/)
 
-Aquí estamos utilizando un componente CI/CD creado por la comunidad para OpenCode — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
+Aquí estamos utilizando un componente CI/CD creado por la comunidad para xcsh — [nagyv/gitlab-xcsh](https://gitlab.com/nagyv/gitlab-xcsh).
 
 ---
 
 ### Características
 
-- **Usar configuración personalizada por trabajo**: configure OpenCode con un directorio de configuración personalizado, por ejemplo `./config/#custom-directory` para habilitar o deshabilitar la funcionalidad por invocación de OpenCode.
-- **Configuración mínima**: el componente CI configura OpenCode en segundo plano, solo necesita crear la configuración OpenCode y el mensaje inicial.
+- **Usar configuración personalizada por trabajo**: configure xcsh con un directorio de configuración personalizado, por ejemplo `./config/#custom-directory` para habilitar o deshabilitar la funcionalidad por invocación de xcsh.
+- **Configuración mínima**: el componente CI configura xcsh en segundo plano, solo necesita crear la configuración xcsh y el mensaje inicial.
 - **Flexible**: el componente CI admite varias entradas para personalizar su comportamiento
 
 ---
 
 ### Configuración
 
-1. Guarde su OpenCode autenticación JSON como variables de entorno de CI de tipo de archivo en **Configuración** > **CI/CD** > **Variables**. Asegúrate de marcarlos como "Enmascarados y ocultos".
+1. Guarde su xcsh autenticación JSON como variables de entorno de CI de tipo de archivo en **Configuración** > **CI/CD** > **Variables**. Asegúrate de marcarlos como "Enmascarados y ocultos".
 2. Agregue lo siguiente a su archivo `.gitlab-ci.yml`.
 
    ```yaml title=".gitlab-ci.yml"
    include:
-     - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
+     - component: $CI_SERVER_FQDN/nagyv/gitlab-xcsh/xcsh@2
        inputs:
-         config_dir: ${CI_PROJECT_DIR}/opencode-config
-         auth_json: $OPENCODE_AUTH_JSON # The variable name for your OpenCode authentication JSON
+         config_dir: ${CI_PROJECT_DIR}/xcsh-config
+         auth_json: $OPENCODE_AUTH_JSON # The variable name for your xcsh authentication JSON
          command: optional-custom-command
          message: "Your prompt here"
    ```
 
-Para obtener más entradas y casos de uso, [consulte los documentos](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode) de este componente.
+Para obtener más entradas y casos de uso, [consulte los documentos](https://gitlab.com/explore/catalog/nagyv/gitlab-xcsh) de este componente.
 
 ---
 
 ## GitLab Duo
 
-OpenCode se integra con su flujo de trabajo GitLab.
-Mencione `@opencode` en un comentario y OpenCode ejecutará tareas dentro de su canal de CI GitLab.
+xcsh se integra con su flujo de trabajo GitLab.
+Mencione `@xcsh` en un comentario y xcsh ejecutará tareas dentro de su canal de CI GitLab.
 
 ---
 
 ### Características
 
-- **Clasificación de problemas**: Pídele a OpenCode que investigue un problema y te lo explique.
-- **Reparar e implementar**: pídale a OpenCode que solucione un problema o implemente una función.
+- **Clasificación de problemas**: Pídele a xcsh que investigue un problema y te lo explique.
+- **Reparar e implementar**: pídale a xcsh que solucione un problema o implemente una función.
   Creará una nueva rama y generará una solicitud de fusión con los cambios.
-- **Seguro**: OpenCode se ejecuta en tus corredores GitLab.
+- **Seguro**: xcsh se ejecuta en tus corredores GitLab.
 
 ---
 
 ### Configuración
 
-OpenCode se ejecuta en su canalización de CI/CD GitLab. Esto es lo que necesitará para configurarlo:
+xcsh se ejecuta en su canalización de CI/CD GitLab. Esto es lo que necesitará para configurarlo:
 
 :::tip
 Consulte los [**GitLab documentos**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) para obtener instrucciones actualizadas.
@@ -82,8 +82,8 @@ Consulte los [**GitLab documentos**](https://docs.gitlab.com/user/duo_agent_plat
     ```yaml
     image: node:22-slim
     commands:
-      - echo "Installing opencode"
-      - npm install --global opencode-ai
+      - echo "Installing xcsh"
+      - npm install --global xcsh-ai
       - echo "Installing glab"
       - export GITLAB_TOKEN=$GITLAB_TOKEN_OPENCODE
       - apt-get update --quiet && apt-get install --yes curl wget gpg git && rm --recursive --force /var/lib/apt/lists/*
@@ -91,10 +91,10 @@ Consulte los [**GitLab documentos**](https://docs.gitlab.com/user/duo_agent_plat
       - apt-get install --yes glab
       - echo "Configuring glab"
       - echo $GITLAB_HOST
-      - echo "Creating OpenCode auth configuration"
-      - mkdir --parents ~/.local/share/opencode
+      - echo "Creating xcsh auth configuration"
+      - mkdir --parents ~/.local/share/xcsh
       - |
-        cat > ~/.local/share/opencode/auth.json << EOF
+        cat > ~/.local/share/xcsh/auth.json << EOF
         {
           "anthropic": {
             "type": "api",
@@ -103,13 +103,13 @@ Consulte los [**GitLab documentos**](https://docs.gitlab.com/user/duo_agent_plat
         }
         EOF
       - echo "Configuring git"
-      - git config --global user.email "opencode@gitlab.com"
-      - git config --global user.name "OpenCode"
+      - git config --global user.email "xcsh@gitlab.com"
+      - git config --global user.name "xcsh"
       - echo "Testing glab"
       - glab issue list
-      - echo "Running OpenCode"
+      - echo "Running xcsh"
       - |
-        opencode run "
+        xcsh run "
         You are an AI assistant helping with GitLab operations.
 
         Context: $AI_FLOW_CONTEXT
@@ -158,10 +158,10 @@ Puede consultar los [GitLab CLI documentos de los agentes](https://docs.gitlab.c
 
 ### Ejemplos
 
-A continuación se muestran algunos ejemplos de cómo puede utilizar OpenCode en GitLab.
+A continuación se muestran algunos ejemplos de cómo puede utilizar xcsh en GitLab.
 
 :::tip
-Puede configurarlo para utilizar una frase de activación diferente a `@opencode`.
+Puede configurarlo para utilizar una frase de activación diferente a `@xcsh`.
 :::
 
 - **Explica un problema**
@@ -169,27 +169,27 @@ Puede configurarlo para utilizar una frase de activación diferente a `@opencode
   Agregue este comentario en una edición GitLab.
 
   ```
-  @opencode explain this issue
+  @xcsh explain this issue
   ```
 
-  OpenCode leerá el problema y responderá con una explicación clara.
+  xcsh leerá el problema y responderá con una explicación clara.
 
 - **Solucionar un problema**
 
   En un problema GitLab, diga:
 
   ```
-  @opencode fix this
+  @xcsh fix this
   ```
 
-  OpenCode creará una nueva rama, implementará los cambios y abrirá una solicitud de fusión con los cambios.
+  xcsh creará una nueva rama, implementará los cambios y abrirá una solicitud de fusión con los cambios.
 
 - **Revisar solicitudes de fusión**
 
   Deje el siguiente comentario sobre una solicitud de fusión GitLab.
 
   ```
-  @opencode review this merge request
+  @xcsh review this merge request
   ```
 
-  OpenCode revisará la solicitud de fusión y brindará comentarios.
+  xcsh revisará la solicitud de fusión y brindará comentarios.

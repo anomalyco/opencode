@@ -3,9 +3,9 @@ title: Themes
 description: Wybierz wbudowany motyw lub zdefiniuj własny.
 ---
 
-Dzięki opencode możesz wybrać jeden z kilku wbudowanych motywów, użyć motywu, który dostosowuje się do motywu terminala lub zdefiniować własny, niestandardowy motyw.
+Dzięki xcsh możesz wybrać jeden z kilku wbudowanych motywów, użyć motywu, który dostosowuje się do motywu terminala lub zdefiniować własny, niestandardowy motyw.
 
-Domyślnie opencode używa naszego własnego motywu `opencode`.
+Domyślnie xcsh używa naszego własnego motywu `xcsh`.
 
 ---
 
@@ -23,7 +23,7 @@ Bez obsługi Truecolor motywy mogą pojawiać się ze zmniejszoną dokładności
 
 ## Wbudowane motywy
 
-opencode ma kilka wbudowanych motywów.
+xcsh ma kilka wbudowanych motywów.
 
 | Name                   | Description                                                                       |
 | ---------------------- | --------------------------------------------------------------------------------- |
@@ -53,7 +53,7 @@ Motyw `system` został zaprojektowany tak, aby automatycznie dostosowywał się 
 
 Motyw systemu przeznaczony jest dla użytkowników, którzy:
 
-- Chcą, aby OpenCode pasował do wyglądu ich terminala
+- Chcą, aby xcsh pasował do wyglądu ich terminala
 - Używają niestandardowych schematów kolorów terminala
 - Preferują spójny wygląd we wszystkich aplikacjach terminalowych
 
@@ -65,7 +65,7 @@ Możesz wybrać motyw, wywołując opcję wyboru motywu za pomocą polecenia `/t
 
 ```json title="tui.json" {3}
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/tui.json",
   "theme": "tokyonight"
 }
 ```
@@ -74,7 +74,7 @@ Możesz wybrać motyw, wywołując opcję wyboru motywu za pomocą polecenia `/t
 
 ## Motywy niestandardowe
 
-opencode obsługuje elastyczny system motywów oparty na JSON, który pozwala użytkownikom łatwo tworzyć i dostosowywać motywy.
+xcsh obsługuje elastyczny system motywów oparty na JSON, który pozwala użytkownikom łatwo tworzyć i dostosowywać motywy.
 
 ---
 
@@ -83,9 +83,9 @@ opencode obsługuje elastyczny system motywów oparty na JSON, który pozwala u�
 Motywy są ładowane z wielu katalogów w następującej kolejności, przy czym późniejsze katalogi zastępują wcześniejsze:
 
 1. **Wbudowane motywy** – są osadzone w formacie binarnym
-2. **Katalog konfiguracji użytkownika** - Zdefiniowany w `~/.config/opencode/themes/*.json` lub `$XDG_CONFIG_HOME/opencode/themes/*.json`
-3. **Katalog główny projektu** - Zdefiniowany w `<project-root>/.opencode/themes/*.json`
-4. **Bieżący katalog roboczy** - Zdefiniowany w `./.opencode/themes/*.json`
+2. **Katalog konfiguracji użytkownika** - Zdefiniowany w `~/.config/xcsh/themes/*.json` lub `$XDG_CONFIG_HOME/xcsh/themes/*.json`
+3. **Katalog główny projektu** - Zdefiniowany w `<project-root>/.xcsh/themes/*.json`
+4. **Bieżący katalog roboczy** - Zdefiniowany w `./.xcsh/themes/*.json`
 
 Jeśli wiele katalogów zawiera motyw o tej samej nazwie, zostanie użyty motyw z katalogu o wyższym priorytecie.
 
@@ -98,15 +98,15 @@ Aby utworzyć niestandardowy motyw, utwórz plik JSON w jednym z katalogów moty
 W przypadku motywów dla całego użytkownika:
 
 ```bash no-frame
-mkdir -p ~/.config/opencode/themes
-vim ~/.config/opencode/themes/my-theme.json
+mkdir -p ~/.config/xcsh/themes
+vim ~/.config/xcsh/themes/my-theme.json
 ```
 
 Oraz dla tematów specyficznych dla projektu.
 
 ```bash no-frame
-mkdir -p .opencode/themes
-vim .opencode/themes/my-theme.json
+mkdir -p .xcsh/themes
+vim .xcsh/themes/my-theme.json
 ```
 
 ---
@@ -144,7 +144,7 @@ Oto przykład niestandardowego motywu:
 
 ```json title="my-theme.json"
 {
-  "$schema": "https://opencode.ai/theme.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/theme.json",
   "defs": {
     "nord0": "#2E3440",
     "nord1": "#3B4252",

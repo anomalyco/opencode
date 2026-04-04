@@ -43,8 +43,8 @@ export const dict = {
   "notFound.docs": "เอกสาร",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
-  "notFound.logoLightAlt": "โลโก้ opencode แบบสว่าง",
-  "notFound.logoDarkAlt": "โลโก้ opencode แบบมืด",
+  "notFound.logoLightAlt": "โลโก้ xcsh แบบสว่าง",
+  "notFound.logoDarkAlt": "โลโก้ xcsh แบบมืด",
 
   "user.logout": "ออกจากระบบ",
 
@@ -87,7 +87,7 @@ export const dict = {
 
   "temp.title": "OpenCode | เอเจนต์เขียนโค้ด AI ที่สร้างมาเพื่อเทอร์มินัล",
   "temp.hero.title": "เอเจนต์เขียนโค้ด AI ที่สร้างมาเพื่อเทอร์มินัล",
-  "temp.zen": "OpenCode Zen",
+  "temp.zen": "xcsh Zen",
   "temp.getStarted": "เริ่มต้นใช้งาน",
   "temp.feature.native.title": "Native TUI",
   "temp.feature.native.body": "UI เทอร์มินัลแบบเนทีฟที่ตอบสนองไวและปรับแต่งธีมได้",
@@ -98,8 +98,8 @@ export const dict = {
   "temp.feature.models.afterLink": "รวมถึงโมเดล Local",
   "temp.screenshot.caption": "OpenCode TUI พร้อมธีม tokyonight",
   "temp.screenshot.alt": "OpenCode TUI พร้อมธีม tokyonight",
-  "temp.logoLightAlt": "โลโก้ opencode แบบสว่าง",
-  "temp.logoDarkAlt": "โลโก้ opencode แบบมืด",
+  "temp.logoLightAlt": "โลโก้ xcsh แบบสว่าง",
+  "temp.logoDarkAlt": "โลโก้ xcsh แบบมืด",
 
   "home.banner.badge": "ใหม่",
   "home.banner.text": "แอปเดสก์ท็อปพร้อมใช้งานในเวอร์ชันเบต้า",
@@ -187,12 +187,12 @@ export const dict = {
     "Zen ให้คุณเข้าถึงชุดโมเดล AI ที่คัดสรรมาแล้ว ซึ่ง OpenCode ได้ทดสอบและทำเบนช์มาร์กโดยเฉพาะสำหรับเอเจนต์เขียนโค้ด ไม่ต้องกังวลเรื่องประสิทธิภาพและคุณภาพที่ไม่สม่ำเสมอจากผู้ให้บริการ ใช้โมเดลที่ผ่านการตรวจสอบแล้วว่าใช้งานได้จริง",
   "home.zenCta.link": "เรียนรู้เกี่ยวกับ Zen",
 
-  "zen.title": "OpenCode Zen | ชุดโมเดลที่คัดสรรมาอย่างดี เชื่อถือได้ และปรับแต่งแล้วสำหรับเอเจนต์เขียนโค้ด",
+  "zen.title": "xcsh Zen | ชุดโมเดลที่คัดสรรมาอย่างดี เชื่อถือได้ และปรับแต่งแล้วสำหรับเอเจนต์เขียนโค้ด",
   "zen.hero.title": "โมเดลที่ปรับแต่งมาอย่างดีและเชื่อถือได้สำหรับเอเจนต์เขียนโค้ด",
   "zen.hero.body":
     "Zen ให้คุณเข้าถึงชุดโมเดล AI ที่คัดสรรมาแล้ว ซึ่ง OpenCode ได้ทดสอบและทำเบนช์มาร์กโดยเฉพาะสำหรับเอเจนต์เขียนโค้ด ไม่ต้องกังวลเรื่องประสิทธิภาพและคุณภาพที่ไม่สม่ำเสมอ ใช้โมเดลที่ผ่านการตรวจสอบแล้วว่าใช้งานได้จริง",
 
-  "zen.faq.q1": "OpenCode Zen คืออะไร?",
+  "zen.faq.q1": "xcsh Zen คืออะไร?",
   "zen.faq.a1":
     "Zen คือชุดโมเดล AI ที่คัดสรรมาอย่างดี ผ่านการทดสอบและทำเบนช์มาร์กสำหรับเอเจนต์เขียนโค้ด สร้างโดยทีมงานผู้อยู่เบื้องหลัง OpenCode",
   "zen.faq.q2": "อะไรทำให้ Zen แม่นยำกว่า?",
@@ -636,7 +636,7 @@ export const dict = {
   "workspace.lite.subscription.resetsIn": "รีเซ็ตใน",
   "workspace.lite.subscription.useBalance": "ใช้ยอดคงเหลือของคุณหลังจากถึงขีดจำกัดการใช้งาน",
   "workspace.lite.subscription.selectProvider":
-    'เลือก "OpenCode Go" เป็นผู้ให้บริการในการตั้งค่า opencode ของคุณเพื่อใช้โมเดล Go',
+    'เลือก "OpenCode Go" เป็นผู้ให้บริการในการตั้งค่า xcsh ของคุณเพื่อใช้โมเดล Go',
   "workspace.lite.black.message":
     "ขณะนี้คุณสมัครสมาชิก OpenCode Black หรืออยู่ในรายการรอ โปรดยกเลิกการสมัครก่อนหากต้องการเปลี่ยนไปใช้ Go",
   "workspace.lite.other.message":

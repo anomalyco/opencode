@@ -37,14 +37,14 @@ export const dict = {
   "email.subscribe": "Подписаться",
   "email.success": "Почти готово, проверьте почту и подтвердите ваш email",
 
-  "notFound.title": "Не найдено | opencode",
+  "notFound.title": "Не найдено | xcsh",
   "notFound.heading": "404 - Страница не найдена",
   "notFound.home": "Главная",
   "notFound.docs": "Документация",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
-  "notFound.logoLightAlt": "светлый логотип opencode",
-  "notFound.logoDarkAlt": "темный логотип opencode",
+  "notFound.logoLightAlt": "светлый логотип xcsh",
+  "notFound.logoDarkAlt": "темный логотип xcsh",
 
   "user.logout": "Выйти",
 
@@ -85,21 +85,21 @@ export const dict = {
 
   "home.title": "OpenCode | AI-агент с открытым кодом для программирования",
 
-  "temp.title": "opencode | AI-агент для программирования в терминале",
+  "temp.title": "xcsh | AI-агент для программирования в терминале",
   "temp.hero.title": "AI-агент для программирования в терминале",
-  "temp.zen": "opencode zen",
+  "temp.zen": "xcsh zen",
   "temp.getStarted": "Начать",
   "temp.feature.native.title": "Нативный TUI",
   "temp.feature.native.body": "Отзывчивый, нативный, темизируемый терминальный интерфейс",
   "temp.feature.zen.beforeLink": "",
   "temp.feature.zen.link": "Отобранный список моделей",
-  "temp.feature.zen.afterLink": "от opencode",
+  "temp.feature.zen.afterLink": "от xcsh",
   "temp.feature.models.beforeLink": "Поддерживает 75+ провайдеров LLM через",
   "temp.feature.models.afterLink": ", включая локальные модели",
   "temp.screenshot.caption": "OpenCode TUI с темой tokyonight",
   "temp.screenshot.alt": "OpenCode TUI с темой tokyonight",
-  "temp.logoLightAlt": "светлый логотип opencode",
-  "temp.logoDarkAlt": "темный логотип opencode",
+  "temp.logoLightAlt": "светлый логотип xcsh",
+  "temp.logoDarkAlt": "темный логотип xcsh",
 
   "home.banner.badge": "Новое",
   "home.banner.text": "Доступно десктопное приложение (бета)",
@@ -191,12 +191,12 @@ export const dict = {
     "Zen дает доступ к отобранному набору AI-моделей, которые OpenCode протестировал и проверил специально для кодинг-агентов. Не нужно беспокоиться о нестабильной производительности и качестве разных провайдеров, используйте проверенные модели, которые работают.",
   "home.zenCta.link": "Узнать о Zen",
 
-  "zen.title": "OpenCode Zen | Набор надежных оптимизированных моделей для кодинг-агентов",
+  "zen.title": "xcsh Zen | Набор надежных оптимизированных моделей для кодинг-агентов",
   "zen.hero.title": "Надежные оптимизированные модели для кодинг-агентов",
   "zen.hero.body":
     "Zen дает доступ к отобранному набору AI-моделей, которые OpenCode протестировал и проверил специально для кодинг-агентов. Не нужно беспокоиться о нестабильной производительности и качестве, используйте проверенные модели, которые работают.",
 
-  "zen.faq.q1": "Что такое OpenCode Zen?",
+  "zen.faq.q1": "Что такое xcsh Zen?",
   "zen.faq.a1":
     "Zen — это отобранный набор AI-моделей, протестированных и проверенных для кодинг-агентов командой, стоящей за OpenCode.",
   "zen.faq.q2": "Почему Zen точнее?",
@@ -447,15 +447,15 @@ export const dict = {
     "Доступ к моделям, настроенным для оптимальной производительности — никаких даунгрейдов или перенаправления к дешевым провайдерам.",
   "workspace.newUser.feature.lockin.title": "Без привязки (Lock-in)",
   "workspace.newUser.feature.lockin.body":
-    "Используйте Zen с любым кодинг-агентом и продолжайте использовать других провайдеров с opencode, когда захотите.",
+    "Используйте Zen с любым кодинг-агентом и продолжайте использовать других провайдеров с xcsh, когда захотите.",
   "workspace.newUser.copyApiKey": "Копировать API ключ",
   "workspace.newUser.copyKey": "Копировать ключ",
   "workspace.newUser.copied": "Скопировано!",
   "workspace.newUser.step.enableBilling": "Включить оплату",
   "workspace.newUser.step.login.before": "Запустите",
-  "workspace.newUser.step.login.after": "и выберите opencode",
+  "workspace.newUser.step.login.after": "и выберите xcsh",
   "workspace.newUser.step.pasteKey": "Вставьте ваш API ключ",
-  "workspace.newUser.step.models.before": "Запустите opencode и выполните",
+  "workspace.newUser.step.models.before": "Запустите xcsh и выполните",
   "workspace.newUser.step.models.after": "для выбора модели",
 
   "workspace.models.title": "Модели",
@@ -502,10 +502,10 @@ export const dict = {
   "workspace.cost.subscriptionShort": "подписка",
 
   "workspace.keys.title": "API Ключи",
-  "workspace.keys.subtitle": "Управляйте вашими API ключами для доступа к сервисам opencode.",
+  "workspace.keys.subtitle": "Управляйте вашими API ключами для доступа к сервисам xcsh.",
   "workspace.keys.create": "Создать API ключ",
   "workspace.keys.placeholder": "Введите название ключа",
-  "workspace.keys.empty": "Создайте API ключ для шлюза opencode",
+  "workspace.keys.empty": "Создайте API ключ для шлюза xcsh",
   "workspace.keys.table.name": "Название",
   "workspace.keys.table.key": "Ключ",
   "workspace.keys.table.createdBy": "Создан",
@@ -647,7 +647,7 @@ export const dict = {
   "workspace.lite.subscription.resetsIn": "Сброс через",
   "workspace.lite.subscription.useBalance": "Использовать доступный баланс после достижения лимитов",
   "workspace.lite.subscription.selectProvider":
-    'Выберите "OpenCode Go" в качестве провайдера в настройках opencode для использования моделей Go.',
+    'Выберите "OpenCode Go" в качестве провайдера в настройках xcsh для использования моделей Go.',
   "workspace.lite.black.message":
     "Вы подписаны на OpenCode Black или находитесь в списке ожидания. Пожалуйста, сначала отмените подписку, если хотите перейти на Go.",
   "workspace.lite.other.message":

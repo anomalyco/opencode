@@ -3,7 +3,7 @@ title: MCPサーバー
 description: ローカルおよびリモートの MCP ツールを追加します。
 ---
 
-_Model Context Protocol_ (MCP) を使用して、OpenCode に外部ツールを追加できます。 OpenCode は、ローカルサーバーとリモートサーバーの両方をサポートします。
+_Model Context Protocol_ (MCP) を使用して、xcsh に外部ツールを追加できます。 xcsh は、ローカルサーバーとリモートサーバーの両方をサポートします。
 
 MCP ツールを追加すると、組み込みツールとともに LLM で自動的に使用できるようになります。
 
@@ -23,11 +23,11 @@ MCP サーバーはコンテキストに追加されるため、どのサーバ�
 
 ## 有効化
 
-MCP サーバーは、`mcp` の下の [OpenCode 設定](https://opencode.ai/docs/config/) で定義できます。各 MCP を一意の名前で追加します。 LLM にプロンプ​​トを表示するときに、その MCP を名前で参照できます。
+MCP サーバーは、`mcp` の下の [xcsh 設定](https://f5xc-salesdemos.github.io/xcsh/docs/config/) で定義できます。各 MCP を一意の名前で追加します。 LLM にプロンプ​​トを表示するときに、その MCP を名前で参照できます。
 
-```jsonc title="opencode.jsonc" {6}
+```jsonc title="xcsh.jsonc" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "mcp": {
     "name-of-mcp-server": {
       // ...
@@ -46,13 +46,13 @@ MCP サーバーは、`mcp` の下の [OpenCode 設定](https://opencode.ai/docs
 
 ### リモートのデフォルトを上書きする
 
-組織は、`.well-known/opencode` エンドポイント経由でデフォルトの MCP サーバーを提供できます。これらのサーバーはデフォルトで無効になっている場合があり、ユーザーは必要なサーバーにオプトインできます。
+組織は、`.well-known/xcsh` エンドポイント経由でデフォルトの MCP サーバーを提供できます。これらのサーバーはデフォルトで無効になっている場合があり、ユーザーは必要なサーバーにオプトインできます。
 
 組織のリモート設定から特定のサーバーを有効にするには、`enabled: true` を使用してローカル設定に追加します。
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "mcp": {
     "jira": {
       "type": "remote",
@@ -71,9 +71,9 @@ MCP サーバーは、`mcp` の下の [OpenCode 設定](https://opencode.ai/docs
 
 MCP オブジェクト内の `type` から `"local"` を使用してローカル MCP サーバーを追加します。
 
-```jsonc title="opencode.jsonc" {15}
+```jsonc title="xcsh.jsonc" {15}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "mcp": {
     "my-local-mcp-server": {
       "type": "local",
@@ -92,9 +92,9 @@ MCP オブジェクト内の `type` から `"local"` を使用してローカル
 
 たとえば、テスト [`@modelcontextprotocol/server-everything`](https://www.npmjs.com/package/@modelcontextprotocol/server-everything) MCP サーバーを追加する方法は次のとおりです。
 
-```jsonc title="opencode.jsonc"
+```jsonc title="xcsh.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "mcp": {
     "mcp_everything": {
       "type": "local",
@@ -130,9 +130,9 @@ use the mcp_everything tool to add the number 3 and 4
 
 `type` を `"remote"` に設定して、リモート MCP サーバーを追加します。
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "mcp": {
     "my-remote-mcp": {
       "type": "remote",
@@ -165,7 +165,7 @@ use the mcp_everything tool to add the number 3 and 4
 
 ## OAuth
 
-OpenCode は、リモート MCP サーバーの OAuth 認証を自動的に処理します。サーバーが認証を必要とする場合、OpenCode は次のことを行います。
+xcsh は、リモート MCP サーバーの OAuth 認証を自動的に処理します。サーバーが認証を必要とする場合、xcsh は次のことを行います。
 
 1. 401 応答を検出し、OAuth フローを開始します。
 2. サーバーでサポートされている場合は **動的クライアント登録 (RFC 7591)** を使用します
@@ -177,9 +177,9 @@ OpenCode は、リモート MCP サーバーの OAuth 認証を自動的に処�
 
 ほとんどの OAuth 対応 MCP サーバーでは、特別な構成は必要ありません。リモートサーバーを設定するだけです。
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "mcp": {
     "my-oauth-server": {
       "type": "remote",
@@ -189,7 +189,7 @@ OpenCode は、リモート MCP サーバーの OAuth 認証を自動的に処�
 }
 ```
 
-サーバーが認証を必要とする場合、OpenCode を初めて使用しようとすると、認証を求めるプロンプトが表示されます。そうでない場合は、`opencode mcp auth <server-name>` を使用して [flow](#authenticating) を手動でトリガーできます。
+サーバーが認証を必要とする場合、xcsh を初めて使用しようとすると、認証を求めるプロンプトが表示されます。そうでない場合は、`xcsh mcp auth <server-name>` を使用して [flow](#authenticating) を手動でトリガーできます。
 
 ---
 
@@ -197,9 +197,9 @@ OpenCode は、リモート MCP サーバーの OAuth 認証を自動的に処�
 
 MCP サーバープロバイダーからクライアント認証情報を取得している場合は、それらを構成できます。
 
-```json title="opencode.json" {7-11}
+```json title="xcsh.json" {7-11}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "mcp": {
     "my-oauth-server": {
       "type": "remote",
@@ -223,22 +223,22 @@ MCP サーバープロバイダーからクライアント認証情報を取得�
 特定の MCP サーバーで認証します。
 
 ```bash
-opencode mcp auth my-oauth-server
+xcsh mcp auth my-oauth-server
 ```
 
 すべての MCP サーバーとその認証ステータスをリストします。
 
 ```bash
-opencode mcp list
+xcsh mcp list
 ```
 
 保存されている認証情報を削除します。
 
 ```bash
-opencode mcp logout my-oauth-server
+xcsh mcp logout my-oauth-server
 ```
 
-`mcp auth` コマンドは、認証のためにブラウザを開きます。承認後、OpenCode はトークンを `~/.local/share/opencode/mcp-auth.json` に安全に保存します。
+`mcp auth` コマンドは、認証のためにブラウザを開きます。承認後、xcsh はトークンを `~/.local/share/xcsh/mcp-auth.json` に安全に保存します。
 
 ---
 
@@ -246,9 +246,9 @@ opencode mcp logout my-oauth-server
 
 サーバー (代わりに API キーを使用するサーバーなど) の自動 OAuth を無効にする場合は、`oauth` を `false` に設定します。
 
-```json title="opencode.json" {7}
+```json title="xcsh.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "mcp": {
     "my-api-key-server": {
       "type": "remote",
@@ -279,10 +279,10 @@ opencode mcp logout my-oauth-server
 
 ```bash
 # View auth status for all OAuth-capable servers
-opencode mcp auth list
+xcsh mcp auth list
 
 # Debug connection and OAuth flow for a specific server
-opencode mcp debug my-oauth-server
+xcsh mcp debug my-oauth-server
 ```
 
 `mcp debug` コマンドは、現在の認証ステータスを表示し、HTTP 接続をテストし、OAuth 検出フローを試行します。
@@ -291,7 +291,7 @@ opencode mcp debug my-oauth-server
 
 ## 管理
 
-MCP は、組み込みツールと並んで、OpenCode のツールとして利用できます。したがって、他のツールと同様に、OpenCode 設定を通じてそれらを管理できます。
+MCP は、組み込みツールと並んで、xcsh のツールとして利用できます。したがって、他のツールと同様に、xcsh 設定を通じてそれらを管理できます。
 
 ---
 
@@ -299,9 +299,9 @@ MCP は、組み込みツールと並んで、OpenCode のツールとして利�
 
 これは、それらをグローバルに有効または無効にできることを意味します。
 
-```json title="opencode.json" {14}
+```json title="xcsh.json" {14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "mcp": {
     "my-mcp-foo": {
       "type": "local",
@@ -320,9 +320,9 @@ MCP は、組み込みツールと並んで、OpenCode のツールとして利�
 
 グロブパターンを使用して、一致するすべての MCP を無効にすることもできます。
 
-```json title="opencode.json" {14}
+```json title="xcsh.json" {14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "mcp": {
     "my-mcp-foo": {
       "type": "local",
@@ -350,9 +350,9 @@ MCP は、組み込みツールと並んで、OpenCode のツールとして利�
 1. ツールとしてグローバルに無効にします。
 2. [エージェント設定](/docs/agents#tools) で、MCP サーバーをツールとして有効にします。
 
-```json title="opencode.json" {11, 14-18}
+```json title="xcsh.json" {11, 14-18}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "mcp": {
     "my-mcp": {
       "type": "local",
@@ -404,9 +404,9 @@ MCP サーバーツールはサーバー名をプレフィックスとして登�
 
 [Sentry MCP サーバー](https://mcp.sentry.dev) を追加して、Sentry プロジェクトや問題と対話します。
 
-```json title="opencode.json" {4-8}
+```json title="xcsh.json" {4-8}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "mcp": {
     "sentry": {
       "type": "remote",
@@ -420,10 +420,10 @@ MCP サーバーツールはサーバー名をプレフィックスとして登�
 設定を追加した後、Sentry で認証します。
 
 ```bash
-opencode mcp auth sentry
+xcsh mcp auth sentry
 ```
 
-これにより、ブラウザウィンドウが開き、OAuth フローが完了し、OpenCode が Sentry アカウントに接続されます。
+これにより、ブラウザウィンドウが開き、OAuth フローが完了し、xcsh が Sentry アカウントに接続されます。
 
 認証が完了すると、プロンプトで Sentry ツールを使用して、問題、プロジェクト、エラーデータをクエリできるようになります。
 
@@ -437,9 +437,9 @@ Show me the latest unresolved issues in my project. use sentry
 
 ドキュメントを検索するために [Context7 MCP server](https://github.com/upstash/context7) を追加します。
 
-```json title="opencode.json" {4-7}
+```json title="xcsh.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "mcp": {
     "context7": {
       "type": "remote",
@@ -451,9 +451,9 @@ Show me the latest unresolved issues in my project. use sentry
 
 無料アカウントにサインアップしている場合は、API キーを使用して、より高いレート制限を取得できます。
 
-```json title="opencode.json" {7-9}
+```json title="xcsh.json" {7-9}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "mcp": {
     "context7": {
       "type": "remote",
@@ -486,9 +486,9 @@ When you need to search docs, use `context7` tools.
 
 GitHub 上のコードスニペットを検索するには、[Grep by Vercel](https://grep.app) MCP サーバーを追加します。
 
-```json title="opencode.json" {4-7}
+```json title="xcsh.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "mcp": {
     "gh_grep": {
       "type": "remote",

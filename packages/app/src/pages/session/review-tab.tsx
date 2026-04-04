@@ -1,12 +1,12 @@
 import { createEffect, createSignal, onCleanup, type JSX } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import type { FileDiff } from "@opencode-ai/sdk/v2"
-import { SessionReview } from "@opencode-ai/ui/session-review"
+import type { FileDiff } from "@f5xc-salesdemos/sdk/v2"
+import { SessionReview } from "@f5xc-salesdemos/ui/session-review"
 import type {
   SessionReviewCommentActions,
   SessionReviewCommentDelete,
   SessionReviewCommentUpdate,
-} from "@opencode-ai/ui/session-review"
+} from "@f5xc-salesdemos/ui/session-review"
 import type { SelectedLineRange } from "@/context/file"
 import { useSDK } from "@/context/sdk"
 import { useLayout } from "@/context/layout"

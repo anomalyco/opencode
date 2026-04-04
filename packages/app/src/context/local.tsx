@@ -1,5 +1,5 @@
-import { createSimpleContext } from "@opencode-ai/ui/context"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { createSimpleContext } from "@f5xc-salesdemos/ui/context"
+import { base64Encode } from "@f5xc-salesdemos/util/encode"
 import { useParams } from "@solidjs/router"
 import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"

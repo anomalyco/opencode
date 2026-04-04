@@ -44,8 +44,8 @@ export const dict = {
   "notFound.docs": "文件",
   "notFound.github": "GitHub",
   "notFound.discord": "Discord",
-  "notFound.logoLightAlt": "opencode 淺色標誌",
-  "notFound.logoDarkAlt": "opencode 深色標誌",
+  "notFound.logoLightAlt": "xcsh 淺色標誌",
+  "notFound.logoDarkAlt": "xcsh 深色標誌",
 
   "user.logout": "登出",
 
@@ -88,7 +88,7 @@ export const dict = {
 
   "temp.title": "OpenCode | 專為終端打造的 AI 編碼代理",
   "temp.hero.title": "專為終端打造的 AI 編碼代理",
-  "temp.zen": "OpenCode Zen",
+  "temp.zen": "xcsh Zen",
   "temp.getStarted": "開始使用",
   "temp.feature.native.title": "原生 TUI",
   "temp.feature.native.body": "響應式、原生、可自訂主題的終端介面",
@@ -99,8 +99,8 @@ export const dict = {
   "temp.feature.models.afterLink": "支援 75+ 家 LLM 供應商，包括本地模型",
   "temp.screenshot.caption": "使用 tokyonight 主題的 OpenCode TUI",
   "temp.screenshot.alt": "使用 tokyonight 主題的 OpenCode TUI",
-  "temp.logoLightAlt": "opencode 淺色標誌",
-  "temp.logoDarkAlt": "opencode 深色標誌",
+  "temp.logoLightAlt": "xcsh 淺色標誌",
+  "temp.logoDarkAlt": "xcsh 深色標誌",
 
   "home.banner.badge": "新",
   "home.banner.text": "桌面應用已推出 Beta",
@@ -184,12 +184,12 @@ export const dict = {
     "Zen 提供一組精選的 AI 模型，這些模型是 OpenCode 為了編碼代理專門測試與評測過的。無需擔心不同供應商之間效能與品質參差不齊，使用經過驗證的模型即可。",
   "home.zenCta.link": "了解 Zen",
 
-  "zen.title": "OpenCode Zen | 專為編碼代理精選的可靠最佳化模型",
+  "zen.title": "xcsh Zen | 專為編碼代理精選的可靠最佳化模型",
   "zen.hero.title": "專為編碼代理提供的可靠最佳化模型",
   "zen.hero.body":
     "Zen 提供一組精選的 AI 模型，這些模型是 OpenCode 為了編碼代理專門測試與評測過的。無需擔心效能與品質參差不齊，使用經過驗證的模型即可。",
 
-  "zen.faq.q1": "什麼是 OpenCode Zen？",
+  "zen.faq.q1": "什麼是 xcsh Zen？",
   "zen.faq.a1": "Zen 是由 OpenCode 團隊打造、專為編碼代理測試與評測的 AI 模型精選集合。",
   "zen.faq.q2": "是什麼讓 Zen 更準確？",
   "zen.faq.a2": "Zen 只提供專為編碼代理測試與評測的模型。你不會用奶油刀切牛排，也別用糟糕的模型來寫程式。",
@@ -617,7 +617,7 @@ export const dict = {
   "workspace.lite.subscription.resetsIn": "重置時間：",
   "workspace.lite.subscription.useBalance": "達到使用限制後使用您的可用餘額",
   "workspace.lite.subscription.selectProvider":
-    "在您的 opencode 設定中選擇「OpenCode Go」作為提供商，即可使用 Go 模型。",
+    "在您的 xcsh 設定中選擇「OpenCode Go」作為提供商，即可使用 Go 模型。",
   "workspace.lite.black.message": "您目前已訂閱 OpenCode Black 或在候補名單中。若要切換至 Go，請先取消訂閱。",
   "workspace.lite.other.message": "此工作區中的另一位成員已訂閱 OpenCode Go。每個工作區只能有一位成員訂閱。",
   "workspace.lite.promo.description":

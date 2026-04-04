@@ -1,22 +1,22 @@
 ---
 title: TUI
-description: Brug af OpenCode-terminalbrugergrænsefladen.
+description: Brug af xcsh-terminalbrugergrænsefladen.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode giver en interaktiv terminalgrænseflade eller TUI til at arbejde med dine projekter med en LLM.
+xcsh giver en interaktiv terminalgrænseflade eller TUI til at arbejde med dine projekter med en LLM.
 
-At køre OpenCode starter TUI for den nuværende mappe.
+At køre xcsh starter TUI for den nuværende mappe.
 
 ```bash
-opencode
+xcsh
 ```
 
 Eller du kan starte den for en bestemt arbejdsmappe.
 
 ```bash
-opencode /path/to/project
+xcsh /path/to/project
 ```
 
 Når du er i TUI, kan du spørge den med en besked.
@@ -57,7 +57,7 @@ Outputtet fra kommandoen tilføjes til samtalen som et værktøjsresultat.
 
 ## Kommandoer
 
-Når du bruger OpenCode TUI, kan du skrive `/` efterfulgt af et kommandonavn for hurtigt at udføre handlinger. For eksempel:
+Når du bruger xcsh TUI, kan du skrive `/` efterfulgt af et kommandonavn for hurtigt at udføre handlinger. For eksempel:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ Her er alle tilgængelige skråstregskommandoer:
 
 ### connect
 
-Tilføj en udbyder til OpenCode. Lader dig vælge fra tilgængelige udbydere og tilføje deres API-nøgler.
+Tilføj en udbyder til xcsh. Lader dig vælge fra tilgængelige udbydere og tilføje deres API-nøgler.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ Skift visning af værktøjsudførelsesdetaljer.
 
 ### exit
 
-Afslut OpenCode. _Aliaser_: `/quit`, `/q`
+Afslut xcsh. _Aliaser_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -356,8 +356,8 @@ Du kan tilpasse TUI-adfærd gennem `tui.json` (eller `tui.jsonc`).
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
-  "theme": "opencode",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/tui.json",
+  "theme": "xcsh",
   "keybinds": {
     "leader": "ctrl+x"
   },
@@ -369,7 +369,7 @@ Du kan tilpasse TUI-adfærd gennem `tui.json` (eller `tui.jsonc`).
 }
 ```
 
-Dette er adskilt fra `opencode.json`, som konfigurerer server-/kørselstidsadfærd.
+Dette er adskilt fra `xcsh.json`, som konfigurerer server-/kørselstidsadfærd.
 
 ### Indstillinger
 

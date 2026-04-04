@@ -1,6 +1,6 @@
 ---
 title: SDK
-description: Типобезопасный JS-клиент для сервера opencode.
+description: Типобезопасный JS-клиент для сервера xcsh.
 ---
 
 import config from "../../../../config.mjs"
@@ -18,17 +18,17 @@ SDK JS/TS с открытым кодом предоставляет типобе
 Установите SDK из npm:
 
 ```bash
-npm install @opencode-ai/sdk
+npm install @f5xc-salesdemos/sdk
 ```
 
 ---
 
 ## Создать клиента
 
-Создайте экземпляр opencode:
+Создайте экземпляр xcsh:
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createOpencode } from "@f5xc-salesdemos/sdk"
 
 const { client } = await createOpencode()
 ```
@@ -49,12 +49,12 @@ const { client } = await createOpencode()
 
 ## Конфигурация
 
-Вы можете передать объект конфигурации для настройки поведения. Экземпляр по-прежнему получает ваш `opencode.json`, но вы можете переопределить или добавить встроенную конфигурацию:
+Вы можете передать объект конфигурации для настройки поведения. Экземпляр по-прежнему получает ваш `xcsh.json`, но вы можете переопределить или добавить встроенную конфигурацию:
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createOpencode } from "@f5xc-salesdemos/sdk"
 
-const opencode = await createOpencode({
+const xcsh = await createOpencode({
   hostname: "127.0.0.1",
   port: 4096,
   config: {
@@ -62,17 +62,17 @@ const opencode = await createOpencode({
   },
 })
 
-console.log(`Server running at ${opencode.server.url}`)
+console.log(`Server running at ${xcsh.server.url}`)
 
-opencode.server.close()
+xcsh.server.close()
 ```
 
 ## Только клиент
 
-Если у вас уже есть работающий экземпляр opencode, вы можете создать экземпляр клиента для подключения к нему:
+Если у вас уже есть работающий экземпляр xcsh, вы можете создать экземпляр клиента для подключения к нему:
 
 ```javascript
-import { createOpencodeClient } from "@opencode-ai/sdk"
+import { createOpencodeClient } from "@f5xc-salesdemos/sdk"
 
 const client = createOpencodeClient({
   baseUrl: "http://localhost:4096",
@@ -96,7 +96,7 @@ const client = createOpencodeClient({
 SDK включает определения TypeScript для всех типов API. Импортируйте их напрямую:
 
 ```typescript
-import type { Session, Message, Part } from "@opencode-ai/sdk"
+import type { Session, Message, Part } from "@f5xc-salesdemos/sdk"
 ```
 
 Все типы генерируются на основе спецификации OpenAPI сервера и доступны в файле <a href={typesUrl}>types</a>.
@@ -376,7 +376,7 @@ await client.session.prompt({
 ```javascript
 // Search and read files
 const textResults = await client.find.text({
-  query: { pattern: "function.*opencode" },
+  query: { pattern: "function.*xcsh" },
 })
 
 const files = await client.find.files({

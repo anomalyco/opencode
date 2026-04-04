@@ -136,13 +136,13 @@ export const dict = {
   "provider.connect.apiKey.label": "{{provider}} API anahtarı",
   "provider.connect.apiKey.placeholder": "API anahtarı",
   "provider.connect.apiKey.required": "API anahtarı gerekli",
-  "provider.connect.opencodeZen.line1":
-    "OpenCode Zen, kodlama ajanları için seçilmiş güvenilir optimize edilmiş modellere erişim sağlar.",
-  "provider.connect.opencodeZen.line2":
+  "provider.connect.xcshZen.line1":
+    "xcsh Zen, kodlama ajanları için seçilmiş güvenilir optimize edilmiş modellere erişim sağlar.",
+  "provider.connect.xcshZen.line2":
     "Tek bir API anahtarıyla Claude, GPT, Gemini, GLM ve daha fazlası gibi modellere erişebilirsiniz.",
-  "provider.connect.opencodeZen.visit.prefix": "",
-  "provider.connect.opencodeZen.visit.link": "opencode.ai/zen",
-  "provider.connect.opencodeZen.visit.suffix": " adresini ziyaret ederek API anahtarınızı alın.",
+  "provider.connect.xcshZen.visit.prefix": "",
+  "provider.connect.xcshZen.visit.link": "f5xc-salesdemos.github.io/xcsh/zen",
+  "provider.connect.xcshZen.visit.suffix": " adresini ziyaret ederek API anahtarınızı alın.",
   "provider.connect.oauth.code.visit.prefix":
     "Hesabınızı bağlamak ve OpenCode'da {{provider}} modellerini kullanmak için ",
   "provider.connect.oauth.code.visit.link": "bu bağlantıya",
@@ -299,7 +299,7 @@ export const dict = {
   "dialog.mcp.empty": "Yapılandırılmış MCP yok",
 
   "dialog.lsp.empty": "LSP'ler dosya türlerinden otomatik algılanır",
-  "dialog.plugins.empty": "Eklentiler opencode.json içinde yapılandırılır",
+  "dialog.plugins.empty": "Eklentiler xcsh.json içinde yapılandırılır",
 
   "mcp.status.connected": "bağlı",
   "mcp.status.failed": "başarısız",
@@ -473,7 +473,7 @@ export const dict = {
   "error.chain.responseBody": "Yanıt gövdesi:\n{{body}}",
   "error.chain.didYouMean": "Bunu mu demek istediniz: {{suggestions}}",
   "error.chain.modelNotFound": "Model bulunamadı: {{provider}}/{{model}}",
-  "error.chain.checkConfig": "Yapılandırma dosyanızı (opencode.json) sağlayıcı/model adlarını kontrol edin",
+  "error.chain.checkConfig": "Yapılandırma dosyanızı (xcsh.json) sağlayıcı/model adlarını kontrol edin",
   "error.chain.mcpFailed":
     'MCP sunucusu "{{name}}" başarısız oldu. Not: OpenCode henüz MCP kimlik doğrulamasını desteklemiyor.',
   "error.chain.providerAuthFailed": "Sağlayıcı kimlik doğrulaması başarısız ({{provider}}): {{message}}",

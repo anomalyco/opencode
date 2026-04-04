@@ -4,8 +4,8 @@ import { Title, Meta } from "@solidjs/meta"
 //import { HttpHeader } from "@solidjs/start"
 import zenLogoLight from "../../asset/zen-ornate-light.svg"
 import zenLogoDark from "../../asset/zen-ornate-dark.svg"
-import compareVideo from "../../asset/lander/opencode-comparison-min.mp4"
-import compareVideoPoster from "../../asset/lander/opencode-comparison-poster.png"
+import compareVideo from "../../asset/lander/xcsh-comparison-min.mp4"
+import compareVideoPoster from "../../asset/lander/xcsh-comparison-poster.png"
 import avatarDax from "../../asset/lander/avatar-dax.png"
 import avatarJay from "../../asset/lander/avatar-jay.png"
 import avatarFrank from "../../asset/lander/avatar-frank.png"
@@ -38,7 +38,7 @@ export default function Home() {
       <LocaleLinks path="/zen" />
       <Meta property="og:image" content="/social-share-zen.png" />
       <Meta name="twitter:image" content="/social-share-zen.png" />
-      <Meta name="opencode:auth" content={loggedin() ? "true" : "false"} />
+      <Meta name="xcsh:auth" content={loggedin() ? "true" : "false"} />
 
       <div data-component="container">
         <Header zen hideGetStarted />

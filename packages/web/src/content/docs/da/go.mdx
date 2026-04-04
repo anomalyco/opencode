@@ -7,15 +7,15 @@ import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Go er et lavprisabonnement — **$5 for din første måned**, derefter **$10/måned** — der giver dig pålidelig adgang til populære åbne kodningsmodeller.
+xcsh Go er et lavprisabonnement — **$5 for din første måned**, derefter **$10/måned** — der giver dig pålidelig adgang til populære åbne kodningsmodeller.
 
 :::note
-OpenCode Go er i øjeblikket i beta.
+xcsh Go er i øjeblikket i beta.
 :::
 
-Go fungerer som enhver anden udbyder i OpenCode. Du abonnerer på OpenCode Go og
+Go fungerer som enhver anden udbyder i xcsh. Du abonnerer på xcsh Go og
 får din API-nøgle. Det er **helt valgfrit**, og du behøver ikke at bruge det for at
-bruge OpenCode.
+bruge xcsh.
 
 Det er primært designet til internationale brugere, med modeller hostet i USA, EU og Singapore for at sikre stabil global adgang.
 
@@ -31,7 +31,7 @@ Det kan dog være svært at få pålidelig adgang til dem med lav latenstid. Udb
 varierer i kvalitet og tilgængelighed.
 
 :::tip
-Vi testede en udvalgt gruppe af modeller og udbydere, der fungerer godt med OpenCode.
+Vi testede en udvalgt gruppe af modeller og udbydere, der fungerer godt med xcsh.
 :::
 
 For at løse dette, gjorde vi et par ting:
@@ -43,22 +43,22 @@ For at løse dette, gjorde vi et par ting:
 3. Til sidst benchmarkede vi kombinationen af model og udbyder, og kom frem til
    en liste, som vi trygt kan anbefale.
 
-OpenCode Go giver dig adgang til disse modeller for **$5 for din første måned**, derefter **$10/måned**.
+xcsh Go giver dig adgang til disse modeller for **$5 for din første måned**, derefter **$10/måned**.
 
 ---
 
 ## Sådan fungerer det
 
-OpenCode Go fungerer som enhver anden udbyder i OpenCode.
+xcsh Go fungerer som enhver anden udbyder i xcsh.
 
-1. Du logger ind på **<a href={console}>OpenCode Zen</a>**, abonnerer på Go, og
+1. Du logger ind på **<a href={console}>xcsh Zen</a>**, abonnerer på Go, og
    kopierer din API-nøgle.
-2. Du kører kommandoen `/connect` i TUI'en, vælger `OpenCode Go`, og indsætter
+2. Du kører kommandoen `/connect` i TUI'en, vælger `xcsh Go`, og indsætter
    din API-nøgle.
 3. Kør `/models` i TUI'en for at se listen over tilgængelige modeller gennem Go.
 
 :::note
-Kun ét medlem per arbejdsområde kan abonnere på OpenCode Go.
+Kun ét medlem per arbejdsområde kan abonnere på xcsh Go.
 :::
 
 Den nuværende liste over modeller inkluderer:
@@ -76,7 +76,7 @@ Listen over modeller kan ændre sig, efterhånden som vi tester og tilføjer nye
 
 ## Forbrugsgrænser
 
-OpenCode Go inkluderer følgende grænser:
+xcsh Go inkluderer følgende grænser:
 
 - **5-timers grænse** — forbrug for $12
 - **Ugentlig grænse** — forbrug for $30
@@ -124,16 +124,16 @@ Du kan også få adgang til Go-modeller gennem følgende API-endpoints.
 
 | Model        | Model ID     | Endpoint                                         | AI SDK Package              |
 | ------------ | ------------ | ------------------------------------------------ | --------------------------- |
-| GLM-5        | glm-5        | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Kimi K2.5    | kimi-k2.5    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2-Pro  | mimo-v2-pro  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiMo-V2-Omni | mimo-v2-omni | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| MiniMax M2.7 | minimax-m2.7 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
-| MiniMax M2.5 | minimax-m2.5 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| GLM-5        | glm-5        | `https://f5xc-salesdemos.github.io/xcsh/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.5    | kimi-k2.5    | `https://f5xc-salesdemos.github.io/xcsh/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2-Pro  | mimo-v2-pro  | `https://f5xc-salesdemos.github.io/xcsh/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2-Omni | mimo-v2-omni | `https://f5xc-salesdemos.github.io/xcsh/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiniMax M2.7 | minimax-m2.7 | `https://f5xc-salesdemos.github.io/xcsh/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
+| MiniMax M2.5 | minimax-m2.5 | `https://f5xc-salesdemos.github.io/xcsh/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
-Dit [model id](/docs/config/#models) i din OpenCode config
-bruger formatet `opencode-go/<model-id>`. For eksempel for Kimi K2.5, vil du
-bruge `opencode-go/kimi-k2.5` i din config.
+Dit [model id](/docs/config/#models) i din xcsh config
+bruger formatet `xcsh-go/<model-id>`. For eksempel for Kimi K2.5, vil du
+bruge `xcsh-go/kimi-k2.5` i din config.
 
 ---
 
@@ -145,9 +145,9 @@ Planen er primært designet til internationale brugere med modeller hostet i US,
 
 ## Mål
 
-Vi skabte OpenCode Go for at:
+Vi skabte xcsh Go for at:
 
 1. Gøre AI-kodning **tilgængelig** for flere mennesker med et lavprisabonnement.
 2. Give **pålidelig** adgang til de bedste åbne kodningsmodeller.
 3. Kuratere modeller, der er **testet og benchmarkede** til brug med kodningsagenter.
-4. Undgå **lock-in** ved også at lade dig bruge enhver anden udbyder med OpenCode.
+4. Undgå **lock-in** ved også at lade dig bruge enhver anden udbyder med xcsh.

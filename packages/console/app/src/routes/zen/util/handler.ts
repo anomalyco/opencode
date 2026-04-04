@@ -1,19 +1,19 @@
 import type { APIEvent } from "@solidjs/start/server"
-import { and, Database, eq, isNull, lt, or, sql } from "@opencode-ai/console-core/drizzle/index.js"
-import { KeyTable } from "@opencode-ai/console-core/schema/key.sql.js"
-import { BillingTable, LiteTable, SubscriptionTable, UsageTable } from "@opencode-ai/console-core/schema/billing.sql.js"
-import { centsToMicroCents } from "@opencode-ai/console-core/util/price.js"
-import { getMonthlyBounds, getWeekBounds } from "@opencode-ai/console-core/util/date.js"
-import { Identifier } from "@opencode-ai/console-core/identifier.js"
-import { Billing } from "@opencode-ai/console-core/billing.js"
-import { Actor } from "@opencode-ai/console-core/actor.js"
-import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
-import { ZenData } from "@opencode-ai/console-core/model.js"
-import { Subscription } from "@opencode-ai/console-core/subscription.js"
-import { BlackData } from "@opencode-ai/console-core/black.js"
-import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
-import { ModelTable } from "@opencode-ai/console-core/schema/model.sql.js"
-import { ProviderTable } from "@opencode-ai/console-core/schema/provider.sql.js"
+import { and, Database, eq, isNull, lt, or, sql } from "@f5xc-salesdemos/console-core/drizzle/index.js"
+import { KeyTable } from "@f5xc-salesdemos/console-core/schema/key.sql.js"
+import { BillingTable, LiteTable, SubscriptionTable, UsageTable } from "@f5xc-salesdemos/console-core/schema/billing.sql.js"
+import { centsToMicroCents } from "@f5xc-salesdemos/console-core/util/price.js"
+import { getMonthlyBounds, getWeekBounds } from "@f5xc-salesdemos/console-core/util/date.js"
+import { Identifier } from "@f5xc-salesdemos/console-core/identifier.js"
+import { Billing } from "@f5xc-salesdemos/console-core/billing.js"
+import { Actor } from "@f5xc-salesdemos/console-core/actor.js"
+import { WorkspaceTable } from "@f5xc-salesdemos/console-core/schema/workspace.sql.js"
+import { ZenData } from "@f5xc-salesdemos/console-core/model.js"
+import { Subscription } from "@f5xc-salesdemos/console-core/subscription.js"
+import { BlackData } from "@f5xc-salesdemos/console-core/black.js"
+import { UserTable } from "@f5xc-salesdemos/console-core/schema/user.sql.js"
+import { ModelTable } from "@f5xc-salesdemos/console-core/schema/model.sql.js"
+import { ProviderTable } from "@f5xc-salesdemos/console-core/schema/provider.sql.js"
 import { logger } from "./logger"
 import {
   AuthError,
@@ -39,8 +39,8 @@ import { createRateLimiter } from "./rateLimiter"
 import { createDataDumper } from "./dataDumper"
 import { createTrialLimiter } from "./trialLimiter"
 import { createStickyTracker } from "./stickyProviderTracker"
-import { LiteData } from "@opencode-ai/console-core/lite.js"
-import { Resource } from "@opencode-ai/console-resource"
+import { LiteData } from "@f5xc-salesdemos/console-core/lite.js"
+import { Resource } from "@f5xc-salesdemos/console-resource"
 import { i18n, type Key } from "~/i18n"
 import { localeFromRequest } from "~/lib/language"
 
@@ -408,7 +408,7 @@ export async function handler(
       throw new ModelError(
         `${t("zen.api.error.trialEnded", {
           model: modelData.name,
-          link: "https://opencode.ai/go",
+          link: "https://f5xc-salesdemos.github.io/xcsh/go",
         })}`,
       )
 
@@ -735,8 +735,8 @@ export async function handler(
 
     // Validate pay as you go billing
     const billing = authInfo.billing
-    const billingUrl = `https://opencode.ai/workspace/${authInfo.workspaceID}/billing`
-    const membersUrl = `https://opencode.ai/workspace/${authInfo.workspaceID}/members`
+    const billingUrl = `https://f5xc-salesdemos.github.io/xcsh/workspace/${authInfo.workspaceID}/billing`
+    const membersUrl = `https://f5xc-salesdemos.github.io/xcsh/workspace/${authInfo.workspaceID}/members`
     if (!billing.paymentMethodID) throw new CreditsError(t("zen.api.error.noPaymentMethod", { billingUrl }))
     if (billing.balance <= 0) throw new CreditsError(t("zen.api.error.insufficientBalance", { billingUrl }))
 

@@ -1,14 +1,14 @@
-import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@opencode-ai/sdk/v2/client"
-import { Button } from "@opencode-ai/ui/button"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { List, type ListRef } from "@opencode-ai/ui/list"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { Spinner } from "@opencode-ai/ui/spinner"
-import { TextField } from "@opencode-ai/ui/text-field"
-import { showToast } from "@opencode-ai/ui/toast"
+import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@f5xc-salesdemos/sdk/v2/client"
+import { Button } from "@f5xc-salesdemos/ui/button"
+import { useDialog } from "@f5xc-salesdemos/ui/context/dialog"
+import { Dialog } from "@f5xc-salesdemos/ui/dialog"
+import { Icon } from "@f5xc-salesdemos/ui/icon"
+import { IconButton } from "@f5xc-salesdemos/ui/icon-button"
+import { List, type ListRef } from "@f5xc-salesdemos/ui/list"
+import { ProviderIcon } from "@f5xc-salesdemos/ui/provider-icon"
+import { Spinner } from "@f5xc-salesdemos/ui/spinner"
+import { TextField } from "@f5xc-salesdemos/ui/text-field"
+import { showToast } from "@f5xc-salesdemos/ui/toast"
 import { createEffect, createMemo, createResource, Match, onCleanup, onMount, Switch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Link } from "@/components/link"
@@ -424,14 +424,14 @@ export function DialogConnectProvider(props: { provider: string }) {
         <Switch>
           <Match when={provider().id === "opencode"}>
             <div class="flex flex-col gap-4">
-              <div class="text-14-regular text-text-base">{language.t("provider.connect.opencodeZen.line1")}</div>
-              <div class="text-14-regular text-text-base">{language.t("provider.connect.opencodeZen.line2")}</div>
+              <div class="text-14-regular text-text-base">{language.t("provider.connect.xcshZen.line1")}</div>
+              <div class="text-14-regular text-text-base">{language.t("provider.connect.xcshZen.line2")}</div>
               <div class="text-14-regular text-text-base">
-                {language.t("provider.connect.opencodeZen.visit.prefix")}
-                <Link href="https://opencode.ai/zen" tabIndex={-1}>
-                  {language.t("provider.connect.opencodeZen.visit.link")}
+                {language.t("provider.connect.xcshZen.visit.prefix")}
+                <Link href="https://f5xc-salesdemos.github.io/xcsh/zen" tabIndex={-1}>
+                  {language.t("provider.connect.xcshZen.visit.link")}
                 </Link>
-                {language.t("provider.connect.opencodeZen.visit.suffix")}
+                {language.t("provider.connect.xcshZen.visit.suffix")}
               </div>
             </div>
           </Match>

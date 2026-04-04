@@ -1,8 +1,8 @@
 import { batch, createMemo } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
-import { Binary } from "@opencode-ai/util/binary"
-import { retry } from "@opencode-ai/util/retry"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { Binary } from "@f5xc-salesdemos/util/binary"
+import { retry } from "@f5xc-salesdemos/util/retry"
+import { createSimpleContext } from "@f5xc-salesdemos/ui/context"
 import {
   clearSessionPrefetch,
   getSessionPrefetch,
@@ -11,7 +11,7 @@ import {
 } from "./global-sync/session-prefetch"
 import { useGlobalSync } from "./global-sync"
 import { useSDK } from "./sdk"
-import type { Message, Part } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part } from "@f5xc-salesdemos/sdk/v2/client"
 import { SESSION_CACHE_LIMIT, dropSessionCaches, pickSessionCacheEvictions } from "./global-sync/session-cache"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])

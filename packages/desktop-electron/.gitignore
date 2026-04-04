@@ -24,5 +24,5 @@ dist-ssr
 *.sw?
 out/
 
-resources/opencode-cli*
+resources/xcsh-cli*
 resources/icons

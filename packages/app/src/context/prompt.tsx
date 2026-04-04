@@ -1,5 +1,5 @@
-import { createSimpleContext } from "@opencode-ai/ui/context"
-import { checksum } from "@opencode-ai/util/encode"
+import { createSimpleContext } from "@f5xc-salesdemos/ui/context"
+import { checksum } from "@f5xc-salesdemos/util/encode"
 import { useParams } from "@solidjs/router"
 import { batch, createMemo, createRoot, getOwner, onCleanup } from "solid-js"
 import { createStore, type SetStoreFunction } from "solid-js/store"

@@ -1,15 +1,15 @@
 ---
 title: 格式化工具
-description: OpenCode 使用特定语言的格式化工具。
+description: xcsh 使用特定语言的格式化工具。
 ---
 
-OpenCode 会在文件写入或编辑后，自动使用特定语言的格式化工具对其进行格式化。这确保了生成的代码遵循你项目的代码风格。
+xcsh 会在文件写入或编辑后，自动使用特定语言的格式化工具对其进行格式化。这确保了生成的代码遵循你项目的代码风格。
 
 ---
 
 ## 内置格式化工具
 
-OpenCode 内置了多种适用于主流语言和框架的格式化工具。下表列出了各格式化工具、支持的文件扩展名以及所需的命令或配置选项。
+xcsh 内置了多种适用于主流语言和框架的格式化工具。下表列出了各格式化工具、支持的文件扩展名以及所需的命令或配置选项。
 
 | 格式化工具           | 扩展名                                                                                                | 要求                                                                                    |
 | -------------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
@@ -40,13 +40,13 @@ OpenCode 内置了多种适用于主流语言和框架的格式化工具。下�
 | uv                   | .py, .pyi                                                                                             | `uv` 命令可用                                                                           |
 | zig                  | .zig, .zon                                                                                            | `zig` 命令可用                                                                          |
 
-因此，如果你的项目 `package.json` 中包含 `prettier`，OpenCode 会自动使用它进行格式化。
+因此，如果你的项目 `package.json` 中包含 `prettier`，xcsh 会自动使用它进行格式化。
 
 ---
 
 ## 工作原理
 
-当 OpenCode 写入或编辑文件时，它会：
+当 xcsh 写入或编辑文件时，它会：
 
 1. 根据所有已启用的格式化工具检查文件扩展名。
 2. 对文件运行相应的格式化命令。
@@ -58,11 +58,11 @@ OpenCode 内置了多种适用于主流语言和框架的格式化工具。下�
 
 ## 配置
 
-你可以通过 OpenCode 配置中的 `formatter` 部分自定义格式化工具。
+你可以通过 xcsh 配置中的 `formatter` 部分自定义格式化工具。
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "formatter": {}
 }
 ```
@@ -84,18 +84,18 @@ OpenCode 内置了多种适用于主流语言和框架的格式化工具。下�
 
 要全局禁用**所有**格式化工具，将 `formatter` 设为 `false`：
 
-```json title="opencode.json" {3}
+```json title="xcsh.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "formatter": false
 }
 ```
 
 要禁用**特定**格式化工具，将 `disabled` 设为 `true`：
 
-```json title="opencode.json" {5}
+```json title="xcsh.json" {5}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -110,9 +110,9 @@ OpenCode 内置了多种适用于主流语言和框架的格式化工具。下�
 
 你可以通过指定命令、环境变量和文件扩展名来覆盖内置格式化工具或添加新的格式化工具：
 
-```json title="opencode.json" {4-14}
+```json title="xcsh.json" {4-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "formatter": {
     "prettier": {
       "command": ["npx", "prettier", "--write", "$FILE"],

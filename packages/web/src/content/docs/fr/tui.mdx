@@ -1,22 +1,22 @@
 ---
 title: TUI
-description: Utilisation de l’interface utilisateur du terminal OpenCode.
+description: Utilisation de l’interface utilisateur du terminal xcsh.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode fournit une interface de terminal interactif ou TUI pour travailler sur vos projets avec un LLM.
+xcsh fournit une interface de terminal interactif ou TUI pour travailler sur vos projets avec un LLM.
 
-L’exécution de OpenCode démarre le TUI pour le répertoire actuel.
+L’exécution de xcsh démarre le TUI pour le répertoire actuel.
 
 ```bash
-opencode
+xcsh
 ```
 
 Ou vous pouvez le démarrer pour un répertoire de travail spécifique.
 
 ```bash
-opencode /path/to/project
+xcsh /path/to/project
 ```
 
 Une fois que vous êtes dans le TUI, vous pouvez lui envoyer un message.
@@ -57,7 +57,7 @@ Le résultat de la commande est ajouté à la conversation en tant que résultat
 
 ## Commandes
 
-Lorsque vous utilisez le OpenCode TUI, vous pouvez taper `/` suivi d'un nom de commande pour exécuter rapidement des actions. Par exemple:
+Lorsque vous utilisez le xcsh TUI, vous pouvez taper `/` suivi d'un nom de commande pour exécuter rapidement des actions. Par exemple:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ Voici toutes les commandes slash disponibles :
 
 ### connect
 
-Ajoutez un fournisseur à OpenCode. Vous permet de sélectionner parmi les fournisseurs disponibles et d’ajouter leurs clés API.
+Ajoutez un fournisseur à xcsh. Vous permet de sélectionner parmi les fournisseurs disponibles et d’ajouter leurs clés API.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ Ouvrez un éditeur externe pour rédiger des messages. Utilise l'éditeur défin
 
 ### exit
 
-Quittez OpenCode. *Alias* : `/quit`, `/q`
+Quittez xcsh. *Alias* : `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -359,8 +359,8 @@ Vous pouvez personnaliser le comportement de TUI via `tui.json` (ou `tui.jsonc`)
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
-  "theme": "opencode",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/tui.json",
+  "theme": "xcsh",
   "keybinds": {
     "leader": "ctrl+x"
   },
@@ -372,7 +372,7 @@ Vous pouvez personnaliser le comportement de TUI via `tui.json` (ou `tui.jsonc`)
 }
 ```
 
-Ceci est séparé de `opencode.json`, qui configure le comportement du serveur/d'exécution.
+Ceci est séparé de `xcsh.json`, qui configure le comportement du serveur/d'exécution.
 
 ### Options
 

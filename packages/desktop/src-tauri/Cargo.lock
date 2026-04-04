@@ -3094,7 +3094,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "opencode-desktop"
+name = "xcsh-desktop"
 version = "0.0.0"
 dependencies = [
  "chrono",

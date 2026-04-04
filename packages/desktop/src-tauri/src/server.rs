@@ -160,7 +160,7 @@ async fn check_health(url: &str, password: Option<&str>) -> bool {
     let mut req = client.get(health_url);
 
     if let Some(password) = password {
-        req = req.basic_auth("opencode", Some(password));
+        req = req.basic_auth("xcsh", Some(password));
     }
 
     req.send()

@@ -25,13 +25,13 @@ describe("shell env", () => {
       },
       {
         PATH: "/desktop/path",
-        OPENCODE_CLIENT: "desktop",
+        XCSH_CLIENT: "desktop",
       },
     )
 
     expect(env.PATH).toBe("/desktop/path")
     expect(env.HOME).toBe("/tmp/home")
-    expect(env.OPENCODE_CLIENT).toBe("desktop")
+    expect(env.XCSH_CLIENT).toBe("desktop")
   })
 
   test("isNushell handles path and binary name", () => {

@@ -1,5 +1,5 @@
-import { getFilename } from "@opencode-ai/util/path"
-import { type AgentPartInput, type FilePartInput, type Part, type TextPartInput } from "@opencode-ai/sdk/v2/client"
+import { getFilename } from "@f5xc-salesdemos/util/path"
+import { type AgentPartInput, type FilePartInput, type Part, type TextPartInput } from "@f5xc-salesdemos/sdk/v2/client"
 import type { FileSelection } from "@/context/file"
 import { encodeFilePath } from "@/context/file/path"
 import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt } from "@/context/prompt"

@@ -1,13 +1,13 @@
 ---
 title: LSP serveri
-description: OpenCode se integriše sa vašim LSP serverima.
+description: xcsh se integriše sa vašim LSP serverima.
 ---
 
-OpenCode se integriše sa vašim Language Server Protocol (LSP) serverima kako bi pomogao LLM-u u interakciji s kodnom bazom. Koristi dijagnostiku za slanje povratnih informacija modelu.
+xcsh se integriše sa vašim Language Server Protocol (LSP) serverima kako bi pomogao LLM-u u interakciji s kodnom bazom. Koristi dijagnostiku za slanje povratnih informacija modelu.
 
 ## Ugrađeni
 
-OpenCode dolazi sa nekoliko ugrađenih LSP servera za popularne jezike:
+xcsh dolazi sa nekoliko ugrađenih LSP servera za popularne jezike:
 
 | LSP server         | Ekstenzije                                                          | Zahtjevi                                                 |
 | ------------------ | ------------------------------------------------------------------- | -------------------------------------------------------- |
@@ -54,7 +54,7 @@ Možete onemogućiti automatska preuzimanja LSP servera tako što ćete postavit
 
 ## Kako radi
 
-Kada opencode otvori fajl, on:
+Kada xcsh otvori fajl, on:
 
 1. Provjerava ekstenziju datoteke u odnosu na sve omogućene LSP servere.
 2. Pokreće odgovarajući LSP server ako već nije pokrenut.
@@ -63,11 +63,11 @@ Kada opencode otvori fajl, on:
 
 ## Konfiguracija
 
-Možete prilagoditi LSP servere kroz `lsp` odjeljak u vašoj opencode konfiguraciji.
+Možete prilagoditi LSP servere kroz `lsp` odjeljak u vašoj xcsh konfiguraciji.
 
-```json title="opencode.json"
+```json title="xcsh.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "lsp": {}
 }
 ```
@@ -90,9 +90,9 @@ Pogledajmo neke primjere.
 
 Koristite svojstvo `env` za postavljanje varijabli okruženja prilikom pokretanja LSP servera:
 
-```json title="opencode.json" {5-7}
+```json title="xcsh.json" {5-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "lsp": {
     "rust": {
       "env": {
@@ -109,9 +109,9 @@ Koristite svojstvo `env` za postavljanje varijabli okruženja prilikom pokretanj
 
 Koristite svojstvo `initialization` da prosledite opcije inicijalizacije na LSP server. Ovo su postavke specifične za server poslane tokom LSP `initialize` zahtjeva:
 
-```json title="opencode.json" {5-9}
+```json title="xcsh.json" {5-9}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "lsp": {
     "typescript": {
       "initialization": {
@@ -134,18 +134,18 @@ Opcije inicijalizacije razlikuju se od LSP servera. Provjerite dokumentaciju va�
 
 Da biste onemogućili **sve** LSP servere globalno, postavite `lsp` na `false`:
 
-```json title="opencode.json" {3}
+```json title="xcsh.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "lsp": false
 }
 ```
 
 Da onemogućite **specifičan** LSP server, postavite `disabled` na `true`:
 
-```json title="opencode.json" {5}
+```json title="xcsh.json" {5}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "lsp": {
     "typescript": {
       "disabled": true
@@ -160,9 +160,9 @@ Da onemogućite **specifičan** LSP server, postavite `disabled` na `true`:
 
 Možete dodati prilagođene LSP servere navodeći ekstenzije naredbe i datoteke:
 
-```json title="opencode.json" {4-7}
+```json title="xcsh.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/config.json",
   "lsp": {
     "custom-lsp": {
       "command": ["custom-lsp-server", "--stdio"],

@@ -226,7 +226,7 @@ export default function Home() {
       <Meta name="twitter:title" content={i18n.t("go.title")} />
       <Meta name="twitter:description" content={i18n.t("go.meta.description")} />
       <Meta name="twitter:image" content="/social-share-black.png" />
-      <Meta name="opencode:auth" content={workspaceID() ? "true" : "false"} />
+      <Meta name="xcsh:auth" content={workspaceID() ? "true" : "false"} />
 
       <div data-component="container">
         <Header go hideGetStarted />

@@ -87,7 +87,7 @@ export const dict = {
 
   "temp.title": "OpenCode | Für das Terminal gebauter AI-Coding-Agent",
   "temp.hero.title": "Der für das Terminal gebaute AI-Coding-Agent",
-  "temp.zen": "OpenCode Zen",
+  "temp.zen": "xcsh Zen",
   "temp.getStarted": "Loslegen",
   "temp.feature.native.title": "Native TUI",
   "temp.feature.native.body": "Eine reaktionsschnelle, native, thematisierbare Terminal-UI",
@@ -190,12 +190,12 @@ export const dict = {
     "Zen gibt dir Zugriff auf ein handverlesenes Set an AI-Modellen, die OpenCode speziell für Coding-Agents getestet und bewertet hat. Keine Sorge wegen inkonsistenter Leistung und Qualität bei verschiedenen Anbietern – nutze validierte Modelle, die funktionieren.",
   "home.zenCta.link": "Erfahre mehr über Zen",
 
-  "zen.title": "OpenCode Zen | Ein kuratiertes Set zuverlässiger, optimierter Modelle für Coding-Agents",
+  "zen.title": "xcsh Zen | Ein kuratiertes Set zuverlässiger, optimierter Modelle für Coding-Agents",
   "zen.hero.title": "Zuverlässige, optimierte Modelle für Coding-Agents",
   "zen.hero.body":
     "Zen gibt dir Zugriff auf ein kuratiertes Set an AI-Modellen, die OpenCode speziell für Coding-Agents getestet und bewertet hat. Keine Sorge wegen inkonsistenter Leistung und Qualität – nutze validierte Modelle, die funktionieren.",
 
-  "zen.faq.q1": "Was ist OpenCode Zen?",
+  "zen.faq.q1": "Was ist xcsh Zen?",
   "zen.faq.a1":
     "Zen ist ein kuratiertes Set an AI-Modellen, getestet und bewertet für Coding-Agents, erstellt vom Team hinter OpenCode.",
   "zen.faq.q2": "Was macht Zen genauer?",
@@ -642,7 +642,7 @@ export const dict = {
   "workspace.lite.subscription.resetsIn": "Setzt zurück in",
   "workspace.lite.subscription.useBalance": "Nutze dein verfügbares Guthaben, nachdem die Nutzungslimits erreicht sind",
   "workspace.lite.subscription.selectProvider":
-    'Wähle "OpenCode Go" als Anbieter in deiner opencode-Konfiguration, um Go-Modelle zu verwenden.',
+    'Wähle "OpenCode Go" als Anbieter in deiner xcsh-Konfiguration, um Go-Modelle zu verwenden.',
   "workspace.lite.black.message":
     "Du hast derzeit OpenCode Black abonniert oder stehst auf der Warteliste. Bitte kündige zuerst, wenn du zu Go wechseln möchtest.",
   "workspace.lite.other.message":

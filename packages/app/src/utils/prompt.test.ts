@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { Part } from "@opencode-ai/sdk/v2"
+import type { Part } from "@f5xc-salesdemos/sdk/v2"
 import { extractPromptFromParts } from "./prompt"
 
 describe("extractPromptFromParts", () => {

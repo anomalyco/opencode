@@ -9,7 +9,7 @@ import {
 } from "../actions"
 import { sessionItemSelector, inlineInputSelector } from "../selectors"
 
-const shareDisabled = process.env.OPENCODE_DISABLE_SHARE === "true" || process.env.OPENCODE_DISABLE_SHARE === "1"
+const shareDisabled = process.env.XCSH_DISABLE_SHARE === "true" || process.env.XCSH_DISABLE_SHARE === "1"
 
 type Sdk = Parameters<typeof withSession>[0]
 
@@ -126,7 +126,7 @@ test("session can be deleted via header menu", async ({ page, project }) => {
 })
 
 test("session can be shared and unshared via header button", async ({ page, project }) => {
-  test.skip(shareDisabled, "Share is disabled in this environment (OPENCODE_DISABLE_SHARE).")
+  test.skip(shareDisabled, "Share is disabled in this environment (XCSH_DISABLE_SHARE).")
 
   const stamp = Date.now()
   const title = `e2e share test ${stamp}`

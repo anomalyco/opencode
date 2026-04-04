@@ -3,11 +3,11 @@ title: Tuş atamaları
 description: Tuş bağlantılarınızı özelleştirin.
 ---
 
-opencode, `tui.json` aracılığıyla özelleştirebileceğiniz bir tuş bağlantıları listesine sahiptir.
+xcsh, `tui.json` aracılığıyla özelleştirebileceğiniz bir tuş bağlantıları listesine sahiptir.
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/tui.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -108,7 +108,7 @@ opencode, `tui.json` aracılığıyla özelleştirebileceğiniz bir tuş bağlan
 
 ## Leader tuşu
 
-opencode çoğu tuş ataması için `leader` anahtarını kullanır. Bu, terminalinizdeki çakışmaları önler.
+xcsh çoğu tuş ataması için `leader` anahtarını kullanır. Bu, terminalinizdeki çakışmaları önler.
 
 Varsayılan olarak `ctrl+x` lider tuştur ve çoğu eylem önce lider tuşa, ardından kısayola basmanızı gerektirir. Örneğin, yeni bir oturum başlatmak için önce `ctrl+x` tuşuna, ardından `n` tuşuna basarsınız.
 
@@ -122,7 +122,7 @@ Anahtarı yapılandırmanıza "none" değeriyle ekleyerek bir tuş atamasını d
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/tui.json",
   "keybinds": {
     "session_compact": "none"
   }
@@ -133,7 +133,7 @@ Anahtarı yapılandırmanıza "none" değeriyle ekleyerek bir tuş atamasını d
 
 ## Masaüstü istemi kısayolları
 
-opencode masaüstü uygulaması bilgi istemi girişi, metni düzenlemek için yaygın Readline/Emacs tarzı kısayolları destekler. Bunlar yerleşiktir ve şu anda `opencode.json` aracılığıyla yapılandırılamaz.
+xcsh masaüstü uygulaması bilgi istemi girişi, metni düzenlemek için yaygın Readline/Emacs tarzı kısayolları destekler. Bunlar yerleşiktir ve şu anda `xcsh.json` aracılığıyla yapılandırılamaz.
 
 | Shortcut | Action                                              |
 | -------- | --------------------------------------------------- |

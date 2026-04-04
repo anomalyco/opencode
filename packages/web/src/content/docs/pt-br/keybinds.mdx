@@ -3,11 +3,11 @@ title: Atalhos de Teclado
 description: Personalize seus atalhos de teclado.
 ---
 
-O opencode tem uma lista de atalhos de teclado que você pode personalizar através de `tui.json`.
+O xcsh tem uma lista de atalhos de teclado que você pode personalizar através de `tui.json`.
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/tui.json",
   "keybinds": {
     "leader": "ctrl+x",
     "app_exit": "ctrl+c,ctrl+d,<leader>q",
@@ -108,7 +108,7 @@ O opencode tem uma lista de atalhos de teclado que você pode personalizar atrav
 
 ## Tecla líder
 
-O opencode usa uma tecla `leader` para a maioria dos atalhos de teclado. Isso evita conflitos no seu terminal.
+O xcsh usa uma tecla `leader` para a maioria dos atalhos de teclado. Isso evita conflitos no seu terminal.
 
 Por padrão, `ctrl+x` é a tecla líder e a maioria das ações requer que você primeiro pressione a tecla líder e depois o atalho. Por exemplo, para iniciar uma nova sessão, você primeiro pressiona `ctrl+x` e depois pressiona `n`.
 
@@ -122,7 +122,7 @@ Você pode desativar um atalho adicionando a tecla à sua configuração com um 
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://f5xc-salesdemos.github.io/xcsh/tui.json",
   "keybinds": {
     "session_compact": "none"
   }
@@ -133,7 +133,7 @@ Você pode desativar um atalho adicionando a tecla à sua configuração com um 
 
 ## Atalhos do prompt do desktop
 
-O prompt de entrada do aplicativo desktop opencode suporta atalhos comuns de estilo Readline/Emacs para edição de texto. Estes são embutidos e atualmente não são configuráveis via `opencode.json`.
+O prompt de entrada do aplicativo desktop xcsh suporta atalhos comuns de estilo Readline/Emacs para edição de texto. Estes são embutidos e atualmente não são configuráveis via `xcsh.json`.
 
 | Atalho   | Ação                                             |
 | -------- | ------------------------------------------------ |

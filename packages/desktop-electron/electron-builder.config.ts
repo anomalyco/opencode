@@ -21,13 +21,13 @@ async function signWindows(configuration: { path: string }) {
 }
 
 const channel = (() => {
-  const raw = process.env.OPENCODE_CHANNEL
+  const raw = process.env.XCSH_CHANNEL
   if (raw === "dev" || raw === "beta" || raw === "prod") return raw
   return "dev"
 })()
 
 const getBase = (): Configuration => ({
-  artifactName: "opencode-electron-${os}-${arch}.${ext}",
+  artifactName: "xcsh-electron-${os}-${arch}.${ext}",
   directories: {
     output: "dist",
     buildResources: "resources",
@@ -37,7 +37,7 @@ const getBase = (): Configuration => ({
     {
       from: "resources/",
       to: "",
-      filter: ["opencode-cli*"],
+      filter: ["xcsh-cli*"],
     },
     {
       from: "native/",
@@ -60,7 +60,7 @@ const getBase = (): Configuration => ({
   },
   protocols: {
     name: "OpenCode",
-    schemes: ["opencode"],
+    schemes: ["xcsh"],
   },
   win: {
     icon: `resources/icons/icon.ico`,
@@ -89,29 +89,29 @@ function getConfig() {
     case "dev": {
       return {
         ...base,
-        appId: "ai.opencode.desktop.dev",
+        appId: "ai.xcsh.desktop.dev",
         productName: "OpenCode Dev",
-        rpm: { packageName: "opencode-dev" },
+        rpm: { packageName: "xcsh-dev" },
       }
     }
     case "beta": {
       return {
         ...base,
-        appId: "ai.opencode.desktop.beta",
-        productName: "OpenCode Beta",
-        protocols: { name: "OpenCode Beta", schemes: ["opencode"] },
-        publish: { provider: "github", owner: "anomalyco", repo: "opencode-beta", channel: "latest" },
-        rpm: { packageName: "opencode-beta" },
+        appId: "ai.xcsh.desktop.beta",
+        productName: "xcsh Beta",
+        protocols: { name: "xcsh Beta", schemes: ["xcsh"] },
+        publish: { provider: "github", owner: "anomalyco", repo: "xcsh-beta", channel: "latest" },
+        rpm: { packageName: "xcsh-beta" },
       }
     }
     case "prod": {
       return {
         ...base,
-        appId: "ai.opencode.desktop",
-        productName: "OpenCode",
-        protocols: { name: "OpenCode", schemes: ["opencode"] },
-        publish: { provider: "github", owner: "anomalyco", repo: "opencode", channel: "latest" },
-        rpm: { packageName: "opencode" },
+        appId: "ai.xcsh.desktop",
+        productName: "xcsh",
+        protocols: { name: "xcsh", schemes: ["xcsh"] },
+        publish: { provider: "github", owner: "anomalyco", repo: "xcsh", channel: "latest" },
+        rpm: { packageName: "xcsh" },
       }
     }
   }

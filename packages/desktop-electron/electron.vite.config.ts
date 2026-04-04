@@ -1,8 +1,8 @@
 import { defineConfig } from "electron-vite"
-import appPlugin from "@opencode-ai/app/vite"
+import appPlugin from "@f5xc-salesdemos/app/vite"
 
 const channel = (() => {
-  const raw = process.env.OPENCODE_CHANNEL
+  const raw = process.env.XCSH_CHANNEL
   if (raw === "dev" || raw === "beta" || raw === "prod") return raw
   return "dev"
 })()
@@ -10,7 +10,7 @@ const channel = (() => {
 export default defineConfig({
   main: {
     define: {
-      "import.meta.env.OPENCODE_CHANNEL": JSON.stringify(channel),
+      "import.meta.env.XCSH_CHANNEL": JSON.stringify(channel),
     },
     build: {
       rollupOptions: {

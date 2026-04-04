@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/sdk",
+  "name": "@f5xc-salesdemos/sdk",
   "version": "1.3.13",
   "type": "module",
   "license": "MIT",

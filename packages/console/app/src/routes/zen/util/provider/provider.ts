@@ -1,4 +1,4 @@
-import { ZenData } from "@opencode-ai/console-core/model.js"
+import { ZenData } from "@f5xc-salesdemos/console-core/model.js"
 import {
   fromAnthropicChunk,
   fromAnthropicRequest,

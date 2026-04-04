@@ -15,7 +15,7 @@ permissions:
   issues: write
 
 env:
-  UPSTREAM_REPO: https://github.com/anomalyco/opencode.git
+  UPSTREAM_REPO: https://github.com/anomalyco/xcsh.git
   UPSTREAM_BRANCH: dev
   FORK_BRANCH: dev
   SYNC_ISSUE_LABEL: upstream-sync
@@ -66,7 +66,7 @@ jobs:
         id: canary
         if: steps.divergence.outputs.status == 'behind'
         run: |
-          if git show upstream/$UPSTREAM_BRANCH:packages/opencode/src/provider/transform.ts | grep -q "$BUGFIX_CANARY"; then
+          if git show upstream/$UPSTREAM_BRANCH:packages/xcsh/src/provider/transform.ts | grep -q "$BUGFIX_CANARY"; then
             echo "needed=true" >> "$GITHUB_OUTPUT"
             echo "🐛 Bugfix still needed — upstream still uses exact-match empty check"
           else
@@ -79,11 +79,11 @@ jobs:
         if: steps.divergence.outputs.status == 'behind'
         run: |
           files=$(git diff HEAD..upstream/$UPSTREAM_BRANCH --name-only -- \
-            packages/opencode/src/provider/transform.ts \
-            packages/opencode/src/session/llm.ts \
-            packages/opencode/src/session/message-v2.ts \
-            packages/opencode/test/provider/transform.test.ts \
-            packages/opencode/src/session/processor.ts)
+            packages/xcsh/src/provider/transform.ts \
+            packages/xcsh/src/session/llm.ts \
+            packages/xcsh/src/session/message-v2.ts \
+            packages/xcsh/test/provider/transform.test.ts \
+            packages/xcsh/src/session/processor.ts)
           if [ -n "$files" ]; then
             echo "touched=true" >> "$GITHUB_OUTPUT"
             echo "files<<FILELIST" >> "$GITHUB_OUTPUT"
@@ -151,7 +151,7 @@ jobs:
       - name: Run bugfix tests
         id: tests
         if: steps.rebase.outputs.result == 'success' && steps.verify_commits.outputs.valid == 'true'
-        working-directory: packages/opencode
+        working-directory: packages/xcsh
         run: |
           if bun test test/provider/transform.test.ts --timeout 60000; then
             echo "result=pass" >> "$GITHUB_OUTPUT"
@@ -254,8 +254,8 @@ jobs:
           git branch dev-backup-\$(date +%Y-%m-%d) dev
           git rebase upstream/dev
           # resolve conflicts
-          bun test test/provider/transform.test.ts  # from packages/opencode
-          bun typecheck                              # from packages/opencode
+          bun test test/provider/transform.test.ts  # from packages/xcsh
+          bun typecheck                              # from packages/xcsh
           git push origin dev --force-with-lease
           \`\`\`
 

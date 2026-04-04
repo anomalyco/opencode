@@ -96,8 +96,8 @@ async function expectPermissionOpen(page: any) {
 async function todoDock(page: any, sessionID: string) {
   await page.addInitScript(() => {
     const win = window as ComposerWindow
-    win.__opencode_e2e = {
-      ...win.__opencode_e2e,
+    win.__xcsh_e2e = {
+      ...win.__xcsh_e2e,
       composer: {
         enabled: true,
         sessions: {},
@@ -109,7 +109,7 @@ async function todoDock(page: any, sessionID: string) {
     await page.evaluate(
       (input: { event: string; sessionID: string; driver: ComposerDriverState | undefined }) => {
         const win = window as ComposerWindow
-        const composer = win.__opencode_e2e?.composer
+        const composer = win.__xcsh_e2e?.composer
         if (!composer?.enabled) throw new Error("Composer e2e driver is not enabled")
         composer.sessions ??= {}
         const prev = composer.sessions[input.sessionID] ?? {}
@@ -134,7 +134,7 @@ async function todoDock(page: any, sessionID: string) {
   const read = () =>
     page.evaluate((sessionID: string) => {
       const win = window as ComposerWindow
-      return win.__opencode_e2e?.composer?.sessions?.[sessionID]?.probe ?? null
+      return win.__xcsh_e2e?.composer?.sessions?.[sessionID]?.probe ?? null
     }, sessionID) as Promise<ComposerProbeState | null>
 
   const api = {
@@ -403,7 +403,7 @@ test("blocked permission flow supports allow once", async ({ page, project }) =>
           id: "per_e2e_once",
           sessionID: session.id,
           permission: "bash",
-          patterns: ["/tmp/opencode-e2e-perm-once"],
+          patterns: ["/tmp/xcsh-e2e-perm-once"],
           metadata: { description: "Need permission for command" },
         },
         undefined,
@@ -436,7 +436,7 @@ test("blocked permission flow supports reject", async ({ page, project }) => {
           id: "per_e2e_reject",
           sessionID: session.id,
           permission: "bash",
-          patterns: ["/tmp/opencode-e2e-perm-reject"],
+          patterns: ["/tmp/xcsh-e2e-perm-reject"],
         },
         undefined,
         async (state) => {
@@ -468,7 +468,7 @@ test("blocked permission flow supports allow always", async ({ page, project }) 
           id: "per_e2e_always",
           sessionID: session.id,
           permission: "bash",
-          patterns: ["/tmp/opencode-e2e-perm-always"],
+          patterns: ["/tmp/xcsh-e2e-perm-always"],
           metadata: { description: "Need permission for command" },
         },
         undefined,
@@ -563,7 +563,7 @@ test("child session permission request blocks parent dock and supports allow onc
             id: "per_e2e_child",
             sessionID: child.id,
             permission: "bash",
-            patterns: ["/tmp/opencode-e2e-perm-child"],
+            patterns: ["/tmp/xcsh-e2e-perm-child"],
             metadata: { description: "Need child permission" },
           },
           { child },

@@ -1,8 +1,8 @@
 import { test as base, expect, type Page } from "@playwright/test"
 import { ManagedRuntime } from "effect"
 import type { E2EWindow } from "../src/testing/terminal"
-import type { Item, Reply, Usage } from "../../opencode/test/lib/llm-server"
-import { TestLLMServer } from "../../opencode/test/lib/llm-server"
+import type { Item, Reply, Usage } from "../../xcsh/test/lib/llm-server"
+import { TestLLMServer } from "../../xcsh/test/lib/llm-server"
 import { startBackend } from "./backend"
 import {
   healthPhase,
@@ -73,10 +73,10 @@ export const settingsKey = "settings.v3"
 
 const seedModel = (() => {
   const [providerID = "opencode", modelID = "big-pickle"] = (
-    process.env.OPENCODE_E2E_MODEL ?? "opencode/big-pickle"
+    process.env.XCSH_E2E_MODEL ?? "opencode/big-pickle"
   ).split("/")
   return {
-    providerID: providerID || "opencode",
+    providerID: providerID || "xcsh",
     modelID: modelID || "big-pickle",
   }
 })()
@@ -104,7 +104,7 @@ async function promptSend(page: Page) {
   return page
     .evaluate(() => {
       const win = window as E2EWindow
-      const sent = win.__opencode_e2e?.prompt?.sent
+      const sent = win.__xcsh_e2e?.prompt?.sent
       return {
         started: sent?.started ?? 0,
         count: sent?.count ?? 0,
@@ -378,7 +378,7 @@ function makeProject(
     if (input.noReply) {
       const cur = need()
       const state = await page.evaluate(() => {
-        const model = (window as E2EWindow).__opencode_e2e?.model?.current
+        const model = (window as E2EWindow).__xcsh_e2e?.model?.current
         if (!model) return null
         return {
           dir: model.dir,
@@ -548,7 +548,7 @@ async function seedStorage(
       extra: string[]
       model: { providerID: string; modelID: string }
     }) => {
-      const key = "opencode.global.dat:server"
+      const key = "xcsh.global.dat:server"
       const raw = localStorage.getItem(key)
       const parsed = (() => {
         if (!raw) return undefined
@@ -586,16 +586,16 @@ async function seedStorage(
       }
 
       localStorage.setItem(key, JSON.stringify({ list: nextList, projects: next, lastProject }))
-      localStorage.setItem("opencode.settings.dat:defaultServerUrl", args.serverUrl)
+      localStorage.setItem("xcsh.settings.dat:defaultServerUrl", args.serverUrl)
 
       const win = window as E2EWindow
-      win.__opencode_e2e = {
-        ...win.__opencode_e2e,
+      win.__xcsh_e2e = {
+        ...win.__xcsh_e2e,
         model: { enabled: true },
         prompt: { enabled: true },
         terminal: { enabled: true, terminals: {} },
       }
-      localStorage.setItem("opencode.global.dat:model", JSON.stringify({ recent: [args.model], user: [], variant: {} }))
+      localStorage.setItem("xcsh.global.dat:model", JSON.stringify({ recent: [args.model], user: [], variant: {} }))
     },
     { directory: input.directory, serverUrl: origin, extra: input.extra ?? [], model: input.model ?? seedModel },
   )

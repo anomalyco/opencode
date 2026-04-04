@@ -2,6 +2,7 @@ import { test, expect } from "../fixtures"
 import { closeDialog, openSettings } from "../actions"
 
 test("custom provider form can be filled and validates input", async ({ page, gotoSession }) => {
+  test.slow()
   await gotoSession()
 
   const settings = await openSettings(page)

@@ -120,13 +120,13 @@ export const dict = {
   "provider.connect.apiKey.label": "مفتاح واجهة برمجة تطبيقات {{provider}}",
   "provider.connect.apiKey.placeholder": "مفتاح API",
   "provider.connect.apiKey.required": "مفتاح API مطلوب",
-  "provider.connect.opencodeZen.line1":
-    "يمنحك OpenCode Zen الوصول إلى مجموعة مختارة من النماذج الموثوقة والمحسنة لوكلاء البرمجة.",
-  "provider.connect.opencodeZen.line2":
+  "provider.connect.xcshZen.line1":
+    "يمنحك xcsh Zen الوصول إلى مجموعة مختارة من النماذج الموثوقة والمحسنة لوكلاء البرمجة.",
+  "provider.connect.xcshZen.line2":
     "باستخدام مفتاح API واحد، ستحصل على إمكانية الوصول إلى نماذج مثل Claude و GPT و Gemini و GLM والمزيد.",
-  "provider.connect.opencodeZen.visit.prefix": "قم بزيارة ",
-  "provider.connect.opencodeZen.visit.link": "opencode.ai/zen",
-  "provider.connect.opencodeZen.visit.suffix": " للحصول على مفتاح API الخاص بك.",
+  "provider.connect.xcshZen.visit.prefix": "قم بزيارة ",
+  "provider.connect.xcshZen.visit.link": "f5xc-salesdemos.github.io/xcsh/zen",
+  "provider.connect.xcshZen.visit.suffix": " للحصول على مفتاح API الخاص بك.",
   "provider.connect.oauth.code.visit.prefix": "قم بزيارة ",
   "provider.connect.oauth.code.visit.link": "هذا الرابط",
   "provider.connect.oauth.code.visit.suffix":
@@ -272,7 +272,7 @@ export const dict = {
   "dialog.mcp.description": "{{enabled}} من {{total}} مفعل",
   "dialog.mcp.empty": "لم يتم تكوين MCPs",
   "dialog.lsp.empty": "تم الكشف تلقائيًا عن LSPs من أنواع الملفات",
-  "dialog.plugins.empty": "الإضافات المكونة في opencode.json",
+  "dialog.plugins.empty": "الإضافات المكونة في xcsh.json",
   "mcp.status.connected": "متصل",
   "mcp.status.failed": "فشل",
   "mcp.status.needs_auth": "يحتاج إلى مصادقة",
@@ -420,7 +420,7 @@ export const dict = {
   "error.chain.responseBody": "نص الاستجابة:\n{{body}}",
   "error.chain.didYouMean": "هل كنت تعني: {{suggestions}}",
   "error.chain.modelNotFound": "النموذج غير موجود: {{provider}}/{{model}}",
-  "error.chain.checkConfig": "تحقق من أسماء الموفر/النموذج في التكوين (opencode.json)",
+  "error.chain.checkConfig": "تحقق من أسماء الموفر/النموذج في التكوين (xcsh.json)",
   "error.chain.mcpFailed": 'فشل خادم MCP "{{name}}". لاحظ أن OpenCode لا يدعم مصادقة MCP بعد.',
   "error.chain.providerAuthFailed": "فشلت مصادقة الموفر ({{provider}}): {{message}}",
   "error.chain.providerInitFailed": 'فشل تهيئة الموفر "{{provider}}". تحقق من بيانات الاعتماد والتكوين.',
