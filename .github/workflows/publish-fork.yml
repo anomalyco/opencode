@@ -205,11 +205,29 @@ jobs:
           echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
           version="${{ steps.version.outputs.version }}"
 
+          # Resolve catalog:/workspace: deps and set fork version before publish
+          bun -e "
+            const resolve = async (pkgPath, ver, sdkVer) => {
+              const root = JSON.parse(await Bun.file('package.json').text())
+              const catalog = root.workspaces?.catalog || {}
+              const p = JSON.parse(await Bun.file(pkgPath).text())
+              p.version = ver
+              for (const section of ['dependencies', 'devDependencies', 'peerDependencies']) {
+                if (!p[section]) continue
+                for (const [k, v] of Object.entries(p[section])) {
+                  if (v === 'catalog:') p[section][k] = catalog[k] || '*'
+                  if (typeof v === 'string' && v.startsWith('workspace:')) p[section][k] = sdkVer || '*'
+                }
+              }
+              await Bun.write(pkgPath, JSON.stringify(p, null, 2))
+            }
+            await resolve('packages/sdk/js/package.json', '$version', null)
+            await resolve('packages/plugin/package.json', '$version', '$version')
+          "
+
           cd packages/sdk/js
-          bun -e "const p=JSON.parse(await Bun.file('package.json').text()); p.version='$version'; await Bun.write('package.json', JSON.stringify(p,null,2))"
           bun ./script/publish.ts
           cd ../../..
 
           cd packages/plugin
-          bun -e "const p=JSON.parse(await Bun.file('package.json').text()); p.version='$version'; await Bun.write('package.json', JSON.stringify(p,null,2))"
           bun ./script/publish.ts
