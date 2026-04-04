@@ -131,8 +131,8 @@ export namespace Project {
         Effect.catch(() => Effect.succeed({ code: 1, text: "", stderr: "" } satisfies GitResult)),
       )
 
-      const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
-        Effect.sync(() => Database.use(fn))
+      const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T | Promise<T>) =>
+        Effect.promise(() => Database.use(fn))
 
       const emitUpdated = (data: Info) =>
         Effect.sync(() =>
@@ -475,8 +475,8 @@ export namespace Project {
     return runPromise((svc) => svc.discover(input))
   }
 
-  export function list() {
-    return Database.use((db) =>
+  export async function list() {
+    return await Database.use((db) =>
       db
         .select()
         .from(ProjectTable)
@@ -485,14 +485,14 @@ export namespace Project {
     )
   }
 
-  export function get(id: ProjectID): Info | undefined {
-    const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
+  export async function get(id: ProjectID): Promise<Info | undefined> {
+    const row = await Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
     if (!row) return undefined
     return fromRow(row)
   }
 
-  export function setInitialized(id: ProjectID) {
-    Database.use((db) =>
+  export async function setInitialized(id: ProjectID) {
+    await Database.use((db) =>
       db.update(ProjectTable).set({ time_initialized: Date.now() }).where(eq(ProjectTable.id, id)).run(),
     )
   }

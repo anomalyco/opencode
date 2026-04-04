@@ -184,13 +184,13 @@ export namespace SessionProcessor {
                 metadata: value.providerMetadata,
               } satisfies MessageV2.ToolPart)
 
-              const parts = MessageV2.parts(ctx.assistantMessage.id)
+              const parts = yield* Effect.promise(() => MessageV2.parts(ctx.assistantMessage.id))
               const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
 
               if (
                 recentParts.length !== DOOM_LOOP_THRESHOLD ||
                 !recentParts.every(
-                  (part) =>
+                  (part: MessageV2.Part) =>
                     part.type === "tool" &&
                     part.tool === value.toolName &&
                     part.state.status !== "pending" &&
@@ -396,7 +396,7 @@ export namespace SessionProcessor {
           }
           ctx.reasoningMap = {}
 
-          const parts = MessageV2.parts(ctx.assistantMessage.id)
+          const parts = yield* Effect.promise(() => MessageV2.parts(ctx.assistantMessage.id))
           for (const part of parts) {
             if (part.type !== "tool" || part.state.status === "completed" || part.state.status === "error") continue
             yield* session.updatePart({

@@ -88,7 +88,7 @@ async function getCurrentProject(): Promise<Project.Info> {
 }
 
 async function getAllSessions(): Promise<Session.Info[]> {
-  const rows = Database.use((db) => db.select().from(SessionTable).all())
+  const rows = await Database.use((db) => db.select().from(SessionTable).all())
   return rows.map((row) => Session.fromRow(row))
 }
 

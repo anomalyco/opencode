@@ -21,14 +21,17 @@ describe("Session.listGlobal", () => {
       fn: async () => Session.create({ title: "second-session" }),
     })
 
-    const sessions = [...Session.listGlobal({ limit: 200 })]
+    const sessions = []
+    for await (const s of Session.listGlobal({ limit: 200 })) {
+      sessions.push(s)
+    }
     const ids = sessions.map((session) => session.id)
 
     expect(ids).toContain(firstSession.id)
     expect(ids).toContain(secondSession.id)
 
-    const firstProject = Project.get(firstSession.projectID)
-    const secondProject = Project.get(secondSession.projectID)
+    const firstProject = await Project.get(firstSession.projectID)
+    const secondProject = await Project.get(secondSession.projectID)
 
     const firstItem = sessions.find((session) => session.id === firstSession.id)
     const secondItem = sessions.find((session) => session.id === secondSession.id)
@@ -52,12 +55,18 @@ describe("Session.listGlobal", () => {
       fn: async () => Session.setArchived({ sessionID: archived.id, time: Date.now() }),
     })
 
-    const sessions = [...Session.listGlobal({ limit: 200 })]
+    const sessions = []
+    for await (const s of Session.listGlobal({ limit: 200 })) {
+      sessions.push(s)
+    }
     const ids = sessions.map((session) => session.id)
 
     expect(ids).not.toContain(archived.id)
 
-    const allSessions = [...Session.listGlobal({ limit: 200, archived: true })]
+    const allSessions = []
+    for await (const s of Session.listGlobal({ limit: 200, archived: true })) {
+      allSessions.push(s)
+    }
     const allIds = allSessions.map((session) => session.id)
 
     expect(allIds).toContain(archived.id)
@@ -76,11 +85,17 @@ describe("Session.listGlobal", () => {
       fn: async () => Session.create({ title: "page-two" }),
     })
 
-    const page = [...Session.listGlobal({ directory: tmp.path, limit: 1 })]
+    const page = []
+    for await (const s of Session.listGlobal({ directory: tmp.path, limit: 1 })) {
+      page.push(s)
+    }
     expect(page.length).toBe(1)
     expect(page[0].id).toBe(second.id)
 
-    const next = [...Session.listGlobal({ directory: tmp.path, limit: 10, cursor: page[0].time.updated })]
+    const next = []
+    for await (const s of Session.listGlobal({ directory: tmp.path, limit: 10, cursor: page[0].time.updated })) {
+      next.push(s)
+    }
     const ids = next.map((session) => session.id)
 
     expect(ids).toContain(first.id)

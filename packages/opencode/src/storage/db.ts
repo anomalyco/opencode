@@ -1,6 +1,7 @@
 import { type SQLiteBunDatabase } from "drizzle-orm/bun-sqlite"
-import { migrate } from "drizzle-orm/bun-sqlite/migrator"
+import { migrate as migrateSqlite } from "drizzle-orm/bun-sqlite/migrator"
 import { type SQLiteTransaction } from "drizzle-orm/sqlite-core"
+import { type PostgresJsDatabase } from "drizzle-orm/postgres-js"
 export * from "drizzle-orm"
 import { Context } from "../util/context"
 import { lazy } from "../util/lazy"
@@ -14,7 +15,8 @@ import { Flag } from "../flag/flag"
 import { CHANNEL } from "../installation/meta"
 import { InstanceState } from "@/effect/instance-state"
 import { iife } from "@/util/iife"
-import { init } from "#db"
+import { init as initSqlite } from "#db"
+import { DIALECT } from "./dialect-detect"
 
 declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number; name: string }[] | undefined
 
@@ -36,6 +38,7 @@ export namespace Database {
   }
 
   export const Path = iife(() => {
+    if (Flag.OPENCODE_DATABASE_URL) return Flag.OPENCODE_DATABASE_URL
     if (Flag.OPENCODE_DB) {
       if (Flag.OPENCODE_DB === ":memory:" || path.isAbsolute(Flag.OPENCODE_DB)) return Flag.OPENCODE_DB
       return path.join(Global.Path.data, Flag.OPENCODE_DB)
@@ -45,6 +48,9 @@ export namespace Database {
 
   export type Transaction = SQLiteTransaction<"sync", void>
 
+  // Typed as SQLiteBunDatabase for TypeScript compatibility with SQLite-typed schemas.
+  // At runtime, may be a PostgresJsDatabase when DIALECT is "postgres" — the Drizzle
+  // query builder API is structurally compatible, so this is safe.
   type Client = SQLiteBunDatabase
 
   type Journal = { sql: string; timestamp: number; name: string }[]
@@ -63,6 +69,7 @@ export namespace Database {
   }
 
   function migrations(dir: string): Journal {
+    if (!existsSync(dir)) return []
     const dirs = readdirSync(dir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name)
@@ -82,10 +89,24 @@ export namespace Database {
     return sql.sort((a, b) => a.timestamp - b.timestamp)
   }
 
-  export const Client = lazy(() => {
-    log.info("opening database", { path: Path })
+  async function initPostgres(url: string): Promise<Client> {
+    const { init } = await import("./db.pg")
+    const db = init(url)
 
-    const db = init(Path)
+    // Apply Postgres migrations from folder
+    const migrationsDir = path.join(import.meta.dirname, "../../migration-pg")
+    if (existsSync(migrationsDir)) {
+      const { migrate } = await import("drizzle-orm/postgres-js/migrator")
+      log.info("applying postgres migrations", { dir: migrationsDir })
+      await migrate(db as any, { migrationsFolder: migrationsDir })
+    }
+
+    // Cast to Client (SQLiteBunDatabase) for type compat — safe at runtime
+    return db as unknown as Client
+  }
+
+  function initSqliteClient(dbPath: string): Client {
+    const db = initSqlite(dbPath)
 
     db.run("PRAGMA journal_mode = WAL")
     db.run("PRAGMA synchronous = NORMAL")
@@ -109,15 +130,48 @@ export namespace Database {
           item.sql = "select 1;"
         }
       }
-      migrate(db, entries)
+      migrateSqlite(db as SQLiteBunDatabase, entries)
     }
 
     return db
+  }
+
+  // Postgres-only client state
+  let _pgClient: Client | undefined
+  let _pgClientPromise: Promise<Client> | undefined
+
+  /** Synchronous SQLite client accessor. */
+  export const Client = lazy(() => {
+    if (DIALECT === "postgres") {
+      throw new Error("Cannot use synchronous Client accessor with Postgres. Use Database.getClient() instead.")
+    }
+    log.info("opening database", { path: Path })
+    return initSqliteClient(Path) as SQLiteBunDatabase
   })
 
-  export function close() {
-    Client().$client.close()
-    Client.reset()
+  export async function getClient(): Promise<Client> {
+    if (DIALECT === "postgres") {
+      if (_pgClient) return _pgClient
+      if (_pgClientPromise) return _pgClientPromise
+      _pgClientPromise = initPostgres(Path)
+      _pgClient = await _pgClientPromise
+      return _pgClient
+    }
+
+    // For SQLite, always delegate to the lazy Client singleton
+    return Client() as Client
+  }
+
+  export async function close() {
+    if (DIALECT === "postgres" && _pgClient) {
+      const pgClient = (_pgClient as any).$client
+      if (pgClient?.end) await pgClient.end()
+      _pgClient = undefined
+      _pgClientPromise = undefined
+    } else if (DIALECT === "sqlite") {
+      ;(Client() as any).$client.close()
+      Client.reset()
+    }
   }
 
   export type TxOrDb = Transaction | Client
@@ -127,14 +181,15 @@ export namespace Database {
     effects: (() => void | Promise<void>)[]
   }>("database")
 
-  export function use<T>(callback: (trx: TxOrDb) => T): T {
+  export async function use<T>(callback: (trx: TxOrDb) => T | Promise<T>): Promise<T> {
     try {
-      return callback(ctx.use().tx)
+      return await callback(ctx.use().tx)
     } catch (err) {
       if (err instanceof Context.NotFound) {
         const effects: (() => void | Promise<void>)[] = []
-        const result = ctx.provide({ effects, tx: Client() }, () => callback(Client()))
-        for (const effect of effects) effect()
+        const client = await getClient()
+        const result = await ctx.provide({ effects, tx: client }, () => callback(client))
+        for (const effect of effects) await effect()
         return result
       }
       throw err
@@ -150,23 +205,33 @@ export namespace Database {
     }
   }
 
-  type NotPromise<T> = T extends Promise<any> ? never : T
-
-  export function transaction<T>(
-    callback: (tx: TxOrDb) => NotPromise<T>,
+  export async function transaction<T>(
+    callback: (tx: TxOrDb) => T | Promise<T>,
     options?: {
       behavior?: "deferred" | "immediate" | "exclusive"
     },
-  ): NotPromise<T> {
+  ): Promise<T> {
     try {
-      return callback(ctx.use().tx)
+      return await callback(ctx.use().tx)
     } catch (err) {
       if (err instanceof Context.NotFound) {
         const effects: (() => void | Promise<void>)[] = []
-        const txCallback = InstanceState.bind((tx: TxOrDb) => ctx.provide({ tx, effects }, () => callback(tx)))
-        const result = Client().transaction(txCallback, { behavior: options?.behavior })
-        for (const effect of effects) effect()
-        return result as NotPromise<T>
+        const client = await getClient()
+
+        let result: T
+        if (DIALECT === "postgres") {
+          const pgDb = client as unknown as PostgresJsDatabase
+          result = await (pgDb.transaction as any)(async (tx: any) => {
+            return await ctx.provide({ tx, effects }, () => callback(tx))
+          })
+        } else {
+          const sqliteDb = client as SQLiteBunDatabase
+          const txCallback = InstanceState.bind((tx: TxOrDb) => ctx.provide({ tx, effects }, () => callback(tx)))
+          result = sqliteDb.transaction(txCallback as any, { behavior: options?.behavior }) as T
+        }
+
+        for (const effect of effects) await effect()
+        return result
       }
       throw err
     }

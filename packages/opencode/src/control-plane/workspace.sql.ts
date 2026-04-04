@@ -1,4 +1,4 @@
-import { sqliteTable, text } from "drizzle-orm/sqlite-core"
+import { table as sqliteTable, text } from "../storage/dialect"
 import { ProjectTable } from "../project/project.sql"
 import type { ProjectID } from "../project/schema"
 import type { WorkspaceID } from "./schema"

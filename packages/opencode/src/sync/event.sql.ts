@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core"
+import { table as sqliteTable, text, integer } from "../storage/dialect"
 
 export const EventSequenceTable = sqliteTable("event_sequence", {
   aggregate_id: text().notNull().primaryKey(),

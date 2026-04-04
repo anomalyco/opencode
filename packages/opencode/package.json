@@ -153,6 +153,7 @@
     "opencode-poe-auth": "0.0.1",
     "opentui-spinner": "0.0.6",
     "partial-json": "0.1.7",
+    "postgres": "3.4.8",
     "remeda": "catalog:",
     "semver": "^7.6.3",
     "solid-js": "catalog:",
