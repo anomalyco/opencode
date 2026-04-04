@@ -385,6 +385,33 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         return input.messages
       })
 
+      const flush = Effect.fn("SessionPrompt.flush")(function* (
+        inject: Array<{ role: "user" | "system"; text: string }> | undefined,
+        sessionID: SessionID,
+        user: { agent: string; model: MessageV2.User["model"] },
+      ) {
+        if (!inject?.length) return
+        for (const entry of inject) {
+          const msg: MessageV2.User = {
+            id: MessageID.ascending(),
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: user.agent,
+            model: user.model,
+          }
+          yield* sessions.updateMessage(msg)
+          yield* sessions.updatePart({
+            id: PartID.ascending(),
+            messageID: msg.id,
+            sessionID,
+            type: "text",
+            text: entry.role === "system" ? `<system-reminder>\n${entry.text}\n</system-reminder>` : entry.text,
+            synthetic: true,
+          } satisfies MessageV2.TextPart)
+        }
+      })
+
       const resolveTools = Effect.fn("SessionPrompt.resolveTools")(function* (input: {
         agent: Agent.Info
         model: Provider.Model
@@ -466,6 +493,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args },
                     output,
                   )
+                  yield* flush(
+                    (output as Record<string, any>).inject,
+                    ctx.sessionID,
+                    { agent: input.agent.name, model: { providerID: input.model.providerID, modelID: ModelID.make(input.model.api.id) } },
+                  )
                   return output
                 }),
               )
@@ -497,6 +529,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   "tool.execute.after",
                   { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId, args },
                   result,
+                )
+                yield* flush(
+                  (result as Record<string, any>).inject,
+                  ctx.sessionID,
+                  { agent: input.agent.name, model: { providerID: input.model.providerID, modelID: ModelID.make(input.model.api.id) } },
                 )
 
                 const textParts: string[] = []
@@ -682,6 +719,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           "tool.execute.after",
           { tool: "task", sessionID, callID: part.id, args: taskArgs },
           result,
+        )
+        yield* flush(
+          (result as Record<string, any> | undefined)?.inject,
+          sessionID,
+          { agent: lastUser.agent, model: lastUser.model },
         )
 
         assistantMessage.finish = "tool-calls"
