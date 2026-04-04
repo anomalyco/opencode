@@ -4,13 +4,15 @@ import {
   createContext,
   createMemo,
   createSignal,
+  getOwner,
   onCleanup,
+  runWithOwner,
   useContext,
   type Accessor,
   type ParentProps,
 } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
-import { type KeybindKey, useKeybind } from "@tui/context/keybind"
+import { useKeybind } from "@tui/context/keybind"
 
 type Context = ReturnType<typeof init>
 const ctx = createContext<Context>()
@@ -21,7 +23,7 @@ export type Slash = {
 }
 
 export type CommandOption = DialogSelectOption<string> & {
-  keybind?: KeybindKey
+  keybind?: string
   suggested?: boolean
   slash?: Slash
   hidden?: boolean
@@ -29,6 +31,7 @@ export type CommandOption = DialogSelectOption<string> & {
 }
 
 function init() {
+  const root = getOwner()
   const [registrations, setRegistrations] = createSignal<Accessor<CommandOption[]>[]>([])
   const [suspendCount, setSuspendCount] = createSignal(0)
   const dialog = useDialog()
@@ -100,11 +103,32 @@ function init() {
       dialog.replace(() => <DialogCommand options={visibleOptions()} suggestedOptions={suggestedOptions()} />)
     },
     register(cb: () => CommandOption[]) {
-      const results = createMemo(cb)
-      setRegistrations((arr) => [results, ...arr])
-      onCleanup(() => {
-        setRegistrations((arr) => arr.filter((x) => x !== results))
+      const owner = getOwner() ?? root
+      if (!owner) return () => {}
+
+      let list: Accessor<CommandOption[]> | undefined
+
+      // TUI plugins now register commands via an async store that runs outside an active reactive scope.
+      // runWithOwner attaches createMemo/onCleanup to this owner so plugin registrations stay reactive and dispose correctly.
+      runWithOwner(owner, () => {
+        list = createMemo(cb)
+        const ref = list
+        if (!ref) return
+        setRegistrations((arr) => [ref, ...arr])
+        onCleanup(() => {
+          setRegistrations((arr) => arr.filter((x) => x !== ref))
+        })
       })
+
+      if (!list) return () => {}
+      let done = false
+      return () => {
+        if (done) return
+        done = true
+        const ref = list
+        if (!ref) return
+        setRegistrations((arr) => arr.filter((x) => x !== ref))
+      }
     },
   }
   return result

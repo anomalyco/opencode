@@ -37,7 +37,6 @@ import { LayoutProvider } from "@/context/layout"
 import { ModelsProvider } from "@/context/models"
 import { NotificationProvider } from "@/context/notification"
 import { PermissionProvider } from "@/context/permission"
-import { usePlatform } from "@/context/platform"
 import { PromptProvider } from "@/context/prompt"
 import { ServerConnection, ServerProvider, serverName, useServer } from "@/context/server"
 import { SettingsProvider } from "@/context/settings"
@@ -48,8 +47,13 @@ import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 
 const HomeRoute = lazy(() => import("@/pages/home"))
-const Session = lazy(() => import("@/pages/session"))
+const loadSession = () => import("@/pages/session")
+const Session = lazy(loadSession)
 const Loading = () => <div class="size-full" />
+
+if (typeof location === "object" && /\/session(?:\/|$)/.test(location.pathname)) {
+  void loadSession()
+}
 
 const SessionRoute = () => (
   <SessionProviders>
@@ -75,11 +79,6 @@ declare global {
       setTitlebar?: (theme: { mode: "light" | "dark" }) => Promise<void>
     }
   }
-}
-
-function MarkedProviderWithNativeParser(props: ParentProps) {
-  const platform = usePlatform()
-  return <MarkedProvider nativeParser={platform.parseMarkdown}>{props.children}</MarkedProvider>
 }
 
 function QueryProvider(props: ParentProps) {
@@ -144,9 +143,9 @@ export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
             <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
               <QueryProvider>
                 <DialogProvider>
-                  <MarkedProviderWithNativeParser>
+                  <MarkedProvider>
                     <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
-                  </MarkedProviderWithNativeParser>
+                  </MarkedProvider>
                 </DialogProvider>
               </QueryProvider>
             </ErrorBoundary>
@@ -184,7 +183,7 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean }>) {
           }
         }).pipe(
           effectMinDuration(checkMode() === "blocking" ? "1.2 seconds" : 0),
-          Effect.timeoutOrElse({ duration: "10 seconds", onTimeout: () => Effect.succeed(false) }),
+          Effect.timeoutOrElse({ duration: "10 seconds", orElse: () => Effect.succeed(false) }),
           Effect.ensuring(Effect.sync(() => setCheckMode("background"))),
           Effect.runPromise,
         ),
@@ -284,7 +283,11 @@ export function AppInterface(props: {
   disableHealthCheck?: boolean
 }) {
   return (
-    <ServerProvider defaultServer={props.defaultServer} servers={props.servers}>
+    <ServerProvider
+      defaultServer={props.defaultServer}
+      disableHealthCheck={props.disableHealthCheck}
+      servers={props.servers}
+    >
       <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
         <ServerKey>
           <GlobalSDKProvider>
