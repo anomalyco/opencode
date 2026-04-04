@@ -1115,18 +1115,18 @@ type HighlightSegment = { text: string; type?: "file" | "agent" | "code-inline" 
 const COLLAPSE_LINES = 8
 
 function parseCode(text: string): HighlightSegment[] {
-  // if fenced code blocks are unbalanced (unclosed), render as plain text
-  if ((text.match(/```/g) ?? []).length % 2 !== 0) return [{ text }]
+  const count = (text.match(/```/g) ?? []).length
+  // if fenced code blocks are unbalanced, auto-close the last fence
+  const src = count % 2 !== 0 ? text + "\n```" : text
   const result: HighlightSegment[] = []
   const re = /```([\w.-]*)[^\S\r\n]*\r?\n?([\s\S]*?)```|`([^`\n]+)`/g
   let last = 0
   let match: RegExpExecArray | null
-  while ((match = re.exec(text)) !== null) {
+  while ((match = re.exec(src)) !== null) {
     if (match.index > last) {
-      // trim leading newlines from text that follows a code block
       const chunk = result.some((s) => s.type === "code-block")
-        ? text.slice(last, match.index).replace(/^\n+/, "")
-        : text.slice(last, match.index)
+        ? src.slice(last, match.index).replace(/^\n+/, "")
+        : src.slice(last, match.index)
       if (chunk) result.push({ text: chunk })
     }
     if (match[2] !== undefined) {
@@ -1136,10 +1136,10 @@ function parseCode(text: string): HighlightSegment[] {
     }
     last = match.index + match[0].length
   }
-  if (last < text.length) {
+  if (last < src.length) {
     const chunk = result.some((s) => s.type === "code-block")
-      ? text.slice(last).replace(/^\n+/, "")
-      : text.slice(last)
+      ? src.slice(last).replace(/^\n+/, "")
+      : src.slice(last)
     if (chunk) result.push({ text: chunk })
   }
   return result
