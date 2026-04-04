@@ -1011,10 +1011,10 @@ export function Prompt(props: PromptProps) {
                   e.preventDefault()
                   return
                 }
-                // Dismiss ask panel on Enter or Space
+                // Dismiss ask panel on Space
                 if (askPanel().visible) {
                   const name = e.name?.toLowerCase()
-                  if (name === "space" || name === "return") {
+                  if (name === "space") {
                     if (askPanel().loading) {
                       askAbort?.abort()
                     }
