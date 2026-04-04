@@ -55,6 +55,7 @@ import { ToolStatusTitle } from "./tool-status-title"
 import { animate } from "motion"
 import { useLocation } from "@solidjs/router"
 import { attached, inline, kind } from "./message-file"
+import { copyToClipboard } from "./clipboard"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -984,7 +985,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   const handleCopy = async () => {
     const content = text()
     if (!content) return
-    await navigator.clipboard.writeText(content)
+    await copyToClipboard(content)
     setState("copied", true)
     setTimeout(() => setState("copied", false), 2000)
   }
@@ -1404,7 +1405,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const handleCopy = async () => {
     const content = text()
     if (!content) return
-    await navigator.clipboard.writeText(content)
+    await copyToClipboard(content)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -1743,27 +1744,9 @@ ToolRegistry.register({
     const handleCopy = async () => {
       const content = text()
       if (!content) return
-
-      try {
-        // Prefer modern clipboard API first
-        if (navigator.clipboard) {
-          await navigator.clipboard.writeText(content)
-        } else {
-          // Fallback to execCommand for non-secure contexts (HTTP environments)
-          const textArea = document.createElement('textarea')
-          textArea.value = content
-          textArea.style.position = 'fixed'
-          textArea.style.opacity = '0'
-          document.body.appendChild(textArea)
-          textArea.select()
-          document.execCommand('copy')
-          document.body.removeChild(textArea)
-        }
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
-      } catch (err) {
-        console.error("Copy failed:", err)
-      }
+      await copyToClipboard(content)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
     }
 
     return (

@@ -24,6 +24,7 @@ import { messageAgentColor } from "@/utils/agent"
 import { decode64 } from "@/utils/base64"
 import { Persist, persisted } from "@/utils/persist"
 import { StatusPopover } from "../status-popover"
+import { copyToClipboard } from "@opencode-ai/ui/clipboard"
 
 const OPEN_APPS = [
   "vscode",
@@ -246,20 +247,18 @@ export function SessionHeader() {
       })
   }
 
-  const copyPath = () => {
+  const copyPath = async () => {
     const directory = projectDirectory()
     if (!directory) return
-    navigator.clipboard
-      .writeText(directory)
-      .then(() => {
-        showToast({
-          variant: "success",
-          icon: "circle-check",
-          title: language.t("session.share.copy.copied"),
-          description: directory,
-        })
+    const ok = await copyToClipboard(directory)
+    if (ok) {
+      showToast({
+        variant: "success",
+        icon: "circle-check",
+        title: language.t("session.share.copy.copied"),
+        description: directory,
       })
-      .catch((err: unknown) => showRequestError(language, err))
+    }
   }
 
   const centerMount = createMemo(() => document.getElementById("opencode-titlebar-center"))

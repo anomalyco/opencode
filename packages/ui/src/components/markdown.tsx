@@ -6,6 +6,7 @@ import { checksum } from "@opencode-ai/util/encode"
 import { ComponentProps, createEffect, createResource, createSignal, onCleanup, splitProps } from "solid-js"
 import { isServer } from "solid-js/web"
 import { stream } from "./markdown-stream"
+import { copyToClipboard } from "./clipboard"
 
 type Entry = {
   hash: string
@@ -199,9 +200,8 @@ function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
     const code = button.closest('[data-component="markdown-code"]')?.querySelector("code")
     const content = code?.textContent ?? ""
     if (!content) return
-    const clipboard = navigator?.clipboard
-    if (!clipboard) return
-    await clipboard.writeText(content)
+    const ok = await copyToClipboard(content)
+    if (!ok) return
     const labels = getLabels()
     setCopyState(button, labels, true)
     const existing = timeouts.get(button)
