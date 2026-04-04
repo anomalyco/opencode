@@ -145,6 +145,7 @@ export namespace Vcs {
       const fs = yield* AppFileSystem.Service
       const git = yield* Git.Service
       const bus = yield* Bus.Service
+
       const state = yield* InstanceState.make<State>(
         Effect.fn("Vcs.state")((ctx) =>
           Effect.gen(function* () {
@@ -152,7 +153,9 @@ export namespace Vcs {
               return { current: undefined, root: undefined }
             }
 
-            const get = () => Effect.runPromise(git.branch(ctx.directory))
+            const get = Effect.fnUntraced(function* () {
+              return yield* git.branch(ctx.directory)
+            })
             const [current, root] = yield* Effect.all([git.branch(ctx.directory), git.defaultBranch(ctx.directory)], {
               concurrency: 2,
             })
@@ -163,7 +166,7 @@ export namespace Vcs {
               Stream.filter((evt) => evt.properties.file.endsWith("HEAD")),
               Stream.runForEach((_evt) =>
                 Effect.gen(function* () {
-                  const next = yield* Effect.promise(() => get())
+                  const next = yield* get()
                   if (next !== value.current) {
                     log.info("branch changed", { from: value.current, to: next })
                     value.current = next
@@ -211,7 +214,7 @@ export namespace Vcs {
     }),
   )
 
-  export const defaultLayer = layer.pipe(
+  const defaultLayer = layer.pipe(
     Layer.provide(Git.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),
     Layer.provide(Bus.layer),
@@ -219,19 +222,19 @@ export namespace Vcs {
 
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
-  export function init() {
+  export async function init() {
     return runPromise((svc) => svc.init())
   }
 
-  export function branch() {
+  export async function branch() {
     return runPromise((svc) => svc.branch())
   }
 
-  export function defaultBranch() {
+  export async function defaultBranch() {
     return runPromise((svc) => svc.defaultBranch())
   }
 
-  export function diff(mode: Mode) {
+  export async function diff(mode: Mode) {
     return runPromise((svc) => svc.diff(mode))
   }
 }

@@ -140,6 +140,7 @@ export namespace Permission {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
+      const bus = yield* Bus.Service
       const state = yield* InstanceState.make<State>(
         Effect.fn("Permission.state")(function* (ctx) {
           const row = Database.use((db) =>
@@ -191,7 +192,7 @@ export namespace Permission {
 
         const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
         pending.set(id, { info, deferred })
-        void Bus.publish(Event.Asked, info)
+        yield* bus.publish(Event.Asked, info)
         return yield* Effect.ensuring(
           Deferred.await(deferred),
           Effect.sync(() => {
@@ -206,7 +207,7 @@ export namespace Permission {
         if (!existing) return
 
         pending.delete(input.requestID)
-        void Bus.publish(Event.Replied, {
+        yield* bus.publish(Event.Replied, {
           sessionID: existing.info.sessionID,
           requestID: existing.info.id,
           reply: input.reply,
@@ -221,7 +222,7 @@ export namespace Permission {
           for (const [id, item] of pending.entries()) {
             if (item.info.sessionID !== existing.info.sessionID) continue
             pending.delete(id)
-            void Bus.publish(Event.Replied, {
+            yield* bus.publish(Event.Replied, {
               sessionID: item.info.sessionID,
               requestID: item.info.id,
               reply: "reject",
@@ -249,7 +250,7 @@ export namespace Permission {
           )
           if (!ok) continue
           pending.delete(id)
-          void Bus.publish(Event.Replied, {
+          yield* bus.publish(Event.Replied, {
             sessionID: item.info.sessionID,
             requestID: item.info.id,
             reply: "always",
@@ -306,7 +307,9 @@ export namespace Permission {
     return result
   }
 
-  export const { runPromise } = makeRuntime(Service, layer)
+  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
+
+  export const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export async function ask(input: z.infer<typeof AskInput>) {
     return runPromise((s) => s.ask(input))

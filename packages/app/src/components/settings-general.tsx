@@ -4,12 +4,21 @@ import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
+import { TextField } from "@opencode-ai/ui/text-field"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { useSettings, monoFontFamily } from "@/context/settings"
+import {
+  monoDefault,
+  monoFontFamily,
+  monoInput,
+  sansDefault,
+  sansFontFamily,
+  sansInput,
+  useSettings,
+} from "@/context/settings"
 import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "./link"
 import { SettingsList } from "./settings-list"
@@ -23,13 +32,6 @@ let demoSoundState = {
 type ThemeOption = {
   id: string
   name: string
-}
-
-let font: Promise<typeof import("@opencode-ai/ui/font-loader")> | undefined
-
-function loadFont() {
-  font ??= import("@opencode-ai/ui/font-loader")
-  return font
 }
 
 // To prevent audio from overlapping/playing very quickly when navigating the settings menus,
@@ -137,11 +139,6 @@ export const SettingsGeneral: Component = () => {
     { value: "dark", label: language.t("theme.scheme.dark") },
   ])
 
-  const followupOptions = createMemo((): { value: "queue" | "steer"; label: string }[] => [
-    { value: "queue", label: language.t("settings.general.row.followup.option.queue") },
-    { value: "steer", label: language.t("settings.general.row.followup.option.steer") },
-  ])
-
   const languageOptions = createMemo(() =>
     language.locales.map((locale) => ({
       value: locale,
@@ -149,25 +146,10 @@ export const SettingsGeneral: Component = () => {
     })),
   )
 
-  const fontOptions = [
-    { value: "ibm-plex-mono", label: "font.option.ibmPlexMono" },
-    { value: "cascadia-code", label: "font.option.cascadiaCode" },
-    { value: "fira-code", label: "font.option.firaCode" },
-    { value: "hack", label: "font.option.hack" },
-    { value: "inconsolata", label: "font.option.inconsolata" },
-    { value: "intel-one-mono", label: "font.option.intelOneMono" },
-    { value: "iosevka", label: "font.option.iosevka" },
-    { value: "jetbrains-mono", label: "font.option.jetbrainsMono" },
-    { value: "meslo-lgs", label: "font.option.mesloLgs" },
-    { value: "roboto-mono", label: "font.option.robotoMono" },
-    { value: "source-code-pro", label: "font.option.sourceCodePro" },
-    { value: "ubuntu-mono", label: "font.option.ubuntuMono" },
-    { value: "geist-mono", label: "font.option.geistMono" },
-  ] as const
-  const fontOptionsList = [...fontOptions]
-
   const noneSound = { id: "none", label: "sound.option.none" } as const
   const soundOptions = [noneSound, ...SOUND_OPTIONS]
+  const mono = () => monoInput(settings.appearance.font())
+  const sans = () => sansInput(settings.appearance.uiFont())
 
   const soundSelectProps = (
     enabled: () => boolean,
@@ -254,24 +236,6 @@ export const SettingsGeneral: Component = () => {
             />
           </div>
         </SettingsRow>
-
-        <SettingsRow
-          title={language.t("settings.general.row.followup.title")}
-          description={language.t("settings.general.row.followup.description")}
-        >
-          <Select
-            data-action="settings-followup"
-            options={followupOptions()}
-            current={followupOptions().find((o) => o.value === settings.general.followup())}
-            value={(o) => o.value}
-            label={(o) => o.label}
-            onSelect={(option) => option && settings.general.setFollowup(option.value)}
-            variant="secondary"
-            size="small"
-            triggerVariant="settings"
-            triggerStyle={{ "min-width": "180px" }}
-          />
-        </SettingsRow>
       </SettingsList>
     </div>
   )
@@ -335,30 +299,49 @@ export const SettingsGeneral: Component = () => {
         </SettingsRow>
 
         <SettingsRow
+          title={language.t("settings.general.row.uiFont.title")}
+          description={language.t("settings.general.row.uiFont.description")}
+        >
+          <div class="w-full sm:w-[220px]">
+            <TextField
+              data-action="settings-ui-font"
+              label={language.t("settings.general.row.uiFont.title")}
+              hideLabel
+              type="text"
+              value={sans()}
+              onChange={(value) => settings.appearance.setUIFont(value)}
+              placeholder={sansDefault}
+              spellcheck={false}
+              autocorrect="off"
+              autocomplete="off"
+              autocapitalize="off"
+              class="text-12-regular"
+              style={{ "font-family": sansFontFamily(settings.appearance.uiFont()) }}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
           title={language.t("settings.general.row.font.title")}
           description={language.t("settings.general.row.font.description")}
         >
-          <Select
-            data-action="settings-font"
-            options={fontOptionsList}
-            current={fontOptionsList.find((o) => o.value === settings.appearance.font())}
-            value={(o) => o.value}
-            label={(o) => language.t(o.label)}
-            onHighlight={(option) => {
-              void loadFont().then((x) => x.ensureMonoFont(option?.value))
-            }}
-            onSelect={(option) => option && settings.appearance.setFont(option.value)}
-            variant="secondary"
-            size="small"
-            triggerVariant="settings"
-            triggerStyle={{ "font-family": monoFontFamily(settings.appearance.font()), "min-width": "180px" }}
-          >
-            {(option) => (
-              <span style={{ "font-family": monoFontFamily(option?.value) }}>
-                {option ? language.t(option.label) : ""}
-              </span>
-            )}
-          </Select>
+          <div class="w-full sm:w-[220px]">
+            <TextField
+              data-action="settings-code-font"
+              label={language.t("settings.general.row.font.title")}
+              hideLabel
+              type="text"
+              value={mono()}
+              onChange={(value) => settings.appearance.setFont(value)}
+              placeholder={monoDefault}
+              spellcheck={false}
+              autocorrect="off"
+              autocomplete="off"
+              autocapitalize="off"
+              class="text-12-regular"
+              style={{ "font-family": monoFontFamily(settings.appearance.font()) }}
+            />
+          </div>
         </SettingsRow>
       </SettingsList>
     </div>
