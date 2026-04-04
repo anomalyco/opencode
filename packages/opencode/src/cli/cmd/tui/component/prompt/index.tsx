@@ -1118,7 +1118,9 @@ export function Prompt(props: PromptProps) {
                 <box flexDirection="row" gap={1} alignItems="center">
                   {props.right}
                   <Show when={activeOrgName()}>
-                    <text fg={theme.textMuted}>{`${CONSOLE_MANAGED_ICON} ${activeOrgName()}`}</text>
+                    <text fg={theme.textMuted} onMouseUp={() => command.trigger("console.org.switch")}>
+                      {`${CONSOLE_MANAGED_ICON} ${activeOrgName()}`}
+                    </text>
                   </Show>
                 </box>
               </Show>

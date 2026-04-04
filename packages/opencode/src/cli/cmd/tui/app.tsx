@@ -36,6 +36,7 @@ import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { DialogWorkspaceList } from "@tui/component/dialog-workspace-list"
+import { DialogConsoleOrg } from "@tui/component/dialog-console-org"
 import { KeybindProvider, useKeybind } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
@@ -626,6 +627,19 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
       onSelect: () => {
         dialog.replace(() => <DialogProviderList />)
+      },
+      category: "Provider",
+    },
+    {
+      title: "Switch org",
+      value: "console.org.switch",
+      suggested: Boolean(sync.data.console_state.activeOrgName),
+      slash: {
+        name: "org",
+        aliases: ["orgs", "switch-org"],
+      },
+      onSelect: () => {
+        dialog.replace(() => <DialogConsoleOrg />)
       },
       category: "Provider",
     },

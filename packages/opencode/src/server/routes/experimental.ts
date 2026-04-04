@@ -10,10 +10,29 @@ import { MCP } from "../../mcp"
 import { Session } from "../../session"
 import { Config } from "../../config/config"
 import { ConsoleState } from "../../config/console-state"
+import { Account, AccountID, OrgID } from "../../account"
 import { zodToJsonSchema } from "zod-to-json-schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { WorkspaceRoutes } from "./workspace"
+
+const ConsoleOrgOption = z.object({
+  accountID: z.string(),
+  accountEmail: z.string(),
+  accountUrl: z.string(),
+  orgID: z.string(),
+  orgName: z.string(),
+  active: z.boolean(),
+})
+
+const ConsoleOrgList = z.object({
+  orgs: z.array(ConsoleOrgOption),
+})
+
+const ConsoleSwitchBody = z.object({
+  accountID: z.string(),
+  orgID: z.string(),
+})
 
 export const ExperimentalRoutes = lazy(() =>
   new Hono()
@@ -36,6 +55,62 @@ export const ExperimentalRoutes = lazy(() =>
       }),
       async (c) => {
         return c.json(await Config.getConsoleState())
+      },
+    )
+    .get(
+      "/console/orgs",
+      describeRoute({
+        summary: "List switchable Console orgs",
+        description: "Get the available Console orgs across logged-in accounts, including the current active org.",
+        operationId: "experimental.console.listOrgs",
+        responses: {
+          200: {
+            description: "Switchable Console orgs",
+            content: {
+              "application/json": {
+                schema: resolver(ConsoleOrgList),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const [groups, active] = await Promise.all([Account.orgsByAccount(), Account.active()])
+        const orgs = groups.flatMap((group) =>
+          group.orgs.map((org) => ({
+            accountID: group.account.id,
+            accountEmail: group.account.email,
+            accountUrl: group.account.url,
+            orgID: org.id,
+            orgName: org.name,
+            active: !!active && active.id === group.account.id && active.active_org_id === org.id,
+          })),
+        )
+        return c.json({ orgs })
+      },
+    )
+    .post(
+      "/console/switch",
+      describeRoute({
+        summary: "Switch active Console org",
+        description: "Persist a new active Console account/org selection for the current local OpenCode state.",
+        operationId: "experimental.console.switchOrg",
+        responses: {
+          200: {
+            description: "Switch success",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+        },
+      }),
+      validator("json", ConsoleSwitchBody),
+      async (c) => {
+        const body = c.req.valid("json")
+        await Account.switchOrg(AccountID.make(body.accountID), OrgID.make(body.orgID))
+        return c.json(true)
       },
     )
     .get(

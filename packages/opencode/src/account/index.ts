@@ -442,6 +442,14 @@ export namespace Account {
     return Option.getOrUndefined(await runPromise((service) => service.activeOrg()))
   }
 
+  export async function orgsByAccount(): Promise<readonly AccountOrgs[]> {
+    return runPromise((service) => service.orgsByAccount())
+  }
+
+  export async function switchOrg(accountID: AccountID, orgID: OrgID) {
+    return runPromise((service) => service.use(accountID, Option.some(orgID)))
+  }
+
   export async function token(accountID: AccountID): Promise<AccessToken | undefined> {
     const t = await runPromise((service) => service.token(accountID))
     return Option.getOrUndefined(t)
