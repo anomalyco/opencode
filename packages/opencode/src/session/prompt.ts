@@ -1701,10 +1701,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const ask = Effect.fn("SessionPrompt.ask")(function* (input: AskInput) {
         const ag = yield* agents.get("ask")
         if (!ag) throw new Error("ask agent not found")
-        const mdl = ag.model
-          ? yield* provider.getModel(ag.model.providerID, ag.model.modelID)
-          : ((yield* provider.getSmallModel(input.providerID)) ??
-            (yield* provider.getModel(input.providerID, input.modelID)))
+        const mdl = yield* provider.getModel(input.providerID, input.modelID)
         const history = yield* sessions.messages({ sessionID: input.sessionID })
         const msgs = yield* MessageV2.toModelMessagesEffect(history, mdl)
         const lastUser = history.findLast((m) => m.info.role === "user")
@@ -1718,12 +1715,18 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               agent: "ask",
               model: { providerID: input.providerID, modelID: input.modelID },
             }
+        // Include environment context so the model knows about the project
+        const envSystem = yield* Effect.promise(() => SystemPrompt.environment(mdl))
+        const system = [
+          ...(ag.prompt ? [ag.prompt] : []),
+          ...envSystem,
+        ]
         const text = yield* Effect.promise(async (signal) => {
           const result = await LLM.stream({
             agent: ag,
             user: userInfo,
-            system: [],
-            small: true,
+            system,
+            small: false,
             tools: {},
             model: mdl,
             abort: signal,
