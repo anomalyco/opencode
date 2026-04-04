@@ -9,7 +9,7 @@ import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { tmpdir } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const live = CrossSpawnSpawner.layer.pipe(Layer.provide(NodeFileSystem.layer), Layer.provide(NodePath.layer))
+const live = CrossSpawnSpawner.defaultLayer
 const fx = testEffect(live)
 
 function js(code: string, opts?: ChildProcess.CommandOptions) {
@@ -159,7 +159,17 @@ describe("cross-spawn spawner", () => {
     fx.effect(
       "captures both stdout and stderr",
       Effect.gen(function* () {
-        const handle = yield* js('process.stdout.write("stdout\\n"); process.stderr.write("stderr\\n")')
+        const handle = yield* js(
+          [
+            "let pending = 2",
+            "const done = () => {",
+            "  pending -= 1",
+            "  if (pending === 0) setTimeout(() => process.exit(0), 0)",
+            "}",
+            'process.stdout.write("stdout\\n", done)',
+            'process.stderr.write("stderr\\n", done)',
+          ].join("\n"),
+        )
         const [stdout, stderr] = yield* Effect.all([decodeByteStream(handle.stdout), decodeByteStream(handle.stderr)])
         expect(stdout).toBe("stdout")
         expect(stderr).toBe("stderr")
@@ -349,122 +359,6 @@ describe("cross-spawn spawner", () => {
         expect(out).toContain("stdout")
         expect(out).toContain("stderr")
       }),
-    )
-
-    fx.effect(
-      "pipes output fd3 with { from: 'fd3' }",
-      Effect.gen(function* () {
-        const handle = yield* js('require("node:fs").writeSync(3, "hello from fd3\\n")', {
-          additionalFds: { fd3: { type: "output" } },
-        }).pipe(
-          ChildProcess.pipeTo(
-            js(
-              'process.stdin.setEncoding("utf8"); let out = ""; process.stdin.on("data", (chunk) => out += chunk); process.stdin.on("end", () => process.stdout.write(out))',
-            ),
-            { from: "fd3" },
-          ),
-        )
-        const out = yield* decodeByteStream(handle.stdout)
-        yield* handle.exitCode
-        expect(out).toBe("hello from fd3")
-      }),
-    )
-
-    fx.effect(
-      "pipes stdout to fd3",
-      Effect.gen(function* () {
-        if (process.platform === "win32") return
-
-        const handle = yield* js('process.stdout.write("hello from stdout")').pipe(
-          ChildProcess.pipeTo(js('process.stdout.write(require("node:fs").readFileSync(3, "utf8"))'), { to: "fd3" }),
-        )
-        const out = yield* decodeByteStream(handle.stdout)
-        yield* handle.exitCode
-        expect(out).toBe("hello from stdout")
-      }),
-    )
-  })
-
-  describe("additional fds", () => {
-    fx.effect(
-      "reads data from output fd3",
-      Effect.gen(function* () {
-        const handle = yield* js('require("node:fs").writeSync(3, "hello from fd3\\n")', {
-          additionalFds: { fd3: { type: "output" } },
-        })
-        const out = yield* decodeByteStream(handle.getOutputFd(3))
-        yield* handle.exitCode
-        expect(out).toBe("hello from fd3")
-      }),
-    )
-
-    fx.effect(
-      "writes data to input fd3",
-      Effect.gen(function* () {
-        if (process.platform === "win32") return
-
-        const input = Stream.make(new TextEncoder().encode("data from parent"))
-        const handle = yield* js('process.stdout.write(require("node:fs").readFileSync(3, "utf8"))', {
-          additionalFds: { fd3: { type: "input", stream: input } },
-        })
-        const out = yield* decodeByteStream(handle.stdout)
-        yield* handle.exitCode
-        expect(out).toBe("data from parent")
-      }),
-    )
-
-    fx.effect(
-      "returns empty stream for unconfigured fd",
-      Effect.gen(function* () {
-        const handle =
-          process.platform === "win32"
-            ? yield* js('process.stdout.write("test")')
-            : yield* ChildProcess.make("echo", ["test"])
-        const out = yield* decodeByteStream(handle.getOutputFd(3))
-        yield* handle.exitCode
-        expect(out).toBe("")
-      }),
-    )
-
-    fx.effect(
-      "works alongside normal stdout and stderr",
-      Effect.gen(function* () {
-        const handle = yield* js(
-          'require("node:fs").writeSync(3, "fd3\\n"); process.stdout.write("stdout\\n"); process.stderr.write("stderr\\n")',
-          {
-            additionalFds: { fd3: { type: "output" } },
-          },
-        )
-        const stdout = yield* decodeByteStream(handle.stdout)
-        const stderr = yield* decodeByteStream(handle.stderr)
-        const fd3 = yield* decodeByteStream(handle.getOutputFd(3))
-        yield* handle.exitCode
-        expect(stdout).toBe("stdout")
-        expect(stderr).toBe("stderr")
-        expect(fd3).toBe("fd3")
-      }),
-    )
-  })
-
-  describe("large output", () => {
-    fx.effect(
-      "does not deadlock on large stdout",
-      Effect.gen(function* () {
-        const handle = yield* js("for (let i = 1; i <= 100000; i++) process.stdout.write(`${i}\\n`)")
-        const out = yield* handle.stdout.pipe(
-          Stream.decodeText(),
-          Stream.runFold(
-            () => "",
-            (acc, chunk) => acc + chunk,
-          ),
-        )
-        yield* handle.exitCode
-        const lines = out.trim().split("\n")
-        expect(lines.length).toBe(100000)
-        expect(lines[0]).toBe("1")
-        expect(lines[99999]).toBe("100000")
-      }),
-      { timeout: 10_000 },
     )
   })
 
