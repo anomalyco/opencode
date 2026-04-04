@@ -1210,3 +1210,302 @@ describe("session.getUsage", () => {
     expect(result.tokens.cache.write).toBe(300)
   })
 })
+
+describe("session.compaction.agentAware", () => {
+  function agentLayer(agents: Record<string, Partial<Agent.Info>>) {
+    const full: Record<string, Agent.Info> = {}
+    for (const [name, info] of Object.entries(agents)) {
+      full[name] = {
+        name,
+        mode: "primary",
+        permission: [],
+        options: {},
+        ...info,
+      }
+    }
+    return Layer.mock(Agent.Service)({
+      get: Effect.fn("TestAgent.get")((name: string) => Effect.succeed(full[name]!)),
+      list: Effect.fn("TestAgent.list")(() => Effect.succeed(Object.values(full))),
+      defaultAgent: Effect.fn("TestAgent.defaultAgent")(() => Effect.succeed(Object.keys(full)[0]!)),
+      generate: Effect.fn("TestAgent.generate")(() => Effect.die(new Error("not implemented"))),
+    })
+  }
+
+  function captureLayer(result: "continue" | "compact", captured: { system?: string[] }) {
+    return Layer.succeed(
+      SessionProcessorModule.SessionProcessor.Service,
+      SessionProcessorModule.SessionProcessor.Service.of({
+        create: Effect.fn("CaptureProcessor.create")((input) => {
+          const msg = input.assistantMessage
+          return Effect.succeed({
+            get message() {
+              return msg
+            },
+            abort: Effect.fn("CaptureProcessor.abort")(() => Effect.void),
+            partFromToolCall() {
+              return {
+                id: PartID.ascending(),
+                messageID: msg.id,
+                sessionID: msg.sessionID,
+                type: "tool" as const,
+                callID: "fake",
+                tool: "fake",
+                state: { status: "pending" as const, input: {}, raw: "" },
+              }
+            },
+            process: Effect.fn("CaptureProcessor.process")((args: any) => {
+              captured.system = args.system
+              return Effect.succeed(result)
+            }),
+          } satisfies SessionProcessorModule.SessionProcessor.Handle)
+        }),
+      }),
+    )
+  }
+
+  function agentRuntime(
+    result: "continue" | "compact",
+    agents: Record<string, Partial<Agent.Info>>,
+    captured: { system?: string[] },
+    pluginLayer = Plugin.defaultLayer,
+    provider = wide(),
+  ) {
+    const bus = Bus.layer
+    return ManagedRuntime.make(
+      Layer.mergeAll(SessionCompaction.layer, bus).pipe(
+        Layer.provide(provider.layer),
+        Layer.provide(Session.defaultLayer),
+        Layer.provide(captureLayer(result, captured)),
+        Layer.provide(agentLayer(agents)),
+        Layer.provide(pluginLayer),
+        Layer.provide(bus),
+        Layer.provide(Config.defaultLayer),
+      ),
+    )
+  }
+
+  async function userMsg(sessionID: SessionID, text: string, agent: string) {
+    const msg = await Session.updateMessage({
+      id: MessageID.ascending(),
+      role: "user",
+      sessionID,
+      agent,
+      model: ref,
+      time: { created: Date.now() },
+    })
+    await Session.updatePart({
+      id: PartID.ascending(),
+      messageID: msg.id,
+      sessionID,
+      type: "text",
+      text,
+    })
+    return msg
+  }
+
+  test("system array contains source agent prompt for non-native agents", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const captured: { system?: string[] } = {}
+        const rt = agentRuntime(
+          "continue",
+          {
+            reviewer: { native: false, prompt: "You are a reviewer..." },
+            compaction: { native: true },
+          },
+          captured,
+        )
+        try {
+          const session = await Session.create({})
+          const msg = await userMsg(session.id, "hello", "reviewer")
+          const msgs = await Session.messages({ sessionID: session.id })
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({ parentID: msg.id, messages: msgs, sessionID: session.id, auto: false }),
+            ),
+          )
+          expect(captured.system).toBeDefined()
+          expect(captured.system!.some((s) => s.includes("You are a reviewer..."))).toBe(true)
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("system array is empty for agents without a prompt", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const captured: { system?: string[] } = {}
+        const rt = agentRuntime(
+          "continue",
+          {
+            reviewer: { native: false },
+            compaction: { native: true },
+          },
+          captured,
+        )
+        try {
+          const session = await Session.create({})
+          const msg = await userMsg(session.id, "hello", "reviewer")
+          const msgs = await Session.messages({ sessionID: session.id })
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({ parentID: msg.id, messages: msgs, sessionID: session.id, auto: false }),
+            ),
+          )
+          expect(captured.system).toBeDefined()
+          expect(captured.system).toHaveLength(0)
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("post-compaction reminder injected for non-native agents", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const captured: { system?: string[] } = {}
+        const rt = agentRuntime(
+          "continue",
+          {
+            reviewer: { native: false, prompt: "You are a reviewer..." },
+            compaction: { native: true },
+          },
+          captured,
+        )
+        try {
+          const session = await Session.create({})
+          const msg = await userMsg(session.id, "hello", "reviewer")
+          const msgs = await Session.messages({ sessionID: session.id })
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({ parentID: msg.id, messages: msgs, sessionID: session.id, auto: true }),
+            ),
+          )
+          const all = await Session.messages({ sessionID: session.id })
+          const last = all.at(-1)
+          expect(last?.parts.some((p) => p.type === "text" && p.text.includes("<system-reminder>"))).toBe(true)
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("no reminder for native agents", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const captured: { system?: string[] } = {}
+        const rt = agentRuntime(
+          "continue",
+          {
+            build: { native: true, prompt: "Built-in agent prompt" },
+            compaction: { native: true },
+          },
+          captured,
+        )
+        try {
+          const session = await Session.create({})
+          const msg = await userMsg(session.id, "hello", "build")
+          const msgs = await Session.messages({ sessionID: session.id })
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({ parentID: msg.id, messages: msgs, sessionID: session.id, auto: true }),
+            ),
+          )
+          const all = await Session.messages({ sessionID: session.id })
+          const last = all.at(-1)
+          const hasReminder = last?.parts.some((p) => p.type === "text" && p.text.includes("<system-reminder>"))
+          expect(hasReminder ?? false).toBe(false)
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("handles unknown agent gracefully with empty system", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const captured: { system?: string[] } = {}
+        const rt = agentRuntime(
+          "continue",
+          {
+            build: { native: true },
+            compaction: { native: true },
+          },
+          captured,
+        )
+        try {
+          const session = await Session.create({})
+          const msg = await userMsg(session.id, "hello", "ghost")
+          const msgs = await Session.messages({ sessionID: session.id })
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({ parentID: msg.id, messages: msgs, sessionID: session.id, auto: false }),
+            ),
+          )
+          expect(captured.system).toBeDefined()
+          expect(captured.system).toHaveLength(0)
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+
+  test("plugin hook receives agent name", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const captured: { system?: string[] } = {}
+        let hookAgent: string | undefined
+        const pluginLayer = Layer.mock(Plugin.Service)({
+          trigger: <Name extends string, Input, Output>(name: Name, input: Input, output: Output) => {
+            if (name === "experimental.session.compacting") {
+              hookAgent = (input as any).agent
+            }
+            return Effect.succeed(output)
+          },
+          list: () => Effect.succeed([]),
+          init: () => Effect.void,
+        })
+        const rt = agentRuntime(
+          "continue",
+          {
+            reviewer: { native: false, prompt: "You are a reviewer..." },
+            compaction: { native: true },
+          },
+          captured,
+          pluginLayer,
+        )
+        try {
+          const session = await Session.create({})
+          const msg = await userMsg(session.id, "hello", "reviewer")
+          const msgs = await Session.messages({ sessionID: session.id })
+          await rt.runPromise(
+            SessionCompaction.Service.use((svc) =>
+              svc.process({ parentID: msg.id, messages: msgs, sessionID: session.id, auto: false }),
+            ),
+          )
+          expect(hookAgent).toBe("reviewer")
+        } finally {
+          await rt.dispose()
+        }
+      },
+    })
+  })
+})
