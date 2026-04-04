@@ -5,6 +5,17 @@ const fs = require("fs")
 const path = require("path")
 const os = require("os")
 
+function isAndroidTermux() {
+  return (
+    os.platform() === "linux" &&
+    (
+      process.env.PREFIX?.includes("com.termux") ||
+      Boolean(process.env.TERMUX_VERSION) ||
+      os.release().toLowerCase().includes("android")
+    )
+  )
+}
+
 function run(target) {
   const result = childProcess.spawnSync(target, process.argv.slice(2), {
     stdio: "inherit",
@@ -20,6 +31,13 @@ function run(target) {
 const envPath = process.env.OPENCODE_BIN_PATH
 if (envPath) {
   run(envPath)
+}
+
+if (isAndroidTermux()) {
+  console.error(
+    "OpenCode does not yet officially support Android/Termux. Detected an Android environment."
+  )
+  process.exit(1)
 }
 
 const scriptPath = fs.realpathSync(__filename)
