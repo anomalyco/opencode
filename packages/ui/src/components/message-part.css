@@ -159,18 +159,29 @@
       border-radius: 6px;
       overflow: hidden;
       white-space: normal;
+      line-height: var(--line-height-x-large);
 
       pre {
         margin: 0;
-        padding: 8px 10px;
+        padding: 8px 12px;
         overflow-x: auto;
         font-family: var(--font-mono);
-        font-size: 0.85em;
-        line-height: 1.5;
+        font-size: 13px;
         background: var(--surface-stronger);
 
         code {
           white-space: pre;
+        }
+      }
+
+      [data-slot="user-message-code-highlighted"] {
+        .shiki {
+          margin: 0;
+          padding: 8px 12px;
+          overflow-x: auto;
+          font-size: 13px;
+          border-radius: 0;
+          border: none;
         }
       }
 

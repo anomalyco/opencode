@@ -2,6 +2,7 @@ import {
   Component,
   createEffect,
   createMemo,
+  createResource,
   createSignal,
   For,
   Match,
@@ -48,6 +49,9 @@ import { ImagePreview } from "./image-preview"
 import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "./tooltip"
+import { getSharedHighlighter } from "@pierre/diffs"
+import { bundledLanguages, type BundledLanguage } from "shiki"
+import { isServer } from "solid-js/web"
 import { IconButton } from "./icon-button"
 import { TextShimmer } from "./text-shimmer"
 import { AnimatedCountList } from "./tool-count-summary"
@@ -1139,6 +1143,21 @@ function parseCode(text: string): HighlightSegment[] {
   return result
 }
 
+async function highlight(code: string, lang: string | undefined) {
+  if (isServer) return null
+  const highlighter = await getSharedHighlighter({
+    themes: ["OpenCode"],
+    langs: [],
+    preferredHighlighter: "shiki-wasm",
+  })
+  let language = lang || "text"
+  if (!(language in bundledLanguages)) language = "text"
+  if (!highlighter.getLoadedLanguages().includes(language)) {
+    await highlighter.loadLanguage(language as BundledLanguage)
+  }
+  return highlighter.codeToHtml(code, { lang: language, theme: "OpenCode", tabindex: false })
+}
+
 function CodeBlock(props: { text: string; lang?: string }) {
   const lines = createMemo(() => props.text.trimEnd().split("\n"))
   const collapsible = createMemo(() => lines().length > COLLAPSE_LINES)
@@ -1147,14 +1166,24 @@ function CodeBlock(props: { text: string; lang?: string }) {
   const extra = createMemo(() => lines().length - COLLAPSE_LINES)
   const i18n = useI18n()
 
+  const src = createMemo(() => ({
+    code: collapsible() && !open() ? preview() : props.text.trimEnd(),
+    lang: props.lang,
+  }))
+
+  const [html] = createResource(src, (s) => highlight(s.code, s.lang))
+
   return (
     <div data-slot="user-message-code-block">
       <Show when={props.lang}>
         <span data-slot="user-message-code-lang">{props.lang}</span>
       </Show>
-      <pre>
-        <code>{collapsible() && !open() ? preview() : props.text.trimEnd()}</code>
-      </pre>
+      <Show
+        when={html()}
+        fallback={<pre><code>{src().code}</code></pre>}
+      >
+        {(h) => <div data-slot="user-message-code-highlighted" innerHTML={h()} />}
+      </Show>
       <Show when={collapsible()}>
         <button
           type="button"
