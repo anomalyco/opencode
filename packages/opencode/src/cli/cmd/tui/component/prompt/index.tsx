@@ -72,6 +72,22 @@ function randomIndex(count: number) {
   return Math.floor(Math.random() * count)
 }
 
+function locate(text: string, width: number) {
+  if (width <= 0) return 0
+
+  let seen = 0
+  let idx = 0
+  for (const char of text) {
+    const span = Bun.stringWidth(char)
+    const next = seen + span
+    if (next >= width) return next === width ? idx + char.length : idx
+    seen = next
+    idx += char.length
+  }
+
+  return idx
+}
+
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
   let anchor: BoxRenderable
@@ -642,8 +658,10 @@ export function Prompt(props: PromptProps) {
       if (partIndex !== undefined) {
         const part = store.prompt.parts[partIndex]
         if (part?.type === "text" && part.text) {
-          const before = inputText.slice(0, extmark.start)
-          const after = inputText.slice(extmark.end)
+          const start = locate(inputText, extmark.start)
+          const end = locate(inputText, extmark.end)
+          const before = inputText.slice(0, start)
+          const after = inputText.slice(end)
           inputText = before + part.text + after
         }
       }
