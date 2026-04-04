@@ -206,10 +206,10 @@ jobs:
           version="${{ steps.version.outputs.version }}"
 
           cd packages/sdk/js
-          npm version "$version" --no-git-tag-version --allow-same-version
+          bun -e "const p=JSON.parse(await Bun.file('package.json').text()); p.version='$version'; await Bun.write('package.json', JSON.stringify(p,null,2))"
           bun ./script/publish.ts
           cd ../../..
 
           cd packages/plugin
-          npm version "$version" --no-git-tag-version --allow-same-version
+          bun -e "const p=JSON.parse(await Bun.file('package.json').text()); p.version='$version'; await Bun.write('package.json', JSON.stringify(p,null,2))"
           bun ./script/publish.ts
