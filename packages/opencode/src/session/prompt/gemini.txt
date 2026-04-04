@@ -109,6 +109,7 @@ Refactoring complete. Running verification...
 [tool_call: bash for 'ruff check src/auth.py && pytest']
 (After verification passes)
 All checks passed. This is a stable checkpoint.
+</example>
 
 <example>
 user: Delete the temp directory.

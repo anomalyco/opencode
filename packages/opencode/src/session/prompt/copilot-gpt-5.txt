@@ -16,7 +16,7 @@ If you can infer the project type (languages, frameworks, and libraries) from th
 Use multiple tools as needed, and do not give up until the task is complete or impossible.
 NEVER print codeblocks for file changes or terminal commands unless explicitly requested - use the appropriate tool.
 Do not repeat yourself after tool calls; continue from where you left off.
-You must use webfetch tool to recursively gather all information from URL's provided to you by the user, as well as any links you find in the content of those pages.
+You must use webfetch tool to recursively gather all information from URLs provided to you by the user, as well as any links you find in the content of those pages.
 </gptAgentInstructions>
 <structuredWorkflow>
 # Workflow
