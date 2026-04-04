@@ -1448,7 +1448,7 @@ export type Config = {
     ignore?: Array<string>
   }
   /**
-   * Enable or disable snapshot tracking. When false, filesystem snapshots are not recorded and undoing or reverting will not undo/redo file changes. Defaults to true. Can also be set to a number to specify the maximum number of snapshots to keep.
+   * Enable or disable snapshot tracking. When false, filesystem snapshots are not recorded and undoing or reverting will not undo/redo file changes. Defaults to true. Can also be set to a number to specify how many days snapshots should be retained for.
    */
   snapshot?: boolean | number
   plugin?: Array<
