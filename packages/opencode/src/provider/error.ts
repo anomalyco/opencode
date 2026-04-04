@@ -1,6 +1,7 @@
 import { APICallError } from "ai"
 import { STATUS_CODES } from "http"
 import { iife } from "@/util/iife"
+import type { ProviderID } from "./schema"
 
 export namespace ProviderError {
   // Adapted from overflow detection patterns in:
@@ -12,7 +13,7 @@ export namespace ProviderError {
     /input token count.*exceeds the maximum/i, // Google (Gemini)
     /maximum prompt length is \d+/i, // xAI (Grok)
     /reduce the length of the messages/i, // Groq
-    /maximum context length is \d+ tokens/i, // OpenRouter, DeepSeek
+    /maximum context length is \d+ tokens/i, // OpenRouter, DeepSeek, vLLM
     /exceeds the limit of \d+/i, // GitHub Copilot
     /exceeds the available context size/i, // llama.cpp server
     /greater than the context length/i, // LM Studio
@@ -20,6 +21,11 @@ export namespace ProviderError {
     /exceeded model token limit/i, // Kimi For Coding, Moonshot
     /context[_ ]length[_ ]exceeded/i, // Generic fallback
     /request entity too large/i, // HTTP 413
+    /context length is only \d+ tokens/i, // vLLM
+    /input length.*exceeds.*context length/i, // vLLM
+    /prompt too long; exceeded (?:max )?context length/i, // Ollama explicit overflow error
+    /too large for model with \d+ maximum context length/i, // Mistral
+    /model_context_window_exceeded/i, // z.ai non-standard finish_reason surfaced as error text
   ]
 
   function isOpenAiErrorRetryable(e: APICallError) {
@@ -40,15 +46,7 @@ export namespace ProviderError {
     return /^4(00|13)\s*(status code)?\s*\(no body\)/i.test(message)
   }
 
-  function error(providerID: string, error: APICallError) {
-    if (providerID.includes("github-copilot") && error.statusCode === 403) {
-      return "Please reauthenticate with the copilot provider to ensure your credentials work properly with OpenCode."
-    }
-
-    return error.message
-  }
-
-  function message(providerID: string, e: APICallError) {
+  function message(providerID: ProviderID, e: APICallError) {
     return iife(() => {
       const msg = e.message
       if (msg === "") {
@@ -60,10 +58,6 @@ export namespace ProviderError {
         return "Unknown error"
       }
 
-      const transformed = error(providerID, e)
-      if (transformed !== msg) {
-        return transformed
-      }
       if (!e.responseBody || (e.statusCode && msg !== STATUS_CODES[e.statusCode])) {
         return msg
       }
@@ -176,9 +170,10 @@ export namespace ProviderError {
         metadata?: Record<string, string>
       }
 
-  export function parseAPICallError(input: { providerID: string; error: APICallError }): ParsedAPICallError {
+  export function parseAPICallError(input: { providerID: ProviderID; error: APICallError }): ParsedAPICallError {
     const m = message(input.providerID, input.error)
-    if (isOverflow(m) || input.error.statusCode === 413) {
+    const body = json(input.error.responseBody)
+    if (isOverflow(m) || input.error.statusCode === 413 || body?.error?.code === "context_length_exceeded") {
       return {
         type: "context_overflow",
         message: m,
