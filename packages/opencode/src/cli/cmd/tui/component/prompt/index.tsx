@@ -36,6 +36,8 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { isRecord } from "@/util/record"
+import { errorMessage } from "@/util/error"
 
 export type PromptProps = {
   sessionID?: string
@@ -678,6 +680,11 @@ export function Prompt(props: PromptProps) {
     const currentMode = store.mode
     const variant = local.model.variant.current()
 
+    // Guard: bare /ask with no question
+    if (/^\/ask\s*$/.test(inputText)) {
+      return
+    }
+
     // Intercept /ask as immediate side-question (non-queued)
     const askMatch = inputText.match(/^\/ask\s+(.+)/s)
     if (askMatch) {
@@ -720,7 +727,11 @@ export function Prompt(props: PromptProps) {
         if (ctrl.signal.aborted) return
         if (!res.ok) {
           const body = await res.json().catch(() => ({}))
-          throw new Error((body as any).error?.message ?? `Request failed (${res.status})`)
+          const message =
+            isRecord(body) && isRecord(body.error) && typeof body.error.message === "string"
+              ? body.error.message
+              : `Request failed (${res.status})`
+          throw new Error(message)
         }
         const data = (await res.json()) as { response: string }
         setAskPanel({
@@ -730,14 +741,14 @@ export function Prompt(props: PromptProps) {
           response: data.response,
           error: "",
         })
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (ctrl.signal.aborted) return
         setAskPanel({
           visible: true,
           loading: false,
           question,
           response: "",
-          error: err?.message ?? "Failed to get response",
+          error: errorMessage(err),
         })
       }
       return
