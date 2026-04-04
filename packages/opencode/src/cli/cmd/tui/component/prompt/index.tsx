@@ -996,7 +996,7 @@ export function Prompt(props: PromptProps) {
                 // Dismiss ask panel on Escape, Enter, or Space
                 if (askPanel().visible) {
                   const name = e.name?.toLowerCase()
-                  if (name === "return" || name === "space") {
+                  if (name === "space") {
                     if (askPanel().loading) {
                       askAbort?.abort()
                     }
