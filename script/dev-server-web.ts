@@ -126,10 +126,15 @@ if (!num(args.web, "--port")) webCmd.push("--port", String(webPort))
 
 const serverUrl = `http://${serverHost}:${serverPort}`
 const webUrl = `http://${webHost}:${webPort}`
+const serverEnv = {
+  ...process.env,
+  OPENCODE_SERVER_PASSWORD: "",
+  OPENCODE_SERVER_USERNAME: "",
+}
 
 console.log(`Starting backend at ${serverUrl}`)
 const server = Bun.spawn(serverCmd, {
-  env: process.env,
+  env: serverEnv,
   stdout: "inherit",
   stderr: "inherit",
 })
