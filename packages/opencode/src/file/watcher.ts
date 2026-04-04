@@ -123,9 +123,30 @@ export namespace FileWatcher {
             const cfgIgnores = cfg.watcher?.ignore ?? []
 
             if (yield* Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
+              // Load .gitignore and .ignore so the watcher skips ignored
+              // subtrees instead of traversing them (critical for large repos
+              // with heavy gitignored directories like build artifacts).
+              const gitignorePatterns = yield* Effect.promise(async () => {
+                const patterns: string[] = []
+                for (const name of [".gitignore", ".ignore"]) {
+                  try {
+                    const content = await Bun.file(path.join(Instance.directory, name)).text()
+                    for (const line of content.split("\n")) {
+                      const trimmed = line.trim()
+                      if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("!")) continue
+                      patterns.push(trimmed.startsWith("/") ? trimmed.slice(1) : trimmed)
+                    }
+                  } catch {
+                    // file doesn't exist
+                  }
+                }
+                return patterns
+              })
+
               yield* subscribe(Instance.directory, [
                 ...FileIgnore.PATTERNS,
                 ...cfgIgnores,
+                ...gitignorePatterns,
                 ...protecteds(Instance.directory),
               ])
             }
