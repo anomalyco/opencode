@@ -386,6 +386,34 @@ export const SessionRoutes = lazy(() =>
       },
     )
     .post(
+      "/:sessionID/continue",
+      describeRoute({
+        summary: "Continue session",
+        description: "Continue an interrupted session from where it left off without creating a new user message.",
+        operationId: "session.continue",
+        responses: {
+          200: {
+            description: "Continued session",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    info: MessageV2.Assistant,
+                    parts: MessageV2.Part.array(),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ sessionID: SessionID.zod })),
+      async (c) => {
+        return c.json(await SessionPrompt.continue_(c.req.valid("param").sessionID))
+      },
+    )
+    .post(
       "/:sessionID/share",
       describeRoute({
         summary: "Share session",

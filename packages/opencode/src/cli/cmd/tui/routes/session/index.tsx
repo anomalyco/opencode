@@ -558,6 +558,40 @@ export function Session() {
       },
     },
     {
+      title: "Continue interrupted session",
+      value: "session.continue",
+      category: "Session",
+      slash: {
+        name: "continue",
+      },
+      onSelect: (dialog) => {
+        const status = sync.data.session_status?.[route.sessionID]
+        if (status?.type !== "idle" && status?.type !== undefined) {
+          toast.show({ message: "Session is busy", variant: "warning", duration: 3000 })
+          dialog.clear()
+          return
+        }
+        // Uses raw fetch because the SDK has not been regenerated yet
+        sdk
+          .fetch(`${sdk.url}/session/${route.sessionID}/continue`, {
+            method: "POST",
+          })
+          .then(async (r) => {
+            if (!r.ok) {
+              const body = await r.json().catch(() => null)
+              throw new Error(body?.message ?? `Continue failed: ${r.status}`)
+            }
+          })
+          .catch((e) =>
+            toast.show({
+              message: e instanceof Error ? e.message : "Failed to continue session",
+              variant: "error",
+            }),
+          )
+        dialog.clear()
+      },
+    },
+    {
       title: sidebarVisible() ? "Hide sidebar" : "Show sidebar",
       value: "session.sidebar.toggle",
       keybind: "sidebar_toggle",

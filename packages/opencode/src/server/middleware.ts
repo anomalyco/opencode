@@ -21,7 +21,7 @@ export function errorHandler(log: Log.Logger): ErrorHandler {
       else status = 500
       return c.json(err.toObject(), { status })
     }
-    if (err instanceof Session.BusyError) {
+    if (err instanceof Session.BusyError || err instanceof Session.NothingToContinueError) {
       return c.json(new NamedError.Unknown({ message: err.message }).toObject(), { status: 400 })
     }
     if (err instanceof HTTPException) return err.getResponse()

@@ -74,6 +74,7 @@ export namespace SessionPrompt {
     readonly loop: (input: z.infer<typeof LoopInput>) => Effect.Effect<MessageV2.WithParts>
     readonly shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts>
     readonly command: (input: CommandInput) => Effect.Effect<MessageV2.WithParts>
+    readonly continue: (sessionID: SessionID) => Effect.Effect<MessageV2.WithParts>
     readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
   }
 
@@ -1323,6 +1324,38 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         },
       )
 
+      const continue_ = Effect.fn("SessionPrompt.continue")(function* (sessionID: SessionID) {
+        const s = yield* InstanceState.get(state)
+        if (s.runners.get(sessionID)?.busy) throw new Session.BusyError(sessionID)
+
+        const last = (yield* MessageV2.filterCompactedEffect(sessionID)).findLast(
+          (m): m is MessageV2.WithParts & { info: MessageV2.Assistant } => m.info.role === "assistant",
+        )
+        if (!last) throw new Session.NothingToContinueError(sessionID)
+
+        if (
+          last.info.finish &&
+          last.info.finish !== "tool-calls" &&
+          !last.parts.some(
+            (p) => p.type === "tool" && (p.state.status === "pending" || p.state.status === "running"),
+          ) &&
+          !last.info.error
+        ) {
+          return yield* prompt({
+            sessionID,
+            parts: [{ type: "text", text: "continue" }],
+          })
+        }
+
+        last.info.error = undefined
+        last.info.finish = "tool-calls"
+        last.info.time.completed ??= Date.now()
+        yield* sessions.updateMessage(last.info)
+
+        yield* sessions.touch(sessionID)
+        return yield* getRunner(s.runners, sessionID).ensureRunning(runLoop(sessionID))
+      })
+
       const lastAssistant = (sessionID: SessionID) =>
         Effect.promise(async () => {
           let latest: MessageV2.WithParts | undefined
@@ -1704,6 +1737,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         loop,
         shell,
         command,
+        continue: continue_,
         resolvePromptParts,
       })
     }),
@@ -1816,6 +1850,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
   export async function cancel(sessionID: SessionID) {
     return runPromise((svc) => svc.cancel(SessionID.zod.parse(sessionID)))
+  }
+
+  export async function continue_(sessionID: SessionID) {
+    return runPromise((svc) => svc.continue(SessionID.zod.parse(sessionID)))
   }
 
   export const LoopInput = z.object({
