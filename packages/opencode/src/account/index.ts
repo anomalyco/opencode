@@ -438,12 +438,20 @@ export namespace Account {
     return Option.getOrUndefined(await runPromise((service) => service.active()))
   }
 
+  export async function list(): Promise<Info[]> {
+    return runPromise((service) => service.list())
+  }
+
   export async function activeOrg(): Promise<ActiveOrg | undefined> {
     return Option.getOrUndefined(await runPromise((service) => service.activeOrg()))
   }
 
   export async function orgsByAccount(): Promise<readonly AccountOrgs[]> {
     return runPromise((service) => service.orgsByAccount())
+  }
+
+  export async function orgs(accountID: AccountID): Promise<readonly Org[]> {
+    return runPromise((service) => service.orgs(accountID))
   }
 
   export async function switchOrg(accountID: AccountID, orgID: OrgID) {
