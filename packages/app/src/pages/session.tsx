@@ -135,22 +135,6 @@ export default function Page() {
   })
 
   const composer = createSessionComposerState()
-  const debugSession = (event: string, extra?: Record<string, unknown>) => {
-    if (!import.meta.env.DEV) return
-    console.debug("[session-debug]", {
-      event,
-      at: Date.now(),
-      sessionID: params.id,
-      mode: ui.mode,
-      bottom: ui.scroll.bottom,
-      overflow: ui.scroll.overflow,
-      userScrolled: autoScroll.userScrolled(),
-      scrollTop: scroller?.scrollTop,
-      scrollHeight: scroller?.scrollHeight,
-      clientHeight: scroller?.clientHeight,
-      ...extra,
-    })
-  }
 
   const workspaceKey = createMemo(() => params.dir ?? "")
   const workspaceTabs = createMemo(() => layout.tabs(workspaceKey))
@@ -1484,12 +1468,10 @@ export default function Page() {
   const live = () => ui.mode === "live"
   const enterLive = () => {
     if (ui.mode === "live") return
-    logScroll("mode:set", { source: "enterLive", nextMode: "live" })
     setUi("mode", "live")
   }
   const enterAnchored = (id?: string) => {
     if (ui.mode === "anchored") return
-    logScroll("mode:set", { source: "enterAnchored", nextMode: "anchored", nextAnchorId: id })
     setUi("mode", "anchored")
   }
 
@@ -1503,7 +1485,6 @@ export default function Page() {
   const lockBottom = (el: HTMLDivElement, source: string) => {
     const next = Math.max(0, el.scrollHeight - el.clientHeight)
     if (Math.abs(el.scrollTop - next) <= 1) return
-    logScroll("scroll:write", { source, prevTop: el.scrollTop, nextTop: next })
     el.scrollTop = next
   }
 
@@ -1513,18 +1494,10 @@ export default function Page() {
   let initialScrollKey: string | undefined
   let initialScrollFrame: number | undefined
 
-  const logScroll = debugSession
-
   const clamp = (el: HTMLDivElement, reason = "clamp") => {
     const max = Math.max(0, el.scrollHeight - el.clientHeight)
     const top = Math.max(0, Math.min(el.scrollTop, max))
     if (Math.abs(el.scrollTop - top) <= 1) return top
-    logScroll("scroll:write", {
-      source: reason,
-      prevTop: el.scrollTop,
-      nextTop: top,
-      max,
-    })
     el.scrollTop = top
     return top
   }
@@ -1539,7 +1512,6 @@ export default function Page() {
       // stream is already idle. If the viewport was still at the bottom before
       // that resize, keep it pinned instead of letting the tail drift upward.
       if (live() || ui.scroll.bottom) {
-        debugSession("content:resize", { source: live() ? "live-lock-bottom" : "bottom-lock-bottom" })
         lockBottom(root, "content:resize:lock-bottom")
       }
       scheduleScrollState(root)
@@ -1595,7 +1567,6 @@ export default function Page() {
   const resumeScroll = () => {
     setStore("messageId", undefined)
     enterLive()
-    logScroll("scroll:write", { source: "resumeScroll:bottom" })
     autoScroll.forceScrollToBottom()
     clearMessageHash()
 
@@ -1612,7 +1583,6 @@ export default function Page() {
         if (!mounted) return
         if (initialScrollKey === key) return
         initialScrollKey = key
-        debugSession("initial-scroll:schedule", { key })
         if (initialScrollFrame !== undefined) cancelAnimationFrame(initialScrollFrame)
         initialScrollFrame = requestAnimationFrame(() => {
           initialScrollFrame = requestAnimationFrame(() => {
@@ -1623,7 +1593,6 @@ export default function Page() {
             setStore("messageId", undefined)
             enterLive()
             clearMessageHash()
-            debugSession("initial-scroll:run", { key })
             lockBottom(el, "initial-scroll:bottom")
             scheduleScrollState(el)
             initialScrollKey = undefined
@@ -1638,7 +1607,6 @@ export default function Page() {
     on(
       autoScroll.userScrolled,
       (scrolled) => {
-        debugSession("auto-scroll:userScrolled", { scrolled, anchor: store.messageId ?? cursor() })
         if (scrolled) {
           enterAnchored(store.messageId ?? cursor())
           return
@@ -1655,7 +1623,6 @@ export default function Page() {
     on(
       () => ui.scroll.bottom,
       (bottom, prev) => {
-        debugSession("scroll-state:bottom", { bottom, prev })
         if (!bottom) return
         if (prev === undefined || prev === bottom) return
         if (ui.mode !== "live") {
@@ -1680,7 +1647,6 @@ export default function Page() {
 
   const markUserScroll = () => {
     scrollMark += 1
-    logScroll("user:scroll", { source: "markUserScroll", scrollMark })
   }
 
   const loadEarlier = async () => {
@@ -2004,13 +1970,6 @@ export default function Page() {
         requestAnimationFrame(() => {
           if (scroller !== el) return
           const top = el.scrollHeight - el.clientHeight - gap
-          logScroll("scroll:write", {
-            source: "dock:resize",
-            prevTop: el.scrollTop,
-            nextTop: top > 0 ? top : 0,
-            gap,
-            delta,
-          })
           el.scrollTop = top > 0 ? top : 0
           clamp(el, "dock:resize:clamp")
         })
