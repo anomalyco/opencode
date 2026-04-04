@@ -55,7 +55,7 @@ export function AskPanel(props: { state: Accessor<AskPanelState> }) {
             streaming={false}
             syntaxStyle={syntax()}
             content={props.state().response}
-            conceal={false}
+            conceal={true}
             fg={theme.text}
           />
         </Show>
