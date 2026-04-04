@@ -135,9 +135,16 @@ fn protect_math_blocks(input: &str) -> String {
             continue;
         }
 
+        if !out.is_empty() && !out.ends_with("\n\n") {
+            if !out.ends_with('\n') {
+                out.push('\n');
+            }
+            out.push('\n');
+        }
+
         out.push_str("<div data-opencode-math-style=\"display\">");
         out.push_str(&escape_html(&math));
-        out.push_str("</div>\n");
+        out.push_str("</div>\n\n");
         i = j + 1;
     }
 
@@ -218,5 +225,25 @@ $$
         assert!(html.contains("```tex"));
         assert!(html.contains("a=b"));
         assert!(!html.contains("data-opencode-math-style"));
+    }
+
+    #[test]
+    fn keeps_list_items_after_block_math() {
+        let html = parse_markdown(
+            r#"- 当前生成元集合升级为
+$$
+\{J,G,\widetilde G,T,W^+,W^-,B_1,B_2,B_3,\Phi_+,\Phi_-\}
+$$
+- weight $5/2$ 的 $\Phi_\pm$ 被确认为必备新生成元
+- 新增了两个扫描脚本：
+  - `Notebooks/check_small_z3_phi_weight3_closure.py`
+  - `Notebooks/check_small_z3_phi_weight4_closure.py`
+"#,
+        );
+
+        assert!(html.contains("<div data-opencode-math-style=\"display\">"));
+        assert!(html.contains("weight <span data-math-style=\"inline\">5/2</span>"));
+        assert!(html.contains("<li>新增了两个扫描脚本："));
+        assert!(html.contains("check_small_z3_phi_weight4_closure.py"));
     }
 }
