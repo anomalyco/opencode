@@ -54,7 +54,7 @@ export function AskPanel(props: { state: Accessor<AskPanelState> }) {
           </text>
         </Show>
         <text fg={theme.textMuted} marginTop={1}>
-          {props.state().loading ? "esc to cancel" : "esc / enter / space to dismiss"}
+          enter / space to dismiss
         </text>
       </box>
     </Show>
