@@ -137,17 +137,7 @@ export default function Layout(props: ParentProps) {
   const server = useServer()
   const notification = useNotification()
   const permission = usePermission()
-  const trace = (event: string, extra?: Record<string, unknown>) => {
-    if (!import.meta.env.DEV) return
-    console.debug("[project-load]", {
-      scope: "page-layout",
-      event,
-      at: Date.now(),
-      currentDir: currentDir(),
-      currentProject: currentProject()?.worktree,
-      ...extra,
-    })
-  }
+  const trace = (_event: string, _extra?: Record<string, unknown>) => {}
   const navigate = useNavigate()
   setNavigate(navigate)
   const providers = useProviders()
@@ -183,6 +173,17 @@ export default function Layout(props: ParentProps) {
   const openclawDir = "/openclaw"
   const openclawSlug = base64Encode(openclawDir)
   const isOpenclawDir = (directory?: string) => directory === openclawDir
+  const waitServer = (key: ServerConnection.Key) =>
+    new Promise<void>((resolve) => {
+      if (server.key === key) {
+        resolve()
+        return
+      }
+      queueMicrotask(() => {
+        if (server.key === key) resolve()
+        else resolve()
+      })
+    })
   const openclawProject = createMemo(
     () =>
       ({
@@ -885,13 +886,10 @@ export default function Layout(props: ParentProps) {
     const sessions = currentSessions()
     if (sessions.length === 0) return
 
+    if (!params.id) return
+
     const index = params.id ? sessions.findIndex((s) => s.id === params.id) : 0
     if (index === -1) return
-
-    if (!params.id) {
-      const first = sessions[index]
-      if (first) prefetchSession(first, "high")
-    }
 
     warm(sessions, index)
   })
@@ -1595,122 +1593,27 @@ export default function Layout(props: ParentProps) {
     if (!directory) return
     if (isOpenclawDir(directory)) {
       const conn = server.list.find((item) => item.integration === "openclaw")
-      if (conn) server.setActive(ServerConnection.key(conn))
-      const root = openclawDir
-      const openSession = async (target: { directory: string; id: string }) => {
-        const data = globalSync.child(target.directory, { bootstrap: false })[0]
-        if (data.session.some((item) => item.id === target.id)) {
-          setStore("lastProjectSession", root, { directory: target.directory, id: target.id, at: Date.now() })
-          navigateWithSidebarReset(`/${base64Encode(target.directory)}/session/${target.id}`)
-          return true
-        }
-        const resolved = await globalSDK.client.session
-          .get({ sessionID: target.id })
-          .then((x) => x.data)
-          .catch(() => undefined)
-        if (!resolved?.directory || projectRoot(resolved.directory) !== root) return false
-        setStore("lastProjectSession", root, { directory: resolved.directory, id: resolved.id, at: Date.now() })
-        navigateWithSidebarReset(`/${base64Encode(resolved.directory)}/session/${resolved.id}`)
-        return true
+      if (conn) {
+        const key = ServerConnection.key(conn)
+        server.setActive(key)
+        await waitServer(key)
       }
-
-      const saved = store.lastProjectSession[root]
-      if (saved?.id && (await openSession(saved))) return
-      if (saved?.id) clearLastProjectSession(root)
-
-      const latest = latestRootSession([globalSync.child(root, { bootstrap: false })[0]], Date.now())
-      if (latest && (await openSession(latest))) return
-
-      const fetched = await globalSDK.client.session
-        .list({ directory: root })
-        .then((x) => x.data ?? [])
-        .catch(() => [] as Session[])
-      const next = latestRootSession([{ path: { directory: root }, session: fetched }], Date.now())
-      if (next && (await openSession(next))) return
-
       navigateWithSidebarReset(`/${openclawSlug}/session`)
       return
     }
 
     if (server.current?.integration === "openclaw") {
       const key = server.lastNonOpenclaw
-      if (key) server.setActive(key)
+      if (key) {
+        server.setActive(key)
+        await waitServer(key)
+      }
       navigateWithSidebarReset(`/${base64Encode(directory)}/session`)
       return
     }
 
     const root = projectRoot(directory)
     server.projects.touch(root)
-    const project =
-      layout.projects.visible().find((item) => item.worktree === root) ??
-      layout.projects.list().find((item) => item.worktree === root)
-    let dirs = project
-      ? effectiveWorkspaceOrder(root, [root, ...(project.sandboxes ?? [])], store.workspaceOrder[root])
-      : [root]
-    const canOpen = (value: string | undefined) => {
-      if (!value) return false
-      return dirs.some((item) => pathKey(item) === pathKey(value))
-    }
-    const refreshDirs = async (target?: string) => {
-      if (!target || target === root || canOpen(target)) return canOpen(target)
-      const listed = await globalSDK.client.worktree
-        .list({ directory: root })
-        .then((x) => x.data ?? [])
-        .catch(() => [] as string[])
-      dirs = effectiveWorkspaceOrder(root, [root, ...listed], store.workspaceOrder[root])
-      return canOpen(target)
-    }
-    const openSession = async (target: { directory: string; id: string }) => {
-      if (!canOpen(target.directory)) return false
-      const [data] = globalSync.child(target.directory, { bootstrap: false })
-      if (data.session.some((item) => item.id === target.id)) {
-        setStore("lastProjectSession", root, { directory: target.directory, id: target.id, at: Date.now() })
-        navigateWithSidebarReset(`/${base64Encode(target.directory)}/session/${target.id}`)
-        return true
-      }
-      const resolved = await globalSDK.client.session
-        .get({ sessionID: target.id })
-        .then((x) => x.data)
-        .catch(() => undefined)
-      if (!resolved?.directory) return false
-      if (!canOpen(resolved.directory)) return false
-      setStore("lastProjectSession", root, { directory: resolved.directory, id: resolved.id, at: Date.now() })
-      navigateWithSidebarReset(`/${base64Encode(resolved.directory)}/session/${resolved.id}`)
-      return true
-    }
-
-    const projectSession = store.lastProjectSession[root]
-    if (projectSession?.id) {
-      await refreshDirs(projectSession.directory)
-      const opened = await openSession(projectSession)
-      if (opened) return
-      clearLastProjectSession(root)
-    }
-
-    const latest = latestRootSession(
-      dirs.map((item) => globalSync.child(item, { bootstrap: false })[0]),
-      Date.now(),
-    )
-    if (latest && (await openSession(latest))) {
-      return
-    }
-
-    const fetched = latestRootSession(
-      await Promise.all(
-        dirs.map(async (item) => ({
-          path: { directory: item },
-          session: await globalSDK.client.session
-            .list({ directory: item })
-            .then((x) => x.data ?? [])
-            .catch(() => []),
-        })),
-      ),
-      Date.now(),
-    )
-    if (fetched && (await openSession(fetched))) {
-      return
-    }
-
     navigateWithSidebarReset(`/${base64Encode(root)}/session`)
   }
 
