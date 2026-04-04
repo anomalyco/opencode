@@ -123,7 +123,7 @@ Tertarik berkontribusi ke OpenCode? Baca dulu [panduan kontribusi](./CONTRIBUTIN
 
 ### Membangun di Atas OpenCode
 
-Jika sedang mengerjakan project yang berkaitan dengan OpenCode dan menggunakan "opencode" sebagai bagian dari namanya — misalnya "opencode-dashboard" atau "opencode-mobile" — tambahkan catatan di README untuk menjelaskan bahwa project tersebut bukan buatan tim OpenCode dan tidak berafiliasi dengan kami.
+Jika sedang mengerjakan project yang berkaitan dengan OpenCode dan menggunakan "opencode" sebagai bagian dari namanya, misalnya "opencode-dashboard" atau "opencode-mobile", tambahkan catatan di README untuk menjelaskan bahwa project tersebut bukan buatan tim OpenCode dan tidak berafiliasi dengan kami.
 
 ### FAQ
 
@@ -132,10 +132,10 @@ Jika sedang mengerjakan project yang berkaitan dengan OpenCode dan menggunakan "
 Secara kapabilitas sangat mirip dengan Claude Code. Berikut perbedaan utamanya:
 
 - 100% open source
-- Tidak terikat ke provider tertentu. Meski kami merekomendasikan model yang tersedia lewat [OpenCode Zen](https://opencode.ai/zen), OpenCode bisa dipakai dengan Claude, OpenAI, Google, atau bahkan model lokal. Seiring model berkembang, gap antar model akan menyempit dan harga akan turun — jadi provider-agnostic itu penting.
+- Tidak terikat ke provider tertentu. Meski kami merekomendasikan model yang tersedia lewat [OpenCode Zen](https://opencode.ai/zen), OpenCode bisa dipakai dengan Claude, OpenAI, Google, atau bahkan model lokal. Seiring model berkembang, gap antar model akan menyempit dan harga akan turun, jadi provider-agnostic itu penting.
 - Out-of-the-box LSP support
 - Fokus pada TUI. OpenCode dibuat oleh pengguna neovim dan kreator [terminal.shop](https://terminal.shop); kami akan terus mendorong batas kemungkinan di dalam terminal.
-- Arsitektur client/server. Ini memungkinkan OpenCode berjalan di komputer lokal sambil dikendalikan dari jarak jauh lewat mobile app — artinya TUI frontend hanyalah salah satu dari banyak kemungkinan client.
+- Arsitektur client/server. Ini memungkinkan OpenCode berjalan di komputer lokal sambil dikendalikan dari jarak jauh lewat mobile app. TUI frontend hanyalah salah satu dari banyak kemungkinan client.
 
 ---
 
