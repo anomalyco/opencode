@@ -10,8 +10,8 @@ const Parameters = z.object({
   name: z.string().describe("The name of the skill from available_skills"),
 })
 
-export const SkillTool = Tool.define("skill", async (ctx) => {
-  const list = await Skill.available(ctx?.agent)
+export const SkillTool = Tool.define("skill", async () => {
+  const list = await Skill.all()
 
   const description =
     list.length === 0

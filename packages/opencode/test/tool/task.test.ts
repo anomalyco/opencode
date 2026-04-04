@@ -28,9 +28,8 @@ describe("tool.task", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const build = await Agent.get("build")
-        const first = await TaskTool.init({ agent: build })
-        const second = await TaskTool.init({ agent: build })
+        const first = await TaskTool.init()
+        const second = await TaskTool.init()
 
         expect(first.description).toBe(second.description)
 
