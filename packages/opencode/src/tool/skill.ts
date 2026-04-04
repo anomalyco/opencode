@@ -12,7 +12,6 @@ const Parameters = z.object({
 
 export const SkillTool = Tool.define("skill", async () => {
   const list = await Skill.all()
-
   const description =
     list.length === 0
       ? "Load a specialized skill that provides domain-specific instructions and workflows. No skills are currently available."
