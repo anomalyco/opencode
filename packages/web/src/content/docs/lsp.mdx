@@ -84,6 +84,7 @@ Each LSP server supports the following:
 | `extensions`     | string[] | File extensions this LSP server should handle     |
 | `env`            | object   | Environment variables to set when starting server |
 | `initialization` | object   | Initialization options to send to the LSP server  |
+| `timeout`        | object   | Timeout overrides for configured LSP entries      |
 
 Let's look at some examples.
 
@@ -130,6 +131,32 @@ Use the `initialization` property to pass initialization options to the LSP serv
 :::note
 Initialization options vary by LSP server. Check your LSP server's documentation for available options.
 :::
+
+---
+
+### Timeouts
+
+Use the `timeout` property to override initialize or diagnostics waits for a configured LSP entry:
+
+```json title="opencode.json" {5-10}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "my-kotlin": {
+      "command": ["kotlin-lsp"],
+      "extensions": [".kt", ".kts"],
+      "timeout": {
+        "startup": 120000,
+        "diagnostics": 15000
+      }
+    }
+  }
+}
+```
+
+- `timeout` is available on configured LSP entries that define a `command`
+- `timeout.startup` controls the LSP `initialize` request timeout and defaults to `45000`
+- `timeout.diagnostics` defaults to `3000` and must be at least `151`
 
 ---
 

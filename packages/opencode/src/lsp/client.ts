@@ -15,6 +15,8 @@ import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
 
 const DIAGNOSTICS_DEBOUNCE_MS = 150
+const STARTUP_TIMEOUT_MS = 45_000
+const DIAGNOSTICS_TIMEOUT_MS = 3_000
 
 export namespace LSPClient {
   const log = Log.create({ service: "lsp.client" })
@@ -42,6 +44,8 @@ export namespace LSPClient {
 
   export async function create(input: { serverID: string; server: LSPServer.Handle; root: string }) {
     const l = log.clone().tag("serverID", input.serverID)
+    const startup_timeout = input.server.timeout?.startup ?? STARTUP_TIMEOUT_MS
+    const diagnostics_timeout = input.server.timeout?.diagnostics ?? DIAGNOSTICS_TIMEOUT_MS
     l.info("starting client")
 
     const connection = createMessageConnection(
@@ -114,7 +118,7 @@ export namespace LSPClient {
           },
         },
       }),
-      45_000,
+      startup_timeout,
     ).catch((err) => {
       l.error("initialize error", { error: err })
       throw new InitializeError(
@@ -228,7 +232,7 @@ export namespace LSPClient {
               }
             })
           }),
-          3000,
+          diagnostics_timeout,
         )
           .catch(() => {})
           .finally(() => {

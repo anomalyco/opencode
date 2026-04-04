@@ -28,6 +28,12 @@ export namespace LSPServer {
   export interface Handle {
     process: ChildProcessWithoutNullStreams
     initialization?: Record<string, any>
+    timeout?: Timeout
+  }
+
+  export interface Timeout {
+    startup?: number
+    diagnostics?: number
   }
 
   type RootFunction = (file: string) => Promise<string | undefined>

@@ -196,6 +196,7 @@ export namespace LSP {
                     env: { ...process.env, ...item.env },
                   }),
                   initialization: item.initialization,
+                  timeout: item.timeout,
                 }),
               }
             }

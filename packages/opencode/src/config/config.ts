@@ -973,6 +973,24 @@ export namespace Config {
                 disabled: z.boolean().optional(),
                 env: z.record(z.string(), z.string()).optional(),
                 initialization: z.record(z.string(), z.any()).optional(),
+                timeout: z
+                  .object({
+                    startup: z
+                      .number()
+                      .int()
+                      .positive()
+                      .optional()
+                      .describe("Timeout in milliseconds for the LSP initialize request"),
+                    diagnostics: z
+                      .number()
+                      .int()
+                      .min(151)
+                      .optional()
+                      .describe(
+                        "Timeout in milliseconds to wait for LSP diagnostics after opening a file. Minimum 151ms.",
+                      ),
+                  })
+                  .optional(),
               }),
             ]),
           ),

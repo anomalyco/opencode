@@ -84,6 +84,7 @@ OpenCode config의 `lsp` 섹션에서 LSP 서버를 사용자 정의할 수 있�
 | `extensions`     | string[] | 이 LSP 서버가 처리할 파일 확장자입니다        |
 | `env`            | object   | 서버 시작 시 설정할 환경 변수입니다           |
 | `initialization` | object   | LSP 서버로 전송할 초기화 옵션입니다           |
+| `timeout`        | object   | 설정된 LSP 엔트리의 timeout 설정입니다        |
 
 예시를 살펴보겠습니다.
 
@@ -130,6 +131,32 @@ OpenCode config의 `lsp` 섹션에서 LSP 서버를 사용자 정의할 수 있�
 :::note
 초기화 옵션은 LSP 서버마다 다릅니다. 사용 가능한 옵션은 해당 LSP 서버 문서를 확인하세요.
 :::
+
+---
+
+### Timeout
+
+`timeout` 속성을 사용하면 설정된 LSP 엔트리의 initialize 요청 또는 diagnostics 대기 시간을 조정할 수 있습니다.
+
+```json title="opencode.json" {5-10}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "my-kotlin": {
+      "command": ["kotlin-lsp"],
+      "extensions": [".kt", ".kts"],
+      "timeout": {
+        "startup": 120000,
+        "diagnostics": 15000
+      }
+    }
+  }
+}
+```
+
+- `timeout`은 `command`가 있는 설정된 LSP 엔트리에서 사용할 수 있습니다.
+- `timeout.startup`은 LSP `initialize` 요청 timeout이며 기본값은 `45000`입니다.
+- `timeout.diagnostics` 기본값은 `3000`이며 최소값은 `151`입니다.
 
 ---
 
