@@ -75,6 +75,7 @@ export namespace SessionPrompt {
     readonly shell: (input: ShellInput) => Effect.Effect<MessageV2.WithParts>
     readonly command: (input: CommandInput) => Effect.Effect<MessageV2.WithParts>
     readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
+    readonly ask: (input: AskInput) => Effect.Effect<string>
   }
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/SessionPrompt") {}
@@ -1697,6 +1698,52 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         return result
       })
 
+      const ask = Effect.fn("SessionPrompt.ask")(function* (input: AskInput) {
+        const ag = yield* agents.get("ask")
+        if (!ag) throw new Error("ask agent not found")
+        const mdl = ag.model
+          ? yield* provider.getModel(ag.model.providerID, ag.model.modelID)
+          : ((yield* provider.getSmallModel(input.providerID)) ??
+            (yield* provider.getModel(input.providerID, input.modelID)))
+        const history = yield* sessions.messages({ sessionID: input.sessionID })
+        const msgs = yield* MessageV2.toModelMessagesEffect(history, mdl)
+        const lastUser = history.findLast((m) => m.info.role === "user")
+        const userInfo: MessageV2.User = lastUser
+          ? (lastUser.info as MessageV2.User)
+          : {
+              id: MessageID.ascending(),
+              sessionID: input.sessionID,
+              role: "user" as const,
+              time: { created: Date.now() },
+              agent: "ask",
+              model: { providerID: input.providerID, modelID: input.modelID },
+            }
+        const text = yield* Effect.promise(async (signal) => {
+          const result = await LLM.stream({
+            agent: ag,
+            user: userInfo,
+            system: [],
+            small: true,
+            tools: {},
+            model: mdl,
+            abort: signal,
+            sessionID: input.sessionID,
+            retries: 2,
+            messages: [
+              ...msgs,
+              {
+                role: "user" as const,
+                content: input.question,
+              },
+            ],
+          })
+          return result.text
+        })
+        return text
+          .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+          .trim()
+      })
+
       return Service.of({
         assertNotBusy,
         cancel,
@@ -1705,6 +1752,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         shell,
         command,
         resolvePromptParts,
+        ask,
       })
     }),
   )
@@ -1869,6 +1917,18 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
   export async function command(input: CommandInput) {
     return runPromise((svc) => svc.command(CommandInput.parse(input)))
+  }
+
+  export const AskInput = z.object({
+    sessionID: SessionID.zod,
+    question: z.string(),
+    providerID: ProviderID.zod,
+    modelID: ModelID.zod,
+  })
+  export type AskInput = z.infer<typeof AskInput>
+
+  export async function ask(input: AskInput) {
+    return runPromise((svc) => svc.ask(AskInput.parse(input)))
   }
 
   /** @internal Exported for testing */

@@ -859,6 +859,38 @@ export const SessionRoutes = lazy(() =>
       },
     )
     .post(
+      "/:sessionID/ask",
+      describeRoute({
+        summary: "Ask a side question",
+        description: "Ask a quick question using session context without interrupting or modifying the conversation.",
+        operationId: "session.ask",
+        responses: {
+          200: {
+            description: "Response to the question",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({ response: z.string() })),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      validator("json", SessionPrompt.AskInput.omit({ sessionID: true })),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const body = c.req.valid("json")
+        const response = await SessionPrompt.ask({ ...body, sessionID })
+        return c.json({ response })
+      },
+    )
+    .post(
       "/:sessionID/command",
       describeRoute({
         summary: "Send command",

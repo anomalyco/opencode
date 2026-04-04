@@ -17,6 +17,7 @@ import { assign } from "./part"
 import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
+import { AskPanel, initialAskPanelState, type AskPanelState } from "./ask-panel"
 import { useCommandDialog } from "../dialog-command"
 import { useKeyboard, useRenderer, type JSX } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
@@ -172,6 +173,9 @@ export function Prompt(props: PromptProps) {
     extmarkToPartIndex: new Map(),
     interrupt: 0,
   })
+
+  const [askPanel, setAskPanel] = createSignal<AskPanelState>({ ...initialAskPanelState })
+  let askAbort: AbortController | undefined
 
   createEffect(
     on(
@@ -656,6 +660,71 @@ export function Prompt(props: PromptProps) {
     const currentMode = store.mode
     const variant = local.model.variant.current()
 
+    // Intercept /ask as immediate side-question (non-queued)
+    const askMatch = inputText.match(/^\/ask\s+(.+)/s)
+    if (askMatch) {
+      const question = askMatch[1].trim()
+      if (!question) return
+
+      // Clear the input
+      input.clear()
+      input.extmarks.clear()
+      setStore("prompt", { input: "", parts: [] })
+      setStore("extmarkToPartIndex", new Map())
+      props.onSubmit?.()
+
+      // Cancel any previous ask request
+      askAbort?.abort()
+      const ctrl = new AbortController()
+      askAbort = ctrl
+
+      // Show loading panel
+      setAskPanel({
+        visible: true,
+        loading: true,
+        question,
+        response: "",
+        error: "",
+      })
+
+      // Call the /ask API endpoint directly (non-queued)
+      try {
+        const res = await sdk.fetch(`${sdk.url}/session/${sessionID}/ask`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            question,
+            providerID: selectedModel.providerID,
+            modelID: selectedModel.modelID,
+          }),
+          signal: ctrl.signal,
+        })
+        if (ctrl.signal.aborted) return
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}))
+          throw new Error((body as any).error?.message ?? `Request failed (${res.status})`)
+        }
+        const data = (await res.json()) as { response: string }
+        setAskPanel({
+          visible: true,
+          loading: false,
+          question,
+          response: data.response,
+          error: "",
+        })
+      } catch (err: any) {
+        if (ctrl.signal.aborted) return
+        setAskPanel({
+          visible: true,
+          loading: false,
+          question,
+          response: "",
+          error: err?.message ?? "Failed to get response",
+        })
+      }
+      return
+    }
+
     if (store.mode === "shell") {
       sdk.client.session.shell({
         sessionID,
@@ -888,6 +957,7 @@ export function Prompt(props: PromptProps) {
         promptPartTypeId={() => promptPartTypeId}
       />
       <box ref={(r) => (anchor = r)} visible={props.visible !== false}>
+        <AskPanel state={askPanel} />
         <box
           border={["left"]}
           borderColor={highlight()}
@@ -922,6 +992,18 @@ export function Prompt(props: PromptProps) {
                 if (props.disabled) {
                   e.preventDefault()
                   return
+                }
+                // Dismiss ask panel on Escape, Enter, or Space
+                if (askPanel().visible) {
+                  const name = e.name?.toLowerCase()
+                  if (name === "escape" || name === "return" || name === "space") {
+                    if (askPanel().loading) {
+                      askAbort?.abort()
+                    }
+                    setAskPanel({ ...initialAskPanelState })
+                    e.preventDefault()
+                    return
+                  }
                 }
                 // Check clipboard for images before terminal-handled paste runs.
                 // This helps terminals that forward Ctrl+V to the app; Windows
