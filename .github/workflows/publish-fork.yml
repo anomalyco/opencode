@@ -38,7 +38,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          base=$(gh api repos/anomalyco/xcsh/releases/latest --jq '.tag_name' | sed 's/^v//')
+          base=$(gh api repos/anomalyco/opencode/releases/latest --jq '.tag_name' | sed 's/^v//')
           echo "Upstream base: $base"
 
           existing=$(gh release list --limit 100 --json tagName \

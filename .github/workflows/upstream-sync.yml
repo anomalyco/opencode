@@ -15,7 +15,7 @@ permissions:
   issues: write
 
 env:
-  UPSTREAM_REPO: https://github.com/anomalyco/xcsh.git
+  UPSTREAM_REPO: https://github.com/anomalyco/opencode.git
   UPSTREAM_BRANCH: dev
   FORK_BRANCH: dev
   SYNC_ISSUE_LABEL: upstream-sync
