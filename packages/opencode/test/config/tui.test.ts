@@ -159,6 +159,22 @@ test("migrates tui-specific keys from opencode.json when tui.json does not exist
   })
 })
 
+test("accepts input_quote_selection keybind", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "tui.json"), JSON.stringify({ keybinds: { input_quote_selection: "ctrl+q" } }, null, 2))
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await TuiConfig.get()
+      expect(config.keybinds?.input_quote_selection).toBe("ctrl+q")
+    },
+  })
+})
+
 test("migrates project legacy tui keys even when global tui.json already exists", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

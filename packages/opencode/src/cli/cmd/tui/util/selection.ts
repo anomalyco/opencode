@@ -11,8 +11,21 @@ type Renderer = {
 }
 
 export namespace Selection {
+  export function text(renderer: Renderer) {
+    return renderer.getSelection()?.getSelectedText()
+  }
+
+  export function quote(text: string) {
+    return text
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      .split("\n")
+      .map((line) => `> ${line}`)
+      .join("\n") + "\n\n"
+  }
+
   export function copy(renderer: Renderer, toast: Toast): boolean {
-    const text = renderer.getSelection()?.getSelectedText()
+    const text = Selection.text(renderer)
     if (!text) return false
 
     Clipboard.copy(text)

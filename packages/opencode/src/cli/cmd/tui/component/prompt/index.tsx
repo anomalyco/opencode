@@ -22,6 +22,7 @@ import { useKeyboard, useRenderer, type JSX } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
+import { Selection } from "../../util/selection"
 import type { AssistantMessage, FilePart } from "@opencode-ai/sdk/v2"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
@@ -244,6 +245,19 @@ export function Prompt(props: PromptProps) {
               content: content.data,
             })
           }
+        },
+      },
+      {
+        title: "Quote selection",
+        value: "prompt.quote_selection",
+        keybind: "input_quote_selection",
+        category: "Prompt",
+        hidden: true,
+        onSelect: () => {
+          const text = Selection.text(renderer)
+          if (!text) return
+          insert(Selection.quote(text))
+          renderer.clearSelection()
         },
       },
       {
@@ -773,6 +787,10 @@ export function Prompt(props: PromptProps) {
         draft.extmarkToPartIndex.set(extmarkId, partIndex)
       }),
     )
+  }
+
+  function insert(text: string) {
+    input.insertText(text)
   }
 
   async function pasteImage(file: { filename?: string; content: string; mime: string }) {

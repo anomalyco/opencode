@@ -302,6 +302,16 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     const sel = renderer.getSelection()
     if (!sel) return
 
+    if (keybind.match("input_quote_selection", evt)) {
+      if (route.data.type !== "session") return
+      if (!Selection.text(renderer)) return
+      evt.preventDefault()
+      evt.stopPropagation()
+      promptRef.current?.focus()
+      command.trigger("prompt.quote_selection")
+      return
+    }
+
     // Windows Terminal-like behavior:
     // - Ctrl+C copies and dismisses selection
     // - Esc dismisses selection
