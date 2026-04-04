@@ -521,6 +521,8 @@ export namespace Snapshot {
                     const map = new Map<string, { before: string; after: string }>()
                     const dec = new TextDecoder()
                     let i = 0
+                    // Parse the default `git cat-file --batch` stream: one header line,
+                    // then exactly `size` bytes of blob content, then a trailing newline.
                     for (const ref of refs) {
                       let end = i
                       while (end < out.length && out[end] !== 10) end += 1
@@ -619,6 +621,7 @@ export namespace Snapshot {
                   })
                 const step = 100
 
+                // Keep batches bounded so a large diff does not buffer every blob at once.
                 for (let i = 0; i < rows.length; i += step) {
                   const run = rows.slice(i, i + step)
                   const text = yield* load(run)
