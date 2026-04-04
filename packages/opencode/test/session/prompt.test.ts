@@ -9,6 +9,7 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
+import { MessageID, PartID } from "../../src/session/schema"
 
 Log.init({ print: false })
 
@@ -313,4 +314,82 @@ describe("session.agent-resolution", () => {
       },
     })
   }, 30000)
+})
+
+describe("session.prompt abort cleanup", () => {
+  test("finalizes running tool parts and active assistant messages on cancel", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const user = await Session.updateMessage({
+          id: MessageID.ascending(),
+          sessionID: session.id,
+          role: "user",
+          time: { created: Date.now() },
+          agent: "build",
+          model: { providerID: ProviderID.make("openai"), modelID: ModelID.make("gpt-5.4") },
+          tools: {},
+          mode: "",
+        } as unknown as MessageV2.User)
+
+        const assistantID = MessageID.ascending()
+        await Session.updateMessage({
+          id: assistantID,
+          sessionID: session.id,
+          role: "assistant",
+          parentID: user.id,
+          time: { created: Date.now() },
+          agent: "build",
+          providerID: ProviderID.make("openai"),
+          modelID: ModelID.make("gpt-5.4"),
+          mode: "build",
+          path: { cwd: tmp.path, root: tmp.path },
+          cost: 0,
+          tokens: {
+            input: 0,
+            output: 0,
+            reasoning: 0,
+            cache: { read: 0, write: 0 },
+          },
+        } as unknown as MessageV2.Assistant)
+
+        await Session.updatePart({
+          id: PartID.ascending(),
+          messageID: assistantID,
+          sessionID: session.id,
+          type: "tool",
+          callID: "call-running",
+          tool: "grep",
+          state: {
+            status: "running",
+            input: { pattern: "skill-force-eval", path: "/Users/lelouch" },
+            time: { start: Date.now() - 10 },
+          },
+        } satisfies MessageV2.ToolPart)
+
+        await SessionPrompt.cancel(session.id)
+
+        const stored = await MessageV2.get({
+          sessionID: session.id,
+          messageID: assistantID,
+        })
+        const tool = stored.parts.find((part) => part.type === "tool")
+
+        expect(stored.info.role).toBe("assistant")
+        if (stored.info.role !== "assistant") throw new Error("expected assistant")
+        expect(typeof stored.info.time.completed).toBe("number")
+        expect(tool?.type).toBe("tool")
+        if (!tool || tool.type !== "tool") throw new Error("expected tool part")
+        expect(tool.state.status).toBe("error")
+        if (tool.state.status !== "error") throw new Error("expected error tool state")
+        expect(tool.state.error).toBe("Tool execution aborted")
+        expect(typeof tool.state.time.end).toBe("number")
+
+        await Session.remove(session.id)
+      },
+    })
+  })
 })
