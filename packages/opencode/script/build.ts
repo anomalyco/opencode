@@ -58,7 +58,41 @@ const migrations = await Promise.all(
     return { sql, timestamp, name }
   }),
 )
-console.log(`Loaded ${migrations.length} migrations`)
+console.log(`Loaded ${migrations.length} SQLite migrations`)
+
+// Load Postgres migrations
+const pgMigrationDir = path.join(dir, "migration-pg")
+let pgMigrations: typeof migrations = []
+if (fs.existsSync(pgMigrationDir)) {
+  const pgMigrationDirs = (
+    await fs.promises.readdir(pgMigrationDir, {
+      withFileTypes: true,
+    })
+  )
+    .filter((entry) => entry.isDirectory() && /^\d{4}\d{2}\d{2}\d{2}\d{2}\d{2}/.test(entry.name))
+    .map((entry) => entry.name)
+    .sort()
+
+  pgMigrations = await Promise.all(
+    pgMigrationDirs.map(async (name) => {
+      const file = path.join(pgMigrationDir, name, "migration.sql")
+      const sql = await Bun.file(file).text()
+      const match = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/.exec(name)
+      const timestamp = match
+        ? Date.UTC(
+            Number(match[1]),
+            Number(match[2]) - 1,
+            Number(match[3]),
+            Number(match[4]),
+            Number(match[5]),
+            Number(match[6]),
+          )
+        : 0
+      return { sql, timestamp, name }
+    }),
+  )
+  console.log(`Loaded ${pgMigrations.length} Postgres migrations`)
+}
 
 const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
@@ -226,6 +260,7 @@ for (const item of targets) {
     define: {
       OPENCODE_VERSION: `'${Script.version}'`,
       OPENCODE_MIGRATIONS: JSON.stringify(migrations),
+      OPENCODE_PG_MIGRATIONS: JSON.stringify(pgMigrations),
       OTUI_TREE_SITTER_WORKER_PATH: bunfsRoot + workerRelativePath,
       OPENCODE_WORKER_PATH: workerPath,
       OPENCODE_CHANNEL: `'${Script.channel}'`,

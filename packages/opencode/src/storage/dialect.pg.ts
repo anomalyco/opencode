@@ -1,7 +1,7 @@
 import {
   pgTable,
   text as pgText,
-  integer as pgInteger,
+  bigint as pgBigint,
   index as pgIndex,
   primaryKey as pgPrimaryKey,
   foreignKey as pgForeignKey,
@@ -21,16 +21,17 @@ function text(nameOrConfig?: any, config?: any) {
   return pgText()
 }
 
-// Wrap integer() to intercept { mode: "boolean" } and route to boolean()
+// Map SQLite integer() to Postgres bigint() (SQLite integer is 64-bit, Postgres integer is 32-bit)
+// Also intercept { mode: "boolean" } and route to boolean()
 function integer(nameOrConfig?: any, config?: any) {
   const resolvedConfig = typeof nameOrConfig === "object" && !Array.isArray(nameOrConfig) ? nameOrConfig : config
   if (resolvedConfig?.mode === "boolean") {
     const name = typeof nameOrConfig === "string" ? nameOrConfig : undefined
     return name ? pgBoolean(name) : pgBoolean()
   }
-  // Pg integer() only accepts an optional name string
-  if (typeof nameOrConfig === "string") return pgInteger(nameOrConfig)
-  return pgInteger()
+  // Use bigint in "number" mode to match SQLite's 64-bit integer
+  if (typeof nameOrConfig === "string") return pgBigint(nameOrConfig, { mode: "number" })
+  return pgBigint({ mode: "number" })
 }
 
 export {

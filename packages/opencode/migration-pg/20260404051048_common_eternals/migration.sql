@@ -1,5 +1,5 @@
 CREATE TABLE "account_state" (
-	"id" integer PRIMARY KEY,
+	"id" bigint PRIMARY KEY,
 	"active_account_id" text,
 	"active_org_id" text
 );
@@ -10,9 +10,9 @@ CREATE TABLE "account" (
 	"url" text NOT NULL,
 	"access_token" text NOT NULL,
 	"refresh_token" text NOT NULL,
-	"token_expiry" integer,
-	"time_created" integer NOT NULL,
-	"time_updated" integer NOT NULL
+	"token_expiry" bigint,
+	"time_created" bigint NOT NULL,
+	"time_updated" bigint NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "control_account" (
@@ -20,10 +20,10 @@ CREATE TABLE "control_account" (
 	"url" text,
 	"access_token" text NOT NULL,
 	"refresh_token" text NOT NULL,
-	"token_expiry" integer,
+	"token_expiry" bigint,
 	"active" boolean NOT NULL,
-	"time_created" integer NOT NULL,
-	"time_updated" integer NOT NULL,
+	"time_created" bigint NOT NULL,
+	"time_updated" bigint NOT NULL,
 	CONSTRAINT "control_account_pkey" PRIMARY KEY("email","url")
 );
 --> statement-breakpoint
@@ -44,9 +44,9 @@ CREATE TABLE "project" (
 	"name" text,
 	"icon_url" text,
 	"icon_color" text,
-	"time_created" integer NOT NULL,
-	"time_updated" integer NOT NULL,
-	"time_initialized" integer,
+	"time_created" bigint NOT NULL,
+	"time_updated" bigint NOT NULL,
+	"time_initialized" bigint,
 	"sandboxes" jsonb NOT NULL,
 	"commands" jsonb
 );
@@ -54,8 +54,8 @@ CREATE TABLE "project" (
 CREATE TABLE "message" (
 	"id" text PRIMARY KEY,
 	"session_id" text NOT NULL,
-	"time_created" integer NOT NULL,
-	"time_updated" integer NOT NULL,
+	"time_created" bigint NOT NULL,
+	"time_updated" bigint NOT NULL,
 	"data" jsonb NOT NULL
 );
 --> statement-breakpoint
@@ -63,15 +63,15 @@ CREATE TABLE "part" (
 	"id" text PRIMARY KEY,
 	"message_id" text NOT NULL,
 	"session_id" text NOT NULL,
-	"time_created" integer NOT NULL,
-	"time_updated" integer NOT NULL,
+	"time_created" bigint NOT NULL,
+	"time_updated" bigint NOT NULL,
 	"data" jsonb NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "permission" (
 	"project_id" text PRIMARY KEY,
-	"time_created" integer NOT NULL,
-	"time_updated" integer NOT NULL,
+	"time_created" bigint NOT NULL,
+	"time_updated" bigint NOT NULL,
 	"data" jsonb NOT NULL
 );
 --> statement-breakpoint
@@ -85,16 +85,16 @@ CREATE TABLE "session" (
 	"title" text NOT NULL,
 	"version" text NOT NULL,
 	"share_url" text,
-	"summary_additions" integer,
-	"summary_deletions" integer,
-	"summary_files" integer,
+	"summary_additions" bigint,
+	"summary_deletions" bigint,
+	"summary_files" bigint,
 	"summary_diffs" jsonb,
 	"revert" jsonb,
 	"permission" jsonb,
-	"time_created" integer NOT NULL,
-	"time_updated" integer NOT NULL,
-	"time_compacting" integer,
-	"time_archived" integer
+	"time_created" bigint NOT NULL,
+	"time_updated" bigint NOT NULL,
+	"time_compacting" bigint,
+	"time_archived" bigint
 );
 --> statement-breakpoint
 CREATE TABLE "todo" (
@@ -102,9 +102,9 @@ CREATE TABLE "todo" (
 	"content" text NOT NULL,
 	"status" text NOT NULL,
 	"priority" text NOT NULL,
-	"position" integer,
-	"time_created" integer NOT NULL,
-	"time_updated" integer NOT NULL,
+	"position" bigint,
+	"time_created" bigint NOT NULL,
+	"time_updated" bigint NOT NULL,
 	CONSTRAINT "todo_pkey" PRIMARY KEY("session_id","position")
 );
 --> statement-breakpoint
@@ -113,19 +113,19 @@ CREATE TABLE "session_share" (
 	"id" text NOT NULL,
 	"secret" text NOT NULL,
 	"url" text NOT NULL,
-	"time_created" integer NOT NULL,
-	"time_updated" integer NOT NULL
+	"time_created" bigint NOT NULL,
+	"time_updated" bigint NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "event_sequence" (
 	"aggregate_id" text PRIMARY KEY,
-	"seq" integer NOT NULL
+	"seq" bigint NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "event" (
 	"id" text PRIMARY KEY,
 	"aggregate_id" text NOT NULL,
-	"seq" integer NOT NULL,
+	"seq" bigint NOT NULL,
 	"type" text NOT NULL,
 	"data" jsonb NOT NULL
 );
