@@ -11,6 +11,7 @@ import { ProviderTransform } from "../provider/transform"
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
+import PROMPT_MEMORY from "./prompt/memory.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { Permission } from "@/permission"
@@ -191,6 +192,21 @@ export namespace Agent {
               native: true,
               hidden: true,
               prompt: PROMPT_COMPACTION,
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  "*": "deny",
+                }),
+                user,
+              ),
+              options: {},
+            },
+            memory: {
+              name: "memory",
+              mode: "primary",
+              native: true,
+              hidden: true,
+              prompt: PROMPT_MEMORY,
               permission: Permission.merge(
                 defaults,
                 Permission.fromConfig({

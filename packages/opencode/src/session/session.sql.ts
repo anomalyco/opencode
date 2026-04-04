@@ -101,3 +101,93 @@ export const PermissionTable = sqliteTable("permission", {
   ...Timestamps,
   data: text({ mode: "json" }).notNull().$type<Permission.Ruleset>(),
 })
+
+export const MemoryFactTable = sqliteTable(
+  "memory_fact",
+  {
+    id: text().primaryKey(),
+    project_id: text()
+      .notNull()
+      .references(() => ProjectTable.id, { onDelete: "cascade" }),
+    session_id: text().$type<SessionID>(),
+    category: text().notNull(),
+    subject: text().notNull(),
+    value: text().notNull(),
+    confidence: integer().notNull().default(0),
+    source_hash: text().notNull(),
+    ...Timestamps,
+  },
+  (table) => [
+    index("memory_fact_project_idx").on(table.project_id),
+    index("memory_fact_subject_idx").on(table.project_id, table.subject),
+  ],
+)
+
+export const MemoryWindowTable = sqliteTable(
+  "memory_window",
+  {
+    id: text().primaryKey(),
+    project_id: text()
+      .notNull()
+      .references(() => ProjectTable.id, { onDelete: "cascade" }),
+    session_id: text().$type<SessionID>().notNull(),
+    started_at: integer().notNull(),
+    ended_at: integer().notNull(),
+    goal: text().notNull(),
+    instructions: text(),
+    discoveries: text(),
+    accomplished: text(),
+    in_progress: text(),
+    blocked_on: text(),
+    files_touched: text({ mode: "json" }).$type<string[]>().notNull(),
+    relevant_dirs: text({ mode: "json" }).$type<string[]>().notNull(),
+    message_ids: text({ mode: "json" }).$type<string[]>().notNull(),
+    parent_window_id: text(),
+    ...Timestamps,
+  },
+  (table) => [
+    index("memory_window_session_idx").on(table.session_id),
+    index("memory_window_project_time_idx").on(table.project_id, table.ended_at),
+  ],
+)
+
+export const MemoryArtifactTable = sqliteTable(
+  "memory_artifact",
+  {
+    id: text().primaryKey(),
+    project_id: text()
+      .notNull()
+      .references(() => ProjectTable.id, { onDelete: "cascade" }),
+    window_id: text()
+      .notNull()
+      .references(() => MemoryWindowTable.id, { onDelete: "cascade" }),
+    kind: text().notNull(),
+    content: text().notNull(),
+    file_path: text(),
+    metadata: text({ mode: "json" }).$type<Record<string, unknown>>(),
+    ...Timestamps,
+  },
+  (table) => [
+    index("memory_artifact_window_idx").on(table.window_id),
+    index("memory_artifact_kind_idx").on(table.project_id, table.kind),
+  ],
+)
+
+export const MemoryProjectTable = sqliteTable(
+  "memory_project",
+  {
+    id: text().primaryKey(),
+    project_id: text()
+      .notNull()
+      .references(() => ProjectTable.id, { onDelete: "cascade" }),
+    project_key: text().notNull(),
+    project_name: text().notNull(),
+    status: text().notNull().default("planned"),
+    summary: text().notNull(),
+    latest_progress: text(),
+    blockers: text(),
+    source_window_ids: text({ mode: "json" }).$type<string[]>().notNull(),
+    ...Timestamps,
+  },
+  (table) => [index("memory_project_key_idx").on(table.project_id, table.project_key)],
+)
