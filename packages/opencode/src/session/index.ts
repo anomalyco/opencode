@@ -32,7 +32,7 @@ import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Permission } from "@/permission"
 import { Global } from "@/global"
-import type { LanguageModelV2Usage } from "@ai-sdk/provider"
+import type { LanguageModelV3Usage } from "@ai-sdk/provider"
 import { Effect, Layer, Scope, ServiceMap } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 
@@ -244,7 +244,7 @@ export namespace Session {
 
   export const getUsage = (input: {
     model: Provider.Model
-    usage: LanguageModelV2Usage
+    usage: LanguageModelV3Usage
     metadata?: ProviderMetadata
   }) => {
     const safe = (value: number) => {
