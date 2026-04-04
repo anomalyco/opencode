@@ -1090,7 +1090,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                         let r: LSP.Range | undefined
                         if ("range" in symbol) r = symbol.range
                         else if ("location" in symbol) r = symbol.location.range
-                        if (r?.start?.line && r?.start?.line === start) {
+                        if (r?.start?.line !== undefined && r.start.line === start) {
                           start = r.start.line
                           end = r?.end?.line ?? start
                           break

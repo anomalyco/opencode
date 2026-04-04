@@ -30,13 +30,13 @@ export const commands = {
 	file: string,
 	line: number,
 	confidence: number,
-	} | null>("query_design_index", { root, component, classes }),
+} | null>("query_design_index", { root, component, classes }),
 	queryDesignUsageIndex: (root: string, component: string, owners: string[] | null) => __TAURI_INVOKE<{
 	file: string,
 	line: number,
 	owner: string | null,
 	confidence: number,
-	} | null>("query_design_usage_index", { root, component, owners }),
+} | null>("query_design_usage_index", { root, component, owners }),
 };
 
 /** Events */
@@ -66,6 +66,13 @@ export type ServerReadyData = {
 
 export type SqliteMigrationProgress = { type: "InProgress"; value: number } | { type: "Done" };
 
+export type UsageQueryResult = {
+		file: string,
+		line: number,
+		owner: string | null,
+		confidence: number,
+	};
+
 export type WslConfig = {
 		enabled: boolean,
 	};
@@ -88,3 +95,4 @@ function makeEvent<T>(name: string) {
 
     return Object.assign(fn, base);
 }
+

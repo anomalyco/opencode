@@ -98,6 +98,7 @@ const EXAMPLES = [
 ] as const
 
 const NON_EMPTY_TEXT = /[^\s\u200B]/
+const mention = /(^|[\s([{"'])@(\S*)$/
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
@@ -895,11 +896,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const shellMode = store.mode === "shell"
 
     if (!shellMode) {
-      const atMatch = rawText.substring(0, cursorPosition).match(/@(\S*)$/)
+      const atMatch = rawText.substring(0, cursorPosition).match(mention)
       const slashMatch = rawText.match(/^\/(\S*)$/)
 
       if (atMatch) {
-        atOnInput(atMatch[1])
+        atOnInput(atMatch[2])
         setStore("popover", "at")
       } else if (slashMatch) {
         slashOnInput(slashMatch[1])
@@ -941,12 +942,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         .map((p) => ("content" in p ? p.content : ""))
         .join("")
       const textBeforeCursor = rawText.substring(0, cursorPosition)
-      const atMatch = textBeforeCursor.match(/@(\S*)$/)
+      const atMatch = textBeforeCursor.match(mention)
       const pill = createPill(part)
       const gap = document.createTextNode(" ")
 
       if (atMatch) {
-        const start = atMatch.index ?? cursorPosition - atMatch[0].length
+        const start = cursorPosition - ((atMatch[2]?.length ?? 0) + 1)
         setRangeEdge(editorRef, range, "start", start)
         setRangeEdge(editorRef, range, "end", cursorPosition)
       }

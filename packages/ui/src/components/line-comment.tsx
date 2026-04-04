@@ -9,6 +9,8 @@ import { useI18n } from "../context/i18n"
 
 installLineCommentStyles()
 
+const mentionPattern = /(^|[\s([{"'])@(\S*)$/
+
 export type LineCommentVariant = "default" | "editor" | "add"
 
 function InlineGlyph(props: { icon: "comment" | "plus" }) {
@@ -267,12 +269,12 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
     if (textarea.selectionStart !== textarea.selectionEnd) return
 
     const end = textarea.selectionStart
-    const match = textarea.value.slice(0, end).match(/@(\S*)$/)
+    const match = textarea.value.slice(0, end).match(mentionPattern)
     if (!match) return
 
     return {
-      query: match[1] ?? "",
-      start: end - match[0].length,
+      query: match[2] ?? "",
+      start: end - ((match[2]?.length ?? 0) + 1),
       end,
     }
   }

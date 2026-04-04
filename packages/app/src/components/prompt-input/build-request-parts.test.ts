@@ -124,6 +124,152 @@ describe("buildRequestParts", () => {
     expect(files.some((part) => part.type === "file" && part.url === "file:///repo/src/shared.ts")).toBe(true)
   })
 
+  test("ignores non-file @mentions in comment text", () => {
+    const result = buildRequestParts({
+      prompt: [{ type: "text", content: "look", start: 0, end: 4 }],
+      context: [
+        {
+          key: "ctx:comment-non-file-mention",
+          type: "file",
+          path: "src/review.ts",
+          comment: "Please ask @alice and me@work.com before merging.",
+        },
+      ],
+      images: [],
+      text: "look",
+      messageID: "msg_comment_non_file_mentions",
+      sessionID: "ses_comment_non_file_mentions",
+      sessionDirectory: "/repo",
+    })
+
+    const files = result.requestParts.filter((part) => part.type === "file")
+    expect(files).toHaveLength(1)
+    expect(files.some((part) => part.type === "file" && part.url === "file:///repo/src/review.ts")).toBe(true)
+  })
+
+  test("adds dotfile @mentions in comment text", () => {
+    const result = buildRequestParts({
+      prompt: [{ type: "text", content: "look", start: 0, end: 4 }],
+      context: [
+        {
+          key: "ctx:comment-dotfile-mention",
+          type: "file",
+          path: "src/review.ts",
+          comment: "Please update @.prettierrc and @.nvmrc.",
+        },
+      ],
+      images: [],
+      text: "look",
+      messageID: "msg_comment_dotfile_mentions",
+      sessionID: "ses_comment_dotfile_mentions",
+      sessionDirectory: "/repo",
+    })
+
+    const files = result.requestParts.filter((part) => part.type === "file")
+    expect(files).toHaveLength(3)
+    expect(files.some((part) => part.type === "file" && part.url === "file:///repo/src/review.ts")).toBe(true)
+    expect(files.some((part) => part.type === "file" && part.url === "file:///repo/.prettierrc")).toBe(true)
+    expect(files.some((part) => part.type === "file" && part.url === "file:///repo/.nvmrc")).toBe(true)
+  })
+
+  test("adds extensionless file @mentions in comment text", () => {
+    const result = buildRequestParts({
+      prompt: [{ type: "text", content: "look", start: 0, end: 4 }],
+      context: [
+        {
+          key: "ctx:comment-extensionless-mention",
+          type: "file",
+          path: "src/review.ts",
+          comment: "Sync @Gemfile with @Procfile before merging.",
+        },
+      ],
+      images: [],
+      text: "look",
+      messageID: "msg_comment_extensionless_mentions",
+      sessionID: "ses_comment_extensionless_mentions",
+      sessionDirectory: "/repo",
+    })
+
+    const files = result.requestParts.filter((part) => part.type === "file")
+    expect(files).toHaveLength(3)
+    expect(files.some((part) => part.type === "file" && part.url === "file:///repo/src/review.ts")).toBe(true)
+    expect(files.some((part) => part.type === "file" && part.url === "file:///repo/Gemfile")).toBe(true)
+    expect(files.some((part) => part.type === "file" && part.url === "file:///repo/Procfile")).toBe(true)
+  })
+
+  test("adds BUILD and WORKSPACE @mentions in comment text", () => {
+    const result = buildRequestParts({
+      prompt: [{ type: "text", content: "look", start: 0, end: 4 }],
+      context: [
+        {
+          key: "ctx:comment-bazel-mention",
+          type: "file",
+          path: "src/review.ts",
+          comment: "Update @BUILD and @WORKSPACE together.",
+        },
+      ],
+      images: [],
+      text: "look",
+      messageID: "msg_comment_bazel_mentions",
+      sessionID: "ses_comment_bazel_mentions",
+      sessionDirectory: "/repo",
+    })
+
+    const files = result.requestParts.filter((part) => part.type === "file")
+    expect(files).toHaveLength(3)
+    expect(files.some((part) => part.type === "file" && part.url === "file:///repo/src/review.ts")).toBe(true)
+    expect(files.some((part) => part.type === "file" && part.url === "file:///repo/BUILD")).toBe(true)
+    expect(files.some((part) => part.type === "file" && part.url === "file:///repo/WORKSPACE")).toBe(true)
+  })
+
+  test("adds Containerfile and Tiltfile @mentions in comment text", () => {
+    const result = buildRequestParts({
+      prompt: [{ type: "text", content: "look", start: 0, end: 4 }],
+      context: [
+        {
+          key: "ctx:comment-containerfile-mention",
+          type: "file",
+          path: "src/review.ts",
+          comment: "Please sync @Containerfile and @Tiltfile.",
+        },
+      ],
+      images: [],
+      text: "look",
+      messageID: "msg_comment_containerfile_mentions",
+      sessionID: "ses_comment_containerfile_mentions",
+      sessionDirectory: "/repo",
+    })
+
+    const files = result.requestParts.filter((part) => part.type === "file")
+    expect(files).toHaveLength(3)
+    expect(files.some((part) => part.type === "file" && part.url === "file:///repo/src/review.ts")).toBe(true)
+    expect(files.some((part) => part.type === "file" && part.url === "file:///repo/Containerfile")).toBe(true)
+    expect(files.some((part) => part.type === "file" && part.url === "file:///repo/Tiltfile")).toBe(true)
+  })
+
+  test("ignores plain words ending with file in comment text", () => {
+    const result = buildRequestParts({
+      prompt: [{ type: "text", content: "look", start: 0, end: 4 }],
+      context: [
+        {
+          key: "ctx:comment-profile-mention",
+          type: "file",
+          path: "src/review.ts",
+          comment: "Please ask @profile owner before merge.",
+        },
+      ],
+      images: [],
+      text: "look",
+      messageID: "msg_comment_profile_mentions",
+      sessionID: "ses_comment_profile_mentions",
+      sessionDirectory: "/repo",
+    })
+
+    const files = result.requestParts.filter((part) => part.type === "file")
+    expect(files).toHaveLength(1)
+    expect(files.some((part) => part.type === "file" && part.url === "file:///repo/src/review.ts")).toBe(true)
+  })
+
   test("handles Windows paths correctly (simulated on macOS)", () => {
     const prompt: Prompt = [{ type: "file", path: "src\\foo.ts", content: "@src\\foo.ts", start: 0, end: 11 }]
 

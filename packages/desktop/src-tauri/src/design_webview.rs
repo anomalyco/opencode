@@ -1,10 +1,82 @@
+use serde_json::Value;
 use std::sync::Mutex;
-use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Webview, WebviewBuilder, WebviewUrl};
 use tauri::webview::PageLoadEvent;
+use tauri::{
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Webview, WebviewBuilder, WebviewUrl,
+};
 
 const LABEL: &str = "design-preview";
+const MAX_PAYLOAD: usize = 262_144;
+const MAX_COMMENT: usize = 8_192;
+const EVENTS: [&str; 5] = [
+    "design:element-select",
+    "design:debug-source",
+    "design:component-list",
+    "design:comment-submit",
+    "design:open-selected",
+];
 
 pub struct DesignWebviewState(pub Mutex<Option<Webview>>);
+
+fn validate_payload(event: &str, input: &str) -> Result<Value, String> {
+    if input.len() > MAX_PAYLOAD {
+        return Err("design bridge payload too large".into());
+    }
+
+    let value: Value = serde_json::from_str(input).map_err(|_| "invalid design bridge payload")?;
+
+    match event {
+        "design:element-select" | "design:open-selected" => {
+            if value.is_object() {
+                return Ok(value);
+            }
+            Err("invalid design bridge payload shape".into())
+        }
+        "design:debug-source" => {
+            let Some(log) = value.get("log") else {
+                return Err("invalid design bridge payload shape".into());
+            };
+            let Some(list) = log.as_array() else {
+                return Err("invalid design bridge payload shape".into());
+            };
+            if list.iter().any(|line| !line.is_string()) {
+                return Err("invalid design bridge payload shape".into());
+            }
+            Ok(value)
+        }
+        "design:component-list" => {
+            let Some(names) = value.get("names") else {
+                return Err("invalid design bridge payload shape".into());
+            };
+            let Some(list) = names.as_array() else {
+                return Err("invalid design bridge payload shape".into());
+            };
+            if list.iter().any(|name| !name.is_string()) {
+                return Err("invalid design bridge payload shape".into());
+            }
+            Ok(value)
+        }
+        "design:comment-submit" => {
+            let Some(comment) = value.get("comment") else {
+                return Err("invalid design bridge payload shape".into());
+            };
+            let Some(text) = comment.as_str() else {
+                return Err("invalid design bridge payload shape".into());
+            };
+            if text.len() > MAX_COMMENT {
+                return Err("design bridge comment too large".into());
+            }
+            let Some(info) = value.get("info") else {
+                return Err("invalid design bridge payload shape".into());
+            };
+            if !info.is_object() {
+                return Err("invalid design bridge payload shape".into());
+            }
+            Ok(value)
+        }
+        _ => Err("design bridge event not allowed".into()),
+    }
+}
 
 #[tauri::command]
 #[specta::specta]
@@ -97,6 +169,16 @@ pub fn eval_design_webview(app: AppHandle, script: String) -> Result<(), String>
 #[tauri::command]
 #[specta::specta]
 pub fn design_bridge(app: AppHandle, event: String, payload: String) -> Result<(), String> {
-    app.emit(&event, payload).map_err(|e| e.to_string())?;
+    if !EVENTS.contains(&event.as_str()) {
+        return Err("design bridge event not allowed".into());
+    }
+
+    validate_payload(&event, &payload)?;
+
+    app.get_window(crate::windows::MainWindow::LABEL)
+        .ok_or("main window not found")?
+        .emit(&event, payload)
+        .map_err(|e| e.to_string())?;
+
     Ok(())
 }

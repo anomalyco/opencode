@@ -41,10 +41,49 @@ const fileQuery = (selection: FileSelection | undefined) =>
 
 const mention = /(^|[\s([{"'])@(\S+)/g
 
+const names = new Set([
+  "dockerfile",
+  "makefile",
+  "readme",
+  "license",
+  "codeowners",
+  "containerfile",
+  "gemfile",
+  "procfile",
+  "rakefile",
+  "tiltfile",
+  "podfile",
+  "vagrantfile",
+  "jenkinsfile",
+  "brewfile",
+  "justfile",
+  ".env",
+  ".gitignore",
+  ".npmrc",
+])
+
+const caps = new Set(["BUILD", "WORKSPACE"])
+
+const fileMention = (value: string) => {
+  if (!value) return false
+  if (value.startsWith("/") || value.startsWith("\\\\") || /^[A-Za-z]:([\\/]|$)/.test(value)) return true
+  if (value.startsWith("./") || value.startsWith("../") || value.startsWith(".\\") || value.startsWith("..\\"))
+    return true
+  if (value.includes("/") || value.includes("\\")) return true
+  const lower = value.toLowerCase()
+  if (names.has(lower)) return true
+  if (caps.has(value)) return true
+  if (lower.startsWith(".") && lower.length > 1 && !lower.endsWith(".")) return true
+  if (/^[A-Z][A-Za-z0-9._-]*file$/.test(value)) return true
+  const idx = lower.lastIndexOf(".")
+  if (idx > 0 && idx < lower.length - 1) return true
+  return false
+}
+
 const parseCommentMentions = (comment: string) => {
   return Array.from(comment.matchAll(mention)).flatMap((match) => {
     const path = (match[2] ?? "").replace(/[.,!?;:)}\]"']+$/, "")
-    if (!path) return []
+    if (!fileMention(path)) return []
     return [path]
   })
 }
