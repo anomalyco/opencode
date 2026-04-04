@@ -75,6 +75,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: unit-${{ matrix.settings.name }}-${{ github.run_attempt }}
+          include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 7
           path: packages/*/.artifacts/unit/junit.xml
