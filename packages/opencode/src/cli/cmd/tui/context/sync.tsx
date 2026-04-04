@@ -375,11 +375,11 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const exit = useExit()
     const args = useArgs()
 
-    async function bootstrap(input: { fatal?: boolean } = {}) {
-      const fatal = input.fatal ?? true
-      const workspace = project.workspace.current()
-      const projectPromise = project.sync()
-      const sessionListPromise = projectPromise.then(() => listSessions())
+    async function bootstrap() {
+      const start = Date.now() - 30 * 24 * 60 * 60 * 1000
+      const sessionListPromise = sdk.client.session
+        .list({ start: start })
+        .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
 
       // blocking - include session.list when continuing a session
       const providersPromise = sdk.client.config.providers({ workspace }, { throwOnError: true })

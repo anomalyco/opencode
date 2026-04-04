@@ -276,16 +276,31 @@ export const layer: Layer.Layer<
         return { id, sandbox, worktree, vcs: "git" as const }
       })
 
-      // Phase 2: upsert
-      const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, data.id)).get())
-      const existing = row
-        ? fromRow(row)
-        : {
-            id: data.id,
-            worktree: data.worktree,
-            vcs: data.vcs,
-            sandboxes: [] as string[],
-            time: { created: Date.now(), updated: Date.now() },
+      const fromDirectory = Effect.fn("Project.fromDirectory")(function* (directory: string) {
+        const all = Date.now()
+        log.info("project.discover", { directory, phase: "start" })
+
+        // Phase 1: discover git info
+        type DiscoveryResult = { id: ProjectID; worktree: string; sandbox: string; vcs: Info["vcs"] }
+
+        const data: DiscoveryResult = yield* Effect.gen(function* () {
+          const at = Date.now()
+          const dotgitMatches = yield* fsys.up({ targets: [".git"], start: directory }).pipe(Effect.orDie)
+          const dotgit = dotgitMatches[0]
+          log.info("project.discover", {
+            directory,
+            phase: "find_git",
+            found: !!dotgit,
+            duration: Date.now() - at,
+          })
+
+          if (!dotgit) {
+            return {
+              id: ProjectID.global,
+              worktree: "/",
+              sandbox: "/",
+              vcs: fakeVcs,
+            }
           }
 
       if (flags.experimentalIconDiscovery) yield* discover(existing).pipe(Effect.ignore, Effect.forkIn(scope))
@@ -308,26 +323,126 @@ export const layer: Layer.Layer<
         { concurrency: "unbounded" },
       ).pipe(Effect.map((arr) => arr.filter((x): x is string => x !== undefined)))
 
-      yield* db((d) =>
-        d
-          .insert(ProjectTable)
-          .values({
-            id: result.id,
-            worktree: result.worktree,
-            vcs: result.vcs ?? null,
-            name: result.name,
-            icon_url: result.icon?.url,
-            icon_url_override: result.icon?.override,
-            icon_color: result.icon?.color,
-            time_created: result.time.created,
-            time_updated: result.time.updated,
-            time_initialized: result.time.initialized,
-            sandboxes: result.sandboxes,
-            commands: result.commands,
+          const commonAt = Date.now()
+          const commonDir = yield* git(["rev-parse", "--git-common-dir"], { cwd: sandbox })
+          log.info("project.discover", {
+            directory,
+            phase: "git_common_dir",
+            code: commonDir.code,
+            duration: Date.now() - commonAt,
           })
-          .onConflictDoUpdate({
-            target: ProjectTable.id,
-            set: {
+          if (commonDir.code !== 0) {
+            return {
+              id: id ?? ProjectID.global,
+              worktree: sandbox,
+              sandbox,
+              vcs: fakeVcs,
+            }
+          }
+          const worktree = (() => {
+            const common = resolveGitPath(sandbox, commonDir.text.trim())
+            return common === sandbox ? sandbox : pathSvc.dirname(common)
+          })()
+
+          if (id == null) {
+            id = yield* readCachedProjectId(pathSvc.join(worktree, ".git"))
+          }
+
+          if (!id) {
+            const rootAt = Date.now()
+            const revList = yield* git(["rev-list", "--max-parents=0", "HEAD"], { cwd: sandbox })
+            const roots = revList.text
+              .split("\n")
+              .filter(Boolean)
+              .map((x) => x.trim())
+              .toSorted()
+            log.info("project.discover", {
+              directory,
+              phase: "git_root_commit",
+              code: revList.code,
+              count: roots.length,
+              duration: Date.now() - rootAt,
+            })
+
+            id = roots[0] ? ProjectID.make(roots[0]) : undefined
+            if (id) {
+              yield* fsys.writeFileString(pathSvc.join(worktree, ".git", "opencode"), id).pipe(Effect.ignore)
+            }
+          }
+
+          if (!id) {
+            return { id: ProjectID.global, worktree: sandbox, sandbox, vcs: "git" as const }
+          }
+
+          const topAt = Date.now()
+          const topLevel = yield* git(["rev-parse", "--show-toplevel"], { cwd: sandbox })
+          log.info("project.discover", {
+            directory,
+            phase: "git_top_level",
+            code: topLevel.code,
+            duration: Date.now() - topAt,
+          })
+          if (topLevel.code !== 0) {
+            return {
+              id,
+              worktree: sandbox,
+              sandbox,
+              vcs: fakeVcs,
+            }
+          }
+          sandbox = resolveGitPath(sandbox, topLevel.text.trim())
+
+          return { id, sandbox, worktree, vcs: "git" as const }
+        })
+        log.info("project.discover", {
+          directory,
+          phase: "git_done",
+          projectID: data.id,
+          vcs: data.vcs,
+          worktree: data.worktree,
+          sandbox: data.sandbox,
+          duration: Date.now() - all,
+        })
+
+        // Phase 2: upsert
+        const dbAt = Date.now()
+        const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, data.id)).get())
+        const existing = row
+          ? fromRow(row)
+          : {
+              id: data.id,
+              worktree: data.worktree,
+              vcs: data.vcs,
+              sandboxes: [] as string[],
+              time: { created: Date.now(), updated: Date.now() },
+            }
+
+        if (Flag.OPENCODE_EXPERIMENTAL_ICON_DISCOVERY)
+          yield* discover(existing).pipe(Effect.ignore, Effect.forkIn(scope))
+
+        const result: Info = {
+          ...existing,
+          worktree: data.worktree,
+          vcs: data.vcs,
+          time: { ...existing.time, updated: Date.now() },
+        }
+        if (data.sandbox !== result.worktree && !result.sandboxes.includes(data.sandbox))
+          result.sandboxes.push(data.sandbox)
+        result.sandboxes = yield* Effect.forEach(
+          result.sandboxes,
+          (s) =>
+            fsys.exists(s).pipe(
+              Effect.orDie,
+              Effect.map((exists) => (exists ? s : undefined)),
+            ),
+          { concurrency: "unbounded" },
+        ).pipe(Effect.map((arr) => arr.filter((x): x is string => x !== undefined)))
+
+        yield* db((d) =>
+          d
+            .insert(ProjectTable)
+            .values({
+              id: result.id,
               worktree: result.worktree,
               vcs: result.vcs ?? null,
               name: result.name,
@@ -353,14 +468,33 @@ export const layer: Layer.Layer<
         )
       }
 
-      yield* emitUpdated(result)
-      return { project: result, sandbox: data.sandbox }
-    })
+        if (data.id !== ProjectID.global) {
+          yield* db((d) =>
+            d
+              .update(SessionTable)
+              .set({ project_id: data.id })
+              .where(and(eq(SessionTable.project_id, ProjectID.global), eq(SessionTable.directory, data.worktree)))
+              .run(),
+          )
+        }
+        log.info("project.discover", {
+          directory,
+          phase: "db_done",
+          projectID: result.id,
+          vcs: result.vcs,
+          duration: Date.now() - dbAt,
+        })
 
-    const discover = Effect.fn("Project.discover")(function* (input: Info) {
-      if (input.vcs !== "git") return
-      if (input.icon?.override) return
-      if (input.icon?.url) return
+        yield* emitUpdated(result)
+        log.info("project.discover", {
+          directory,
+          phase: "total",
+          projectID: result.id,
+          vcs: result.vcs,
+          duration: Date.now() - all,
+        })
+        return { project: result, sandbox: data.sandbox }
+      })
 
       const matches = yield* fs
         .glob("**/favicon.{ico,png,svg,jpg,jpeg,webp}", {

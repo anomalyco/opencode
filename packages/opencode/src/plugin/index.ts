@@ -23,14 +23,12 @@ import { XaiAuthPlugin } from "./xai"
 import { Effect, Layer, Context, Stream } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
-import { errorMessage } from "@/util/error"
-import { PluginLoader } from "./loader"
-import { parsePluginSpecifier, readPluginId, readV1Plugin, resolvePluginId } from "./shared"
-import { registerAdapter } from "@/control-plane/adapters"
-import type { WorkspaceAdapter } from "@/control-plane/types"
-import { RuntimeFlags } from "@/effect/runtime-flags"
+import { makeRunPromise } from "@/effect/run-service"
+import { Instance } from "@/project/instance"
 
-const log = Log.create({ service: "plugin" })
+export namespace Plugin {
+  const log = Log.create({ service: "plugin" })
+  const pending = new Map<string, Promise<void>>()
 
   type Item = {
     name: string
@@ -189,20 +187,22 @@ type TriggerName = {
   }
 
   export async function init() {
-    const hooks = await state().then((x) => x.hooks)
-    const config = await Config.get()
-    for (const item of hooks) {
-      // @ts-expect-error this is because we haven't moved plugin to sdk v2
-      await item.hooks.config?.(config)
-    }
-    Bus.subscribeAll(async (input) => {
-      const hooks = await state().then((x) => x.hooks)
-      for (const item of hooks) {
-        item.hooks["event"]?.({
-          event: input,
+    const dir = Instance.directory
+    const task = pending.get(dir)
+    if (task) return
+
+    const next = runPromise((svc) => svc.init())
+      .catch((err) => {
+        log.error("plugin preload failed", {
+          directory: dir,
+          error: err instanceof Error ? err.message : String(err),
         })
-      }
-    })
+      })
+      .finally(() => {
+        if (pending.get(dir) === next) pending.delete(dir)
+      })
+
+    pending.set(dir, next)
   }
 }
 

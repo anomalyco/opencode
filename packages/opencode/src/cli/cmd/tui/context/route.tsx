@@ -38,7 +38,7 @@ export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
         return store
       },
       navigate(route: Route) {
-        setStore(reconcile(route))
+        setStore(route)
       },
     }
   },
