@@ -203,9 +203,25 @@ jobs:
           XCSH_CHANNEL: latest
         run: |
           echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
-          version="${{ steps.version.outputs.version }}"
+          base="${{ steps.version.outputs.base }}"
 
-          # Resolve catalog:/workspace: deps and set fork version before publish
+          # Compute a clean npm version by bumping the upstream patch version.
+          # e.g., upstream 1.3.13 → npm 1.3.14, 1.3.15, etc.
+          # Check which versions already exist and pick the next one.
+          npm_version=$(bun -e "
+            const base = '$base'.split('.')
+            const major = base[0], minor = base[1]
+            let patch = parseInt(base[2]) + 1
+            while (true) {
+              const ver = major + '.' + minor + '.' + patch
+              const res = await fetch('https://registry.npmjs.org/@f5xc-salesdemos/sdk/' + ver)
+              if (res.status === 404) { console.log(ver); break }
+              patch++
+            }
+          ")
+          echo "npm_version=$npm_version"
+
+          # Resolve catalog:/workspace: deps and set clean version before publish
           bun -e "
             const resolve = async (pkgPath, ver, sdkVer) => {
               const root = JSON.parse(await Bun.file('package.json').text())
@@ -221,8 +237,8 @@ jobs:
               }
               await Bun.write(pkgPath, JSON.stringify(p, null, 2))
             }
-            await resolve('packages/sdk/js/package.json', '$version', null)
-            await resolve('packages/plugin/package.json', '$version', '$version')
+            await resolve('packages/sdk/js/package.json', '$npm_version', null)
+            await resolve('packages/plugin/package.json', '$npm_version', '$npm_version')
           "
 
           cd packages/sdk/js
