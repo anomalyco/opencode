@@ -1115,6 +1115,8 @@ type HighlightSegment = { text: string; type?: "file" | "agent" | "code-inline" 
 const COLLAPSE_LINES = 8
 
 function parseCode(text: string): HighlightSegment[] {
+  // if fenced code blocks are unbalanced (unclosed), render as plain text
+  if ((text.match(/```/g) ?? []).length % 2 !== 0) return [{ text }]
   const result: HighlightSegment[] = []
   const re = /```([\w.-]*)[^\S\r\n]*\r?\n?([\s\S]*?)```|`([^`\n]+)`/g
   let last = 0
