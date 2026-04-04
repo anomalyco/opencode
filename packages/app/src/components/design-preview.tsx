@@ -12,17 +12,11 @@ import { detectDevUrl } from "@/utils/detect-port"
 import { createInjectionScript } from "@/components/design-preview/injection"
 import { pickClasses } from "@/components/design-preview/pick-classes"
 import { createResolver, type Hit } from "@/components/design-preview/resolve"
+import { choose, grade, mode, need, rank, state, type SourceLoc } from "@/components/design-preview/source"
 
 const INJECT = createInjectionScript()
 
-type Source = {
-  file?: string
-  line?: number
-  column?: number
-  component?: string
-  owner?: string
-  _debug?: string[]
-}
+type Source = SourceLoc
 
 export type DesignElementInfo = {
   tag: string
@@ -67,6 +61,8 @@ const cfg = {
   poll: 2000,
   minConfidence: 0.3,
   minUsageConfidence: 0.6,
+  minOpen: 0.6,
+  minComment: 0.6,
 }
 
 export type DesignPreviewProps = {
@@ -128,6 +124,7 @@ export function DesignPreview(props: DesignPreviewProps) {
     selected: undefined as DesignElementInfo | undefined,
     inspect: true,
     notes: [] as Note[],
+    pending: undefined as Hit | undefined,
   })
 
   const [url, setUrl] = createSignal(layout.design.url())
@@ -145,6 +142,7 @@ export function DesignPreview(props: DesignPreviewProps) {
   const run = (input: string) => platform.evalDesignWebview?.(input)
   const lookup = createResolver(files, sdk.client)
   const select = (info: DesignElementInfo | undefined) => {
+    setStore("pending", undefined)
     setStore("selected", info)
     props.onElementSelect?.(info)
   }
@@ -333,17 +331,20 @@ export function DesignPreview(props: DesignPreviewProps) {
     return e.payload
   }
 
-  const note = (info: DesignElementInfo, text: string): Note => ({
-    text,
-    element: {
-      tagName: info.tag,
-      className: info.classes,
-      domPath: info.path,
-      sourceFile: info.source?.file ? lookup.normalizePath(info.source.file) : undefined,
-      sourceLine: info.source?.line,
-      boundingRect: info.rect,
-    },
-  })
+  const note = (info: DesignElementInfo, text: string): Note => {
+    const src = choose(info)
+    return {
+      text,
+      element: {
+        tagName: info.tag,
+        className: info.classes,
+        domPath: info.path,
+        sourceFile: src?.file ? lookup.normalizePath(src.file) : undefined,
+        sourceLine: src?.line,
+        boundingRect: info.rect,
+      },
+    }
+  }
 
   let rustNames: string[] = []
 
@@ -411,7 +412,13 @@ export function DesignPreview(props: DesignPreviewProps) {
           if (ver !== cache) return null
           if (result && result.confidence > cfg.minConfidence) {
             console.log("[Design] Rust index hit:", result.file, "line:", result.line, "confidence:", result.confidence)
-            const hit = { file: result.file, line: result.line, comp: comp ?? undefined }
+            const hit = {
+              file: result.file,
+              line: result.line,
+              comp: comp ?? undefined,
+              origin: "rust-index",
+              score: result.confidence,
+            }
             idxCache.set(key, hit)
             return hit
           }
@@ -458,6 +465,8 @@ export function DesignPreview(props: DesignPreviewProps) {
               line: result.line,
               comp,
               owner: result.owner ?? owners[0],
+              origin: "usage-index",
+              score: result.confidence,
             }
             usageCache.set(key, hit)
             console.log(
@@ -512,6 +521,11 @@ export function DesignPreview(props: DesignPreviewProps) {
       line: hit.line,
       component: comp,
       owner: hit.owner,
+      origin: hit.origin,
+      confidence: hit.score !== undefined ? grade(hit.score) : undefined,
+      score: hit.score,
+      ambiguous: hit.ambiguous,
+      candidates: hit.candidates,
     }
     return slot === "source" ? { ...info, component: comp, source: src } : { ...info, component: comp, definition: src }
   }
@@ -536,9 +550,28 @@ export function DesignPreview(props: DesignPreviewProps) {
   }
 
   const openHit = (hit: Hit) => {
-    props.onOpenFile?.(hit.file, hit.line)
+    const file = lookup.normalizePath(hit.file)
+    const next = { ...hit, file }
+    const val = typeof next.score === "number" ? next.score : rank(next)
+    if (val < cfg.minOpen) return "blocked" as const
+    const gate = mode(next)
+    if (gate === "deny") return "blocked" as const
+    if (gate === "confirm") {
+      const prev = store.pending
+      const same =
+        prev &&
+        lookup.normalizePath(prev.file) === next.file &&
+        prev.line === next.line &&
+        (prev.comp ?? "") === (next.comp ?? "")
+      if (!same) {
+        setStore("pending", next)
+        return "pending" as const
+      }
+    }
+    setStore("pending", undefined)
+    props.onOpenFile?.(next.file, next.line)
     select(undefined)
-    return true
+    return "opened" as const
   }
 
   const sourceLabel = (src: Source | undefined) => {
@@ -546,9 +579,27 @@ export function DesignPreview(props: DesignPreviewProps) {
     return `${src.file.split(/[\\/]/).pop()}:${src.line ?? 1}`
   }
 
+  const sourceState = (src: Source | undefined) => {
+    return state(src)
+  }
+
   const usageText = (src: Source | undefined, comp: string | undefined) => {
     if (!src?.owner || src.owner === comp) return "Go to usage"
     return `Go to usage in ${src.owner}`
+  }
+
+  const sourceTone = (src: Source | undefined) => {
+    const lvl = sourceState(src)
+    if (lvl === "high") return "text-text-strong"
+    if (lvl === "medium") return "text-text-weak"
+    if (lvl === "low") return "text-text-secondary"
+    return "text-text-weaker"
+  }
+
+  const sourceBadge = (src: Source | undefined) => {
+    const lvl = sourceState(src)
+    if (lvl === "none") return "UNKNOWN"
+    return lvl.toUpperCase()
   }
 
   const locateUsage = async (info: Query): Promise<Hit | null> => {
@@ -559,7 +610,14 @@ export function DesignPreview(props: DesignPreviewProps) {
     const owner = idx === -1 ? chain[1] : chain[idx + 1]
     const file = info.source?.file ? lookup.normalizePath(info.source.file) : undefined
     if (file && lookup.isSourceFile(file) && !lookup.fileDefinesComponent(file, comp)) {
-      return { file, line: info.source?.line ?? 1, comp, owner }
+      return {
+        file,
+        line: info.source?.line ?? 1,
+        comp,
+        owner,
+        origin: info.source?.origin ?? "runtime",
+        score: info.source?.score ?? rank(info.source),
+      }
     }
     const rust = await queryUsageIndex(info)
     if (rust) {
@@ -568,7 +626,8 @@ export function DesignPreview(props: DesignPreviewProps) {
         search: info.searchHint,
         classes: info.classes,
       })
-      if (exact) return { ...exact, owner: rust.owner }
+      if (exact)
+        return { ...exact, owner: rust.owner, origin: exact.origin ?? "usage-index", score: exact.score ?? rust.score }
       return rust
     }
     const names = (idx === -1 ? chain : chain.slice(idx + 1)).filter(
@@ -588,7 +647,7 @@ export function DesignPreview(props: DesignPreviewProps) {
         search: info.searchHint,
         classes: info.classes,
       })
-      if (hit) return { ...hit, owner: name }
+      if (hit) return { ...hit, owner: name, origin: hit.origin ?? "usage-chain", score: hit.score ?? 0.62 }
     }
     return lookup.findUsage(comp)
   }
@@ -611,11 +670,11 @@ export function DesignPreview(props: DesignPreviewProps) {
 
   const enrich = async (info: DesignElementInfo, all = true) => {
     let next = prime(info)
-    if (!next.source) {
+    if (need(next, all)) {
       const hit = await locateUsage(next)
       if (hit) next = setLocation(next, "source", hit)
     }
-    if (!next.source) {
+    if (need(next, all)) {
       const hit = await lookup.grepFallback(next)
       if (hit) next = setLocation(next, "source", hit)
     }
@@ -625,7 +684,7 @@ export function DesignPreview(props: DesignPreviewProps) {
         next = setLocation(next, "definition", hit)
       }
     }
-    if (!next.source && next.definition?.file) {
+    if (!next.source?.file && next.definition?.file) {
       next = { ...next, source: { ...next.definition } }
     }
     if (next.definition && sameSource(next.source, next.definition)) {
@@ -639,11 +698,25 @@ export function DesignPreview(props: DesignPreviewProps) {
     const comp = next.component ?? next.source?.component ?? next.definition?.component
     const file = next.source?.file ? lookup.normalizePath(next.source.file) : undefined
     if (file && lookup.isSourceFile(file)) {
-      return openHit({ file, line: next.source?.line ?? 1, comp })
+      const out = openHit({
+        file,
+        line: next.source?.line ?? 1,
+        comp,
+        origin: next.source?.origin,
+        score: next.source?.score ?? rank(next.source),
+      })
+      if (out !== "blocked") return out === "opened"
     }
     const def = next.definition?.file ? lookup.normalizePath(next.definition.file) : undefined
     if (def && lookup.isSourceFile(def)) {
-      return openHit({ file: def, line: next.definition?.line ?? 1, comp })
+      const out = openHit({
+        file: def,
+        line: next.definition?.line ?? 1,
+        comp,
+        origin: next.definition?.origin,
+        score: next.definition?.score ?? rank(next.definition),
+      })
+      if (out !== "blocked") return out === "opened"
     }
     return false
   }
@@ -653,14 +726,35 @@ export function DesignPreview(props: DesignPreviewProps) {
     const comp = next.component ?? next.source?.component ?? next.definition?.component
     const def = next.definition?.file ? lookup.normalizePath(next.definition.file) : undefined
     if (def && lookup.isSourceFile(def)) {
-      return openHit({ file: def, line: next.definition?.line ?? 1, comp })
+      const out = openHit({
+        file: def,
+        line: next.definition?.line ?? 1,
+        comp,
+        origin: next.definition?.origin,
+        score: next.definition?.score ?? rank(next.definition),
+      })
+      if (out !== "blocked") return out === "opened"
     }
     const file = next.source?.file ? lookup.normalizePath(next.source.file) : undefined
     if (file && lookup.isSourceFile(file) && (!comp || lookup.fileDefinesComponent(file, comp))) {
-      return openHit({ file, line: next.source?.line ?? 1, comp })
+      const out = openHit({
+        file,
+        line: next.source?.line ?? 1,
+        comp,
+        origin: next.source?.origin,
+        score: next.source?.score ?? rank(next.source),
+      })
+      if (out !== "blocked") return out === "opened"
     }
     if (file && lookup.isSourceFile(file)) {
-      return openHit({ file, line: next.source?.line ?? 1, comp })
+      const out = openHit({
+        file,
+        line: next.source?.line ?? 1,
+        comp,
+        origin: next.source?.origin,
+        score: next.source?.score ?? rank(next.source),
+      })
+      if (out !== "blocked") return out === "opened"
     }
     return false
   }
@@ -673,9 +767,15 @@ export function DesignPreview(props: DesignPreviewProps) {
         ? store.selected
         : { component: name, ancestry: idx === -1 ? [name] : chain.slice(idx) }
     const use = await locateUsage(info)
-    if (use) return openHit(use)
+    if (use) {
+      const out = openHit(use)
+      if (out !== "blocked") return out === "opened"
+    }
     const def = await locateDefinition(info)
-    if (def) return openHit(def)
+    if (def) {
+      const out = openHit(def)
+      if (out !== "blocked") return out === "opened"
+    }
     return false
   }
 
@@ -769,8 +869,8 @@ export function DesignPreview(props: DesignPreviewProps) {
             className: store.selected.classes ?? "",
             id: store.selected.id ?? "",
             domPath: store.selected.path,
-            sourceFile: store.selected.source?.file,
-            sourceLine: store.selected.source?.line,
+            sourceFile: choose(store.selected)?.file,
+            sourceLine: choose(store.selected)?.line,
             computedStyles: store.selected.computedStyles ?? {},
             boundingRect: store.selected.rect,
           }
@@ -952,15 +1052,19 @@ export function DesignPreview(props: DesignPreviewProps) {
                 }
               : raw
           const next = await enrich(info, false)
+          const src = choose(next)
+          if (rank(src) < cfg.minComment) {
+            console.log("[Design] comment-submit skipped: low confidence")
+            return
+          }
           setStore("notes", (prev) => [...prev, note(next, text)])
-
-          const path = next.source?.file ? lookup.normalizePath(next.source.file) : undefined
+          const path = src?.file ? lookup.normalizePath(src.file) : undefined
           if (!path) return
           props.onComment?.({
             file: path,
-            line: next.source?.line ?? 1,
+            line: src?.line ?? 1,
             comment: text,
-            component: next.component ?? next.source?.component,
+            component: next.component ?? src?.component,
           })
         } catch (err) {
           console.log("[Design] comment-submit error:", err)
@@ -1318,8 +1422,20 @@ export function DesignPreview(props: DesignPreviewProps) {
                 const use = !!file && !!comp && !lookup.fileDefinesComponent(file, comp)
                 const main = def?.file ? def : src
                 const text = def?.file || (!use && src?.file) ? "Go to definition" : usageText(src, comp)
+                const badge = sourceBadge(main)
+                const tone = sourceTone(main)
+                const pending = store.pending
+                const same = (value: Source | undefined) =>
+                  !!pending &&
+                  !!value?.file &&
+                  lookup.normalizePath(pending.file) === lookup.normalizePath(value.file) &&
+                  pending.line === (value.line ?? 1)
+                const canConfirm = same(main) || (use && same(src))
                 return (
                   <>
+                    <Show when={main}>
+                      <span class={`text-11-regular shrink-0 ${tone}`}>{badge}</span>
+                    </Show>
                     <Show when={main?.file}>
                       <button
                         class="text-text-weak hover:text-text-strong underline shrink-0"
@@ -1327,6 +1443,19 @@ export function DesignPreview(props: DesignPreviewProps) {
                         onClick={() => void openSelection(el())}
                       >
                         {`${text} (${sourceLabel(main)})`}
+                      </button>
+                    </Show>
+                    <Show when={canConfirm}>
+                      <button
+                        class="text-text-weak hover:text-text-strong underline shrink-0"
+                        onClick={() => {
+                          const hit = store.pending
+                          if (!hit) return
+                          const out = openHit(hit)
+                          if (out === "blocked") setStore("pending", undefined)
+                        }}
+                      >
+                        Confirm open
                       </button>
                     </Show>
                     <Show when={use && src?.file}>

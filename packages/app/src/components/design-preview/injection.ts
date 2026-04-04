@@ -373,7 +373,15 @@ export function createInjectionScript(): string {
               file = resolvedSources[name].file || resolvedSources[name];
               line = resolvedSources[name].line || 1;
             }
-            componentMap.set(el, { name: name, chain: chain, file: file, line: line, column: col });
+            componentMap.set(el, {
+              name: name,
+              chain: chain,
+              file: file,
+              line: line,
+              column: col,
+              origin: file ? 'react-map' : 'react-name',
+              score: file ? 0.88 : 0.45,
+            });
             count++;
             if (!file && !unresolvedNames[name]) unresolvedNames[name] = 1;
           }
@@ -383,7 +391,15 @@ export function createInjectionScript(): string {
           var opts = el.__vue__.$options;
           var vn = opts.name || opts._componentTag;
           if (vn && vn[0] === vn[0].toUpperCase()) {
-            componentMap.set(el, { name: vn, chain: [vn], file: opts.__file || null, line: 1, column: null });
+            componentMap.set(el, {
+              name: vn,
+              chain: [vn],
+              file: opts.__file || null,
+              line: 1,
+              column: null,
+              origin: opts.__file ? 'vue-file' : 'vue-name',
+              score: opts.__file ? 0.9 : 0.45,
+            });
             count++;
             if (!opts.__file && !unresolvedNames[vn]) unresolvedNames[vn] = 1;
           }
@@ -393,7 +409,15 @@ export function createInjectionScript(): string {
           var vt = el.__vueParentComponent.type;
           var v3 = vt && (vt.name || vt.__name);
           if (v3 && v3[0] === v3[0].toUpperCase()) {
-            componentMap.set(el, { name: v3, chain: [v3], file: vt.__file || null, line: 1, column: null });
+            componentMap.set(el, {
+              name: v3,
+              chain: [v3],
+              file: vt.__file || null,
+              line: 1,
+              column: null,
+              origin: vt.__file ? 'vue3-file' : 'vue3-name',
+              score: vt.__file ? 0.9 : 0.45,
+            });
             count++;
             if (!vt.__file && !unresolvedNames[v3]) unresolvedNames[v3] = 1;
           }
@@ -403,7 +427,15 @@ export function createInjectionScript(): string {
           var loc = el.__svelte_meta.loc;
           var sn = (loc.file || '').split('/').pop().replace(/\\.svelte$/, '');
           if (sn && sn[0] === sn[0].toUpperCase()) {
-            componentMap.set(el, { name: sn, chain: [sn], file: loc.file, line: loc.line, column: loc.column });
+            componentMap.set(el, {
+              name: sn,
+              chain: [sn],
+              file: loc.file,
+              line: loc.line,
+              column: loc.column,
+              origin: 'svelte-meta',
+              score: 0.9,
+            });
             count++;
           }
           continue;
@@ -551,7 +583,15 @@ export function createInjectionScript(): string {
     function findSource(el) {
       var entry = mapLookup(el);
       if (entry && entry.file) {
-        return { file: entry.file, line: entry.line, column: entry.column, component: entry.name, _debug: ['map'] };
+        return {
+          file: entry.file,
+          line: entry.line,
+          column: entry.column,
+          component: entry.name,
+          origin: entry.origin || 'map',
+          score: typeof entry.score === 'number' ? entry.score : 0.88,
+          _debug: ['map'],
+        };
       }
       var log = [];
 
@@ -572,6 +612,8 @@ export function createInjectionScript(): string {
           line: parts[1] ? parseInt(parts[1], 10) : 1,
           column: parts[2] ? parseInt(parts[2], 10) : undefined,
           component: componentName(el),
+          origin: 'data-source-file',
+          score: 0.95,
           _debug: debugLines
         };
       }
@@ -588,7 +630,16 @@ export function createInjectionScript(): string {
             log.push('[Design]   _debugSource raw skipped: ' + raw);
           } else {
             var f = stripPath(raw);
-            if (!shouldSkip(f)) return { file: f, line: fb._debugSource.lineNumber, column: fb._debugSource.columnNumber, component: fiberName(fb) };
+            if (!shouldSkip(f)) {
+              return {
+                file: f,
+                line: fb._debugSource.lineNumber,
+                column: fb._debugSource.columnNumber,
+                component: fiberName(fb),
+                origin: 'react-debug-source',
+                score: 0.95,
+              };
+            }
             log.push('[Design]   _debugSource skipped: ' + f);
           }
         }
@@ -598,18 +649,37 @@ export function createInjectionScript(): string {
             log.push('[Design]   _debugOwner._debugSource raw skipped: ' + owRaw);
           } else {
             var owf = stripPath(owRaw);
-            if (!shouldSkip(owf)) return { file: owf, line: fb._debugOwner._debugSource.lineNumber, column: fb._debugOwner._debugSource.columnNumber, component: fiberName(fb) || fiberName(fb._debugOwner) };
+            if (!shouldSkip(owf)) {
+              return {
+                file: owf,
+                line: fb._debugOwner._debugSource.lineNumber,
+                column: fb._debugOwner._debugSource.columnNumber,
+                component: fiberName(fb) || fiberName(fb._debugOwner),
+                origin: 'react-owner-debug-source',
+                score: 0.92,
+              };
+            }
             log.push('[Design]   _debugOwner._debugSource skipped: ' + owf);
           }
         }
         if (fb._debugStack) {
           var p = parseStack(fb._debugStack);
-          if (p && !shouldSkip(p.file)) { if (!p.component) p.component = fiberName(fb); return p; }
+          if (p && !shouldSkip(p.file)) {
+            if (!p.component) p.component = fiberName(fb);
+            p.origin = 'react-debug-stack';
+            p.score = 0.62;
+            return p;
+          }
           if (p) log.push('[Design]   _debugStack skipped: ' + p.file);
         }
         if (fb._debugOwner && fb._debugOwner._debugStack) {
           var ows = parseStack(fb._debugOwner._debugStack);
-          if (ows && !shouldSkip(ows.file)) { if (!ows.component) ows.component = fiberName(fb._debugOwner) || fiberName(fb); return ows; }
+          if (ows && !shouldSkip(ows.file)) {
+            if (!ows.component) ows.component = fiberName(fb._debugOwner) || fiberName(fb);
+            ows.origin = 'react-owner-debug-stack';
+            ows.score = 0.6;
+            return ows;
+          }
           if (ows) log.push('[Design]   _debugOwner._debugStack skipped: ' + ows.file);
         }
         if (fb._debugInfo && Array.isArray(fb._debugInfo)) {
@@ -617,12 +687,26 @@ export function createInjectionScript(): string {
             var entry = fb._debugInfo[di];
             if (entry && entry.owner && entry.owner._debugSource) {
               var df = stripPath(entry.owner._debugSource.fileName);
-              if (!shouldSkip(df)) return { file: df, line: entry.owner._debugSource.lineNumber, column: entry.owner._debugSource.columnNumber, component: entry.owner.name || entry.name || fiberName(fb) };
+              if (!shouldSkip(df)) {
+                return {
+                  file: df,
+                  line: entry.owner._debugSource.lineNumber,
+                  column: entry.owner._debugSource.columnNumber,
+                  component: entry.owner.name || entry.name || fiberName(fb),
+                  origin: 'react-debug-info',
+                  score: 0.88,
+                };
+              }
               log.push('[Design]   _debugInfo[' + di + '] skipped: ' + df);
             }
             if (entry && entry.owner && entry.owner._debugStack) {
               var ip = parseStack(entry.owner._debugStack);
-              if (ip && !shouldSkip(ip.file)) { if (!ip.component) ip.component = entry.owner.name || entry.name; return ip; }
+              if (ip && !shouldSkip(ip.file)) {
+                if (!ip.component) ip.component = entry.owner.name || entry.name;
+                ip.origin = 'react-debug-info-stack';
+                ip.score = 0.58;
+                return ip;
+              }
             }
           }
         }
@@ -707,7 +791,7 @@ export function createInjectionScript(): string {
           if (opts && opts.__file) {
             log.push('[Design] FOUND Vue __file: ' + opts.__file);
             postDebugLog(log);
-            return { file: opts.__file, line: 1, _debug: debugLines };
+            return { file: opts.__file, line: 1, origin: 'vue-file', score: 0.9, _debug: debugLines };
           }
         }
         if (node.__vueParentComponent) {
@@ -715,7 +799,7 @@ export function createInjectionScript(): string {
           if (vtype && vtype.__file) {
             log.push('[Design] FOUND Vue __vueParentComponent.__file: ' + vtype.__file);
             postDebugLog(log);
-            return { file: vtype.__file, line: 1, _debug: debugLines };
+            return { file: vtype.__file, line: 1, origin: 'vue3-file', score: 0.9, _debug: debugLines };
           }
         }
         node = node.parentElement;
@@ -729,7 +813,7 @@ export function createInjectionScript(): string {
           if (loc) {
             log.push('[Design] FOUND Svelte __svelte_meta: ' + loc.file + ':' + loc.line);
             postDebugLog(log);
-            return { file: loc.file, line: loc.line, column: loc.column, _debug: debugLines };
+            return { file: loc.file, line: loc.line, column: loc.column, origin: 'svelte-meta', score: 0.9, _debug: debugLines };
           }
         }
         node = node.parentElement;
@@ -837,6 +921,18 @@ export function createInjectionScript(): string {
         searchHint: searchHint(el),
         framework: framework()
       };
+    }
+
+    function hot() {
+      if (window.__vite_plugin_react_preamble_installed__ || window.__VITE__) return true;
+      if (window.__webpack_hot_middleware_reporter__ || window.__webpack_require__) return true;
+      return false;
+    }
+
+    function hmr() {
+      queueMap(150);
+      queueSelection();
+      if (currentEl) post('element-select', readInfo(currentEl, true));
     }
 
     var currentEl = null;
@@ -1006,6 +1102,23 @@ export function createInjectionScript(): string {
       queueMap(1500);
     });
     mapObserver.observe(document.body, { childList: true, subtree: true });
+
+    if (hot()) {
+      window.addEventListener('vite:afterUpdate', hmr, true);
+      window.addEventListener('vite:beforeUpdate', function() { queueMap(60); }, true);
+      window.addEventListener('webpackHotUpdate', hmr, true);
+      window.addEventListener('message', function(e) {
+        var d = e && e.data;
+        if (!d) return;
+        if (typeof d === 'string' && d.indexOf('vite') !== -1 && d.indexOf('update') !== -1) {
+          hmr();
+          return;
+        }
+        if (typeof d === 'object' && (d.type === 'vite:afterUpdate' || d.type === 'webpackHotUpdate')) {
+          hmr();
+        }
+      }, true);
+    }
 
     queueMap(1500);
 

@@ -1,10 +1,23 @@
 import { pickClasses } from "./pick-classes"
 
+const SCORE = {
+  index: 0.95,
+  tag: 0.9,
+  definition: 0.88,
+  usage: 0.65,
+  text: 0.05,
+  grep: 0.35,
+} as const
+
 export type Hit = {
   file: string
   line: number
   comp?: string
   owner?: string
+  origin?: string
+  score?: number
+  ambiguous?: boolean
+  candidates?: Array<{ file: string; line: number; component?: string; owner?: string }>
 }
 
 type Match = {
@@ -211,7 +224,8 @@ export function createResolver(files: Files, client: Client) {
           file,
           line: chosen.line,
           comp,
-          score: chosen.score,
+          origin: "tag",
+          score: chosen.score > 0 ? Math.min(0.95, SCORE.tag + Math.min(0.05, chosen.score * 0.005)) : SCORE.tag,
         }
         if (cur !== rev) return null
         tagCache.set(key, hit)
@@ -228,7 +242,7 @@ export function createResolver(files: Files, client: Client) {
   const findTag = async (input: string, comp: string, opts?: TagOpts): Promise<Hit | null> => {
     const hit = await scanTag(input, comp, opts)
     if (!hit) return null
-    return { file: hit.file, line: hit.line, comp: hit.comp }
+    return { file: hit.file, line: hit.line, comp: hit.comp, origin: "tag", score: hit.score ?? SCORE.tag }
   }
 
   const findTagInFiles = async (inputs: string[], comp: string, opts?: TagOpts): Promise<Hit | null> => {
@@ -243,7 +257,7 @@ export function createResolver(files: Files, client: Client) {
       if (!best || hit.score > best.score) best = hit
     }
     if (!best) return null
-    return { file: best.file, line: best.line, comp: best.comp }
+    return { file: best.file, line: best.line, comp: best.comp, origin: "tag", score: best.score ?? SCORE.tag }
   }
 
   const findDefinition = async (comp: string): Promise<Hit | null> => {
@@ -269,7 +283,22 @@ export function createResolver(files: Files, client: Client) {
         const match = exact ?? user[0]
         if (!match?.path.text) continue
 
-        const hit = { file: match.path.text, line: match.line_number ?? 1, comp }
+        const hit = {
+          file: match.path.text,
+          line: match.line_number ?? 1,
+          comp,
+          origin: "definition",
+          score: SCORE.definition,
+          ambiguous: user.length > 1,
+          candidates:
+            user.length > 1
+              ? user.slice(0, 5).map((item) => ({
+                  file: item.path.text,
+                  line: item.line_number ?? 1,
+                  component: comp,
+                }))
+              : undefined,
+        }
         defCache.set(comp, hit)
         console.log("[Design] Found definition of", comp, "at:", match.path.text, "line:", hit.line, "via:", pattern)
         return hit
@@ -299,7 +328,13 @@ export function createResolver(files: Files, client: Client) {
             useCache.set(comp, null)
             return null
           }
-          const hit = { file: match.path.text, line: match.line_number ?? 1, comp }
+          const hit = {
+            file: match.path.text,
+            line: match.line_number ?? 1,
+            comp,
+            origin: "usage",
+            score: SCORE.usage,
+          }
           useCache.set(comp, hit)
           console.log("[Design] Found usage of <" + comp + "> at:", match.path.text, "line:", hit.line)
           return hit
@@ -334,7 +369,12 @@ export function createResolver(files: Files, client: Client) {
             textCache.set(text, null)
             return null
           }
-          const hit = { file: match.path.text, line: match.line_number ?? 1 }
+          const hit = {
+            file: match.path.text,
+            line: match.line_number ?? 1,
+            origin: "text",
+            score: SCORE.text,
+          }
           textCache.set(text, hit)
           console.log("[Design] Found by text content:", match.path.text, "line:", match.line_number)
           return hit
@@ -381,7 +421,12 @@ export function createResolver(files: Files, client: Client) {
       const match = hits.find((m) => isUserFile(m.path.text))
       if (!match?.path.text) continue
       console.log("[Design] grep fallback found:", match.path.text, "via term:", pattern)
-      return { file: match.path.text, line: match.line_number ?? 1 }
+      return {
+        file: match.path.text,
+        line: match.line_number ?? 1,
+        origin: "grep",
+        score: SCORE.grep,
+      }
     }
 
     return null
