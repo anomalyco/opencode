@@ -147,20 +147,21 @@ export default function Layout(props: ParentProps) {
   const language = useLanguage()
   type DictKey = keyof typeof enDict
   const kw = (...keys: DictKey[]) => (language.locale() === "en" ? undefined : keys.map((k) => enDict[k]).join(" "))
-  const initialDirectory = decode64(params.dir)
-  const location = useLocation()
-  const route = createMemo(() => {
-    const slug = params.dir
-    if (!slug) return { slug, dir: "" }
+  // Keep the route slug, resolved directory, and comparison key separate.
+  // Most bugs in the project rail/sidebar flow came from mixing these layers.
+  const routeSlug = createMemo(() => params.dir)
+  const initialDirectory = decode64(routeSlug())
+  const routeDir = createMemo(() => {
+    const slug = routeSlug()
+    if (!slug) return ""
     const dir = decode64(slug)
-    if (!dir) return { slug, dir: "" }
-    const store = globalSync.peek(dir, { bootstrap: false })
-    return {
-      slug,
-      store,
-      dir: store[0].path.directory || dir,
-    }
+    if (!dir) return ""
+    // Prefer the synced child directory because the raw route value may be a
+    // non-canonical path that later resolves to a normalized worktree path.
+    return globalSync.peek(dir, { bootstrap: false })[0].path.directory || dir
   })
+  // Use this only for equality checks, never as a directory source.
+  const routeKey = createMemo(() => workspaceKey(routeDir()))
   const availableThemeEntries = createMemo(() => theme.ids().map((id) => [id, theme.themes()[id]] as const))
   const colorSchemeOrder: ColorScheme[] = ["system", "light", "dark"]
   const colorSchemeKey: Record<ColorScheme, "theme.scheme.system" | "theme.scheme.light" | "theme.scheme.dark"> = {
@@ -169,7 +170,6 @@ export default function Layout(props: ParentProps) {
     dark: "theme.scheme.dark",
   }
   const colorSchemeLabel = (scheme: ColorScheme) => language.t(colorSchemeKey[scheme])
-  const currentDir = createMemo(() => route().dir)
   const openclawDir = "/openclaw"
   const openclawSlug = base64Encode(openclawDir)
   const isOpenclawDir = (directory?: string) => directory === openclawDir
@@ -459,8 +459,8 @@ export default function Layout(props: ParentProps) {
         }
 
         const currentSession = params.id
-        if (pathKey(directory) === pathKey(currentDir()) && props.sessionID === currentSession) return
-        if (pathKey(directory) === pathKey(currentDir()) && session?.parentID === currentSession) return
+        if (workspaceKey(directory) === routeKey() && props.sessionID === currentSession) return
+        if (workspaceKey(directory) === routeKey() && session?.parentID === currentSession) return
 
         dismissSessionAlert(sessionKey)
 
@@ -486,13 +486,13 @@ export default function Layout(props: ParentProps) {
 
       createEffect(() => {
         const currentSession = params.id
-        if (!currentDir() || !currentSession) return
-        const sessionKey = `${currentDir()}:${currentSession}`
+        if (!routeDir() || !currentSession) return
+        const sessionKey = `${routeDir()}:${currentSession}`
         dismissSessionAlert(sessionKey)
-        const [store] = globalSync.child(currentDir(), { bootstrap: false })
+        const [store] = globalSync.child(routeDir(), { bootstrap: false })
         const childSessions = store.session.filter((s) => s.parentID === currentSession)
         for (const child of childSessions) {
-          dismissSessionAlert(`${currentDir()}:${child.id}`)
+          dismissSessionAlert(`${routeDir()}:${child.id}`)
         }
       })
     })
@@ -515,7 +515,7 @@ export default function Layout(props: ParentProps) {
   }
 
   const currentProject = createMemo(() => {
-    const directory = currentDir()
+    const directory = routeDir()
     if (!directory) return
     if (isOpenclawDir(directory)) return openclawProject()
 
@@ -591,7 +591,7 @@ export default function Layout(props: ParentProps) {
     if (!project) return [] as string[]
     if (!workspaceSetting()) return [project.worktree]
 
-    const activeDir = currentDir()
+    const activeDir = routeDir()
     return workspaceIds(project).filter((directory) => {
       const expanded = store.workspaceExpanded[directory] ?? directory === project.worktree
       const active = pathKey(directory) === pathKey(activeDir)
@@ -634,7 +634,7 @@ export default function Layout(props: ParentProps) {
     if (!pageReady()) return false
     if (!layoutReady()) return false
     if (autoselecting.loading) return false
-    const dir = currentDir()
+    const dir = routeDir()
     if (!dir) return true
     const [child] = globalSync.child(dir, { bootstrap: false })
     if (!child.path.directory) return false
@@ -680,7 +680,7 @@ export default function Layout(props: ParentProps) {
       seen: lru,
       keep: sessionID,
       limit: PREFETCH_MAX_SESSIONS_PER_DIR,
-      preserve: directory === currentDir() && params.id ? [params.id] : undefined,
+      preserve: params.id && workspaceKey(directory) === routeKey() ? [params.id] : undefined,
     })
   }
 
@@ -693,7 +693,7 @@ export default function Layout(props: ParentProps) {
   })
 
   createEffect(() => {
-    route()
+    routeDir()
     globalSDK.url
 
     prefetchToken.value += 1
@@ -921,7 +921,7 @@ export default function Layout(props: ParentProps) {
     if (projects.length === 0) return
 
     const current = currentProject()?.worktree
-    const fallback = currentDir() ? projectRoot(currentDir()) : undefined
+    const fallback = routeDir() ? projectRoot(routeDir()) : undefined
     const active = current ?? fallback
     const index = active ? projects.findIndex((project) => project.worktree === active) : -1
 
@@ -1808,9 +1808,9 @@ export default function Layout(props: ParentProps) {
   const deleteWorkspace = async (root: string, directory: string, leaveDeletedWorkspace = false) => {
     if (directory === root) return
 
-    const current = currentDir()
-    const currentKey = pathKey(current)
-    const deletedKey = pathKey(directory)
+    const current = routeDir()
+    const currentKey = workspaceKey(current)
+    const deletedKey = workspaceKey(directory)
     const shouldLeave = leaveDeletedWorkspace || (!!params.dir && currentKey === deletedKey)
     if (!leaveDeletedWorkspace && shouldLeave) {
       navigateWithSidebarReset(`/${base64Encode(root)}/session`)
@@ -1852,8 +1852,8 @@ export default function Layout(props: ParentProps) {
 
     if (shouldLeave) return
 
-    const nextCurrent = currentDir()
-    const nextKey = pathKey(nextCurrent)
+    const nextCurrent = routeDir()
+    const nextKey = workspaceKey(nextCurrent)
     const project = layout.projects.list().find((item) => item.worktree === root)
     const dirs = project
       ? effectiveWorkspaceOrder(root, [root, ...(project.sandboxes ?? [])], store.workspaceOrder[root])
@@ -1965,7 +1965,7 @@ export default function Layout(props: ParentProps) {
     })
 
     const handleDelete = () => {
-      const leaveDeletedWorkspace = !!params.dir && pathKey(currentDir()) === pathKey(props.directory)
+      const leaveDeletedWorkspace = !!params.dir && routeKey() === workspaceKey(props.directory)
       if (leaveDeletedWorkspace) {
         navigateWithSidebarReset(`/${base64Encode(props.root)}/session`)
       }
@@ -2271,34 +2271,15 @@ export default function Layout(props: ParentProps) {
 
   createEffect(
     on(
-      () => ({
-        ready: pageReady(),
-        notifications: notification.ready(),
-        dir: params.dir,
-        id: params.id,
-        list: layout.projects.list(),
-        order: store.workspaceOrder,
-      }),
-      (value) => {
-        if (!value.ready) return
-        if (!value.notifications) return
-        const dir = value.dir
-        if (!dir) return
-        const directory = decode64(dir)
-        if (!directory) return
-        const root = projectRoot(directory)
-        const project = value.list.find((item) => item.worktree === root)
-        Array.from(new Set([root, directory, ...(value.order[root] ?? []), ...(project?.sandboxes ?? [])]))
-          .filter((item) => notification.project.unseenCount(item) > 0)
-          .forEach((item) => notification.project.markViewed(item))
-        const at = Date.now()
-        const id = value.id
-        if (!id) return
-        setStore("lastProjectSession", root, { directory, id, at })
-        notification.session.markViewed(id)
-        const expanded = untrack(() => store.workspaceExpanded[directory])
-        if (expanded === false) {
-          setStore("workspaceExpanded", directory, true)
+      () => {
+        return [pageReady(), routeSlug(), params.id, currentProject()?.worktree, routeDir()] as const
+      },
+      ([ready, slug, id, root, dir]) => {
+        if (!ready || !slug || !dir) {
+          activeRoute.session = ""
+          activeRoute.sessionProject = ""
+          activeRoute.directory = ""
+          return
         }
         requestAnimationFrame(() => scrollToSession(id, `${directory}:${id}`))
       },
@@ -2318,7 +2299,7 @@ export default function Layout(props: ParentProps) {
 
   createEffect(
     on(
-      () => [visibleSessionDirs(), currentDir(), autoselecting.loading] as const,
+      () => [visibleSessionDirs(), routeDir(), autoselecting.loading] as const,
       ([dirs, dir, selecting]) => {
         trace("visibleSessionDirs.effect", {
           dirs,
@@ -2383,7 +2364,7 @@ export default function Layout(props: ParentProps) {
     const local = project.worktree
     const dirs = [local, ...(project.sandboxes ?? [])]
     const active = currentProject()
-    const directory = pathKey(active?.worktree ?? "") === pathKey(project.worktree) ? currentDir() : undefined
+    const directory = workspaceKey(active?.worktree ?? "") === workspaceKey(project.worktree) ? routeDir() : undefined
     const extra =
       directory && pathKey(directory) !== pathKey(local) && !dirs.some((item) => pathKey(item) === pathKey(directory))
         ? directory
@@ -3383,7 +3364,7 @@ export default function Layout(props: ParentProps) {
   }
 
   const workspaceSidebarCtx: WorkspaceSidebarContext = {
-    currentDir,
+    currentDir: routeDir,
     navList: currentSessions,
     sidebarExpanded,
     sidebarReduced,
@@ -3410,7 +3391,7 @@ export default function Layout(props: ParentProps) {
   }
 
   const projectSidebarCtx: ProjectSidebarContext = {
-    currentDir,
+    currentDir: routeDir,
     sidebarReduced,
     navigateToProject,
     closeProject,
@@ -3896,7 +3877,7 @@ export default function Layout(props: ParentProps) {
       onOpenProject={chooseProject}
       renderProjectOverlay={projectOverlay}
       openclawLabel={() => language.t("sidebar.openclaw")}
-      openclawActive={() => isOpenclawDir(currentDir())}
+      openclawActive={() => isOpenclawDir(routeDir())}
       onOpenOpenclaw={openOpenclaw}
       configLabel={() => "Config"}
       onOpenConfig={openConfig}
