@@ -36,6 +36,7 @@ import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { DialogWorkspaceList } from "@tui/component/dialog-workspace-list"
+import { DialogConsoleOrg } from "@tui/component/dialog-console-org"
 import { KeybindProvider, useKeybind } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
@@ -125,6 +126,7 @@ import { DialogVariant } from "./component/dialog-variant"
 
 function rendererConfig(_config: TuiConfig.Info): CliRendererConfig {
   return {
+    externalOutputMode: "passthrough",
     targetFps: 60,
     gatherStats: false,
     exitOnCtrlC: false,
@@ -250,7 +252,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const route = useRoute()
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
-  renderer.disableStdoutInterception()
   const dialog = useDialog()
   const local = useLocal()
   const kv = useKV()
@@ -299,7 +300,8 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
 
   useKeyboard((evt) => {
     if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
-    if (!renderer.getSelection()) return
+    const sel = renderer.getSelection()
+    if (!sel) return
 
     // Windows Terminal-like behavior:
     // - Ctrl+C copies and dismisses selection
@@ -320,6 +322,11 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       renderer.clearSelection()
       evt.preventDefault()
       evt.stopPropagation()
+      return
+    }
+
+    const focus = renderer.currentFocusedRenderable
+    if (focus?.hasSelection() && sel.selectedRenderables.includes(focus)) {
       return
     }
 
@@ -623,6 +630,23 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
       category: "Provider",
     },
+    ...(sync.data.console_state.switchableOrgCount > 1
+      ? [
+          {
+            title: "Switch org",
+            value: "console.org.switch",
+            suggested: Boolean(sync.data.console_state.activeOrgName),
+            slash: {
+              name: "org",
+              aliases: ["orgs", "switch-org"],
+            },
+            onSelect: () => {
+              dialog.replace(() => <DialogConsoleOrg />)
+            },
+            category: "Provider",
+          },
+        ]
+      : []),
     {
       title: "View status",
       keybind: "status_view",

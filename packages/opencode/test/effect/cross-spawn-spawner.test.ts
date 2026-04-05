@@ -159,7 +159,17 @@ describe("cross-spawn spawner", () => {
     fx.effect(
       "captures both stdout and stderr",
       Effect.gen(function* () {
-        const handle = yield* js('process.stdout.write("stdout\\n"); process.stderr.write("stderr\\n")')
+        const handle = yield* js(
+          [
+            "let pending = 2",
+            "const done = () => {",
+            "  pending -= 1",
+            "  if (pending === 0) setTimeout(() => process.exit(0), 0)",
+            "}",
+            'process.stdout.write("stdout\\n", done)',
+            'process.stderr.write("stderr\\n", done)',
+          ].join("\n"),
+        )
         const [stdout, stderr] = yield* Effect.all([decodeByteStream(handle.stdout), decodeByteStream(handle.stderr)])
         expect(stdout).toBe("stdout")
         expect(stderr).toBe("stderr")
