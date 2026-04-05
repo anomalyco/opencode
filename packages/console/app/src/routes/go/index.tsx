@@ -12,7 +12,7 @@ import { Footer } from "~/component/footer"
 import { Header } from "~/component/header"
 import { config } from "~/config"
 import { getLastSeenWorkspaceID } from "../workspace/common"
-import { IconMiniMax, IconZai } from "~/component/icon"
+import { IconMiniMax, IconMiMo, IconZai } from "~/component/icon"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { LocaleLinks } from "~/component/locale-links"
@@ -54,7 +54,7 @@ function LimitsGraph(props: { href: string }) {
   ]
 
   const w = 720
-  const h = 220
+  const h = 260
   const left = 40
   const right = 60
   const top = 18
@@ -299,6 +299,9 @@ export default function Home() {
                 </div>
                 <div>
                   <IconZai width="24" height="24" />
+                </div>
+                <div>
+                  <IconMiMo width="24" height="24" />
                 </div>
                 {/*
                 <div>

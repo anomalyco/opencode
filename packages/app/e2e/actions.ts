@@ -1,5 +1,5 @@
 import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
-import { expect, type Locator, type Page, type Route } from "@playwright/test"
+import { expect, type Locator, type Page } from "@playwright/test"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -7,7 +7,6 @@ import { execSync } from "node:child_process"
 import { terminalAttr, type E2EWindow } from "../src/testing/terminal"
 import { createSdk, modKey, resolveDirectory, serverUrl } from "./utils"
 import {
-  dropdownMenuTriggerSelector,
   dropdownMenuContentSelector,
   projectSwitchSelector,
   projectMenuTriggerSelector,
@@ -41,27 +40,6 @@ export async function defocus(page: Page) {
       if (el instanceof HTMLElement) el.blur()
     })
     .catch(() => undefined)
-}
-
-export async function withNoReplyPrompt<T>(page: Page, fn: () => Promise<T>) {
-  const url = "**/session/*/prompt_async"
-  const route = async (input: Route) => {
-    const body = input.request().postDataJSON()
-    await input.continue({
-      postData: JSON.stringify({ ...body, noReply: true }),
-      headers: {
-        ...input.request().headers(),
-        "content-type": "application/json",
-      },
-    })
-  }
-
-  await page.route(url, route)
-  try {
-    return await fn()
-  } finally {
-    await page.unroute(url, route)
-  }
 }
 
 async function terminalID(term: Locator) {
@@ -227,7 +205,7 @@ export async function closeDialog(page: Page, dialog: Locator) {
   await expect(dialog).toHaveCount(0)
 }
 
-export async function isSidebarClosed(page: Page) {
+async function isSidebarClosed(page: Page) {
   const button = await waitSidebarButton(page, "isSidebarClosed")
   return (await button.getAttribute("aria-expanded")) !== "true"
 }
@@ -258,7 +236,7 @@ async function errorBoundaryText(page: Page) {
   return [title ? "Error boundary" : "", description ?? "", detail ?? ""].filter(Boolean).join("\n")
 }
 
-export async function assertHealthy(page: Page, context: string) {
+async function assertHealthy(page: Page, context: string) {
   const text = await errorBoundaryText(page)
   if (!text) return
   console.log(`[e2e:error-boundary][${context}]\n${text}`)
@@ -331,63 +309,6 @@ export async function openSettings(page: Page) {
   await page.getByRole("button", { name: "Settings" }).first().click()
   await expect(dialog).toBeVisible()
   return dialog
-}
-
-export async function seedProjects(page: Page, input: { directory: string; extra?: string[]; serverUrl?: string }) {
-  await page.addInitScript(
-    (args: { directory: string; serverUrl: string; extra: string[] }) => {
-      const key = "opencode.global.dat:server"
-      const defaultKey = "opencode.settings.dat:defaultServerUrl"
-      const raw = localStorage.getItem(key)
-      const parsed = (() => {
-        if (!raw) return undefined
-        try {
-          return JSON.parse(raw) as unknown
-        } catch {
-          return undefined
-        }
-      })()
-
-      const store = parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {}
-      const list = Array.isArray(store.list) ? store.list : []
-      const lastProject = store.lastProject && typeof store.lastProject === "object" ? store.lastProject : {}
-      const projects = store.projects && typeof store.projects === "object" ? store.projects : {}
-      const nextProjects = { ...(projects as Record<string, unknown>) }
-      const nextList = list.includes(args.serverUrl) ? list : [args.serverUrl, ...list]
-
-      const add = (origin: string, directory: string) => {
-        const current = nextProjects[origin]
-        const items = Array.isArray(current) ? current : []
-        const existing = items.filter(
-          (p): p is { worktree: string; expanded?: boolean } =>
-            !!p &&
-            typeof p === "object" &&
-            "worktree" in p &&
-            typeof (p as { worktree?: unknown }).worktree === "string",
-        )
-
-        if (existing.some((p) => p.worktree === directory)) return
-        nextProjects[origin] = [{ worktree: directory, expanded: true }, ...existing]
-      }
-
-      const directories = [args.directory, ...args.extra]
-      for (const directory of directories) {
-        add("local", directory)
-        add(args.serverUrl, directory)
-      }
-
-      localStorage.setItem(
-        key,
-        JSON.stringify({
-          list: nextList,
-          projects: nextProjects,
-          lastProject,
-        }),
-      )
-      localStorage.setItem(defaultKey, args.serverUrl)
-    },
-    { directory: input.directory, serverUrl: input.serverUrl ?? serverUrl, extra: input.extra ?? [] },
-  )
 }
 
 export async function createTestProject(input?: { serverUrl?: string }) {
@@ -479,7 +400,15 @@ export async function waitDir(page: Page, directory: string, input?: { serverUrl
   return { directory: target, slug: base64Encode(target) }
 }
 
-export async function waitSession(page: Page, input: { directory: string; sessionID?: string; serverUrl?: string }) {
+export async function waitSession(
+  page: Page,
+  input: {
+    directory: string
+    sessionID?: string
+    serverUrl?: string
+    allowAnySession?: boolean
+  },
+) {
   const target = await resolveDirectory(input.directory, input.serverUrl)
   await expect
     .poll(
@@ -491,11 +420,11 @@ export async function waitSession(page: Page, input: { directory: string; sessio
         if (!resolved || resolved.directory !== target) return false
         const current = sessionIDFromUrl(page.url())
         if (input.sessionID && current !== input.sessionID) return false
-        if (!input.sessionID && current) return false
+        if (!input.sessionID && !input.allowAnySession && current) return false
 
         const state = await probeSession(page)
         if (input.sessionID && (!state || state.sessionID !== input.sessionID)) return false
-        if (!input.sessionID && state?.sessionID) return false
+        if (!input.sessionID && !input.allowAnySession && state?.sessionID) return false
         if (state?.dir) {
           const dir = await resolveDirectory(state.dir, input.serverUrl).catch(() => state.dir ?? "")
           if (dir !== target) return false
@@ -602,12 +531,15 @@ export async function confirmDialog(page: Page, buttonName: string | RegExp) {
 }
 
 export async function openSharePopover(page: Page) {
-  const rightSection = page.locator(titlebarRightSelector)
-  const shareButton = rightSection.getByRole("button", { name: "Share" }).first()
-  await expect(shareButton).toBeVisible()
+  const scroller = page.locator(".scroll-view__viewport").first()
+  await expect(scroller).toBeVisible()
+  await expect(scroller.getByRole("heading", { level: 1 }).first()).toBeVisible({ timeout: 30_000 })
+
+  const menuTrigger = scroller.getByRole("button", { name: /more options/i }).first()
+  await expect(menuTrigger).toBeVisible({ timeout: 30_000 })
 
   const popoverBody = page
-    .locator(popoverBodySelector)
+    .locator('[data-component="popover-content"]')
     .filter({ has: page.getByRole("button", { name: /^(Publish|Unpublish)$/ }) })
     .first()
 
@@ -617,16 +549,13 @@ export async function openSharePopover(page: Page) {
     .catch(() => false)
 
   if (!opened) {
-    await shareButton.click()
-    await expect(popoverBody).toBeVisible()
+    const menu = page.locator(dropdownMenuContentSelector).first()
+    await menuTrigger.click()
+    await clickMenuItem(menu, /share/i)
+    await expect(menu).toHaveCount(0)
+    await expect(popoverBody).toBeVisible({ timeout: 30_000 })
   }
-  return { rightSection, popoverBody }
-}
-
-export async function clickPopoverButton(page: Page, buttonName: string | RegExp) {
-  const button = page.getByRole("button").filter({ hasText: buttonName }).first()
-  await expect(button).toBeVisible()
-  await button.click()
+  return { rightSection: scroller, popoverBody }
 }
 
 export async function clickListItem(
@@ -794,40 +723,6 @@ export async function seedSessionQuestion(
   return { id: result.id }
 }
 
-export async function seedSessionPermission(
-  sdk: ReturnType<typeof createSdk>,
-  input: {
-    sessionID: string
-    permission: string
-    patterns: string[]
-    description?: string
-  },
-) {
-  const text = [
-    "Your only valid response is one bash tool call.",
-    `Use this JSON input: ${JSON.stringify({
-      command: input.patterns[0] ? `ls ${JSON.stringify(input.patterns[0])}` : "pwd",
-      workdir: "/",
-      description: input.description ?? `seed ${input.permission} permission request`,
-    })}`,
-    "Do not output plain text.",
-  ].join("\n")
-
-  const result = await seed({
-    sdk,
-    sessionID: input.sessionID,
-    prompt: text,
-    timeout: 30_000,
-    probe: async () => {
-      const list = await sdk.permission.list().then((x) => x.data ?? [])
-      return list.find((item) => item.sessionID === input.sessionID)
-    },
-  })
-
-  if (!result) throw new Error("Timed out seeding permission request")
-  return { id: result.id }
-}
-
 export async function seedSessionTask(
   sdk: ReturnType<typeof createSdk>,
   input: {
@@ -884,36 +779,6 @@ export async function seedSessionTask(
 
   if (!result) throw new Error("Timed out seeding task tool")
   return result
-}
-
-export async function seedSessionTodos(
-  sdk: ReturnType<typeof createSdk>,
-  input: {
-    sessionID: string
-    todos: Array<{ content: string; status: string; priority: string }>
-  },
-) {
-  const text = [
-    "Your only valid response is one todowrite tool call.",
-    `Use this JSON input: ${JSON.stringify({ todos: input.todos })}`,
-    "Do not output plain text.",
-  ].join("\n")
-  const target = JSON.stringify(input.todos)
-
-  const result = await seed({
-    sdk,
-    sessionID: input.sessionID,
-    prompt: text,
-    timeout: 30_000,
-    probe: async () => {
-      const todos = await sdk.session.todo({ sessionID: input.sessionID }).then((x) => x.data ?? [])
-      if (JSON.stringify(todos) !== target) return
-      return true
-    },
-  })
-
-  if (!result) throw new Error("Timed out seeding todos")
-  return true
 }
 
 export async function clearSessionDockSeed(sdk: ReturnType<typeof createSdk>, sessionID: string) {
@@ -1005,30 +870,57 @@ export async function openProjectMenu(page: Page, projectSlug: string) {
 }
 
 export async function setWorkspacesEnabled(page: Page, projectSlug: string, enabled: boolean) {
-  const current = await page
-    .getByRole("button", { name: "New workspace" })
-    .first()
-    .isVisible()
-    .then((x) => x)
-    .catch(() => false)
+  const current = () =>
+    page
+      .getByRole("button", { name: "New workspace" })
+      .first()
+      .isVisible()
+      .then((x) => x)
+      .catch(() => false)
 
-  if (current === enabled) return
+  if ((await current()) === enabled) return
+
+  if (enabled) {
+    await page.reload()
+    await openSidebar(page)
+    if ((await current()) === enabled) return
+  }
 
   const flip = async (timeout?: number) => {
     const menu = await openProjectMenu(page, projectSlug)
     const toggle = menu.locator(projectWorkspacesToggleSelector(projectSlug)).first()
     await expect(toggle).toBeVisible()
-    return toggle.click({ force: true, timeout })
+    await expect(toggle).toBeEnabled({ timeout: 30_000 })
+    const clicked = await toggle
+      .click({ force: true, timeout })
+      .then(() => true)
+      .catch(() => false)
+    if (clicked) return
+    await toggle.focus()
+    await page.keyboard.press("Enter")
   }
 
-  const flipped = await flip(1500)
-    .then(() => true)
-    .catch(() => false)
+  for (const timeout of [1500, undefined, undefined]) {
+    if ((await current()) === enabled) break
+    await flip(timeout)
+      .then(() => undefined)
+      .catch(() => undefined)
+    const matched = await expect
+      .poll(current, { timeout: 5_000 })
+      .toBe(enabled)
+      .then(() => true)
+      .catch(() => false)
+    if (matched) break
+  }
 
-  if (!flipped) await flip()
+  if ((await current()) !== enabled) {
+    await page.reload()
+    await openSidebar(page)
+  }
 
   const expected = enabled ? "New workspace" : "New session"
-  await expect(page.getByRole("button", { name: expected }).first()).toBeVisible()
+  await expect.poll(current, { timeout: 60_000 }).toBe(enabled)
+  await expect(page.getByRole("button", { name: expected }).first()).toBeVisible({ timeout: 30_000 })
 }
 
 export async function openWorkspaceMenu(page: Page, workspaceSlug: string) {

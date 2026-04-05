@@ -74,8 +74,8 @@ export namespace Plugin {
     return result
   }
 
-  function publishPluginError(message: string) {
-    Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+  function publishPluginError(bus: Bus.Interface, message: string) {
+    Effect.runFork(bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() }))
   }
 
   async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, hooks: Hooks[]) {
@@ -161,24 +161,24 @@ export namespace Plugin {
                   if (stage === "install") {
                     const parsed = parsePluginSpecifier(spec)
                     log.error("failed to install plugin", { pkg: parsed.pkg, version: parsed.version, error: message })
-                    publishPluginError(`Failed to install plugin ${parsed.pkg}@${parsed.version}: ${message}`)
+                    publishPluginError(bus, `Failed to install plugin ${parsed.pkg}@${parsed.version}: ${message}`)
                     return
                   }
 
                   if (stage === "compatibility") {
                     log.warn("plugin incompatible", { path: spec, error: message })
-                    publishPluginError(`Plugin ${spec} skipped: ${message}`)
+                    publishPluginError(bus, `Plugin ${spec} skipped: ${message}`)
                     return
                   }
 
                   if (stage === "entry") {
                     log.error("failed to resolve plugin server entry", { path: spec, error: message })
-                    publishPluginError(`Failed to load plugin ${spec}: ${message}`)
+                    publishPluginError(bus, `Failed to load plugin ${spec}: ${message}`)
                     return
                   }
 
                   log.error("failed to load plugin", { path: spec, target: resolved?.entry, error: message })
-                  publishPluginError(`Failed to load plugin ${spec}: ${message}`)
+                  publishPluginError(bus, `Failed to load plugin ${spec}: ${message}`)
                 },
               },
             }),
