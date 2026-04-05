@@ -1,6 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { dirname, join, relative, resolve as pathResolve } from "path"
 import { realpathSync } from "fs"
+import * as NFS from "fs/promises"
 import { lookup } from "mime-types"
 import { Effect, FileSystem, Layer, Schema, ServiceMap } from "effect"
 import type { PlatformError } from "effect/PlatformError"
@@ -14,13 +15,20 @@ export namespace AppFileSystem {
 
   export type Error = PlatformError | FileSystemError
 
+  export interface DirEntry {
+    readonly name: string
+    readonly type: "file" | "directory" | "symlink" | "other"
+  }
+
   export interface Interface extends FileSystem.FileSystem {
-    readonly isDir: (path: string) => Effect.Effect<boolean, Error>
-    readonly isFile: (path: string) => Effect.Effect<boolean, Error>
+    readonly isDir: (path: string) => Effect.Effect<boolean>
+    readonly isFile: (path: string) => Effect.Effect<boolean>
+    readonly existsSafe: (path: string) => Effect.Effect<boolean>
     readonly readJson: (path: string) => Effect.Effect<unknown, Error>
     readonly writeJson: (path: string, data: unknown, mode?: number) => Effect.Effect<void, Error>
     readonly ensureDir: (path: string) => Effect.Effect<void, Error>
     readonly writeWithDirs: (path: string, content: string | Uint8Array, mode?: number) => Effect.Effect<void, Error>
+    readonly readDirectoryEntries: (path: string) => Effect.Effect<DirEntry[], Error>
     readonly findUp: (target: string, start: string, stop?: string) => Effect.Effect<string[], Error>
     readonly up: (options: { targets: string[]; start: string; stop?: string }) => Effect.Effect<string[], Error>
     readonly globUp: (pattern: string, start: string, stop?: string) => Effect.Effect<string[], Error>
@@ -35,6 +43,10 @@ export namespace AppFileSystem {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem
 
+      const existsSafe = Effect.fn("FileSystem.existsSafe")(function* (path: string) {
+        return yield* fs.exists(path).pipe(Effect.orElseSucceed(() => false))
+      })
+
       const isDir = Effect.fn("FileSystem.isDir")(function* (path: string) {
         const info = yield* fs.stat(path).pipe(Effect.catch(() => Effect.void))
         return info?.type === "Directory"
@@ -43,6 +55,21 @@ export namespace AppFileSystem {
       const isFile = Effect.fn("FileSystem.isFile")(function* (path: string) {
         const info = yield* fs.stat(path).pipe(Effect.catch(() => Effect.void))
         return info?.type === "File"
+      })
+
+      const readDirectoryEntries = Effect.fn("FileSystem.readDirectoryEntries")(function* (dirPath: string) {
+        return yield* Effect.tryPromise({
+          try: async () => {
+            const entries = await NFS.readdir(dirPath, { withFileTypes: true })
+            return entries.map(
+              (e): DirEntry => ({
+                name: e.name,
+                type: e.isDirectory() ? "directory" : e.isSymbolicLink() ? "symlink" : e.isFile() ? "file" : "other",
+              }),
+            )
+          },
+          catch: (cause) => new FileSystemError({ method: "readDirectoryEntries", cause }),
+        })
       })
 
       const readJson = Effect.fn("FileSystem.readJson")(function* (path: string) {
@@ -135,8 +162,10 @@ export namespace AppFileSystem {
 
       return Service.of({
         ...fs,
+        existsSafe,
         isDir,
         isFile,
+        readDirectoryEntries,
         readJson,
         writeJson,
         ensureDir,
@@ -159,11 +188,21 @@ export namespace AppFileSystem {
 
   export function normalizePath(p: string): string {
     if (process.platform !== "win32") return p
+    const resolved = pathResolve(windowsPath(p))
     try {
-      return realpathSync.native(p)
+      return realpathSync.native(resolved)
     } catch {
-      return p
+      return resolved
     }
+  }
+
+  export function normalizePathPattern(p: string): string {
+    if (process.platform !== "win32") return p
+    if (p === "*") return p
+    const match = p.match(/^(.*)[\\/]\*$/)
+    if (!match) return normalizePath(p)
+    const dir = /^[A-Za-z]:$/.test(match[1]) ? match[1] + "\\" : match[1]
+    return join(normalizePath(dir), "*")
   }
 
   export function resolve(p: string): string {

@@ -1,5 +1,6 @@
 import { batch, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { same } from "@/utils/same"
 
 const emptyTabs: string[] = []
@@ -93,6 +94,13 @@ export const focusTerminalById = (id: string) => {
   return true
 }
 
+const skip = new Set(["Alt", "Control", "Meta", "Shift"])
+
+export const shouldFocusTerminalOnKeyDown = (event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey">) => {
+  if (skip.has(event.key)) return false
+  return !(event.ctrlKey || event.metaKey || event.altKey)
+}
+
 export const createOpenReviewFile = (input: {
   showAllFiles: () => void
   tabForPath: (path: string) => string
@@ -164,14 +172,9 @@ export const createSizing = () => {
   }
 
   onMount(() => {
-    window.addEventListener("pointerup", stop)
-    window.addEventListener("pointercancel", stop)
-    window.addEventListener("blur", stop)
-    onCleanup(() => {
-      window.removeEventListener("pointerup", stop)
-      window.removeEventListener("pointercancel", stop)
-      window.removeEventListener("blur", stop)
-    })
+    makeEventListener(window, "pointerup", stop)
+    makeEventListener(window, "pointercancel", stop)
+    makeEventListener(window, "blur", stop)
   })
 
   onCleanup(() => {
