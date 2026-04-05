@@ -35,6 +35,29 @@ async function user(sessionID: SessionID, text: string) {
 }
 
 describe("session action routes", () => {
+  test("create route accepts directory query param", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const dir = `${tmp.path}/custom-worktree`
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const app = Server.Default()
+
+        const res = await app.request(`/session?directory=${encodeURIComponent(dir)}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ title: "custom-dir" }),
+        })
+
+        expect(res.status).toBe(200)
+        const session = (await res.json()) as Session.Info
+        expect(session.directory).toBe(dir)
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+
   test("abort route calls SessionPrompt.cancel", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({

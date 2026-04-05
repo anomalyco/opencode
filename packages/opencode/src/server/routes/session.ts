@@ -206,9 +206,11 @@ export const SessionRoutes = lazy(() =>
         },
       }),
       validator("json", Session.create.schema.optional()),
+      validator("query", z.object({ directory: z.string().optional() }).optional()),
       async (c) => {
         const body = c.req.valid("json") ?? {}
-        const session = await Session.create(body)
+        const query = c.req.valid("query")
+        const session = await Session.create({ ...body, ...query })
         return c.json(session)
       },
     )
