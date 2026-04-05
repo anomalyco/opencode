@@ -4,7 +4,6 @@ import { useTheme } from "../../context/theme"
 import { useTuiConfig } from "../../context/tui-config"
 import { Installation } from "@/installation"
 import { TuiPluginRuntime } from "../../plugin"
-import { Locale } from "@/util/locale"
 
 import { getScrollAcceleration } from "../../util/scroll"
 
@@ -14,31 +13,6 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const tuiConfig = useTuiConfig()
   const session = createMemo(() => sync.session.get(props.sessionID))
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
-
-  const metrics = createMemo(() => {
-    const msgs = sync.data.message[props.sessionID] ?? []
-    let totalOutput = 0
-    let totalTime = 0
-
-    for (const msg of msgs) {
-      if (msg.role !== "assistant") continue
-      if (!msg.time.completed) continue
-      const out = msg.tokens.output
-      if (out <= 0) continue
-      const user = msgs.find((x) => x.role === "user" && x.id === msg.parentID)
-      if (!user) continue
-      const dur = msg.time.completed - user.time.created
-      if (dur <= 0) continue
-      totalOutput += out
-      totalTime += dur
-    }
-
-    if (totalOutput <= 0 || totalTime <= 0) return
-    return {
-      tps: Locale.tokensPerSec(totalOutput, totalTime),
-      tokens: totalOutput,
-    }
-  })
 
   return (
     <Show when={session()}>
@@ -79,15 +53,6 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 </Show>
               </box>
             </TuiPluginRuntime.Slot>
-            <Show when={metrics()}>
-              {(m) => (
-                <text fg={theme.textMuted} paddingRight={1}>
-                  {m().tps}
-                  <span> · </span>
-                  {Locale.number(m().tokens)} tokens
-                </text>
-              )}
-            </Show>
             <TuiPluginRuntime.Slot name="sidebar_content" session_id={props.sessionID} />
           </box>
         </scrollbox>

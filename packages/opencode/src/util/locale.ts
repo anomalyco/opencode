@@ -81,6 +81,6 @@ export namespace Locale {
 
   export function tokensPerSec(tokens: number, ms: number): string | undefined {
     if (ms <= 0 || tokens <= 0) return
-    return `${(tokens / (ms / 1000)).toFixed(1)} tok/s`
+    return `${(tokens / (ms / 1000)).toFixed(1)} TPS`
   }
 }
