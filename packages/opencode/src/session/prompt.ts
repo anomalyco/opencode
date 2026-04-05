@@ -451,6 +451,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
                     { args },
                   )
+                  
+                  yield* Effect.promise(() =>
+                    Plugin.trigger("preToolUse", { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID }, { args }),
+                  )
                   const result = yield* Effect.promise(() => item.execute(args, ctx))
                   const output = {
                     ...result,
@@ -465,6 +469,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     "tool.execute.after",
                     { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args },
                     output,
+                  )
+                  
+                  yield* Effect.promise(() =>
+                    Plugin.trigger(
+                      "postToolUse",
+                      { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID, args, result: output },
+                      {},
+                    ),
                   )
                   return output
                 }),
@@ -489,19 +501,29 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },
                   { args },
                 )
+                yield* Effect.promise(() =>
+                  Plugin.trigger("preToolUse", { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId }, { args }),
+                )
                 yield* Effect.promise(() => ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] }))
-                const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.promise(() =>
+                const mcpResult: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.promise(() =>
                   execute(args, opts),
                 )
                 yield* plugin.trigger(
                   "tool.execute.after",
                   { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId, args },
-                  result,
+                  mcpResult,
+                )
+                yield* Effect.promise(() =>
+                  Plugin.trigger(
+                    "postToolUse",
+                    { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId, args, result: mcpResult as any },
+                    {},
+                  ),
                 )
 
                 const textParts: string[] = []
                 const attachments: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[] = []
-                for (const contentItem of result.content) {
+                for (const contentItem of mcpResult.content) {
                   if (contentItem.type === "text") textParts.push(contentItem.text)
                   else if (contentItem.type === "image") {
                     attachments.push({
@@ -525,7 +547,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
                 const truncated = yield* truncate.output(textParts.join("\n\n"), {}, input.agent)
                 const metadata = {
-                  ...(result.metadata ?? {}),
+                  ...(mcpResult.metadata ?? {}),
                   truncated: truncated.truncated,
                   ...(truncated.truncated && { outputPath: truncated.outputPath }),
                 }
@@ -540,7 +562,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                     sessionID: ctx.sessionID,
                     messageID: input.processor.message.id,
                   })),
-                  content: result.content,
+                  content: mcpResult.content,
                 }
               }),
             )

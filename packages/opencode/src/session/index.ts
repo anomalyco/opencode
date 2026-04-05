@@ -8,6 +8,7 @@ import { type ProviderMetadata } from "ai"
 import { Config } from "../config/config"
 import { Flag } from "../flag/flag"
 import { Installation } from "../installation"
+import { Plugin } from "@/plugin"
 
 import { Database, NotFoundError, eq, and, gte, isNull, desc, like, inArray, lt } from "../storage/db"
 import { SyncEvent } from "../sync"
@@ -403,6 +404,10 @@ export namespace Session {
 
         yield* Effect.sync(() => SyncEvent.run(Event.Created, { sessionID: result.id, info: result }))
 
+        yield* Effect.promise(() =>
+          Plugin.trigger("session.start", { sessionID: result.id, directory: result.directory, project: ctx.project }, {}),
+        )
+
         const cfg = yield* config.get()
         if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto")) {
           yield* share(result.id).pipe(Effect.ignore, Effect.forkIn(scope))
@@ -469,6 +474,10 @@ export namespace Session {
             SyncEvent.run(Event.Deleted, { sessionID, info: session })
             SyncEvent.remove(sessionID)
           })
+          
+          yield* Effect.promise(() =>
+            Plugin.trigger("session.end", { sessionID, directory: session.directory }, {}),
+          )
         } catch (e) {
           log.error(e)
         }

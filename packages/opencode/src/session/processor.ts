@@ -484,7 +484,22 @@ export namespace SessionProcessor {
               yield* abort()
             }
             if (ctx.needsCompaction) return "compact"
-            if (ctx.blocked || ctx.assistantMessage.error || aborted) return "stop"
+            if (ctx.blocked || ctx.assistantMessage.error || aborted) {
+              if (aborted) {
+                yield* Effect.promise(() =>
+                  Plugin.trigger("stop", { sessionID: ctx.sessionID, reason: "user_abort" }, {}),
+                )
+              } else if (ctx.assistantMessage.error) {
+                yield* Effect.promise(() =>
+                  Plugin.trigger("stop", { sessionID: ctx.sessionID, reason: "error" }, {}),
+                )
+              } else {
+                yield* Effect.promise(() =>
+                  Plugin.trigger("stop", { sessionID: ctx.sessionID, reason: "blocked" }, {}),
+                )
+              }
+              return "stop"
+            }
             return "continue"
           }).pipe(Effect.onInterrupt(() => abort().pipe(Effect.asVoid)))
         })

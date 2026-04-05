@@ -180,7 +180,7 @@ export namespace SessionCompaction {
         const model = agent.model
           ? yield* provider.getModel(agent.model.providerID, agent.model.modelID)
           : yield* provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
-        // Allow plugins to inject context or replace compaction prompt.
+        yield* Effect.promise(() => Plugin.trigger("preCompact", { sessionID: input.sessionID }, {}))
         const compacting = yield* plugin.trigger(
           "experimental.session.compacting",
           { sessionID: input.sessionID },
@@ -342,7 +342,7 @@ When constructing the summary, try to stick to this template:
         }
 
         if (processor.message.error) return "stop"
-        if (result === "continue") yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
+        if (result === "continue") { yield* bus.publish(Event.Compacted, { sessionID: input.sessionID }); yield* Effect.promise(() => Plugin.trigger("postCompact", { sessionID: input.sessionID, success: true }, {})) }
         return result
       })
 

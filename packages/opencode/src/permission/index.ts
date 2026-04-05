@@ -3,6 +3,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
+import { Plugin } from "@/plugin"
 import { ProjectID } from "@/project/schema"
 import { Instance } from "@/project/instance"
 import { MessageID, SessionID } from "@/session/schema"
@@ -193,6 +194,7 @@ export namespace Permission {
         const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
         pending.set(id, { info, deferred })
         yield* bus.publish(Event.Asked, info)
+        Plugin.trigger("permission.request", info, {}).catch(() => {})
         return yield* Effect.ensuring(
           Deferred.await(deferred),
           Effect.sync(() => {

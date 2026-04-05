@@ -225,18 +225,18 @@ export interface Hooks {
   ) => Promise<void>
   "tool.execute.before"?: (
     input: { tool: string; sessionID: string; callID: string },
-    output: { args: any },
+    output: { args: Record<string, unknown> },
   ) => Promise<void>
   "shell.env"?: (
     input: { cwd: string; sessionID?: string; callID?: string },
     output: { env: Record<string, string> },
   ) => Promise<void>
   "tool.execute.after"?: (
-    input: { tool: string; sessionID: string; callID: string; args: any },
+    input: { tool: string; sessionID: string; callID: string; args: Record<string, unknown> },
     output: {
       title: string
       output: string
-      metadata: any
+      metadata: Record<string, unknown>
     },
   ) => Promise<void>
   "experimental.chat.messages.transform"?: (
@@ -272,5 +272,75 @@ export interface Hooks {
   /**
    * Modify tool definitions (description and parameters) sent to LLM
    */
-  "tool.definition"?: (input: { toolID: string }, output: { description: string; parameters: any }) => Promise<void>
+  "tool.definition"?: (input: { toolID: string }, output: { description: string; parameters: Record<string, unknown> }) => Promise<void>
+
+  /**
+   * Called when a new session starts
+   */
+  "session.start"?: (
+    input: { sessionID: string; directory: string; project?: Project },
+    output: {},
+  ) => Promise<void>
+
+  /**
+   * Called when a session ends
+   */
+  "session.end"?: (
+    input: { sessionID: string; directory: string },
+    output: {},
+  ) => Promise<void>
+
+  /**
+   * Called when the agent is stopped (user interrupt or completion)
+   */
+  "stop"?: (
+    input: { sessionID: string; reason?: string },
+    output: {},
+  ) => Promise<void>
+
+  /**
+   * Called before a tool is executed. Allows modifying arguments.
+   */
+  "preToolUse"?: (
+    input: { tool: string; sessionID: string; callID: string },
+    output: { args: Record<string, unknown> },
+  ) => Promise<void>
+
+  /**
+   * Called after a tool executes successfully
+   */
+  "postToolUse"?: (
+    input: {
+      tool: string
+      sessionID: string
+      callID: string
+      args: Record<string, unknown>
+      result: { title?: string; content?: string; base64?: string }
+    },
+    output: {},
+  ) => Promise<void>
+
+  /**
+   * Called when a permission request is made
+   */
+  "permission.request"?: (
+    input: Permission,
+    output: {},
+  ) => Promise<void>
+
+  /**
+   * Called before session compaction
+   */
+  "preCompact"?: (
+    input: { sessionID: string },
+    output: {},
+  ) => Promise<void>
+
+  /**
+   * Called after session compaction
+   */
+  "postCompact"?: (
+    input: { sessionID: string; success: boolean },
+    output: {},
+  ) => Promise<void>
 }
