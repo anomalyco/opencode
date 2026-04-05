@@ -529,6 +529,26 @@ export namespace ACP {
           }
           return
         }
+
+        case "session.updated": {
+          const props = event.properties
+          const session = this.sessionManager.tryGet(props.sessionID)
+          if (!session) return
+          if (!props.info.title) return
+          await this.connection
+            .sessionUpdate({
+              sessionId: session.id,
+              update: {
+                sessionUpdate: "session_info_update",
+                title: props.info.title,
+                updatedAt: new Date(props.info.time.updated).toISOString(),
+              },
+            })
+            .catch((error) => {
+              log.error("failed to send session_info_update to ACP", { error })
+            })
+          return
+        }
       }
     }
 
