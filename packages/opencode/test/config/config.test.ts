@@ -25,6 +25,7 @@ import { Npm } from "../../src/npm"
 
 const emptyAccount = Layer.mock(Account.Service)({
   active: () => Effect.succeed(Option.none()),
+  activeOrg: () => Effect.succeed(Option.none()),
 })
 
 const emptyAuth = Layer.mock(Auth.Service)({
@@ -280,6 +281,21 @@ test("resolves env templates in account config with account token", async () => 
           email: "user@example.com",
           url: "https://control.example.com",
           active_org_id: OrgID.make("org-1"),
+        }),
+      ),
+    activeOrg: () =>
+      Effect.succeed(
+        Option.some({
+          account: {
+            id: AccountID.make("account-1"),
+            email: "user@example.com",
+            url: "https://control.example.com",
+            active_org_id: OrgID.make("org-1"),
+          },
+          org: {
+            id: OrgID.make("org-1"),
+            name: "Example Org",
+          },
         }),
       ),
     config: () =>
