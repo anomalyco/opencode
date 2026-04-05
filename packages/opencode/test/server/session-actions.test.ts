@@ -6,6 +6,7 @@ import { Session } from "../../src/session"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { SessionPrompt } from "../../src/session/prompt"
+import { Filesystem } from "../../src/util/filesystem"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
 
@@ -53,7 +54,7 @@ describe("session action routes", () => {
 
         expect(res.status).toBe(200)
         const session = (await res.json()) as Session.Info
-        expect(session.directory).toBe(dir)
+        expect(session.directory).toBe(Filesystem.resolve(dir))
 
         await Session.remove(session.id)
       },
