@@ -475,6 +475,31 @@ export function SessionHeader() {
                       </div>
                     </Button>
                   </TooltipKeybind>
+
+                  <TooltipKeybind
+                    title={language.t("command.browser.toggle")}
+                    keybind={command.keybind("browser.toggle")}
+                  >
+                    <Button
+                      variant="ghost"
+                      class="titlebar-icon w-8 h-6 p-0 box-border"
+                      onClick={() => view().browser.toggle()}
+                      aria-label={language.t("command.browser.toggle")}
+                      aria-expanded={view().browser.opened()}
+                      aria-controls="browser-panel"
+                    >
+                      <div class="relative flex items-center justify-center size-4">
+                        <Icon
+                          size="small"
+                          name={view().browser.opened() ? "browser-active" : "browser"}
+                          classList={{
+                            "text-icon-strong": view().browser.opened(),
+                            "text-icon-weak": !view().browser.opened(),
+                          }}
+                        />
+                      </div>
+                    </Button>
+                  </TooltipKeybind>
                 </div>
               </div>
             </div>

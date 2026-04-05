@@ -249,6 +249,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           width: DEFAULT_FILE_TREE_WIDTH,
           tab: "changes" as "changes" | "all",
         },
+        browser: {
+          opened: false,
+          width: 600,
+        },
         session: {
           width: DEFAULT_SESSION_WIDTH,
         },
@@ -680,6 +684,38 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("fileTree", "width", width)
         },
       },
+      browser: {
+        opened: createMemo(() => store.browser?.opened ?? false),
+        width: createMemo(() => store.browser?.width ?? 600),
+        open() {
+          if (!store.browser) {
+            setStore("browser", { opened: true, width: 600 })
+            return
+          }
+          setStore("browser", "opened", true)
+        },
+        close() {
+          if (!store.browser) {
+            setStore("browser", { opened: false, width: 600 })
+            return
+          }
+          setStore("browser", "opened", false)
+        },
+        toggle() {
+          if (!store.browser) {
+            setStore("browser", { opened: true, width: 600 })
+            return
+          }
+          setStore("browser", "opened", (x) => !x)
+        },
+        resize(width: number) {
+          if (!store.browser) {
+            setStore("browser", { opened: true, width })
+            return
+          }
+          setStore("browser", "width", width)
+        },
+      },
       session: {
         width: createMemo(() => store.session?.width ?? DEFAULT_SESSION_WIDTH),
         resize(width: number) {
@@ -804,6 +840,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             },
             toggle() {
               setReviewPanelOpened(!reviewPanelOpened())
+            },
+          },
+          browser: {
+            opened: () => store.browser?.opened ?? false,
+            open() {
+              setStore("browser", { opened: true, width: 600 })
+            },
+            close() {
+              setStore("browser", { opened: false, width: 600 })
+            },
+            toggle() {
+              setStore("browser", "opened", (x) => !(store.browser?.opened ?? false))
             },
           },
           review: {

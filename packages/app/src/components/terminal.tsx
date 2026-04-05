@@ -210,6 +210,8 @@ export const Terminal = (props: TerminalProps) => {
   let drop: VoidFunction | undefined
   let reconn: ReturnType<typeof setTimeout> | undefined
   let tries = 0
+  // Track whether user has scrolled up in history (away from bottom)
+  let userScrolledAway = false
 
   const cleanup = () => {
     if (!cleanups.length) return
@@ -378,6 +380,7 @@ export const Terminal = (props: TerminalProps) => {
       }
       ghostty = g
       term = t
+
       output = terminalWriter((data, done) =>
         t.write(data, () => {
           probe.render(data)
@@ -410,6 +413,29 @@ export const Terminal = (props: TerminalProps) => {
       serializeAddon = serializer
 
       t.open(container)
+
+      // Track when user scrolls away from bottom
+      const onScroll = t.onScroll((viewportY) => {
+        const scrollbackLen = t.getScrollbackLength()
+        userScrolledAway = scrollbackLen > 0 && viewportY > 0
+      })
+      cleanups.push(() => disposeIfDisposable(onScroll))
+
+      // Override t.write() to prevent auto-scroll when user is reading history.
+      // Ghostty's internal write() calls scrollToBottom() whenever viewportY !== 0,
+      // which jumps to bottom even when user scrolled up intentionally.
+      const originalWrite = t.write.bind(t)
+      t.write = (data: string | Uint8Array, callback?: () => void) => {
+        const prevScrolledAway = userScrolledAway
+        originalWrite(data, () => {
+          if (prevScrolledAway) {
+            // User was reading history — restore their scroll position
+            t.scrollToLine(t.getViewportY())
+          }
+          callback?.()
+        })
+      }
+
       useTerminalUiBindings({
         container,
         term: t,

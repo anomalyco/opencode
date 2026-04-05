@@ -464,6 +464,13 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       onSelect: () => layout.fileTree.toggle(),
     }),
     viewCommand({
+      id: "browser.toggle",
+      title: language.t("command.browser.toggle"),
+      keybind: "mod+shift+b",
+      slash: "browser",
+      onSelect: () => view().browser.toggle(),
+    }),
+    viewCommand({
       id: "input.focus",
       title: language.t("command.input.focus"),
       keybind: "ctrl+l",

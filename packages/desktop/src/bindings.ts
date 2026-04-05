@@ -5,6 +5,7 @@ import * as __TAURI_EVENT from "@tauri-apps/api/event";
 
 /** Commands */
 export const commands = {
+	setWindowTitle: (title: string) => __TAURI_INVOKE<void>("set_window_title", { title }),
 	killSidecar: () => __TAURI_INVOKE<void>("kill_sidecar"),
 	installCli: () => __TAURI_INVOKE<string>("install_cli"),
 	awaitInitialization: (events: Channel) => __TAURI_INVOKE<ServerReadyData>("await_initialization", { events }),
@@ -19,6 +20,13 @@ export const commands = {
 	wslPath: (path: string, mode: "windows" | "linux" | null) => __TAURI_INVOKE<string>("wsl_path", { path, mode }),
 	resolveAppPath: (appName: string) => __TAURI_INVOKE<string | null>("resolve_app_path", { appName }),
 	openPath: (path: string, appName: string | null) => __TAURI_INVOKE<null>("open_path", { path, appName }),
+	createBrowser: (label: string, url: string, x: number, y: number, w: number, h: number) => __TAURI_INVOKE<null>("create_browser", { label, url, x, y, w, h }),
+	closeBrowser: (label: string) => __TAURI_INVOKE<null>("close_browser", { label }),
+	navigateBrowser: (label: string, url: string) => __TAURI_INVOKE<null>("navigate_browser", { label, url }),
+	resizeBrowser: (label: string, x: number, y: number, w: number, h: number) => __TAURI_INVOKE<null>("resize_browser", { label, x, y, w, h }),
+	browserGoBack: (label: string) => __TAURI_INVOKE<null>("browser_go_back", { label }),
+	browserGoForward: (label: string) => __TAURI_INVOKE<null>("browser_go_forward", { label }),
+	browserReload: (label: string) => __TAURI_INVOKE<null>("browser_reload", { label }),
 };
 
 /** Events */

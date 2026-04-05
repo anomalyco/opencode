@@ -14,6 +14,8 @@ import { Terminal } from "@/components/terminal"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
+import { useLocal } from "@/context/local"
+import { usePlatform } from "@/context/platform"
 import { useTerminal } from "@/context/terminal"
 import { terminalTabLabel } from "@/pages/session/terminal-label"
 import { createSizing, focusTerminalById } from "@/pages/session/helpers"
@@ -28,6 +30,8 @@ export function TerminalPanel() {
   const language = useLanguage()
   const command = useCommand()
   const { params, view } = useSessionLayout()
+  const local = useLocal()
+  const platform = usePlatform()
 
   const opened = createMemo(() => view().terminal.opened())
   const size = createSizing()
@@ -140,6 +144,17 @@ export function TerminalPanel() {
         }),
       ),
     )
+  })
+
+  // Update window title based on current model and provider (CCR if not Anthropic)
+  createEffect(() => {
+    const model = local.model.current()
+    let title = "OpenCode"
+    if (model) {
+      const isCCR = model.provider.id !== "anthropic"
+      title = isCCR ? `CCR: ${model.name} - OpenCode` : `${model.name} - OpenCode`
+    }
+    platform.setWindowTitle?.(title)
   })
 
   const handoff = createMemo(() => {

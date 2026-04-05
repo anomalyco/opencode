@@ -380,6 +380,38 @@ const createPlatform = (): Platform => {
       return commands.checkAppExists(appName)
     },
 
+    setWindowTitle: (title: string) => {
+      void import("@tauri-apps/api/core").then((m) => m.invoke("set_window_title", { title })).catch(() => undefined)
+    },
+
+    createBrowser: async (opts) => {
+      await commands.createBrowser(opts.label, opts.url, opts.x, opts.y, opts.w, opts.h)
+    },
+
+    closeBrowser: async (label) => {
+      await commands.closeBrowser(label)
+    },
+
+    navigateBrowser: async (label, url) => {
+      await commands.navigateBrowser(label, url)
+    },
+
+    resizeBrowser: async (opts) => {
+      await commands.resizeBrowser(opts.label, opts.x, opts.y, opts.w, opts.h)
+    },
+
+    browserGoBack: async (label) => {
+      await commands.browserGoBack(label)
+    },
+
+    browserGoForward: async (label) => {
+      await commands.browserGoForward(label)
+    },
+
+    browserReload: async (label) => {
+      await commands.browserReload(label)
+    },
+
     async readClipboardImage() {
       const image = await readImage().catch(() => null)
       if (!image) return null

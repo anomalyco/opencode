@@ -87,6 +87,33 @@ export type Platform = {
 
   /** Read image from clipboard (desktop only) */
   readClipboardImage?(): Promise<File | null>
+
+  /** Create a browser webview (desktop only) */
+  createBrowser?(opts: { label: string; url: string; x: number; y: number; w: number; h: number }): Promise<void>
+
+  /** Close a browser webview (desktop only) */
+  closeBrowser?(label: string): Promise<void>
+
+  /** Navigate a browser webview to a URL (desktop only) */
+  navigateBrowser?(label: string, url: string): Promise<void>
+
+  /** Get the current URL of a browser webview (desktop only) */
+  getBrowserUrl?(label: string): Promise<string>
+
+  /** Resize a browser webview (desktop only) */
+  resizeBrowser?(opts: { label: string; x: number; y: number; w: number; h: number }): Promise<void>
+
+  /** Go back in browser history (desktop only) */
+  browserGoBack?(label: string): Promise<void>
+
+  /** Go forward in browser history (desktop only) */
+  browserGoForward?(label: string): Promise<void>
+
+  /** Reload the browser webview (desktop only) */
+  browserReload?(label: string): Promise<void>
+
+  /** Set the window title (desktop only) */
+  setWindowTitle?(title: string): void
 }
 
 export type DisplayBackend = "auto" | "wayland"

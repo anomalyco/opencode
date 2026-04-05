@@ -174,7 +174,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!sessionID) return false
 
     const diffs = sync.data.session_diff[sessionID]
-    if (!diffs) return false
+    if (!Array.isArray(diffs)) return false
     return diffs.some((diff) => diff.file === path)
   }
 

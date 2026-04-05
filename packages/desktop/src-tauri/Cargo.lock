@@ -3134,6 +3134,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+ "url",
  "uuid",
  "webkit2gtk",
  "windows-core 0.62.2",

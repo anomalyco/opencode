@@ -1,3 +1,4 @@
+mod browser;
 mod cli;
 mod constants;
 #[cfg(target_os = "linux")]
@@ -67,6 +68,14 @@ struct ServerState {
 
 /// Resolves with sidecar credentials as soon as the sidecar is spawned (before health check).
 struct SidecarReady(futures::future::Shared<oneshot::Receiver<ServerReadyData>>);
+
+#[tauri::command]
+#[specta::specta]
+fn set_window_title(app: AppHandle, title: String) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_title(&title);
+    }
+}
 
 #[tauri::command]
 #[specta::specta]
@@ -347,6 +356,7 @@ pub fn run() {
             // Hold the guard in managed state so it lives for the app's lifetime,
             // ensuring all buffered logs are flushed on shutdown.
             handle.manage(logging::init(&log_dir));
+            handle.manage(browser::BrowserState::default());
 
             builder.mount_events(&handle);
             tauri::async_runtime::spawn(initialize(handle));
@@ -374,6 +384,7 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
     tauri_specta::Builder::<tauri::Wry>::new()
         // Then register them (separated by a comma)
         .commands(tauri_specta::collect_commands![
+            set_window_title,
             kill_sidecar,
             cli::install_cli,
             await_initialization,
@@ -387,7 +398,14 @@ fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             check_app_exists,
             wsl_path,
             resolve_app_path,
-            open_path
+            open_path,
+            browser::create_browser,
+            browser::close_browser,
+            browser::navigate_browser,
+            browser::resize_browser,
+            browser::browser_go_back,
+            browser::browser_go_forward,
+            browser::browser_reload,
         ])
         .events(tauri_specta::collect_events![
             LoadingWindowComplete,

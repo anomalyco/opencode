@@ -716,7 +716,8 @@ export default function Layout(props: ParentProps) {
   })
 
   createEffect(() => {
-    route()
+    const dir = route().dir
+    if (!dir) return
     globalSDK.url
 
     prefetchToken.value += 1
