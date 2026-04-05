@@ -12,15 +12,21 @@ import {
   type ListSessionsRequest,
   type ListSessionsResponse,
   type LoadSessionRequest,
+  type LoadSessionResponse,
   type NewSessionRequest,
+  type NewSessionResponse,
   type PermissionOption,
   type PlanEntry,
   type PromptRequest,
   type ResumeSessionRequest,
   type ResumeSessionResponse,
+  type SessionConfigOption,
   type Role,
   type SessionInfo,
+  type SetSessionConfigOptionRequest,
+  type SetSessionConfigOptionResponse,
   type SetSessionModelRequest,
+  type SetSessionModelResponse,
   type SetSessionModeRequest,
   type SetSessionModeResponse,
   type ToolCallContent,
@@ -48,8 +54,13 @@ import { applyPatch } from "diff"
 
 type ModeOption = { id: string; name: string; description?: string }
 type ModelOption = { modelId: string; name: string }
+type ProviderEntry = { id: string; name: string; models: Record<string, any> }
+type VariantEntry = { id: string; models: Record<string, { variants?: Record<string, any> }> }
 
 const DEFAULT_VARIANT_VALUE = "default"
+const MODE_CONFIG_ID = "mode"
+const MODEL_CONFIG_ID = "model"
+const REASONING_CONFIG_ID = "reasoning_effort"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
@@ -582,7 +593,7 @@ export namespace ACP {
       throw new Error("Authentication not implemented")
     }
 
-    async newSession(params: NewSessionRequest) {
+    async newSession(params: NewSessionRequest): Promise<NewSessionResponse> {
       const directory = params.cwd
       try {
         const model = await defaultModel(this.config, directory)
@@ -601,6 +612,7 @@ export namespace ACP {
 
         return {
           sessionId,
+          configOptions: load.configOptions,
           models: load.models,
           modes: load.modes,
           _meta: load._meta,
@@ -616,7 +628,7 @@ export namespace ACP {
       }
     }
 
-    async loadSession(params: LoadSessionRequest) {
+    async loadSession(params: LoadSessionRequest): Promise<LoadSessionResponse> {
       const directory = params.cwd
       const sessionId = params.sessionId
 
@@ -650,11 +662,28 @@ export namespace ACP {
           })
 
         const lastUser = messages?.findLast((m) => m.info.role === "user")?.info
-        if (lastUser?.role === "user") {
+        if (lastUser?.role === "user" && result.models) {
           result.models.currentModelId = `${lastUser.model.providerID}/${lastUser.model.modelID}`
           this.sessionManager.setModel(sessionId, {
             providerID: ProviderID.make(lastUser.model.providerID),
             modelID: ModelID.make(lastUser.model.modelID),
+          })
+          this.sessionManager.setVariant(sessionId, lastUser.variant)
+          result.configOptions = buildConfigOptions({
+            providers: await this.sdk.config
+              .providers({ directory }, { throwOnError: true })
+              .then((x) => sortProvidersByName(x.data!.providers)),
+            modes: (result.modes?.availableModes ?? []).map((mode) => ({
+              id: mode.id,
+              name: mode.name,
+              description: mode.description ?? undefined,
+            })),
+            currentModeId: result.modes?.currentModeId,
+            model: {
+              providerID: ProviderID.make(lastUser.model.providerID),
+              modelID: ModelID.make(lastUser.model.modelID),
+            },
+            variant: lastUser.variant,
           })
           if (result.modes?.availableModes.some((m) => m.id === lastUser.agent)) {
             result.modes.currentModeId = lastUser.agent
@@ -1167,7 +1196,7 @@ export namespace ACP {
       return { availableModes, currentModeId }
     }
 
-    private async loadSessionMode(params: LoadSessionRequest) {
+    private async loadSessionMode(params: LoadSessionRequest): Promise<LoadSessionResponse & { sessionId: string }> {
       const directory = params.cwd
       const model = await defaultModel(this.config, directory)
       const sessionId = params.sessionId
@@ -1176,10 +1205,11 @@ export namespace ACP {
       const entries = sortProvidersByName(providers)
       const availableVariants = modelVariantsFromProviders(entries, model)
       const currentVariant = this.sessionManager.getVariant(sessionId)
-      if (currentVariant && !availableVariants.includes(currentVariant)) {
+      const variant = currentVariant && availableVariants.includes(currentVariant) ? currentVariant : undefined
+      if (currentVariant && !variant) {
         this.sessionManager.setVariant(sessionId, undefined)
       }
-      const availableModels = buildAvailableModels(entries, { includeVariants: true })
+      const availableModels = buildAvailableModels(entries)
       const modeState = await this.resolveModeState(directory, sessionId)
       const currentModeId = modeState.currentModeId
       const modes = currentModeId
@@ -1188,6 +1218,13 @@ export namespace ACP {
             currentModeId,
           }
         : undefined
+      const configOptions = buildConfigOptions({
+        providers: entries,
+        modes: modeState.availableModes,
+        currentModeId,
+        model,
+        variant,
+      })
 
       const commands = await this.config.sdk.command
         .list(
@@ -1261,20 +1298,21 @@ export namespace ACP {
 
       return {
         sessionId,
+        configOptions,
         models: {
-          currentModelId: formatModelIdWithVariant(model, currentVariant, availableVariants, true),
+          currentModelId: formatModelIdWithVariant(model, undefined, availableVariants, false),
           availableModels,
         },
         modes,
         _meta: buildVariantMeta({
           model,
-          variant: this.sessionManager.getVariant(sessionId),
+          variant,
           availableVariants,
         }),
       }
     }
 
-    async unstable_setSessionModel(params: SetSessionModelRequest) {
+    async unstable_setSessionModel(params: SetSessionModelRequest): Promise<SetSessionModelResponse> {
       const session = this.sessionManager.get(params.sessionId)
       const providers = await this.sdk.config
         .providers({ directory: session.cwd }, { throwOnError: true })
@@ -1286,12 +1324,106 @@ export namespace ACP {
 
       const entries = sortProvidersByName(providers)
       const availableVariants = modelVariantsFromProviders(entries, selection.model)
+      const variant = selection.variant && availableVariants.includes(selection.variant) ? selection.variant : undefined
+
+      if (selection.variant && !variant) {
+        this.sessionManager.setVariant(session.id, undefined)
+      }
+
+      setTimeout(() => {
+        this.connection.sessionUpdate({
+          sessionId: session.id,
+          update: {
+            sessionUpdate: "config_option_update",
+            configOptions: buildConfigOptions({
+              providers: entries,
+              modes: [],
+              currentModeId: this.sessionManager.get(session.id).modeId,
+              model: selection.model,
+              variant,
+            }),
+          },
+        })
+      }, 0)
 
       return {
         _meta: buildVariantMeta({
           model: selection.model,
-          variant: selection.variant,
+          variant,
           availableVariants,
+        }),
+      }
+    }
+
+    async setSessionConfigOption(params: SetSessionConfigOptionRequest): Promise<SetSessionConfigOptionResponse> {
+      const session = this.sessionManager.get(params.sessionId)
+      const current = session.model ?? (await defaultModel(this.config, session.cwd))
+      if (!session.model) {
+        this.sessionManager.setModel(session.id, current)
+      }
+
+      const providers = await this.sdk.config
+        .providers({ directory: session.cwd }, { throwOnError: true })
+        .then((x) => x.data!.providers)
+      const entries = sortProvidersByName(providers)
+      const modes = await this.loadAvailableModes(session.cwd)
+      const modeId = session.modeId ?? (await AgentModule.defaultAgent())
+
+      if (params.configId === MODE_CONFIG_ID) {
+        if (!modes.some((mode) => mode.id === params.value)) {
+          throw RequestError.invalidParams(JSON.stringify({ error: `Invalid config value: ${params.value}` }))
+        }
+        this.sessionManager.setMode(session.id, params.value)
+        return {
+          configOptions: buildConfigOptions({
+            providers: entries,
+            modes,
+            currentModeId: params.value,
+            model: current,
+            variant: this.sessionManager.getVariant(session.id),
+          }),
+        }
+      }
+
+      if (params.configId === MODEL_CONFIG_ID) {
+        const selection = parseModelSelection(params.value, entries)
+        const variants = modelVariantsFromProviders(entries, selection.model)
+        const variant = this.sessionManager.getVariant(session.id)
+        const next = variant && variants.includes(variant) ? variant : undefined
+        this.sessionManager.setModel(session.id, selection.model)
+        this.sessionManager.setVariant(session.id, next)
+        return {
+          configOptions: buildConfigOptions({
+            providers: entries,
+            modes,
+            currentModeId: session.modeId ?? modeId,
+            model: selection.model,
+            variant: next,
+          }),
+        }
+      }
+
+      if (params.configId !== REASONING_CONFIG_ID) {
+        throw RequestError.invalidParams(JSON.stringify({ error: `Unknown config option: ${params.configId}` }))
+      }
+
+      const variants = [
+        DEFAULT_VARIANT_VALUE,
+        ...modelVariantsFromProviders(entries, current).filter((variant) => variant !== DEFAULT_VARIANT_VALUE),
+      ]
+      if (!variants.includes(params.value)) {
+        throw RequestError.invalidParams(JSON.stringify({ error: `Invalid config value: ${params.value}` }))
+      }
+
+      this.sessionManager.setVariant(session.id, params.value === DEFAULT_VARIANT_VALUE ? undefined : params.value)
+
+      return {
+        configOptions: buildConfigOptions({
+          providers: entries,
+          modes,
+          currentModeId: session.modeId ?? modeId,
+          model: current,
+          variant: this.sessionManager.getVariant(session.id),
         }),
       }
     }
@@ -1668,7 +1800,7 @@ export namespace ACP {
   }
 
   function modelVariantsFromProviders(
-    providers: Array<{ id: string; models: Record<string, { variants?: Record<string, any> }> }>,
+    providers: VariantEntry[],
     model: { providerID: ProviderID; modelID: ModelID },
   ): string[] {
     const provider = providers.find((entry) => entry.id === model.providerID)
@@ -1678,11 +1810,7 @@ export namespace ACP {
     return Object.keys(modelInfo.variants)
   }
 
-  function buildAvailableModels(
-    providers: Array<{ id: string; name: string; models: Record<string, any> }>,
-    options: { includeVariants?: boolean } = {},
-  ): ModelOption[] {
-    const includeVariants = options.includeVariants ?? false
+  function buildAvailableModels(providers: ProviderEntry[]): ModelOption[] {
     return providers.flatMap((provider) => {
       const unsorted: Array<{ id: string; name: string; variants?: Record<string, any> }> = Object.values(
         provider.models,
@@ -1693,15 +1821,84 @@ export namespace ACP {
           modelId: `${provider.id}/${model.id}`,
           name: `${provider.name}/${model.name}`,
         }
-        if (!includeVariants || !model.variants) return [base]
-        const variants = Object.keys(model.variants).filter((variant) => variant !== DEFAULT_VARIANT_VALUE)
-        const variantOptions = variants.map((variant) => ({
-          modelId: `${provider.id}/${model.id}/${variant}`,
-          name: `${provider.name}/${model.name} (${variant})`,
-        }))
-        return [base, ...variantOptions]
+        return [base]
       })
     })
+  }
+
+  function buildReasoning(input: {
+    providers: VariantEntry[]
+    model: { providerID: ProviderID; modelID: ModelID }
+    variant?: string
+  }): SessionConfigOption[] {
+    const base = modelVariantsFromProviders(input.providers, input.model)
+    if (!base.length) return []
+    const variants = [DEFAULT_VARIANT_VALUE, ...base.filter((variant) => variant !== DEFAULT_VARIANT_VALUE)]
+    const current = input.variant && variants.includes(input.variant) ? input.variant : DEFAULT_VARIANT_VALUE
+    return [
+      {
+        type: "select",
+        id: REASONING_CONFIG_ID,
+        name: "Reasoning effort",
+        category: "thought_level",
+        currentValue: current,
+        options: variants.map((variant) => ({
+          value: variant,
+          name: variant === DEFAULT_VARIANT_VALUE ? "Default" : variant,
+        })),
+      },
+    ]
+  }
+
+  function buildModeConfig(input: { modes: ModeOption[]; currentModeId?: string }): SessionConfigOption[] {
+    if (!input.modes.length || !input.currentModeId) return []
+    return [
+      {
+        type: "select",
+        id: MODE_CONFIG_ID,
+        name: "Mode",
+        category: "mode",
+        currentValue: input.currentModeId,
+        options: input.modes.map((mode) => ({
+          value: mode.id,
+          name: mode.name,
+          description: mode.description,
+        })),
+      },
+    ]
+  }
+
+  function buildModelConfig(input: {
+    providers: ProviderEntry[]
+    model: { providerID: ProviderID; modelID: ModelID }
+  }): SessionConfigOption[] {
+    return [
+      {
+        type: "select",
+        id: MODEL_CONFIG_ID,
+        name: "Model",
+        category: "model",
+        currentValue: `${input.model.providerID}/${input.model.modelID}`,
+        options: buildAvailableModels(input.providers).map((model) => ({
+          value: model.modelId,
+          name: model.name,
+        })),
+      },
+    ]
+  }
+
+  function buildConfigOptions(input: {
+    providers: ProviderEntry[]
+    modes: ModeOption[]
+    currentModeId?: string
+    model: { providerID: ProviderID; modelID: ModelID }
+    variant?: string
+  }) {
+    return [
+      ...buildModeConfig({ modes: input.modes, currentModeId: input.currentModeId }),
+      ...buildModelConfig({ providers: input.providers, model: input.model }),
+      ...buildReasoning({ providers: input.providers, model: input.model, variant: input.variant }),
+    ]
   }
 
   function formatModelIdWithVariant(
@@ -1731,8 +1928,11 @@ export namespace ACP {
 
   function parseModelSelection(
     modelId: string,
-    providers: Array<{ id: string; models: Record<string, { variants?: Record<string, any> }> }>,
-  ): { model: { providerID: ProviderID; modelID: ModelID }; variant?: string } {
+    providers: VariantEntry[],
+  ): {
+    model: { providerID: ProviderID; modelID: ModelID }
+    variant?: string
+  } {
     const parsed = Provider.parseModel(modelId)
     const provider = providers.find((p) => p.id === parsed.providerID)
     if (!provider) {

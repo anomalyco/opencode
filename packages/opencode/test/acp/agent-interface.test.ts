@@ -33,6 +33,7 @@ describe("acp.agent interface compliance", () => {
     // Optional but checked by SDK router
     "loadSession",
     "setSessionMode",
+    "setSessionConfigOption",
     "authenticate",
     // Unstable - SDK checks these with unstable_ prefix
     "listSessions",
