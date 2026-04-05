@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -50,12 +51,8 @@ export function TerminalPanel() {
     const port = window.visualViewport
 
     sync()
-    window.addEventListener("resize", sync)
-    port?.addEventListener("resize", sync)
-    onCleanup(() => {
-      window.removeEventListener("resize", sync)
-      port?.removeEventListener("resize", sync)
-    })
+    makeEventListener(window, "resize", sync)
+    if (port) makeEventListener(port, "resize", sync)
   })
 
   createEffect(() => {
