@@ -150,8 +150,20 @@ export const ReadTool = Tool.defineEffect(
       const loaded = yield* instruction.resolve(ctx.messages, filepath, ctx.messageID)
 
       const mime = AppFileSystem.mimeType(filepath)
-      const isImage = mime.startsWith("image/") && mime !== "image/svg+xml" && mime !== "image/vnd.fastbidsheet"
+      const supportedImageMimes = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"])
+      const isImage = supportedImageMimes.has(mime)
+      const isUnsupportedImage =
+        !isImage && mime.startsWith("image/") && mime !== "image/svg+xml" && mime !== "image/vnd.fastbidsheet"
       const isPdf = mime === "application/pdf"
+
+      if (isUnsupportedImage) {
+        return yield* Effect.fail(
+          new Error(
+            `Cannot read image: ${mime} is not a supported format. Supported image formats: JPEG, PNG, GIF, WebP.`,
+          ),
+        )
+      }
+
       if (isImage || isPdf) {
         const msg = `${isImage ? "Image" : "PDF"} read successfully`
         return {

@@ -425,6 +425,39 @@ root_type Monster;`
       expect(result.output).toContain("table Monster")
     }),
   )
+
+  it.live("rejects unsupported image formats like BMP", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      // minimal BMP file header
+      const bmp = Buffer.from("BM", "ascii")
+      yield* put(path.join(dir, "image.bmp"), bmp)
+
+      const err = yield* fail(dir, { filePath: path.join(dir, "image.bmp") })
+      expect(err.message).toContain("image/bmp is not a supported format")
+      expect(err.message).toContain("JPEG, PNG, GIF, WebP")
+    }),
+  )
+
+  it.live("rejects unsupported image formats like TIFF", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* put(path.join(dir, "photo.tiff"), Buffer.from("II", "ascii"))
+
+      const err = yield* fail(dir, { filePath: path.join(dir, "photo.tiff") })
+      expect(err.message).toContain("is not a supported format")
+    }),
+  )
+
+  it.live("rejects unsupported image formats like AVIF", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* put(path.join(dir, "photo.avif"), Buffer.from([0x00, 0x00, 0x00, 0x1c]))
+
+      const err = yield* fail(dir, { filePath: path.join(dir, "photo.avif") })
+      expect(err.message).toContain("is not a supported format")
+    }),
+  )
 })
 
 describe("tool.read loaded instructions", () => {
