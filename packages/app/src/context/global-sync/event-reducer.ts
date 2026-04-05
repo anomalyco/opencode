@@ -13,7 +13,8 @@ import type {
 } from "@opencode-ai/sdk/v2/client"
 import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
-import { dropSessionCaches, sessionDiffs } from "./session-cache"
+import { dropSessionCaches } from "./session-cache"
+import { hasSessionDiffs, sessionDiffs } from "./session-diff"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 
@@ -162,7 +163,12 @@ export function applyDirectoryEvent(input: {
     }
     case "session.diff": {
       const props = event.properties as { sessionID: string; diff: unknown }
-      input.setStore("session_diff", props.sessionID, sessionDiffs(props.diff))
+      const value = sessionDiffs(props.diff)
+      if (hasSessionDiffs(props.diff)) {
+        input.setStore("session_diff", props.sessionID, value)
+        break
+      }
+      input.setStore("session_diff", props.sessionID, undefined)
       break
     }
     case "todo.updated": {

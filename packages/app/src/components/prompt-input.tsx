@@ -36,7 +36,7 @@ import { usePlatform } from "@/context/platform"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { promptEnabled, promptProbe } from "@/testing/prompt"
-import { sessionDiffs } from "@/context/global-sync/session-cache"
+import { sessionDiffIncludes } from "@/context/global-sync/session-diff"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
 import { createPromptAttachments } from "./prompt-input/attachments"
 import { ACCEPTED_FILE_TYPES } from "./prompt-input/files"
@@ -174,8 +174,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const sessionID = params.id
     if (!sessionID) return false
 
-    const diffs = sessionDiffs(sync.data.session_diff[sessionID])
-    return diffs.some((diff) => diff.file === path)
+    return sessionDiffIncludes(sync.data.session_diff[sessionID], path)
   }
 
   const openComment = (item: { path: string; commentID?: string; commentOrigin?: "review" | "file" }) => {

@@ -48,7 +48,7 @@ export type State = {
     [sessionID: string]: SessionStatus
   }
   session_diff: {
-    [sessionID: string]: FileDiff[]
+    [sessionID: string]: FileDiff[] | undefined
   }
   todo: {
     [sessionID: string]: Todo[]

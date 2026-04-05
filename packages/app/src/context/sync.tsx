@@ -12,13 +12,8 @@ import {
 import { useGlobalSync } from "./global-sync"
 import { useSDK } from "./sdk"
 import type { Message, Part } from "@opencode-ai/sdk/v2/client"
-import {
-  SESSION_CACHE_LIMIT,
-  dropSessionCaches,
-  hasSessionDiffs,
-  pickSessionCacheEvictions,
-  sessionDiffs,
-} from "./global-sync/session-cache"
+import { SESSION_CACHE_LIMIT, dropSessionCaches, pickSessionCacheEvictions } from "./global-sync/session-cache"
+import { hasSessionDiffs, sessionDiffs, shouldFetchSessionDiff } from "./global-sync/session-diff"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 
@@ -509,12 +504,16 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           const client = sdk.client
           const [store, setStore] = globalSync.child(directory)
           touch(directory, setStore, sessionID)
-          if (hasSessionDiffs(store.session_diff[sessionID]) && !opts?.force) return
+          if (!shouldFetchSessionDiff(store.session_diff[sessionID], opts?.force)) return
 
           const key = keyFor(directory, sessionID)
           return runInflight(inflightDiff, key, () =>
             retry(() => client.session.diff({ sessionID })).then((diff) => {
               if (!tracked(directory, sessionID)) return
+              if (!hasSessionDiffs(diff.data)) {
+                setStore("session_diff", sessionID, undefined)
+                return
+              }
               setStore("session_diff", sessionID, sessionDiffs(diff.data))
             }),
           )

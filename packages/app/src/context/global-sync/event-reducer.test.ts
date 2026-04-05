@@ -291,7 +291,7 @@ describe("applyDirectoryEvent", () => {
     expect(todos).toEqual([dropped.id])
   })
 
-  test("normalizes non-array session diffs", () => {
+  test("drops malformed session diffs so they can be re-fetched", () => {
     const [store, setStore] = createStore(baseState())
 
     applyDirectoryEvent({
@@ -309,8 +309,7 @@ describe("applyDirectoryEvent", () => {
       loadLsp() {},
     })
 
-    expect(store.session_diff.ses_1).toEqual([])
-    expect(Array.isArray(store.session_diff.ses_1)).toBe(true)
+    expect(store.session_diff.ses_1).toBeUndefined()
   })
 
   test("cleanupDroppedSessionCaches clears part-only orphan state", () => {
