@@ -1,5 +1,5 @@
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import { createEffect, createSignal } from "solid-js"
+import { createEffect, createMemo, createSignal } from "solid-js"
 import { Logo } from "../component/logo"
 import { useProject } from "../context/project"
 import { useSync } from "../context/sync"
@@ -8,13 +8,10 @@ import { useArgs } from "../context/args"
 import { useRouteData } from "@tui/context/route"
 import { usePromptRef } from "../context/prompt"
 import { useLocal } from "../context/local"
-import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
+import { useI18n } from "../context/i18n"
+import { TuiPluginRuntime } from "../plugin"
 
 let once = false
-const placeholder = {
-  normal: ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"],
-  shell: ["ls -la", "git status", "pwd"],
-}
 
 export function Home() {
   const sync = useSync()
@@ -24,7 +21,21 @@ export function Home() {
   const [ref, setRef] = createSignal<PromptRef | undefined>()
   const args = useArgs()
   const local = useLocal()
+  const i18n = useI18n()
   let sent = false
+
+  const placeholder = createMemo(() => ({
+    normal: [
+      i18n.t("tui.home.placeholder.todo"),
+      i18n.t("tui.home.placeholder.stack"),
+      i18n.t("tui.home.placeholder.tests"),
+    ],
+    shell: [
+      i18n.t("tui.home.placeholder.shell.ls"),
+      i18n.t("tui.home.placeholder.shell.git"),
+      i18n.t("tui.home.placeholder.shell.pwd"),
+    ],
+  }))
 
   const bind = (r: PromptRef | undefined) => {
     setRef(r)
@@ -74,7 +85,7 @@ export function Home() {
               ref={bind}
               workspaceID={project.workspace.current()}
               right={<TuiPluginRuntime.Slot name="home_prompt_right" workspace_id={project.workspace.current()} />}
-              placeholders={placeholder}
+              placeholders={placeholder()}
             />
           </TuiPluginRuntime.Slot>
         </box>
