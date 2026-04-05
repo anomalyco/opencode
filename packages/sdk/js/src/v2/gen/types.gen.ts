@@ -783,6 +783,7 @@ export type ToolPart = {
   metadata?: {
     [key: string]: unknown
   }
+  providerExecuted?: boolean
 }
 
 export type StepStartPart = {
