@@ -76,6 +76,28 @@ export namespace SessionStart {
     })
   }
 
+  export async function consume(sessionID: SessionID, input: string[]) {
+    const next = clean(input)
+    if (next.length === 0) return []
+    return Database.use((db) => {
+      const row = db
+        .select({ pending_context: SessionTable.pending_context })
+        .from(SessionTable)
+        .where(eq(SessionTable.id, sessionID))
+        .get()
+      if (!row) return []
+      const pending = row.pending_context ?? []
+      if (pending.length === 0) return []
+      if (!next.every((item, i) => pending[i] === item)) return [...pending]
+      const rest = pending.slice(next.length)
+      db.update(SessionTable)
+        .set({ pending_context: rest.length > 0 ? rest : null })
+        .where(eq(SessionTable.id, sessionID))
+        .run()
+      return rest
+    })
+  }
+
   export async function trigger(input: { sessionID: SessionID; trigger: Trigger }) {
     const output = { additionalContext: [] as string[] }
     for (const hook of await Plugin.list()) {

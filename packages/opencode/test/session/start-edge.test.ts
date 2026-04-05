@@ -42,6 +42,30 @@ describe("session.start edges", () => {
     })
   })
 
+  test("consume removes only the pending prefix", async () => {
+    await Instance.provide({
+      directory: root,
+      fn: async () => {
+        const session = await Session.create({})
+        await SessionStart.clear(session.id)
+
+        expect(await SessionStart.append(session.id, ["startup:one", "resume:two"])).toEqual([
+          "startup:one",
+          "resume:two",
+        ])
+        expect(await SessionStart.append(session.id, ["compact:three"])).toEqual([
+          "startup:one",
+          "resume:two",
+          "compact:three",
+        ])
+        expect(await SessionStart.consume(session.id, ["startup:one", "resume:two"])).toEqual(["compact:three"])
+        expect(await SessionStart.pending(session.id)).toEqual(["compact:three"])
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+
   test("throws when appending to a missing session", async () => {
     await Instance.provide({
       directory: root,

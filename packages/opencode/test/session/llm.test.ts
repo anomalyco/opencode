@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test"
+import { afterAll, beforeAll, beforeEach, describe, expect, spyOn, test } from "bun:test"
 import path from "path"
 import { tool, type ModelMessage } from "ai"
 import { Cause, Exit, Stream } from "effect"
@@ -17,6 +17,7 @@ import type { MessageV2 } from "../../src/session/message-v2"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { Session } from "../../src/session"
 import { SessionStart } from "../../src/session/start"
+import { Plugin } from "../../src/plugin"
 
 describe("session.llm.hasToolCalls", () => {
   test("returns false for empty messages array", () => {
@@ -496,6 +497,88 @@ describe("session.llm.stream", () => {
         await Session.remove(session.id)
       },
     })
+  })
+
+  test("keeps pending session start context when stream setup fails", async () => {
+    const server = state.server
+    if (!server) throw new Error("Server not initialized")
+
+    const providerID = "alibaba"
+    const modelID = "qwen-plus"
+    const fixture = await loadFixture(providerID, modelID)
+    const model = fixture.model
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: [providerID],
+            provider: {
+              [providerID]: {
+                options: {
+                  apiKey: "test-key",
+                  baseURL: `${server.url.origin}/v1`,
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    const orig = Plugin.trigger
+    const spy = spyOn(Plugin, "trigger").mockImplementation(async (...args) => {
+      if (args[0] === "chat.params") throw new Error("boom")
+      return orig(...args)
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await Provider.getModel(ProviderID.make(providerID), ModelID.make(model.id))
+        const session = await Session.create({})
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          temperature: 0.4,
+          topP: 0.8,
+        } satisfies Agent.Info
+
+        const user = {
+          id: MessageID.make("user-start-fail"),
+          sessionID: session.id,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderID.make(providerID), modelID: resolved.id },
+        } satisfies MessageV2.User
+
+        await SessionStart.append(session.id, ["restored from resume"])
+
+        await expect(
+          LLM.stream({
+            user,
+            sessionID: session.id,
+            model: resolved,
+            agent,
+            system: ["You are a helpful assistant."],
+            abort: new AbortController().signal,
+            messages: [{ role: "user", content: "Hello" }],
+            tools: {},
+          }),
+        ).rejects.toThrow("boom")
+
+        expect(await SessionStart.pending(session.id)).toEqual(["restored from resume"])
+
+        await Session.remove(session.id)
+      },
+    })
+
+    spy.mockRestore()
   })
 
   test("raw stream abort signal cancels provider response body promptly", async () => {
