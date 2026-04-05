@@ -24,7 +24,8 @@ import { InstanceState } from "@/effect/instance-state"
 import { Context, Duration, Effect, Exit, Fiber, Layer, Option, Schema } from "effect"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { InstanceRef } from "@/effect/instance-ref"
-import { zod } from "@/util/effect-zod"
+import { normalizeLocale } from "@/i18n"
+import { zod, ZodOverride } from "@/util/effect-zod"
 import { NonNegativeInt, PositiveInt, withStatics, type DeepMutable } from "@/util/schema"
 import { ConfigAgent } from "./agent"
 import { ConfigCommand } from "./command"
@@ -58,6 +59,9 @@ function mergeConfigConcatArrays(target: Info, source: Info): Info {
 function normalizeLoadedConfig(data: unknown, source: string) {
   if (!isRecord(data)) return data
   const copy = { ...data }
+  if (copy.locale !== undefined) {
+    copy.locale = normalizeLocale(copy.locale) === "en" && copy.locale !== "en" ? undefined : normalizeLocale(copy.locale)
+  }
   const hadLegacy = "theme" in copy || "keybinds" in copy || "tui" in copy
   if (!hadLegacy) return copy
   delete copy.theme
@@ -139,6 +143,9 @@ export const Info = Schema.Struct({
   }),
   model: Schema.optional(ConfigModelID).annotate({
     description: "Model to use in the format of provider/model, eg anthropic/claude-2",
+  }),
+  locale: Schema.optional(Schema.Literals(["en", "zh"])).annotate({
+    description: "Locale for localized CLI and TUI messages. Defaults to environment locale, then English.",
   }),
   small_model: Schema.optional(ConfigModelID).annotate({
     description: "Small model to use for tasks like title generation in the format of provider/model",

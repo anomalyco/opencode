@@ -1544,6 +1544,10 @@ export type Config = {
    */
   model?: string
   /**
+   * Locale for localized CLI and TUI messages. Defaults to environment locale, then English.
+   */
+  locale?: "en" | "zh"
+  /**
    * Small model to use for tasks like title generation in the format of provider/model
    */
   small_model?: string
