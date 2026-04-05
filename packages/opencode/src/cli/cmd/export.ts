@@ -2,6 +2,8 @@ import type { Argv } from "yargs"
 import { Session } from "@/session/session"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionID } from "../../session/schema"
+import { Config } from "../../config/config"
+import { datetime, resolveLocale, t, type Locale } from "../../i18n"
 import { cmd } from "./cmd"
 import { bootstrap } from "../bootstrap"
 import { UI } from "../ui"
@@ -220,6 +222,18 @@ function sanitize(data: { info: Session.Info; messages: MessageV2.WithParts[] })
   }
 }
 
+function latest(locale: Locale) {
+  return t(locale, "cli.export.latest")
+}
+
+export function exportProgress(locale: Locale, session: string) {
+  return t(locale, "cli.export.progress", { session })
+}
+
+export function exportHint(locale: Locale, updated: number, id: string) {
+  return `${datetime(locale, updated)} • ${id.slice(-8)}`
+}
+
 export const ExportCommand = cmd({
   command: "export [sessionID]",
   describe: "export session data as JSON",
@@ -236,12 +250,13 @@ export const ExportCommand = cmd({
   },
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
+      const locale = resolveLocale((await Config.get()).locale)
       let sessionID = args.sessionID ? SessionID.make(args.sessionID) : undefined
-      process.stderr.write(`Exporting session: ${sessionID ?? "latest"}\n`)
+      process.stderr.write(exportProgress(locale, sessionID ?? latest(locale)) + "\n")
 
       if (!sessionID) {
         UI.empty()
-        prompts.intro("Export session", {
+        prompts.intro(t(locale, "cli.export.intro"), {
           output: process.stderr,
         })
 
@@ -251,10 +266,10 @@ export const ExportCommand = cmd({
         }
 
         if (sessions.length === 0) {
-          prompts.log.error("No sessions found", {
+          prompts.log.error(t(locale, "cli.export.none"), {
             output: process.stderr,
           })
-          prompts.outro("Done", {
+          prompts.outro(t(locale, "cli.export.done"), {
             output: process.stderr,
           })
           return
@@ -263,12 +278,12 @@ export const ExportCommand = cmd({
         sessions.sort((a, b) => b.time.updated - a.time.updated)
 
         const selectedSession = await prompts.autocomplete({
-          message: "Select session to export",
+          message: t(locale, "cli.export.select"),
           maxItems: 10,
           options: sessions.map((session) => ({
             label: session.title,
             value: session.id,
-            hint: `${new Date(session.time.updated).toLocaleString()} • ${session.id.slice(-8)}`,
+            hint: exportHint(locale, session.time.updated, session.id),
           })),
           output: process.stderr,
         })
@@ -279,7 +294,7 @@ export const ExportCommand = cmd({
 
         sessionID = selectedSession
 
-        prompts.outro("Exporting session...", {
+        prompts.outro(t(locale, "cli.export.outro"), {
           output: process.stderr,
         })
       }
@@ -297,8 +312,8 @@ export const ExportCommand = cmd({
 
         process.stdout.write(JSON.stringify(args.sanitize ? sanitize(exportData) : exportData, null, 2))
         process.stdout.write(EOL)
-      } catch {
-        UI.error(`Session not found: ${sessionID!}`)
+      } catch (error) {
+        UI.error(t(locale, "cli.export.not_found", { session: sessionID! }))
         process.exit(1)
       }
     })

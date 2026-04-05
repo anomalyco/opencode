@@ -1,13 +1,15 @@
 import type { Argv } from "yargs"
 import { cmd } from "./cmd"
-import { Session } from "@/session/session"
+import { Session } from "../../session"
 import { SessionID } from "../../session/schema"
 import { bootstrap } from "../bootstrap"
 import { UI } from "../ui"
-import { Locale } from "@/util/locale"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { Filesystem } from "@/util/filesystem"
-import { Process } from "@/util/process"
+import { Config } from "../../config/config"
+import { resolveLocale, t, type Locale as Lang } from "../../i18n"
+import { Locale } from "../../util"
+import { Flag } from "../../flag/flag"
+import { Filesystem } from "../../util"
+import { Process } from "../../util"
 import { EOL } from "os"
 import path from "path"
 import { which } from "../../util/which"
@@ -59,15 +61,21 @@ export const SessionDeleteCommand = cmd({
   },
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
+      const config = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.get()))
+      const locale = resolveLocale(config.locale)
       const sessionID = SessionID.make(args.sessionID)
       try {
         await AppRuntime.runPromise(Session.Service.use((svc) => svc.get(sessionID)))
       } catch {
-        UI.error(`Session not found: ${args.sessionID}`)
+        UI.error(t(locale, "cli.session.not_found", { session: args.sessionID }))
         process.exit(1)
       }
       await AppRuntime.runPromise(Session.Service.use((svc) => svc.remove(sessionID)))
-      UI.println(UI.Style.TEXT_SUCCESS_BOLD + `Session ${args.sessionID} deleted` + UI.Style.TEXT_NORMAL)
+      UI.println(
+        UI.Style.TEXT_SUCCESS_BOLD +
+          t(locale, "cli.session.deleted", { session: args.sessionID }) +
+          UI.Style.TEXT_NORMAL,
+      )
     })
   },
 })
@@ -91,6 +99,8 @@ export const SessionListCommand = cmd({
   },
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
+      const config = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.get()))
+      const locale = resolveLocale(config.locale)
       const sessions = [...Session.list({ roots: true, limit: args.maxCount })]
 
       if (sessions.length === 0) {
@@ -101,7 +111,7 @@ export const SessionListCommand = cmd({
       if (args.format === "json") {
         output = formatSessionJSON(sessions)
       } else {
-        output = formatSessionTable(sessions)
+        output = formatSessionTable(sessions, locale)
       }
 
       const shouldPaginate = process.stdout.isTTY && !args.maxCount && args.format === "table"
@@ -128,23 +138,33 @@ export const SessionListCommand = cmd({
   },
 })
 
-function formatSessionTable(sessions: Session.Info[]): string {
+function formatSessionTable(sessions: Session.Info[], locale: Lang): string {
   const lines: string[] = []
 
   const maxIdWidth = Math.max(20, ...sessions.map((s) => s.id.length))
   const maxTitleWidth = Math.max(25, ...sessions.map((s) => s.title.length))
 
-  const header = `Session ID${" ".repeat(maxIdWidth - 10)}  Title${" ".repeat(maxTitleWidth - 5)}  Updated`
+  const id = t(locale, "cli.session.header.id")
+  const title = t(locale, "cli.session.header.title")
+  const updated = t(locale, "cli.session.header.updated")
+  const header = sessionHeader(locale, maxIdWidth, maxTitleWidth)
   lines.push(header)
   lines.push("─".repeat(header.length))
   for (const session of sessions) {
     const truncatedTitle = Locale.truncate(session.title, maxTitleWidth)
-    const timeStr = Locale.todayTimeOrDateTime(session.time.updated)
+    const timeStr = Locale.todayTimeOrDateTime(session.time.updated, locale)
     const line = `${session.id.padEnd(maxIdWidth)}  ${truncatedTitle.padEnd(maxTitleWidth)}  ${timeStr}`
     lines.push(line)
   }
 
   return lines.join(EOL)
+}
+
+export function sessionHeader(locale: Lang, maxIdWidth: number, maxTitleWidth: number) {
+  const id = t(locale, "cli.session.header.id")
+  const title = t(locale, "cli.session.header.title")
+  const updated = t(locale, "cli.session.header.updated")
+  return `${id}${" ".repeat(Math.max(1, maxIdWidth - id.length))}  ${title}${" ".repeat(Math.max(1, maxTitleWidth - title.length))}  ${updated}`
 }
 
 function formatSessionJSON(sessions: Session.Info[]): string {
