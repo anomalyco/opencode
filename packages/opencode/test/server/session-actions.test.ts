@@ -1,3 +1,4 @@
+import { mkdir } from "node:fs/promises"
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
@@ -38,6 +39,7 @@ describe("session action routes", () => {
   test("create route accepts directory query param", async () => {
     await using tmp = await tmpdir({ git: true })
     const dir = `${tmp.path}/custom-worktree`
+    await mkdir(dir, { recursive: true })
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {

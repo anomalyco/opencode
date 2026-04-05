@@ -27,6 +27,7 @@ import { Snapshot } from "@/snapshot"
 import { ProjectID } from "../project/schema"
 import { WorkspaceID } from "../control-plane/schema"
 import { SessionID, MessageID, PartID } from "./schema"
+import { Filesystem } from "@/util/filesystem"
 
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
@@ -500,7 +501,7 @@ export namespace Session {
         permission?: Permission.Ruleset
         workspaceID?: WorkspaceID
       }) {
-        const directory = input?.directory ?? (yield* InstanceState.directory)
+        const directory = input?.directory ? Filesystem.resolve(input.directory) : yield* InstanceState.directory
         return yield* createNext({
           parentID: input?.parentID,
           directory,
