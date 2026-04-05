@@ -235,11 +235,27 @@ Once individual tools are effectified, change `Tool.Info` (`tool/tool.ts`) so `i
 2. Update `Tool.define()` factory to work with Effects
 3. Update `SessionPrompt` to `yield*` tool results instead of `await`ing
 
+### Tool migration details
+
+Until the tool interface itself returns `Effect`, use this transitional pattern for migrated tools:
+
+- `Tool.defineEffect(...)` should `yield*` the services the tool depends on and close over them in the returned tool definition.
+- Keep the bridge at the Promise boundary only. Prefer a single `Effect.runPromise(...)` in the temporary `async execute(...)` implementation, and move the inner logic into `Effect.fn(...)` helpers instead of scattering `runPromise` islands through the tool body.
+- If a tool starts requiring new services, wire them into `ToolRegistry.defaultLayer` so production callers resolve the same dependencies as tests.
+
+Tool tests should use the existing Effect helpers in `packages/opencode/test/lib/effect.ts`:
+
+- Use `testEffect(...)` / `it.live(...)` instead of creating fake local wrappers around effectful tools.
+- Yield the real tool export, then initialize it: `const info = yield* ReadTool`, `const tool = yield* Effect.promise(() => info.init())`.
+- Run tests inside a real instance with `provideTmpdirInstance(...)` or `provideInstance(tmpdirScoped(...))` so instance-scoped services resolve exactly as they do in production.
+
+This keeps migrated tool tests aligned with the production service graph today, and makes the eventual `Tool.Info` → `Effect` cleanup mostly mechanical later.
+
 Individual tools, ordered by value:
 
 - [ ] `apply_patch.ts` — HIGH: multi-step orchestration, error accumulation, Bus events
 - [ ] `bash.ts` — HIGH: shell orchestration, quoting, timeout handling, output capture
-- [ ] `read.ts` — HIGH: streaming I/O, readline, binary detection → FileSystem + Stream
+- [x] `read.ts` — HIGH: streaming I/O, readline, binary detection → FileSystem + Stream
 - [ ] `edit.ts` — HIGH: multi-step diff/format/publish pipeline, FileWatcher lock
 - [ ] `grep.ts` — MEDIUM: spawns ripgrep → ChildProcessSpawner, timeout handling
 - [ ] `write.ts` — MEDIUM: permission checks, diagnostics polling, Bus events

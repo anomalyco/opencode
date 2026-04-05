@@ -36,6 +36,7 @@ import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
 import * as Tps from "../../util/tps"
+import { CONSOLE_MANAGED_ICON, consoleManagedProviderLabel } from "@tui/util/provider-origin"
 
 export type PromptProps = {
   sessionID?: string
@@ -95,6 +96,15 @@ export function Prompt(props: PromptProps) {
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
   const [auto, setAuto] = createSignal<AutocompleteRef>()
+  const activeOrgName = createMemo(() => sync.data.console_state.activeOrgName)
+  const canSwitchOrgs = createMemo(() => sync.data.console_state.switchableOrgCount > 1)
+  const currentProviderLabel = createMemo(() => {
+    const current = local.model.current()
+    const provider = local.model.parsed().provider
+    if (!current) return provider
+    return consoleManagedProviderLabel(sync.data.console_state.consoleManagedProviders, current.providerID, provider)
+  })
+  const hasRightContent = createMemo(() => Boolean(props.right || activeOrgName()))
 
   function promptModelWarning() {
     toast.show({
@@ -1150,7 +1160,7 @@ export function Prompt(props: PromptProps) {
                     <text flexShrink={0} fg={keybind.leader ? theme.textMuted : theme.text}>
                       {local.model.parsed().model}
                     </text>
-                    <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
+                    <text fg={theme.textMuted}>{currentProviderLabel()}</text>
                     <Show when={showVariant()}>
                       <text fg={theme.textMuted}>·</text>
                       <text>
@@ -1160,7 +1170,22 @@ export function Prompt(props: PromptProps) {
                   </box>
                 </Show>
               </box>
-              {props.right}
+              <Show when={hasRightContent()}>
+                <box flexDirection="row" gap={1} alignItems="center">
+                  {props.right}
+                  <Show when={activeOrgName()}>
+                    <text
+                      fg={theme.textMuted}
+                      onMouseUp={() => {
+                        if (!canSwitchOrgs()) return
+                        command.trigger("console.org.switch")
+                      }}
+                    >
+                      {`${CONSOLE_MANAGED_ICON} ${activeOrgName()}`}
+                    </text>
+                  </Show>
+                </box>
+              </Show>
             </box>
           </box>
         </box>
