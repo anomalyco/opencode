@@ -15,6 +15,7 @@ import {
   latestRootSession,
   workspaceKey,
 } from "./helpers"
+import { projectSelected } from "./sidebar-project-helpers"
 
 const session = (input: Partial<Session> & Pick<Session, "id" | "directory">) =>
   ({
@@ -105,6 +106,12 @@ describe("layout workspace helpers", () => {
   test("normalizes trailing slash in workspace key", () => {
     expect(workspaceKey("/tmp/demo///")).toBe("/tmp/demo")
     expect(workspaceKey("C:\\tmp\\demo\\\\")).toBe("C:/tmp/demo")
+  })
+
+  test("matches selected project against normalized workspace paths", () => {
+    expect(projectSelected("/tmp/demo///", "/tmp/demo")).toBe(true)
+    expect(projectSelected("C:\\tmp\\sandbox\\\\", "C:/tmp/root", ["C:/tmp/sandbox"])).toBe(true)
+    expect(projectSelected("/tmp/other", "/tmp/demo", ["/tmp/sandbox"])).toBe(false)
   })
 
   test("preserves posix and drive roots in workspace key", () => {

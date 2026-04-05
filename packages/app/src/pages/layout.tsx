@@ -161,7 +161,7 @@ export default function Layout(props: ParentProps) {
     dark: "theme.scheme.dark",
   }
   const colorSchemeLabel = (scheme: ColorScheme) => language.t(colorSchemeKey[scheme])
-  const currentDir = createMemo(() => decode64(params.dir) ?? "")
+  const currentDir = createMemo(() => route().dir)
   const openclawDir = "/openclaw"
   const openclawSlug = base64Encode(openclawDir)
   const isOpenclawDir = (directory?: string) => directory === openclawDir
