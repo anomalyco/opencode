@@ -80,6 +80,7 @@ import {
   displayName,
   effectiveWorkspaceOrder,
   errorMessage,
+  latestProjectSession,
   latestRootSession,
   sortedRootSessions,
   workspaceKey,
@@ -1515,7 +1516,23 @@ export default function Layout(props: ParentProps) {
     }
 
     const root = projectRoot(directory)
+    const project = layout.projects.list().find((item) => workspaceKey(item.worktree) === workspaceKey(root))
+    const dirs = workspaceIds(project)
+    const stores = dirs.map((dir) => globalSync.child(dir, { bootstrap: false })[0])
+    const session = latestProjectSession(
+      {
+        root,
+        dirs,
+        recent: store.lastProjectSession[root],
+        stores,
+      },
+      Date.now(),
+    )
     server.projects.touch(root)
+    if (session) {
+      navigateWithSidebarReset(`/${base64Encode(session.directory)}/session/${session.id}`)
+      return
+    }
     navigateWithSidebarReset(`/${base64Encode(root)}/session`)
   }
 

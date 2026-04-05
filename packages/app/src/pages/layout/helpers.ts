@@ -39,6 +39,31 @@ export const sortedRootSessions = (store: SessionStore, now: number) => roots(st
 export const latestRootSession = (stores: SessionStore[], now: number) =>
   stores.flatMap(roots).sort(sortSessions(now))[0]
 
+export const latestProjectSession = (
+  input: {
+    root: string
+    dirs: string[]
+    recent?: { directory: string; id: string; at: number }
+    stores: SessionStore[]
+  },
+  now: number,
+) => {
+  const key = workspaceKey(input.root)
+  const dirs = input.dirs.filter((dir) => workspaceKey(dir) !== key)
+  const all = [input.root, ...dirs]
+  const recent =
+    input.recent &&
+    all.some((dir) => workspaceKey(dir) === workspaceKey(input.recent!.directory)) &&
+    input.stores
+      .flatMap(roots)
+      .find(
+        (session) =>
+          workspaceKey(session.directory) === workspaceKey(input.recent!.directory) && session.id === input.recent!.id,
+      )
+  if (recent) return recent
+  return latestRootSession(input.stores, now)
+}
+
 export function hasProjectPermissions(
   session: Session[],
   request: Record<string, PermissionRequest[] | undefined>,

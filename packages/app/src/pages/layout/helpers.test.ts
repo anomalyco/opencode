@@ -12,6 +12,7 @@ import {
   effectiveWorkspaceOrder,
   errorMessage,
   hasProjectPermissions,
+  latestProjectSession,
   latestRootSession,
   workspaceKey,
 } from "./helpers"
@@ -213,6 +214,76 @@ describe("layout workspace helpers", () => {
     )
 
     expect(result?.id).toBe("root")
+  })
+
+  test("prefers remembered project session when it still exists", () => {
+    const result = latestProjectSession(
+      {
+        root: "/root",
+        dirs: ["/root", "/workspace"],
+        recent: { directory: "/root", id: "older", at: 999 },
+        stores: [
+          {
+            path: { directory: "/root" },
+            session: [
+              session({
+                id: "older",
+                directory: "/root",
+                time: { created: 1, updated: 1, archived: undefined },
+              }),
+            ],
+          },
+          {
+            path: { directory: "/workspace" },
+            session: [
+              session({
+                id: "newer",
+                directory: "/workspace",
+                time: { created: 2, updated: 2, archived: undefined },
+              }),
+            ],
+          },
+        ],
+      },
+      120_000,
+    )
+
+    expect(result?.id).toBe("older")
+  })
+
+  test("falls back to latest root session when remembered project session is gone", () => {
+    const result = latestProjectSession(
+      {
+        root: "/root",
+        dirs: ["/root", "/workspace"],
+        recent: { directory: "/missing", id: "older", at: 999 },
+        stores: [
+          {
+            path: { directory: "/root" },
+            session: [
+              session({
+                id: "root",
+                directory: "/root",
+                time: { created: 1, updated: 1, archived: undefined },
+              }),
+            ],
+          },
+          {
+            path: { directory: "/workspace" },
+            session: [
+              session({
+                id: "workspace",
+                directory: "/workspace",
+                time: { created: 2, updated: 2, archived: undefined },
+              }),
+            ],
+          },
+        ],
+      },
+      120_000,
+    )
+
+    expect(result?.id).toBe("workspace")
   })
 
   test("formats fallback project display name", () => {
