@@ -7,10 +7,14 @@ export interface IconButtonProps extends ComponentProps<typeof Kobalte> {
   size?: "small" | "normal" | "large"
   iconSize?: IconProps["size"]
   variant?: "primary" | "secondary" | "ghost"
+  ariaLabel?: string
+  ariaDescribedby?: string
+  ariaExpanded?: boolean
+  ariaCurrent?: string
 }
 
 export function IconButton(props: ComponentProps<"button"> & IconButtonProps) {
-  const [split, rest] = splitProps(props, ["variant", "size", "iconSize", "class", "classList"])
+  const [split, rest] = splitProps(props, ["variant", "size", "iconSize", "class", "classList", "ariaLabel", "ariaDescribedby", "ariaExpanded", "ariaCurrent"])
   return (
     <Kobalte
       {...rest}
@@ -18,6 +22,10 @@ export function IconButton(props: ComponentProps<"button"> & IconButtonProps) {
       data-icon={props.icon}
       data-size={split.size || "normal"}
       data-variant={split.variant || "secondary"}
+      aria-label={split.ariaLabel}
+      aria-describedby={split.ariaDescribedby}
+      aria-expanded={split.ariaExpanded}
+      aria-current={split.ariaCurrent}
       classList={{
         ...(split.classList ?? {}),
         [split.class ?? ""]: !!split.class,
