@@ -156,25 +156,30 @@ describe("tool.write", () => {
       await using tmp = await tmpdir()
       const filepath = path.join(tmp.path, "sensitive.json")
 
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const write = await WriteTool.init()
-          await write.execute(
-            {
-              filePath: filepath,
-              content: JSON.stringify({ secret: "data" }),
-            },
-            ctx,
-          )
+      const prevUmask = process.umask(0o022)
+      try {
+        await Instance.provide({
+          directory: tmp.path,
+          fn: async () => {
+            const write = await WriteTool.init()
+            await write.execute(
+              {
+                filePath: filepath,
+                content: JSON.stringify({ secret: "data" }),
+              },
+              ctx,
+            )
 
-          // On Unix systems, check permissions
-          if (process.platform !== "win32") {
-            const stats = await fs.stat(filepath)
-            expect(stats.mode & 0o777).toBe(0o644)
-          }
-        },
-      })
+            // On Unix systems, check permissions
+            if (process.platform !== "win32") {
+              const stats = await fs.stat(filepath)
+              expect(stats.mode & 0o777).toBe(0o644)
+            }
+          },
+        })
+      } finally {
+        process.umask(prevUmask)
+      }
     })
   })
 
