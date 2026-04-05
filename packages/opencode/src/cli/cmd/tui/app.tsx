@@ -333,6 +333,17 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     renderer.clearSelection()
   })
 
+  // Fallback exit handler for routes without their own exit handling (e.g. plugin routes).
+  // Home and session routes handle app_exit in their own components, so skip those here.
+  useKeyboard((evt) => {
+    if (evt.defaultPrevented) return
+    if (route.data.type === "home" || route.data.type === "session") return
+    if (!keybind.match("app_exit", evt)) return
+    exit()
+    evt.preventDefault()
+    evt.stopPropagation()
+  })
+
   // Wire up console copy-to-clipboard via opentui's onCopySelection callback
   renderer.console.onCopySelection = async (text: string) => {
     if (!text || text.length === 0) return
