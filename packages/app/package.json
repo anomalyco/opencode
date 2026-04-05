@@ -20,7 +20,8 @@
     "test:e2e": "playwright test",
     "test:e2e:local": "bun script/e2e-local.ts",
     "test:e2e:ui": "playwright test --ui",
-    "test:e2e:report": "playwright show-report e2e/playwright-report"
+    "test:e2e:report": "playwright show-report e2e/playwright-report",
+    "extract:collab-pro": "node scripts/extract-collab-pro.mjs"
   },
   "license": "MIT",
   "devDependencies": {

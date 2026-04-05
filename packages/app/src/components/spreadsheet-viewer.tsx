@@ -62,6 +62,8 @@ export function SpreadsheetViewer(props: Props) {
     const el = host()
     if (!el || typeof window === "undefined") return
 
+    // `createUniver` only clears core IUndoRedoService (etc.) when `collaboration` is truthy.
+    // If you omit it but keep `UniverSheetsCollaborationPreset`, core + collab both register undo → crash.
     const instance = createUniver({
       locale: LocaleType.EN_US,
       locales: {
