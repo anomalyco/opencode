@@ -2031,13 +2031,13 @@
       }
     }
   },
-  "minimax-coding-plan": {
-    "id": "minimax-coding-plan",
+  "minimax-token-plan": {
+    "id": "minimax-token-plan",
     "env": ["MINIMAX_API_KEY"],
     "npm": "@ai-sdk/anthropic",
     "api": "https://api.minimax.io/anthropic/v1",
     "name": "MiniMax Coding Plan (minimax.io)",
-    "doc": "https://platform.minimax.io/docs/coding-plan/intro",
+    "doc": "https://platform.minimax.io/docs/token-plan/intro",
     "models": {
       "MiniMax-M2.7": {
         "id": "MiniMax-M2.7",
@@ -48570,13 +48570,13 @@
       }
     }
   },
-  "minimax-cn-coding-plan": {
-    "id": "minimax-cn-coding-plan",
+  "minimax-cn-token-plan": {
+    "id": "minimax-cn-token-plan",
     "env": ["MINIMAX_API_KEY"],
     "npm": "@ai-sdk/anthropic",
     "api": "https://api.minimaxi.com/anthropic/v1",
     "name": "MiniMax Coding Plan (minimaxi.com)",
-    "doc": "https://platform.minimaxi.com/docs/coding-plan/intro",
+    "doc": "https://platform.minimaxi.com/docs/token-plan/intro",
     "models": {
       "MiniMax-M2.7": {
         "id": "MiniMax-M2.7",
