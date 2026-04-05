@@ -19,19 +19,8 @@ permissions:
 
 jobs:
   unit:
-    name: unit (${{ matrix.settings.name }})
-    strategy:
-      fail-fast: false
-      matrix:
-        settings:
-          - name: linux
-            host: blacksmith-4vcpu-ubuntu-2404
-          - name: windows
-            host: blacksmith-4vcpu-windows-2025
-    runs-on: ${{ matrix.settings.host }}
-    defaults:
-      run:
-        shell: bash
+    name: unit (linux)
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -57,15 +46,13 @@ jobs:
 
       - name: Run unit tests
         run: bun turbo test:ci
-        env:
-          OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
 
       - name: Publish unit reports
         if: always()
         uses: mikepenz/action-junit-report@v6
         with:
           report_paths: packages/*/.artifacts/unit/junit.xml
-          check_name: "unit results (${{ matrix.settings.name }})"
+          check_name: "unit results (linux)"
           detailed_summary: true
           include_time_in_summary: true
           fail_on_failure: false
@@ -74,27 +61,16 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: unit-${{ matrix.settings.name }}-${{ github.run_attempt }}
+          name: unit-linux-${{ github.run_attempt }}
           if-no-files-found: ignore
           retention-days: 7
           path: packages/*/.artifacts/unit/junit.xml
 
   e2e:
-    name: e2e (${{ matrix.settings.name }})
-    strategy:
-      fail-fast: false
-      matrix:
-        settings:
-          - name: linux
-            host: blacksmith-4vcpu-ubuntu-2404
-          - name: windows
-            host: blacksmith-4vcpu-windows-2025
-    runs-on: ${{ matrix.settings.host }}
+    name: e2e (linux)
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
-    defaults:
-      run:
-        shell: bash
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -118,7 +94,6 @@ jobs:
           key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}-chromium
 
       - name: Install Playwright system dependencies
-        if: runner.os == 'Linux'
         working-directory: packages/app
         run: bunx playwright install-deps chromium
 
@@ -131,14 +106,14 @@ jobs:
         run: bun --cwd packages/app test:e2e:local
         env:
           CI: true
-          PLAYWRIGHT_JUNIT_OUTPUT: e2e/junit-${{ matrix.settings.name }}.xml
+          PLAYWRIGHT_JUNIT_OUTPUT: e2e/junit-linux.xml
         timeout-minutes: 30
 
       - name: Upload Playwright artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-${{ matrix.settings.name }}-${{ github.run_attempt }}
+          name: playwright-linux-${{ github.run_attempt }}
           if-no-files-found: ignore
           retention-days: 7
           path: |
