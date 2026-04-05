@@ -2613,11 +2613,11 @@ export default function Layout(props: ParentProps) {
                 fallback={
                   <>
                     <div class="shrink-0 py-4 px-3">
-                      <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-                        <Button
-                          size="large"
-                          icon="new-session"
-                          variant="ghost"
+                    <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                      <Button
+                        size="large"
+                        icon="new-session"
+                        variant="ghost"
                           class="w-full border border-border-weak-base"
                           onClick={() => {
                             const dir = worktree()
@@ -2627,18 +2627,33 @@ export default function Layout(props: ParentProps) {
                         >
                           {language.t("command.session.new")}
                         </Button>
-                        <IconButton
-                          icon="archive"
-                          variant="ghost"
-                          size="large"
-                          class="rounded-lg border border-border-weak-base"
-                          aria-label={language.t("sidebar.project.viewArchivedSessions")}
-                          onClick={() => {
-                            const item = project()
-                            if (!item) return
-                            dialog.show(() => <DialogArchivedSessions project={item} />)
-                          }}
-                        />
+                        <div class="flex items-center gap-2">
+                          <Tooltip placement="bottom" value={language.t("sidebar.project.clearNotifications")}>
+                            <IconButton
+                              icon="bell-off"
+                              variant="ghost"
+                              size="large"
+                              class="rounded-lg border border-border-weak-base"
+                              disabled={unseenCount() === 0}
+                              aria-label={language.t("sidebar.project.clearNotifications")}
+                              onClick={clearNotifications}
+                            />
+                          </Tooltip>
+                          <Tooltip placement="bottom" value={language.t("sidebar.project.viewArchivedSessions")}>
+                            <IconButton
+                              icon="archive"
+                              variant="ghost"
+                              size="large"
+                              class="rounded-lg border border-border-weak-base"
+                              aria-label={language.t("sidebar.project.viewArchivedSessions")}
+                              onClick={() => {
+                                const item = project()
+                                if (!item) return
+                                dialog.show(() => <DialogArchivedSessions project={item} />)
+                              }}
+                            />
+                          </Tooltip>
+                        </div>
                       </div>
                     </div>
                     <div class="flex-1 min-h-0">
@@ -2667,18 +2682,33 @@ export default function Layout(props: ParentProps) {
                       >
                         {language.t("workspace.new")}
                       </Button>
-                      <IconButton
-                        icon="archive"
-                        variant="ghost"
-                        size="large"
-                        class="rounded-lg border border-border-weak-base"
-                        aria-label={language.t("sidebar.project.viewArchivedSessions")}
-                        onClick={() => {
-                          const item = project()
-                          if (!item) return
-                          dialog.show(() => <DialogArchivedSessions project={item} />)
-                        }}
-                      />
+                      <div class="flex items-center gap-2">
+                        <Tooltip placement="bottom" value={language.t("sidebar.project.clearNotifications")}>
+                          <IconButton
+                            icon="bell-off"
+                            variant="ghost"
+                            size="large"
+                            class="rounded-lg border border-border-weak-base"
+                            disabled={unseenCount() === 0}
+                            aria-label={language.t("sidebar.project.clearNotifications")}
+                            onClick={clearNotifications}
+                          />
+                        </Tooltip>
+                        <Tooltip placement="bottom" value={language.t("sidebar.project.viewArchivedSessions")}>
+                          <IconButton
+                            icon="archive"
+                            variant="ghost"
+                            size="large"
+                            class="rounded-lg border border-border-weak-base"
+                            aria-label={language.t("sidebar.project.viewArchivedSessions")}
+                            onClick={() => {
+                              const item = project()
+                              if (!item) return
+                              dialog.show(() => <DialogArchivedSessions project={item} />)
+                            }}
+                          />
+                        </Tooltip>
+                      </div>
                     </div>
                   </div>
                   <div class="relative flex-1 min-h-0">
