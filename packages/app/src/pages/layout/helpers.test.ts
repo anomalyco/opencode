@@ -16,6 +16,7 @@ import {
   workspaceKey,
 } from "./helpers"
 import { projectSelected } from "./sidebar-project-helpers"
+import type { Project } from "@opencode-ai/sdk/v2"
 
 const session = (input: Partial<Session> & Pick<Session, "id" | "directory">) =>
   ({
@@ -112,6 +113,11 @@ describe("layout workspace helpers", () => {
     expect(projectSelected("/tmp/demo///", "/tmp/demo")).toBe(true)
     expect(projectSelected("C:\\tmp\\sandbox\\\\", "C:/tmp/root", ["C:/tmp/sandbox"])).toBe(true)
     expect(projectSelected("/tmp/other", "/tmp/demo", ["/tmp/sandbox"])).toBe(false)
+  })
+
+  test("does not select a project from unrelated sandbox metadata", () => {
+    const tile = { worktree: "/p", sandboxes: ["/q/sandbox"] } satisfies Partial<Project>
+    expect(projectSelected("/c", tile.worktree!, tile.sandboxes)).toBe(false)
   })
 
   test("preserves posix and drive roots in workspace key", () => {

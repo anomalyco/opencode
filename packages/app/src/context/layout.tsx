@@ -393,9 +393,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     function enrich(project: { worktree: string; expanded: boolean }) {
       const [childStore] = globalSync.child(project.worktree, { bootstrap: false })
       const projectID = childStore.project
-      const metadata = projectID
-        ? globalSync.data.project.find((x) => x.id === projectID)
-        : globalSync.data.project.find((x) => x.worktree === project.worktree)
+      // Root entries in the rail are keyed by worktree. Prefer matching metadata
+      // by worktree so a stale childStore.project id cannot graft another
+      // project's sandboxes onto this tile and create a false "selected" state.
+      const metadata =
+        globalSync.data.project.find((x) => x.worktree === project.worktree) ??
+        (projectID ? globalSync.data.project.find((x) => x.id === projectID) : undefined)
 
       const local = childStore.projectMeta
       const localOverride =
