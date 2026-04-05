@@ -67,6 +67,7 @@ export namespace Npm {
       binLinks: true,
       progress: false,
       savePrefix: "",
+      ignoreScripts: true,
     })
     const tree = await arborist.loadVirtual().catch(() => {})
     if (tree) {
@@ -106,6 +107,7 @@ export namespace Npm {
         binLinks: true,
         progress: false,
         savePrefix: "",
+        ignoreScripts: true,
       })
       await arb.reify().catch(() => {})
     }

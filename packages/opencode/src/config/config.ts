@@ -2,6 +2,7 @@ import { Log } from "../util/log"
 import path from "path"
 import { pathToFileURL } from "url"
 import os from "os"
+import { Process } from "../util/process"
 import z from "zod"
 import { ModelsDev } from "../provider/models"
 import { mergeDeep, pipe, unique } from "remeda"
@@ -32,6 +33,7 @@ import { Account } from "@/account"
 import { isRecord } from "@/util/record"
 import { ConfigPaths } from "./paths"
 import { Filesystem } from "@/util/filesystem"
+import type { ConsoleState } from "./console-state"
 import { AppFileSystem } from "@/filesystem"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
@@ -74,6 +76,59 @@ export namespace Config {
   }
 
   const managedDir = managedConfigDir()
+
+  const MANAGED_PLIST_DOMAIN = "ai.opencode.managed"
+
+  // Keys injected by macOS/MDM into the managed plist that are not OpenCode config
+  const PLIST_META = new Set([
+    "PayloadDisplayName",
+    "PayloadIdentifier",
+    "PayloadType",
+    "PayloadUUID",
+    "PayloadVersion",
+    "_manualProfile",
+  ])
+
+  /**
+   * Parse raw JSON (from plutil conversion of a managed plist) into OpenCode config.
+   * Strips MDM metadata keys before parsing through the config schema.
+   * Pure function — no OS interaction, safe to unit test directly.
+   */
+  export function parseManagedPlist(json: string, source: string): Info {
+    const raw = JSON.parse(json)
+    for (const key of Object.keys(raw)) {
+      if (PLIST_META.has(key)) delete raw[key]
+    }
+    return parseConfig(JSON.stringify(raw), source)
+  }
+
+  /**
+   * Read macOS managed preferences deployed via .mobileconfig / MDM (Jamf, Kandji, etc).
+   * MDM-installed profiles write to /Library/Managed Preferences/ which is only writable by root.
+   * User-scoped plists are checked first, then machine-scoped.
+   */
+  async function readManagedPreferences(): Promise<Info> {
+    if (process.platform !== "darwin") return {}
+
+    const domain = MANAGED_PLIST_DOMAIN
+    const user = os.userInfo().username
+    const paths = [
+      path.join("/Library/Managed Preferences", user, `${domain}.plist`),
+      path.join("/Library/Managed Preferences", `${domain}.plist`),
+    ]
+
+    for (const plist of paths) {
+      if (!existsSync(plist)) continue
+      log.info("reading macOS managed preferences", { path: plist })
+      const result = await Process.run(["plutil", "-convert", "json", "-o", "-", plist], { nothrow: true })
+      if (result.code !== 0) {
+        log.warn("failed to convert managed preferences plist", { path: plist })
+        continue
+      }
+      return parseManagedPlist(result.stdout.toString(), `mobileconfig:${plist}`)
+    }
+    return {}
+  }
 
   // Custom merge function that concatenates array fields instead of replacing them
   function mergeConfigConcatArrays(target: Info, source: Info): Info {
@@ -996,11 +1051,13 @@ export namespace Config {
     config: Info
     directories: string[]
     deps: Promise<void>[]
+    consoleState: ConsoleState
   }
 
   export interface Interface {
     readonly get: () => Effect.Effect<Info>
     readonly getGlobal: () => Effect.Effect<Info>
+    readonly getConsoleState: () => Effect.Effect<ConsoleState>
     readonly update: (config: Info) => Effect.Effect<void>
     readonly updateGlobal: (config: Info) => Effect.Effect<Info>
     readonly invalidate: (wait?: boolean) => Effect.Effect<void>
@@ -1206,6 +1263,8 @@ export namespace Config {
           const auth = yield* authSvc.all().pipe(Effect.orDie)
 
           let result: Info = {}
+          const consoleManagedProviders = new Set<string>()
+          let activeOrgName: string | undefined
 
           const scope = (source: string): PluginScope => {
             if (source.startsWith("http://") || source.startsWith("https://")) return "global"
@@ -1317,26 +1376,31 @@ export namespace Config {
             log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
           }
 
-          const active = Option.getOrUndefined(yield* accountSvc.active().pipe(Effect.orDie))
-          if (active?.active_org_id) {
+          const activeOrg = Option.getOrUndefined(
+            yield* accountSvc.activeOrg().pipe(Effect.catch(() => Effect.succeed(Option.none()))),
+          )
+          if (activeOrg) {
             yield* Effect.gen(function* () {
               const [configOpt, tokenOpt] = yield* Effect.all(
-                [accountSvc.config(active.id, active.active_org_id!), accountSvc.token(active.id)],
+                [accountSvc.config(activeOrg.account.id, activeOrg.org.id), accountSvc.token(activeOrg.account.id)],
                 { concurrency: 2 },
               )
-              const token = Option.getOrUndefined(tokenOpt)
-              if (token) {
-                process.env["OPENCODE_CONSOLE_TOKEN"] = token
-                Env.set("OPENCODE_CONSOLE_TOKEN", token)
+              if (Option.isSome(tokenOpt)) {
+                process.env["OPENCODE_CONSOLE_TOKEN"] = tokenOpt.value
+                Env.set("OPENCODE_CONSOLE_TOKEN", tokenOpt.value)
               }
 
-              const config = Option.getOrUndefined(configOpt)
-              if (config) {
-                const source = `${active.url}/api/config`
-                const next = yield* loadConfig(JSON.stringify(config), {
+              activeOrgName = activeOrg.org.name
+
+              if (Option.isSome(configOpt)) {
+                const source = `${activeOrg.account.url}/api/config`
+                const next = yield* loadConfig(JSON.stringify(configOpt.value), {
                   dir: path.dirname(source),
                   source,
                 })
+                for (const providerID of Object.keys(next.provider ?? {})) {
+                  consoleManagedProviders.add(providerID)
+                }
                 merge(source, next, "global")
               }
             }).pipe(
@@ -1355,6 +1419,9 @@ export namespace Config {
               merge(source, yield* loadFile(source), "global")
             }
           }
+
+          // macOS managed preferences (.mobileconfig deployed via MDM) override everything
+          result = mergeConfigConcatArrays(result, yield* Effect.promise(() => readManagedPreferences()))
 
           for (const [name, mode] of Object.entries(result.mode ?? {})) {
             result.agent = mergeDeep(result.agent ?? {}, {
@@ -1399,6 +1466,11 @@ export namespace Config {
             config: result,
             directories,
             deps,
+            consoleState: {
+              consoleManagedProviders: Array.from(consoleManagedProviders),
+              activeOrgName,
+              switchableOrgCount: 0,
+            },
           }
         })
 
@@ -1414,6 +1486,10 @@ export namespace Config {
 
         const directories = Effect.fn("Config.directories")(function* () {
           return yield* InstanceState.use(state, (s) => s.directories)
+        })
+
+        const getConsoleState = Effect.fn("Config.getConsoleState")(function* () {
+          return yield* InstanceState.use(state, (s) => s.consoleState)
         })
 
         const waitForDependencies = Effect.fn("Config.waitForDependencies")(function* () {
@@ -1471,6 +1547,7 @@ export namespace Config {
         return Service.of({
           get,
           getGlobal,
+          getConsoleState,
           update,
           updateGlobal,
           invalidate,
@@ -1494,6 +1571,10 @@ export namespace Config {
 
   export async function getGlobal() {
     return runPromise((svc) => svc.getGlobal())
+  }
+
+  export async function getConsoleState() {
+    return runPromise((svc) => svc.getConsoleState())
   }
 
   export async function update(config: Info) {

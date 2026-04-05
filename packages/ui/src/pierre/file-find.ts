@@ -1,4 +1,6 @@
-import { createEffect, onCleanup, onMount } from "solid-js"
+import { createEffect, createSignal, onCleanup, onMount } from "solid-js"
+import { makeEventListener } from "@solid-primitives/event-listener"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createStore } from "solid-js/store"
 
 export type FindHost = {
@@ -104,9 +106,9 @@ type CreateFileFindOptions = {
 export function createFileFind(opts: CreateFileFindOptions) {
   let input: HTMLInputElement | undefined
   let overlayFrame: number | undefined
-  let overlayScroll: HTMLElement[] = []
   let mode: "highlights" | "overlay" = "overlay"
   let hits: Range[] = []
+  const [overlayScroll, setOverlayScroll] = createSignal<HTMLElement[]>([])
 
   const [state, setState] = createStore({
     open: false,
@@ -122,8 +124,7 @@ export function createFileFind(opts: CreateFileFindOptions) {
   const pos = () => state.pos
 
   const clearOverlayScroll = () => {
-    for (const el of overlayScroll) el.removeEventListener("scroll", scheduleOverlay)
-    overlayScroll = []
+    setOverlayScroll([])
   }
 
   const clearOverlay = () => {
@@ -196,11 +197,11 @@ export function createFileFind(opts: CreateFileFindOptions) {
           (node): node is HTMLElement => node instanceof HTMLElement,
         )
       : []
-    if (next.length === overlayScroll.length && next.every((el, i) => el === overlayScroll[i])) return
+    const current = overlayScroll()
+    if (next.length === current.length && next.every((el, i) => el === current[i])) return
 
     clearOverlayScroll()
-    overlayScroll = next
-    for (const el of overlayScroll) el.addEventListener("scroll", scheduleOverlay, { passive: true })
+    setOverlayScroll(next)
   }
 
   const clearFind = () => {
@@ -403,6 +404,10 @@ export function createFileFind(opts: CreateFileFindOptions) {
     close,
   }
 
+  createEffect(() => {
+    for (const el of overlayScroll()) makeEventListener(el, "scroll", scheduleOverlay, { passive: true })
+  })
+
   onMount(() => {
     mode = supportsHighlights() ? "highlights" : "overlay"
     installShortcuts()
@@ -424,18 +429,12 @@ export function createFileFind(opts: CreateFileFindOptions) {
 
     const update = () => positionBar()
     requestAnimationFrame(update)
-    window.addEventListener("resize", update, { passive: true })
+    makeEventListener(window, "resize", update, { passive: true })
 
     const wrapper = opts.wrapper()
     if (!wrapper) return
     const root = scrollParent(wrapper) ?? wrapper
-    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(() => update())
-    observer?.observe(root)
-
-    onCleanup(() => {
-      window.removeEventListener("resize", update)
-      observer?.disconnect()
-    })
+    createResizeObserver(root, update)
   })
 
   onCleanup(() => {
