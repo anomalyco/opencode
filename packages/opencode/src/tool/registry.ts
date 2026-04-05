@@ -35,6 +35,10 @@ import { makeRuntime } from "@/effect/run-service"
 import { Env } from "../env"
 import { Question } from "../question"
 import { Todo } from "../session/todo"
+import { LSP } from "../lsp"
+import { FileTime } from "../file/time"
+import { Instruction } from "../session/instruction"
+import { AppFileSystem } from "../filesystem"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -57,167 +61,176 @@ export namespace ToolRegistry {
 
   export class Service extends ServiceMap.Service<Service, Interface>()("@opencode/ToolRegistry") {}
 
-  export const layer: Layer.Layer<Service, never, Config.Service | Plugin.Service | Question.Service | Todo.Service> =
-    Layer.effect(
-      Service,
-      Effect.gen(function* () {
-        const config = yield* Config.Service
-        const plugin = yield* Plugin.Service
+  export const layer: Layer.Layer<
+    Service,
+    never,
+    | Config.Service
+    | Plugin.Service
+    | Question.Service
+    | Todo.Service
+    | LSP.Service
+    | FileTime.Service
+    | Instruction.Service
+    | AppFileSystem.Service
+  > = Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const config = yield* Config.Service
+      const plugin = yield* Plugin.Service
 
-        const build = <T extends Tool.Info>(tool: T | Effect.Effect<T, never, any>) =>
-          Effect.isEffect(tool) ? tool : Effect.succeed(tool)
+      const build = <T extends Tool.Info>(tool: T | Effect.Effect<T, never, any>) =>
+        Effect.isEffect(tool) ? tool : Effect.succeed(tool)
 
-        const state = yield* InstanceState.make<State>(
-          Effect.fn("ToolRegistry.state")(function* (ctx) {
-            const custom: Tool.Info[] = []
+      const state = yield* InstanceState.make<State>(
+        Effect.fn("ToolRegistry.state")(function* (ctx) {
+          const custom: Tool.Info[] = []
 
-            function fromPlugin(id: string, def: ToolDefinition): Tool.Info {
-              return {
-                id,
-                init: async (initCtx) => ({
-                  parameters: z.object(def.args),
-                  description: def.description,
-                  execute: async (args, toolCtx) => {
-                    const pluginCtx = {
-                      ...toolCtx,
-                      directory: ctx.directory,
-                      worktree: ctx.worktree,
-                    } as unknown as PluginToolContext
-                    const result = await def.execute(args as any, pluginCtx)
-                    const out = await Truncate.output(result, {}, initCtx?.agent)
-                    return {
-                      title: "",
-                      output: out.truncated ? out.content : result,
-                      metadata: { truncated: out.truncated, outputPath: out.truncated ? out.outputPath : undefined },
-                    }
-                  },
-                }),
-              }
+          function fromPlugin(id: string, def: ToolDefinition): Tool.Info {
+            return {
+              id,
+              init: async (initCtx) => ({
+                parameters: z.object(def.args),
+                description: def.description,
+                execute: async (args, toolCtx) => {
+                  const pluginCtx = {
+                    ...toolCtx,
+                    directory: ctx.directory,
+                    worktree: ctx.worktree,
+                  } as unknown as PluginToolContext
+                  const result = await def.execute(args as any, pluginCtx)
+                  const out = await Truncate.output(result, {}, initCtx?.agent)
+                  return {
+                    title: "",
+                    output: out.truncated ? out.content : result,
+                    metadata: { truncated: out.truncated, outputPath: out.truncated ? out.outputPath : undefined },
+                  }
+                },
+              }),
             }
+          }
 
-            const dirs = yield* config.directories()
-            const matches = dirs.flatMap((dir) =>
-              Glob.scanSync("{tool,tools}/*.{js,ts}", { cwd: dir, absolute: true, dot: true, symlink: true }),
-            )
-            if (matches.length) yield* config.waitForDependencies()
-            for (const match of matches) {
-              const namespace = path.basename(match, path.extname(match))
-              const mod = yield* Effect.promise(
-                () => import(process.platform === "win32" ? match : pathToFileURL(match).href),
-              )
-              for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
-                custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
-              }
-            }
-
-            const plugins = yield* plugin.list()
-            for (const p of plugins) {
-              for (const [id, def] of Object.entries(p.tool ?? {})) {
-                custom.push(fromPlugin(id, def))
-              }
-            }
-
-            return { custom }
-          }),
-        )
-
-        const invalid = yield* build(InvalidTool)
-        const ask = yield* build(QuestionTool)
-        const bash = yield* build(BashTool)
-        const read = yield* build(ReadTool)
-        const glob = yield* build(GlobTool)
-        const grep = yield* build(GrepTool)
-        const edit = yield* build(EditTool)
-        const write = yield* build(WriteTool)
-        const task = yield* build(TaskTool)
-        const fetch = yield* build(WebFetchTool)
-        const todo = yield* build(TodoWriteTool)
-        const search = yield* build(WebSearchTool)
-        const code = yield* build(CodeSearchTool)
-        const skill = yield* build(SkillTool)
-        const patch = yield* build(ApplyPatchTool)
-        const lsp = yield* build(LspTool)
-        const batch = yield* build(BatchTool)
-        const plan = yield* build(PlanExitTool)
-
-        const all = Effect.fn("ToolRegistry.all")(function* (custom: Tool.Info[]) {
-          const cfg = yield* config.get()
-          const question =
-            ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
-
-          return [
-            invalid,
-            ...(question ? [ask] : []),
-            bash,
-            read,
-            glob,
-            grep,
-            edit,
-            write,
-            task,
-            fetch,
-            todo,
-            search,
-            code,
-            skill,
-            patch,
-            ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [lsp] : []),
-            ...(cfg.experimental?.batch_tool === true ? [batch] : []),
-            ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [plan] : []),
-            ...custom,
-          ]
-        })
-
-        const ids = Effect.fn("ToolRegistry.ids")(function* () {
-          const s = yield* InstanceState.get(state)
-          const tools = yield* all(s.custom)
-          return tools.map((t) => t.id)
-        })
-
-        const tools = Effect.fn("ToolRegistry.tools")(function* (
-          model: { providerID: ProviderID; modelID: ModelID },
-          agent?: Agent.Info,
-        ) {
-          const s = yield* InstanceState.get(state)
-          const allTools = yield* all(s.custom)
-          const filtered = allTools.filter((tool) => {
-            if (tool.id === "codesearch" || tool.id === "websearch") {
-              return model.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
-            }
-
-            const usePatch =
-              !!Env.get("OPENCODE_E2E_LLM_URL") ||
-              (model.modelID.includes("gpt-") && !model.modelID.includes("oss") && !model.modelID.includes("gpt-4"))
-            if (tool.id === "apply_patch") return usePatch
-            if (tool.id === "edit" || tool.id === "write") return !usePatch
-
-            return true
-          })
-          return yield* Effect.forEach(
-            filtered,
-            Effect.fnUntraced(function* (tool: Tool.Info) {
-              using _ = log.time(tool.id)
-              const next = yield* Effect.promise(() => tool.init({ agent }))
-              const output = {
-                description: next.description,
-                parameters: next.parameters,
-              }
-              yield* plugin.trigger("tool.definition", { toolID: tool.id }, output)
-              return {
-                id: tool.id,
-                description: output.description,
-                parameters: output.parameters,
-                execute: next.execute,
-                formatValidationError: next.formatValidationError,
-              }
-            }),
-            { concurrency: "unbounded" },
+          const dirs = yield* config.directories()
+          const matches = dirs.flatMap((dir) =>
+            Glob.scanSync("{tool,tools}/*.{js,ts}", { cwd: dir, absolute: true, dot: true, symlink: true }),
           )
-        })
+          if (matches.length) yield* config.waitForDependencies()
+          for (const match of matches) {
+            const namespace = path.basename(match, path.extname(match))
+            const mod = yield* Effect.promise(
+              () => import(process.platform === "win32" ? match : pathToFileURL(match).href),
+            )
+            for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
+              custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
+            }
+          }
 
-        return Service.of({ ids, named: { task, read }, tools })
-      }),
-    )
+          const plugins = yield* plugin.list()
+          for (const p of plugins) {
+            for (const [id, def] of Object.entries(p.tool ?? {})) {
+              custom.push(fromPlugin(id, def))
+            }
+          }
+
+          return { custom }
+        }),
+      )
+
+      const invalid = yield* build(InvalidTool)
+      const ask = yield* build(QuestionTool)
+      const bash = yield* build(BashTool)
+      const read = yield* build(ReadTool)
+      const glob = yield* build(GlobTool)
+      const grep = yield* build(GrepTool)
+      const edit = yield* build(EditTool)
+      const write = yield* build(WriteTool)
+      const task = yield* build(TaskTool)
+      const fetch = yield* build(WebFetchTool)
+      const todo = yield* build(TodoWriteTool)
+      const search = yield* build(WebSearchTool)
+      const code = yield* build(CodeSearchTool)
+      const skill = yield* build(SkillTool)
+      const patch = yield* build(ApplyPatchTool)
+      const lsp = yield* build(LspTool)
+      const batch = yield* build(BatchTool)
+      const plan = yield* build(PlanExitTool)
+
+      const all = Effect.fn("ToolRegistry.all")(function* (custom: Tool.Info[]) {
+        const cfg = yield* config.get()
+        const question = ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) || Flag.OPENCODE_ENABLE_QUESTION_TOOL
+
+        return [
+          invalid,
+          ...(question ? [ask] : []),
+          bash,
+          read,
+          glob,
+          grep,
+          edit,
+          write,
+          task,
+          fetch,
+          todo,
+          search,
+          code,
+          skill,
+          patch,
+          ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [lsp] : []),
+          ...(cfg.experimental?.batch_tool === true ? [batch] : []),
+          ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [plan] : []),
+          ...custom,
+        ]
+      })
+
+      const ids = Effect.fn("ToolRegistry.ids")(function* () {
+        const s = yield* InstanceState.get(state)
+        const tools = yield* all(s.custom)
+        return tools.map((t) => t.id)
+      })
+
+      const tools = Effect.fn("ToolRegistry.tools")(function* (
+        model: { providerID: ProviderID; modelID: ModelID },
+        agent?: Agent.Info,
+      ) {
+        const s = yield* InstanceState.get(state)
+        const allTools = yield* all(s.custom)
+        const filtered = allTools.filter((tool) => {
+          if (tool.id === "codesearch" || tool.id === "websearch") {
+            return model.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
+          }
+
+          const usePatch =
+            !!Env.get("OPENCODE_E2E_LLM_URL") ||
+            (model.modelID.includes("gpt-") && !model.modelID.includes("oss") && !model.modelID.includes("gpt-4"))
+          if (tool.id === "apply_patch") return usePatch
+          if (tool.id === "edit" || tool.id === "write") return !usePatch
+
+          return true
+        })
+        return yield* Effect.forEach(
+          filtered,
+          Effect.fnUntraced(function* (tool: Tool.Info) {
+            using _ = log.time(tool.id)
+            const next = yield* Effect.promise(() => tool.init({ agent }))
+            const output = {
+              description: next.description,
+              parameters: next.parameters,
+            }
+            yield* plugin.trigger("tool.definition", { toolID: tool.id }, output)
+            return {
+              id: tool.id,
+              description: output.description,
+              parameters: output.parameters,
+              execute: next.execute,
+              formatValidationError: next.formatValidationError,
+            }
+          }),
+          { concurrency: "unbounded" },
+        )
+      })
+
+      return Service.of({ ids, named: { task, read }, tools })
+    }),
+  )
 
   export const defaultLayer = Layer.unwrap(
     Effect.sync(() =>
@@ -226,6 +239,10 @@ export namespace ToolRegistry {
         Layer.provide(Plugin.defaultLayer),
         Layer.provide(Question.defaultLayer),
         Layer.provide(Todo.defaultLayer),
+        Layer.provide(LSP.defaultLayer),
+        Layer.provide(FileTime.defaultLayer),
+        Layer.provide(Instruction.defaultLayer),
+        Layer.provide(AppFileSystem.defaultLayer),
       ),
     ),
   )
