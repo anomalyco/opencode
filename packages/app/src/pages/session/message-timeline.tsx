@@ -21,17 +21,22 @@ import { Popover as KobaltePopover } from "@kobalte/core/popover"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
-import { useSessionKey } from "@/pages/session/session-layout"
+import { useSessionKey, useSessionLayout } from "@/pages/session/session-layout"
 import { useGlobalSDK } from "@/context/global-sdk"
+import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { itemStyle } from "@/pages/session/message-timeline-utils"
+import { resolveLinkedPath } from "@/pages/session/message-link-path"
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
 import { messageAgentColor } from "@/utils/agent"
 import { makeTimer } from "@solid-primitives/timer"
+import { Persist, persisted } from "@/utils/persist"
+import { apps, editor, getOpenPlan, manager, type OpenApp, type OS } from "@/components/session/open-app"
 import { active, working } from "./session-working"
 
 type MessageComment = {
@@ -136,6 +141,31 @@ const markBoundaryGesture = (input: {
   }
 }
 
+function os(platform: ReturnType<typeof usePlatform>): OS {
+  if (platform.platform === "desktop" && platform.os) return platform.os
+  if (typeof navigator !== "object") return "unknown"
+  const value = navigator.platform || navigator.userAgent
+  if (/Mac/i.test(value)) return "macos"
+  if (/Win/i.test(value)) return "windows"
+  if (/Linux/i.test(value)) return "linux"
+  return "unknown"
+}
+
+function dir(path: string) {
+  const idx = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"))
+  if (idx < 0) return ""
+  return path.slice(0, idx)
+}
+
+function absolute(root: string, path: string) {
+  if (!path) return root
+  if (/^(?:[A-Za-z]:[\\/]|\/|\\\\|~[\\/])/.test(path)) return path
+  const sep = root.includes("\\") ? "\\" : "/"
+  const base = root.replace(/[\\/]+$/, "")
+  const child = path.replace(/^[\\/]+/, "").replace(/[\\/]/g, sep)
+  return `${base}${sep}${child}`
+}
+
 export function MessageTimeline(props: {
   mobileChanges: boolean
   mobileFallback: JSX.Element
@@ -166,9 +196,12 @@ export function MessageTimeline(props: {
   const sync = useSync()
   const settings = useSettings()
   const dialog = useDialog()
+  const layout = useLayout()
   const language = useLanguage()
   const { params, sessionKey } = useSessionKey()
+  const { tabs, view } = useSessionLayout()
   const platform = usePlatform()
+  const file = useFile()
   let viewport: HTMLDivElement | undefined
   let windowFrame: number | undefined
   let bottomFrame: number | undefined
@@ -204,6 +237,8 @@ export function MessageTimeline(props: {
   })
   const isWorking = createMemo(() => working(sessionStatus(), sessionMessages()))
   const tint = createMemo(() => messageAgentColor(sessionMessages(), sync.data.agent))
+  const [prefs] = persisted(Persist.global("open.app"), createStore({ app: "finder" as OpenApp }))
+  const openApps = createMemo(() => apps(os(platform)))
   // Windowing is only disabled while the active reply is still growing. Static
   // sessions may stay pinned to the bottom and still use history windowing;
   // otherwise long math-heavy conversations would remount the full timeline
@@ -503,6 +538,92 @@ export function MessageTimeline(props: {
     }
     if (err instanceof Error) return err.message
     return language.t("common.requestFailed")
+  }
+
+  const openFile = (path: string, line?: number) => {
+    const next = file.normalize(path)
+    if (!next) return
+
+    const resolve = async () => {
+      const base = getFilename(next)
+      if (!base) return next
+
+      // Keep fallback search scoped to the active project. This only resolves
+      // ambiguous task-relative links to a real file already discoverable in
+      // the current project tree.
+      return resolveLinkedPath(next, await file.searchFiles(base))
+    }
+
+    void resolve().then((target) => {
+      const tab = file.tab(target)
+      if (!view().reviewPanel.opened()) view().reviewPanel.open()
+      layout.fileTree.setTab("all")
+      if (line) file.setSelectedLines(target, { start: line, end: line })
+      void tabs().open(tab)
+      tabs().setActive(tab)
+      requestAnimationFrame(() => {
+        void file.load(target)
+      })
+    })
+  }
+
+  const openExternal = (path: string) => {
+    if (platform.platform !== "desktop" || !platform.openPath) return
+    const next = file.normalize(path)
+    if (!next) return
+
+    const resolve = async () => {
+      const base = getFilename(next)
+      if (!base) return next
+      return resolveLinkedPath(next, await file.searchFiles(base))
+    }
+
+    void resolve().then((target) => {
+      const app = prefs.app
+      const plan = getOpenPlan(app, [{ id: "finder" as const }, ...openApps()], !!platform.openInEditor)
+      const full = absolute(sdk.directory, target)
+      const value = editor(app) ? full : manager(app) ? dir(full) || full : dir(full) || full
+      const task =
+        plan.kind === "editor" && platform.openInEditor
+          ? platform.openInEditor(plan.editor, value)
+          : platform.openPath?.(value, plan.kind === "path" ? plan.app : undefined)
+      void Promise.resolve(task).catch((err) => {
+        showToast({
+          variant: "error",
+          title: language.t("common.requestFailed"),
+          description: err instanceof Error ? err.message : String(err),
+        })
+      })
+    })
+  }
+
+  const onLink = (event: MouseEvent) => {
+    const target = event.target
+    const node = target instanceof Element ? target : target instanceof Node ? target.parentElement : undefined
+    if (!(node instanceof Element)) return
+    const link = node.closest("a[data-file-link]")
+    if (!(link instanceof HTMLAnchorElement)) return
+    const path = link.dataset.path
+    if (!path) return
+    event.preventDefault()
+    event.stopPropagation()
+    const line = link.dataset.line ? Number(link.dataset.line) : undefined
+    if (event.metaKey || event.ctrlKey || link.dataset.openExternal === "true") {
+      delete link.dataset.openExternal
+      openExternal(path)
+      return
+    }
+    openFile(path, line)
+  }
+
+  const onLinkDown = (event: MouseEvent) => {
+    const target = event.target
+    const node = target instanceof Element ? target : target instanceof Node ? target.parentElement : undefined
+    if (!(node instanceof Element)) return
+    const link = node.closest("a[data-file-link]")
+    if (!(link instanceof HTMLAnchorElement)) return
+    if (!(event.metaKey || event.ctrlKey)) return
+    link.dataset.openExternal = "true"
   }
 
   const shareMutation = useMutation(() => ({
@@ -1143,6 +1264,7 @@ export function MessageTimeline(props: {
     })
     const commentCount = createMemo(() => comments().length)
     let rootRef: HTMLDivElement | undefined
+    let stop: (() => void) | undefined
 
     const measure = () => {
       const next = rootRef?.offsetHeight
@@ -1163,10 +1285,19 @@ export function MessageTimeline(props: {
       onCleanup(() => observer.disconnect())
     })
 
+    onCleanup(() => stop?.())
+
     return (
       <div
         ref={(el) => {
+          stop?.()
           rootRef = el
+          el.addEventListener("mousedown", onLinkDown, { capture: true })
+          el.addEventListener("click", onLink, { capture: true })
+          stop = () => {
+            el.removeEventListener("mousedown", onLinkDown, { capture: true })
+            el.removeEventListener("click", onLink, { capture: true })
+          }
         }}
         id={props.anchor(item.messageID)}
         data-message-id={item.messageID}

@@ -75,7 +75,14 @@ type CopyLabels = {
   copied: string
 }
 
+export type FileLink = {
+  path: string
+  line?: number
+  col?: number
+}
+
 const urlPattern = /^https?:\/\/[^\s<>()`"']+$/
+const filePattern = /(^|[\s([{"'])((?:\.{1,2}[\\/]|~[\\/]|\/|[A-Za-z]:[\\/])?(?:[\w.@-]+[\\/])+[\w.@-]+(?:\:\d+(?:\:\d+)?)?(?:#L\d+(?:C\d+)?)?)/g
 
 function codeUrl(text: string) {
   const href = text.trim().replace(/[),.;!?]+$/, "")
@@ -85,6 +92,106 @@ function codeUrl(text: string) {
     return url.toString()
   } catch {
     return
+  }
+}
+
+function stripFileSuffix(text: string) {
+  return text.replace(/[),.;!?]+$/, "")
+}
+
+export function fileLink(text: string) {
+  const raw = stripFileSuffix(text.trim())
+  if (!raw) return
+  if (raw.includes("://")) return
+  if (!/[\\/]/.test(raw)) return
+
+  const hash = raw.match(/#L(\d+)(?:C(\d+))?$/i)
+  const hashLine = hash?.[1] ? Number(hash[1]) : undefined
+  const hashCol = hash?.[2] ? Number(hash[2]) : undefined
+  const base = hash ? raw.slice(0, -hash[0].length) : raw
+  const win = /^[A-Za-z]:[\\/]/.test(base)
+  const line = base.match(/:(\d+)(?::(\d+))?$/)
+  const path = line && (!win || base.indexOf(":") !== 1) ? base.slice(0, -line[0].length) : base
+  const next = path.replace(/[\\/]+$/, "")
+  if (!next || !/[\\/]/.test(next)) return
+  if (/^\d+\/\d+$/.test(next)) return
+
+  const parts = next.split("/").filter(Boolean)
+  if (parts.length < 2) return
+
+  const rooted =
+    next.startsWith("./") || next.startsWith("../") || next.startsWith("~/") || next.startsWith("/") || win
+  const named = parts.some((part) => /[._-]/.test(part))
+  if (!rooted && !named) return
+
+  const link = {
+    path: path.replace(/\\/g, "/"),
+    line: hashLine ?? (line?.[1] ? Number(line[1]) : undefined),
+    col: hashCol ?? (line?.[2] ? Number(line[2]) : undefined),
+  }
+
+  if (link.line !== undefined && (!Number.isInteger(link.line) || link.line <= 0)) return
+  if (link.col !== undefined && (!Number.isInteger(link.col) || link.col <= 0)) return
+  return link
+}
+
+function fileHref(link: FileLink) {
+  const line = link.line ? `:${link.line}${link.col ? `:${link.col}` : ""}` : ""
+  return `opencode-file:${encodeURIComponent(`${link.path}${line}`)}`
+}
+
+function applyFileLink(node: HTMLAnchorElement, link: FileLink) {
+  node.href = fileHref(link)
+  node.dataset.fileLink = ""
+  node.dataset.path = link.path
+  if (link.line) node.dataset.line = String(link.line)
+  else delete node.dataset.line
+  if (link.col) node.dataset.col = String(link.col)
+  else delete node.dataset.col
+}
+
+function markFileLinks(root: HTMLDivElement) {
+  const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const parent = node.parentElement
+      if (!parent) return NodeFilter.FILTER_REJECT
+      if (parent.closest("a, pre, code")) return NodeFilter.FILTER_REJECT
+      if (!filePattern.test(node.textContent ?? "")) return NodeFilter.FILTER_REJECT
+      filePattern.lastIndex = 0
+      return NodeFilter.FILTER_ACCEPT
+    },
+  })
+
+  const list: Text[] = []
+  while (walk.nextNode()) {
+    if (walk.currentNode instanceof Text) list.push(walk.currentNode)
+  }
+
+  for (const node of list) {
+    const text = node.data
+    const frag = document.createDocumentFragment()
+    let from = 0
+    filePattern.lastIndex = 0
+    let hit: RegExpExecArray | null
+
+    while ((hit = filePattern.exec(text))) {
+      const lead = hit[1] ?? ""
+      const raw = hit[2] ?? ""
+      const link = fileLink(raw)
+      if (!link) continue
+      const start = hit.index + lead.length
+      const end = start + raw.length
+      if (start > from) frag.append(text.slice(from, start))
+      const a = document.createElement("a")
+      applyFileLink(a, link)
+      a.textContent = raw
+      frag.append(a)
+      from = end
+    }
+
+    if (from === 0) continue
+    if (from < text.length) frag.append(text.slice(from))
+    node.parentNode?.replaceChild(frag, node)
   }
 }
 
@@ -159,11 +266,23 @@ function ensureCodeWrapper(block: HTMLPreElement, labels: CopyLabels) {
 function markCodeLinks(root: HTMLDivElement) {
   const codeNodes = Array.from(root.querySelectorAll(":not(pre) > code"))
   for (const code of codeNodes) {
+    const file = fileLink(code.textContent ?? "")
+    const parent = code.parentElement instanceof HTMLAnchorElement ? code.parentElement : null
+    if (file) {
+      if (parent) {
+        applyFileLink(parent, file)
+        continue
+      }
+
+      const link = document.createElement("a")
+      applyFileLink(link, file)
+      code.parentNode?.replaceChild(link, code)
+      link.appendChild(code)
+      continue
+    }
+
     const href = codeUrl(code.textContent ?? "")
-    const parentLink =
-      code.parentElement instanceof HTMLAnchorElement && code.parentElement.classList.contains("external-link")
-        ? code.parentElement
-        : null
+    const parentLink = parent?.classList.contains("external-link") ? parent : null
 
     if (!href) {
       if (parentLink) parentLink.replaceWith(code)
@@ -190,6 +309,7 @@ function decorate(root: HTMLDivElement, labels: CopyLabels) {
   for (const block of blocks) {
     ensureCodeWrapper(block, labels)
   }
+  markFileLinks(root)
   markCodeLinks(root)
 }
 
