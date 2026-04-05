@@ -609,6 +609,16 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
     },
     {
+      title: "Cycle Copilot account",
+      value: "provider.cycle",
+      keybind: "provider_cycle",
+      category: "Provider",
+      hidden: true,
+      onSelect: () => {
+        local.model.cycleProvider()
+      },
+    },
+    {
       title: "Agent cycle reverse",
       value: "agent.cycle.reverse",
       keybind: "agent_cycle_reverse",

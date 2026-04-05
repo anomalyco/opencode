@@ -320,6 +320,20 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             save()
           })
         },
+        cycleProvider() {
+          const m = currentModel()
+          if (!m) return
+          const copilot = sync.data.provider.filter(
+            (p) => p.id === "github-copilot" || p.id.startsWith("github-copilot:"),
+          )
+          if (copilot.length < 2) return
+          const idx = copilot.findIndex((p) => p.id === m.providerID)
+          if (idx === -1) return
+          const next = copilot[(idx + 1) % copilot.length]
+          const modelID = next.models[m.modelID] ? m.modelID : Object.keys(next.models)[0]
+          if (!modelID) return
+          this.set({ providerID: next.id, modelID }, { recent: true })
+        },
         variant: {
           selected() {
             const m = currentModel()

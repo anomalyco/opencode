@@ -516,6 +516,13 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       keybind: "shift+mod+d",
       onSelect: () => local.model.variant.cycle(),
     }),
+    modelCommand({
+      id: "model.provider.cycle",
+      title: language.t("command.model.provider.cycle"),
+      description: language.t("command.model.provider.cycle.description"),
+      keybind: "mod+shift+g",
+      onSelect: () => local.model.cycleProvider(),
+    }),
   ]
 
   const mcpCmds = () => [

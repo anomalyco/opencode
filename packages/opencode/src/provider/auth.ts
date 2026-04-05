@@ -21,6 +21,7 @@ export namespace ProviderAuth {
               key: z.string(),
               message: z.string(),
               placeholder: z.string().optional(),
+              optional: z.boolean().optional(),
               when: z
                 .object({
                   key: z.string(),
@@ -154,6 +155,7 @@ export namespace ProviderAuth {
                   key: prompt.key,
                   message: prompt.message,
                   placeholder: prompt.placeholder,
+                  optional: prompt.optional,
                   when: prompt.when,
                 }
               }),
@@ -206,8 +208,10 @@ export namespace ProviderAuth {
         )
         if (!result || result.type !== "success") return yield* Effect.fail(new OauthCallbackFailed({}))
 
+        const saveID = ProviderID.make(result.provider ?? input.providerID)
+
         if ("key" in result) {
-          yield* auth.set(input.providerID, {
+          yield* auth.set(saveID, {
             type: "api",
             key: result.key,
           })
@@ -215,7 +219,7 @@ export namespace ProviderAuth {
 
         if ("refresh" in result) {
           const { type: _, provider: __, refresh, access, expires, ...extra } = result
-          yield* auth.set(input.providerID, {
+          yield* auth.set(saveID, {
             type: "oauth",
             access,
             refresh,

@@ -190,6 +190,13 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                 }
               },
             },
+            {
+              type: "text",
+              key: "label",
+              message: "Account label (optional, e.g. 'work' or 'personal')",
+              placeholder: "leave blank for default",
+              optional: true,
+            },
           ],
           async authorize(inputs = {}) {
             const deploymentType = inputs.deploymentType || "github.com"
@@ -202,7 +209,6 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
             }
 
             const urls = getUrls(domain)
-
             const deviceResponse = await fetch(urls.DEVICE_CODE_URL, {
               method: "POST",
               headers: {
@@ -262,6 +268,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                       access: string
                       expires: number
                       provider?: string
+                      accountId?: string
                       enterpriseUrl?: string
                     } = {
                       type: "success",
@@ -272,6 +279,23 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
 
                     if (deploymentType === "enterprise") {
                       result.enterpriseUrl = domain
+                    }
+
+                    const label = inputs.label?.trim()
+                    if (label) result.provider = `github-copilot:${label}`
+
+                    const userRes = await fetch(
+                      `https://${deploymentType === "enterprise" ? domain : "api.github.com"}/user`,
+                      {
+                        headers: {
+                          Authorization: `Bearer ${data.access_token}`,
+                          "User-Agent": `opencode/${Installation.VERSION}`,
+                        },
+                      },
+                    ).catch(() => undefined)
+                    if (userRes?.ok) {
+                      const user = (await userRes.json()) as { login?: string }
+                      if (user.login) result.accountId = user.login
                     }
 
                     return result

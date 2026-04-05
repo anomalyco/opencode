@@ -1005,6 +1005,12 @@ export namespace Provider {
 
           log.info("init")
 
+          function baseID(providerID: ProviderID): ProviderID {
+            const colon = providerID.indexOf(":")
+            if (colon === -1) return providerID
+            return ProviderID.make(providerID.slice(0, colon))
+          }
+
           function mergeProvider(providerID: ProviderID, provider: Partial<Info>) {
             const existing = providers[providerID]
             if (existing) {
@@ -1012,10 +1018,13 @@ export namespace Provider {
               providers[providerID] = mergeDeep(existing, provider)
               return
             }
-            const match = database[providerID]
+            const base = baseID(providerID)
+            const match = database[providerID] ?? database[base]
             if (!match) return
+            const label = base === providerID ? undefined : providerID.slice(base.length + 1)
+            const info: Info = label ? { ...match, id: providerID, name: `${match.name} (${label})` } : match
             // @ts-expect-error
-            providers[providerID] = mergeDeep(match, provider)
+            providers[providerID] = mergeDeep(info, provider)
           }
 
           // load plugins first so config() hook runs before reading cfg.provider
@@ -1027,8 +1036,9 @@ export namespace Provider {
           const enabled = cfg.enabled_providers ? new Set(cfg.enabled_providers) : null
 
           function isProviderAllowed(providerID: ProviderID): boolean {
-            if (enabled && !enabled.has(providerID)) return false
-            if (disabled.has(providerID)) return false
+            const base = baseID(providerID)
+            if (enabled && !enabled.has(providerID) && !enabled.has(base)) return false
+            if (disabled.has(providerID) || disabled.has(base)) return false
             return true
           }
 
@@ -1126,7 +1136,7 @@ export namespace Provider {
           const env = Env.all()
           for (const [id, provider] of Object.entries(database)) {
             const providerID = ProviderID.make(id)
-            if (disabled.has(providerID)) continue
+            if (!isProviderAllowed(providerID)) continue
             const apiKey = provider.env.map((item) => env[item]).find(Boolean)
             if (!apiKey) continue
             mergeProvider(providerID, {
@@ -1137,41 +1147,58 @@ export namespace Provider {
 
           // load apikeys
           const auths = yield* auth.all().pipe(Effect.orDie)
-          for (const [id, provider] of Object.entries(auths)) {
+          for (const [id, info] of Object.entries(auths)) {
             const providerID = ProviderID.make(id)
-            if (disabled.has(providerID)) continue
-            if (provider.type === "api") {
+            if (!isProviderAllowed(providerID)) continue
+            if (info.type === "api") {
               mergeProvider(providerID, {
                 source: "api",
-                key: provider.key,
+                key: info.key,
               })
+            }
+            if (info.type === "oauth" && providerID.includes(":")) {
+              mergeProvider(providerID, { source: "custom" })
             }
           }
 
           // plugin auth loader - database now has entries for config providers
           for (const plugin of plugins) {
             if (!plugin.auth) continue
-            const providerID = ProviderID.make(plugin.auth.provider)
-            if (disabled.has(providerID)) continue
-
-            const stored = yield* auth.get(providerID).pipe(Effect.orDie)
-            if (!stored) continue
+            const base = ProviderID.make(plugin.auth.provider)
+            if (!isProviderAllowed(base)) continue
             if (!plugin.auth.loader) continue
 
-            const options = yield* Effect.promise(() =>
-              plugin.auth!.loader!(
-                () => Effect.runPromise(auth.get(providerID).pipe(Effect.orDie)) as any,
-                database[plugin.auth!.provider],
-              ),
-            )
-            const opts = options ?? {}
-            const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
-            mergeProvider(providerID, patch)
+            // collect all provider IDs this plugin's auth covers:
+            // the exact provider ID plus any composite keys (e.g. "github-copilot:work")
+            const ids = [
+              base,
+              ...Object.keys(auths)
+                .map(ProviderID.make)
+                .filter((id) => id.startsWith(base + ":")),
+            ]
+
+            for (const providerID of ids) {
+              if (!isProviderAllowed(providerID)) continue
+              const stored = yield* auth.get(providerID).pipe(Effect.orDie)
+              if (!stored) continue
+
+              const options = yield* Effect.promise(() =>
+                plugin.auth!.loader!(
+                  () => Effect.runPromise(auth.get(providerID).pipe(Effect.orDie)) as any,
+                  database[plugin.auth!.provider],
+                ),
+              )
+              const opts = options ?? {}
+              const patch: Partial<Info> = providers[providerID]
+                ? { options: opts }
+                : { source: "custom", options: opts }
+              mergeProvider(providerID, patch)
+            }
           }
 
           for (const [id, fn] of Object.entries(custom(dep))) {
             const providerID = ProviderID.make(id)
-            if (disabled.has(providerID)) continue
+            if (!isProviderAllowed(providerID)) continue
             const data = database[providerID]
             if (!data) {
               log.error("Provider does not exist in model list " + providerID)
@@ -1187,6 +1214,15 @@ export namespace Provider {
                 ? { options: opts }
                 : { source: "custom", options: opts }
               mergeProvider(providerID, patch)
+            }
+
+            // apply the same custom loader to composite-key variants (e.g. "github-copilot:work")
+            if (result?.getModel) {
+              for (const compositeID of Object.keys(providers).map(ProviderID.make)) {
+                if (!compositeID.startsWith(providerID + ":")) continue
+                modelLoaders[compositeID] = result.getModel
+                if (result.vars) varsLoaders[compositeID] = result.vars
+              }
             }
           }
 
@@ -1221,26 +1257,37 @@ export namespace Provider {
             const models = p?.models
             if (!p || !models) continue
 
-            const providerID = ProviderID.make(p.id)
-            if (disabled.has(providerID)) continue
+            const base = ProviderID.make(p.id)
+            if (!isProviderAllowed(base)) continue
 
-            const provider = providers[providerID]
-            if (!provider) continue
-            const pluginAuth = yield* auth.get(providerID).pipe(Effect.orDie)
+            // run for the base provider and any composite-key variants
+            const ids = [
+              base,
+              ...Object.keys(providers)
+                .map(ProviderID.make)
+                .filter((id) => id.startsWith(base + ":")),
+            ]
 
-            provider.models = yield* Effect.promise(async () => {
-              const next = await models(provider, { auth: pluginAuth })
-              return Object.fromEntries(
-                Object.entries(next).map(([id, model]) => [
-                  id,
-                  {
-                    ...model,
-                    id: ModelID.make(id),
-                    providerID,
-                  },
-                ]),
-              )
-            })
+            for (const providerID of ids) {
+              if (!isProviderAllowed(providerID)) continue
+              const provider = providers[providerID]
+              if (!provider) continue
+              const pluginAuth = yield* auth.get(providerID).pipe(Effect.orDie)
+
+              provider.models = yield* Effect.promise(async () => {
+                const next = await models(provider, { auth: pluginAuth })
+                return Object.fromEntries(
+                  Object.entries(next).map(([id, model]) => [
+                    id,
+                    {
+                      ...model,
+                      id: ModelID.make(id),
+                      providerID,
+                    },
+                  ]),
+                )
+              })
+            }
           }
 
           for (const [id, provider] of Object.entries(providers)) {

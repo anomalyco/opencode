@@ -1888,6 +1888,7 @@ export type ProviderAuthMethod = {
         key: string
         message: string
         placeholder?: string
+        optional?: boolean
         when?: {
           key: string
           op: "eq" | "neq"

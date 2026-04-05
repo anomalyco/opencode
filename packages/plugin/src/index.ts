@@ -66,6 +66,7 @@ export type AuthHook = {
               key: string
               message: string
               placeholder?: string
+              optional?: boolean
               validate?: (value: string) => string | undefined
               /** @deprecated Use `when` instead */
               condition?: (inputs: Record<string, string>) => boolean
@@ -96,6 +97,7 @@ export type AuthHook = {
               key: string
               message: string
               placeholder?: string
+              optional?: boolean
               validate?: (value: string) => string | undefined
               /** @deprecated Use `when` instead */
               condition?: (inputs: Record<string, string>) => boolean

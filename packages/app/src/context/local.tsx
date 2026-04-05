@@ -305,6 +305,20 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           models.recent.push(item)
         })
       },
+      cycleProvider() {
+        const item = current()
+        if (!item) return
+        const copilot = providers
+          .connected()
+          .filter((p) => p.id === "github-copilot" || p.id.startsWith("github-copilot:"))
+        if (copilot.length < 2) return
+        const idx = copilot.findIndex((p) => p.id === item.provider.id)
+        if (idx === -1) return
+        const next = copilot[(idx + 1) % copilot.length]
+        const modelID = next.models[item.id] ? item.id : Object.keys(next.models)[0]
+        if (!modelID) return
+        model.set({ providerID: next.id, modelID }, { recent: true })
+      },
       visible(item: ModelKey) {
         return models.visible(item)
       },

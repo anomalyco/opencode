@@ -16,6 +16,17 @@ import { text } from "node:stream/consumers"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
 
+function displayName(id: string, database: Record<string, { name?: string }>): string {
+  const name = database[id]?.name
+  if (name) return name
+  const colon = id.indexOf(":")
+  if (colon === -1) return id
+  const base = id.slice(0, colon)
+  const label = id.slice(colon + 1)
+  const baseName = database[base]?.name ?? base
+  return `${baseName} (${label})`
+}
+
 async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, methodName?: string): Promise<boolean> {
   let index = 0
   if (methodName) {
@@ -219,7 +230,7 @@ export const ProvidersListCommand = cmd({
     const database = await ModelsDev.get()
 
     for (const [providerID, result] of results) {
-      const name = database[providerID]?.name || providerID
+      const name = displayName(providerID, database)
       prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}`)
     }
 
@@ -467,7 +478,7 @@ export const ProvidersLogoutCommand = cmd({
     const providerID = await prompts.select({
       message: "Select provider",
       options: credentials.map(([key, value]) => ({
-        label: (database[key]?.name || key) + UI.Style.TEXT_DIM + " (" + value.type + ")",
+        label: displayName(key, database) + UI.Style.TEXT_DIM + " (" + value.type + ")",
         value: key,
       })),
     })

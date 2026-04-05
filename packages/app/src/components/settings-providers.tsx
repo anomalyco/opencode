@@ -40,11 +40,15 @@ export const SettingsProviders: Component = () => {
       .filter((p) => p.id !== "opencode" || Object.values(p.models).find((m) => m.cost?.input))
   })
 
+  const hasCopilot = createMemo(() =>
+    connected().some((p) => p.id === "github-copilot" || p.id.startsWith("github-copilot:")),
+  )
+
   const popular = createMemo(() => {
     const connectedIDs = new Set(connected().map((p) => p.id))
     const items = providers
       .popular()
-      .filter((p) => !connectedIDs.has(p.id))
+      .filter((p) => !connectedIDs.has(p.id) || p.id === "github-copilot")
       .slice()
     items.sort((a, b) => popularProviders.indexOf(a.id) - popularProviders.indexOf(b.id))
     return items
@@ -150,7 +154,7 @@ export const SettingsProviders: Component = () => {
                 {(item) => (
                   <div class="group flex flex-wrap items-center justify-between gap-4 min-h-16 py-3 border-b border-border-weak-base last:border-none">
                     <div class="flex items-center gap-3 min-w-0">
-                      <ProviderIcon id={item.id} class="size-5 shrink-0 icon-strong-base" />
+                      <ProviderIcon id={item.id.split(":")[0]} class="size-5 shrink-0 icon-strong-base" />
                       <span class="text-14-medium text-text-strong truncate">{item.name}</span>
                       <Tag>{type(item)}</Tag>
                     </div>
@@ -202,7 +206,9 @@ export const SettingsProviders: Component = () => {
                       dialog.show(() => <DialogConnectProvider provider={item.id} />)
                     }}
                   >
-                    {language.t("common.connect")}
+                    {hasCopilot() && item.id === "github-copilot"
+                      ? language.t("settings.providers.addAccount")
+                      : language.t("common.connect")}
                   </Button>
                 </div>
               )}

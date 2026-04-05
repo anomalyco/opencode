@@ -27,9 +27,16 @@ export function normalizeProviderList(input: ProviderListResponse): ProviderList
 }
 
 export function sanitizeProject(project: Project) {
-  if (!project.icon?.url && !project.icon?.override) return project
+  const sandboxes = Array.isArray(project.sandboxes)
+    ? project.sandboxes.filter((item): item is string => typeof item === "string")
+    : []
+  if (!project.icon?.url && !project.icon?.override) {
+    if (sandboxes === project.sandboxes) return project
+    return { ...project, sandboxes }
+  }
   return {
     ...project,
+    sandboxes,
     icon: {
       ...project.icon,
       url: undefined,

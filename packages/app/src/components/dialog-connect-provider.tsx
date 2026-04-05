@@ -221,6 +221,7 @@ export function DialogConnectProvider(props: { provider: string }) {
     const valid = createMemo(() => {
       const item = current()
       if (!item || item.prompt.type !== "text") return false
+      if (item.prompt.optional) return true
       const value = formStore.value[item.prompt.key] ?? ""
       return value.trim().length > 0
     })
