@@ -59,6 +59,13 @@ export const dict = {
   "desktop.loading.progressAria": "数据库迁移进度",
   "desktop.loading.reload.title": "正在重载后端",
   "desktop.loading.reload.message": "正在重启本地后端并刷新其状态。",
+  "desktop.loading.status.failed": "启动失败",
+  "desktop.startup.failed.title": "OpenCode 无法启动本地后端",
+  "desktop.startup.failed.message": "修复本地后端问题后，请重启应用。",
+  "desktop.startup.failed.reloadWebview": "重启前端",
+  "desktop.startup.failed.reloadBackend": "重启后端",
+  "desktop.startup.failed.restart": "重启应用",
+  "desktop.startup.failed.checkUpdates": "检查更新",
   "desktop.server.local": "本地服务器",
   "desktop.server.openclaw": "OpenClaw",
 }

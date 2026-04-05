@@ -63,7 +63,10 @@ export const dict = {
   "desktop.loading.reload.message": "Restarting the local backend and refreshing its state.",
   "desktop.startup.failed.title": "OpenCode couldn't start the local backend",
   "desktop.startup.failed.message": "Restart the app after fixing the local backend issue.",
+  "desktop.startup.failed.reloadWebview": "Restart frontend",
+  "desktop.startup.failed.reloadBackend": "Restart backend",
   "desktop.startup.failed.restart": "Restart app",
+  "desktop.startup.failed.checkUpdates": "Check for updates",
   "desktop.server.local": "Local Server",
   "desktop.server.openclaw": "OpenClaw",
 }

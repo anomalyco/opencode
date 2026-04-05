@@ -10,12 +10,14 @@ import { createEffect, createMemo, createSignal, onCleanup, onMount } from "soli
 import { commands, events, type InitStep, type SqliteMigrationProgress } from "./bindings"
 import { Channel } from "@tauri-apps/api/core"
 import { relaunch } from "@tauri-apps/plugin-process"
+import { openUrl } from "@tauri-apps/plugin-opener"
 import { initI18n, t } from "./i18n"
 
 const root = document.getElementById("root")!
 const delays = [3000, 9000]
 const startupClock = typeof performance === "object" ? performance.now() : Date.now()
 const startupSeen = new Set<string>()
+const release = "https://github.com/panyw5/opencode/releases"
 
 function profile(phase: string, detail?: string) {
   if (startupSeen.has(phase)) return Promise.resolve()
@@ -98,6 +100,16 @@ render(() => {
     void profile("app.ready")
   })
 
+  const webview = () => window.location.reload()
+  const sidecar = async () => {
+    await commands.reloadSidecar()
+  }
+  const app = async () => {
+    await commands.killSidecar().catch(() => undefined)
+    await relaunch()
+  }
+  const updates = () => openUrl(release)
+
   return (
     <MetaProvider>
       <div class="w-screen h-screen bg-background-base flex items-center justify-center p-8 overflow-hidden">
@@ -114,9 +126,20 @@ render(() => {
                   {t("desktop.startup.failed.message")}
                 </div>
                 {detail() ? <div class="w-full text-center text-balance text-text-danger text-12-normal leading-5">{detail()}</div> : null}
-                <Button class="px-4" onClick={() => void relaunch()}>
-                  {t("desktop.startup.failed.restart")}
-                </Button>
+                <div class="flex flex-wrap items-center justify-center gap-2">
+                  <Button class="px-4" onClick={webview}>
+                    {t("desktop.startup.failed.reloadWebview")}
+                  </Button>
+                  <Button class="px-4" onClick={() => void sidecar()}>
+                    {t("desktop.startup.failed.reloadBackend")}
+                  </Button>
+                  <Button class="px-4" onClick={() => void app()}>
+                    {t("desktop.startup.failed.restart")}
+                  </Button>
+                  <Button class="px-4" variant="ghost" onClick={updates}>
+                    {t("desktop.startup.failed.checkUpdates")}
+                  </Button>
+                </div>
               </>
             ) : (
               <Progress
