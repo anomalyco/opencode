@@ -10,8 +10,8 @@ import { BusEvent } from "@/bus/bus-event"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { Flag } from "@/flag/flag"
+import { Git } from "@/git"
 import { Instance } from "@/project/instance"
-import { git } from "@/util/git"
 import { lazy } from "@/util/lazy"
 import { Config } from "../config/config"
 import { FileIgnore } from "./ignore"
@@ -132,7 +132,7 @@ export namespace FileWatcher {
 
             if (Instance.project.vcs === "git") {
               const result = yield* Effect.promise(() =>
-                git(["rev-parse", "--git-dir"], {
+                Git.run(["rev-parse", "--git-dir"], {
                   cwd: Instance.project.worktree,
                 }),
               )

@@ -35,6 +35,7 @@ import { JsonMigration } from "./storage/json-migration"
 import { Database } from "./storage/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
+import { Heap } from "./cli/heap"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -95,6 +96,8 @@ const cli = yargs(args)
         return "INFO"
       })(),
     })
+
+    Heap.start()
 
     process.env.AGENT = "1"
     process.env.OPENCODE = "1"
