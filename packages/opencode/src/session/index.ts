@@ -16,6 +16,7 @@ import { SessionTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
 import { Storage } from "@/storage/storage"
 import { Log } from "../util/log"
+import { Filesystem } from "../util/filesystem"
 import { updateSchema } from "../util/update-schema"
 import { MessageV2 } from "./message-v2"
 import { Instance } from "../project/instance"
@@ -736,6 +737,11 @@ export namespace Session {
     runPromise((svc) => svc.messages(input)),
   )
 
+  function normalizeDirectory(dir?: string) {
+    if (!dir) return dir
+    return Filesystem.normalizePath(Filesystem.windowsPath(dir))
+  }
+
   export function* list(input?: {
     directory?: string
     workspaceID?: WorkspaceID
@@ -746,12 +752,13 @@ export namespace Session {
   }) {
     const project = Instance.project
     const conditions = [eq(SessionTable.project_id, project.id)]
+    const dir = normalizeDirectory(input?.directory)
 
     if (input?.workspaceID) {
       conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
     }
-    if (input?.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
+    if (dir) {
+      conditions.push(eq(SessionTable.directory, dir))
     }
     if (input?.roots) {
       conditions.push(isNull(SessionTable.parent_id))
@@ -789,9 +796,10 @@ export namespace Session {
     archived?: boolean
   }) {
     const conditions: SQL[] = []
+    const dir = normalizeDirectory(input?.directory)
 
-    if (input?.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
+    if (dir) {
+      conditions.push(eq(SessionTable.directory, dir))
     }
     if (input?.roots) {
       conditions.push(isNull(SessionTable.parent_id))
