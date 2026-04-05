@@ -2,6 +2,7 @@ import { Log } from "../util/log"
 import path from "path"
 import { pathToFileURL } from "url"
 import os from "os"
+import { Process } from "../util/process"
 import z from "zod"
 import { ModelsDev } from "../provider/models"
 import { mergeDeep, pipe, unique } from "remeda"
@@ -20,7 +21,6 @@ import {
 } from "jsonc-parser"
 import { Instance, type InstanceContext } from "../project/instance"
 import { LSPServer } from "../lsp/server"
-import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
 import { constants, existsSync } from "fs"
@@ -28,20 +28,19 @@ import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
 import { Event } from "../server/event"
 import { Glob } from "../util/glob"
-import { PackageRegistry } from "@/bun/registry"
-import { online, proxied } from "@/util/network"
 import { iife } from "@/util/iife"
 import { Account } from "@/account"
 import { isRecord } from "@/util/record"
 import { ConfigPaths } from "./paths"
 import { Filesystem } from "@/util/filesystem"
-import { Process } from "@/util/process"
+import type { ConsoleState } from "./console-state"
 import { AppFileSystem } from "@/filesystem"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
 import { Duration, Effect, Layer, Option, ServiceMap } from "effect"
 import { Flock } from "@/util/flock"
 import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "@/plugin/shared"
+import { Npm } from "@/npm"
 
 export namespace Config {
   const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
@@ -50,6 +49,12 @@ export namespace Config {
 
   export type PluginOptions = z.infer<typeof PluginOptions>
   export type PluginSpec = z.infer<typeof PluginSpec>
+  export type PluginScope = "global" | "local"
+  export type PluginOrigin = {
+    spec: PluginSpec
+    source: string
+    scope: PluginScope
+  }
 
   const log = Log.create({ service: "config" })
 
@@ -72,12 +77,62 @@ export namespace Config {
 
   const managedDir = managedConfigDir()
 
+  const MANAGED_PLIST_DOMAIN = "ai.opencode.managed"
+
+  // Keys injected by macOS/MDM into the managed plist that are not OpenCode config
+  const PLIST_META = new Set([
+    "PayloadDisplayName",
+    "PayloadIdentifier",
+    "PayloadType",
+    "PayloadUUID",
+    "PayloadVersion",
+    "_manualProfile",
+  ])
+
+  /**
+   * Parse raw JSON (from plutil conversion of a managed plist) into OpenCode config.
+   * Strips MDM metadata keys before parsing through the config schema.
+   * Pure function — no OS interaction, safe to unit test directly.
+   */
+  export function parseManagedPlist(json: string, source: string): Info {
+    const raw = JSON.parse(json)
+    for (const key of Object.keys(raw)) {
+      if (PLIST_META.has(key)) delete raw[key]
+    }
+    return parseConfig(JSON.stringify(raw), source)
+  }
+
+  /**
+   * Read macOS managed preferences deployed via .mobileconfig / MDM (Jamf, Kandji, etc).
+   * MDM-installed profiles write to /Library/Managed Preferences/ which is only writable by root.
+   * User-scoped plists are checked first, then machine-scoped.
+   */
+  async function readManagedPreferences(): Promise<Info> {
+    if (process.platform !== "darwin") return {}
+
+    const domain = MANAGED_PLIST_DOMAIN
+    const user = os.userInfo().username
+    const paths = [
+      path.join("/Library/Managed Preferences", user, `${domain}.plist`),
+      path.join("/Library/Managed Preferences", `${domain}.plist`),
+    ]
+
+    for (const plist of paths) {
+      if (!existsSync(plist)) continue
+      log.info("reading macOS managed preferences", { path: plist })
+      const result = await Process.run(["plutil", "-convert", "json", "-o", "-", plist], { nothrow: true })
+      if (result.code !== 0) {
+        log.warn("failed to convert managed preferences plist", { path: plist })
+        continue
+      }
+      return parseManagedPlist(result.stdout.toString(), `mobileconfig:${plist}`)
+    }
+    return {}
+  }
+
   // Custom merge function that concatenates array fields instead of replacing them
   function mergeConfigConcatArrays(target: Info, source: Info): Info {
     const merged = mergeDeep(target, source)
-    if (target.plugin && source.plugin) {
-      merged.plugin = Array.from(new Set([...target.plugin, ...source.plugin]))
-    }
     if (target.instructions && source.instructions) {
       merged.instructions = Array.from(new Set([...target.instructions, ...source.instructions]))
     }
@@ -90,8 +145,7 @@ export namespace Config {
   }
 
   export async function installDependencies(dir: string, input?: InstallInput) {
-    if (!(await needsInstall(dir))) return
-
+    if (!(await isWritable(dir))) return
     await using _ = await Flock.acquire(`config-install:${Filesystem.resolve(dir)}`, {
       signal: input?.signal,
       onWait: (tick) =>
@@ -102,13 +156,10 @@ export namespace Config {
           waited: tick.waited,
         }),
     })
-
     input?.signal?.throwIfAborted()
-    if (!(await needsInstall(dir))) return
 
     const pkg = path.join(dir, "package.json")
     const target = Installation.isLocal() ? "*" : Installation.VERSION
-
     const json = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => ({
       dependencies: {},
     }))
@@ -121,51 +172,12 @@ export namespace Config {
     const gitignore = path.join(dir, ".gitignore")
     const ignore = await Filesystem.exists(gitignore)
     if (!ignore) {
-      await Filesystem.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
+      await Filesystem.write(
+        gitignore,
+        ["node_modules", "package.json", "package-lock.json", "bun.lock", ".gitignore"].join("\n"),
+      )
     }
-
-    // Bun can race cache writes on Windows when installs run in parallel across dirs.
-    // Serialize installs globally on win32, but keep parallel installs on other platforms.
-    await using __ =
-      process.platform === "win32"
-        ? await Flock.acquire("config-install:bun", {
-            signal: input?.signal,
-          })
-        : undefined
-
-    await BunProc.run(
-      [
-        "install",
-        // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
-        ...(proxied() || process.env.CI ? ["--no-cache"] : []),
-      ],
-      {
-        cwd: dir,
-        abort: input?.signal,
-      },
-    ).catch((err) => {
-      if (err instanceof Process.RunFailedError) {
-        const detail = {
-          dir,
-          cmd: err.cmd,
-          code: err.code,
-          stdout: err.stdout.toString(),
-          stderr: err.stderr.toString(),
-        }
-        if (Flag.OPENCODE_STRICT_CONFIG_DEPS) {
-          log.error("failed to install dependencies", detail)
-          throw err
-        }
-        log.warn("failed to install dependencies", detail)
-        return
-      }
-
-      if (Flag.OPENCODE_STRICT_CONFIG_DEPS) {
-        log.error("failed to install dependencies", { dir, error: err })
-        throw err
-      }
-      log.warn("failed to install dependencies", { dir, error: err })
-    })
+    await Npm.install(dir)
   }
 
   async function isWritable(dir: string) {
@@ -175,42 +187,6 @@ export namespace Config {
     } catch {
       return false
     }
-  }
-
-  export async function needsInstall(dir: string) {
-    // Some config dirs may be read-only.
-    // Installing deps there will fail; skip installation in that case.
-    const writable = await isWritable(dir)
-    if (!writable) {
-      log.debug("config dir is not writable, skipping dependency install", { dir })
-      return false
-    }
-
-    const mod = path.join(dir, "node_modules", "@opencode-ai", "plugin")
-    if (!existsSync(mod)) return true
-
-    const pkg = path.join(dir, "package.json")
-    const pkgExists = await Filesystem.exists(pkg)
-    if (!pkgExists) return true
-
-    const parsed = await Filesystem.readJson<{ dependencies?: Record<string, string> }>(pkg).catch(() => null)
-    const dependencies = parsed?.dependencies ?? {}
-    const depVersion = dependencies["@opencode-ai/plugin"]
-    if (!depVersion) return true
-
-    const targetVersion = Installation.isLocal() ? "latest" : Installation.VERSION
-    if (targetVersion === "latest") {
-      if (!online()) return false
-      const stale = await PackageRegistry.isOutdated("@opencode-ai/plugin", depVersion, dir)
-      if (!stale) return false
-      log.info("Cached version is outdated, proceeding with install", {
-        pkg: "@opencode-ai/plugin",
-        cachedVersion: depVersion,
-      })
-      return true
-    }
-    if (depVersion === targetVersion) return false
-    return true
   }
 
   function rel(item: string, patterns: string[]) {
@@ -379,31 +355,19 @@ export namespace Config {
     return resolved
   }
 
-  /**
-   * Deduplicates plugins by name, with later entries (higher priority) winning.
-   * Priority order (highest to lowest):
-   * 1. Local plugin/ directory
-   * 2. Local opencode.json
-   * 3. Global plugin/ directory
-   * 4. Global opencode.json
-   *
-   * Since plugins are added in low-to-high priority order,
-   * we reverse, deduplicate (keeping first occurrence), then restore order.
-   */
-  export function deduplicatePlugins(plugins: PluginSpec[]): PluginSpec[] {
-    const seenNames = new Set<string>()
-    const uniqueSpecifiers: PluginSpec[] = []
+  export function deduplicatePluginOrigins(plugins: PluginOrigin[]): PluginOrigin[] {
+    const seen = new Set<string>()
+    const list: PluginOrigin[] = []
 
-    for (const specifier of plugins.toReversed()) {
-      const spec = pluginSpecifier(specifier)
+    for (const plugin of plugins.toReversed()) {
+      const spec = pluginSpecifier(plugin.spec)
       const name = spec.startsWith("file://") ? spec : parsePluginSpecifier(spec).pkg
-      if (!seenNames.has(name)) {
-        seenNames.add(name)
-        uniqueSpecifiers.push(specifier)
-      }
+      if (seen.has(name)) continue
+      seen.add(name)
+      list.push(plugin)
     }
 
-    return uniqueSpecifiers.toReversed()
+    return list.toReversed()
   }
 
   export const McpLocal = z
@@ -1079,17 +1043,21 @@ export namespace Config {
       ref: "Config",
     })
 
-  export type Info = z.output<typeof Info>
+  export type Info = z.output<typeof Info> & {
+    plugin_origins?: PluginOrigin[]
+  }
 
   type State = {
     config: Info
     directories: string[]
     deps: Promise<void>[]
+    consoleState: ConsoleState
   }
 
   export interface Interface {
     readonly get: () => Effect.Effect<Info>
     readonly getGlobal: () => Effect.Effect<Info>
+    readonly getConsoleState: () => Effect.Effect<ConsoleState>
     readonly update: (config: Info) => Effect.Effect<void>
     readonly updateGlobal: (config: Info) => Effect.Effect<Info>
     readonly invalidate: (wait?: boolean) => Effect.Effect<void>
@@ -1124,6 +1092,11 @@ export namespace Config {
       if (value === undefined) return result
       return patchJsonc(result, value, [...path, key])
     }, input)
+  }
+
+  function writable(info: Info) {
+    const { plugin_origins, ...next } = info
+    return next
   }
 
   function parseConfig(text: string, filepath: string): Info {
@@ -1290,6 +1263,32 @@ export namespace Config {
           const auth = yield* authSvc.all().pipe(Effect.orDie)
 
           let result: Info = {}
+          const consoleManagedProviders = new Set<string>()
+          let activeOrgName: string | undefined
+
+          const scope = (source: string): PluginScope => {
+            if (source.startsWith("http://") || source.startsWith("https://")) return "global"
+            if (source === "OPENCODE_CONFIG_CONTENT") return "local"
+            if (Instance.containsPath(source)) return "local"
+            return "global"
+          }
+
+          const track = (source: string, list: PluginSpec[] | undefined, kind?: PluginScope) => {
+            if (!list?.length) return
+            const hit = kind ?? scope(source)
+            const plugins = deduplicatePluginOrigins([
+              ...(result.plugin_origins ?? []),
+              ...list.map((spec) => ({ spec, source, scope: hit })),
+            ])
+            result.plugin = plugins.map((item) => item.spec)
+            result.plugin_origins = plugins
+          }
+
+          const merge = (source: string, next: Info, kind?: PluginScope) => {
+            result = mergeConfigConcatArrays(result, next)
+            track(source, next.plugin, kind)
+          }
+
           for (const [key, value] of Object.entries(auth)) {
             if (value.type === "wellknown") {
               const url = key.replace(/\/+$/, "")
@@ -1302,21 +1301,21 @@ export namespace Config {
               const wellknown = (yield* Effect.promise(() => response.json())) as any
               const remoteConfig = wellknown.config ?? {}
               if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
-              result = mergeConfigConcatArrays(
-                result,
-                yield* loadConfig(JSON.stringify(remoteConfig), {
-                  dir: path.dirname(`${url}/.well-known/opencode`),
-                  source: `${url}/.well-known/opencode`,
-                }),
-              )
+              const source = `${url}/.well-known/opencode`
+              const next = yield* loadConfig(JSON.stringify(remoteConfig), {
+                dir: path.dirname(source),
+                source,
+              })
+              merge(source, next, "global")
               log.debug("loaded remote config from well-known", { url })
             }
           }
 
-          result = mergeConfigConcatArrays(result, yield* getGlobal())
+          const global = yield* getGlobal()
+          merge(Global.Path.config, global, "global")
 
           if (Flag.OPENCODE_CONFIG) {
-            result = mergeConfigConcatArrays(result, yield* loadFile(Flag.OPENCODE_CONFIG))
+            merge(Flag.OPENCODE_CONFIG, yield* loadFile(Flag.OPENCODE_CONFIG))
             log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
           }
 
@@ -1324,7 +1323,7 @@ export namespace Config {
             for (const file of yield* Effect.promise(() =>
               ConfigPaths.projectFiles("opencode", ctx.directory, ctx.worktree),
             )) {
-              result = mergeConfigConcatArrays(result, yield* loadFile(file))
+              merge(file, yield* loadFile(file), "local")
             }
           }
 
@@ -1342,9 +1341,10 @@ export namespace Config {
 
           for (const dir of unique(directories)) {
             if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
-              for (const file of ["opencode.jsonc", "opencode.json"]) {
-                log.debug(`loading config from ${path.join(dir, file)}`)
-                result = mergeConfigConcatArrays(result, yield* loadFile(path.join(dir, file)))
+              for (const file of ["opencode.json", "opencode.jsonc"]) {
+                const source = path.join(dir, file)
+                log.debug(`loading config from ${source}`)
+                merge(source, yield* loadFile(source))
                 result.agent ??= {}
                 result.mode ??= {}
                 result.plugin ??= []
@@ -1352,8 +1352,7 @@ export namespace Config {
             }
 
             const dep = iife(async () => {
-              const stale = await needsInstall(dir)
-              if (stale) await installDependencies(dir)
+              await installDependencies(dir)
             })
             void dep.catch((err) => {
               log.warn("background dependency install failed", { dir, error: err })
@@ -1363,42 +1362,46 @@ export namespace Config {
             result.command = mergeDeep(result.command ?? {}, yield* Effect.promise(() => loadCommand(dir)))
             result.agent = mergeDeep(result.agent, yield* Effect.promise(() => loadAgent(dir)))
             result.agent = mergeDeep(result.agent, yield* Effect.promise(() => loadMode(dir)))
-            result.plugin.push(...(yield* Effect.promise(() => loadPlugin(dir))))
+            const list = yield* Effect.promise(() => loadPlugin(dir))
+            track(dir, list)
           }
 
           if (process.env.OPENCODE_CONFIG_CONTENT) {
-            result = mergeConfigConcatArrays(
-              result,
-              yield* loadConfig(process.env.OPENCODE_CONFIG_CONTENT, {
-                dir: ctx.directory,
-                source: "OPENCODE_CONFIG_CONTENT",
-              }),
-            )
+            const source = "OPENCODE_CONFIG_CONTENT"
+            const next = yield* loadConfig(process.env.OPENCODE_CONFIG_CONTENT, {
+              dir: ctx.directory,
+              source,
+            })
+            merge(source, next, "local")
             log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
           }
 
-          const active = Option.getOrUndefined(yield* accountSvc.active().pipe(Effect.orDie))
-          if (active?.active_org_id) {
+          const activeOrg = Option.getOrUndefined(
+            yield* accountSvc.activeOrg().pipe(Effect.catch(() => Effect.succeed(Option.none()))),
+          )
+          if (activeOrg) {
             yield* Effect.gen(function* () {
               const [configOpt, tokenOpt] = yield* Effect.all(
-                [accountSvc.config(active.id, active.active_org_id!), accountSvc.token(active.id)],
+                [accountSvc.config(activeOrg.account.id, activeOrg.org.id), accountSvc.token(activeOrg.account.id)],
                 { concurrency: 2 },
               )
-              const token = Option.getOrUndefined(tokenOpt)
-              if (token) {
-                process.env["OPENCODE_CONSOLE_TOKEN"] = token
-                Env.set("OPENCODE_CONSOLE_TOKEN", token)
+              if (Option.isSome(tokenOpt)) {
+                process.env["OPENCODE_CONSOLE_TOKEN"] = tokenOpt.value
+                Env.set("OPENCODE_CONSOLE_TOKEN", tokenOpt.value)
               }
 
-              const config = Option.getOrUndefined(configOpt)
-              if (config) {
-                result = mergeConfigConcatArrays(
-                  result,
-                  yield* loadConfig(JSON.stringify(config), {
-                    dir: path.dirname(`${active.url}/api/config`),
-                    source: `${active.url}/api/config`,
-                  }),
-                )
+              activeOrgName = activeOrg.org.name
+
+              if (Option.isSome(configOpt)) {
+                const source = `${activeOrg.account.url}/api/config`
+                const next = yield* loadConfig(JSON.stringify(configOpt.value), {
+                  dir: path.dirname(source),
+                  source,
+                })
+                for (const providerID of Object.keys(next.provider ?? {})) {
+                  consoleManagedProviders.add(providerID)
+                }
+                merge(source, next, "global")
               }
             }).pipe(
               Effect.catch((err) => {
@@ -1411,10 +1414,14 @@ export namespace Config {
           }
 
           if (existsSync(managedDir)) {
-            for (const file of ["opencode.jsonc", "opencode.json"]) {
-              result = mergeConfigConcatArrays(result, yield* loadFile(path.join(managedDir, file)))
+            for (const file of ["opencode.json", "opencode.jsonc"]) {
+              const source = path.join(managedDir, file)
+              merge(source, yield* loadFile(source), "global")
             }
           }
+
+          // macOS managed preferences (.mobileconfig deployed via MDM) override everything
+          result = mergeConfigConcatArrays(result, yield* Effect.promise(() => readManagedPreferences()))
 
           for (const [name, mode] of Object.entries(result.mode ?? {})) {
             result.agent = mergeDeep(result.agent ?? {}, {
@@ -1455,12 +1462,15 @@ export namespace Config {
             result.compaction = { ...result.compaction, prune: false }
           }
 
-          result.plugin = deduplicatePlugins(result.plugin ?? [])
-
           return {
             config: result,
             directories,
             deps,
+            consoleState: {
+              consoleManagedProviders: Array.from(consoleManagedProviders),
+              activeOrgName,
+              switchableOrgCount: 0,
+            },
           }
         })
 
@@ -1478,14 +1488,21 @@ export namespace Config {
           return yield* InstanceState.use(state, (s) => s.directories)
         })
 
+        const getConsoleState = Effect.fn("Config.getConsoleState")(function* () {
+          return yield* InstanceState.use(state, (s) => s.consoleState)
+        })
+
         const waitForDependencies = Effect.fn("Config.waitForDependencies")(function* () {
           yield* InstanceState.useEffect(state, (s) => Effect.promise(() => Promise.all(s.deps).then(() => undefined)))
         })
 
         const update = Effect.fn("Config.update")(function* (config: Info) {
-          const file = path.join(Instance.directory, "config.json")
+          const dir = yield* InstanceState.directory
+          const file = path.join(dir, "config.json")
           const existing = yield* loadFile(file)
-          yield* fs.writeFileString(file, JSON.stringify(mergeDeep(existing, config), null, 2)).pipe(Effect.orDie)
+          yield* fs
+            .writeFileString(file, JSON.stringify(mergeDeep(writable(existing), writable(config)), null, 2))
+            .pipe(Effect.orDie)
           yield* Effect.promise(() => Instance.dispose())
         })
 
@@ -1509,15 +1526,16 @@ export namespace Config {
         const updateGlobal = Effect.fn("Config.updateGlobal")(function* (config: Info) {
           const file = globalConfigFile()
           const before = (yield* readConfigFile(file)) ?? "{}"
+          const input = writable(config)
 
           let next: Info
           if (!file.endsWith(".jsonc")) {
             const existing = parseConfig(before, file)
-            const merged = mergeDeep(existing, config)
+            const merged = mergeDeep(writable(existing), input)
             yield* fs.writeFileString(file, JSON.stringify(merged, null, 2)).pipe(Effect.orDie)
             next = merged
           } else {
-            const updated = patchJsonc(before, config)
+            const updated = patchJsonc(before, input)
             next = parseConfig(updated, file)
             yield* fs.writeFileString(file, updated).pipe(Effect.orDie)
           }
@@ -1529,6 +1547,7 @@ export namespace Config {
         return Service.of({
           get,
           getGlobal,
+          getConsoleState,
           update,
           updateGlobal,
           invalidate,
@@ -1552,6 +1571,10 @@ export namespace Config {
 
   export async function getGlobal() {
     return runPromise((svc) => svc.getGlobal())
+  }
+
+  export async function getConsoleState() {
+    return runPromise((svc) => svc.getConsoleState())
   }
 
   export async function update(config: Info) {
