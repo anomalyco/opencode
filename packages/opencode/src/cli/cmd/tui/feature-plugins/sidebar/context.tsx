@@ -1,7 +1,8 @@
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
-import { createMemo } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js"
 import { Locale } from "@/util/locale"
+import * as Tps from "../../util/tps"
 
 const id = "internal:sidebar-context"
 
@@ -13,15 +14,61 @@ const money = new Intl.NumberFormat("en-US", {
 function View(props: { api: TuiPluginApi; session_id: string }) {
   const theme = () => props.api.theme.current
   const msg = createMemo(() => props.api.state.session.messages(props.session_id))
+  const status = createMemo(() => props.api.state.session.status(props.session_id)?.type ?? "idle")
   const cost = createMemo(() => msg().reduce((sum, item) => sum + (item.role === "assistant" ? item.cost : 0), 0))
+
+  const active = createMemo(() => {
+    return msg().findLast((item): item is AssistantMessage => item.role === "assistant" && !item.time.completed)
+  })
+
+  const [samples, setSamples] = createSignal<Tps.Sample[]>([])
+  const [tick, setTick] = createSignal(Date.now())
+
+  createEffect(
+    on(
+      () => active()?.id,
+      () => setSamples([]),
+      { defer: true },
+    ),
+  )
+
+  onMount(() => {
+    const off = props.api.event.on("message.part.delta", (evt) => {
+      if (evt.properties.sessionID !== props.session_id) return
+      if (evt.properties.field !== "text") return
+      if (evt.properties.messageID !== active()?.id) return
+      setSamples((list) => Tps.append(list, { delta: evt.properties.delta }))
+    })
+    onCleanup(off)
+  })
+
+  createEffect(() => {
+    if (status() === "idle") return
+    const timer = setInterval(() => setTick(Date.now()), 250)
+    onCleanup(() => clearInterval(timer))
+  })
+
+  const liveTps = createMemo(() => {
+    tick()
+    if (status() === "idle") return
+    return Tps.live(samples())
+  })
 
   const state = createMemo(() => {
     const last = msg().findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
-    if (!last) {
+    if (!last && !liveTps()) {
       return {
         tokens: 0,
         percent: null,
         tps: undefined,
+      }
+    }
+
+    if (!last) {
+      return {
+        tokens: 0,
+        percent: null,
+        tps: liveTps(),
       }
     }
 
@@ -30,7 +77,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     const model = props.api.state.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
     const user = msg().find((item) => item.role === "user" && item.id === last.parentID)
     const end = last.time.completed ?? Date.now()
-    const tps = user ? Locale.tokensPerSec(last.tokens.output, end - user.time.created) : undefined
+    const tps = liveTps() ?? (user ? Locale.tokensPerSec(last.tokens.output, end - user.time.created) : undefined)
     return {
       tokens,
       percent: model?.limit.context ? Math.round((tokens / model.limit.context) * 100) : null,

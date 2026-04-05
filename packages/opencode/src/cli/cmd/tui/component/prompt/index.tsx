@@ -35,6 +35,7 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import * as Tps from "../../util/tps"
 
 export type PromptProps = {
   sessionID?: string
@@ -137,11 +138,61 @@ export function Prompt(props: PromptProps) {
     return messages.findLast((m) => m.role === "user")
   })
 
+  const messages = createMemo(() => {
+    if (!props.sessionID) return []
+    return sync.data.message[props.sessionID] ?? []
+  })
+
+  const active = createMemo(() => {
+    return messages().findLast((item): item is AssistantMessage => item.role === "assistant" && !item.time.completed)
+  })
+
+  const [samples, setSamples] = createSignal<Tps.Sample[]>([])
+  const [tick, setTick] = createSignal(Date.now())
+
+  createEffect(
+    on(
+      () => active()?.id,
+      () => setSamples([]),
+      { defer: true },
+    ),
+  )
+
+  onMount(() => {
+    const off = sdk.event.on("message.part.delta", (evt) => {
+      if (evt.properties.sessionID !== props.sessionID) return
+      if (evt.properties.field !== "text") return
+      if (evt.properties.messageID !== active()?.id) return
+      setSamples((list) => Tps.append(list, { delta: evt.properties.delta }))
+    })
+    onCleanup(off)
+  })
+
+  createEffect(() => {
+    if (status().type === "idle") return
+    const timer = setInterval(() => setTick(Date.now()), 250)
+    onCleanup(() => clearInterval(timer))
+  })
+
+  const liveTps = createMemo(() => {
+    tick()
+    if (status().type === "idle") return
+    return Tps.live(samples())
+  })
+
   const usage = createMemo(() => {
     if (!props.sessionID) return
-    const msg = sync.data.message[props.sessionID] ?? []
+    const msg = messages()
     const last = msg.findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
-    if (!last) return
+    if (!last) {
+      const tps = liveTps()
+      if (!tps) return
+      return {
+        tps,
+        context: undefined,
+        cost: undefined,
+      }
+    }
 
     const tokens =
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
@@ -152,7 +203,7 @@ export function Prompt(props: PromptProps) {
     const cost = msg.reduce((sum, item) => sum + (item.role === "assistant" ? item.cost : 0), 0)
     const user = msg.find((item) => item.role === "user" && item.id === last.parentID)
     const end = last.time.completed ?? Date.now()
-    const tps = user ? Locale.tokensPerSec(last.tokens.output, end - user.time.created) : undefined
+    const tps = liveTps() ?? (user ? Locale.tokensPerSec(last.tokens.output, end - user.time.created) : undefined)
     return {
       tps,
       context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
