@@ -1,4 +1,15 @@
-import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, decodePasteBytes, t, dim, fg } from "@opentui/core"
+import {
+  BoxRenderable,
+  TextareaRenderable,
+  MouseEvent,
+  PasteEvent,
+  decodePasteBytes,
+  t,
+  dim,
+  fg,
+  RGBA,
+  hsvToRgb,
+} from "@opentui/core"
 import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
@@ -121,6 +132,51 @@ export function Prompt(props: PromptProps) {
   const fileStyleId = syntax().getStyleId("extmark.file")!
   const agentStyleId = syntax().getStyleId("extmark.agent")!
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
+
+  function pasteNumber(value: string) {
+    const match = value.match(/^\[Pasted\s+(\d+)\s+~/)
+    const n = Number(match?.[1])
+    if (!Number.isFinite(n) || n <= 0) {
+      return
+    }
+
+    return n
+  }
+
+  function pasteColor(n: number) {
+    const idx = n - 1
+    const h = (idx * 137.508) % 360
+    const s = Math.min(0.55 + (idx % 5) * 0.08, 0.9)
+    const v = Math.min(0.72 + (Math.floor(idx / 5) % 4) * 0.07, 0.95)
+    return hsvToRgb(h, s, v)
+  }
+
+  function pasteStyle(value: string) {
+    const n = pasteNumber(value)
+    if (!n) {
+      return pasteStyleId
+    }
+
+    const name = `extmark.paste.${n}`
+    const id = syntax().getStyleId(name)
+    if (id !== null) {
+      return id
+    }
+
+    const bg = pasteColor(n)
+    const [r, g, b] = bg.toInts()
+    let text = RGBA.fromInts(255, 255, 255)
+    if (r * 0.299 + g * 0.587 + b * 0.114 > 150) {
+      text = RGBA.fromInts(0, 0, 0)
+    }
+
+    return syntax().registerStyle(name, {
+      fg: text,
+      bg,
+      bold: true,
+    })
+  }
+
   let promptPartTypeId = 0
 
   sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
@@ -496,7 +552,7 @@ export function Prompt(props: PromptProps) {
         start = part.source.text.start
         end = part.source.text.end
         virtualText = part.source.text.value
-        styleId = pasteStyleId
+        styleId = pasteStyle(virtualText)
       }
 
       if (virtualText) {
@@ -755,6 +811,7 @@ export function Prompt(props: PromptProps) {
     const currentOffset = input.visualCursor.offset
     const extmarkStart = currentOffset
     const extmarkEnd = extmarkStart + virtualText.length
+    const styleId = pasteStyle(virtualText)
 
     input.insertText(virtualText + " ")
 
@@ -762,7 +819,7 @@ export function Prompt(props: PromptProps) {
       start: extmarkStart,
       end: extmarkEnd,
       virtual: true,
-      styleId: pasteStyleId,
+      styleId,
       typeId: promptPartTypeId,
     })
 
@@ -1065,8 +1122,33 @@ export function Prompt(props: PromptProps) {
                   (lineCount >= 3 || pastedContent.length > 150) &&
                   !sync.data.config.experimental?.disable_paste_summary
                 ) {
+                  const lineLabel = lineCount === 1 ? "line" : "lines"
+                  const pasteCount =
+                    store.prompt.parts.reduce((max, part) => {
+                      if (part.type !== "text") {
+                        return max
+                      }
+
+                      if (!part.source || !("text" in part.source)) {
+                        return max
+                      }
+
+                      const value = part.source.text.value
+                      if (!value.startsWith("[Pasted ")) {
+                        return max
+                      }
+
+                      const match = value.match(/^\[Pasted\s+(\d+)\s+~/)
+                      const n = Number(match?.[1])
+                      if (!Number.isFinite(n) || n <= 0) {
+                        return max
+                      }
+
+                      return Math.max(max, n)
+                    }, 0) + 1
+
                   event.preventDefault()
-                  pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
+                  pasteText(pastedContent, `[Pasted ${pasteCount} ~${lineCount} ${lineLabel}]`)
                   return
                 }
 
