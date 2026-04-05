@@ -151,10 +151,8 @@ export function Prompt(props: PromptProps) {
     const pct = model?.limit.context ? `${Math.round((tokens / model.limit.context) * 100)}%` : undefined
     const cost = msg.reduce((sum, item) => sum + (item.role === "assistant" ? item.cost : 0), 0)
     const user = msg.find((item) => item.role === "user" && item.id === last.parentID)
-    const tps =
-      user && last.time.completed
-        ? Locale.tokensPerSec(last.tokens.output, last.time.completed - user.time.created)
-        : undefined
+    const end = last.time.completed ?? Date.now()
+    const tps = user ? Locale.tokensPerSec(last.tokens.output, end - user.time.created) : undefined
     return {
       tps,
       context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),

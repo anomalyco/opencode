@@ -29,10 +29,8 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
     const model = props.api.state.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
     const user = msg().find((item) => item.role === "user" && item.id === last.parentID)
-    const tps =
-      user && last.time.completed
-        ? Locale.tokensPerSec(last.tokens.output, last.time.completed - user.time.created)
-        : undefined
+    const end = last.time.completed ?? Date.now()
+    const tps = user ? Locale.tokensPerSec(last.tokens.output, end - user.time.created) : undefined
     return {
       tokens,
       percent: model?.limit.context ? Math.round((tokens / model.limit.context) * 100) : null,
