@@ -739,7 +739,7 @@ export namespace Session {
 
   function normalizeDirectory(dir?: string) {
     if (!dir) return dir
-    return Filesystem.normalizePath(Filesystem.windowsPath(dir))
+    return Filesystem.resolve(dir)
   }
 
   export function* list(input?: {
