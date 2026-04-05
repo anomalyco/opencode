@@ -188,11 +188,21 @@ export namespace AppFileSystem {
 
   export function normalizePath(p: string): string {
     if (process.platform !== "win32") return p
+    const resolved = pathResolve(windowsPath(p))
     try {
-      return realpathSync.native(p)
+      return realpathSync.native(resolved)
     } catch {
-      return p
+      return resolved
     }
+  }
+
+  export function normalizePathPattern(p: string): string {
+    if (process.platform !== "win32") return p
+    if (p === "*") return p
+    const match = p.match(/^(.*)[\\/]\*$/)
+    if (!match) return normalizePath(p)
+    const dir = /^[A-Za-z]:$/.test(match[1]) ? match[1] + "\\" : match[1]
+    return join(normalizePath(dir), "*")
   }
 
   export function resolve(p: string): string {
