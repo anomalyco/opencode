@@ -32,6 +32,7 @@ import rosepine from "./theme/rosepine.json" with { type: "json" }
 import solarized from "./theme/solarized.json" with { type: "json" }
 import synthwave84 from "./theme/synthwave84.json" with { type: "json" }
 import tokyonight from "./theme/tokyonight.json" with { type: "json" }
+import vague from "./theme/vague.json" with { type: "json" }
 import vercel from "./theme/vercel.json" with { type: "json" }
 import vesper from "./theme/vesper.json" with { type: "json" }
 import zenburn from "./theme/zenburn.json" with { type: "json" }
@@ -115,6 +116,7 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   solarized,
   synthwave84,
   tokyonight,
+  vague,
   vesper,
   vercel,
   zenburn,

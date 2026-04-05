@@ -33,6 +33,7 @@ import shadesOfPurpleThemeJson from "./themes/shadesofpurple.json"
 import solarizedThemeJson from "./themes/solarized.json"
 import synthwave84ThemeJson from "./themes/synthwave84.json"
 import tokyonightThemeJson from "./themes/tokyonight.json"
+import vagueThemeJson from "./themes/vague.json"
 import vercelThemeJson from "./themes/vercel.json"
 import vesperThemeJson from "./themes/vesper.json"
 import zenburnThemeJson from "./themes/zenburn.json"
@@ -71,6 +72,7 @@ export const shadesOfPurpleTheme = shadesOfPurpleThemeJson as DesktopTheme
 export const solarizedTheme = solarizedThemeJson as DesktopTheme
 export const synthwave84Theme = synthwave84ThemeJson as DesktopTheme
 export const tokyonightTheme = tokyonightThemeJson as DesktopTheme
+export const vagueTheme = vagueThemeJson as DesktopTheme
 export const vercelTheme = vercelThemeJson as DesktopTheme
 export const vesperTheme = vesperThemeJson as DesktopTheme
 export const zenburnTheme = zenburnThemeJson as DesktopTheme
@@ -110,6 +112,7 @@ export const DEFAULT_THEMES: Record<string, DesktopTheme> = {
   solarized: solarizedTheme,
   synthwave84: synthwave84Theme,
   tokyonight: tokyonightTheme,
+  vague: vagueTheme,
   vercel: vercelTheme,
   vesper: vesperTheme,
   zenburn: zenburnTheme,
