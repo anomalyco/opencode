@@ -21,10 +21,14 @@ import { Session } from "../../src/session"
 import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
 import { AppFileSystem } from "../../src/filesystem"
-import { SessionCompaction } from "../../src/session/compaction"
+import { MemoryExtractor } from "../../src/session/memory/extractor"
+import { MemoryRetriever } from "../../src/session/memory/retriever"
+import { ProjectTracker } from "../../src/session/memory/project-tracker"
+import { MemoryStore } from "../../src/session/memory/store"
 import { Instruction } from "../../src/session/instruction"
 import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
+import { SessionCompaction } from "../../src/session/compaction"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { Shell } from "../../src/shell/shell"
@@ -143,6 +147,41 @@ const filetime = Layer.succeed(
   }),
 )
 
+const memoryStub = Layer.mergeAll(
+  Layer.succeed(
+    MemoryRetriever.Service,
+    MemoryRetriever.Service.of({
+      retrieve: () => Effect.succeed({ windows: [], facts: [], artifacts: [] }),
+    }),
+  ),
+  Layer.succeed(
+    ProjectTracker.Service,
+    ProjectTracker.Service.of({
+      track: () => Effect.void,
+      getActive: () => Effect.succeed([]),
+    }),
+  ),
+  Layer.succeed(
+    MemoryStore.Service,
+    MemoryStore.Service.of({
+      writeWindow: () => Effect.void,
+      writeFacts: () => Effect.void,
+      writeArtifacts: () => Effect.void,
+      searchWindows: () => Effect.succeed([]),
+      searchFacts: () => Effect.succeed([]),
+      searchArtifacts: () => Effect.succeed([]),
+      getRecentWindows: () => Effect.succeed([]),
+      getDurableFacts: () => Effect.succeed([]),
+    }),
+  ),
+  Layer.succeed(
+    MemoryExtractor.Service,
+    MemoryExtractor.Service.of({
+      extract: () => Effect.succeed(null),
+    }),
+  ),
+)
+
 const status = SessionStatus.layer.pipe(Layer.provideMerge(Bus.layer))
 const infra = Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
 function makeHttp() {
@@ -161,6 +200,7 @@ function makeHttp() {
     mcp,
     AppFileSystem.defaultLayer,
     status,
+    memoryStub,
   ).pipe(Layer.provideMerge(infra))
   const question = Question.layer.pipe(Layer.provideMerge(deps))
   const todo = Todo.layer.pipe(Layer.provideMerge(deps))
@@ -171,7 +211,11 @@ function makeHttp() {
   )
   const trunc = Truncate.layer.pipe(Layer.provideMerge(deps))
   const proc = SessionProcessor.layer.pipe(Layer.provideMerge(deps))
-  const compact = SessionCompaction.layer.pipe(Layer.provideMerge(proc), Layer.provideMerge(deps))
+  const compact = SessionCompaction.layer.pipe(
+    Layer.provideMerge(proc),
+    Layer.provideMerge(deps),
+    Layer.provide(memoryStub),
+  )
   return Layer.mergeAll(
     TestLLMServer.layer,
     SessionPrompt.layer.pipe(
@@ -180,6 +224,7 @@ function makeHttp() {
       Layer.provideMerge(registry),
       Layer.provideMerge(trunc),
       Layer.provide(Instruction.defaultLayer),
+      Layer.provideMerge(memoryStub),
       Layer.provideMerge(deps),
     ),
   )

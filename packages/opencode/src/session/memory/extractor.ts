@@ -47,35 +47,39 @@ export namespace MemoryExtractor {
           return null
         }
 
-        const userModel = input.messages.find((m) => m.info.role === "user" && m.info.model)
-        const modelRef = userModel?.info.model
+        const lastUser = input.messages.findLast(
+          (m): m is MessageV2.WithParts & { info: MessageV2.User } => m.info.role === "user",
+        )
+        const modelRef = lastUser?.info.model
         const model = modelRef
           ? yield* provider.getModel(modelRef.providerID, modelRef.modelID)
-          : yield* provider.defaultModel()
+          : yield* Effect.gen(function* () {
+              const def = yield* provider.defaultModel()
+              return yield* provider.getModel(def.providerID, def.modelID)
+            })
 
-        const msgs = yield* MessageV2.toModelMessagesEffect(
-          input.messages.filter((m) => m.info.role !== "system"),
-          model,
-          { stripMedia: true },
-        )
+        const msgs = yield* MessageV2.toModelMessagesEffect(input.messages, model, { stripMedia: true })
 
         const extractionPrompt = `Extract structured memory from the conversation above following the JSON schema defined in your system prompt. Return ONLY valid JSON.`
 
-        const result = yield* Effect.promise(async () => {
-          const response = await LLM.stream({
+        const result = yield* Effect.promise((signal) =>
+          LLM.stream({
             agent,
-            user: input.messages.findLast((m) => m.info.role === "user")!.info,
+            user: lastUser!.info,
             system: [],
             tools: {},
             messages: [...msgs, { role: "user", content: extractionPrompt }],
             model,
             sessionID: input.sessionID,
+            abort: signal,
             retries: 1,
-          })
-          return response.text
-        })
+          }).then((r) => r.text),
+        )
 
-        const cleaned = result.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim()
+        const cleaned = result
+          .replace(/```json\n?/g, "")
+          .replace(/```\n?/g, "")
+          .trim()
         let parsed: ExtractionResult
         try {
           parsed = JSON.parse(cleaned)
@@ -151,21 +155,7 @@ export namespace MemoryExtractor {
     }),
   )
 
-  export const defaultLayer = Layer.unwrap(
-    Effect.sync(() =>
-      layer.pipe(
-        Layer.provide(MemoryStore.defaultLayer),
-        Layer.provide(Agent.defaultLayer),
-        Layer.provide(Provider.defaultLayer),
-      ),
-    ),
-  )
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function extract(input: ExtractInput) {
-    return runPromise((svc) => svc.extract(input))
-  }
+  export const defaultLayer = layer
 }
 
 function formatSummary(r: ExtractionResult): string {

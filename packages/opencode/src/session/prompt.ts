@@ -50,6 +50,8 @@ import { Process } from "@/util/process"
 import { Cause, Effect, Exit, Layer, Option, Scope, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
+import { MemoryRetriever, formatMemory, ProjectTracker } from "./memory"
+import { MemoryStore } from "./memory/store"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -101,6 +103,8 @@ export namespace SessionPrompt {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
       const scope = yield* Scope.Scope
       const instruction = yield* Instruction.Service
+      const retriever = yield* MemoryRetriever.Service
+      const tracker = yield* ProjectTracker.Service
 
       const state = yield* InstanceState.make(
         Effect.fn("SessionPrompt.state")(function* () {
@@ -1505,6 +1509,46 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   Effect.promise(() => MessageV2.toModelMessages(msgs, model)),
                 ])
                 const system = [...env, ...(skills ? [skills] : []), ...instructions]
+
+                if (step === 1) {
+                  const ctx = yield* InstanceState.context
+                  const memResult = yield* retriever
+                    .retrieve({
+                      keywords: [],
+                      projectID: ctx.worktree,
+                      sessionID,
+                    })
+                    .pipe(Effect.catch(() => Effect.succeed({ windows: [], facts: [], artifacts: [] })))
+                  const memorySection = formatMemory(memResult)
+                  if (memorySection) {
+                    system.push(`<system-reminder>\n## Prior Session Context\n\n${memorySection}\n</system-reminder>`)
+                  }
+
+                  const activeProjects = yield* tracker
+                    .getActive(ctx.worktree)
+                    .pipe(Effect.catch(() => Effect.succeed([])))
+                  if (activeProjects.length) {
+                    const projectLines = activeProjects.map(
+                      (p: {
+                        project_name: string
+                        status: string
+                        summary: string | null
+                        latest_progress: string | null
+                        blockers: string | null
+                      }) => {
+                        const parts = [`**${p.project_name}** (${p.status})`]
+                        if (p.summary) parts.push(p.summary)
+                        if (p.latest_progress) parts.push(`Progress: ${p.latest_progress}`)
+                        if (p.blockers) parts.push(`Blockers: ${p.blockers}`)
+                        return `- ${parts.join(" — ")}`
+                      },
+                    )
+                    system.push(
+                      `<system-reminder>\n## Active Projects\n\n${projectLines.join("\n")}\n</system-reminder>`,
+                    )
+                  }
+                }
+
                 const format = lastUser.format ?? { type: "text" as const }
                 if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
                 const result = yield* handle.process({
@@ -1710,28 +1754,35 @@ NOTE: At any point in time through this workflow you should feel free to ask the
   )
 
   const defaultLayer = Layer.unwrap(
-    Effect.sync(() =>
-      layer.pipe(
+    Effect.gen(function* () {
+      const l = layer.pipe(
         Layer.provide(SessionStatus.layer),
         Layer.provide(SessionCompaction.defaultLayer),
         Layer.provide(SessionProcessor.defaultLayer),
+        Layer.provide(MemoryRetriever.defaultLayer),
+        Layer.provide(ProjectTracker.defaultLayer),
+        Layer.provide(MemoryStore.defaultLayer),
         Layer.provide(Command.defaultLayer),
         Layer.provide(Permission.defaultLayer),
         Layer.provide(MCP.defaultLayer),
         Layer.provide(LSP.defaultLayer),
-        Layer.provide(FileTime.defaultLayer),
-        Layer.provide(ToolRegistry.defaultLayer),
-        Layer.provide(Truncate.layer),
-        Layer.provide(Provider.defaultLayer),
-        Layer.provide(Instruction.defaultLayer),
-        Layer.provide(AppFileSystem.defaultLayer),
-        Layer.provide(Plugin.defaultLayer),
-        Layer.provide(Session.defaultLayer),
-        Layer.provide(Agent.defaultLayer),
-        Layer.provide(Bus.layer),
-        Layer.provide(CrossSpawnSpawner.defaultLayer),
-      ),
-    ),
+      )
+      return yield* Effect.sync(() =>
+        l.pipe(
+          Layer.provide(FileTime.defaultLayer),
+          Layer.provide(ToolRegistry.defaultLayer),
+          Layer.provide(Truncate.layer),
+          Layer.provide(Provider.defaultLayer),
+          Layer.provide(Instruction.defaultLayer),
+          Layer.provide(AppFileSystem.defaultLayer),
+          Layer.provide(Plugin.defaultLayer),
+          Layer.provide(Session.defaultLayer),
+          Layer.provide(Agent.defaultLayer),
+          Layer.provide(Bus.layer),
+          Layer.provide(CrossSpawnSpawner.defaultLayer),
+        ),
+      )
+    }),
   )
   const { runPromise } = makeRuntime(Service, defaultLayer)
 

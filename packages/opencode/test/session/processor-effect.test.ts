@@ -18,6 +18,9 @@ import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { Snapshot } from "../../src/snapshot"
 import { Log } from "../../src/util/log"
+import { MemoryRetriever } from "../../src/session/memory/retriever"
+import { ProjectTracker } from "../../src/session/memory/project-tracker"
+import { MemoryStore } from "../../src/session/memory/store"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -145,6 +148,36 @@ const assistant = Effect.fn("TestSession.assistant")(function* (
 
 const status = SessionStatus.layer.pipe(Layer.provideMerge(Bus.layer))
 const infra = Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
+
+const memoryStubs = Layer.mergeAll(
+  Layer.succeed(
+    MemoryRetriever.Service,
+    MemoryRetriever.Service.of({
+      retrieve: () => Effect.succeed({ windows: [], facts: [], artifacts: [] }),
+    }),
+  ),
+  Layer.succeed(
+    ProjectTracker.Service,
+    ProjectTracker.Service.of({
+      track: () => Effect.void,
+      getActive: () => Effect.succeed([]),
+    }),
+  ),
+  Layer.succeed(
+    MemoryStore.Service,
+    MemoryStore.Service.of({
+      writeWindow: () => Effect.void,
+      writeFacts: () => Effect.void,
+      writeArtifacts: () => Effect.void,
+      searchWindows: () => Effect.succeed([]),
+      searchFacts: () => Effect.succeed([]),
+      searchArtifacts: () => Effect.succeed([]),
+      getRecentWindows: () => Effect.succeed([]),
+      getDurableFacts: () => Effect.succeed([]),
+    }),
+  ),
+)
+
 const deps = Layer.mergeAll(
   Session.defaultLayer,
   Snapshot.defaultLayer,
@@ -155,6 +188,7 @@ const deps = Layer.mergeAll(
   LLM.defaultLayer,
   Provider.defaultLayer,
   status,
+  memoryStubs,
 ).pipe(Layer.provideMerge(infra))
 const env = Layer.mergeAll(TestLLMServer.layer, SessionProcessor.layer.pipe(Layer.provideMerge(deps)))
 

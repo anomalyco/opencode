@@ -15,10 +15,16 @@ import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 import { NotFoundError } from "@/storage/db"
 import { ModelID, ProviderID } from "@/provider/schema"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Effect, Exit, Layer, ServiceMap } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 import { InstanceState } from "@/effect/instance-state"
 import { isOverflow as overflow } from "./overflow"
+import { LLM } from "./llm"
+import { MemoryExtractor } from "./memory/extractor"
+import { MemoryRetriever } from "./memory/retriever"
+import { formatMemory } from "./memory"
+import { ProjectTracker } from "./memory/project-tracker"
+import { MemoryStore } from "./memory/store"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -70,6 +76,9 @@ export namespace SessionCompaction {
     | Plugin.Service
     | SessionProcessor.Service
     | Provider.Service
+    | MemoryExtractor.Service
+    | MemoryRetriever.Service
+    | ProjectTracker.Service
   > = Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -80,6 +89,9 @@ export namespace SessionCompaction {
       const plugin = yield* Plugin.Service
       const processors = yield* SessionProcessor.Service
       const provider = yield* Provider.Service
+      const extractor = yield* MemoryExtractor.Service
+      const retriever = yield* MemoryRetriever.Service
+      const tracker = yield* ProjectTracker.Service
 
       const isOverflow = Effect.fn("SessionCompaction.isOverflow")(function* (input: {
         tokens: MessageV2.Assistant["tokens"]
@@ -216,12 +228,173 @@ When constructing the summary, try to stick to this template:
 [Construct a structured list of relevant files that have been read, edited, or created that pertain to the task at hand. If all the files in a directory are relevant, include the path to the directory.]
 ---`
 
-        const prompt = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
-        const msgs = structuredClone(messages)
-        yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
-        const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, { stripMedia: true })
         const ctx = yield* InstanceState.context
-        const msg: MessageV2.Assistant = {
+        const projectID = ctx.worktree
+
+        const extractionExit = yield* extractor
+          .extract({
+            messages,
+            sessionID: input.sessionID,
+            projectID,
+          })
+          .pipe(Effect.exit)
+
+        let summaryText: string | null = null
+        if (Exit.isSuccess(extractionExit) && extractionExit.value) {
+          const extracted = extractionExit.value
+          summaryText = extracted.summary
+          log.info("structured extraction succeeded", { sessionID: input.sessionID })
+          yield* tracker
+            .track({
+              extraction: extracted.result,
+              windowID: "",
+              projectID,
+            })
+            .pipe(Effect.ignore)
+        } else {
+          log.info("structured extraction failed, falling back to compaction agent", { sessionID: input.sessionID })
+        }
+
+        if (!summaryText) {
+          const msg: MessageV2.Assistant = {
+            id: MessageID.ascending(),
+            role: "assistant",
+            parentID: input.parentID,
+            sessionID: input.sessionID,
+            mode: "compaction",
+            agent: "compaction",
+            variant: userMessage.variant,
+            summary: true,
+            path: {
+              cwd: ctx.directory,
+              root: ctx.worktree,
+            },
+            cost: 0,
+            tokens: {
+              output: 0,
+              input: 0,
+              reasoning: 0,
+              cache: { read: 0, write: 0 },
+            },
+            modelID: model.id,
+            providerID: model.providerID,
+            time: {
+              created: Date.now(),
+            },
+          }
+          yield* session.updateMessage(msg)
+          const processor = yield* processors.create({
+            assistantMessage: msg,
+            sessionID: input.sessionID,
+            model,
+          })
+          const modelMsgs = yield* MessageV2.toModelMessagesEffect(messages, model)
+          const result = yield* processor
+            .process({
+              user: userMessage,
+              agent,
+              sessionID: input.sessionID,
+              tools: {},
+              system: [],
+              messages: [
+                ...modelMsgs,
+                {
+                  role: "user",
+                  content: [{ type: "text", text: compacting.prompt ?? defaultPrompt }],
+                },
+              ],
+              model,
+            })
+            .pipe(Effect.onInterrupt(() => processor.abort()))
+
+          if (result === "compact") {
+            processor.message.error = new MessageV2.ContextOverflowError({
+              message: replay
+                ? "Conversation history too large to compact - exceeds model context limit"
+                : "Session too large to compact - context exceeds model limit even after stripping media",
+            }).toObject()
+            processor.message.finish = "error"
+            yield* session.updateMessage(processor.message)
+            return "stop"
+          }
+
+          if (processor.message.error) return "stop"
+          if (result === "continue") yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
+
+          if (input.auto && result === "continue") {
+            if (replay) {
+              const original = replay.info
+              const replayMsg = yield* session.updateMessage({
+                id: MessageID.ascending(),
+                role: "user",
+                sessionID: input.sessionID,
+                time: { created: Date.now() },
+                agent: original.agent,
+                model: original.model,
+                format: original.format,
+                tools: original.tools,
+                system: original.system,
+                variant: original.variant,
+              })
+              for (const part of replay.parts) {
+                if (part.type === "compaction") continue
+                const replayPart =
+                  part.type === "file" && MessageV2.isMedia(part.mime)
+                    ? { type: "text" as const, text: `[Attached ${part.mime}: ${part.filename ?? "file"}]` }
+                    : part
+                yield* session.updatePart({
+                  ...replayPart,
+                  id: PartID.ascending(),
+                  messageID: replayMsg.id,
+                  sessionID: input.sessionID,
+                })
+              }
+            } else {
+              const memoryCtx = yield* retriever
+                .retrieve({
+                  keywords: [],
+                  projectID,
+                  sessionID: input.sessionID,
+                })
+                .pipe(Effect.exit)
+              let memorySection = ""
+              if (Exit.isSuccess(memoryCtx)) {
+                memorySection = formatMemory(memoryCtx.value)
+              }
+
+              const continueMsg = yield* session.updateMessage({
+                id: MessageID.ascending(),
+                role: "user",
+                sessionID: input.sessionID,
+                time: { created: Date.now() },
+                agent: userMessage.agent,
+                model: userMessage.model,
+              })
+              const text =
+                (input.overflow
+                  ? "The previous request exceeded the provider's size limit due to large media attachments. The conversation was compacted and media files were removed from context. If the user was asking about attached images or files, explain that the attachments were too large to process and suggest they try again with smaller or fewer files.\n\n"
+                  : "") +
+                "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed." +
+                (memorySection ? "\n\n" + memorySection : "")
+              yield* session.updatePart({
+                id: PartID.ascending(),
+                messageID: continueMsg.id,
+                sessionID: input.sessionID,
+                type: "text",
+                synthetic: true,
+                text,
+                time: {
+                  start: Date.now(),
+                  end: Date.now(),
+                },
+              })
+            }
+          }
+
+          return result
+        }
+
+        const summaryMsg: MessageV2.Assistant = {
           id: MessageID.ascending(),
           role: "assistant",
           parentID: input.parentID,
@@ -247,42 +420,17 @@ When constructing the summary, try to stick to this template:
             created: Date.now(),
           },
         }
-        yield* session.updateMessage(msg)
-        const processor = yield* processors.create({
-          assistantMessage: msg,
+        yield* session.updateMessage(summaryMsg)
+        yield* session.updatePart({
+          id: PartID.ascending(),
+          messageID: summaryMsg.id,
           sessionID: input.sessionID,
-          model,
+          type: "text",
+          text: summaryText,
+          time: { start: Date.now(), end: Date.now() },
         })
-        const result = yield* processor
-          .process({
-            user: userMessage,
-            agent,
-            sessionID: input.sessionID,
-            tools: {},
-            system: [],
-            messages: [
-              ...modelMessages,
-              {
-                role: "user",
-                content: [{ type: "text", text: prompt }],
-              },
-            ],
-            model,
-          })
-          .pipe(Effect.onInterrupt(() => processor.abort()))
 
-        if (result === "compact") {
-          processor.message.error = new MessageV2.ContextOverflowError({
-            message: replay
-              ? "Conversation history too large to compact - exceeds model context limit"
-              : "Session too large to compact - context exceeds model limit even after stripping media",
-          }).toObject()
-          processor.message.finish = "error"
-          yield* session.updateMessage(processor.message)
-          return "stop"
-        }
-
-        if (result === "continue" && input.auto) {
+        if (input.auto) {
           if (replay) {
             const original = replay.info
             const replayMsg = yield* session.updateMessage({
@@ -313,6 +461,18 @@ When constructing the summary, try to stick to this template:
           }
 
           if (!replay) {
+            const memoryCtx = yield* retriever
+              .retrieve({
+                keywords: [],
+                projectID,
+                sessionID: input.sessionID,
+              })
+              .pipe(Effect.exit)
+            let memorySection = ""
+            if (Exit.isSuccess(memoryCtx)) {
+              memorySection = formatMemory(memoryCtx.value)
+            }
+
             const continueMsg = yield* session.updateMessage({
               id: MessageID.ascending(),
               role: "user",
@@ -325,7 +485,8 @@ When constructing the summary, try to stick to this template:
               (input.overflow
                 ? "The previous request exceeded the provider's size limit due to large media attachments. The conversation was compacted and media files were removed from context. If the user was asking about attached images or files, explain that the attachments were too large to process and suggest they try again with smaller or fewer files.\n\n"
                 : "") +
-              "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed."
+              "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed." +
+              (memorySection ? "\n\n" + memorySection : "")
             yield* session.updatePart({
               id: PartID.ascending(),
               messageID: continueMsg.id,
@@ -341,9 +502,8 @@ When constructing the summary, try to stick to this template:
           }
         }
 
-        if (processor.message.error) return "stop"
-        if (result === "continue") yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
-        return result
+        yield* bus.publish(Event.Compacted, { sessionID: input.sessionID })
+        return "continue"
       })
 
       const create = Effect.fn("SessionCompaction.create")(function* (input: {
@@ -383,6 +543,11 @@ When constructing the summary, try to stick to this template:
   export const defaultLayer = Layer.unwrap(
     Effect.sync(() =>
       layer.pipe(
+        Layer.provide(MemoryExtractor.defaultLayer),
+        Layer.provide(MemoryRetriever.defaultLayer),
+        Layer.provide(ProjectTracker.defaultLayer),
+        Layer.provide(MemoryStore.defaultLayer),
+        Layer.provide(LLM.defaultLayer),
         Layer.provide(Provider.defaultLayer),
         Layer.provide(Session.defaultLayer),
         Layer.provide(SessionProcessor.defaultLayer),

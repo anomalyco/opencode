@@ -3,7 +3,6 @@ import { Database, eq, and, desc } from "../../storage/db"
 import { MemoryProjectTable } from "../session.sql"
 import { Log } from "@/util/log"
 import type { ExtractionResult, MemoryProject } from "./types"
-import { makeRuntime } from "@/effect/run-service"
 
 export namespace ProjectTracker {
   const log = Log.create({ service: "memory.project-tracker" })
@@ -41,12 +40,7 @@ export namespace ProjectTracker {
           d
             .select()
             .from(MemoryProjectTable)
-            .where(
-              and(
-                eq(MemoryProjectTable.project_id, input.projectID),
-                eq(MemoryProjectTable.project_key, key),
-              ),
-            )
+            .where(and(eq(MemoryProjectTable.project_id, input.projectID), eq(MemoryProjectTable.project_key, key)))
             .all(),
         )
 
@@ -107,12 +101,7 @@ export namespace ProjectTracker {
           d
             .select()
             .from(MemoryProjectTable)
-            .where(
-              and(
-                eq(MemoryProjectTable.project_id, projectID),
-                eq(MemoryProjectTable.status, "in_progress"),
-              ),
-            )
+            .where(and(eq(MemoryProjectTable.project_id, projectID), eq(MemoryProjectTable.status, "in_progress")))
             .orderBy(desc(MemoryProjectTable.time_updated))
             .all(),
         )
@@ -123,18 +112,4 @@ export namespace ProjectTracker {
   )
 
   export const defaultLayer = layer
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function track(input: {
-    extraction: ExtractionResult
-    windowID: string
-    projectID: string
-  }) {
-    return runPromise((svc) => svc.track(input))
-  }
-
-  export async function getActive(projectID: string) {
-    return runPromise((svc) => svc.getActive(projectID))
-  }
 }

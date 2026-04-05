@@ -1,6 +1,6 @@
 export { MemoryExtractor } from "./extractor"
 export { MemoryRetriever } from "./retriever"
-export { MemoryInjector } from "./injector"
+export { format as formatMemory, formatSummary as formatMemorySummary } from "./injector"
 export { ProjectTracker } from "./project-tracker"
 export { MemoryStore } from "./store"
 export type { MemoryResult } from "./retriever"

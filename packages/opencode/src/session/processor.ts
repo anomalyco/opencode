@@ -1,4 +1,4 @@
-import { Cause, Effect, Layer, ServiceMap } from "effect"
+import { Cause, Effect, Exit, Layer, ServiceMap } from "effect"
 import * as Stream from "effect/Stream"
 import { Agent } from "@/agent/agent"
 import { Bus } from "@/bus"
@@ -18,6 +18,9 @@ import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
 import type { Provider } from "@/provider/provider"
 import { Question } from "@/question"
+import { MemoryRetriever, formatMemory, ProjectTracker } from "./memory"
+import { MemoryStore } from "./memory/store"
+import { InstanceState } from "@/effect/instance-state"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -52,6 +55,7 @@ export namespace SessionProcessor {
     needsCompaction: boolean
     currentText: MessageV2.TextPart | undefined
     reasoningMap: Record<string, MessageV2.ReasoningPart>
+    projectID: string
   }
 
   type StreamEvent = Event
@@ -70,6 +74,8 @@ export namespace SessionProcessor {
     | Permission.Service
     | Plugin.Service
     | SessionStatus.Service
+    | MemoryRetriever.Service
+    | ProjectTracker.Service
   > = Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -82,6 +88,8 @@ export namespace SessionProcessor {
       const permission = yield* Permission.Service
       const plugin = yield* Plugin.Service
       const status = yield* SessionStatus.Service
+      const retriever = yield* MemoryRetriever.Service
+      const tracker = yield* ProjectTracker.Service
 
       const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
         // Pre-capture snapshot before the LLM stream starts. The AI SDK
@@ -99,6 +107,7 @@ export namespace SessionProcessor {
           needsCompaction: false,
           currentText: undefined,
           reasoningMap: {},
+          projectID: (yield* InstanceState.context).worktree,
         }
         let aborted = false
 
@@ -201,11 +210,36 @@ export namespace SessionProcessor {
               }
 
               const agent = yield* agents.get(ctx.assistantMessage.agent)
+
+              const keywords = Object.values(ctx.toolcalls)
+                .filter((p) => p.state.status !== "pending")
+                .flatMap((p) => {
+                  const inp = p.state.status === "running" ? p.state.input : {}
+                  return Object.values(inp).flatMap((v) =>
+                    typeof v === "string" ? v.split(/[\s/_.-]+/).filter(Boolean) : [],
+                  )
+                })
+                .slice(-10)
+
+              const memResult = yield* retriever
+                .retrieve({
+                  keywords,
+                  projectID: ctx.projectID,
+                  sessionID: ctx.sessionID,
+                })
+                .pipe(Effect.catch(() => Effect.succeed({ windows: [], facts: [], artifacts: [] })))
+
+              const memSection = formatMemory(memResult)
+
               yield* permission.ask({
                 permission: "doom_loop",
                 patterns: [value.toolName],
                 sessionID: ctx.assistantMessage.sessionID,
-                metadata: { tool: value.toolName, input: value.input },
+                metadata: {
+                  tool: value.toolName,
+                  input: value.input,
+                  memoryContext: memSection || undefined,
+                },
                 always: [value.toolName],
                 ruleset: agent.permission,
               })
@@ -517,6 +551,9 @@ export namespace SessionProcessor {
         Layer.provide(SessionStatus.layer.pipe(Layer.provide(Bus.layer))),
         Layer.provide(Bus.layer),
         Layer.provide(Config.defaultLayer),
+        Layer.provide(MemoryRetriever.defaultLayer),
+        Layer.provide(ProjectTracker.defaultLayer),
+        Layer.provide(MemoryStore.defaultLayer),
       ),
     ),
   )

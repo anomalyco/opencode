@@ -3,7 +3,6 @@ import { MemoryStore } from "./store"
 import { Log } from "@/util/log"
 import type { MemoryFact, MemoryWindow, MemoryArtifact } from "./types"
 import type { SessionID } from "../schema"
-import { makeRuntime } from "@/effect/run-service"
 
 export interface MemoryResult {
   windows: MemoryWindow[]
@@ -81,10 +80,4 @@ export namespace MemoryRetriever {
   )
 
   export const defaultLayer = layer
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function retrieve(input: RetrieveInput) {
-    return runPromise((svc) => svc.retrieve(input))
-  }
 }

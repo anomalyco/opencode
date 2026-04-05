@@ -23,6 +23,10 @@ import type { Provider } from "../../src/provider/provider"
 import * as SessionProcessorModule from "../../src/session/processor"
 import { Snapshot } from "../../src/snapshot"
 import { ProviderTest } from "../fake/provider"
+import { MemoryExtractor } from "../../src/session/memory/extractor"
+import { MemoryRetriever } from "../../src/session/memory/retriever"
+import { ProjectTracker } from "../../src/session/memory/project-tracker"
+import { MemoryStore } from "../../src/session/memory/store"
 
 Log.init({ print: false })
 
@@ -166,8 +170,37 @@ function layer(result: "continue" | "compact") {
 
 function runtime(result: "continue" | "compact", plugin = Plugin.defaultLayer, provider = ProviderTest.fake()) {
   const bus = Bus.layer
+  const stubExtractor = Layer.succeed(
+    MemoryExtractor.Service,
+    MemoryExtractor.Service.of({ extract: () => Effect.succeed(null) }),
+  )
+  const stubRetriever = Layer.succeed(
+    MemoryRetriever.Service,
+    MemoryRetriever.Service.of({ retrieve: () => Effect.succeed({ windows: [], facts: [], artifacts: [] }) }),
+  )
+  const stubTracker = Layer.succeed(
+    ProjectTracker.Service,
+    ProjectTracker.Service.of({ track: () => Effect.void, getActive: () => Effect.succeed([]) }),
+  )
+  const stubStore = Layer.succeed(
+    MemoryStore.Service,
+    MemoryStore.Service.of({
+      writeWindow: () => Effect.void,
+      writeFacts: () => Effect.void,
+      writeArtifacts: () => Effect.void,
+      getRecentWindows: () => Effect.succeed([]),
+      searchWindows: () => Effect.succeed([]),
+      searchFacts: () => Effect.succeed([]),
+      searchArtifacts: () => Effect.succeed([]),
+      getDurableFacts: () => Effect.succeed([]),
+    }),
+  )
   return ManagedRuntime.make(
     Layer.mergeAll(SessionCompaction.layer, bus).pipe(
+      Layer.provide(stubExtractor),
+      Layer.provide(stubRetriever),
+      Layer.provide(stubTracker),
+      Layer.provide(stubStore),
       Layer.provide(provider.layer),
       Layer.provide(Session.defaultLayer),
       Layer.provide(layer(result)),
@@ -201,16 +234,45 @@ function llm() {
   }
 }
 
-function liveRuntime(layer: Layer.Layer<LLM.Service>, provider = ProviderTest.fake()) {
+function liveRuntime(llmLayer: Layer.Layer<LLM.Service>, provider = ProviderTest.fake()) {
   const bus = Bus.layer
   const status = SessionStatus.layer.pipe(Layer.provide(bus))
   const processor = SessionProcessorModule.SessionProcessor.layer
+  const stubExtractor = Layer.succeed(
+    MemoryExtractor.Service,
+    MemoryExtractor.Service.of({ extract: () => Effect.succeed(null) }),
+  )
+  const stubRetriever = Layer.succeed(
+    MemoryRetriever.Service,
+    MemoryRetriever.Service.of({ retrieve: () => Effect.succeed({ windows: [], facts: [], artifacts: [] }) }),
+  )
+  const stubTracker = Layer.succeed(
+    ProjectTracker.Service,
+    ProjectTracker.Service.of({ track: () => Effect.void, getActive: () => Effect.succeed([]) }),
+  )
+  const stubStore = Layer.succeed(
+    MemoryStore.Service,
+    MemoryStore.Service.of({
+      writeWindow: () => Effect.void,
+      writeFacts: () => Effect.void,
+      writeArtifacts: () => Effect.void,
+      getRecentWindows: () => Effect.succeed([]),
+      searchWindows: () => Effect.succeed([]),
+      searchFacts: () => Effect.succeed([]),
+      searchArtifacts: () => Effect.succeed([]),
+      getDurableFacts: () => Effect.succeed([]),
+    }),
+  )
   return ManagedRuntime.make(
     Layer.mergeAll(SessionCompaction.layer.pipe(Layer.provide(processor)), processor, bus, status).pipe(
+      Layer.provide(stubExtractor),
+      Layer.provide(stubRetriever),
+      Layer.provide(stubTracker),
+      Layer.provide(stubStore),
       Layer.provide(provider.layer),
       Layer.provide(Session.defaultLayer),
       Layer.provide(Snapshot.defaultLayer),
-      Layer.provide(layer),
+      Layer.provide(llmLayer),
       Layer.provide(Permission.defaultLayer),
       Layer.provide(Agent.defaultLayer),
       Layer.provide(Plugin.defaultLayer),

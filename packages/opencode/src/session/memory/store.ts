@@ -1,9 +1,8 @@
 import { Effect, Layer, ServiceMap } from "effect"
-import { Database, eq, and, desc } from "../../storage/db"
+import { Database, eq, and, desc, sql } from "../../storage/db"
 import { MemoryFactTable, MemoryWindowTable, MemoryArtifactTable } from "../session.sql"
 import { Log } from "@/util/log"
 import type { MemoryFact, MemoryWindow, MemoryArtifact } from "./types"
-import { makeRuntime } from "@/effect/run-service"
 
 export namespace MemoryStore {
   const log = Log.create({ service: "memory.store" })
@@ -34,16 +33,8 @@ export namespace MemoryStore {
       ) {
         Database.transaction((tx) => {
           tx.insert(MemoryWindowTable).values(window).run()
-          tx.$client.run(
-            `INSERT INTO memory_window_fts(id, goal, instructions, discoveries, accomplished, in_progress) VALUES (?, ?, ?, ?, ?, ?)`,
-            [
-              window.id,
-              window.goal,
-              window.instructions ?? "",
-              window.discoveries ?? "",
-              window.accomplished ?? "",
-              window.in_progress ?? "",
-            ],
+          tx.run(
+            sql`INSERT INTO memory_window_fts(id, goal, instructions, discoveries, accomplished, in_progress) VALUES (${window.id}, ${window.goal}, ${window.instructions ?? ""}, ${window.discoveries ?? ""}, ${window.accomplished ?? ""}, ${window.in_progress ?? ""})`,
           )
         })
         log.info("wrote window", { id: window.id })
@@ -56,11 +47,9 @@ export namespace MemoryStore {
         Database.transaction((tx) => {
           for (const fact of facts) {
             tx.insert(MemoryFactTable).values(fact).run()
-            tx.run(`INSERT INTO memory_fact_fts(id, subject, value) VALUES (?, ?, ?)`, [
-              fact.id,
-              fact.subject,
-              fact.value,
-            ])
+            tx.run(
+              sql`INSERT INTO memory_fact_fts(id, subject, value) VALUES (${fact.id}, ${fact.subject}, ${fact.value})`,
+            )
           }
         })
         log.info("wrote facts", { count: facts.length })
@@ -73,11 +62,9 @@ export namespace MemoryStore {
         Database.transaction((tx) => {
           for (const artifact of artifacts) {
             tx.insert(MemoryArtifactTable).values(artifact).run()
-            tx.run(`INSERT INTO memory_artifact_fts(id, content, file_path) VALUES (?, ?, ?)`, [
-              artifact.id,
-              artifact.content,
-              artifact.file_path ?? "",
-            ])
+            tx.run(
+              sql`INSERT INTO memory_artifact_fts(id, content, file_path) VALUES (${artifact.id}, ${artifact.content}, ${artifact.file_path ?? ""})`,
+            )
           }
         })
         log.info("wrote artifacts", { count: artifacts.length })
@@ -105,11 +92,10 @@ export namespace MemoryStore {
         return Database.use((d) => {
           const escaped = query.replace(/"/g, '""')
           return d.all<MemoryWindow>(
-            `SELECT mw.* FROM memory_window mw
+            sql`SELECT mw.* FROM memory_window mw
              JOIN memory_window_fts fts ON mw.id = fts.id
-             WHERE memory_window_fts MATCH ? AND mw.project_id = ?
-             ORDER BY mw.ended_at DESC LIMIT ?`,
-            [`"${escaped}"`, opts.projectID, opts.limit],
+             WHERE memory_window_fts MATCH ${`"${escaped}"`} AND mw.project_id = ${opts.projectID}
+             ORDER BY mw.ended_at DESC LIMIT ${opts.limit}`,
           )
         })
       })
@@ -121,11 +107,10 @@ export namespace MemoryStore {
         return Database.use((d) => {
           const escaped = query.replace(/"/g, '""')
           return d.all<MemoryFact>(
-            `SELECT mf.* FROM memory_fact mf
+            sql`SELECT mf.* FROM memory_fact mf
              JOIN memory_fact_fts fts ON mf.id = fts.id
-             WHERE memory_fact_fts MATCH ? AND mf.project_id = ?
-             ORDER BY mf.confidence DESC LIMIT ?`,
-            [`"${escaped}"`, opts.projectID, opts.limit],
+             WHERE memory_fact_fts MATCH ${`"${escaped}"`} AND mf.project_id = ${opts.projectID}
+             ORDER BY mf.confidence DESC LIMIT ${opts.limit}`,
           )
         })
       })
@@ -137,11 +122,10 @@ export namespace MemoryStore {
         return Database.use((d) => {
           const escaped = query.replace(/"/g, '""')
           return d.all<MemoryArtifact>(
-            `SELECT ma.* FROM memory_artifact ma
+            sql`SELECT ma.* FROM memory_artifact ma
              JOIN memory_artifact_fts fts ON ma.id = fts.id
-             WHERE memory_artifact_fts MATCH ? AND ma.project_id = ?
-             ORDER BY ma.time_created DESC LIMIT ?`,
-            [`"${escaped}"`, opts.projectID, opts.limit],
+             WHERE memory_artifact_fts MATCH ${`"${escaped}"`} AND ma.project_id = ${opts.projectID}
+             ORDER BY ma.time_created DESC LIMIT ${opts.limit}`,
           )
         })
       })
@@ -170,18 +154,4 @@ export namespace MemoryStore {
   )
 
   export const defaultLayer = layer
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function writeWindow(window: Omit<MemoryWindow, "time_created" | "time_updated">) {
-    return runPromise((svc) => svc.writeWindow(window))
-  }
-
-  export async function writeFacts(facts: Array<Omit<MemoryFact, "time_created" | "time_updated">>) {
-    return runPromise((svc) => svc.writeFacts(facts))
-  }
-
-  export async function writeArtifacts(artifacts: Array<Omit<MemoryArtifact, "time_created" | "time_updated">>) {
-    return runPromise((svc) => svc.writeArtifacts(artifacts))
-  }
 }
