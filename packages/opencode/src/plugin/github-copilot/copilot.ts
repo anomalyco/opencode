@@ -39,6 +39,9 @@ function fix(model: Model): Model {
 
 export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
   const sdk = input.client
+  const synth = (part: unknown) =>
+    typeof part === "object" && part !== null && "synthetic" in part && part.synthetic === true
+
   return {
     provider: {
       id: "github-copilot",
@@ -330,6 +333,15 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
         .catch(() => undefined)
 
       if (parts?.data.parts?.some((part) => part.type === "compaction")) {
+        output.headers["x-initiator"] = "agent"
+        return
+      }
+
+      if (
+        parts?.data.parts?.length &&
+        parts.data.parts.some((part) => part.type === "text") &&
+        parts.data.parts.every(synth)
+      ) {
         output.headers["x-initiator"] = "agent"
         return
       }
