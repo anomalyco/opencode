@@ -13,25 +13,7 @@ import { decode64 } from "@/utils/base64"
 import { EventSessionError } from "@opencode-ai/sdk/v2"
 import { Persist, persisted } from "@/utils/persist"
 import { playSoundById } from "@/utils/sound"
-
-type NotificationBase = {
-  directory?: string
-  session?: string
-  metadata?: unknown
-  time: number
-  viewed: boolean
-}
-
-type TurnCompleteNotification = NotificationBase & {
-  type: "turn-complete"
-}
-
-type ErrorNotification = NotificationBase & {
-  type: "error"
-  error: EventSessionError["properties"]["error"]
-}
-
-export type Notification = TurnCompleteNotification | ErrorNotification
+import { markCurrentNotifications, type Notification } from "./notification-state"
 
 type NotificationIndex = {
   session: {
@@ -297,9 +279,46 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       }
       handleSessionError(directory, event, time)
     })
+
+    const markCurrent = () => {
+      const directory = currentDirectory()
+      const session = currentSession()
+      if (!directory) return
+      if (!session) return
+      const unseen = index.session.unseen[session] ?? empty
+      if (unseen.length === 0) return
+      if (!unseen.some((item) => item.directory === directory)) return
+
+      const nextList = markCurrentNotifications(store.list, session, directory)
+      if (nextList === store.list) return
+      batch(() => {
+        setStore("list", nextList)
+        const nextSession = unseen.filter((item) => item.directory !== directory)
+        updateUnseen("session", session, nextSession)
+        const nextProject = (index.project.unseen[directory] ?? empty).filter((item) => item.session !== session)
+        updateUnseen("project", directory, nextProject)
+      })
+    }
+
+    createEffect(() => {
+      if (!ready()) return
+      currentDirectory()
+      currentSession()
+      markCurrent()
+    })
+
+    const syncCurrent = () => {
+      if (document.visibilityState === "hidden") return
+      markCurrent()
+    }
+
+    window.addEventListener("focus", syncCurrent)
+    document.addEventListener("visibilitychange", syncCurrent)
     onCleanup(() => {
       meta.disposed = true
       unsub()
+      window.removeEventListener("focus", syncCurrent)
+      document.removeEventListener("visibilitychange", syncCurrent)
     })
 
     return {
