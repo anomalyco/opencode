@@ -810,10 +810,9 @@ export namespace Session {
           .get(),
       )
       if (msg) {
-        const d = msg.data as any
-        const m = d?.model
+        const m = (msg.data as Record<string, unknown>)?.model as Record<string, unknown> | undefined
         if (m?.providerID && m?.modelID) {
-          modelBySession.set(sid, { providerID: m.providerID, modelID: m.modelID })
+          modelBySession.set(sid, { providerID: m.providerID as ProviderID, modelID: m.modelID as ModelID })
         }
       }
     }
@@ -884,10 +883,9 @@ export namespace Session {
           .get(),
       )
       if (msg) {
-        const d = msg.data as any
-        const m = d?.model
+        const m = (msg.data as Record<string, unknown>)?.model as Record<string, unknown> | undefined
         if (m?.providerID && m?.modelID) {
-          modelBySession.set(sid, { providerID: m.providerID, modelID: m.modelID })
+          modelBySession.set(sid, { providerID: m.providerID as ProviderID, modelID: m.modelID as ModelID })
         }
       }
     }
