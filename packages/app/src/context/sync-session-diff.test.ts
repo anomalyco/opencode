@@ -1,44 +1,11 @@
-import { beforeAll, describe, expect, mock, test } from "bun:test"
+import { describe, expect, mock, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { FileDiff } from "@opencode-ai/sdk/v2/client"
 import type { State } from "./global-sync/types"
+import { createSyncContextValue } from "./sync"
 
-type SyncValue = {
-  session: {
-    diff: (sessionID: string, opts?: { force?: boolean }) => Promise<void> | undefined
-  }
-}
-
-let initSyncForTest: () => SyncValue
-let currentGlobalSync: unknown
-let currentSDK: unknown
-
-beforeAll(async () => {
-  let capturedInit: (() => SyncValue) | undefined
-
-  mock.module("@opencode-ai/ui/context", () => ({
-    createSimpleContext: (input: { init: () => SyncValue }) => {
-      capturedInit = input.init
-      return {
-        use: () => undefined,
-        provider: () => undefined,
-      }
-    },
-  }))
-
-  mock.module("./global-sync", () => ({
-    useGlobalSync: () => currentGlobalSync,
-  }))
-
-  mock.module("./sdk", () => ({
-    useSDK: () => currentSDK,
-  }))
-
-  await import("./sync")
-  if (!capturedInit) throw new Error("Failed to capture sync context init")
-  initSyncForTest = capturedInit
-})
+type SyncDeps = Parameters<typeof createSyncContextValue>[0]
 
 function baseState(): State {
   return {
@@ -84,7 +51,7 @@ describe("sync session diff recovery", () => {
       return count === 1 ? ({ data: {} } as const) : ({ data: valid } as const)
     })
 
-    currentGlobalSync = {
+    const globalSync = {
       child: () => [store, setStore],
       data: {
         project: [],
@@ -95,7 +62,7 @@ describe("sync session diff recovery", () => {
       },
     }
 
-    currentSDK = {
+    const sdk = {
       directory: "/tmp/project",
       client: {
         session: {
@@ -106,7 +73,10 @@ describe("sync session diff recovery", () => {
 
     await new Promise<void>((resolve, reject) => {
       createRoot((dispose) => {
-        const sync = initSyncForTest()
+        const sync = createSyncContextValue({
+          globalSync: globalSync as unknown as SyncDeps["globalSync"],
+          sdk: sdk as unknown as SyncDeps["sdk"],
+        })
         void (async () => {
           try {
             await sync.session.diff(sessionID)

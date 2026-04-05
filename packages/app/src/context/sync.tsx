@@ -166,109 +166,109 @@ function setOptimisticRemove(setStore: (...args: unknown[]) => void, input: Opti
   })
 }
 
-export const { use: useSync, provider: SyncProvider } = createSimpleContext({
-  name: "Sync",
-  init: () => {
-    const globalSync = useGlobalSync()
-    const sdk = useSDK()
+export function createSyncContextValue(input: {
+  globalSync: ReturnType<typeof useGlobalSync>
+  sdk: ReturnType<typeof useSDK>
+}) {
+  const { globalSync, sdk } = input
 
-    type Child = ReturnType<(typeof globalSync)["child"]>
-    type Setter = Child[1]
+  type Child = ReturnType<(typeof globalSync)["child"]>
+  type Setter = Child[1]
 
-    const current = createMemo(() => globalSync.child(sdk.directory))
-    const target = (directory?: string) => {
-      if (!directory || directory === sdk.directory) return current()
-      return globalSync.child(directory)
+  const current = createMemo(() => globalSync.child(sdk.directory))
+  const target = (directory?: string) => {
+    if (!directory || directory === sdk.directory) return current()
+    return globalSync.child(directory)
+  }
+  const absolute = (path: string) => (current()[0].path.directory + "/" + path).replace("//", "/")
+  const initialMessagePageSize = 80
+  const historyMessagePageSize = 200
+  const inflight = new Map<string, Promise<void>>()
+  const inflightDiff = new Map<string, Promise<void>>()
+  const inflightTodo = new Map<string, Promise<void>>()
+  const optimistic = new Map<string, Map<string, OptimisticItem>>()
+  const maxDirs = 30
+  const seen = new Map<string, Set<string>>()
+  const [meta, setMeta] = createStore({
+    limit: {} as Record<string, number>,
+    cursor: {} as Record<string, string | undefined>,
+    complete: {} as Record<string, boolean>,
+    loading: {} as Record<string, boolean>,
+  })
+
+  const getSession = (sessionID: string) => {
+    const store = current()[0]
+    const match = Binary.search(store.session, sessionID, (s) => s.id)
+    if (match.found) return store.session[match.index]
+    return undefined
+  }
+
+  const setOptimistic = (directory: string, sessionID: string, item: OptimisticItem) => {
+    const key = keyFor(directory, sessionID)
+    const list = optimistic.get(key)
+    if (list) {
+      list.set(item.message.id, { message: item.message, parts: sortParts(item.parts) })
+      return
     }
-    const absolute = (path: string) => (current()[0].path.directory + "/" + path).replace("//", "/")
-    const initialMessagePageSize = 80
-    const historyMessagePageSize = 200
-    const inflight = new Map<string, Promise<void>>()
-    const inflightDiff = new Map<string, Promise<void>>()
-    const inflightTodo = new Map<string, Promise<void>>()
-    const optimistic = new Map<string, Map<string, OptimisticItem>>()
-    const maxDirs = 30
-    const seen = new Map<string, Set<string>>()
-    const [meta, setMeta] = createStore({
-      limit: {} as Record<string, number>,
-      cursor: {} as Record<string, string | undefined>,
-      complete: {} as Record<string, boolean>,
-      loading: {} as Record<string, boolean>,
-    })
+    optimistic.set(key, new Map([[item.message.id, { message: item.message, parts: sortParts(item.parts) }]]))
+  }
 
-    const getSession = (sessionID: string) => {
-      const store = current()[0]
-      const match = Binary.search(store.session, sessionID, (s) => s.id)
-      if (match.found) return store.session[match.index]
-      return undefined
-    }
-
-    const setOptimistic = (directory: string, sessionID: string, item: OptimisticItem) => {
-      const key = keyFor(directory, sessionID)
-      const list = optimistic.get(key)
-      if (list) {
-        list.set(item.message.id, { message: item.message, parts: sortParts(item.parts) })
-        return
-      }
-      optimistic.set(key, new Map([[item.message.id, { message: item.message, parts: sortParts(item.parts) }]]))
-    }
-
-    const clearOptimistic = (directory: string, sessionID: string, messageID?: string) => {
-      const key = keyFor(directory, sessionID)
-      if (!messageID) {
-        optimistic.delete(key)
-        return
-      }
-
-      const list = optimistic.get(key)
-      if (!list) return
-      list.delete(messageID)
-      if (list.size === 0) optimistic.delete(key)
+  const clearOptimistic = (directory: string, sessionID: string, messageID?: string) => {
+    const key = keyFor(directory, sessionID)
+    if (!messageID) {
+      optimistic.delete(key)
+      return
     }
 
-    const getOptimistic = (directory: string, sessionID: string) => [
-      ...(optimistic.get(keyFor(directory, sessionID))?.values() ?? []),
-    ]
+    const list = optimistic.get(key)
+    if (!list) return
+    list.delete(messageID)
+    if (list.size === 0) optimistic.delete(key)
+  }
 
-    const seenFor = (directory: string) => {
-      const existing = seen.get(directory)
-      if (existing) {
-        seen.delete(directory)
-        seen.set(directory, existing)
-        return existing
-      }
-      const created = new Set<string>()
-      seen.set(directory, created)
-      while (seen.size > maxDirs) {
-        const first = seen.keys().next().value
-        if (!first) break
-        const stale = [...(seen.get(first) ?? [])]
-        seen.delete(first)
-        const [, setStore] = globalSync.child(first, { bootstrap: false })
-        evict(first, setStore, stale)
-      }
-      return created
+  const getOptimistic = (directory: string, sessionID: string) => [
+    ...(optimistic.get(keyFor(directory, sessionID))?.values() ?? []),
+  ]
+
+  const seenFor = (directory: string) => {
+    const existing = seen.get(directory)
+    if (existing) {
+      seen.delete(directory)
+      seen.set(directory, existing)
+      return existing
     }
-
-    const clearMeta = (directory: string, sessionIDs: string[]) => {
-      if (sessionIDs.length === 0) return
-      for (const sessionID of sessionIDs) {
-        clearOptimistic(directory, sessionID)
-      }
-      setMeta(
-        produce((draft) => {
-          for (const sessionID of sessionIDs) {
-            const key = keyFor(directory, sessionID)
-            delete draft.limit[key]
-            delete draft.cursor[key]
-            delete draft.complete[key]
-            delete draft.loading[key]
-          }
-        }),
-      )
+    const created = new Set<string>()
+    seen.set(directory, created)
+    while (seen.size > maxDirs) {
+      const first = seen.keys().next().value
+      if (!first) break
+      const stale = [...(seen.get(first) ?? [])]
+      seen.delete(first)
+      const [, setStore] = globalSync.child(first, { bootstrap: false })
+      evict(first, setStore, stale)
     }
+    return created
+  }
 
-    const evict = (directory: string, setStore: Setter, sessionIDs: string[]) => {
+  const clearMeta = (directory: string, sessionIDs: string[]) => {
+    if (sessionIDs.length === 0) return
+    for (const sessionID of sessionIDs) {
+      clearOptimistic(directory, sessionID)
+    }
+    setMeta(
+      produce((draft) => {
+        for (const sessionID of sessionIDs) {
+          const key = keyFor(directory, sessionID)
+          delete draft.limit[key]
+          delete draft.cursor[key]
+          delete draft.complete[key]
+          delete draft.loading[key]
+        }
+      }),
+    )
+  }
+
+  const evict = (directory: string, setStore: Setter, sessionIDs: string[]) => {
       if (sessionIDs.length === 0) return
       clearSessionPrefetch(directory, sessionIDs)
       for (const sessionID of sessionIDs) {
@@ -282,7 +282,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       clearMeta(directory, sessionIDs)
     }
 
-    const touch = (directory: string, setStore: Setter, sessionID: string) => {
+  const touch = (directory: string, setStore: Setter, sessionID: string) => {
       const stale = pickSessionCacheEvictions({
         seen: seenFor(directory),
         keep: sessionID,
@@ -291,7 +291,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       evict(directory, setStore, stale)
     }
 
-    const fetchMessages = async (input: {
+  const fetchMessages = async (input: {
       client: typeof sdk.client
       sessionID: string
       limit: number
@@ -312,9 +312,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       }
     }
 
-    const tracked = (directory: string, sessionID: string) => seen.get(directory)?.has(sessionID) ?? false
+  const tracked = (directory: string, sessionID: string) => seen.get(directory)?.has(sessionID) ?? false
 
-    const loadMessages = async (input: {
+  const loadMessages = async (input: {
       directory: string
       client: typeof sdk.client
       setStore: Setter
@@ -368,26 +368,26 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         })
     }
 
-    return {
-      get data() {
-        return current()[0]
-      },
-      get set(): Setter {
-        return current()[1]
-      },
-      get status() {
-        return current()[0].status
-      },
-      get ready() {
-        return current()[0].status !== "loading"
-      },
-      get project() {
-        const store = current()[0]
-        const match = Binary.search(globalSync.data.project, store.project, (p) => p.id)
-        if (match.found) return globalSync.data.project[match.index]
-        return undefined
-      },
-      session: {
+  return {
+    get data() {
+      return current()[0]
+    },
+    get set(): Setter {
+      return current()[1]
+    },
+    get status() {
+      return current()[0].status
+    },
+    get ready() {
+      return current()[0].status !== "loading"
+    },
+    get project() {
+      const store = current()[0]
+      const match = Binary.search(globalSync.data.project, store.project, (p) => p.id)
+      if (match.found) return globalSync.data.project[match.index]
+      return undefined
+    },
+    session: {
         get: getSession,
         optimistic: {
           add(input: { directory?: string; sessionID: string; message: Message; parts: Part[] }) {
@@ -614,10 +614,19 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           )
         },
       },
-      absolute,
-      get directory() {
-        return current()[0].path.directory
-      },
-    }
+    absolute,
+    get directory() {
+      return current()[0].path.directory
+    },
+  }
+}
+
+export const { use: useSync, provider: SyncProvider } = createSimpleContext({
+  name: "Sync",
+  init: () => {
+    return createSyncContextValue({
+      globalSync: useGlobalSync(),
+      sdk: useSDK(),
+    })
   },
 })

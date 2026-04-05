@@ -32,7 +32,7 @@ import { useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
 import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
-import { hasSessionDiffs, sessionDiffCount, sessionDiffs, shouldFetchSessionDiff } from "@/context/global-sync/session-diff"
+import { sessionDiffCount, sessionDiffs, shouldFetchSessionDiff } from "@/context/global-sync/session-diff"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
@@ -51,6 +51,7 @@ import {
   shouldFocusTerminalOnKeyDown,
 } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/message-timeline"
+import { sessionReviewDiffsReady, shouldLoadSessionReviewDiff } from "@/pages/session/review-diff-state"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
@@ -467,10 +468,11 @@ export default function Page() {
     return sync.session.history.loading(id)
   })
   const diffsReady = createMemo(() => {
-    const id = params.id
-    if (!id) return true
-    if (!hasSessionReview()) return true
-    return hasSessionDiffs(sync.data.session_diff[id])
+    return sessionReviewDiffsReady({
+      sessionID: params.id,
+      hasSessionReview: hasSessionReview(),
+      sessionDiff: params.id ? sync.data.session_diff[params.id] : undefined,
+    })
   })
 
   const userMessages = createMemo(
@@ -1371,10 +1373,16 @@ export default function Page() {
     const id = params.id
     if (!id) return
 
-    if (!wantsReview()) return
-    if (!shouldFetchSessionDiff(sync.data.session_diff[id])) return
-    if (sync.status === "loading") return
-
+    if (
+      !shouldLoadSessionReviewDiff({
+        sessionID: id,
+        wantsReview: wantsReview(),
+        sessionDiff: sync.data.session_diff[id],
+        syncStatus: sync.status,
+      })
+    ) {
+      return
+    }
     void sync.session.diff(id)
   })
 
