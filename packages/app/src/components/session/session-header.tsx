@@ -26,103 +26,7 @@ import { decode64 } from "@/utils/base64"
 import { Persist, persisted } from "@/utils/persist"
 import { dict as enDict } from "@/i18n/en"
 import { StatusPopover } from "../status-popover"
-
-const OPEN_APPS = [
-  "vscode",
-  "cursor",
-  "zed",
-  "textmate",
-  "antigravity",
-  "finder",
-  "terminal",
-  "iterm2",
-  "ghostty",
-  "wezterm",
-  "warp",
-  "xcode",
-  "android-studio",
-  "powershell",
-  "sublime-text",
-] as const
-
-type OpenApp = (typeof OPEN_APPS)[number]
-type OS = "macos" | "windows" | "linux" | "unknown"
-
-export type OpenPlan =
-  | {
-      kind: "editor"
-      editor: string
-    }
-  | {
-      kind: "path"
-      app?: string
-    }
-
-const MAC_APPS = [
-  {
-    id: "vscode",
-    label: "session.header.open.app.vscode",
-    icon: "vscode",
-    openWith: "Visual Studio Code",
-  },
-  { id: "cursor", label: "session.header.open.app.cursor", icon: "cursor", openWith: "Cursor" },
-  { id: "zed", label: "session.header.open.app.zed", icon: "zed", openWith: "Zed" },
-  { id: "textmate", label: "session.header.open.app.textmate", icon: "textmate", openWith: "TextMate" },
-  {
-    id: "antigravity",
-    label: "session.header.open.app.antigravity",
-    icon: "antigravity",
-    openWith: "Antigravity",
-  },
-  { id: "terminal", label: "session.header.open.app.terminal", icon: "terminal", openWith: "Terminal" },
-  { id: "iterm2", label: "session.header.open.app.iterm2", icon: "iterm2", openWith: "iTerm" },
-  { id: "ghostty", label: "session.header.open.app.ghostty", icon: "ghostty", openWith: "Ghostty" },
-  { id: "wezterm", label: "session.header.open.app.wezterm", icon: "wezterm", openWith: "WezTerm" },
-  { id: "warp", label: "session.header.open.app.warp", icon: "warp", openWith: "Warp" },
-  { id: "xcode", label: "session.header.open.app.xcode", icon: "xcode", openWith: "Xcode" },
-  {
-    id: "android-studio",
-    label: "session.header.open.app.androidStudio",
-    icon: "android-studio",
-    openWith: "Android Studio",
-  },
-  {
-    id: "sublime-text",
-    label: "session.header.open.app.sublimeText",
-    icon: "sublime-text",
-    openWith: "Sublime Text",
-  },
-] as const
-
-const WINDOWS_APPS = [
-  { id: "vscode", label: "session.header.open.app.vscode", icon: "vscode", openWith: "code" },
-  { id: "cursor", label: "session.header.open.app.cursor", icon: "cursor", openWith: "cursor" },
-  { id: "zed", label: "session.header.open.app.zed", icon: "zed", openWith: "zed" },
-  {
-    id: "powershell",
-    label: "session.header.open.app.powershell",
-    icon: "powershell",
-    openWith: "powershell",
-  },
-  {
-    id: "sublime-text",
-    label: "session.header.open.app.sublimeText",
-    icon: "sublime-text",
-    openWith: "Sublime Text",
-  },
-] as const
-
-const LINUX_APPS = [
-  { id: "vscode", label: "session.header.open.app.vscode", icon: "vscode", openWith: "code" },
-  { id: "cursor", label: "session.header.open.app.cursor", icon: "cursor", openWith: "cursor" },
-  { id: "zed", label: "session.header.open.app.zed", icon: "zed", openWith: "zed" },
-  {
-    id: "sublime-text",
-    label: "session.header.open.app.sublimeText",
-    icon: "sublime-text",
-    openWith: "Sublime Text",
-  },
-] as const
+import { OPEN_APPS, apps, getOpenPlan, type OpenApp, type OS } from "./open-app"
 
 const detectOS = (platform: ReturnType<typeof usePlatform>): OS => {
   if (platform.platform === "desktop" && platform.os) return platform.os
@@ -140,24 +44,6 @@ const showRequestError = (language: ReturnType<typeof useLanguage>, err: unknown
     title: language.t("common.requestFailed"),
     description: err instanceof Error ? err.message : String(err),
   })
-}
-
-export function getOpenPlan(
-  app: OpenApp,
-  list: ReadonlyArray<{ id: OpenApp; openWith?: string }>,
-  hasEditor: boolean,
-): OpenPlan {
-  if (app === "wezterm" && hasEditor) {
-    return {
-      kind: "editor",
-      editor: "WezTerm",
-    }
-  }
-
-  return {
-    kind: "path",
-    app: list.find((item) => item.id === app)?.openWith,
-  }
 }
 
 export function SessionHeader() {
@@ -225,41 +111,7 @@ export function SessionHeader() {
     return "unknown"
   })
 
-  const options = createMemo(() => {
-    if (os() === "macos") {
-      return [
-        { id: "vscode", label: "VS Code", icon: "vscode", openWith: "Visual Studio Code" },
-        { id: "cursor", label: "Cursor", icon: "cursor", openWith: "Cursor" },
-        { id: "zed", label: "Zed", icon: "zed", openWith: "Zed" },
-        { id: "textmate", label: "TextMate", icon: "textmate", openWith: "TextMate" },
-        { id: "antigravity", label: "Antigravity", icon: "antigravity", openWith: "Antigravity" },
-        { id: "finder", label: "Finder", icon: "finder" },
-        { id: "terminal", label: "Terminal", icon: "terminal", openWith: "Terminal" },
-        { id: "iterm2", label: "iTerm2", icon: "iterm2", openWith: "iTerm" },
-        { id: "ghostty", label: "Ghostty", icon: "ghostty", openWith: "Ghostty" },
-        { id: "wezterm", label: "WezTerm", icon: "wezterm", openWith: "WezTerm" },
-        { id: "xcode", label: "Xcode", icon: "xcode", openWith: "Xcode" },
-        { id: "android-studio", label: "Android Studio", icon: "android-studio", openWith: "Android Studio" },
-      ] as const
-    }
-
-    if (os() === "windows") {
-      return [
-        { id: "vscode", label: "VS Code", icon: "vscode", openWith: "code" },
-        { id: "cursor", label: "Cursor", icon: "cursor", openWith: "cursor" },
-        { id: "zed", label: "Zed", icon: "zed", openWith: "zed" },
-        { id: "finder", label: "File Explorer", icon: "finder" },
-        { id: "powershell", label: "PowerShell", icon: "powershell", openWith: "powershell" },
-      ] as const
-    }
-
-    return [
-      { id: "vscode", label: "VS Code", icon: "vscode", openWith: "code" },
-      { id: "cursor", label: "Cursor", icon: "cursor", openWith: "cursor" },
-      { id: "zed", label: "Zed", icon: "zed", openWith: "zed" },
-      { id: "finder", label: "File Manager", icon: "finder" },
-    ] as const
-  })
+  const list = createMemo(() => apps(os()))
 
   const fileManager = createMemo(() => {
     if (os() === "macos") return { label: "session.header.open.finder", icon: "finder" as const }
@@ -271,12 +123,12 @@ export function SessionHeader() {
     if (platform.platform !== "desktop") return
     if (!platform.checkAppExists) return
 
-    const list = apps()
+    const next = list()
 
-    setExists(Object.fromEntries(list.map((app) => [app.id, undefined])) as Partial<Record<OpenApp, boolean>>)
+    setExists(Object.fromEntries(next.map((app) => [app.id, undefined])) as Partial<Record<OpenApp, boolean>>)
 
     void Promise.all(
-      list.map((app) =>
+      next.map((app) =>
         Promise.resolve(platform.checkAppExists?.(app.openWith))
           .then((value) => Boolean(value))
           .catch(() => false)
@@ -290,7 +142,7 @@ export function SessionHeader() {
   const options = createMemo(() => {
     return [
       { id: "finder", label: language.t(fileManager().label), icon: fileManager().icon },
-      ...apps()
+      ...list()
         .filter((app) => exists[app.id])
         .map((app) => ({ ...app, label: language.t(app.label) })),
     ] as const
@@ -315,7 +167,7 @@ export function SessionHeader() {
     if (prefs.app === "finder") {
       return { id: "finder", label: language.t(fileManager().label), icon: fileManager().icon } as const
     }
-    const app = apps().find((item) => item.id === prefs.app)
+    const app = list().find((item) => item.id === prefs.app)
     if (!app) return
     return { ...app, label: language.t(app.label) } as const
   })
