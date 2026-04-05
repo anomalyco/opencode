@@ -25,6 +25,7 @@ export namespace LLM {
   export type StreamInput = {
     user: MessageV2.User
     sessionID: string
+    parentSessionID?: string
     model: Provider.Model
     agent: Agent.Info
     permission?: Permission.Ruleset
@@ -301,6 +302,8 @@ export namespace LLM {
               "x-opencode-client": Flag.OPENCODE_CLIENT,
             }
           : {
+              "x-session-affinity": input.sessionID,
+              ...(input.parentSessionID ? { "x-parent-session-id": input.parentSessionID } : {}),
               "User-Agent": `opencode/${Installation.VERSION}`,
             }),
         ...input.model.headers,

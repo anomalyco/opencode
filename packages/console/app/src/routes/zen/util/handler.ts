@@ -100,6 +100,7 @@ export async function handler(
       session: sessionId,
       request: requestId,
       client: ocClient,
+      ...(model === "mimo-v2-pro-free" && JSON.stringify(body).length < 1000 ? { payload: JSON.stringify(body) } : {}),
     })
     const zenData = ZenData.list(opts.modelList)
     const modelInfo = validateModel(zenData, model)
@@ -401,6 +402,14 @@ export async function handler(
           model: reqModel,
           format: opts.format,
         }),
+      )
+
+    if (modelData.trialEnded)
+      throw new ModelError(
+        `${t("zen.api.error.trialEnded", {
+          model: modelData.name,
+          link: "https://opencode.ai/go",
+        })}`,
       )
 
     logger.metric({ model: modelId })
