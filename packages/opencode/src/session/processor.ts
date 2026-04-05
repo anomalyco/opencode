@@ -9,6 +9,7 @@ import { Snapshot } from "@/snapshot"
 import { Log } from "@/util/log"
 import { Session } from "."
 import { LLM } from "./llm"
+import { create as createLoop, type LoopOutcome } from "./loop"
 import { MessageV2 } from "./message-v2"
 import { isOverflow } from "./overflow"
 import { PartID } from "./schema"
@@ -23,7 +24,7 @@ export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
   const log = Log.create({ service: "session.processor" })
 
-  export type Result = "compact" | "stop" | "continue"
+  export type Result = "compact" | "stop" | "continue" | LoopOutcome
 
   export type Event = LLM.Event
 
@@ -52,6 +53,7 @@ export namespace SessionProcessor {
     needsCompaction: boolean
     currentText: MessageV2.TextPart | undefined
     reasoningMap: Record<string, MessageV2.ReasoningPart>
+    loopOutcome: LoopOutcome | undefined
   }
 
   type StreamEvent = Event
@@ -99,6 +101,7 @@ export namespace SessionProcessor {
           needsCompaction: false,
           currentText: undefined,
           reasoningMap: {},
+          loopOutcome: undefined,
         }
         let aborted = false
 
@@ -445,7 +448,13 @@ export namespace SessionProcessor {
         const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
           log.info("process")
           ctx.needsCompaction = false
-          ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
+          ctx.loopOutcome = undefined
+          const cfg = yield* config.get()
+          ctx.shouldBreak = cfg.experimental?.continue_loop_on_deny !== true
+
+          const loop = cfg.experimental?.loop
+          const reasoning = loop?.enabled !== false ? createLoop({ source: "reasoning", ...loop }) : undefined
+          const text = loop?.enabled !== false ? createLoop({ source: "text", ...loop }) : undefined
 
           return yield* Effect.gen(function* () {
             yield* Effect.gen(function* () {
@@ -455,7 +464,27 @@ export namespace SessionProcessor {
 
               yield* stream.pipe(
                 Stream.tap((event) => handleEvent(event)),
-                Stream.takeUntil(() => ctx.needsCompaction),
+                Stream.tap((event) =>
+                  Effect.sync(() => {
+                    if (event.type === "reasoning-start") reasoning?.reset()
+                    if (event.type === "text-start") text?.reset()
+                    if (event.type === "reasoning-delta") {
+                      const outcome = reasoning?.feed(event.text)
+                      if (outcome) {
+                        ctx.loopOutcome = outcome
+                        log.warn("loop", { sessionID: ctx.sessionID, period: outcome.period, source: outcome.source })
+                      }
+                    }
+                    if (event.type === "text-delta") {
+                      const outcome = text?.feed(event.text)
+                      if (outcome) {
+                        ctx.loopOutcome = outcome
+                        log.warn("loop", { sessionID: ctx.sessionID, period: outcome.period, source: outcome.source })
+                      }
+                    }
+                  }),
+                ),
+                Stream.takeUntil(() => ctx.needsCompaction || !!ctx.loopOutcome),
                 Stream.runDrain,
               )
             }).pipe(
@@ -483,6 +512,7 @@ export namespace SessionProcessor {
             if (aborted && !ctx.assistantMessage.error) {
               yield* abort()
             }
+            if (ctx.loopOutcome) return ctx.loopOutcome
             if (ctx.needsCompaction) return "compact"
             if (ctx.blocked || ctx.assistantMessage.error || aborted) return "stop"
             return "continue"

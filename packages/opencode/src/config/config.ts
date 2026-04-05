@@ -1036,6 +1036,52 @@ export namespace Config {
             .positive()
             .optional()
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
+          loop: z
+            .object({
+              enabled: z.boolean().optional().describe("Enable loop detection for reasoning and text streams"),
+              min_period: z
+                .number()
+                .int()
+                .positive()
+                .optional()
+                .describe("Minimum repeating pattern length in characters"),
+              max_period: z
+                .number()
+                .int()
+                .positive()
+                .optional()
+                .describe("Maximum repeating pattern length in characters"),
+              similarity: z
+                .number()
+                .min(0)
+                .max(1)
+                .optional()
+                .describe("Similarity threshold for near-identical repetition detection (0-1)"),
+              check_interval: z
+                .number()
+                .int()
+                .positive()
+                .optional()
+                .describe("Number of characters between detection checks"),
+              min_chars: z
+                .number()
+                .int()
+                .positive()
+                .optional()
+                .describe("Minimum characters received before detection starts"),
+              max_nudges: z
+                .number()
+                .int()
+                .min(0)
+                .optional()
+                .describe("Maximum nudge attempts before aborting on loop detection"),
+              reminder: z.string().optional().describe("Custom reminder message injected on nudge"),
+            })
+            .refine((d) => !d.min_period || !d.max_period || d.min_period <= d.max_period, {
+              message: "min_period must be <= max_period",
+            })
+            .optional()
+            .describe("Loop detection configuration for reasoning and text streams"),
         })
         .optional(),
     })

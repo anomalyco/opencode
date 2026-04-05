@@ -408,6 +408,17 @@ export type ContextOverflowError = {
   }
 }
 
+export type LoopError = {
+  name: "LoopError"
+  data: {
+    message: string
+    period: number
+    attempts: number
+    action: "abort"
+    source: "reasoning" | "text"
+  }
+}
+
 export type ApiError = {
   name: "APIError"
   data: {
@@ -435,6 +446,7 @@ export type EventSessionError = {
       | MessageAbortedError
       | StructuredOutputError
       | ContextOverflowError
+      | LoopError
       | ApiError
   }
 }
@@ -570,6 +582,7 @@ export type AssistantMessage = {
     | MessageAbortedError
     | StructuredOutputError
     | ContextOverflowError
+    | LoopError
     | ApiError
   parentID: string
   modelID: string
@@ -1615,6 +1628,43 @@ export type Config = {
      * Timeout in milliseconds for model context protocol (MCP) requests
      */
     mcp_timeout?: number
+    /**
+     * Loop detection configuration for reasoning and text streams
+     */
+    loop?: {
+      /**
+       * Enable loop detection for reasoning and text streams
+       */
+      enabled?: boolean
+      /**
+       * Minimum repeating pattern length in characters
+       */
+      min_period?: number
+      /**
+       * Maximum repeating pattern length in characters
+       */
+      max_period?: number
+      /**
+       * Similarity threshold for near-identical repetition detection (0-1)
+       */
+      similarity?: number
+      /**
+       * Number of characters between detection checks
+       */
+      check_interval?: number
+      /**
+       * Minimum characters received before detection starts
+       */
+      min_chars?: number
+      /**
+       * Maximum nudge attempts before aborting on loop detection
+       */
+      max_nudges?: number
+      /**
+       * Custom reminder message injected on nudge
+       */
+      reminder?: string
+    }
   }
 }
 

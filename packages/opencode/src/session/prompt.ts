@@ -31,10 +31,12 @@ import * as CrossSpawnSpawner from "@/effect/cross-spawn-spawner"
 import * as Stream from "effect/Stream"
 import { Command } from "../command"
 import { pathToFileURL, fileURLToPath } from "url"
+import { Config } from "../config/config"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/util/error"
 import { SessionProcessor } from "./processor"
+import { isLoopOutcome, recovery as loopRecovery } from "./loop"
 import { Tool } from "@/tool/tool"
 import { Permission } from "@/permission"
 import { SessionStatus } from "./status"
@@ -87,6 +89,7 @@ export namespace SessionPrompt {
       const provider = yield* Provider.Service
       const processor = yield* SessionProcessor.Service
       const compaction = yield* SessionCompaction.Service
+      const config = yield* Config.Service
       const plugin = yield* Plugin.Service
       const commands = yield* Command.Service
       const permission = yield* Permission.Service
@@ -1341,6 +1344,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           const ctx = yield* InstanceState.context
           let structured: unknown | undefined
           let step = 0
+          let loopAttempt = 0
           const session = yield* sessions.get(sessionID)
 
           while (true) {
@@ -1521,6 +1525,53 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   model,
                   toolChoice: format.type === "json_schema" ? "required" : undefined,
                 })
+
+                if (isLoopOutcome(result)) {
+                  const detection = (yield* config.get()).experimental?.loop
+                  const decision = loopRecovery(loopAttempt, {
+                    max_nudges: detection?.max_nudges,
+                    reminder: detection?.reminder,
+                    period: result.period,
+                  })
+                  loopAttempt++
+
+                  if (decision.action === "nudge") {
+                    const reminder: MessageV2.User = yield* sessions.updateMessage({
+                      id: MessageID.ascending(),
+                      role: "user",
+                      sessionID,
+                      time: { created: Date.now() },
+                      agent: lastUser.agent,
+                      model: lastUser.model,
+                      format: lastUser.format,
+                      tools: lastUser.tools,
+                      system: lastUser.system,
+                      variant: lastUser.model.variant,
+                    })
+                    yield* sessions.updatePart({
+                      id: PartID.ascending(),
+                      messageID: reminder.id,
+                      sessionID,
+                      type: "text",
+                      text: decision.reminder,
+                      synthetic: true,
+                    })
+                    return "continue" as const
+                  }
+
+                  handle.message.error = new MessageV2.LoopError({
+                    message: `Repetitive ${result.source} output detected (period ~${result.period} chars) after ${decision.attempts} detection attempts`,
+                    period: result.period,
+                    attempts: decision.attempts,
+                    action: "abort",
+                    source: result.source,
+                  }).toObject()
+                  handle.message.finish = "error"
+                  yield* sessions.updateMessage(handle.message)
+                  return "break" as const
+                }
+
+                loopAttempt = 0
 
                 if (structured !== undefined) {
                   handle.message.structured = structured
@@ -1731,6 +1782,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         Layer.provide(Session.defaultLayer),
         Layer.provide(Agent.defaultLayer),
         Layer.provide(Bus.layer),
+        Layer.provide(Config.defaultLayer),
         Layer.provide(CrossSpawnSpawner.defaultLayer),
       ),
     ),
