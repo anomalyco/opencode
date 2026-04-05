@@ -894,15 +894,21 @@ function getSyntaxRules(theme: Theme) {
       },
     },
     {
-      scope: ["variable.builtin", "type.builtin", "function.builtin", "module.builtin", "constant.builtin"],
+      scope: ["type.builtin", "module.builtin"],
       style: {
         foreground: theme.syntaxType,
       },
     },
     {
-      scope: ["variable.super"],
+      scope: ["function.builtin"],
       style: {
-        foreground: theme.error,
+        foreground: theme.syntaxFunction,
+      },
+    },
+    {
+      scope: ["variable.builtin", "variable.super", "constant.builtin"],
+      style: {
+        foreground: theme.syntaxVariable,
       },
     },
     {
