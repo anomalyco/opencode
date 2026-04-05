@@ -6,7 +6,7 @@
 
 Usage notes:
   - Supports live crawling modes: 'fallback' (backup if cached unavailable) or 'preferred' (prioritize live crawling)
-  - Search types: 'auto' (balanced), 'fast' (quick results), 'deep' (comprehensive search)
+  - Search types: 'auto' (balanced search, default), 'fast' (quick results)
   - Configurable context length for optimal LLM integration
   - Domain filtering and advanced search options available
 

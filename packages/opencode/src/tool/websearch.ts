@@ -21,7 +21,7 @@ interface McpSearchRequest {
       query: string
       numResults?: number
       livecrawl?: "fallback" | "preferred"
-      type?: "auto" | "fast" | "deep"
+      type?: "auto" | "fast"
       contextMaxCharacters?: number
     }
   }
@@ -52,11 +52,9 @@ export const WebSearchTool = Tool.define("websearch", async () => {
           "Live crawl mode - 'fallback': use live crawling as backup if cached content unavailable, 'preferred': prioritize live crawling (default: 'fallback')",
         ),
       type: z
-        .enum(["auto", "fast", "deep"])
+        .enum(["auto", "fast"])
         .optional()
-        .describe(
-          "Search type - 'auto': balanced search (default), 'fast': quick results, 'deep': comprehensive search",
-        ),
+        .describe("Search type - 'auto': balanced search (default), 'fast': quick results"),
       contextMaxCharacters: z
         .number()
         .optional()
