@@ -1,0 +1,19 @@
+[data-component="skeleton"] {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--surface-disabled);
+  border-radius: var(--radius-sm);
+
+  &[data-variant="text"] {
+    height: 1em;
+    border-radius: var(--radius-sm);
+  }
+
+  &[data-variant="circular"] {
+    border-radius: 50%;
+  }
+
+  &[data-variant="rectangular"] {
+    border-radius: var(--radius-md);
+  }
+}
