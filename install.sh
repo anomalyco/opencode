@@ -44,7 +44,15 @@ detect_platform() {
     fi
   fi
 
-  PLATFORM="${BINARY_NAME}-${OS}-${ARCH}${LIBC}"
+  # Check for AVX2 support on Linux x64; fall back to baseline binary if absent
+  VARIANT=""
+  if [ "$OS" = "linux" ] && [ "$ARCH" = "x64" ]; then
+    if ! grep -q avx2 /proc/cpuinfo 2>/dev/null; then
+      VARIANT="-baseline"
+    fi
+  fi
+
+  PLATFORM="${BINARY_NAME}-${OS}-${ARCH}${LIBC}${VARIANT}"
 }
 
 # Get latest version from GitHub API
