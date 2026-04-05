@@ -291,6 +291,28 @@ describe("applyDirectoryEvent", () => {
     expect(todos).toEqual([dropped.id])
   })
 
+  test("normalizes non-array session diffs", () => {
+    const [store, setStore] = createStore(baseState())
+
+    applyDirectoryEvent({
+      event: {
+        type: "session.diff",
+        properties: {
+          sessionID: "ses_1",
+          diff: {},
+        },
+      },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    expect(store.session_diff.ses_1).toEqual([])
+    expect(Array.isArray(store.session_diff.ses_1)).toBe(true)
+  })
+
   test("cleanupDroppedSessionCaches clears part-only orphan state", () => {
     const [store, setStore] = createStore(
       baseState({

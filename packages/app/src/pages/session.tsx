@@ -32,6 +32,7 @@ import { useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
 import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
+import { hasSessionDiffs, sessionDiffs } from "@/context/global-sync/session-cache"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
@@ -430,7 +431,7 @@ export default function Page() {
 
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const isChildSession = createMemo(() => !!info()?.parentID)
-  const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
+  const diffs = createMemo(() => (params.id ? sessionDiffs(sync.data.session_diff[params.id]) : []))
   const sessionCount = createMemo(() => Math.max(info()?.summary?.files ?? 0, diffs().length))
   const hasSessionReview = createMemo(() => sessionCount() > 0)
   const canReview = createMemo(() => !!sync.project)
@@ -467,7 +468,7 @@ export default function Page() {
     const id = params.id
     if (!id) return true
     if (!hasSessionReview()) return true
-    return sync.data.session_diff[id] !== undefined
+    return hasSessionDiffs(sync.data.session_diff[id])
   })
 
   const userMessages = createMemo(
@@ -1369,7 +1370,7 @@ export default function Page() {
     if (!id) return
 
     if (!wantsReview()) return
-    if (sync.data.session_diff[id] !== undefined) return
+    if (hasSessionDiffs(sync.data.session_diff[id])) return
     if (sync.status === "loading") return
 
     void sync.session.diff(id)
@@ -1387,7 +1388,7 @@ export default function Page() {
 
         const id = params.id
         if (!id) return
-        if (!untrack(() => sync.data.session_diff[id] !== undefined)) return
+        if (!untrack(() => hasSessionDiffs(sync.data.session_diff[id]))) return
 
         diffFrame = requestAnimationFrame(() => {
           diffFrame = undefined

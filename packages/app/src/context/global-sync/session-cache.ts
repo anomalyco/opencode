@@ -10,6 +10,14 @@ import type {
 
 export const SESSION_CACHE_LIMIT = 40
 
+export function sessionDiffs(value: unknown): FileDiff[] {
+  return Array.isArray(value) ? value : []
+}
+
+export function hasSessionDiffs(value: unknown) {
+  return Array.isArray(value)
+}
+
 type SessionCache = {
   session_status: Record<string, SessionStatus | undefined>
   session_diff: Record<string, FileDiff[] | undefined>

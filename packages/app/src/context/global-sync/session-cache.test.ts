@@ -8,7 +8,7 @@ import type {
   SessionStatus,
   Todo,
 } from "@opencode-ai/sdk/v2/client"
-import { dropSessionCaches, pickSessionCacheEvictions } from "./session-cache"
+import { dropSessionCaches, pickSessionCacheEvictions, hasSessionDiffs, sessionDiffs } from "./session-cache"
 
 const msg = (id: string, sessionID: string) =>
   ({
@@ -30,6 +30,16 @@ const part = (id: string, sessionID: string, messageID: string) =>
   }) as Part
 
 describe("app session cache", () => {
+  test("sessionDiffs only accepts arrays", () => {
+    const list = [{ file: "a.ts" }] as FileDiff[]
+
+    expect(sessionDiffs(list)).toBe(list)
+    expect(sessionDiffs({})).toEqual([])
+    expect(sessionDiffs(undefined)).toEqual([])
+    expect(hasSessionDiffs(list)).toBe(true)
+    expect(hasSessionDiffs({})).toBe(false)
+  })
+
   test("dropSessionCaches clears orphaned parts without message rows", () => {
     const store: {
       session_status: Record<string, SessionStatus | undefined>
