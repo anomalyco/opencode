@@ -6,6 +6,7 @@ import { Portal } from "solid-js/web"
 import { useI18n } from "../context/i18n"
 import { Icon, type IconProps } from "./icon"
 import { IconButton } from "./icon-button"
+import "./toast.css"
 
 export interface ToastRegionProps extends ComponentProps<typeof Kobalte.Region> {}
 
@@ -153,6 +154,11 @@ export function showToast(options: ToastOptions | string) {
         </Show>
       </Toast.Content>
       <Toast.CloseButton />
+      <Show when={!opts.persistent}>
+        <Toast.ProgressTrack>
+          <Toast.ProgressFill />
+        </Toast.ProgressTrack>
+      </Show>
     </Toast>
   ))
 }
@@ -180,6 +186,9 @@ export function showPromiseToast<T, U = unknown>(
         </Toast.Description>
       </Toast.Content>
       <Toast.CloseButton />
+      <Toast.ProgressTrack>
+        <Toast.ProgressFill />
+      </Toast.ProgressTrack>
     </Toast>
   ))
 }

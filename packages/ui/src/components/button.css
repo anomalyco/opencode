@@ -10,6 +10,10 @@
   cursor: default;
   outline: none;
   white-space: nowrap;
+  transition: background-color var(--transition-fast), 
+              color var(--transition-fast), 
+              box-shadow var(--transition-fast),
+              transform var(--transition-fast);
 
   &[data-variant="primary"] {
     background-color: var(--button-primary-base);
@@ -28,6 +32,7 @@
     }
     &:active:not(:disabled) {
       background-color: var(--icon-strong-active);
+      transform: scale(0.98);
     }
     &:disabled {
       background-color: var(--icon-strong-disabled);
@@ -55,6 +60,7 @@
     }
     &:active:not(:disabled) {
       background-color: var(--surface-base-active);
+      transform: scale(0.98);
     }
     &:disabled {
       color: var(--text-weak);
@@ -93,6 +99,7 @@
     }
     &:active:not(:disabled) {
       background-color: var(--button-secondary-base);
+      transform: scale(0.98);
     }
     &:disabled {
       border-color: var(--border-disabled);

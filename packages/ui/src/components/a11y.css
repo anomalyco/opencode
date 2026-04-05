@@ -1,0 +1,64 @@
+/* 无障碍访问样式 */
+
+/* 焦点可见性 */
+.focus-visible--mouse :focus-visible {
+  outline: none;
+}
+
+/* 键盘导航焦点样式 */
+:focus-visible {
+  outline: 2px solid var(--icon-info-active);
+  outline-offset: 2px;
+}
+
+/* 焦点样式增强 */
+[data-component="button"]:focus-visible,
+[data-component="icon-button"]:focus-visible,
+[data-component="input"]:focus-visible,
+[data-component="select"]:focus-visible,
+[data-component="textarea"]:focus-visible {
+  outline: 2px solid var(--icon-info-active);
+  outline-offset: 2px;
+}
+
+/* ARIA 相关样式 */
+[aria-hidden="true"] {
+  display: none !important;
+}
+
+[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+[aria-expanded="true"] {
+  position: relative;
+}
+
+/* 高对比度模式支持 */
+@media (prefers-contrast: high) {
+  :root {
+    --border-strong-base: #000000;
+    --text-strong: #000000;
+    --icon-strong-base: #000000;
+  }
+}
+
+/* 减少动画模式支持 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* 暗色模式下的焦点样式 */
+@media (prefers-color-scheme: dark) {
+  :focus-visible {
+    outline-color: var(--icon-info-active);
+  }
+}

@@ -7,6 +7,9 @@
   user-select: none;
   aspect-ratio: 1;
   flex-shrink: 0;
+  transition: background-color var(--transition-fast), 
+              color var(--transition-fast), 
+              transform var(--transition-fast);
 
   &[data-variant="primary"] {
     background-color: var(--icon-strong-base);
@@ -31,6 +34,7 @@
     }
     &:active:not(:disabled) {
       background-color: var(--icon-strong-active);
+      transform: scale(0.95);
     }
     &:disabled {
       background-color: var(--icon-strong-disabled);
