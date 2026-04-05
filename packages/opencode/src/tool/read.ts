@@ -185,7 +185,7 @@ export const ReadTool = Tool.defineEffect(
         )
       }
 
-      let output = [`<path>${filepath}</path>`, `<type>file</type>`, "<content>"].join("\n")
+      let output = [`<path>${filepath}</path>`, `<type>file</type>`, "<content>" + "\n"].join("\n")
       output += file.raw.map((line, i) => `${i + file.offset}: ${line}`).join("\n")
 
       const last = file.offset + file.raw.length - 1
