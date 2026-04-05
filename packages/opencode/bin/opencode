@@ -121,7 +121,10 @@ function findBinary(startDir) {
 const resolved = findBinary(scriptDir)
 
 if (!resolved) {
-  console.error("Could not locate opencode binary for this platform.")
+  console.error(
+  "Could not locate opencode binary for this platform. " +
+  "If you're running in an unsupported environment (e.g. Termux/Android), behavior may be limited."
+)
   process.exit(1)
 }
 
