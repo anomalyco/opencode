@@ -2036,7 +2036,7 @@
     "env": ["MINIMAX_API_KEY"],
     "npm": "@ai-sdk/anthropic",
     "api": "https://api.minimax.io/anthropic/v1",
-    "name": "MiniMax Coding Plan (minimax.io)",
+    "name": "MiniMax Token Plan (minimax.io)",
     "doc": "https://platform.minimax.io/docs/token-plan/intro",
     "models": {
       "MiniMax-M2.7": {
@@ -48575,7 +48575,7 @@
     "env": ["MINIMAX_API_KEY"],
     "npm": "@ai-sdk/anthropic",
     "api": "https://api.minimaxi.com/anthropic/v1",
-    "name": "MiniMax Coding Plan (minimaxi.com)",
+    "name": "MiniMax Token Plan (minimaxi.com)",
     "doc": "https://platform.minimaxi.com/docs/token-plan/intro",
     "models": {
       "MiniMax-M2.7": {
