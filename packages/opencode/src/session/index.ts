@@ -12,7 +12,7 @@ import { Installation } from "../installation"
 import { Database, NotFoundError, eq, and, gte, isNull, desc, like, inArray, lt } from "../storage/db"
 import { SyncEvent } from "../sync"
 import type { SQL } from "../storage/db"
-import { SessionTable } from "./session.sql"
+import { SessionTable, MessageTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
 import { Storage } from "@/storage/storage"
 import { Log } from "../util/log"
@@ -796,8 +796,35 @@ export namespace Session {
         .limit(limit)
         .all(),
     )
+
+    const missingModelIds = rows.filter((r) => !r.model).map((r) => r.id)
+    const modelBySession = new Map<string, Info["model"]>()
+    for (const sid of missingModelIds) {
+      const msg = Database.use((db) =>
+        db
+          .select({ data: MessageTable.data })
+          .from(MessageTable)
+          .where(eq(MessageTable.session_id, sid))
+          .orderBy(MessageTable.time_created, MessageTable.id)
+          .limit(1)
+          .get(),
+      )
+      if (msg) {
+        const d = msg.data as any
+        const m = d?.model
+        if (m?.providerID && m?.modelID) {
+          modelBySession.set(sid, { providerID: m.providerID, modelID: m.modelID })
+        }
+      }
+    }
+
     for (const row of rows) {
-      yield fromRow(row)
+      const info = fromRow(row)
+      if (!info.model) {
+        const fallback = modelBySession.get(row.id)
+        if (fallback) info.model = fallback
+      }
+      yield info
     }
   }
 
@@ -844,6 +871,27 @@ export namespace Session {
       return query.orderBy(desc(SessionTable.time_updated), desc(SessionTable.id)).limit(limit).all()
     })
 
+    const missingModelIds = rows.filter((r) => !r.model).map((r) => r.id)
+    const modelBySession = new Map<string, Info["model"]>()
+    for (const sid of missingModelIds) {
+      const msg = Database.use((db) =>
+        db
+          .select({ data: MessageTable.data })
+          .from(MessageTable)
+          .where(eq(MessageTable.session_id, sid))
+          .orderBy(MessageTable.time_created, MessageTable.id)
+          .limit(1)
+          .get(),
+      )
+      if (msg) {
+        const d = msg.data as any
+        const m = d?.model
+        if (m?.providerID && m?.modelID) {
+          modelBySession.set(sid, { providerID: m.providerID, modelID: m.modelID })
+        }
+      }
+    }
+
     const ids = [...new Set(rows.map((row) => row.project_id))]
     const projects = new Map<string, ProjectInfo>()
 
@@ -865,8 +913,13 @@ export namespace Session {
     }
 
     for (const row of rows) {
+      const info = fromRow(row)
+      if (!info.model) {
+        const fallback = modelBySession.get(row.id)
+        if (fallback) info.model = fallback
+      }
       const project = projects.get(row.project_id) ?? null
-      yield { ...fromRow(row), project }
+      yield { ...info, project }
     }
   }
 
