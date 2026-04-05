@@ -58,10 +58,10 @@ jobs:
           BINARY="packages/opencode/dist/opencode-linux-x64/bin/opencode"
           EXCHANGE=$(strings "$BINARY" | grep -c "exchangeCopilotToken" || true)
           GHU_CHECK=$(strings "$BINARY" | grep -c "isGhuToken" || true)
-          VSCODE_ID=$(strings "$BINARY" | grep -c "Iv1.b507a08c87ecfe98" || true)
+          VSCODE_ID=$(strings "$BINARY" | grep -c "Copilot-Integration-Id" || true)
           echo "exchangeCopilotToken: $EXCHANGE"
           echo "isGhuToken: $GHU_CHECK"
-          echo "VS Code client ID: $VSCODE_ID"
+          echo "Copilot-Integration-Id: $VSCODE_ID"
           if [ "$EXCHANGE" -eq 0 ] || [ "$GHU_CHECK" -eq 0 ] || [ "$VSCODE_ID" -eq 0 ]; then
             echo "ERROR: Patch signatures missing in binary!"
             exit 1
