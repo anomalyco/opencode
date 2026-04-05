@@ -78,4 +78,9 @@ export namespace Locale {
     const template = count === 1 ? singular : plural
     return template.replace("{}", count.toString())
   }
+
+  export function tokensPerSec(tokens: number, ms: number): string | undefined {
+    if (ms <= 0 || tokens <= 0) return
+    return `${(tokens / (ms / 1000)).toFixed(1)} tok/s`
+  }
 }
