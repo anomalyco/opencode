@@ -6,6 +6,7 @@ import { Log } from "../../src/util/log"
 import { Instance } from "../../src/project/instance"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID } from "../../src/session/schema"
+import { ModelID, ProviderID } from "../../src/provider/schema"
 
 const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
@@ -139,4 +140,88 @@ describe("step-finish token propagation via Bus event", () => {
     },
     { timeout: 30000 },
   )
+})
+
+describe("session model", () => {
+  test("new session has no model by default", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const session = await Session.create({})
+        expect(session.model).toBeUndefined()
+        await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("setModel updates session model", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const session = await Session.create({})
+
+        await Session.setModel({
+          sessionID: session.id,
+          model: { providerID: ProviderID.make("openai"), modelID: ModelID.make("gpt-4") },
+        })
+
+        const updated = await Session.get(session.id)
+        expect(updated.model).toEqual({ providerID: ProviderID.make("openai"), modelID: ModelID.make("gpt-4") })
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("setModel with undefined clears model", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const session = await Session.create({})
+
+        await Session.setModel({
+          sessionID: session.id,
+          model: { providerID: ProviderID.make("openai"), modelID: ModelID.make("gpt-4") },
+        })
+
+        await Session.setModel({
+          sessionID: session.id,
+          model: undefined,
+        })
+
+        const updated = await Session.get(session.id)
+        expect(updated.model).toBeUndefined()
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("list includes model info", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const session1 = await Session.create({})
+        const session2 = await Session.create({})
+
+        await Session.setModel({
+          sessionID: session1.id,
+          model: { providerID: ProviderID.make("anthropic"), modelID: ModelID.make("claude-sonnet-4-20250514") },
+        })
+
+        const sessions = [...Session.list({ roots: true })]
+        const found = sessions.find((s) => s.id === session1.id)
+        expect(found?.model).toEqual({
+          providerID: ProviderID.make("anthropic"),
+          modelID: ModelID.make("claude-sonnet-4-20250514"),
+        })
+
+        const withoutModel = sessions.find((s) => s.id === session2.id)
+        expect(withoutModel?.model).toBeUndefined()
+
+        await Session.remove(session1.id)
+        await Session.remove(session2.id)
+      },
+    })
+  })
 })

@@ -132,18 +132,30 @@ function formatSessionTable(sessions: Session.Info[]): string {
 
   const maxIdWidth = Math.max(20, ...sessions.map((s) => s.id.length))
   const maxTitleWidth = Math.max(25, ...sessions.map((s) => s.title.length))
+  const maxModelWidth = Math.max(
+    10,
+    ...sessions.map((s) => (s.model?.modelID ? extractModelName(s.model.modelID).length : 0)),
+  )
 
-  const header = `Session ID${" ".repeat(maxIdWidth - 10)}  Title${" ".repeat(maxTitleWidth - 5)}  Updated`
+  const header = `Session ID${" ".repeat(maxIdWidth - 10)}  Title${" ".repeat(maxTitleWidth - 5)}  Model${" ".repeat(maxModelWidth - 5)}  Updated`
   lines.push(header)
   lines.push("─".repeat(header.length))
   for (const session of sessions) {
     const truncatedTitle = Locale.truncate(session.title, maxTitleWidth)
+    const modelName = session.model?.modelID
+      ? extractModelName(session.model.modelID).padEnd(maxModelWidth)
+      : " ".repeat(maxModelWidth)
     const timeStr = Locale.todayTimeOrDateTime(session.time.updated)
-    const line = `${session.id.padEnd(maxIdWidth)}  ${truncatedTitle.padEnd(maxTitleWidth)}  ${timeStr}`
+    const line = `${session.id.padEnd(maxIdWidth)}  ${truncatedTitle.padEnd(maxTitleWidth)}  ${modelName}  ${timeStr}`
     lines.push(line)
   }
 
   return lines.join(EOL)
+}
+
+function extractModelName(modelID: string): string {
+  const parts = modelID.split("/")
+  return parts[parts.length - 1]
 }
 
 function formatSessionJSON(sessions: Session.Info[]): string {
@@ -154,6 +166,7 @@ function formatSessionJSON(sessions: Session.Info[]): string {
     created: session.time.created,
     projectId: session.projectID,
     directory: session.directory,
+    model: session.model ?? null,
   }))
   return JSON.stringify(jsonData, null, 2)
 }

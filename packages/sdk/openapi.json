@@ -9903,6 +9903,18 @@
               }
             },
             "required": ["messageID"]
+          },
+          "model": {
+            "type": "object",
+            "properties": {
+              "providerID": {
+                "type": "string"
+              },
+              "modelID": {
+                "type": "string"
+              }
+            },
+            "required": ["providerID", "modelID"]
           }
         },
         "required": ["id", "slug", "projectID", "directory", "title", "version", "time"]
@@ -10501,6 +10513,25 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "model": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "providerID": {
+                            "type": "string"
+                          },
+                          "modelID": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["providerID", "modelID"]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -10514,7 +10545,8 @@
                   "title",
                   "version",
                   "permission",
-                  "revert"
+                  "revert",
+                  "model"
                 ]
               }
             },
@@ -12174,6 +12206,18 @@
               }
             },
             "required": ["messageID"]
+          },
+          "model": {
+            "type": "object",
+            "properties": {
+              "providerID": {
+                "type": "string"
+              },
+              "modelID": {
+                "type": "string"
+              }
+            },
+            "required": ["providerID", "modelID"]
           },
           "project": {
             "anyOf": [

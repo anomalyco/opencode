@@ -66,6 +66,9 @@ export namespace Session {
         : undefined
     const share = row.share_url ? { url: row.share_url } : undefined
     const revert = row.revert ?? undefined
+    const model = row.model
+      ? { providerID: row.model.provider_id as ProviderID, modelID: row.model.model_id as ModelID }
+      : undefined
     return {
       id: row.id,
       slug: row.slug,
@@ -78,6 +81,7 @@ export namespace Session {
       summary,
       share,
       revert,
+      model,
       permission: row.permission ?? undefined,
       time: {
         created: row.time_created,
@@ -105,6 +109,7 @@ export namespace Session {
       summary_diffs: info.summary?.diffs,
       revert: info.revert ?? null,
       permission: info.permission,
+      model: info.model ? { provider_id: info.model.providerID, model_id: info.model.modelID } : null,
       time_created: info.time.created,
       time_updated: info.time.updated,
       time_compacting: info.time.compacting,
@@ -158,6 +163,12 @@ export namespace Session {
           partID: PartID.zod.optional(),
           snapshot: z.string().optional(),
           diff: z.string().optional(),
+        })
+        .optional(),
+      model: z
+        .object({
+          providerID: ProviderID.zod,
+          modelID: ModelID.zod,
         })
         .optional(),
     })
@@ -325,6 +336,7 @@ export namespace Session {
     readonly share: (id: SessionID) => Effect.Effect<{ url: string }>
     readonly unshare: (id: SessionID) => Effect.Effect<void>
     readonly setTitle: (input: { sessionID: SessionID; title: string }) => Effect.Effect<void>
+    readonly setModel: (input: { sessionID: SessionID; model: Info["model"] }) => Effect.Effect<void>
     readonly setArchived: (input: { sessionID: SessionID; time?: number }) => Effect.Effect<void>
     readonly setPermission: (input: { sessionID: SessionID; permission: Permission.Ruleset }) => Effect.Effect<void>
     readonly setRevert: (input: {
@@ -556,6 +568,10 @@ export namespace Session {
         yield* patch(input.sessionID, { title: input.title })
       })
 
+      const setModel = Effect.fn("Session.setModel")(function* (input: { sessionID: SessionID; model: Info["model"] }) {
+        yield* patch(input.sessionID, { model: input.model ?? null })
+      })
+
       const setArchived = Effect.fn("Session.setArchived")(function* (input: { sessionID: SessionID; time?: number }) {
         yield* patch(input.sessionID, { time: { archived: input.time } })
       })
@@ -643,6 +659,7 @@ export namespace Session {
         providerID: ProviderID
         messageID: MessageID
       }) {
+        yield* setModel({ sessionID: input.sessionID, model: { providerID: input.providerID, modelID: input.modelID } })
         yield* Effect.promise(() =>
           SessionPrompt.command({
             sessionID: input.sessionID,
@@ -662,6 +679,7 @@ export namespace Session {
         share,
         unshare,
         setTitle,
+        setModel,
         setArchived,
         setPermission,
         setRevert,
@@ -708,6 +726,10 @@ export namespace Session {
 
   export const setTitle = fn(z.object({ sessionID: SessionID.zod, title: z.string() }), (input) =>
     runPromise((svc) => svc.setTitle(input)),
+  )
+
+  export const setModel = fn(z.object({ sessionID: SessionID.zod, model: Info.shape.model.optional() }), (input) =>
+    runPromise((svc) => svc.setModel({ sessionID: input.sessionID, model: input.model })),
   )
 
   export const setArchived = fn(z.object({ sessionID: SessionID.zod, time: z.number().optional() }), (input) =>

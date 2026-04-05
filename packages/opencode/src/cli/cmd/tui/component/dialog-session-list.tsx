@@ -12,6 +12,11 @@ import { useKV } from "../context/kv"
 import { createDebouncedSignal } from "../util/signal"
 import { Spinner } from "./spinner"
 
+function extractModelName(modelID: string): string {
+  const parts = modelID.split("/")
+  return parts[parts.length - 1]
+}
+
 export function DialogSessionList() {
   const dialog = useDialog()
   const route = useRoute()
@@ -48,12 +53,13 @@ export function DialogSessionList() {
         const isDeleting = toDelete() === x.id
         const status = sync.data.session_status?.[x.id]
         const isWorking = status?.type === "busy"
+        const modelStr = x.model?.modelID ? ` · ${extractModelName(x.model.modelID)}` : ""
         return {
           title: isDeleting ? `Press ${keybind.print("session_delete")} again to confirm` : x.title,
           bg: isDeleting ? theme.error : undefined,
           value: x.id,
           category,
-          footer: Locale.time(x.time.updated),
+          footer: Locale.time(x.time.updated) + modelStr,
           gutter: isWorking ? <Spinner /> : undefined,
         }
       })

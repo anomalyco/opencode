@@ -937,6 +937,10 @@ export type Session = {
     snapshot?: string
     diff?: string
   }
+  model?: {
+    providerID: string
+    modelID: string
+  }
 }
 
 export type EventSessionCreated = {
@@ -1097,6 +1101,10 @@ export type SyncEventSessionUpdated = {
         partID?: string
         snapshot?: string
         diff?: string
+      } | null
+      model: {
+        providerID: string
+        modelID: string
       } | null
     }
   }
@@ -1819,6 +1827,10 @@ export type GlobalSession = {
     partID?: string
     snapshot?: string
     diff?: string
+  }
+  model?: {
+    providerID: string
+    modelID: string
   }
   project: ProjectSummary | null
 }
