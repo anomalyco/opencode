@@ -2,6 +2,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "b
 import type { Prompt } from "@/context/prompt"
 
 let createPromptSubmit: typeof import("./submit").createPromptSubmit
+let sendFollowupDraft: typeof import("./submit").sendFollowupDraft
+const toasts: Array<{ title?: string; description?: string }> = []
 
 const createdClients: string[] = []
 const createdSessions: string[] = []
@@ -19,7 +21,9 @@ const optimisticSeeded: boolean[] = []
 const storedSessions: Record<string, Array<{ id: string; title?: string }>> = {}
 const promoted: Array<{ directory: string; sessionID: string }> = []
 const sentShell: string[] = []
+const sentCommands: Array<{ directory: string; messageID?: string }> = []
 const syncedDirectories: string[] = []
+const messagePages: Record<string, Array<{ info: { id: string } }>> = {}
 
 let params: { id?: string } = {}
 let selected = "/repo/worktree-a"
@@ -44,9 +48,13 @@ const clientFor = (directory: string) => {
         sentShell.push(directory)
         return { data: undefined }
       },
+      messages: async () => ({ data: messagePages[directory] ?? [] }),
       prompt: async () => ({ data: undefined }),
       promptAsync: async () => ({ data: undefined }),
-      command: async () => ({ data: undefined }),
+      command: async (input: { messageID?: string }) => {
+        sentCommands.push({ directory, messageID: input.messageID })
+        return { data: undefined }
+      },
       abort: async () => ({ data: undefined }),
     },
     worktree: {
@@ -64,7 +72,10 @@ beforeAll(async () => {
   }))
 
   mock.module("@opencode-ai/ui/toast", () => ({
-    showToast: () => 0,
+    showToast: (input: { title?: string; description?: string }) => {
+      toasts.push(input)
+      return 0
+    },
   }))
 
   mock.module("@opencode-ai/util/encode", () => ({
@@ -199,6 +210,7 @@ beforeAll(async () => {
 
   const mod = await import("./submit")
   createPromptSubmit = mod.createPromptSubmit
+  sendFollowupDraft = mod.sendFollowupDraft
 })
 
 afterAll(() => {
@@ -214,10 +226,13 @@ beforeEach(() => {
   promoted.length = 0
   params = {}
   sentShell.length = 0
+  sentCommands.length = 0
   syncedDirectories.length = 0
+  toasts.length = 0
   selected = "/repo/worktree-a"
   variant = undefined
   for (const key of Object.keys(storedSessions)) delete storedSessions[key]
+  for (const key of Object.keys(messagePages)) delete messagePages[key]
 })
 
 describe("prompt submit worktree selection", () => {
@@ -346,5 +361,41 @@ describe("prompt submit worktree selection", () => {
 
     expect(storedSessions["/repo/worktree-a"]).toEqual([{ id: "session-1", title: "New session 1" }])
     expect(optimisticSeeded).toEqual([true])
+  })
+
+  test("treats command send as delivered when message appears after request failure", async () => {
+    messagePages["/repo/main"] = [{ info: { id: "message-1" } }]
+    const err = new Error("Load failed")
+    const client = {
+      session: {
+        command: async () => {
+          throw err
+        },
+        messages: async () => ({ data: messagePages["/repo/main"] ?? [] }),
+      },
+    }
+
+    const ok = await sendFollowupDraft({
+      client: client as never,
+      globalSync: {
+        child: () => [{}, () => undefined],
+      } as never,
+      sync: {
+        data: { command: [{ name: "foo" }] },
+      } as never,
+      draft: {
+        sessionID: "session-1",
+        sessionDirectory: "/repo/main",
+        prompt: [{ type: "text", content: "/foo", start: 0, end: 4 }],
+        context: [],
+        agent: "agent",
+        model: { providerID: "provider", modelID: "model" },
+      },
+      messageID: "message-1",
+    })
+
+    expect(ok).toBe(true)
+    expect(toasts).toEqual([])
+    expect(sentCommands).toEqual([])
   })
 })

@@ -47,6 +47,33 @@ type FollowupSendInput = {
   before?: () => Promise<boolean> | boolean
 }
 
+function errorName(err: unknown) {
+  if (!err || typeof err !== "object") return
+  const value = err as { name?: unknown }
+  return typeof value.name === "string" ? value.name : undefined
+}
+
+function aborted(err: unknown) {
+  const name = errorName(err)
+  if (name === "AbortError" || name === "MessageAbortedError") return true
+  const msg = formatServerError(err).toLowerCase()
+  return msg.includes("operation was aborted")
+}
+
+async function delivered(
+  client: ReturnType<typeof useSDK>["client"],
+  sessionID: string,
+  messageID: string,
+) {
+  const found = (items: { id: string }[] | undefined) => items?.some((item) => item.id === messageID) ?? false
+  for (const ms of [0, 150, 400]) {
+    if (ms) await new Promise((resolve) => setTimeout(resolve, ms))
+    const resp = await client.session.messages({ sessionID, limit: 20 }).catch(() => undefined)
+    if (found(resp?.data?.map((item) => item.info))) return true
+  }
+  return false
+}
+
 const draftText = (prompt: Prompt) => prompt.map((part) => ("content" in part ? part.content : "")).join("")
 
 const draftImages = (prompt: Prompt) => prompt.filter((part): part is ImageAttachmentPart => part.type === "image")
@@ -75,6 +102,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
   const [head, ...tail] = text.split(" ")
   const cmd = head?.startsWith("/") ? head.slice(1) : undefined
   if (cmd && input.sync.data.command.find((item) => item.name === cmd)) {
+    const messageID = input.messageID ?? Identifier.ascending("message")
     setBusy()
     try {
       if (!(await wait())) {
@@ -84,6 +112,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
 
       await input.client.session.command({
         sessionID: input.draft.sessionID,
+        messageID,
         command: cmd,
         arguments: tail.join(" "),
         agent: input.draft.agent,
@@ -99,6 +128,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       })
       return true
     } catch (err) {
+      if (await delivered(input.client, input.draft.sessionID, messageID)) return true
       setIdle()
       throw err
     }
@@ -160,6 +190,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
     })
     return true
   } catch (err) {
+    if (await delivered(input.client, input.draft.sessionID, messageID)) return true
     setIdle()
     remove()
     throw err
@@ -479,10 +510,12 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       const commandName = cmdName.slice(1)
       const customCommand = sync.data.command.find((c) => c.name === commandName)
       if (customCommand) {
+        const messageID = Identifier.ascending("message")
         clearInput()
         client.session
           .command({
             sessionID: session.id,
+            messageID,
             command: commandName,
             arguments: args.join(" "),
             agent,
@@ -496,7 +529,8 @@ export function createPromptSubmit(input: PromptSubmitInput) {
               filename: attachment.filename,
             })),
           })
-          .catch((err) => {
+          .catch(async (err) => {
+            if (await delivered(client, session.id, messageID)) return
             showToast({
               title: language.t("prompt.toast.commandSendFailed.title"),
               description: formatServerError(err, language.t, language.t("common.requestFailed")),
@@ -587,6 +621,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       optimisticBusy: sessionDirectory === projectDirectory,
       before: waitForWorktree,
     }).catch((err) => {
+      if (aborted(err)) return
       pending.delete(session.id)
       if (sessionDirectory === projectDirectory) {
         sync.set("session_status", session.id, { type: "idle" })
