@@ -61,57 +61,22 @@ export interface Settings {
   sounds: SoundSettings
 }
 
-export const monoDefault = "System Mono"
-export const sansDefault = "System Sans"
-export const terminalDefault = "JetBrainsMono Nerd Font Mono"
-
-const monoFallback =
-  'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
-const sansFallback = 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
-const terminalFallback =
-  '"JetBrainsMono Nerd Font Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
-
-const monoBase = monoFallback
-const sansBase = sansFallback
-const terminalBase = terminalFallback
-
-function input(font: string | undefined) {
-  return font ?? ""
-}
-
-function family(font: string) {
-  if (/^[\w-]+$/.test(font)) return font
-  return `"${font.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`
-}
-
-function stack(font: string | undefined, base: string) {
-  const value = font?.trim() ?? ""
-  if (!value) return base
-  return `${family(value)}, ${base}`
-}
-
-export function monoInput(font: string | undefined) {
-  return input(font)
-}
-
-export function sansInput(font: string | undefined) {
-  return input(font)
-}
-
-export function monoFontFamily(font: string | undefined) {
-  return stack(font, monoBase)
-}
-
-export function sansFontFamily(font: string | undefined) {
-  return stack(font, sansBase)
-}
-
-export function terminalInput(font: string | undefined) {
-  return input(font)
-}
-
-export function terminalFontFamily(font: string | undefined) {
-  return stack(font, terminalBase)
+function migrate(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value
+  const next = value as Record<string, unknown>
+  const general =
+    next.general && typeof next.general === "object" && !Array.isArray(next.general)
+      ? (next.general as Record<string, unknown>)
+      : undefined
+  if (!general) return value
+  if (general.showReasoningSummaries === true) return value
+  return {
+    ...next,
+    general: {
+      ...general,
+      showReasoningSummaries: true,
+    },
+  }
 }
 
 const defaultSettings: Settings = {
@@ -119,12 +84,7 @@ const defaultSettings: Settings = {
     autoSave: true,
     releaseNotes: true,
     followup: "steer",
-    showFileTree: false,
-    showNavigation: false,
-    showSearch: false,
-    showStatus: false,
-    showTerminal: false,
-    showReasoningSummaries: false,
+    showReasoningSummaries: true,
     showCustomHookParts: true,
     shellToolPartsExpanded: true,
     editToolPartsExpanded: false,
@@ -168,7 +128,13 @@ function withFallback<T>(read: () => T | undefined, fallback: T) {
 export const { use: useSettings, provider: SettingsProvider } = createSimpleContext({
   name: "Settings",
   init: () => {
-    const [store, setStore, _, ready] = persisted("settings.v3", createStore<Settings>(defaultSettings))
+    const [store, setStore, _, ready] = persisted(
+      {
+        key: "settings.v3",
+        migrate,
+      },
+      createStore<Settings>(defaultSettings),
+    )
 
     createEffect(() => {
       if (typeof document === "undefined") return
