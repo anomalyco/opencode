@@ -2,14 +2,19 @@
 [data-component="context-menu-sub-content"] {
   min-width: 8rem;
   overflow: hidden;
-  border: 1px solid rgb(255 255 255 / 0.1);
+  border: 1px solid color-mix(in oklch, var(--border-strong-base) 88%, transparent);
   border-radius: var(--radius-xl);
   background-clip: padding-box;
   background-color: rgb(12 12 14 / 0.34);
   backdrop-filter: blur(40px) saturate(150%);
   -webkit-backdrop-filter: blur(40px) saturate(150%);
   padding: 6px;
-  box-shadow: var(--shadow-lg-border-base);
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--border-weak-base) 58%, transparent) inset,
+    0 1px 0 color-mix(in srgb, white 12%, transparent) inset,
+    0 24px 56px rgba(0, 0, 0, 0.16),
+    0 10px 24px rgba(0, 0, 0, 0.12),
+    0 4px 10px rgba(0, 0, 0, 0.08);
   z-index: 100;
   transform-origin: var(--kb-menu-content-transform-origin);
 

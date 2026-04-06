@@ -1,9 +1,14 @@
 [data-dock-surface="shell"] {
   background-color: rgb(12 12 14 / 0.34);
-  border: 1px solid rgb(255 255 255 / 0.1);
+  border: 1px solid color-mix(in oklch, var(--border-strong-base) 88%, transparent);
   backdrop-filter: blur(40px) saturate(150%);
   -webkit-backdrop-filter: blur(40px) saturate(150%);
-  box-shadow: var(--shadow-lg-border-base);
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--border-weak-base) 58%, transparent) inset,
+    0 1px 0 color-mix(in srgb, white 12%, transparent) inset,
+    0 24px 56px rgba(0, 0, 0, 0.16),
+    0 10px 24px rgba(0, 0, 0, 0.12),
+    0 4px 10px rgba(0, 0, 0, 0.08);
   position: relative;
   z-index: 10;
   border-radius: 12px;
