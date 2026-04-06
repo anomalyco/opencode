@@ -67,6 +67,41 @@ test("loads config with defaults when no files exist", async () => {
   })
 })
 
+test("project plugin config does not leak into other projects", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const a = path.join(dir, "a")
+      const b = path.join(dir, "b")
+      await fs.mkdir(path.join(a, ".opencode", "plugin"), { recursive: true })
+      await fs.mkdir(b, { recursive: true })
+      await Filesystem.write(path.join(a, ".opencode", "plugin", "scoped.js"), "export default async () => ({})")
+    },
+  })
+
+  const a = path.join(tmp.path, "a")
+  const b = path.join(tmp.path, "b")
+
+  const first = await Instance.provide({
+    directory: a,
+    fn: async () => {
+      const cfg = await Config.get()
+      return cfg.plugin ?? []
+    },
+  })
+
+  const second = await Instance.provide({
+    directory: b,
+    fn: async () => {
+      const cfg = await Config.get()
+      return cfg.plugin ?? []
+    },
+  })
+
+  expect(first.length).toBe(1)
+  expect(Config.getPluginName(first[0])).toBe("scoped")
+  expect(second).toEqual([])
+})
+
 test("loads JSON config file", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

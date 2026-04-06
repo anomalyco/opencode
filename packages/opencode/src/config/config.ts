@@ -1392,7 +1392,7 @@ export namespace Config {
   )
 
   export async function get() {
-    return state().then((x) => x.config)
+    return state().then((x) => structuredClone(x.config))
   }
 
   export async function getGlobal() {
