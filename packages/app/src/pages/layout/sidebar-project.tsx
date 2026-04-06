@@ -53,6 +53,10 @@ const ProjectTile = (props: {
   setMenu: (value: boolean) => void
   language: ReturnType<typeof useLanguage>
 }): JSX.Element => {
+  const dbg = (...args: unknown[]) => {
+    if (!import.meta.env.DEV) return
+    console.debug("[sidebar-project]", ...args)
+  }
   const notification = useNotification()
   const layout = useLayout()
   const unseenCount = createMemo(() =>
@@ -100,6 +104,13 @@ const ProjectTile = (props: {
             event.preventDefault()
           }}
           onClick={() => {
+            dbg("click", {
+              worktree: props.project.worktree,
+              selected: props.selected(),
+              active: props.active(),
+              sandboxes: props.project.sandboxes,
+              dirs: props.dirs(),
+            })
             if (props.selected()) {
               layout.sidebar.toggle()
               return
