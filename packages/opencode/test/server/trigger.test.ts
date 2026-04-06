@@ -1,9 +1,15 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import type { UpgradeWebSocket } from "hono/ws"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
 import { Trigger } from "../../src/trigger"
 import { resetDatabase } from "../fixture/db"
 import { tmpdir } from "../fixture/fixture"
+
+// stub – tests don't exercise WebSocket upgrades
+const upgrade = (() => {
+  throw new Error("not implemented")
+}) as UpgradeWebSocket
 
 function auth(password: string, username = "opencode") {
   return `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`
@@ -161,7 +167,7 @@ describe("trigger routes", () => {
       directory: tmp.path,
       fn: () => Trigger.create({ interval: 5_000 }),
     })
-    const app = Server.ControlPlaneRoutes()
+    const app = Server.ControlPlaneRoutes(upgrade)
 
     const fire = await app.request(`/trigger/${item.id}/fire/webhook?directory=${encodeURIComponent(tmp.path)}`, {
       method: "POST",
@@ -189,7 +195,7 @@ describe("trigger routes", () => {
       directory: tmp.path,
       fn: () => Trigger.create({ interval: 5_000 }),
     })
-    const app = Server.ControlPlaneRoutes()
+    const app = Server.ControlPlaneRoutes(upgrade)
 
     const fire = await app.request(`/trigger/${item.id}/fire/webhook?directory=${encodeURIComponent(tmp.path)}`, {
       method: "POST",
@@ -205,7 +211,7 @@ describe("trigger routes", () => {
       directory: tmp.path,
       fn: () => Trigger.create({ interval: 5_000, webhook_secret: "topsecret" }),
     })
-    const app = Server.ControlPlaneRoutes()
+    const app = Server.ControlPlaneRoutes(upgrade)
     const url = `/trigger/${item.id}/fire/webhook?directory=${encodeURIComponent(tmp.path)}`
 
     const miss = await app.request(url, {
@@ -242,7 +248,7 @@ describe("trigger routes", () => {
     process.env.OPENCODE_SERVER_PASSWORD = "secret"
 
     try {
-      const app = Server.ControlPlaneRoutes()
+      const app = Server.ControlPlaneRoutes(upgrade)
       const url = `/trigger/${item.id}/fire/webhook?directory=${encodeURIComponent(tmp.path)}`
 
       const bad = await app.request(url, { method: "POST" })

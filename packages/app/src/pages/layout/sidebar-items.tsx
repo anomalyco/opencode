@@ -16,6 +16,7 @@ import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { messageAgentColor } from "@/utils/agent"
+import { sessionTitle } from "@/utils/session-title"
 import { sessionPermissionRequest, sessionQuestionRequest } from "../session/composer/session-request-tree"
 import { hasProjectPermissions, projectAttention, sessionAttention } from "./helpers"
 
@@ -119,47 +120,51 @@ const SessionRow = (props: {
   warmPress: () => void
   warmFocus: () => void
   cancelHoverPrefetch: () => void
-}): JSX.Element => (
-  <A
-    href={`/${props.slug}/session/${props.session.id}`}
-    class={`flex items-center gap-1 min-w-0 w-full text-left focus:outline-none ${props.dense ? "py-0.5" : "py-1"}`}
-    onPointerDown={props.warmPress}
-    onPointerEnter={props.warmHover}
-    onPointerLeave={props.cancelHoverPrefetch}
-    onFocus={props.warmFocus}
-    onClick={() => {
-      props.setHoverSession(undefined)
-      if (props.sidebarOpened()) return
-      props.clearHoverProjectSoon()
-    }}
-  >
-    <div
-      data-slot="session-state"
-      data-state={props.state()}
-      class="shrink-0 size-6 flex items-center justify-center"
-      style={{ color: props.tint() ?? "var(--icon-interactive-base)" }}
+}) => {
+  const title = () => sessionTitle(props.session.title)
+
+  return (
+    <A
+      href={`/${props.slug}/session/${props.session.id}`}
+      class={`flex items-center gap-1 min-w-0 w-full text-left focus:outline-none ${props.dense ? "py-0.5" : "py-1"}`}
+      onPointerDown={props.warmPress}
+      onPointerEnter={props.warmHover}
+      onPointerLeave={props.cancelHoverPrefetch}
+      onFocus={props.warmFocus}
+      onClick={() => {
+        props.setHoverSession(undefined)
+        if (props.sidebarOpened()) return
+        props.clearHoverProjectSoon()
+      }}
     >
-      <Switch fallback={<Icon name="dash" size="small" class="text-icon-weak" />}>
-        <Match when={props.isWorking()}>
-          <Spinner class="size-[15px]" />
-        </Match>
-        <Match when={props.hasPermissions()}>
-          <div class="size-1.5 rounded-full bg-surface-warning-strong" />
-        </Match>
-        <Match when={props.hasQuestions()}>
-          <div class="size-1.5 rounded-full bg-surface-warning-strong" />
-        </Match>
-        <Match when={props.hasError()}>
-          <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
-        </Match>
-        <Match when={props.unseenCount() > 0}>
-          <div class="size-1.5 rounded-full bg-text-interactive-base" />
-        </Match>
-      </Switch>
-    </div>
-    <span class="text-14-regular text-text-strong min-w-0 flex-1 truncate">{props.session.title}</span>
-  </A>
-)
+      <div
+        data-slot="session-state"
+        data-state={props.state()}
+        class="shrink-0 size-6 flex items-center justify-center"
+        style={{ color: props.tint() ?? "var(--icon-interactive-base)" }}
+      >
+        <Switch fallback={<Icon name="dash" size="small" class="text-icon-weak" />}>
+          <Match when={props.isWorking()}>
+            <Spinner class="size-[15px]" />
+          </Match>
+          <Match when={props.hasPermissions()}>
+            <div class="size-1.5 rounded-full bg-surface-warning-strong" />
+          </Match>
+          <Match when={props.hasQuestions()}>
+            <div class="size-1.5 rounded-full bg-surface-warning-strong" />
+          </Match>
+          <Match when={props.hasError()}>
+            <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
+          </Match>
+          <Match when={props.unseenCount() > 0}>
+            <div class="size-1.5 rounded-full bg-text-interactive-base" />
+          </Match>
+        </Switch>
+      </div>
+      <span class="text-14-regular text-text-strong min-w-0 flex-1 truncate">{title()}</span>
+    </A>
+  )
+}
 
 const SessionHoverPreview = (props: {
   mobile?: boolean
@@ -356,7 +361,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
             fallback={
               <Tooltip
                 placement={props.mobile ? "bottom" : "right"}
-                value={props.session.title}
+                value={sessionTitle(props.session.title)}
                 gutter={10}
                 class="min-w-0 w-full"
               >

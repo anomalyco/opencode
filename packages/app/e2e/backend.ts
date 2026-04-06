@@ -44,6 +44,14 @@ async function waitForHealth(url: string, probe = "/global/health") {
   throw new Error(`Timed out waiting for backend health at ${url}${probe}${last ? ` (${last})` : ""}`)
 }
 
+async function waitExit(proc: ReturnType<typeof spawn>, timeout = 10_000) {
+  if (proc.exitCode !== null) return
+  await Promise.race([
+    new Promise<void>((resolve) => proc.once("exit", () => resolve())),
+    new Promise<void>((resolve) => setTimeout(resolve, timeout)),
+  ])
+}
+
 const LOG_CAP = 100
 
 function cap(input: string[]) {
@@ -54,7 +62,7 @@ function tail(input: string[]) {
   return input.slice(-40).join("")
 }
 
-export async function startBackend(label: string): Promise<Handle> {
+export async function startBackend(label: string, input?: { llmUrl?: string }): Promise<Handle> {
   const port = await freePort()
   const sandbox = await fs.mkdtemp(path.join(os.tmpdir(), `opencode-e2e-${label}-`))
   const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
@@ -62,7 +70,6 @@ export async function startBackend(label: string): Promise<Handle> {
   const opencodeDir = path.join(repoDir, "packages", "opencode")
   const env = {
     ...process.env,
-    OPENCODE_DISABLE_SHARE: process.env.OPENCODE_DISABLE_SHARE ?? "true",
     OPENCODE_DISABLE_LSP_DOWNLOAD: "true",
     OPENCODE_DISABLE_DEFAULT_PLUGINS: "true",
     OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true",
@@ -73,6 +80,7 @@ export async function startBackend(label: string): Promise<Handle> {
     XDG_STATE_HOME: path.join(sandbox, "state"),
     OPENCODE_CLIENT: "app",
     OPENCODE_STRICT_CONFIG_DEPS: "true",
+    OPENCODE_E2E_LLM_URL: input?.llmUrl,
   } satisfies Record<string, string | undefined>
   const out: string[] = []
   const err: string[] = []
@@ -117,7 +125,11 @@ export async function startBackend(label: string): Promise<Handle> {
     async stop() {
       if (proc.exitCode === null) {
         proc.kill("SIGTERM")
-        await new Promise((resolve) => proc.once("exit", () => resolve(undefined))).catch(() => undefined)
+        await waitExit(proc)
+      }
+      if (proc.exitCode === null) {
+        proc.kill("SIGKILL")
+        await waitExit(proc)
       }
       await fs.rm(sandbox, { recursive: true, force: true }).catch(() => undefined)
     },

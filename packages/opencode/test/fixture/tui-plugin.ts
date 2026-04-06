@@ -211,6 +211,7 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
         }
       },
       trigger: () => {},
+      show: () => {},
     },
     route: {
       register: () => {
@@ -231,6 +232,7 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
       DialogConfirm: () => null,
       DialogPrompt: () => null,
       DialogSelect: () => null,
+      Slot: () => null,
       Prompt: () => null,
       toast: () => {},
       dialog: {
