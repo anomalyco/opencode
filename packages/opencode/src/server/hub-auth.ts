@@ -7,14 +7,15 @@ import { Log } from "../util/log"
 /**
  * JupyterHub OAuth2 Authorization Code flow for singleuser servers.
  *
- * Replicates what jupyter-labhub does in Python:
- * 1. Unauthenticated browser request -> redirect to Hub OAuth authorize
- * 2. Hub authenticates user via its own session cookie
- * 3. Hub redirects back with authorization code
- * 4. Server exchanges code for access token
- * 5. Server fetches user info with the token
- * 6. Compares user with JUPYTERHUB_USER (container owner)
- * 7. Issues a session cookie for subsequent requests
+ * TypeScript port of the Python implementation in jupyterhub 5.4.3:
+ * - HubOAuth (login_url, token_for_code):
+ *   https://github.com/jupyterhub/jupyterhub/blob/652390e/jupyterhub/services/auth.py#L874-L1112
+ * - HubAuthenticated (get_current_user, get_login_url):
+ *   https://github.com/jupyterhub/jupyterhub/blob/652390e/jupyterhub/services/auth.py#L1298-L1538
+ * - HubOAuthCallbackHandler (state validation, code exchange, cookie set):
+ *   https://github.com/jupyterhub/jupyterhub/blob/652390e/jupyterhub/services/auth.py#L1547-L1618
+ * - Spawner.get_env (env vars injected into singleuser pods):
+ *   https://github.com/jupyterhub/jupyterhub/blob/652390e/jupyterhub/spawner.py#L1244-L1387
  */
 export namespace HubAuth {
   const log = Log.create({ service: "hub-auth" })
