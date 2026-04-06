@@ -543,7 +543,16 @@ it.live("command-created subtasks inherit the selected variant", () =>
   provideTmpdirServer(
     Effect.fnUntraced(function* ({ llm }) {
       const sessions = yield* Session.Service
-      let seen: { variant?: string } | undefined
+      let seen:
+        | {
+            description: string
+            prompt: string
+            subagent_type: string
+            task_id?: string
+            command?: string
+            variant?: string
+          }
+        | undefined
       const init = spyOn(TaskTool, "init").mockImplementation(async () => ({
         description: "task",
         parameters: z.object({
