@@ -10,6 +10,8 @@ const channel = (() => {
 
 const OPENCODE_SERVER_DIST = "../opencode/dist/node"
 
+const nodePtyPkg = `@lydell/node-pty-${process.platform}-${process.arch}`
+
 export default defineConfig({
   main: {
     define: {
@@ -19,8 +21,16 @@ export default defineConfig({
       rollupOptions: {
         input: { index: "src/main/index.ts" },
       },
+      externalizeDeps: { include: [nodePtyPkg] },
     },
     plugins: [
+      {
+        name: "opencode:node-pty-narrower",
+        enforce: "pre",
+        resolveId(s) {
+          if (s === "@lydell/node-pty") return nodePtyPkg
+        },
+      },
       {
         name: "opencode:virtual-server-module",
         enforce: "pre",
