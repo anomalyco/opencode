@@ -1,0 +1,1 @@
+Show current GitHub Copilot usage and quota information.
