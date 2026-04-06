@@ -493,12 +493,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.promise(() =>
                   execute(args, opts),
                 )
-                yield* plugin.trigger(
-                  "tool.execute.after",
-                  { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId, args },
-                  result,
-                )
-
                 const textParts: string[] = []
                 const attachments: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[] = []
                 for (const contentItem of result.content) {
@@ -530,10 +524,17 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   ...(truncated.truncated && { outputPath: truncated.outputPath }),
                 }
 
+                const assembled = { title: key, output: truncated.content, metadata }
+                yield* plugin.trigger(
+                  "tool.execute.after",
+                  { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId, args },
+                  assembled,
+                )
+
                 return {
                   title: "",
-                  metadata,
-                  output: truncated.content,
+                  metadata: assembled.metadata,
+                  output: assembled.output,
                   attachments: attachments.map((attachment) => ({
                     ...attachment,
                     id: PartID.ascending(),
