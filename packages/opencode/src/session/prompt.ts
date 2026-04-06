@@ -590,7 +590,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               prompt: task.prompt,
               description: task.description,
               subagent_type: task.agent,
-              variant: lastUser.variant,
               command: task.command,
             },
             time: { start: Date.now() },
@@ -600,7 +599,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           prompt: task.prompt,
           description: task.description,
           subagent_type: task.agent,
-          variant: lastUser.variant,
           command: task.command,
         }
         yield* plugin.trigger("tool.execute.before", { tool: "task", sessionID, callID: part.id }, { args: taskArgs })

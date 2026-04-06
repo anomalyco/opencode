@@ -550,18 +550,24 @@ it.live("command-created subtasks inherit the selected variant", () =>
           description: z.string(),
           prompt: z.string(),
           subagent_type: z.string(),
-          variant: z.string().optional(),
           task_id: z.string().optional(),
           command: z.string().optional(),
         }),
-        execute: async (args) => {
+        execute: async (args, ctx) => {
           seen = args
+          ctx.metadata({
+            metadata: {
+              sessionId: SessionID.make("task"),
+              model: ref,
+              variant: "high",
+            },
+          })
           return {
             title: "inspect bug",
             metadata: {
               sessionId: SessionID.make("task"),
               model: ref,
-              variant: args.variant,
+              variant: "high",
             },
             output: "done",
           }
@@ -582,7 +588,7 @@ it.live("command-created subtasks inherit the selected variant", () =>
         }),
       )
 
-      expect(seen?.variant).toBe("high")
+      expect(seen?.variant).toBeUndefined()
 
       const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
       const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
@@ -591,7 +597,7 @@ it.live("command-created subtasks inherit the selected variant", () =>
 
       expect(taskMsg.info.variant).toBe("high")
       const tool = completedTool(taskMsg.parts)
-      expect(tool?.state.input.variant).toBe("high")
+      expect(tool?.state.input.variant).toBeUndefined()
       expect(tool?.state.metadata?.variant).toBe("high")
     }),
     {

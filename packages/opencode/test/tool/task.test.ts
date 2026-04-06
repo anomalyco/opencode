@@ -127,7 +127,7 @@ describe("tool.task", () => {
     })
   })
 
-  test("task uses explicit variant override when provided", async () => {
+  test("task ignores supplied variant and inherits parent variant", async () => {
     await using tmp = await tmpdir({ git: true })
 
     await Instance.provide({
@@ -168,7 +168,6 @@ describe("tool.task", () => {
 
         try {
           const tool = await TaskTool.init()
-          let meta: Record<string, unknown> | undefined
           type Ctx = Parameters<typeof tool.execute>[1]
           const ctx: Ctx = {
             agent: "build",
@@ -176,12 +175,9 @@ describe("tool.task", () => {
             messageID: assistant.id,
             abort: new AbortController().signal,
             callID: "call-1",
-            extra: { bypassAgentCheck: true },
             messages: [],
             ask: async () => {},
-            metadata(input) {
-              meta = input.metadata
-            },
+            metadata() {},
           }
 
           await tool.execute(
@@ -189,14 +185,13 @@ describe("tool.task", () => {
               description: "inspect bug",
               prompt: "look into the cache key path",
               subagent_type: "general",
-              variant: "max",
-            },
+              variant: "low",
+            } as Parameters<typeof tool.execute>[0],
             ctx,
           )
 
           expect(prompt).toHaveBeenCalledTimes(1)
-          expect(prompt.mock.calls[0]?.[0].variant).toBe("max")
-          expect(meta?.variant).toBe("max")
+          expect(prompt.mock.calls[0]?.[0].variant).toBe("high")
         } finally {
           prompt.mockRestore()
         }
