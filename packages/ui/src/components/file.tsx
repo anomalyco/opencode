@@ -966,6 +966,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
   const large = createMemo(() => md() && (bytes() > MARKDOWN_PREVIEW_BYTES || lines() > MARKDOWN_PREVIEW_LINES))
   const meta = createMemo(() => `${Intl.NumberFormat().format(lines())} lines, ${Intl.NumberFormat().format(bytes())} chars`)
   const preview = createMemo(() => (large() ? previewText(text()) : ""))
+  const linked = () => md() && props.selectedLines?.start != null && props.selectedLines?.end != null
   const svgSrc = createMemo(() => {
     if (!svg()) return
     return dataUrlFromMediaValue(props.media?.current ?? props.file.contents, "svg")
@@ -973,7 +974,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
 
   if (!md() && !svg()) return SourceViewer<T>(props)
 
-  const [mode, setMode] = createSignal<"preview" | "source">("preview")
+  const [mode, setMode] = createSignal<"preview" | "source">(linked() ? "source" : "preview")
   const [full, setFull] = createSignal(false)
   const bar = (
     <div
@@ -996,7 +997,22 @@ function TextViewer<T>(props: TextFileProps<T>) {
   createEffect(
     on(
       () => props.file.cacheKey ?? props.file.name,
-      () => setFull(false),
+      () => {
+        setFull(false)
+        if (md()) setMode(linked() ? "source" : "preview")
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => [props.file.cacheKey ?? props.file.name, props.selectedLines?.start, props.selectedLines?.end],
+      ([, start, end]) => {
+        if (!md()) return
+        if (start == null || end == null) return
+        setMode("source")
+      },
       { defer: true },
     ),
   )

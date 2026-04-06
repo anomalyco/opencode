@@ -18,6 +18,14 @@ describe("markdown fileLink", () => {
     })
   })
 
+  test("parses file paths with line ranges", () => {
+    expect(fileLink("packages/app/src/app.tsx:12-18")).toEqual({
+      path: "packages/app/src/app.tsx",
+      line: 12,
+      col: undefined,
+    })
+  })
+
   test("parses hash line references", () => {
     expect(fileLink("/tmp/demo/file.ts#L20C3")).toEqual({
       path: "/tmp/demo/file.ts",

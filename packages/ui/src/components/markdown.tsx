@@ -82,7 +82,8 @@ export type FileLink = {
 }
 
 const urlPattern = /^https?:\/\/[^\s<>()`"']+$/
-const filePattern = /(^|[\s([{"'])((?:\.{1,2}[\\/]|~[\\/]|\/|[A-Za-z]:[\\/])?(?:[\w.@-]+[\\/])+[\w.@-]+(?:\:\d+(?:\:\d+)?)?(?:#L\d+(?:C\d+)?)?)/g
+const filePattern =
+  /(^|[\s([{"'])((?:\.{1,2}[\\/]|~[\\/]|\/|[A-Za-z]:[\\/])?(?:[\w.@-]+[\\/])+[\w.@-]+(?:\:\d+(?:-\d+)?(?:\:\d+)?)?(?:#L\d+(?:C\d+)?)?)/g
 
 function codeUrl(text: string) {
   const href = text.trim().replace(/[),.;!?]+$/, "")
@@ -110,7 +111,7 @@ export function fileLink(text: string) {
   const hashCol = hash?.[2] ? Number(hash[2]) : undefined
   const base = hash ? raw.slice(0, -hash[0].length) : raw
   const win = /^[A-Za-z]:[\\/]/.test(base)
-  const line = base.match(/:(\d+)(?::(\d+))?$/)
+  const line = base.match(/:(\d+)(?:-(\d+))?(?::(\d+))?$/)
   const path = line && (!win || base.indexOf(":") !== 1) ? base.slice(0, -line[0].length) : base
   const next = path.replace(/[\\/]+$/, "")
   if (!next || !/[\\/]/.test(next)) return
@@ -127,7 +128,7 @@ export function fileLink(text: string) {
   const link = {
     path: path.replace(/\\/g, "/"),
     line: hashLine ?? (line?.[1] ? Number(line[1]) : undefined),
-    col: hashCol ?? (line?.[2] ? Number(line[2]) : undefined),
+    col: hashCol ?? (line?.[3] ? Number(line[3]) : undefined),
   }
 
   if (link.line !== undefined && (!Number.isInteger(link.line) || link.line <= 0)) return
