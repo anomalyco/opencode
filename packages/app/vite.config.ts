@@ -3,6 +3,7 @@ import desktopPlugin from "./vite"
 
 export default defineConfig({
   plugins: [desktopPlugin] as any,
+  base: "./",
   server: {
     host: "0.0.0.0",
     allowedHosts: true,

@@ -3,7 +3,7 @@ import { Hono } from "hono"
 import { proxy } from "hono/proxy"
 import type { UpgradeWebSocket } from "hono/ws"
 import z from "zod"
-import { createHash } from "node:crypto"
+import { randomBytes } from "node:crypto"
 import { Log } from "../util/log"
 import { Format } from "../format"
 import { TuiRoutes } from "./routes/tui"
@@ -15,6 +15,7 @@ import { Global } from "../global"
 import { LSP } from "../lsp"
 import { Command } from "../command"
 import { Flag } from "../flag/flag"
+import { requestContext } from "./context"
 import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
 import { Snapshot } from "@/snapshot"
@@ -36,11 +37,61 @@ const embeddedUIPromise = Flag.OPENCODE_DISABLE_EMBEDDED_WEB_UI
   : // @ts-expect-error - generated file at build time
     import("opencode-web-ui.gen.ts").then((module) => module.default as Record<string, string>).catch(() => null)
 
-const DEFAULT_CSP =
-  "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:"
+const DEFAULT_CSP = (nonce: string) =>
+  `default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:`
 
-const csp = (hash = "") =>
-  `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:`
+const createHtmlRewriter = (options: {
+  basePath: string
+  nonce: string
+}) => {
+  const normalizeBasePath = (src: string) => {
+    if (src.startsWith("/")) {
+      return `${options.basePath}${src.replace(/^\//, "")}`
+    } else if (src.startsWith("./")) {
+      return `${options.basePath}${src.replace(/^\.\//, "")}`
+    }
+
+    return src
+  }
+
+  return new HTMLRewriter().on('link,meta,script', {
+    element(el) {
+      switch (el.tagName) {
+        case "link":
+          const href = el.getAttribute("href")
+          if (href) {
+            el.setAttribute("href", normalizeBasePath(href))
+          }
+          break
+        case "meta":
+          const content = el.getAttribute("content")
+          if (content && el.getAttribute("property")?.endsWith(":image")) {
+            el.setAttribute("content", normalizeBasePath(content))
+          }
+          break
+        case "script":
+          const src = el.getAttribute("src")
+          if (src) {
+            el.setAttribute("src", normalizeBasePath(src))
+          }
+          break
+
+        default:
+          break
+      }
+    }
+  }).on("head", {
+    element(el) {
+      el.prepend(`<script nonce="${options.nonce}">window.__OPENCODE__ = Object.assign(window.__OPENCODE__ ?? {}, ${JSON.stringify({basePath: options.basePath})})</script>`, { html: true })
+    }
+  }).on("script#oc-theme-preload-script", {
+    element(el) {
+      if(!el.getAttribute("src")) {
+        el.setAttribute("nonce", options.nonce)
+      }
+    }
+  })
+}
 
 export const InstanceRoutes = (upgrade: UpgradeWebSocket, app: Hono = new Hono()) =>
   app
@@ -281,6 +332,7 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket, app: Hono = new Hono()
     .all("/*", async (c) => {
       const embeddedWebUI = await embeddedUIPromise
       const path = c.req.path
+      const basePath = requestContext.getStore()?.basePath ?? "/"
 
       if (embeddedWebUI) {
         const match = embeddedWebUI[path.replace(/^\//, "")] ?? embeddedWebUI["index.html"] ?? null
@@ -289,8 +341,15 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket, app: Hono = new Hono()
         if (await file.exists()) {
           c.header("Content-Type", file.type)
           if (file.type.startsWith("text/html")) {
-            c.header("Content-Security-Policy", DEFAULT_CSP)
+            const nonce = randomBytes(16).toString("base64")
+
+            c.header("Content-Security-Policy", DEFAULT_CSP(nonce))
+
+            const rewriter = createHtmlRewriter({ basePath, nonce })
+
+            return c.body(rewriter.transform(await file.text()))
           }
+
           return c.body(await file.arrayBuffer())
         } else {
           return c.json({ error: "Not Found" }, 404)
@@ -303,13 +362,17 @@ export const InstanceRoutes = (upgrade: UpgradeWebSocket, app: Hono = new Hono()
             host: "app.opencode.ai",
           },
         })
-        const match = response.headers.get("content-type")?.includes("text/html")
-          ? (await response.clone().text()).match(
-              /<script\b(?![^>]*\bsrc\s*=)[^>]*\bid=(['"])oc-theme-preload-script\1[^>]*>([\s\S]*?)<\/script>/i,
-            )
-          : undefined
-        const hash = match ? createHash("sha256").update(match[2]).digest("base64") : ""
-        response.headers.set("Content-Security-Policy", csp(hash))
+
+        if(response.headers.get("content-type")?.includes("text/html")) {
+          const nonce = randomBytes(16).toString("base64")
+
+          response.headers.set("Content-Security-Policy", DEFAULT_CSP(nonce))
+
+          const rewriter = createHtmlRewriter({ basePath, nonce })
+
+          return rewriter.transform(response.clone())
+        }
+
         return response
       }
     })

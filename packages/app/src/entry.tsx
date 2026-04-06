@@ -11,6 +11,18 @@ import { ServerConnection } from "./context/server"
 
 const DEFAULT_SERVER_URL_KEY = "opencode.settings.dat:defaultServerUrl"
 
+const ensureOnBasePath = () => {
+  const basePath = window.__OPENCODE__?.basePath ?? "/"
+
+  if (basePath !== "/" && !location.pathname.startsWith(basePath)) {
+    const newUrl = new URL(location.href)
+    newUrl.pathname = `${basePath}${location.pathname.slice(1)}`
+    location.replace(newUrl.toString())
+  }
+}
+
+ensureOnBasePath()
+
 const getLocale = () => {
   if (typeof navigator !== "object") return "en" as const
   const languages = navigator.languages?.length ? navigator.languages : [navigator.language]
@@ -101,6 +113,11 @@ const getCurrentUrl = () => {
   if (location.hostname.includes("opencode.ai")) return "http://localhost:4096"
   if (import.meta.env.DEV)
     return `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
+
+  if(window.__OPENCODE__?.basePath) {
+    return new URL(window.__OPENCODE__.basePath, location.origin).href.replace(/\/$/, "")
+  }
+
   return location.origin
 }
 

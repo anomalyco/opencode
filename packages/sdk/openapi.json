@@ -10578,6 +10578,10 @@
             "description": "Hostname to listen on",
             "type": "string"
           },
+          "basePath": {
+            "description": "Base path to serve the web app on (default: /)",
+            "type": "string"
+          },
           "mdns": {
             "description": "Enable mDNS service discovery",
             "type": "boolean"

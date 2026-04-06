@@ -16,6 +16,7 @@ import { errors } from "./error"
 import { GlobalRoutes } from "./routes/global"
 import { MDNS } from "./mdns"
 import { lazy } from "@/util/lazy"
+import { requestContext } from "./context"
 import { errorHandler } from "./middleware"
 import { InstanceRoutes } from "./instance"
 import { initProjectors } from "./projectors"
@@ -44,7 +45,7 @@ export namespace Server {
 
   export const Default = lazy(() => create({}).app)
 
-  export function ControlPlaneRoutes(upgrade: UpgradeWebSocket, app = new Hono(), opts?: { cors?: string[] }): Hono {
+  export function ControlPlaneRoutes(upgrade: UpgradeWebSocket, app = new Hono(), opts?: { cors?: string[] }) {
     return app
       .onError(errorHandler(log))
       .use((c, next) => {
@@ -237,6 +238,7 @@ export namespace Server {
 
   function create(opts: { cors?: string[] }) {
     const app = new Hono()
+
     const ws = createNodeWebSocket({ app })
     return {
       app: ControlPlaneRoutes(ws.upgradeWebSocket, app, opts),
@@ -273,14 +275,30 @@ export namespace Server {
   export async function listen(opts: {
     port: number
     hostname: string
+    basePath?: string
     mdns?: boolean
     mdnsDomain?: string
     cors?: string[]
   }): Promise<Listener> {
+    const basePath = opts.basePath ?? "/"
     const built = create(opts)
     const start = (port: number) =>
       new Promise<ServerType>((resolve, reject) => {
-        const server = createAdaptorServer({ fetch: built.app.fetch })
+        const server = createAdaptorServer({
+          fetch: (request, env) => {
+            return requestContext.run({ basePath }, () => {
+              const url = new URL(request.url)
+
+              if(basePath !== "/" && url.pathname.startsWith(basePath)) {
+                url.pathname = url.pathname.slice(basePath.length - 1)
+
+                return built.app.fetch(new Request(url.toString(), request), env)
+              }
+
+              return built.app.fetch(request, env)
+            })
+          }
+        })
         built.ws.injectWebSocket(server)
         const fail = (err: Error) => {
           cleanup()
@@ -308,6 +326,7 @@ export namespace Server {
     const next = new URL("http://localhost")
     next.hostname = opts.hostname
     next.port = String(addr.port)
+    next.pathname = basePath
     url = next
 
     const mdns =

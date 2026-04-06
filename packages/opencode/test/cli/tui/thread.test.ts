@@ -37,6 +37,7 @@ function setup() {
     mdns: false,
     port: 0,
     hostname: "127.0.0.1",
+    basePath: "/",
     mdnsDomain: "opencode.local",
     cors: [],
   })
@@ -68,6 +69,8 @@ describe("tui thread", () => {
       fork: false,
       port: 0,
       hostname: "127.0.0.1",
+      "base-path": "/",
+      basePath: "/",
       mdns: false,
       "mdns-domain": "opencode.local",
       mdnsDomain: "opencode.local",

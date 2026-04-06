@@ -1133,6 +1133,10 @@ export type ServerConfig = {
    */
   hostname?: string
   /**
+   * Base path to serve the web app on (default: /)
+   */
+  basePath?: string
+  /**
    * Enable mDNS service discovery
    */
   mdns?: boolean

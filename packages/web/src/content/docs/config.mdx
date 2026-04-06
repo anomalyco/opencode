@@ -293,6 +293,7 @@ You can configure server settings for the `opencode serve` and `opencode web` co
   "server": {
     "port": 4096,
     "hostname": "0.0.0.0",
+    "basePath": "/my-base/sub-path/",
     "mdns": true,
     "mdnsDomain": "myproject.local",
     "cors": ["http://localhost:5173"]
@@ -304,6 +305,7 @@ Available options:
 
 - `port` - Port to listen on.
 - `hostname` - Hostname to listen on. When `mdns` is enabled and no hostname is set, defaults to `0.0.0.0`.
+- `basePath` - BasePath to serve the web app on (useful when running as a part of an ingress network or similar), defaults to `0.0.0.0`.
 - `mdns` - Enable mDNS service discovery. This allows other devices on the network to discover your OpenCode server.
 - `mdnsDomain` - Custom domain name for mDNS service. Defaults to `opencode.local`. Useful for running multiple instances on the same network.
 - `cors` - Additional origins to allow for CORS when using the HTTP server from a browser-based client. Values must be full origins (scheme + host + optional port), eg `https://app.example.com`.

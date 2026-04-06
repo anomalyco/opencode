@@ -74,6 +74,7 @@ declare global {
       updaterEnabled?: boolean
       deepLinks?: string[]
       wsl?: boolean
+      basePath?: string
     }
     api?: {
       setTitlebar?: (theme: { mode: "light" | "dark" }) => Promise<void>
@@ -295,6 +296,7 @@ export function AppInterface(props: {
               <Dynamic
                 component={props.router ?? Router}
                 root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
+                base={window.__OPENCODE__?.basePath?.replace(/\/$/, "") ?? ""}
               >
                 <Route path="/" component={HomeRoute} />
                 <Route path="/:dir" component={DirectoryLayout}>
