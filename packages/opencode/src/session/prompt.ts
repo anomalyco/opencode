@@ -54,6 +54,16 @@ import { makeRuntime } from "@/effect/run-service"
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
 
+/**
+ * Returns true if the given finish reason indicates the model has finished
+ * and the prompt loop should not continue. Only "tool-calls" is non-terminal
+ * (the model needs tool results to continue). All other reasons — including
+ * "unknown" from non-standard providers — are treated as terminal.
+ */
+export function isTerminalFinishReason(reason: string): boolean {
+  return reason !== "tool-calls"
+}
+
 const STRUCTURED_OUTPUT_DESCRIPTION = `Use this tool to return your final response in the requested structured format.
 
 IMPORTANT:
@@ -1372,7 +1382,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
             if (
               lastAssistant?.finish &&
-              !["tool-calls"].includes(lastAssistant.finish) &&
+              isTerminalFinishReason(lastAssistant.finish) &&
               !hasToolCalls &&
               lastUser.id < lastAssistant.id
             ) {
@@ -1527,7 +1537,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   return "break" as const
                 }
 
-                const finished = handle.message.finish && !["tool-calls", "unknown"].includes(handle.message.finish)
+                const finished = handle.message.finish && isTerminalFinishReason(handle.message.finish)
                 if (finished && !handle.message.error) {
                   if (format.type === "json_schema") {
                     handle.message.error = new MessageV2.StructuredOutputError({
