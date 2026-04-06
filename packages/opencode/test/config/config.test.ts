@@ -246,70 +246,42 @@ test("creates global jsonc config with schema when no global configs exist", asy
   }
 })
 
-test("does not create global config when OPENCODE_CONFIG_DIR is set", async () => {
-  await using tmp = await tmpdir()
-  await using custom = await tmpdir()
-  const prevConfig = Global.Path.config
-  const prevEnv = process.env.OPENCODE_CONFIG_DIR
-  ;(Global.Path as { config: string }).config = tmp.path
-  process.env.OPENCODE_CONFIG_DIR = custom.path
-  await clear(true)
+test("project plugin config does not leak into other projects", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const a = path.join(dir, "a")
+      const b = path.join(dir, "b")
+      await fs.mkdir(path.join(a, ".opencode", "plugin"), { recursive: true })
+      await fs.mkdir(b, { recursive: true })
+      await Filesystem.write(path.join(a, ".opencode", "plugin", "scoped.js"), "export default async () => ({})")
+    },
+  })
 
-  try {
-    await withTestInstance({
-      directory: tmp.path,
-      fn: async (ctx) => {
-        await load(ctx)
-      },
-    })
+  const a = path.join(tmp.path, "a")
+  const b = path.join(tmp.path, "b")
 
-    expect(await Filesystem.exists(path.join(tmp.path, "opencode.jsonc"))).toBe(false)
-  } finally {
-    ;(Global.Path as { config: string }).config = prevConfig
-    if (prevEnv === undefined) delete process.env.OPENCODE_CONFIG_DIR
-    else process.env.OPENCODE_CONFIG_DIR = prevEnv
-    await clear(true)
-  }
+  const first = await Instance.provide({
+    directory: a,
+    fn: async () => {
+      const cfg = await Config.get()
+      return cfg.plugin ?? []
+    },
+  })
+
+  const second = await Instance.provide({
+    directory: b,
+    fn: async () => {
+      const cfg = await Config.get()
+      return cfg.plugin ?? []
+    },
+  })
+
+  expect(first.length).toBe(1)
+  expect(Config.getPluginName(first[0])).toBe("scoped")
+  expect(second).toEqual([])
 })
 
-it.instance(
-  "loads JSON config file",
-  Effect.gen(function* () {
-    const config = yield* Config.use.get()
-    expect(config.model).toBe("test/model")
-    expect(config.username).toBe("testuser")
-  }),
-  { config: { model: "test/model", username: "testuser" } },
-)
-
-it.instance(
-  "loads shell config field",
-  Effect.gen(function* () {
-    const config = yield* Config.use.get()
-    expect(config.shell).toBe("bash")
-  }),
-  { config: { shell: "bash" } },
-)
-
-it.instance("updates config and preserves empty shell sentinel", () =>
-  Effect.gen(function* () {
-    const test = yield* TestInstance
-    yield* writeConfigEffect(
-      test.directory,
-      { $schema: "https://opencode.ai/config.json", shell: "bash" },
-      "config.json",
-    )
-
-    yield* Config.Service.use((svc) => svc.update(ConfigParse.schema(Config.Info, { shell: "" }, "test:config")))
-
-    const writtenConfig = yield* Effect.promise(() =>
-      Filesystem.readJson<{ shell?: string }>(path.join(test.directory, "config.json")),
-    )
-    expect(writtenConfig.shell).toBe("")
-  }),
-)
-
-test("updates global config and omits empty shell key in json", async () => {
+test("loads JSON config file", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await writeConfig(dir, {
