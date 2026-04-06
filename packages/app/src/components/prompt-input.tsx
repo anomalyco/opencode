@@ -65,6 +65,7 @@ import { Popover } from "@opencode-ai/ui/popover"
 import { getFilename } from "@opencode-ai/util/path"
 import { merge, value } from "./prompt-input/expand"
 import { working as sessionWorking } from "@/pages/session/session-working"
+import { createInputUndoEntry, createInputUndoState, recordInputUndo, stepInputUndo } from "./prompt-input/input-undo"
 
 interface PromptInputProps {
   class?: string
@@ -356,6 +357,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let fileInputRef: HTMLInputElement | undefined
   let scrollRef!: HTMLDivElement
   let slashPopoverRef!: HTMLDivElement
+  let inputUndo = createInputUndoState(createInputUndoEntry(DEFAULT_PROMPT, 0))
+  let inputUndoLast = 0
 
   const mirror = { input: false }
   const inset = 56
@@ -673,6 +676,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const length = position === "start" ? 0 : promptLength(p)
     setStore("applyingHistory", true)
     applyHistoryComments(entry.comments)
+    resetInputUndo(p, length)
     prompt.set(p, length)
     requestAnimationFrame(() => {
       editorRef.focus()
@@ -750,6 +754,34 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setStore("savedPrompt", null)
   }
 
+  const resetInputUndo = (entry: Prompt = prompt.current(), cursor = prompt.cursor() ?? promptLength(entry)) => {
+    inputUndo = createInputUndoState(createInputUndoEntry(entry, cursor))
+    inputUndoLast = 0
+  }
+
+  const syncInputUndo = (next: Prompt, cursor: number, prev = prompt.current()) => {
+    const now = Date.now()
+    inputUndo = recordInputUndo({
+      state: inputUndo,
+      prev: createInputUndoEntry(prev, prompt.cursor() ?? promptLength(prev)),
+      next: createInputUndoEntry(next, cursor),
+      time: now,
+      last: inputUndoLast,
+    })
+    inputUndoLast = now
+  }
+
+  const applyInputUndoEntry = (entry: { prompt: Prompt; cursor: number }) => {
+    closePopover()
+    resetHistoryNavigation(true)
+    prompt.set(entry.prompt, entry.cursor)
+    requestAnimationFrame(() => {
+      editorRef.focus()
+      setCursorPosition(editorRef, entry.cursor)
+      queueScroll()
+    })
+  }
+
   const clearEditor = () => {
     editorRef.innerHTML = ""
   }
@@ -801,6 +833,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }, 6500)
     onCleanup(() => clearInterval(interval))
   })
+
+  createEffect(
+    on(
+      () => [params.dir, params.id] as const,
+      () => resetInputUndo(),
+      { defer: true },
+    ),
+  )
 
   const [composing, setComposing] = createSignal(false)
   const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
@@ -926,13 +966,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (cmd.type === "custom" || cmd.type === "openclaw") {
       const text = `/${cmd.trigger} `
       setEditorText(text)
-      prompt.set([{ type: "text", content: text, start: 0, end: text.length }, ...images], text.length)
+      resetInputUndo([{ type: "text", content: text, start: 0, end: text.length }], text.length)
+      prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
       focusEditorEnd()
       return
     }
 
     clearEditor()
-    prompt.set([...DEFAULT_PROMPT, ...images], 0)
+    resetInputUndo(DEFAULT_PROMPT, 0)
+    prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
     command.trigger(cmd.id, "slash")
   }
 
@@ -1151,6 +1193,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const handleInput = () => {
+    const prev = prompt.current()
     const rawParts = parseFromDOM()
     const images = imageAttachments()
     const cursorPosition = getCursorPosition(editorRef)
@@ -1167,6 +1210,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       closePopover()
       resetHistoryNavigation()
       if (prompt.dirty()) {
+        syncInputUndo(DEFAULT_PROMPT, 0, prev)
         mirror.input = true
         prompt.set(DEFAULT_PROMPT, 0)
       }
@@ -1195,6 +1239,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     resetHistoryNavigation()
 
+    syncInputUndo([...rawParts, ...images], cursorPosition, prev)
     mirror.input = true
     prompt.set([...rawParts, ...images], cursorPosition)
     queueScroll()
@@ -1320,6 +1365,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         setStore("historyIndex", -1)
         setStore("savedPrompt", null)
         prompt.set(edit.prompt, promptLength(edit.prompt))
+        resetInputUndo(edit.prompt, promptLength(edit.prompt))
         requestAnimationFrame(() => {
           editorRef.focus()
           setCursorPosition(editorRef, promptLength(edit.prompt))
@@ -1383,6 +1429,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const cursor = promptLength(next)
     closePopover()
     resetHistoryNavigation(true)
+    syncInputUndo(next, cursor)
     prompt.set(next, cursor)
     queueScroll()
     schedulePrediction()
@@ -1422,6 +1469,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     },
     setMode: (mode) => setStore("mode", mode),
     setPopover: (popover) => setStore("popover", popover),
+    resetInputUndo,
     newSessionWorktree: () => props.newSessionWorktree,
     onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
     shouldQueue: props.shouldQueue,
@@ -1432,6 +1480,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   const handleKeyDown = (event: KeyboardEvent) => {
+    const mod = event.metaKey || event.ctrlKey
+
+    if (mod && !event.altKey && event.key.toLowerCase() === "z") {
+      const dir = event.shiftKey ? "redo" : "undo"
+      const next = stepInputUndo(inputUndo, dir)
+      if (!next) return
+      event.preventDefault()
+      inputUndo = next.state
+      applyInputUndoEntry(next.entry)
+      return
+    }
+
     if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "u") {
       event.preventDefault()
       if (store.mode !== "normal") return
