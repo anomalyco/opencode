@@ -745,6 +745,7 @@ it.live(
                 metadata: {
                   sessionId: SessionID.make("task"),
                   model: ref,
+                  variant: undefined,
                 },
                 output: "",
               }
