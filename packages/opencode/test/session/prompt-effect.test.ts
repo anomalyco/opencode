@@ -539,6 +539,102 @@ it.live("failed subtask preserves metadata on error tool state", () =>
   ),
 )
 
+it.live("command-created subtasks inherit the selected variant", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ llm }) {
+      const sessions = yield* Session.Service
+      let seen:
+        | {
+            description: string
+            prompt: string
+            subagent_type: string
+            task_id?: string
+            command?: string
+          }
+        | undefined
+      const init = spyOn(TaskTool, "init").mockImplementation(async () => ({
+        description: "task",
+        parameters: z.object({
+          description: z.string(),
+          prompt: z.string(),
+          subagent_type: z.string(),
+          task_id: z.string().optional(),
+          command: z.string().optional(),
+        }),
+        execute: async (args, ctx) => {
+          seen = args
+          ctx.metadata({
+            metadata: {
+              sessionId: SessionID.make("task"),
+              model: ref,
+              variant: "high",
+            },
+          })
+          return {
+            title: "inspect bug",
+            metadata: {
+              sessionId: SessionID.make("task"),
+              model: ref,
+              variant: "high",
+            },
+            output: "done",
+          }
+        },
+      }))
+      yield* Effect.addFinalizer(() => Effect.sync(() => init.mockRestore()))
+
+      const chat = yield* sessions.create({ title: "Pinned" })
+      yield* llm.text("done")
+      yield* Effect.promise(() =>
+        SessionPrompt.command({
+          sessionID: chat.id,
+          command: "inspect",
+          arguments: "",
+          agent: "build",
+          model: "test/test-model",
+          variant: "high",
+        }),
+      )
+
+      expect(seen).toEqual({
+        description: "inspect bug",
+        prompt: "look into the cache key path",
+        subagent_type: "general",
+        command: "inspect",
+      })
+
+      const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+      const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
+      expect(taskMsg?.info.role).toBe("assistant")
+      if (!taskMsg || taskMsg.info.role !== "assistant") return
+
+      expect(taskMsg.info.variant).toBe("high")
+      const tool = completedTool(taskMsg.parts)
+      expect(tool?.state.input).toEqual({
+        description: "inspect bug",
+        prompt: "look into the cache key path",
+        subagent_type: "general",
+        command: "inspect",
+      })
+      expect(tool?.state.metadata?.variant).toBe("high")
+    }),
+    {
+      git: true,
+      config: (url) => ({
+        ...providerCfg(url),
+        command: {
+          inspect: {
+            description: "inspect bug",
+            template: "look into the cache key path",
+            agent: "general",
+            subtask: true,
+          },
+        },
+      }),
+    },
+  ),
+)
+
 it.live(
   "loop sets status to busy then idle",
   () =>
