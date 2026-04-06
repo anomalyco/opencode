@@ -3,7 +3,8 @@
   "provider": {
     "anthropic": {
       "options": {
-        "baseURL": "${ANTHROPIC_BASE_URL}"
+        "baseURL": "${ANTHROPIC_BASE_URL}",
+        "apiKey": "${JUPYTERHUB_API_TOKEN}"
       }
     }
   }
