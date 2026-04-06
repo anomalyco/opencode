@@ -182,10 +182,36 @@ else
 
     if [ -z "$requested_version" ]; then
         url="https://github.com/anomalyco/opencode/releases/latest/download/$filename"
-        specific_version=$(curl -s https://api.github.com/repos/anomalyco/opencode/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
+        api_response=""
+        # GitHub's unauthenticated API is rate-limited per IP (60 req/hr), which can
+        # cause failures on shared/office networks. Authenticated requests get a much
+        # higher limit (5000 req/hr). If gh CLI is installed, attempt the call through
+        # it — gh picks up any logged-in account automatically. Falls back to plain
+        # anonymous curl if gh is absent or the call fails.
+        if command -v gh >/dev/null 2>&1; then
+            api_response=$(gh api repos/anomalyco/opencode/releases/latest 2>/dev/null || true)
+        fi
+        if [ -z "$api_response" ]; then
+            api_response=$(curl -s https://api.github.com/repos/anomalyco/opencode/releases/latest)
+        fi
+        specific_version=$(echo "$api_response" | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
 
-        if [[ $? -ne 0 || -z "$specific_version" ]]; then
-            echo -e "${RED}Failed to fetch version information${NC}"
+        if [[ -z "$specific_version" ]]; then
+            if echo "$api_response" | grep -qi "rate limit"; then
+                echo -e "${RED}Error: GitHub API rate limit exceeded${NC}"
+                echo -e "${MUTED}This can happen on shared/office networks. To install anyway:${NC}"
+                echo -e ""
+                echo -e "${MUTED}Option 1 — specify a version explicitly:${NC}"
+                echo -e "  curl -fsSL https://opencode.ai/install | bash -s -- --version <version>"
+                echo -e ""
+                echo -e "${MUTED}Option 2 — authenticate with GitHub CLI:${NC}"
+                echo -e "  gh auth login"
+                echo -e "  curl -fsSL https://opencode.ai/install | bash"
+                echo -e ""
+                echo -e "${MUTED}Find available versions at: ${NC}https://github.com/anomalyco/opencode/releases"
+            else
+                echo -e "${RED}Failed to fetch version information${NC}"
+            fi
             exit 1
         fi
     else
