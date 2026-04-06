@@ -92,6 +92,14 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
       return ServerProxy.websocket(target, c.req.raw, c.env)
     }
 
-    return ServerProxy.http(target, c.req.raw)
+    const headers = new Headers(c.req.raw.headers)
+    headers.delete("x-opencode-workspace")
+
+    return ServerProxy.http(
+      target,
+      new Request(c.req.raw, {
+        headers,
+      }),
+    )
   }
 }
