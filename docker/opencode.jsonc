@@ -1,3 +1,11 @@
 {
-  "permission": "allow"
+  "permission": "allow",
+  "provider": {
+    "anthropic": {
+      "options": {
+        "baseURL": "${ANTHROPIC_BASE_URL}",
+        "apiKey": "proxy-auth"
+      }
+    }
+  }
 }

@@ -1,29 +1,21 @@
-### Issue for this PR
+## 배경
 
-Closes #
+<!-- 동료가 이해할 수 있는 작업 배경을 한 두 문장으로 간결히 작성합니다. -->
+<!-- 필요한 경우 슬랙, 노션, 사진, 영상 등을 첨부합니다. -->
 
-### Type of change
+## 변경사항
 
-- [ ] Bug fix
-- [ ] New feature
-- [ ] Refactor / code improvement
-- [ ] Documentation
+<!-- 파일별로 나열하지 않고, 컴포넌트/개념/시스템 단위로 변경을 서술합니다. -->
+<!-- 동료들은 레포에 익숙하고 관련 기술에 숙련되어 있으므로 간결하고 추상적인 서술이 적합합니다. -->
 
-### What does this PR do?
+## 대안 분석
 
-Please provide a description of the issue, the changes you made to fix it, and why they work. It is expected that you understand why your changes work and if you do not understand why at least say as much so a maintainer knows how much to value the PR.
+<!-- 검토한 대안이 있다면 장단점과 함께 현재 전략이 왜 최선인지 설명합니다. -->
+<!-- 실험이 포함된 경우 나열하되, 길어지면 <details>/<summary>를 활용합니다. -->
+<!-- 대안이 없다면 이 섹션을 삭제합니다. -->
 
-**If you paste a large clearly AI generated description here your PR may be IGNORED or CLOSED!**
+## 검증
 
-### How did you verify your code works?
-
-### Screenshots / recordings
-
-_If this is a UI change, please include a screenshot or recording._
-
-### Checklist
-
-- [ ] I have tested my changes locally
-- [ ] I have not included unrelated changes in this PR
-
-_If you do not follow this template your PR will be automatically rejected._
+<!-- 테스트 코드, 임시 스크립트, 터미널 출력, 스크린샷, 동영상 등을 기록하여 -->
+<!-- 동료가 짧은 시간 안에 검증 과정을 파악하고 메타-검증할 수 있어야 합니다. -->
+<!-- 길어지면 <details>/<summary>를 활용합니다. -->
