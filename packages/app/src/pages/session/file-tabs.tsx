@@ -405,7 +405,7 @@ export function FileTabContent(props: { tab: string }) {
         }}
         enableLineSelection={!md()}
         enableHoverUtility={!md()}
-        selectedLines={md() ? null : activeSelection()}
+        selectedLines={activeSelection()}
         commentedLines={md() ? [] : commentedLines()}
         onRendered={() => {
           queueRestore()
