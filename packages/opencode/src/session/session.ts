@@ -341,6 +341,43 @@ export const Event = {
       error: MessageV2.Assistant.fields.error,
     }),
   ),
+  SubagentStarted: BusEvent.define(
+    "session.subagent.started",
+    Schema.Struct({
+      sessionID: SessionID,
+      parentID: SessionID,
+      agent: Schema.String,
+      description: Schema.String,
+      model: Schema.Struct({
+        modelID: ModelID,
+        providerID: ProviderID,
+      }),
+      time: Schema.Struct({ start: Schema.Number }),
+    }),
+  ),
+  SubagentStopped: BusEvent.define(
+    "session.subagent.stopped",
+    Schema.Struct({
+      sessionID: SessionID,
+      parentID: SessionID,
+      agent: Schema.String,
+      description: Schema.String,
+      model: Schema.Struct({
+        modelID: ModelID,
+        providerID: ProviderID,
+      }),
+      time: Schema.Struct({ start: Schema.Number, end: Schema.Number }),
+      tokens: Schema.Struct({
+        input: Schema.Number,
+        output: Schema.Number,
+        reasoning: Schema.Number,
+        cache: Schema.Struct({ read: Schema.Number, write: Schema.Number }),
+      }),
+      cost: Schema.Number,
+      status: Schema.Literal("completed", "cancelled", "failed"),
+      error: Schema.optional(Schema.String),
+    }),
+  ),
 }
 
 export function plan(input: { slug: string; time: { created: number } }, instance: InstanceContext) {
