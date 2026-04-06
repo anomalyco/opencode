@@ -136,9 +136,22 @@ export function SessionComposerRegion(props: {
   createEffect(() => {
     const el = store.body
     if (!el) return
-    const update = () => setStore("height", el.getBoundingClientRect().height)
-    createResizeObserver(store.body, update)
+    let raf: number | undefined
+    const update = () => {
+      if (raf !== undefined) cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => {
+        raf = undefined
+        setStore("height", el.getBoundingClientRect().height)
+      })
+    }
     update()
+    const observer = new ResizeObserver(update)
+    observer.observe(el)
+    onCleanup(() => {
+      observer.disconnect()
+      if (raf === undefined) return
+      cancelAnimationFrame(raf)
+    })
   })
 
   return (
