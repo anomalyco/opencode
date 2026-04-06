@@ -32,12 +32,72 @@ type NotificationIndex = {
 
 const MAX_NOTIFICATIONS = 500
 const NOTIFICATION_TTL_MS = 1000 * 60 * 60 * 24 * 30
+const ERROR_SOUND_LOG = "opencode.error-sound.dat"
+const ERROR_SOUND_KEY = "error-sound.v1"
+const ERROR_SOUND_MAX = 200
+
+type ErrorSoundLog = {
+  time: number
+  directory: string
+  sessionID?: string
+  sessionTitle?: string
+  sound?: string
+  error?: unknown
+}
 
 function pruneNotifications(list: Notification[]) {
   const cutoff = Date.now() - NOTIFICATION_TTL_MS
   const pruned = list.filter((n) => n.time >= cutoff)
   if (pruned.length <= MAX_NOTIFICATIONS) return pruned
   return pruned.slice(pruned.length - MAX_NOTIFICATIONS)
+}
+
+function errorText(error: EventSessionError["properties"]["error"]) {
+  if (!error) return
+  if (typeof error === "string") return error
+  if (typeof error !== "object") return String(error)
+  const data = "data" in error ? error.data : undefined
+  if (data && typeof data === "object" && "message" in data && typeof data.message === "string") return data.message
+  if ("name" in error && typeof error.name === "string") return error.name
+  return JSON.stringify(error)
+}
+
+async function logErrorSound(
+  platform: ReturnType<typeof usePlatform>,
+  input: {
+    directory: string
+    sessionID?: string
+    sessionTitle?: string
+    sound?: string
+    error?: EventSessionError["properties"]["error"]
+  },
+) {
+  const storage = platform.storage?.(ERROR_SOUND_LOG)
+  if (!storage) return
+  const prev = await Promise.resolve(storage.getItem(ERROR_SOUND_KEY)).catch(() => null)
+  const list = (() => {
+    if (!prev) return [] as ErrorSoundLog[]
+    try {
+      const data = JSON.parse(prev) as unknown
+      return Array.isArray(data) ? (data as ErrorSoundLog[]) : []
+    } catch {
+      return [] as ErrorSoundLog[]
+    }
+  })()
+  const item = {
+    time: Date.now(),
+    directory: input.directory,
+    sessionID: input.sessionID,
+    sessionTitle: input.sessionTitle,
+    sound: input.sound,
+    error: {
+      raw: input.error,
+      text: errorText(input.error),
+    },
+  } satisfies ErrorSoundLog
+  const next = [...list.slice(-(ERROR_SOUND_MAX - 1)), item]
+  console.error("error sound", item)
+  await Promise.resolve(storage.setItem(ERROR_SOUND_KEY, JSON.stringify(next))).catch(() => undefined)
 }
 
 function createNotificationIndex(): NotificationIndex {
@@ -245,6 +305,13 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
         if (session?.parentID) return
 
         if (settings.sounds.errorsEnabled()) {
+          void logErrorSound(platform, {
+            directory,
+            sessionID,
+            sessionTitle: session?.title,
+            sound: settings.sounds.errors(),
+            error: "error" in event.properties ? event.properties.error : undefined,
+          })
           void playSoundById(settings.sounds.errors())
         }
 
