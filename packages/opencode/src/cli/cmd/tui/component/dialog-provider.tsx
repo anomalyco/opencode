@@ -13,6 +13,7 @@ import { DialogModel } from "./dialog-model"
 import { useKeyboard } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { useToast } from "../ui/toast"
+import { Keybind } from "@/util/keybind"
 import { CONSOLE_MANAGED_ICON, isConsoleManagedProvider } from "@tui/util/provider-origin"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
@@ -166,7 +167,7 @@ function AutoMethod(props: AutoMethodProps) {
   const toast = useToast()
 
   useKeyboard((evt) => {
-    if (evt.name === "c" && !evt.ctrl && !evt.meta) {
+    if (Keybind.resolveKeyName(evt) === "c" && !evt.ctrl && !evt.meta) {
       const code = props.authorization.instructions.match(/[A-Z0-9]{4}-[A-Z0-9]{4,5}/)?.[0] ?? props.authorization.url
       Clipboard.copy(code)
         .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
