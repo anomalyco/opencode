@@ -52,6 +52,7 @@ import {
   discoverWorkflowModels,
 } from "gitlab-ai-provider"
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
+import { wrapCredentialProviderWithRefresh } from "./aws-refresh"
 import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
@@ -317,8 +318,6 @@ export namespace Provider {
         // Only use credential chain if no bearer token exists
         // Bearer token takes precedence over credential chain (profiles, access keys, IAM roles, web identity tokens)
         if (!awsBearerToken) {
-          const { wrapCredentialProviderWithRefresh } = await import("./aws-refresh")
-
           // Build credential provider options (only pass profile if specified)
           const credentialProviderOptions = profile ? { profile } : {}
 
