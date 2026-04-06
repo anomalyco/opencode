@@ -8,6 +8,7 @@ import { SettingsGeneral } from "./settings-general"
 import { SettingsKeybinds } from "./settings-keybinds"
 import { SettingsProviders } from "./settings-providers"
 import { SettingsModels } from "./settings-models"
+import { SettingsAgents } from "./settings-agents"
 
 export const DialogSettings: Component = () => {
   const language = useLanguage()
@@ -19,33 +20,35 @@ export const DialogSettings: Component = () => {
         <Tabs.List>
           <div class="flex flex-col justify-between h-full w-full">
             <div class="flex flex-col gap-3 w-full pt-3">
-              <div class="flex flex-col gap-3">
-                <div class="flex flex-col gap-1.5">
-                  <Tabs.SectionTitle>{language.t("settings.section.desktop")}</Tabs.SectionTitle>
-                  <div class="flex flex-col gap-1.5 w-full">
-                    <Tabs.Trigger value="general">
-                      <Icon name="sliders" />
-                      {language.t("settings.tab.general")}
-                    </Tabs.Trigger>
-                    <Tabs.Trigger value="shortcuts">
-                      <Icon name="keyboard" />
-                      {language.t("settings.tab.shortcuts")}
-                    </Tabs.Trigger>
-                  </div>
+              <div class="flex flex-col gap-1.5">
+                <Tabs.SectionTitle>{language.t("settings.section.desktop")}</Tabs.SectionTitle>
+                <div class="flex flex-col gap-1.5 w-full">
+                  <Tabs.Trigger value="general">
+                    <Icon name="sliders" />
+                    {language.t("settings.tab.general")}
+                  </Tabs.Trigger>
+                  <Tabs.Trigger value="shortcuts">
+                    <Icon name="keyboard" />
+                    {language.t("settings.tab.shortcuts")}
+                  </Tabs.Trigger>
                 </div>
+              </div>
 
-                <div class="flex flex-col gap-1.5">
-                  <Tabs.SectionTitle>{language.t("settings.section.server")}</Tabs.SectionTitle>
-                  <div class="flex flex-col gap-1.5 w-full">
-                    <Tabs.Trigger value="providers">
-                      <Icon name="providers" />
-                      {language.t("settings.providers.title")}
-                    </Tabs.Trigger>
-                    <Tabs.Trigger value="models">
-                      <Icon name="models" />
-                      {language.t("settings.models.title")}
-                    </Tabs.Trigger>
-                  </div>
+              <div class="flex flex-col gap-1.5">
+                <Tabs.SectionTitle>{language.t("settings.section.server")}</Tabs.SectionTitle>
+                <div class="flex flex-col gap-1.5 w-full">
+                  <Tabs.Trigger value="agents">
+                    <Icon name="users" />
+                    {language.t("settings.agents.title")}
+                  </Tabs.Trigger>
+                  <Tabs.Trigger value="providers">
+                    <Icon name="providers" />
+                    {language.t("settings.providers.title")}
+                  </Tabs.Trigger>
+                  <Tabs.Trigger value="models">
+                    <Icon name="models" />
+                    {language.t("settings.models.title")}
+                  </Tabs.Trigger>
                 </div>
               </div>
             </div>
@@ -60,6 +63,9 @@ export const DialogSettings: Component = () => {
         </Tabs.Content>
         <Tabs.Content value="shortcuts" class="no-scrollbar">
           <SettingsKeybinds />
+        </Tabs.Content>
+        <Tabs.Content value="agents" class="no-scrollbar">
+          <SettingsAgents />
         </Tabs.Content>
         <Tabs.Content value="providers" class="no-scrollbar">
           <SettingsProviders />
