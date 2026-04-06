@@ -115,7 +115,19 @@ export namespace CopilotUsage {
 }
 
 function val(v?: number) {
-  return typeof v === "number" ? v.toString() : "-"
+  if (typeof v !== "number") return "-"
+  if (Number.isInteger(v)) return v.toString()
+  return v.toFixed(2)
+}
+
+function rem(item?: Quota) {
+  if (!item) return
+  if (typeof item.quota_remaining === "number") return item.quota_remaining
+  if (typeof item.remaining === "number") return item.remaining
+}
+
+function num(v: number) {
+  return Math.round(v * 100) / 100
 }
 
 function pick(data: Usage) {
@@ -133,8 +145,7 @@ function pick(data: Usage) {
 function left(item?: Quota) {
   if (!item) return "-"
   if (item.unlimited === true) return "无限"
-  const v = typeof item.remaining === "number" ? item.remaining : item.quota_remaining
-  return val(v)
+  return val(rem(item))
 }
 
 function cap(item?: Quota) {
@@ -147,20 +158,20 @@ function use(item?: Quota) {
   if (!item) return "-"
   if (item.unlimited === true) return "-"
   if (typeof item.entitlement !== "number") return "-"
-  const r = typeof item.remaining === "number" ? item.remaining : item.quota_remaining
+  const r = rem(item)
   if (typeof r !== "number") return "-"
-  return String(Math.max(item.entitlement - r, 0))
+  return val(Math.max(item.entitlement - r, 0))
 }
 
 function pct(item?: Quota) {
   if (!item) return undefined
   if (item.unlimited === true) return undefined
   if (typeof item.percent_remaining === "number") {
-    return Math.max(0, Math.min(100, 100 - item.percent_remaining))
+    return num(Math.max(0, Math.min(100, 100 - item.percent_remaining)))
   }
   if (typeof item.entitlement !== "number") return undefined
-  const r = typeof item.remaining === "number" ? item.remaining : item.quota_remaining
+  const r = rem(item)
   if (typeof r !== "number") return undefined
   const used = Math.max(item.entitlement - r, 0)
-  return Math.max(0, Math.min(100, (used / item.entitlement) * 100))
+  return num(Math.max(0, Math.min(100, (used / item.entitlement) * 100)))
 }

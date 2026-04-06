@@ -74,7 +74,7 @@ test("formats summary and raw output", () => {
 
   const raw = CopilotUsage.format({ usage, raw: true })
   expect(raw).toContain("```json")
-  expect(raw).toContain("\"copilot_plan\": \"pro\"")
+  expect(raw).toContain('"copilot_plan": "pro"')
 })
 
 test("formats unlimited quota as infinite", () => {
@@ -93,6 +93,31 @@ test("formats unlimited quota as infinite", () => {
   expect(text).toContain("使用额度: -")
   expect(text).toContain("剩余额度: 无限")
   expect(text).toContain("总额度: 无限")
+})
+
+test("prefers precise quota values and keeps two decimals", () => {
+  const usage = {
+    quota_reset_date: "2026-05-01",
+    quota_snapshots: {
+      premium_interactions: {
+        entitlement: 1500,
+        remaining: 1327,
+        quota_remaining: 1327.56,
+        percent_remaining: 88.50399999999999,
+        unlimited: false,
+      },
+    },
+  }
+
+  const sum = CopilotUsage.brief({ usage })
+  expect(sum.used).toBe("172.44")
+  expect(sum.remaining).toBe("1327.56")
+  expect(sum.total).toBe("1500")
+  expect(sum.percent).toBe(11.5)
+
+  const text = CopilotUsage.format({ usage })
+  expect(text).toContain("使用额度: 172.44")
+  expect(text).toContain("剩余额度: 1327.56")
 })
 
 test("maps known errors to readable messages", () => {
