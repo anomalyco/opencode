@@ -1194,7 +1194,10 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[1].content[0]).toEqual({ type: "text", text: "Answer" })
   })
 
-  test("does not filter for non-anthropic providers", () => {
+  test("also filters empty content for non-anthropic providers", () => {
+    // Fix for #13811: empty text blocks must be filtered for all providers,
+    // not just @ai-sdk/anthropic, since proxied endpoints (e.g. base_url → Bedrock)
+    // also reject empty text content blocks.
     const openaiModel = {
       ...anthropicModel,
       providerID: "openai",
@@ -1215,9 +1218,9 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
 
     const result = ProviderTransform.message(msgs, openaiModel, {})
 
-    expect(result).toHaveLength(2)
-    expect(result[0].content).toBe("")
-    expect(result[1].content).toHaveLength(1)
+    // Both messages should be filtered out: one has empty string content,
+    // the other has only an empty text part.
+    expect(result).toHaveLength(0)
   })
 })
 
@@ -2835,5 +2838,117 @@ describe("ProviderTransform.variants", () => {
       const result = ProviderTransform.variants(model)
       expect(result).toEqual({})
     })
+  })
+})
+
+// ── Empty text content block filtering (issue #13811) ──────────────────────
+describe("ProviderTransform.message — empty text filtering", () => {
+  const makeModel = (npm: string, providerID: string, apiId = "claude-3-5-sonnet-20241022"): any => ({
+    id: `${providerID}/${apiId}`,
+    providerID,
+    api: { id: apiId, url: "https://example.com", npm },
+    name: "Test",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+    limit: { context: 200_000, output: 8192 },
+    status: "active",
+    options: {},
+    headers: {},
+    release_date: "2025-01-01",
+  })
+
+  const providers = [
+    { name: "openai-compatible (base_url proxy to Bedrock)", model: makeModel("@ai-sdk/openai-compatible", "custom") },
+    { name: "anthropic", model: makeModel("@ai-sdk/anthropic", "anthropic") },
+    { name: "bedrock", model: makeModel("@ai-sdk/amazon-bedrock", "bedrock", "anthropic.claude-3-5-sonnet-20241022-v2:0") },
+    { name: "openai", model: makeModel("@ai-sdk/openai", "openai", "gpt-4") },
+  ]
+
+  for (const { name, model } of providers) {
+    describe(`provider: ${name}`, () => {
+      test("filters messages with empty string content", () => {
+        const msgs: any[] = [
+          { role: "system", content: "You are helpful." },
+          { role: "user", content: "" },
+          { role: "user", content: "Hello" },
+        ]
+        const result = ProviderTransform.message(msgs, model, {})
+        const userMsgs = result.filter((m) => m.role === "user")
+        expect(userMsgs).toHaveLength(1)
+        expect(userMsgs[0].content).toBe("Hello")
+      })
+
+      test("filters empty text parts from array content", () => {
+        const msgs: any[] = [
+          { role: "system", content: "You are helpful." },
+          {
+            role: "assistant",
+            content: [
+              { type: "text", text: "" },
+              { type: "text", text: "Real response" },
+            ],
+          },
+        ]
+        const result = ProviderTransform.message(msgs, model, {})
+        const assistant = result.find((m) => m.role === "assistant")
+        expect(assistant).toBeDefined()
+        const parts = assistant!.content as any[]
+        expect(parts.every((p: any) => p.type !== "text" || p.text !== "")).toBe(true)
+      })
+
+      test("removes message entirely when all parts are empty", () => {
+        const msgs: any[] = [
+          { role: "system", content: "You are helpful." },
+          {
+            role: "assistant",
+            content: [
+              { type: "text", text: "" },
+              { type: "reasoning", text: "" },
+            ],
+          },
+          { role: "user", content: "Follow-up" },
+        ]
+        const result = ProviderTransform.message(msgs, model, {})
+        expect(result.find((m) => m.role === "assistant")).toBeUndefined()
+      })
+
+      test("preserves non-empty parts alongside empty text parts", () => {
+        const msgs: any[] = [
+          {
+            role: "assistant",
+            content: [
+              { type: "text", text: "" },
+              { type: "tool-call", toolCallId: "tc_1", toolName: "read", args: {} },
+              { type: "text", text: "Here is the result" },
+            ],
+          },
+        ]
+        const result = ProviderTransform.message(msgs, model, {})
+        const assistant = result.find((m) => m.role === "assistant")
+        expect(assistant).toBeDefined()
+        const parts = assistant!.content as any[]
+        expect(parts).toHaveLength(2)
+        expect(parts[0].type).toBe("tool-call")
+        expect(parts[1].text).toBe("Here is the result")
+      })
+    })
+  }
+
+  test("whitespace-only strings are preserved (not stripped)", () => {
+    // The Bedrock error is specifically about zero-length text, not whitespace.
+    // Stripping whitespace risks losing intentional formatting.
+    const model = makeModel("@ai-sdk/openai-compatible", "custom")
+    const msgs: any[] = [{ role: "user", content: "   " }]
+    const result = ProviderTransform.message(msgs, model, {})
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toBe("   ")
   })
 })

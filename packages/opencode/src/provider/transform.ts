@@ -51,27 +51,26 @@ export namespace ProviderTransform {
     model: Provider.Model,
     options: Record<string, unknown>,
   ): ModelMessage[] {
-    // Anthropic rejects messages with empty content - filter out empty string messages
-    // and remove empty text/reasoning parts from array content
-    if (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/amazon-bedrock") {
-      msgs = msgs
-        .map((msg) => {
-          if (typeof msg.content === "string") {
-            if (msg.content === "") return undefined
-            return msg
+    // Many providers (Anthropic, Bedrock, OpenAI-compatible proxies to Bedrock, etc.)
+    // reject messages with empty text content blocks. Filter them for all providers
+    // since empty text blocks are never meaningful.
+    msgs = msgs
+      .map((msg) => {
+        if (typeof msg.content === "string") {
+          if (msg.content === "") return undefined
+          return msg
+        }
+        if (!Array.isArray(msg.content)) return msg
+        const filtered = msg.content.filter((part) => {
+          if (part.type === "text" || part.type === "reasoning") {
+            return part.text !== ""
           }
-          if (!Array.isArray(msg.content)) return msg
-          const filtered = msg.content.filter((part) => {
-            if (part.type === "text" || part.type === "reasoning") {
-              return part.text !== ""
-            }
-            return true
-          })
-          if (filtered.length === 0) return undefined
-          return { ...msg, content: filtered }
+          return true
         })
-        .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
-    }
+        if (filtered.length === 0) return undefined
+        return { ...msg, content: filtered }
+      })
+      .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
 
     if (model.api.id.includes("claude")) {
       const scrub = (id: string) => id.replace(/[^a-zA-Z0-9_-]/g, "_")
