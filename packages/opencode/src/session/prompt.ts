@@ -50,6 +50,8 @@ import { Process } from "@/util/process"
 import { Cause, Effect, Exit, Layer, Option, Scope, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { makeRuntime } from "@/effect/run-service"
+import { Auth } from "@/auth"
+import { CopilotUsage, UsageError } from "@/plugin/github-copilot/usage"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1581,17 +1583,107 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         },
       )
 
-      const command = Effect.fn("SessionPrompt.command")(function* (input: CommandInput) {
-        log.info("command", input)
-        const cmd = yield* commands.get(input.command)
-        if (!cmd) {
-          const available = (yield* commands.list()).map((c) => c.name)
-          const hint = available.length ? ` Available commands: ${available.join(", ")}` : ""
-          const error = new NamedError.Unknown({ message: `Command not found: "${input.command}".${hint}` })
-          yield* bus.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
-          throw error
-        }
-        const agentName = cmd.agent ?? input.agent ?? (yield* agents.defaultAgent())
+      const usage: (input: CommandInput) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.usage")(
+        function* (input: CommandInput) {
+          const ctx = yield* InstanceState.context
+          const session = yield* sessions.get(input.sessionID)
+          if (session.revert) {
+            yield* Effect.promise(() => SessionRevert.cleanup(session))
+          }
+
+          const mode = input.agent ?? (yield* agents.defaultAgent())
+          const model = input.model ? Provider.parseModel(input.model) : yield* lastModel(input.sessionID)
+          const raw = /\braw\b|--raw\b/.test(input.arguments)
+          const cmd = ["/usage", input.arguments.trim()].filter(Boolean).join(" ")
+
+          const user: MessageV2.User = {
+            id: input.messageID ?? MessageID.ascending(),
+            sessionID: input.sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: mode,
+            model: { providerID: model.providerID, modelID: model.modelID },
+          }
+          yield* sessions.updateMessage(user)
+          yield* sessions.updatePart({
+            id: PartID.ascending(),
+            messageID: user.id,
+            sessionID: user.sessionID,
+            type: "text",
+            text: cmd,
+            synthetic: true,
+          } satisfies MessageV2.TextPart)
+
+          const msg: MessageV2.Assistant = {
+            id: MessageID.ascending(),
+            sessionID: input.sessionID,
+            parentID: user.id,
+            mode,
+            agent: mode,
+            cost: 0,
+            path: { cwd: ctx.directory, root: ctx.worktree },
+            time: { created: Date.now() },
+            role: "assistant",
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            modelID: model.modelID,
+            providerID: model.providerID,
+          }
+          yield* sessions.updateMessage(msg)
+
+          const info = yield* Effect.promise(() => Auth.get("github-copilot")).pipe(Effect.orDie)
+          const text = yield* Effect.promise(async () => {
+            if (!model.providerID.includes("github-copilot")) {
+              return "当前模型不是 GitHub Copilot，Usage 暂不可用。"
+            }
+            if (!info || info.type !== "oauth") {
+              return CopilotUsage.explain(new UsageError("not_logged_in"))
+            }
+            const result = await CopilotUsage.get({
+              token: info.refresh,
+              enterpriseUrl: info.enterpriseUrl,
+            }).catch((err) => err)
+            if (result instanceof Error) return CopilotUsage.explain(result)
+            return CopilotUsage.format({ usage: result, raw })
+          })
+
+          msg.time.completed = Date.now()
+          const done = yield* sessions.updateMessage(msg)
+          const part = yield* sessions.updatePart({
+            id: PartID.ascending(),
+            messageID: msg.id,
+            sessionID: msg.sessionID,
+            type: "text",
+            text,
+          } satisfies MessageV2.TextPart)
+          return {
+            info: done,
+            parts: [part],
+          }
+        },
+      )
+
+      const command: (input: CommandInput) => Effect.Effect<MessageV2.WithParts> = Effect.fn("SessionPrompt.command")(
+        function* (input: CommandInput) {
+          log.info("command", input)
+          if (input.command === Command.Default.USAGE) {
+            const result = yield* usage(input)
+            yield* bus.publish(Command.Event.Executed, {
+              name: input.command,
+              sessionID: input.sessionID,
+              arguments: input.arguments,
+              messageID: result.info.id,
+            })
+            return result
+          }
+          const cmd = yield* commands.get(input.command)
+          if (!cmd) {
+            const available = (yield* commands.list()).map((c) => c.name)
+            const hint = available.length ? ` Available commands: ${available.join(", ")}` : ""
+            const error = new NamedError.Unknown({ message: `Command not found: "${input.command}".${hint}` })
+            yield* bus.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
+            throw error
+          }
+          const agentName = cmd.agent ?? input.agent ?? (yield* agents.defaultAgent())
 
         const raw = input.arguments.match(argsRegex) ?? []
         const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
@@ -1695,7 +1787,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           messageID: result.info.id,
         })
         return result
-      })
+        },
+      )
 
       return Service.of({
         assertNotBusy,

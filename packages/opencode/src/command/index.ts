@@ -63,6 +63,7 @@ export namespace Command {
   export const Default = {
     INIT: "init",
     REVIEW: "review",
+    USAGE: "usage",
   } as const
 
   export interface Interface {
@@ -102,7 +103,6 @@ export namespace Command {
           subtask: true,
           hints: hints(PROMPT_REVIEW),
         }
-
         for (const [name, command] of Object.entries(cfg.command ?? {})) {
           commands[name] = {
             name,
