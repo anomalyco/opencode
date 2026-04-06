@@ -21,6 +21,7 @@ import { Popover as KobaltePopover } from "@kobalte/core/popover"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLanguage } from "@/context/language"
 import { useSessionKey } from "@/pages/session/session-layout"
 import { useGlobalSDK } from "@/context/global-sdk"
@@ -75,6 +76,8 @@ const taskDescription = (part: Part, sessionID: string) => {
   const value = part.state.input?.description
   if (typeof value === "string" && value) return value
 }
+
+const pace = (width: number) => Math.round(Math.max(1200, Math.min(3200, (Math.max(width, 360) * 2000) / 900)))
 
 const boundaryTarget = (root: HTMLElement, target: EventTarget | null) => {
   const current = target instanceof Element ? target : undefined
@@ -351,8 +354,20 @@ export function MessageTimeline(props: {
     open: false,
     dismiss: null as "escape" | "outside" | null,
   })
+  const [bar, setBar] = createStore({
+    ms: pace(640),
+  })
 
   let more: HTMLButtonElement | undefined
+  let head: HTMLDivElement | undefined
+
+  createResizeObserver(
+    () => head,
+    () => {
+      if (!head || head.clientWidth <= 0) return
+      setBar("ms", pace(head.clientWidth))
+    },
+  )
 
   const viewShare = () => {
     const url = shareUrl()
@@ -692,15 +707,33 @@ export function MessageTimeline(props: {
           <div ref={props.setContentRef} class="min-w-0 w-full">
             <Show when={showHeader()}>
               <div
+                ref={(el) => {
+                  head = el
+                  setBar("ms", pace(el.clientWidth))
+                }}
                 data-session-title
                 classList={{
                   "sticky top-0 z-30 bg-[linear-gradient(to_bottom,var(--background-stronger)_48px,transparent)]": true,
+                  relative: true,
                   "w-full": true,
                   "pb-4": true,
                   "pl-2 pr-3 md:pl-4 md:pr-3": true,
                   "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
                 }}
               >
+                <Show when={workingStatus() !== "hidden"}>
+                  <div
+                    data-component="session-progress"
+                    data-state={workingStatus()}
+                    aria-hidden="true"
+                    style={{
+                      "--session-progress-color": tint() ?? "var(--icon-interactive-base)",
+                      "--session-progress-ms": `${bar.ms}ms`,
+                    }}
+                  >
+                    <div data-component="session-progress-bar" />
+                  </div>
+                </Show>
                 <div class="h-12 w-full flex items-center justify-between gap-2">
                   <div class="flex items-center gap-1 min-w-0 flex-1 pr-3">
                     <div class="flex items-center min-w-0 grow-1">
