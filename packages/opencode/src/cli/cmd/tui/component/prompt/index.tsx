@@ -1,4 +1,15 @@
-import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, decodePasteBytes, t, dim, fg } from "@opentui/core"
+import {
+  BoxRenderable,
+  TextareaRenderable,
+  MouseEvent,
+  PasteEvent,
+  decodePasteBytes,
+  t,
+  dim,
+  fg,
+  RGBA,
+  hsvToRgb,
+} from "@opentui/core"
 import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
@@ -18,7 +29,7 @@ import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
-import { useRenderer, type JSX } from "@opentui/solid"
+import { useKeyboard, useRenderer, type JSX } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
@@ -121,6 +132,71 @@ export function Prompt(props: PromptProps) {
   const fileStyleId = syntax().getStyleId("extmark.file")!
   const agentStyleId = syntax().getStyleId("extmark.agent")!
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
+
+  function pasteNumber(value: string) {
+    const match = value.match(/^\[Pasted\s+(\d+)\s+~/)
+    const n = Number(match?.[1])
+    if (!Number.isFinite(n) || n <= 0) {
+      return
+    }
+
+    return n
+  }
+
+  function pasteColor(n: number) {
+    const idx = n - 1
+    const h = (idx * 137.508) % 360
+    const s = Math.min(0.55 + (idx % 5) * 0.08, 0.9)
+    const v = Math.min(0.72 + (Math.floor(idx / 5) % 4) * 0.07, 0.95)
+    return hsvToRgb(h, s, v)
+  }
+
+  function pasteStyle(value: string) {
+    const n = pasteNumber(value)
+    if (!n) {
+      return pasteStyleId
+    }
+
+    const name = `extmark.paste.${n}`
+    const id = syntax().getStyleId(name)
+    if (id !== null) {
+      return id
+    }
+
+    const bg = pasteColor(n)
+    const [r, g, b] = bg.toInts()
+    let text = RGBA.fromInts(255, 255, 255)
+    if (r * 0.299 + g * 0.587 + b * 0.114 > 150) {
+      text = RGBA.fromInts(0, 0, 0)
+    }
+
+    return syntax().registerStyle(name, {
+      fg: text,
+      bg,
+      bold: true,
+    })
+  }
+
+  function pasteTextStyle(value: string) {
+    const n = pasteNumber(value)
+    if (!n) {
+      return pasteStyleId
+    }
+
+    const name = `extmark.paste.text.${n}`
+    const id = syntax().getStyleId(name)
+    if (id !== null) {
+      return id
+    }
+
+    const fg = pasteColor(n)
+
+    return syntax().registerStyle(name, {
+      fg,
+      bold: true,
+    })
+  }
+
   let promptPartTypeId = 0
 
   sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
@@ -400,6 +476,20 @@ export function Prompt(props: PromptProps) {
     ]
   })
 
+  // Windows Terminal 1.25+ handles Ctrl+V on keydown when kitty events are
+  // enabled, but still reports the kitty key-release event. Probe on release.
+  if (process.platform === "win32") {
+    useKeyboard(
+      (evt) => {
+        if (!input.focused) return
+        if (evt.name === "v" && evt.ctrl && evt.eventType === "release") {
+          command.trigger("prompt.paste")
+        }
+      },
+      { release: true },
+    )
+  }
+
   const ref: PromptRef = {
     get focused() {
       return input.focused
@@ -467,29 +557,40 @@ export function Prompt(props: PromptProps) {
       let end = 0
       let virtualText = ""
       let styleId: number | undefined
+      let virtual = true
 
       if (part.type === "file" && part.source?.text) {
         start = part.source.text.start
         end = part.source.text.end
         virtualText = part.source.text.value
         styleId = fileStyleId
-      } else if (part.type === "agent" && part.source) {
+      }
+
+      if (part.type === "agent" && part.source) {
         start = part.source.start
         end = part.source.end
         virtualText = part.source.value
         styleId = agentStyleId
-      } else if (part.type === "text" && part.source?.text) {
+      }
+
+      if (part.type === "text" && part.source?.text) {
         start = part.source.text.start
         end = part.source.text.end
         virtualText = part.source.text.value
-        styleId = pasteStyleId
+        const current = input.plainText.slice(start, end)
+        const collapsed = current === virtualText
+        virtual = collapsed
+        styleId = pasteTextStyle(virtualText)
+        if (collapsed) {
+          styleId = pasteStyle(virtualText)
+        }
       }
 
       if (virtualText) {
         const extmarkId = input.extmarks.create({
           start,
           end,
-          virtual: true,
+          virtual,
           styleId,
           typeId: promptPartTypeId,
         })
@@ -523,6 +624,10 @@ export function Prompt(props: PromptProps) {
               } else if (part.type === "text" && part.source?.text) {
                 part.source.text.start = extmark.start
                 part.source.text.end = extmark.end
+                const value = draft.prompt.input.slice(extmark.start, extmark.end)
+                if (value !== part.source.text.value) {
+                  part.text = value
+                }
               }
               newMap.set(extmark.id, newParts.length)
               newParts.push(part)
@@ -534,6 +639,270 @@ export function Prompt(props: PromptProps) {
         draft.prompt.parts = newParts
       }),
     )
+  }
+
+  function expandText(offset?: number) {
+    let value = store.prompt.input
+    let cursor = offset
+
+    const sorted = input.extmarks
+      .getAllForTypeId(promptPartTypeId)
+      .sort((a: { start: number }, b: { start: number }) => b.start - a.start)
+
+    for (const extmark of sorted) {
+      const partIndex = store.extmarkToPartIndex.get(extmark.id)
+      if (partIndex === undefined) continue
+
+      const part = store.prompt.parts[partIndex]
+      if (part?.type !== "text") {
+        continue
+      }
+
+      if (!part.text) {
+        continue
+      }
+
+      const before = value.slice(0, extmark.start)
+      const after = value.slice(extmark.end)
+      value = before + part.text + after
+
+      if (cursor === undefined) {
+        continue
+      }
+
+      const delta = part.text.length - (extmark.end - extmark.start)
+      if (cursor > extmark.end) {
+        cursor += delta
+        continue
+      }
+      if (cursor >= extmark.start) {
+        cursor = extmark.start + part.text.length
+      }
+    }
+
+    const parts = store.prompt.parts
+      .filter((part) => part.type !== "text")
+      .map((part) => {
+        if (part.type === "file" && part.source?.text) {
+          return {
+            part,
+            value: part.source.text.value,
+            start: part.source.text.start,
+          }
+        }
+
+        if (part.type === "agent" && part.source) {
+          return {
+            part,
+            value: part.source.value,
+            start: part.source.start,
+          }
+        }
+
+        return {
+          part,
+          value: "",
+          start: Number.MAX_SAFE_INTEGER,
+        }
+      })
+      .sort((a, b) => a.start - b.start)
+      .reduce(
+        (acc, item) => {
+          if (!item.value) {
+            acc.parts.push(item.part)
+            return acc
+          }
+
+          const start = value.indexOf(item.value, acc.offset)
+          if (start === -1) {
+            return acc
+          }
+
+          const end = start + item.value.length
+          acc.offset = end
+
+          if (item.part.type === "file" && item.part.source?.text) {
+            acc.parts.push({
+              ...item.part,
+              source: {
+                ...item.part.source,
+                text: {
+                  ...item.part.source.text,
+                  start,
+                  end,
+                },
+              },
+            })
+            return acc
+          }
+
+          if (item.part.type === "agent" && item.part.source) {
+            acc.parts.push({
+              ...item.part,
+              source: {
+                ...item.part.source,
+                start,
+                end,
+              },
+            })
+            return acc
+          }
+
+          acc.parts.push(item.part)
+          return acc
+        },
+        {
+          offset: 0,
+          parts: [] as PromptInfo["parts"],
+        },
+      ).parts
+
+    return {
+      input: value,
+      parts,
+      cursor,
+    }
+  }
+
+  function togglePaste() {
+    const offset = input.visualCursor.offset
+    const hit = input.extmarks
+      .getAllForTypeId(promptPartTypeId)
+      .flatMap((extmark) => {
+        const partIndex = store.extmarkToPartIndex.get(extmark.id)
+        if (partIndex === undefined) {
+          return []
+        }
+
+        const part = store.prompt.parts[partIndex]
+        if (part?.type !== "text") {
+          return []
+        }
+
+        if (!part.source?.text) {
+          return []
+        }
+
+        if (!part.source.text.value.startsWith("[Pasted ")) {
+          return []
+        }
+
+        return [{ extmark, part, partIndex, collapsed: part.source.text.value }]
+      })
+      .find((item) => offset >= item.extmark.start && offset < item.extmark.end)
+
+    if (!hit) {
+      return
+    }
+
+    const collapsed = hit.collapsed
+    const current = store.prompt.input.slice(hit.extmark.start, hit.extmark.end)
+    let text = hit.part.text
+    if (current !== collapsed) {
+      text = current
+    }
+
+    let replacement = collapsed
+    if (current === collapsed) {
+      replacement = hit.part.text
+    }
+    const delta = replacement.length - (hit.extmark.end - hit.extmark.start)
+    const nextInput =
+      store.prompt.input.slice(0, hit.extmark.start) + replacement + store.prompt.input.slice(hit.extmark.end)
+
+    const nextParts = store.prompt.parts.map((part, index) => {
+      if (part.type === "text" && part.source?.text) {
+        if (index === hit.partIndex) {
+          return {
+            ...part,
+            text,
+            source: {
+              ...part.source,
+              text: {
+                ...part.source.text,
+                start: hit.extmark.start,
+                end: hit.extmark.start + replacement.length,
+              },
+            },
+          }
+        }
+
+        if (part.source.text.start < hit.extmark.end) {
+          return part
+        }
+
+        return {
+          ...part,
+          source: {
+            ...part.source,
+            text: {
+              ...part.source.text,
+              start: part.source.text.start + delta,
+              end: part.source.text.end + delta,
+            },
+          },
+        }
+      }
+
+      if (part.type === "file" && part.source?.text) {
+        if (part.source.text.start < hit.extmark.end) {
+          return part
+        }
+
+        return {
+          ...part,
+          source: {
+            ...part.source,
+            text: {
+              ...part.source.text,
+              start: part.source.text.start + delta,
+              end: part.source.text.end + delta,
+            },
+          },
+        }
+      }
+
+      if (part.type === "agent" && part.source) {
+        if (part.source.start < hit.extmark.end) {
+          return part
+        }
+
+        return {
+          ...part,
+          source: {
+            ...part.source,
+            start: part.source.start + delta,
+            end: part.source.end + delta,
+          },
+        }
+      }
+
+      return part
+    })
+
+    const cursor = hit.extmark.start + Math.min(Math.max(0, offset - hit.extmark.start), replacement.length)
+
+    input.setText(nextInput)
+    setStore("prompt", {
+      input: nextInput,
+      parts: nextParts,
+    })
+    restoreExtmarksFromParts(nextParts)
+    input.cursorOffset = cursor
+
+    const view = input.editorView.getViewport()
+    const max = Math.max(0, input.editorView.getTotalVirtualLineCount() - view.height)
+    if (view.offsetY > max) {
+      input.editorView.setViewport(view.offsetX, max, view.width, view.height, false)
+    }
+
+    setTimeout(() => {
+      if (!input || input.isDestroyed) {
+        return
+      }
+      input.getLayoutNode().markDirty()
+      renderer.requestRender()
+    }, 0)
   }
 
   command.register(() => [
@@ -627,26 +996,11 @@ export function Prompt(props: PromptProps) {
     }
 
     const messageID = MessageID.ascending()
-    let inputText = store.prompt.input
+    const expanded = expandText()
+    let inputText = expanded.input
 
-    // Expand pasted text inline before submitting
-    const allExtmarks = input.extmarks.getAllForTypeId(promptPartTypeId)
-    const sortedExtmarks = allExtmarks.sort((a: { start: number }, b: { start: number }) => b.start - a.start)
-
-    for (const extmark of sortedExtmarks) {
-      const partIndex = store.extmarkToPartIndex.get(extmark.id)
-      if (partIndex !== undefined) {
-        const part = store.prompt.parts[partIndex]
-        if (part?.type === "text" && part.text) {
-          const before = inputText.slice(0, extmark.start)
-          const after = inputText.slice(extmark.end)
-          inputText = before + part.text + after
-        }
-      }
-    }
-
-    // Filter out text parts (pasted content) since they're now expanded inline
-    const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
+    // Keep the same submit behavior: only send non-text parts separately.
+    const nonTextParts = expanded.parts
 
     // Capture mode before it gets reset
     const currentMode = store.mode
@@ -741,6 +1095,7 @@ export function Prompt(props: PromptProps) {
     const currentOffset = input.visualCursor.offset
     const extmarkStart = currentOffset
     const extmarkEnd = extmarkStart + virtualText.length
+    const styleId = pasteStyle(virtualText)
 
     input.insertText(virtualText + " ")
 
@@ -748,7 +1103,7 @@ export function Prompt(props: PromptProps) {
       start: extmarkStart,
       end: extmarkEnd,
       virtual: true,
-      styleId: pasteStyleId,
+      styleId,
       typeId: promptPartTypeId,
     })
 
@@ -1051,8 +1406,33 @@ export function Prompt(props: PromptProps) {
                   (lineCount >= 3 || pastedContent.length > 150) &&
                   !sync.data.config.experimental?.disable_paste_summary
                 ) {
+                  const lineLabel = lineCount === 1 ? "line" : "lines"
+                  const pasteCount =
+                    store.prompt.parts.reduce((max, part) => {
+                      if (part.type !== "text") {
+                        return max
+                      }
+
+                      if (!part.source || !("text" in part.source)) {
+                        return max
+                      }
+
+                      const value = part.source.text.value
+                      if (!value.startsWith("[Pasted ")) {
+                        return max
+                      }
+
+                      const match = value.match(/^\[Pasted\s+(\d+)\s+~/)
+                      const n = Number(match?.[1])
+                      if (!Number.isFinite(n) || n <= 0) {
+                        return max
+                      }
+
+                      return Math.max(max, n)
+                    }, 0) + 1
+
                   event.preventDefault()
-                  pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
+                  pasteText(pastedContent, `[Pasted ${pasteCount} ~${lineCount} ${lineLabel}]`)
                   return
                 }
 
@@ -1077,6 +1457,7 @@ export function Prompt(props: PromptProps) {
                 }, 0)
               }}
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
+              onMouseUp={togglePaste}
               focusedBackgroundColor={theme.backgroundElement}
               cursorColor={theme.text}
               syntaxStyle={syntax()}
