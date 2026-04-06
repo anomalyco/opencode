@@ -558,6 +558,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!messages) return false
     return messages.some((m) => m.role === "user")
   })
+  const [submit, setSubmit] = createSignal(false)
 
   const [history, setHistory] = persisted(
     Persist.global("prompt-history", ["prompt-history.v1"]),
@@ -576,7 +577,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }),
   )
 
-  const suggest = createMemo(() => !hasUserPrompt())
+  createEffect(() => {
+    if (!submit()) return
+    if (!prompt.dirty() && !hasUserPrompt()) return
+    setSubmit(false)
+  })
+
+  const suggest = createMemo(() => !hasUserPrompt() && !submit())
 
   const placeholder = createMemo(() =>
     promptPlaceholder({
@@ -1468,7 +1475,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onQueue: props.onQueue,
     onAbort: props.onAbort,
     onSubmit: props.onSubmit,
-    onSubmitted: props.onSubmitted,
+    onSubmitted: () => {
+      setSubmit(true)
+      props.onSubmitted?.()
+    },
   })
 
   const handleKeyDown = (event: KeyboardEvent) => {
