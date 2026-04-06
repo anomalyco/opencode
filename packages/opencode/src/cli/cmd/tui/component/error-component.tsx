@@ -4,6 +4,7 @@ import { Clipboard } from "@tui/util/clipboard"
 import { createSignal } from "solid-js"
 import { Installation } from "@/installation"
 import { win32FlushInputBuffer } from "../win32"
+import { Keybind } from "@/util/keybind"
 import { getScrollAcceleration } from "../util/scroll"
 
 export function ErrorComponent(props: {
@@ -25,7 +26,7 @@ export function ErrorComponent(props: {
   }
 
   useKeyboard((evt) => {
-    if (evt.ctrl && evt.name === "c") {
+    if (evt.ctrl && Keybind.resolveKeyName(evt) === "c") {
       handleExit()
     }
   })

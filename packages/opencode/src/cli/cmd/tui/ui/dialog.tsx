@@ -6,6 +6,7 @@ import { createStore } from "solid-js/store"
 import { useToast } from "./toast"
 import { Flag } from "@/flag/flag"
 import { Selection } from "@tui/util/selection"
+import { Keybind } from "@/util/keybind"
 
 export function Dialog(
   props: ParentProps<{
@@ -76,8 +77,9 @@ function init() {
   useKeyboard((evt) => {
     if (store.stack.length === 0) return
     if (evt.defaultPrevented) return
-    if ((evt.name === "escape" || (evt.ctrl && evt.name === "c")) && renderer.getSelection()?.getSelectedText()) return
-    if (evt.name === "escape" || (evt.ctrl && evt.name === "c")) {
+    const keyName = Keybind.resolveKeyName(evt)
+    if ((evt.name === "escape" || (evt.ctrl && keyName === "c")) && renderer.getSelection()?.getSelectedText()) return
+    if (evt.name === "escape" || (evt.ctrl && keyName === "c")) {
       if (renderer.getSelection()) {
         renderer.clearSelection()
       }

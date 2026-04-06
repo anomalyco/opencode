@@ -38,6 +38,7 @@ import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { DialogWorkspaceList } from "@tui/component/dialog-workspace-list"
 import { DialogConsoleOrg } from "@tui/component/dialog-console-org"
 import { KeybindProvider, useKeybind } from "@tui/context/keybind"
+import { Keybind } from "@/util/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
@@ -310,7 +311,8 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     // - Ctrl+C copies and dismisses selection
     // - Esc dismisses selection
     // - Most other key input dismisses selection and is passed through
-    if (evt.ctrl && evt.name === "c") {
+    const keyName = Keybind.resolveKeyName(evt)
+    if (evt.ctrl && keyName === "c") {
       if (!Selection.copy(renderer, toast)) {
         renderer.clearSelection()
         return

@@ -21,9 +21,33 @@ export namespace Keybind {
    * Convert OpenTUI's ParsedKey to our Keybind.Info format.
    * This helper ensures all required fields are present and avoids manual object creation.
    */
+
+  // IME character → QWERTY physical key mappings.
+  // To add a new layout, append entries to this map (e.g. Russian ЙЦУКЕН, Japanese Kana).
+  const IME_TO_LATIN: Record<string, string> = {
+    // Korean 2-Set (두벌식)
+    "ㅂ": "q", "ㅈ": "w", "ㄷ": "e", "ㄱ": "r", "ㅅ": "t",
+    "ㅛ": "y", "ㅕ": "u", "ㅑ": "i", "ㅐ": "o", "ㅔ": "p",
+    "ㅁ": "a", "ㄴ": "s", "ㅇ": "d", "ㄹ": "f", "ㅎ": "g",
+    "ㅗ": "h", "ㅓ": "j", "ㅏ": "k", "ㅣ": "l",
+    "ㅋ": "z", "ㅌ": "x", "ㅊ": "c", "ㅍ": "v",
+    "ㅠ": "b", "ㅜ": "n", "ㅡ": "m",
+    "ㅃ": "q", "ㅉ": "w", "ㄸ": "e", "ㄲ": "r", "ㅆ": "t",
+    "ㅒ": "o", "ㅖ": "p",
+  }
+
+  /** Use physical key (baseCode) when available, falling back to IME layout mapping. */
+  export function resolveKeyName(key: ParsedKey): string {
+    if (key.baseCode) {
+      return String.fromCodePoint(key.baseCode)
+    }
+    return IME_TO_LATIN[key.name] ?? key.name
+  }
+
   export function fromParsedKey(key: ParsedKey, leader = false): Info {
+    const name = resolveKeyName(key)
     return {
-      name: key.name === " " ? "space" : key.name,
+      name: name === " " ? "space" : name,
       ctrl: key.ctrl,
       meta: key.meta,
       shift: key.shift,

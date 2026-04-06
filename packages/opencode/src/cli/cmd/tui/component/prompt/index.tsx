@@ -36,6 +36,7 @@ import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
 import { CONSOLE_MANAGED_ICON, consoleManagedProviderLabel } from "@tui/util/provider-origin"
+import { Keybind } from "@/util/keybind"
 
 export type PromptProps = {
   sessionID?: string
@@ -406,7 +407,7 @@ export function Prompt(props: PromptProps) {
     useKeyboard(
       (evt) => {
         if (!input.focused) return
-        if (evt.name === "v" && evt.ctrl && evt.eventType === "release") {
+        if (Keybind.resolveKeyName(evt) === "v" && evt.ctrl && evt.eventType === "release") {
           command.trigger("prompt.paste")
         }
       },

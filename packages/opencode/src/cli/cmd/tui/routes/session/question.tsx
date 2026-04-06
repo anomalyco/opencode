@@ -3,6 +3,7 @@ import { createMemo, createSignal, For, Show } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
+import { Keybind } from "@/util/keybind"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
@@ -189,12 +190,13 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
       return
     }
 
-    if (evt.name === "left" || evt.name === "h") {
+    const keyName = Keybind.resolveKeyName(evt)
+    if (evt.name === "left" || keyName === "h") {
       evt.preventDefault()
       selectTab((store.tab - 1 + tabs()) % tabs())
     }
 
-    if (evt.name === "right" || evt.name === "l") {
+    if (evt.name === "right" || keyName === "l") {
       evt.preventDefault()
       selectTab((store.tab + 1) % tabs())
     }
@@ -228,12 +230,12 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
         return
       }
 
-      if (evt.name === "up" || evt.name === "k") {
+      if (evt.name === "up" || keyName === "k") {
         evt.preventDefault()
         moveTo((store.selected - 1 + total) % total)
       }
 
-      if (evt.name === "down" || evt.name === "j") {
+      if (evt.name === "down" || keyName === "j") {
         evt.preventDefault()
         moveTo((store.selected + 1) % total)
       }
