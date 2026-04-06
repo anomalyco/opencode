@@ -1,7 +1,8 @@
 import path from "path"
+import { Effect } from "effect"
 import type { Tool } from "./tool"
 import { Instance } from "../project/instance"
-import { Filesystem } from "@/util/filesystem"
+import { AppFileSystem } from "../filesystem"
 
 type Kind = "file" | "directory"
 
@@ -15,14 +16,14 @@ export async function assertExternalDirectory(ctx: Tool.Context, target?: string
 
   if (options?.bypass) return
 
-  const full = process.platform === "win32" ? Filesystem.normalizePath(target) : target
+  const full = process.platform === "win32" ? AppFileSystem.normalizePath(target) : target
   if (Instance.containsPath(full)) return
 
   const kind = options?.kind ?? "file"
   const dir = kind === "directory" ? full : path.dirname(full)
   const glob =
     process.platform === "win32"
-      ? Filesystem.normalizePathPattern(path.join(dir, "*"))
+      ? AppFileSystem.normalizePathPattern(path.join(dir, "*"))
       : path.join(dir, "*").replaceAll("\\", "/")
 
   await ctx.ask({
@@ -35,3 +36,11 @@ export async function assertExternalDirectory(ctx: Tool.Context, target?: string
     },
   })
 }
+
+export const assertExternalDirectoryEffect = Effect.fn("Tool.assertExternalDirectory")(function* (
+  ctx: Tool.Context,
+  target?: string,
+  options?: Options,
+) {
+  yield* Effect.promise(() => assertExternalDirectory(ctx, target, options))
+})
