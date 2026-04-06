@@ -1560,7 +1560,16 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             continue
           }
 
-          yield* compaction.prune({ sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
+          const pruneModelRef = yield* lastModel(sessionID).pipe(Effect.option)
+          const pruneContextLimit = yield* (
+            Option.isSome(pruneModelRef)
+              ? provider.getModel(pruneModelRef.value.providerID, pruneModelRef.value.modelID).pipe(
+                  Effect.map((m) => m.limit.context),
+                  Effect.orElseSucceed(() => 0),
+                )
+              : Effect.succeed(0)
+          )
+          yield* compaction.prune({ sessionID, contextLimit: pruneContextLimit }).pipe(Effect.ignore, Effect.forkIn(scope))
           return yield* lastAssistant(sessionID)
         },
       )

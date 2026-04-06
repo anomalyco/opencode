@@ -1238,3 +1238,29 @@ describe("session.getUsage", () => {
     expect(result.tokens.cache.write).toBe(300)
   })
 })
+
+describe("session.compaction.pruneThresholds", () => {
+  test("uses defaults for small context", () => {
+    const result = SessionCompaction.pruneThresholds(200_000)
+    expect(result.protect).toBe(40_000)
+    expect(result.minimum).toBe(20_000)
+  })
+
+  test("scales up for 1M context", () => {
+    const result = SessionCompaction.pruneThresholds(1_000_000)
+    expect(result.protect).toBe(200_000)
+    expect(result.minimum).toBe(100_000)
+  })
+
+  test("scales up for 2M context", () => {
+    const result = SessionCompaction.pruneThresholds(2_000_000)
+    expect(result.protect).toBe(400_000)
+    expect(result.minimum).toBe(200_000)
+  })
+
+  test("falls back to defaults when context is 0", () => {
+    const result = SessionCompaction.pruneThresholds(0)
+    expect(result.protect).toBe(40_000)
+    expect(result.minimum).toBe(20_000)
+  })
+})
