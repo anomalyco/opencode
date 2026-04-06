@@ -211,6 +211,7 @@ type PromptSubmitInput = {
   resetHistoryNavigation: () => void
   setMode: (mode: "normal" | "shell") => void
   setPopover: (popover: "at" | "slash" | null) => void
+  resetInputUndo: (prompt?: Prompt, cursor?: number) => void
   newSessionWorktree?: Accessor<string | undefined>
   onNewSessionWorktreeReset?: () => void
   shouldQueue?: Accessor<boolean>
@@ -460,12 +461,14 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
     const clearInput = () => {
       prompt.reset()
+      input.resetInputUndo()
       input.setMode("normal")
       input.setPopover(null)
     }
 
     const restoreInput = () => {
       prompt.set(currentPrompt, input.promptLength(currentPrompt))
+      input.resetInputUndo(currentPrompt, input.promptLength(currentPrompt))
       input.setMode(mode)
       input.setPopover(null)
       requestAnimationFrame(() => {
