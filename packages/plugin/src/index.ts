@@ -4,7 +4,7 @@ import type {
   Project,
   Model,
   Provider,
-  Permission,
+  PermissionRequest,
   UserMessage,
   Message,
   Part,
@@ -35,8 +35,15 @@ export type PluginInput = {
 
 export type PluginOptions = Record<string, unknown>
 
+export type TuiConfig = {
+  [key: string]: unknown
+}
+
 export type Config = Omit<SDKConfig, "plugin"> & {
   plugin?: Array<string | [string, PluginOptions]>
+  theme?: string
+  keybinds?: Record<string, unknown>
+  tui?: TuiConfig
 }
 
 export type Plugin = (input: PluginInput, options?: PluginOptions) => Promise<Hooks>
@@ -186,6 +193,17 @@ export type ProviderHook = {
 /** @deprecated Use AuthOAuthResult instead. */
 export type AuthOuathResult = AuthOAuthResult
 
+export type SessionEnsureMode =
+  | "get"
+  | "messages"
+  | "todo"
+  | "prompt"
+  | "prompt_async"
+  | "command"
+  | "shell"
+  | "revert"
+  | "unrevert"
+
 export interface Hooks {
   event?: (input: { event: Event }) => Promise<void>
   config?: (input: Config) => Promise<void>
@@ -200,7 +218,10 @@ export interface Hooks {
     },
   ) => Promise<void>
   "session.ensure.before"?: (
-    input: { sessionID: string; mode: "get" | "messages" | "todo" | "prompt" | "prompt_async" | "command" | "shell" },
+    input: {
+      sessionID: string
+      mode: SessionEnsureMode
+    },
     output: {},
   ) => Promise<void>
   tool?: {
@@ -238,7 +259,7 @@ export interface Hooks {
     input: { sessionID: string; agent: string; model: Model; provider: ProviderContext; message: UserMessage },
     output: { headers: Record<string, string> },
   ) => Promise<void>
-  "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void>
+  "permission.ask"?: (input: PermissionRequest, output: { status: "ask" | "deny" | "allow" }) => Promise<void>
   "command.execute.before"?: (
     input: { command: string; sessionID: string; arguments: string },
     output: { parts: Part[] },

@@ -3,7 +3,6 @@ import { SyncEvent } from "@/sync"
 import { Session } from "./index"
 import { MessageV2 } from "./message-v2"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
-import { ProjectTable } from "../project/project.sql"
 import { Log } from "../util/log"
 
 const log = Log.create({ service: "session.projector" })
@@ -21,7 +20,7 @@ function grab<T extends object, K1 extends keyof T, X>(
   field1: K1,
   cb?: (val: NonNullable<T[K1]>) => X,
 ): X | undefined {
-  if (obj == undefined || !(field1 in obj)) return undefined
+  if (obj === undefined || obj === null || !(field1 in obj)) return undefined
 
   const val = obj[field1]
   if (val && typeof val === "object" && cb) {
@@ -40,6 +39,7 @@ export function toPartialRow(info: DeepPartial<Session.Info>) {
     id: grab(info, "id"),
     project_id: grab(info, "projectID"),
     workspace_id: grab(info, "workspaceID"),
+    origin_machine: grab(info, "originMachine"),
     parent_id: grab(info, "parentID"),
     slug: grab(info, "slug"),
     directory: grab(info, "directory"),

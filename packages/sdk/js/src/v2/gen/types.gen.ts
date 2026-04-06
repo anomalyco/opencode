@@ -931,9 +931,12 @@ export type Session = {
     archived?: number
   }
   permission?: PermissionRuleset
+  originMachine?: string
   revert?: {
     messageID: string
     partID?: string
+    mode?: "conversation" | "conversation_and_files"
+    state?: "restore_failed"
     snapshot?: string
     diff?: string
   }
@@ -1092,9 +1095,12 @@ export type SyncEventSessionUpdated = {
         archived: number | null
       }
       permission: PermissionRuleset | null
+      originMachine: string | null
       revert: {
         messageID: string
         partID?: string
+        mode?: "conversation" | "conversation_and_files"
+        state?: "restore_failed"
         snapshot?: string
         diff?: string
       } | null
@@ -1817,9 +1823,12 @@ export type GlobalSession = {
     archived?: number
   }
   permission?: PermissionRuleset
+  originMachine?: string
   revert?: {
     messageID: string
     partID?: string
+    mode?: "conversation" | "conversation_and_files"
+    state?: "restore_failed"
     snapshot?: string
     diff?: string
   }
@@ -3938,6 +3947,7 @@ export type SessionRevertData = {
   body?: {
     messageID: string
     partID?: string
+    mode?: "conversation" | "conversation_and_files"
   }
   path: {
     sessionID: string

@@ -843,6 +843,37 @@ test("restore function", async () => {
   })
 })
 
+test("restore only updates files in invoking worktree", async () => {
+  await using tmp = await bootstrap()
+  const worktreePath = `${tmp.path}-worktree`
+  await $`git worktree add ${worktreePath} HEAD`.cwd(tmp.path).quiet()
+
+  try {
+    await Filesystem.write(`${tmp.path}/shared.txt`, "primary before")
+    await Filesystem.write(`${worktreePath}/shared.txt`, "worktree before")
+
+    await Instance.provide({
+      directory: worktreePath,
+      fn: async () => {
+        const before = await Snapshot.track()
+        expect(before).toBeTruthy()
+
+        await Filesystem.write(`${worktreePath}/shared.txt`, "worktree after")
+        await Filesystem.write(`${tmp.path}/shared.txt`, "primary after")
+
+        expect(await Snapshot.restore(before!)).toBe(true)
+      },
+    })
+
+    expect(await fs.readFile(`${worktreePath}/shared.txt`, "utf-8")).toBe("worktree before")
+    expect(await fs.readFile(`${tmp.path}/shared.txt`, "utf-8")).toBe("primary after")
+  } finally {
+    await $`git worktree remove --force ${worktreePath}`.cwd(tmp.path).quiet().nothrow()
+    await $`rm -rf ${worktreePath}`.quiet()
+    await $`rm -f ${tmp.path}/shared.txt`.quiet()
+  }
+})
+
 test("revert should not delete files that existed but were deleted in snapshot", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({

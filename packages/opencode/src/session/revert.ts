@@ -6,6 +6,7 @@ import { Snapshot } from "../snapshot"
 import { Storage } from "@/storage/storage"
 import { SyncEvent } from "../sync"
 import { Log } from "../util/log"
+import { machineId } from "../util/machine"
 import { Session } from "."
 import { MessageV2 } from "./message-v2"
 import { SessionID, MessageID, PartID } from "./schema"
@@ -15,10 +16,16 @@ import { SessionSummary } from "./summary"
 export namespace SessionRevert {
   const log = Log.create({ service: "session.revert" })
 
+  function foreign(session: Session.Info) {
+    if (!session.originMachine || session.originMachine === "unknown") return true
+    return session.originMachine !== machineId()
+  }
+
   export const RevertInput = z.object({
     sessionID: SessionID.zod,
     messageID: MessageID.zod,
     partID: PartID.zod.optional(),
+    mode: z.enum(["conversation", "conversation_and_files"]).optional(),
   })
   export type RevertInput = z.infer<typeof RevertInput>
 
@@ -44,8 +51,22 @@ export namespace SessionRevert {
         const all = yield* sessions.messages({ sessionID: input.sessionID })
         let lastUser: MessageV2.User | undefined
         const session = yield* sessions.get(input.sessionID)
+        const keep = foreign(session) && session.revert?.mode === "conversation_and_files" ? session.revert : undefined
+        const mode = keep
+          ? "conversation_and_files"
+          : foreign(session)
+            ? "conversation"
+            : (input.mode ?? "conversation_and_files")
 
-        let rev: Session.Info["revert"]
+        if (!keep && foreign(session) && input.mode !== "conversation") {
+          log.warn("skipping file revert on foreign machine", {
+            sessionID: input.sessionID,
+            originMachine: session.originMachine,
+            machine: machineId(),
+          })
+        }
+
+        let rev: Session.Revert | undefined
         const patches: Snapshot.Patch[] = []
         for (const msg of all) {
           if (msg.info.role === "user") lastUser = msg.info
@@ -62,6 +83,7 @@ export namespace SessionRevert {
                 rev = {
                   messageID: !partID && lastUser ? lastUser.id : msg.info.id,
                   partID,
+                  mode,
                 }
               }
               remaining.push(part)
@@ -71,10 +93,18 @@ export namespace SessionRevert {
 
         if (!rev) return session
 
-        rev.snapshot = session.revert?.snapshot ?? (yield* snap.track())
-        if (session.revert?.snapshot) yield* snap.restore(session.revert.snapshot)
-        yield* snap.revert(patches)
-        if (rev.snapshot) rev.diff = yield* snap.diff(rev.snapshot as string)
+        if (mode === "conversation_and_files") {
+          if (keep) {
+            rev.snapshot = keep.snapshot
+            rev.diff = keep.diff
+            rev.state = keep.state
+          } else {
+            rev.snapshot = session.revert?.snapshot ?? (yield* snap.track())
+            if (session.revert?.snapshot) yield* snap.restore(session.revert.snapshot)
+            yield* snap.revert(patches)
+            if (rev.snapshot) rev.diff = yield* snap.diff(rev.snapshot)
+          }
+        }
         const range = all.filter((msg) => msg.info.id >= rev!.messageID)
         const diffs = yield* summary.computeDiff({ messages: range })
         yield* storage.write(["session_diff", input.sessionID], diffs).pipe(Effect.ignore)
@@ -96,13 +126,35 @@ export namespace SessionRevert {
         yield* Effect.promise(() => SessionPrompt.assertNotBusy(input.sessionID))
         const session = yield* sessions.get(input.sessionID)
         if (!session.revert) return session
-        if (session.revert.snapshot) yield* snap.restore(session.revert!.snapshot!)
+        if (foreign(session) && session.revert.mode !== "conversation") {
+          log.warn("skipping file restore on foreign machine", {
+            sessionID: input.sessionID,
+            originMachine: session.originMachine,
+            machine: machineId(),
+          })
+          return session
+        }
+        if (session.revert.mode === "conversation") {
+          yield* sessions.clearRevert(input.sessionID)
+          return yield* sessions.get(input.sessionID)
+        }
+        if (session.revert.snapshot) {
+          const ok = yield* snap.restore(session.revert.snapshot)
+          if (!ok) {
+            yield* sessions.setRevert({
+              sessionID: input.sessionID,
+              revert: { ...session.revert, state: "restore_failed" },
+            })
+            return yield* sessions.get(input.sessionID)
+          }
+        }
         yield* sessions.clearRevert(input.sessionID)
         return yield* sessions.get(input.sessionID)
       })
 
       const cleanup = Effect.fn("SessionRevert.cleanup")(function* (session: Session.Info) {
         if (!session.revert) return
+        if (session.revert.state === "restore_failed") return
         const sessionID = session.id
         const msgs = yield* sessions.messages({ sessionID })
         const messageID = session.revert.messageID

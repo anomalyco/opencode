@@ -1,12 +1,13 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import fs from "fs/promises"
-import path from "path"
+import os from "os"
 import { Session } from "../../src/session"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { SessionRevert } from "../../src/session/revert"
-import { SessionCompaction } from "../../src/session/compaction"
 import { MessageV2 } from "../../src/session/message-v2"
 import { Snapshot } from "../../src/snapshot"
+import { eq, Database } from "../../src/storage/db"
+import { SessionTable } from "../../src/session/session.sql"
 import { Log } from "../../src/util/log"
 import { Instance } from "../../src/project/instance"
 import { MessageID, PartID } from "../../src/session/schema"
@@ -361,7 +362,7 @@ describe("revert + compact workflow", () => {
         const u1 = await user(sid)
         const p1 = await text(sid, u1.id, "first part")
         const p2 = await tool(sid, u1.id)
-        const p3 = await text(sid, u1.id, "third part")
+        await text(sid, u1.id, "third part")
 
         // Set revert state pointing at a specific part
         await Session.setRevert({
@@ -443,178 +444,430 @@ describe("revert + compact workflow", () => {
       },
     })
   })
++
++  test("restore messages in sequential order", async () => {
++    await using tmp = await tmpdir({ git: true })
++    await Instance.provide({
++      directory: tmp.path,
++      fn: async () => {
++        await fs.writeFile(path.join(tmp.path, "a.txt"), "a0")
++        await fs.writeFile(path.join(tmp.path, "b.txt"), "b0")
++        await fs.writeFile(path.join(tmp.path, "c.txt"), "c0")
++
++        const session = await Session.create({})
++        const sid = session.id
++
++        const turn = async (file: string, next: string) => {
++          const u = await user(sid)
++          await text(sid, u.id, `${file}:${next}`)
++          const a = await assistant(sid, u.id, tmp.path)
++          const before = await Snapshot.track()
++          if (!before) throw new Error("expected snapshot")
++          await fs.writeFile(path.join(tmp.path, file), next)
++          const after = await Snapshot.track()
++          if (!after) throw new Error("expected snapshot")
++          const patch = await Snapshot.patch(before)
++          await Session.updatePart({
++            id: PartID.ascending(),
++            messageID: a.id,
++            sessionID: sid,
++            type: "step-start",
++            snapshot: before,
++          })
++          await Session.updatePart({
++            id: PartID.ascending(),
++            messageID: a.id,
++            sessionID: sid,
++            type: "step-finish",
++            reason: "stop",
++            snapshot: after,
++            cost: 0,
++            tokens,
++          })
++          await Session.updatePart({
++            id: PartID.ascending(),
++            messageID: a.id,
++            sessionID: sid,
++            type: "patch",
++            hash: patch.hash,
++            files: patch.files,
++          })
++          return u.id
++        }
++
++        const first = await turn("a.txt", "a1")
++        const second = await turn("b.txt", "b2")
++        const third = await turn("c.txt", "c3")
++
++        await SessionRevert.revert({
++          sessionID: sid,
++          messageID: first,
++        })
++        expect((await Session.get(sid)).revert?.messageID).toBe(first)
++        expect(await fs.readFile(path.join(tmp.path, "a.txt"), "utf-8")).toBe("a0")
++        expect(await fs.readFile(path.join(tmp.path, "b.txt"), "utf-8")).toBe("b0")
++        expect(await fs.readFile(path.join(tmp.path, "c.txt"), "utf-8")).toBe("c0")
++
++        await SessionRevert.revert({
++          sessionID: sid,
++          messageID: second,
++        })
++        expect((await Session.get(sid)).revert?.messageID).toBe(second)
++        expect(await fs.readFile(path.join(tmp.path, "a.txt"), "utf-8")).toBe("a1")
++        expect(await fs.readFile(path.join(tmp.path, "b.txt"), "utf-8")).toBe("b0")
++        expect(await fs.readFile(path.join(tmp.path, "c.txt"), "utf-8")).toBe("c0")
++
++        await SessionRevert.revert({
++          sessionID: sid,
++          messageID: third,
++        })
++        expect((await Session.get(sid)).revert?.messageID).toBe(third)
++        expect(await fs.readFile(path.join(tmp.path, "a.txt"), "utf-8")).toBe("a1")
++        expect(await fs.readFile(path.join(tmp.path, "b.txt"), "utf-8")).toBe("b2")
++        expect(await fs.readFile(path.join(tmp.path, "c.txt"), "utf-8")).toBe("c0")
++
++        await SessionRevert.unrevert({
++          sessionID: sid,
++        })
++        expect((await Session.get(sid)).revert).toBeUndefined()
++        expect(await fs.readFile(path.join(tmp.path, "a.txt"), "utf-8")).toBe("a1")
++        expect(await fs.readFile(path.join(tmp.path, "b.txt"), "utf-8")).toBe("b2")
++        expect(await fs.readFile(path.join(tmp.path, "c.txt"), "utf-8")).toBe("c3")
++      },
++    })
++  })
++
++  test("restore same file in sequential order", async () => {
++    await using tmp = await tmpdir({ git: true })
++    await Instance.provide({
++      directory: tmp.path,
++      fn: async () => {
++        await fs.writeFile(path.join(tmp.path, "a.txt"), "a0")
++
++        const session = await Session.create({})
++        const sid = session.id
++
++        const turn = async (next: string) => {
++          const u = await user(sid)
++          await text(sid, u.id, `a.txt:${next}`)
++          const a = await assistant(sid, u.id, tmp.path)
++          const before = await Snapshot.track()
++          if (!before) throw new Error("expected snapshot")
++          await fs.writeFile(path.join(tmp.path, "a.txt"), next)
++          const after = await Snapshot.track()
++          if (!after) throw new Error("expected snapshot")
++          const patch = await Snapshot.patch(before)
++          await Session.updatePart({
++            id: PartID.ascending(),
++            messageID: a.id,
++            sessionID: sid,
++            type: "step-start",
++            snapshot: before,
++          })
++          await Session.updatePart({
++            id: PartID.ascending(),
++            messageID: a.id,
++            sessionID: sid,
++            type: "step-finish",
++            reason: "stop",
++            snapshot: after,
++            cost: 0,
++            tokens,
++          })
++          await Session.updatePart({
++            id: PartID.ascending(),
++            messageID: a.id,
++            sessionID: sid,
++            type: "patch",
++            hash: patch.hash,
++            files: patch.files,
++          })
++          return u.id
++        }
++
++        const first = await turn("a1")
++        const second = await turn("a2")
++        const third = await turn("a3")
++        expect(await fs.readFile(path.join(tmp.path, "a.txt"), "utf-8")).toBe("a3")
++
++        await SessionRevert.revert({
++          sessionID: sid,
++          messageID: first,
++        })
++        expect((await Session.get(sid)).revert?.messageID).toBe(first)
++        expect(await fs.readFile(path.join(tmp.path, "a.txt"), "utf-8")).toBe("a0")
++
++        await SessionRevert.revert({
++          sessionID: sid,
++          messageID: second,
++        })
++        expect((await Session.get(sid)).revert?.messageID).toBe(second)
++        expect(await fs.readFile(path.join(tmp.path, "a.txt"), "utf-8")).toBe("a1")
++
++        await SessionRevert.revert({
++          sessionID: sid,
++          messageID: third,
++        })
++        expect((await Session.get(sid)).revert?.messageID).toBe(third)
++        expect(await fs.readFile(path.join(tmp.path, "a.txt"), "utf-8")).toBe("a2")
++
++        await SessionRevert.unrevert({
++          sessionID: sid,
++        })
++        expect((await Session.get(sid)).revert).toBeUndefined()
++        expect(await fs.readFile(path.join(tmp.path, "a.txt"), "utf-8")).toBe("a3")
++      },
++    })
++  })
 
-  test("restore messages in sequential order", async () => {
+  test("unrevert keeps revert flag when snapshot restore fails", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        await fs.writeFile(path.join(tmp.path, "a.txt"), "a0")
-        await fs.writeFile(path.join(tmp.path, "b.txt"), "b0")
-        await fs.writeFile(path.join(tmp.path, "c.txt"), "c0")
-
         const session = await Session.create({})
         const sid = session.id
 
-        const turn = async (file: string, next: string) => {
-          const u = await user(sid)
-          await text(sid, u.id, `${file}:${next}`)
-          const a = await assistant(sid, u.id, tmp.path)
-          const before = await Snapshot.track()
-          if (!before) throw new Error("expected snapshot")
-          await fs.writeFile(path.join(tmp.path, file), next)
-          const after = await Snapshot.track()
-          if (!after) throw new Error("expected snapshot")
-          const patch = await Snapshot.patch(before)
-          await Session.updatePart({
-            id: PartID.ascending(),
-            messageID: a.id,
-            sessionID: sid,
-            type: "step-start",
-            snapshot: before,
-          })
-          await Session.updatePart({
-            id: PartID.ascending(),
-            messageID: a.id,
-            sessionID: sid,
-            type: "step-finish",
-            reason: "stop",
-            snapshot: after,
-            cost: 0,
-            tokens,
-          })
-          await Session.updatePart({
-            id: PartID.ascending(),
-            messageID: a.id,
-            sessionID: sid,
-            type: "patch",
-            hash: patch.hash,
-            files: patch.files,
-          })
-          return u.id
-        }
+        const u1 = await user(sid)
+        await text(sid, u1.id, "hello")
 
-        const first = await turn("a.txt", "a1")
-        const second = await turn("b.txt", "b2")
-        const third = await turn("c.txt", "c3")
-
-        await SessionRevert.revert({
+        await Session.setRevert({
           sessionID: sid,
-          messageID: first,
+          revert: { messageID: u1.id, mode: "conversation_and_files", snapshot: "missing-snapshot" },
+          summary: { additions: 0, deletions: 0, files: 0 },
         })
-        expect((await Session.get(sid)).revert?.messageID).toBe(first)
-        expect(await fs.readFile(path.join(tmp.path, "a.txt"), "utf-8")).toBe("a0")
-        expect(await fs.readFile(path.join(tmp.path, "b.txt"), "utf-8")).toBe("b0")
-        expect(await fs.readFile(path.join(tmp.path, "c.txt"), "utf-8")).toBe("c0")
 
-        await SessionRevert.revert({
-          sessionID: sid,
-          messageID: second,
-        })
-        expect((await Session.get(sid)).revert?.messageID).toBe(second)
-        expect(await fs.readFile(path.join(tmp.path, "a.txt"), "utf-8")).toBe("a1")
-        expect(await fs.readFile(path.join(tmp.path, "b.txt"), "utf-8")).toBe("b0")
-        expect(await fs.readFile(path.join(tmp.path, "c.txt"), "utf-8")).toBe("c0")
+        await SessionRevert.unrevert({ sessionID: sid })
 
-        await SessionRevert.revert({
-          sessionID: sid,
-          messageID: third,
-        })
-        expect((await Session.get(sid)).revert?.messageID).toBe(third)
-        expect(await fs.readFile(path.join(tmp.path, "a.txt"), "utf-8")).toBe("a1")
-        expect(await fs.readFile(path.join(tmp.path, "b.txt"), "utf-8")).toBe("b2")
-        expect(await fs.readFile(path.join(tmp.path, "c.txt"), "utf-8")).toBe("c0")
-
-        await SessionRevert.unrevert({
-          sessionID: sid,
-        })
-        expect((await Session.get(sid)).revert).toBeUndefined()
-        expect(await fs.readFile(path.join(tmp.path, "a.txt"), "utf-8")).toBe("a1")
-        expect(await fs.readFile(path.join(tmp.path, "b.txt"), "utf-8")).toBe("b2")
-        expect(await fs.readFile(path.join(tmp.path, "c.txt"), "utf-8")).toBe("c3")
+        const info = await Session.get(sid)
+        expect(info.revert).toBeDefined()
+        expect(info.revert?.state).toBe("restore_failed")
+        expect(info.revert?.snapshot).toBe("missing-snapshot")
       },
     })
   })
 
-  test("restore same file in sequential order", async () => {
+  test("conversation-only unrevert clears revert flag without snapshot restore", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        await fs.writeFile(path.join(tmp.path, "a.txt"), "a0")
-
         const session = await Session.create({})
         const sid = session.id
 
-        const turn = async (next: string) => {
-          const u = await user(sid)
-          await text(sid, u.id, `a.txt:${next}`)
-          const a = await assistant(sid, u.id, tmp.path)
-          const before = await Snapshot.track()
-          if (!before) throw new Error("expected snapshot")
-          await fs.writeFile(path.join(tmp.path, "a.txt"), next)
-          const after = await Snapshot.track()
-          if (!after) throw new Error("expected snapshot")
-          const patch = await Snapshot.patch(before)
-          await Session.updatePart({
-            id: PartID.ascending(),
-            messageID: a.id,
-            sessionID: sid,
-            type: "step-start",
-            snapshot: before,
-          })
-          await Session.updatePart({
-            id: PartID.ascending(),
-            messageID: a.id,
-            sessionID: sid,
-            type: "step-finish",
-            reason: "stop",
-            snapshot: after,
-            cost: 0,
-            tokens,
-          })
-          await Session.updatePart({
-            id: PartID.ascending(),
-            messageID: a.id,
-            sessionID: sid,
-            type: "patch",
-            hash: patch.hash,
-            files: patch.files,
-          })
-          return u.id
-        }
+        const u1 = await user(sid)
+        await text(sid, u1.id, "hello")
 
-        const first = await turn("a1")
-        const second = await turn("a2")
-        const third = await turn("a3")
-        expect(await fs.readFile(path.join(tmp.path, "a.txt"), "utf-8")).toBe("a3")
-
-        await SessionRevert.revert({
+        await Session.setRevert({
           sessionID: sid,
-          messageID: first,
+          revert: { messageID: u1.id, mode: "conversation" },
+          summary: { additions: 0, deletions: 0, files: 0 },
         })
-        expect((await Session.get(sid)).revert?.messageID).toBe(first)
-        expect(await fs.readFile(path.join(tmp.path, "a.txt"), "utf-8")).toBe("a0")
 
-        await SessionRevert.revert({
-          sessionID: sid,
-          messageID: second,
-        })
-        expect((await Session.get(sid)).revert?.messageID).toBe(second)
-        expect(await fs.readFile(path.join(tmp.path, "a.txt"), "utf-8")).toBe("a1")
+        await SessionRevert.unrevert({ sessionID: sid })
 
-        await SessionRevert.revert({
-          sessionID: sid,
-          messageID: third,
-        })
-        expect((await Session.get(sid)).revert?.messageID).toBe(third)
-        expect(await fs.readFile(path.join(tmp.path, "a.txt"), "utf-8")).toBe("a2")
+        const info = await Session.get(sid)
+        expect(info.revert).toBeUndefined()
+      },
+    })
+  })
 
-        await SessionRevert.unrevert({
+  test("foreign-machine unrevert keeps file-backed revert flag", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const host = spyOn(os, "hostname").mockReturnValue("machine-b")
+        const session = await Session.create({})
+        const sid = session.id
+
+        const u1 = await user(sid)
+        await text(sid, u1.id, "hello")
+        Database.use((db) =>
+          db.update(SessionTable).set({ origin_machine: "machine-a" }).where(eq(SessionTable.id, sid)).run(),
+        )
+
+        await Session.setRevert({
           sessionID: sid,
+          revert: { messageID: u1.id, mode: "conversation_and_files" },
+          summary: { additions: 0, deletions: 0, files: 0 },
         })
-        expect((await Session.get(sid)).revert).toBeUndefined()
-        expect(await fs.readFile(path.join(tmp.path, "a.txt"), "utf-8")).toBe("a3")
+
+        await SessionRevert.unrevert({ sessionID: sid })
+
+        const info = await Session.get(sid)
+        expect(info.revert).toBeDefined()
+        expect(info.revert?.mode).toBe("conversation_and_files")
+
+        host.mockRestore()
+      },
+    })
+  })
+
+  test("foreign-machine conversation-only unrevert clears revert flag", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const host = spyOn(os, "hostname").mockReturnValue("machine-b")
+        const session = await Session.create({})
+        const sid = session.id
+
+        const u1 = await user(sid)
+        await text(sid, u1.id, "hello")
+        Database.use((db) =>
+          db.update(SessionTable).set({ origin_machine: "machine-a" }).where(eq(SessionTable.id, sid)).run(),
+        )
+
+        await Session.setRevert({
+          sessionID: sid,
+          revert: { messageID: u1.id, mode: "conversation" },
+          summary: { additions: 0, deletions: 0, files: 0 },
+        })
+
+        await SessionRevert.unrevert({ sessionID: sid })
+
+        const info = await Session.get(sid)
+        expect(info.revert).toBeUndefined()
+
+        host.mockRestore()
+      },
+    })
+  })
+
+  test("unknown-origin unrevert keeps file-backed revert flag", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const sid = session.id
+
+        const u1 = await user(sid)
+        await text(sid, u1.id, "hello")
+        Database.use((db) =>
+          db.update(SessionTable).set({ origin_machine: null }).where(eq(SessionTable.id, sid)).run(),
+        )
+
+        await Session.setRevert({
+          sessionID: sid,
+          revert: { messageID: u1.id, mode: "conversation_and_files" },
+          summary: { additions: 0, deletions: 0, files: 0 },
+        })
+
+        await SessionRevert.unrevert({ sessionID: sid })
+
+        const info = await Session.get(sid)
+        expect(info.revert).toBeDefined()
+        expect(info.revert?.mode).toBe("conversation_and_files")
+      },
+    })
+  })
+
+  test("foreign follow-up revert preserves existing file-backed snapshot state", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const host = spyOn(os, "hostname").mockReturnValue("machine-b")
+        const session = await Session.create({})
+        const sid = session.id
+
+        const u1 = await user(sid)
+        await text(sid, u1.id, "first")
+        const u2 = await user(sid)
+        await text(sid, u2.id, "second")
+        Database.use((db) =>
+          db.update(SessionTable).set({ origin_machine: "machine-a" }).where(eq(SessionTable.id, sid)).run(),
+        )
+
+        await Session.setRevert({
+          sessionID: sid,
+          revert: {
+            messageID: u1.id,
+            mode: "conversation_and_files",
+            snapshot: "existing-snapshot",
+            diff: "existing-diff",
+          },
+          summary: { additions: 0, deletions: 0, files: 0 },
+        })
+
+        const info = await SessionRevert.revert({ sessionID: sid, messageID: u2.id })
+        expect(info.revert?.mode).toBe("conversation_and_files")
+        expect(info.revert?.snapshot).toBe("existing-snapshot")
+        expect(info.revert?.diff).toBe("existing-diff")
+
+        host.mockRestore()
+      },
+    })
+  })
+
+  test("cleanup is blocked after restore failure", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const sid = session.id
+
+        const u1 = await user(sid)
+        await text(sid, u1.id, "hello")
+        const a1 = await assistant(sid, u1.id, tmp.path)
+        await text(sid, a1.id, "reply")
+
+        await Session.setRevert({
+          sessionID: sid,
+          revert: { messageID: u1.id, mode: "conversation_and_files", snapshot: "missing-snapshot" },
+          summary: { additions: 0, deletions: 0, files: 0 },
+        })
+
+        const blocked = await SessionRevert.unrevert({ sessionID: sid })
+        expect(blocked.revert?.state).toBe("restore_failed")
+
+        await SessionRevert.cleanup(blocked)
+
+        const info = await Session.get(sid)
+        expect(info.revert?.state).toBe("restore_failed")
+        const msgs = await Session.messages({ sessionID: sid })
+        expect(msgs.length).toBe(2)
+      },
+    })
+  })
+
+  test("cleanup still removes conversation tail for foreign file-backed reverts", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const host = spyOn(os, "hostname").mockReturnValue("machine-b")
+        const session = await Session.create({})
+        const sid = session.id
+
+        const u1 = await user(sid)
+        await text(sid, u1.id, "hello")
+        const a1 = await assistant(sid, u1.id, tmp.path)
+        await text(sid, a1.id, "reply")
+        const u2 = await user(sid)
+        await text(sid, u2.id, "second")
+        Database.use((db) =>
+          db.update(SessionTable).set({ origin_machine: "machine-a" }).where(eq(SessionTable.id, sid)).run(),
+        )
+
+        await Session.setRevert({
+          sessionID: sid,
+          revert: { messageID: u2.id, mode: "conversation_and_files" },
+          summary: { additions: 0, deletions: 0, files: 0 },
+        })
+
+        const info = await Session.get(sid)
+        await SessionRevert.cleanup(info)
+
+        const after = await Session.get(sid)
+        expect(after.revert).toBeUndefined()
+        const msgs = await Session.messages({ sessionID: sid })
+        expect(msgs.map((msg) => msg.info.id)).toEqual([u1.id, a1.id])
+
+        host.mockRestore()
       },
     })
   })

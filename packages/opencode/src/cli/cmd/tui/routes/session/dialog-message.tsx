@@ -53,6 +53,38 @@ export function DialogMessage(props: {
           },
         },
         {
+          title: "Revert Conversation",
+          value: "session.revert.conversation",
+          description: "undo messages only",
+          onSelect: (dialog) => {
+            const msg = message()
+            if (!msg) return
+
+            sdk.client.session.revert({
+              sessionID: props.sessionID,
+              messageID: msg.id,
+              mode: "conversation",
+            })
+
+            if (props.setPrompt) {
+              const parts = sync.data.part[msg.id]
+              const promptInfo = parts.reduce(
+                (agg, part) => {
+                  if (part.type === "text") {
+                    if (!part.synthetic) agg.input += part.text
+                  }
+                  if (part.type === "file") agg.parts.push(strip(part))
+                  return agg
+                },
+                { input: "", parts: [] as PromptInfo["parts"] },
+              )
+              props.setPrompt(promptInfo)
+            }
+
+            dialog.clear()
+          },
+        },
+        {
           title: "Copy",
           value: "message.copy",
           description: "message text to clipboard",

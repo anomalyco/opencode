@@ -104,6 +104,12 @@ export namespace SyncEvent {
 
   function root(type: string, agg: string): string | undefined {
     if (sessionTypes.has(type)) return
+    const version = versions.get(type)
+    if (!version) return
+    const def = registry.get(versionedType(type, version))
+    if (!def) return
+    if (def.aggregate !== "sessionID") return
+    return Database.sessionRoot(agg)
   }
 
   function seq(type: string, agg: string) {

@@ -525,6 +525,44 @@ export function Session() {
       },
     },
     {
+      title: "Undo previous message (conversation only)",
+      value: "session.undo.conversation",
+      category: "Session",
+      slash: {
+        name: "undo-conversation",
+      },
+      onSelect: async (dialog) => {
+        const status = sync.data.session_status?.[route.sessionID]
+        if (status?.type !== "idle") await sdk.client.session.abort({ sessionID: route.sessionID }).catch(() => {})
+        const revert = session()?.revert?.messageID
+        const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
+        if (!message) return
+        sdk.client.session
+          .revert({
+            sessionID: route.sessionID,
+            messageID: message.id,
+            mode: "conversation",
+          })
+          .then(() => {
+            toBottom()
+          })
+        const parts = sync.data.part[message.id]
+        prompt.set(
+          parts.reduce(
+            (agg, part) => {
+              if (part.type === "text") {
+                if (!part.synthetic) agg.input += part.text
+              }
+              if (part.type === "file") agg.parts.push(part)
+              return agg
+            },
+            { input: "", parts: [] as PromptInfo["parts"] },
+          ),
+        )
+        dialog.clear()
+      },
+    },
+    {
       title: "Redo",
       value: "session.redo",
       keybind: "messages_redo",

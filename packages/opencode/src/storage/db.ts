@@ -1,6 +1,7 @@
 import { migrate } from "drizzle-orm/bun-sqlite/migrator"
 import { type SQLiteTransaction } from "drizzle-orm/sqlite-core"
 export * from "drizzle-orm"
+import { Database as SQLite } from "bun:sqlite"
 import { Context } from "../util/context"
 import { lazy } from "../util/lazy"
 import { Global } from "../global"
@@ -105,6 +106,8 @@ export namespace Database {
     )`,
   ]
 
+  const tables = ["message", "part", "todo", "event_sequence", "event"]
+
   function time(tag: string) {
     const match = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/.exec(tag)
     if (!match) return 0
@@ -149,11 +152,25 @@ export namespace Database {
 
   function evict() {
     if (cache.size <= limit) return
-    const item = [...cache.entries()].sort((a, b) => a[1].at - b[1].at)[0]
-    if (!item) return
-    item[1].db.$client.close()
-    cache.delete(item[0])
+    const sorted = [...cache.entries()].sort((a, b) => a[1].at - b[1].at)
+    while (cache.size > limit && sorted.length) {
+      const item = sorted.shift()!
+      item[1].db.$client.close()
+      cache.delete(item[0])
+    }
   }
+
+  const idle = 5 * 60_000
+  const sweep = setInterval(() => {
+    const cutoff = Date.now() - idle
+    for (const [id, item] of cache) {
+      if (item.at < cutoff) {
+        item.db.$client.close()
+        cache.delete(id)
+      }
+    }
+  }, 60_000)
+  if (typeof sweep === "object" && "unref" in sweep) sweep.unref()
 
   export const Client = lazy(() => {
     log.info("opening database", { path: Path })
@@ -178,6 +195,12 @@ export namespace Database {
         }
       }
       migrate(db, entries)
+    }
+
+    try {
+      db.run("UPDATE session SET origin_machine = 'unknown' WHERE origin_machine IS NULL")
+    } catch (err) {
+      log.warn("origin_machine backfill failed", { error: err })
     }
 
     return db
@@ -206,6 +229,56 @@ export namespace Database {
     cache.set(id, { db, at: Date.now() })
     evict()
     return db
+  }
+
+  export function hasSession(id: string) {
+    if (cache.has(id)) return true
+    const file = path.join(sessionDir, id + ".db")
+    if (!existsSync(file)) return false
+    let db: SQLite | undefined
+    try {
+      db = new SQLite(file, { readonly: true, create: false })
+      const rows = db
+        .query("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (?, ?, ?, ?, ?)")
+        .all(...tables) as Array<{ name: string }>
+      return rows.length === tables.length
+    } catch {
+      return false
+    } finally {
+      db?.close()
+    }
+  }
+
+  export function sessionRoot(id: string) {
+    if (hasSession(id)) return id
+
+    const seen = new Set<string>()
+    let next: string | undefined = id
+
+    for (let hop = 0; hop < 100 && next; hop++) {
+      if (seen.has(next)) {
+        log.warn("parent chain cycle detected", { id })
+        return
+      }
+
+      seen.add(next)
+
+      const row = Client().$client.query("SELECT parent_id FROM session WHERE id = ?").get(next) as {
+        parent_id: string | null
+      } | null
+      const parent = row?.parent_id ?? undefined
+      if (!parent) return
+      if (hasSession(parent)) return parent
+      next = parent
+    }
+
+    if (next) log.warn("parent chain cycle detected", { id })
+  }
+
+  export function resolveSession(id: string) {
+    const root = sessionRoot(id)
+    if (root) return session(root)
+    return Client()
   }
 
   export function closeSession(id: string) {

@@ -966,6 +966,7 @@ export const SessionRoutes = lazy(() =>
       validator("json", SessionRevert.RevertInput.omit({ sessionID: true })),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
+        await Plugin.trigger("session.ensure.before", { sessionID, mode: "revert" }, {})
         log.info("revert", c.req.valid("json"))
         const session = await SessionRevert.revert({
           sessionID,
@@ -1000,6 +1001,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
+        await Plugin.trigger("session.ensure.before", { sessionID, mode: "unrevert" }, {})
         const session = await SessionRevert.unrevert({ sessionID })
         return c.json(session)
       },

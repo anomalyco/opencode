@@ -1,4 +1,3 @@
-import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Cause, Duration, Effect, Layer, Schedule, Semaphore, ServiceMap, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import path from "path"
@@ -52,7 +51,7 @@ export namespace Snapshot {
     readonly cleanup: () => Effect.Effect<void>
     readonly track: () => Effect.Effect<string | undefined>
     readonly patch: (hash: string) => Effect.Effect<Snapshot.Patch>
-    readonly restore: (snapshot: string) => Effect.Effect<void>
+    readonly restore: (snapshot: string) => Effect.Effect<boolean>
     readonly revert: (patches: Snapshot.Patch[]) => Effect.Effect<void>
     readonly diff: (hash: string) => Effect.Effect<string>
     readonly diffFull: (from: string, to: string) => Effect.Effect<Snapshot.FileDiff[]>
@@ -185,7 +184,7 @@ export namespace Snapshot {
                   .pipe(Effect.catch(() => Effect.void))
                   .pipe(
                     Effect.map((stat) => {
-                      if (!stat || stat.type !== "File") return
+                      if (!stat || stat.type !== "File") return undefined
                       const size = typeof stat.size === "bigint" ? Number(stat.size) : stat.size
                       return size > limit ? item : undefined
                     }),
@@ -277,24 +276,36 @@ export namespace Snapshot {
             return yield* locked(
               Effect.gen(function* () {
                 log.info("restore", { commit: snapshot })
-                const result = yield* git([...core, ...args(["read-tree", snapshot])], { cwd: state.worktree })
-                if (result.code === 0) {
-                  const checkout = yield* git([...core, ...args(["checkout-index", "-a", "-f"])], {
-                    cwd: state.worktree,
+                const changed = yield* git(
+                  [...quote, ...args(["diff", "--name-only", "--no-ext-diff", snapshot, "--", "."])],
+                  {
+                    cwd: state.directory,
+                  },
+                )
+                if (changed.code === 0) {
+                  const files = changed.text
+                    .trim()
+                    .split("\n")
+                    .map((item) => item.trim())
+                    .filter((item) => item && !item.startsWith("../") && item !== "..")
+                  if (!files.length) return true
+                  const checkout = yield* git([...core, ...args(["checkout", snapshot, "--", ...files])], {
+                    cwd: state.directory,
                   })
-                  if (checkout.code === 0) return
+                  if (checkout.code === 0) return true
                   log.error("failed to restore snapshot", {
                     snapshot,
                     exitCode: checkout.code,
                     stderr: checkout.stderr,
                   })
-                  return
+                  return false
                 }
                 log.error("failed to restore snapshot", {
                   snapshot,
-                  exitCode: result.code,
-                  stderr: result.stderr,
+                  exitCode: changed.code,
+                  stderr: changed.stderr,
                 })
+                return false
               }),
             )
           })
@@ -308,15 +319,24 @@ export namespace Snapshot {
                   for (const file of item.files) {
                     if (seen.has(file)) continue
                     seen.add(file)
+                    const rel = path.relative(state.worktree, file).replaceAll("\\", "/")
+                    if (rel.startsWith("../") || rel === "..") {
+                      log.warn("refusing to revert file outside worktree", { file, hash: item.hash })
+                      continue
+                    }
                     ops.push({
                       hash: item.hash,
                       file,
-                      rel: path.relative(state.worktree, file).replaceAll("\\", "/"),
+                      rel,
                     })
                   }
                 }
 
                 const single = Effect.fnUntraced(function* (op: (typeof ops)[number]) {
+                  if (op.rel.startsWith("../") || op.rel === "..") {
+                    log.warn("refusing to revert file outside worktree", { file: op.file, hash: op.hash })
+                    return
+                  }
                   log.info("reverting", { file: op.file, hash: op.hash })
                   const result = yield* git([...core, ...args(["checkout", op.hash, "--", op.file])], {
                     cwd: state.worktree,

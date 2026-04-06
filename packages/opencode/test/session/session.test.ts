@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
+import { Database, eq } from "../../src/storage/db"
 import { Session } from "../../src/session"
+import { SessionTable } from "../../src/session/session.sql"
 import { Bus } from "../../src/bus"
 import { Log } from "../../src/util/log"
+import { machineId } from "../../src/util/machine"
 import { Instance } from "../../src/project/instance"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID } from "../../src/session/schema"
@@ -11,6 +14,38 @@ const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
 
 describe("session.created event", () => {
+  test("should persist originMachine when session is created", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const session = await Session.create({})
+        const stored = await Session.get(session.id)
+
+        expect(session.originMachine).toBe(machineId())
+        expect(stored.originMachine).toBe(machineId())
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("should read missing originMachine as unknown", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const session = await Session.create({})
+        Database.use((db) =>
+          db.update(SessionTable).set({ origin_machine: null }).where(eq(SessionTable.id, session.id)).run(),
+        )
+
+        const stored = await Session.get(session.id)
+        expect(stored.originMachine).toBe("unknown")
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+
   test("should emit session.created event when session is created", async () => {
     await Instance.provide({
       directory: projectRoot,

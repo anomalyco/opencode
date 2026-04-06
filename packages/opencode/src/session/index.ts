@@ -17,6 +17,7 @@ import { SessionTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
 import { Storage } from "@/storage/storage"
 import { Log } from "../util/log"
+import { machineId } from "../util/machine"
 import { updateSchema } from "../util/update-schema"
 import { MessageV2 } from "./message-v2"
 import { Instance } from "../project/instance"
@@ -72,6 +73,7 @@ export namespace Session {
       slug: row.slug,
       projectID: row.project_id,
       workspaceID: row.workspace_id ?? undefined,
+      originMachine: row.origin_machine ?? "unknown",
       directory: row.directory,
       parentID: row.parent_id ?? undefined,
       title: row.title,
@@ -94,6 +96,7 @@ export namespace Session {
       id: info.id,
       project_id: info.projectID,
       workspace_id: info.workspaceID,
+      origin_machine: info.originMachine ?? "unknown",
       parent_id: info.parentID,
       slug: info.slug,
       directory: info.directory,
@@ -122,6 +125,16 @@ export namespace Session {
     }
     return `${title} (fork #1)`
   }
+
+  export const Revert = z.object({
+    messageID: MessageID.zod,
+    partID: PartID.zod.optional(),
+    mode: z.enum(["conversation", "conversation_and_files"]).optional(),
+    state: z.enum(["restore_failed"]).optional(),
+    snapshot: z.string().optional(),
+    diff: z.string().optional(),
+  })
+  export type Revert = z.output<typeof Revert>
 
   export const Info = z
     .object({
@@ -154,14 +167,7 @@ export namespace Session {
       }),
       permission: Permission.Ruleset.optional(),
       originMachine: z.string().optional(),
-      revert: z
-        .object({
-          messageID: MessageID.zod,
-          partID: PartID.zod.optional(),
-          snapshot: z.string().optional(),
-          diff: z.string().optional(),
-        })
-        .optional(),
+      revert: Revert.optional(),
     })
     .meta({
       ref: "Session",
@@ -331,8 +337,8 @@ export namespace Session {
     readonly setPermission: (input: { sessionID: SessionID; permission: Permission.Ruleset }) => Effect.Effect<void>
     readonly setRevert: (input: {
       sessionID: SessionID
-      revert: Info["revert"]
-      summary: Info["summary"]
+      revert: Revert | undefined
+      summary?: Info["summary"]
     }) => Effect.Effect<void>
     readonly clearRevert: (sessionID: SessionID) => Effect.Effect<void>
     readonly setSummary: (input: { sessionID: SessionID; summary: Info["summary"] }) => Effect.Effect<void>
@@ -393,6 +399,7 @@ export namespace Session {
           projectID: ctx.project.id,
           directory: input.directory,
           workspaceID: input.workspaceID,
+          originMachine: machineId(),
           parentID: input.parentID,
           title: input.title ?? createDefaultTitle(!!input.parentID),
           permission: input.permission,
@@ -591,10 +598,14 @@ export namespace Session {
 
       const setRevert = Effect.fn("Session.setRevert")(function* (input: {
         sessionID: SessionID
-        revert: Info["revert"]
-        summary: Info["summary"]
+        revert: Revert | undefined
+        summary?: Info["summary"]
       }) {
-        yield* patch(input.sessionID, { summary: input.summary, time: { updated: Date.now() }, revert: input.revert })
+        yield* patch(input.sessionID, {
+          ...(input.summary ? { summary: input.summary } : {}),
+          time: { updated: Date.now() },
+          revert: input.revert,
+        })
       })
 
       const clearRevert = Effect.fn("Session.clearRevert")(function* (sessionID: SessionID) {
@@ -742,7 +753,7 @@ export namespace Session {
   )
 
   export const setRevert = fn(
-    z.object({ sessionID: SessionID.zod, revert: Info.shape.revert, summary: Info.shape.summary }),
+    z.object({ sessionID: SessionID.zod, revert: Revert.optional(), summary: Info.shape.summary.optional() }),
     (input) =>
       runPromise((svc) => svc.setRevert({ sessionID: input.sessionID, revert: input.revert, summary: input.summary })),
   )

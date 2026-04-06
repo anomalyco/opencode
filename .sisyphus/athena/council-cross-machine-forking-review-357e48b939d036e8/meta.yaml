@@ -1,0 +1,27 @@
+archive_name: council-cross-machine-forking-review-357e48b939d036e8
+created_at: 2026-04-07T00:45:42.250Z
+question: |
+  Dispatch the full council with delegation to review this work, including the replay() path.
+prompt_file: .sisyphus/athena/council-cross-machine-forking-review-357e48b939d036e8/council-prompt.md
+members:
+  - task_id: bg_5bdb88f6
+    member: "unknown"
+    member_slug: unknown
+    task_output_path: .sisyphus/task-outputs/bg_5bdb88f6.md
+    archive_file: 
+    has_response: false
+    response_complete: false
+  - task_id: bg_92ea9896
+    member: "unknown"
+    member_slug: unknown
+    task_output_path: .sisyphus/task-outputs/bg_92ea9896.md
+    archive_file: 
+    has_response: false
+    response_complete: false
+  - task_id: bg_55615bb5
+    member: "unknown"
+    member_slug: unknown
+    task_output_path: .sisyphus/task-outputs/bg_55615bb5.md
+    archive_file: 
+    has_response: false
+    response_complete: false

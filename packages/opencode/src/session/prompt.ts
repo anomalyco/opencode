@@ -1349,7 +1349,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             log.info("loop", { step, sessionID })
 
             let msgs = yield* MessageV2.filterCompactedEffect(sessionID)
-
             let lastUser: MessageV2.User | undefined
             let lastAssistant: MessageV2.Assistant | undefined
             let lastFinished: MessageV2.Assistant | undefined
@@ -1363,7 +1362,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               const task = msg.parts.filter((part) => part.type === "compaction" || part.type === "subtask")
               if (task && !lastFinished) tasks.push(...task)
             }
-
             if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
 
             const lastAssistantMsg = msgs.findLast(
@@ -1372,7 +1370,6 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             // Some providers return "stop" even when the assistant message contains tool calls.
             // Keep the loop running so tool results can be sent back to the model.
             const hasToolCalls = lastAssistantMsg?.parts.some((part) => part.type === "tool") ?? false
-
             if (
               lastAssistant?.finish &&
               !["tool-calls"].includes(lastAssistant.finish) &&

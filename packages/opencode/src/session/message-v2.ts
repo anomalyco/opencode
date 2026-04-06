@@ -547,8 +547,8 @@ export namespace MessageV2 {
       and(eq(MessageTable.time_created, row.time), lt(MessageTable.id, row.id)),
     )
 
-  function resolve(_sid: SessionID) {
-    return Database.Client()
+  function resolve(sid: SessionID) {
+    return Database.resolveSession(sid)
   }
 
   function hydrate(db: Database.TxOrDb, rows: (typeof MessageTable.$inferSelect)[]) {
