@@ -15,7 +15,7 @@ import { Instance } from "../project/instance"
 import { Bus } from "../bus"
 import { ProviderTransform } from "../provider/transform"
 import { SystemPrompt } from "./system"
-import { InstructionPrompt } from "./instruction"
+import { Instruction } from "./instruction"
 import { Plugin } from "../plugin"
 import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
@@ -100,6 +100,7 @@ export namespace SessionPrompt {
       const truncate = yield* Truncate.Service
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
       const scope = yield* Scope.Scope
+      const instruction = yield* Instruction.Service
 
       const state = yield* InstanceState.make(
         Effect.fn("SessionPrompt.state")(function* () {
@@ -216,7 +217,7 @@ export namespace SessionPrompt {
             (yield* provider.getModel(input.providerID, input.modelID)))
         const msgs = onlySubtasks
           ? [{ role: "user" as const, content: subtasks.map((p) => p.prompt).join("\n") }]
-          : yield* Effect.promise(() => MessageV2.toModelMessages(context, mdl))
+          : yield* MessageV2.toModelMessagesEffect(context, mdl)
         const text = yield* Effect.promise(async (signal) => {
           const result = await LLM.stream({
             agent: ag,
@@ -559,7 +560,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }) {
         const { task, model, lastUser, sessionID, session, msgs } = input
         const ctx = yield* InstanceState.context
-        const taskTool = yield* Effect.promise(() => TaskTool.init())
+        const taskTool = yield* Effect.promise(() => registry.named.task.init())
         const taskModel = task.model ? yield* getModel(task.model.providerID, task.model.modelID, sessionID) : model
         const assistantMessage: MessageV2.Assistant = yield* sessions.updateMessage({
           id: MessageID.ascending(),
@@ -582,7 +583,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           sessionID: assistantMessage.sessionID,
           type: "tool",
           callID: ulid(),
-          tool: TaskTool.id,
+          tool: registry.named.task.id,
           state: {
             status: "running",
             input: {
@@ -755,7 +756,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         }
         const model = input.model ?? agent.model ?? (yield* lastModel(input.sessionID))
         const userMsg: MessageV2.User = {
-          id: MessageID.ascending(),
+          id: input.messageID ?? MessageID.ascending(),
           sessionID: input.sessionID,
           time: { created: Date.now() },
           role: "user",
@@ -979,7 +980,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           variant,
         }
 
-        yield* Effect.addFinalizer(() => InstanceState.withALS(() => InstructionPrompt.clear(info.id)))
+        yield* Effect.addFinalizer(() =>
+          InstanceState.withALS(() => instruction.clear(info.id)).pipe(Effect.flatMap((x) => x)),
+        )
 
         type Draft<T> = T extends MessageV2.Part ? Omit<T, "id"> & { id?: string } : never
         const assign = (part: Draft<MessageV2.Part>): MessageV2.Part => ({
@@ -1107,7 +1110,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                       text: `Called the Read tool with the following input: ${JSON.stringify(args)}`,
                     },
                   ]
-                  const read = yield* Effect.promise(() => ReadTool.init()).pipe(
+                  const read = yield* Effect.promise(() => registry.named.read.init()).pipe(
                     Effect.flatMap((t) =>
                       provider.getModel(info.model.providerID, info.model.modelID).pipe(
                         Effect.flatMap((mdl) =>
@@ -1171,7 +1174,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
                 if (part.mime === "application/x-directory") {
                   const args = { filePath: filepath }
-                  const result = yield* Effect.promise(() => ReadTool.init()).pipe(
+                  const result = yield* Effect.promise(() => registry.named.read.init()).pipe(
                     Effect.flatMap((t) =>
                       Effect.promise(() =>
                         t.execute(args, {
@@ -1342,7 +1345,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             yield* status.set(sessionID, { type: "busy" })
             log.info("loop", { step, sessionID })
 
-            let msgs = yield* Effect.promise(() => MessageV2.filterCompacted(MessageV2.stream(sessionID)))
+            let msgs = yield* MessageV2.filterCompactedEffect(sessionID)
 
             let lastUser: MessageV2.User | undefined
             let lastAssistant: MessageV2.Assistant | undefined
@@ -1359,9 +1362,18 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             }
 
             if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
+
+            const lastAssistantMsg = msgs.findLast(
+              (msg) => msg.info.role === "assistant" && msg.info.id === lastAssistant?.id,
+            )
+            // Some providers return "stop" even when the assistant message contains tool calls.
+            // Keep the loop running so tool results can be sent back to the model.
+            const hasToolCalls = lastAssistantMsg?.parts.some((part) => part.type === "tool") ?? false
+
             if (
               lastAssistant?.finish &&
               !["tool-calls"].includes(lastAssistant.finish) &&
+              !hasToolCalls &&
               lastUser.id < lastAssistant.id
             ) {
               log.info("exiting loop", { sessionID })
@@ -1486,14 +1498,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
                 yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
-                const [skills, env, instructions, modelMsgs] = yield* Effect.promise(() =>
-                  Promise.all([
-                    SystemPrompt.skills(agent),
-                    SystemPrompt.environment(model),
-                    InstructionPrompt.system(),
-                    MessageV2.toModelMessages(msgs, model),
-                  ]),
-                )
+                const [skills, env, instructions, modelMsgs] = yield* Effect.all([
+                  Effect.promise(() => SystemPrompt.skills(agent)),
+                  Effect.promise(() => SystemPrompt.environment(model)),
+                  instruction.system().pipe(Effect.orDie),
+                  Effect.promise(() => MessageV2.toModelMessages(msgs, model)),
+                ])
                 const system = [...env, ...(skills ? [skills] : []), ...instructions]
                 const format = lastUser.format ?? { type: "text" as const }
                 if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
@@ -1502,6 +1512,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   agent,
                   permission: session.permission,
                   sessionID,
+                  parentSessionID: session.parentID,
                   system,
                   messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
                   tools,
@@ -1542,7 +1553,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               }),
               Effect.fnUntraced(function* (exit) {
                 if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) yield* handle.abort()
-                yield* InstanceState.withALS(() => InstructionPrompt.clear(handle.message.id))
+                yield* InstanceState.withALS(() => instruction.clear(handle.message.id)).pipe(Effect.flatMap((x) => x))
               }),
             )
             if (outcome === "break") break
@@ -1705,13 +1716,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         Layer.provide(SessionCompaction.defaultLayer),
         Layer.provide(SessionProcessor.defaultLayer),
         Layer.provide(Command.defaultLayer),
-        Layer.provide(Permission.layer),
+        Layer.provide(Permission.defaultLayer),
         Layer.provide(MCP.defaultLayer),
         Layer.provide(LSP.defaultLayer),
         Layer.provide(FileTime.defaultLayer),
         Layer.provide(ToolRegistry.defaultLayer),
         Layer.provide(Truncate.layer),
         Layer.provide(Provider.defaultLayer),
+        Layer.provide(Instruction.defaultLayer),
         Layer.provide(AppFileSystem.defaultLayer),
         Layer.provide(Plugin.defaultLayer),
         Layer.provide(Session.defaultLayer),
@@ -1816,6 +1828,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
   export const ShellInput = z.object({
     sessionID: SessionID.zod,
+    messageID: MessageID.zod.optional(),
     agent: z.string(),
     model: z
       .object({

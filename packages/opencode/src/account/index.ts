@@ -52,6 +52,11 @@ export type AccountOrgs = {
   orgs: readonly Org[]
 }
 
+export type ActiveOrg = {
+  account: Info
+  org: Org
+}
+
 class RemoteConfig extends Schema.Class<RemoteConfig>("RemoteConfig")({
   config: Schema.Record(Schema.String, Schema.Json),
 }) {}
@@ -119,6 +124,11 @@ class TokenRefreshRequest extends Schema.Class<TokenRefreshRequest>("TokenRefres
 }) {}
 
 const clientId = "opencode-cli"
+const eagerRefreshThreshold = Duration.minutes(5)
+const eagerRefreshThresholdMs = Duration.toMillis(eagerRefreshThreshold)
+
+const isTokenFresh = (tokenExpiry: number | null, now: number) =>
+  tokenExpiry != null && tokenExpiry > now + eagerRefreshThresholdMs
 
 const mapAccountServiceError =
   (message = "Account service operation failed") =>
@@ -132,6 +142,7 @@ const mapAccountServiceError =
 export namespace Account {
   export interface Interface {
     readonly active: () => Effect.Effect<Option.Option<Info>, AccountError>
+    readonly activeOrg: () => Effect.Effect<Option.Option<ActiveOrg>, AccountError>
     readonly list: () => Effect.Effect<Info[], AccountError>
     readonly orgsByAccount: () => Effect.Effect<readonly AccountOrgs[], AccountError>
     readonly remove: (accountID: AccountID) => Effect.Effect<void, AccountError>
@@ -218,7 +229,9 @@ export namespace Account {
 
           const account = maybeAccount.value
           const now = yield* Clock.currentTimeMillis
-          if (account.token_expiry && account.token_expiry > now) return account.access_token
+          if (isTokenFresh(account.token_expiry, now)) {
+            return account.access_token
+          }
 
           return yield* refreshToken(account)
         }),
@@ -226,7 +239,9 @@ export namespace Account {
 
       const resolveToken = Effect.fnUntraced(function* (row: AccountRow) {
         const now = yield* Clock.currentTimeMillis
-        if (row.token_expiry && row.token_expiry > now) return row.access_token
+        if (isTokenFresh(row.token_expiry, now)) {
+          return row.access_token
+        }
 
         return yield* Cache.get(refreshTokenCache, row.id)
       })
@@ -270,19 +285,31 @@ export namespace Account {
         resolveAccess(accountID).pipe(Effect.map(Option.map((r) => r.accessToken))),
       )
 
+      const activeOrg = Effect.fn("Account.activeOrg")(function* () {
+        const activeAccount = yield* repo.active()
+        if (Option.isNone(activeAccount)) return Option.none<ActiveOrg>()
+
+        const account = activeAccount.value
+        if (!account.active_org_id) return Option.none<ActiveOrg>()
+
+        const accountOrgs = yield* orgs(account.id)
+        const org = accountOrgs.find((item) => item.id === account.active_org_id)
+        if (!org) return Option.none<ActiveOrg>()
+
+        return Option.some({ account, org })
+      })
+
       const orgsByAccount = Effect.fn("Account.orgsByAccount")(function* () {
         const accounts = yield* repo.list()
-        const [errors, results] = yield* Effect.partition(
+        return yield* Effect.forEach(
           accounts,
-          (account) => orgs(account.id).pipe(Effect.map((orgs) => ({ account, orgs }))),
+          (account) =>
+            orgs(account.id).pipe(
+              Effect.catch(() => Effect.succeed([] as readonly Org[])),
+              Effect.map((orgs) => ({ account, orgs })),
+            ),
           { concurrency: 3 },
         )
-        for (const error of errors) {
-          yield* Effect.logWarning("failed to fetch orgs for account").pipe(
-            Effect.annotateLogs({ error: String(error) }),
-          )
-        }
-        return results
       })
 
       const orgs = Effect.fn("Account.orgs")(function* (accountID: AccountID) {
@@ -387,6 +414,7 @@ export namespace Account {
 
       return Service.of({
         active: repo.active,
+        activeOrg,
         list: repo.list,
         orgsByAccount,
         remove: repo.remove,
@@ -408,9 +436,24 @@ export namespace Account {
     return Option.getOrUndefined(await runPromise((service) => service.active()))
   }
 
-  export async function config(accountID: AccountID, orgID: OrgID): Promise<Record<string, unknown> | undefined> {
-    const cfg = await runPromise((service) => service.config(accountID, orgID))
-    return Option.getOrUndefined(cfg)
+  export async function list(): Promise<Info[]> {
+    return runPromise((service) => service.list())
+  }
+
+  export async function activeOrg(): Promise<ActiveOrg | undefined> {
+    return Option.getOrUndefined(await runPromise((service) => service.activeOrg()))
+  }
+
+  export async function orgsByAccount(): Promise<readonly AccountOrgs[]> {
+    return runPromise((service) => service.orgsByAccount())
+  }
+
+  export async function orgs(accountID: AccountID): Promise<readonly Org[]> {
+    return runPromise((service) => service.orgs(accountID))
+  }
+
+  export async function switchOrg(accountID: AccountID, orgID: OrgID) {
+    return runPromise((service) => service.use(accountID, Option.some(orgID)))
   }
 
   export async function token(accountID: AccountID): Promise<AccessToken | undefined> {
