@@ -38,6 +38,7 @@ export interface DialogSelectOption<T = any> {
   description?: string
   footer?: JSX.Element | string
   category?: string
+  categoryView?: JSX.Element
   disabled?: boolean
   bg?: RGBA
   gutter?: JSX.Element
@@ -291,9 +292,16 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
               <>
                 <Show when={category}>
                   <box paddingTop={index() > 0 ? 1 : 0} paddingLeft={3}>
-                    <text fg={theme.accent} attributes={TextAttributes.BOLD}>
-                      {category}
-                    </text>
+                    <Show
+                      when={options[0]?.categoryView}
+                      fallback={
+                        <text fg={theme.accent} attributes={TextAttributes.BOLD}>
+                          {category}
+                        </text>
+                      }
+                    >
+                      {options[0]?.categoryView}
+                    </Show>
                   </box>
                 </Show>
                 <For each={options}>

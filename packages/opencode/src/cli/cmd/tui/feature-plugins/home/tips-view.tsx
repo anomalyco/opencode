@@ -148,5 +148,7 @@ const TIPS = [
   "Use {highlight}/review{/highlight} to review uncommitted changes, branches, or PRs",
   "Run {highlight}/help{/highlight} or {highlight}Ctrl+X H{/highlight} to show the help dialog",
   "Use {highlight}/rename{/highlight} to rename the current session",
-  "Press {highlight}Ctrl+Z{/highlight} to suspend the terminal and return to your shell",
+  ...(process.platform === "win32"
+    ? ["Press {highlight}Ctrl+Z{/highlight} to undo changes in your prompt"]
+    : ["Press {highlight}Ctrl+Z{/highlight} to suspend the terminal and return to your shell"]),
 ]
