@@ -61,6 +61,7 @@ import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
+import { ContextPanel, PANEL_WIDTH as CONTEXT_PANEL_WIDTH } from "./context-panel"
 import { SubagentFooter } from "./subagent-footer.tsx"
 import { Flag } from "@/flag/flag"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
@@ -141,6 +142,7 @@ export function Session() {
   const dimensions = useTerminalDimensions()
   const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto")
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
+  const [contextPanel, setContextPanel] = kv.signal<"hide" | "show">("context_panel", "hide")
   const [conceal, setConceal] = createSignal(true)
   const [showThinking, setShowThinking] = kv.signal("thinking_visibility", true)
   const [timestamps, setTimestamps] = kv.signal<"hide" | "show">("timestamps", "hide")
@@ -152,14 +154,24 @@ export function Session() {
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
 
   const wide = createMemo(() => dimensions().width > 120)
+  const contextPanelVisible = createMemo(() => {
+    if (session()?.parentID) return false
+    return contextPanel() === "show"
+  })
   const sidebarVisible = createMemo(() => {
     if (session()?.parentID) return false
+    if (contextPanelVisible()) return false
     if (sidebarOpen()) return true
     if (sidebar() === "auto" && wide()) return true
     return false
   })
   const showTimestamps = createMemo(() => timestamps() === "show")
-  const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
+  const rightWidth = createMemo(() => {
+    if (contextPanelVisible()) return CONTEXT_PANEL_WIDTH
+    if (sidebarVisible()) return 42
+    return 0
+  })
+  const contentWidth = createMemo(() => dimensions().width - rightWidth() - 4)
   const providers = createMemo(() => Model.index(sync.data.provider))
 
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
@@ -563,6 +575,20 @@ export function Session() {
           setSidebar(() => (isVisible ? "hide" : "auto"))
           setSidebarOpen(!isVisible)
         })
+        dialog.clear()
+      },
+    },
+    {
+      title: contextPanelVisible() ? "Hide context panel" : "Show context panel",
+      value: "session.context_panel.toggle",
+      keybind: "context_panel",
+      category: "Session",
+      slash: {
+        name: "context-panel",
+        aliases: ["cp"],
+      },
+      onSelect: (dialog) => {
+        setContextPanel(() => (contextPanelVisible() ? "hide" : "show"))
         dialog.clear()
       },
     },
@@ -1193,6 +1219,9 @@ export function Session() {
               </box>
             </Match>
           </Switch>
+        </Show>
+        <Show when={contextPanelVisible()}>
+          <ContextPanel sessionID={route.sessionID} />
         </Show>
       </box>
     </context.Provider>
