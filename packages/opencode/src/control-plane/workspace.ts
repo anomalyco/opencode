@@ -12,6 +12,7 @@ import { getAdaptor } from "./adaptors"
 import { WorkspaceInfo } from "./types"
 import { WorkspaceID } from "./schema"
 import { parseSSE } from "./sse"
+import { ServerProxy } from "@/server/proxy"
 
 export namespace Workspace {
   export const Event = {
@@ -116,7 +117,10 @@ export namespace Workspace {
   async function workspaceEventLoop(space: Info, stop: AbortSignal) {
     while (!stop.aborted) {
       const adaptor = await getAdaptor(space.type)
-      const res = await adaptor.fetch(space, "/event", { method: "GET", signal: stop }).catch(() => undefined)
+      const req = new Request(new URL("/event", "http://workspace.local"), { method: "GET", signal: stop })
+      const target = await Promise.resolve(adaptor.target(space)).catch(() => undefined)
+      const res =
+        !target || target.type === "local" ? undefined : await ServerProxy.http(target, req).catch(() => undefined)
       if (!res || !res.ok || !res.body) {
         await sleep(1000)
         continue
