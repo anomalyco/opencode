@@ -11621,6 +11621,15 @@
           },
           "key": {
             "type": "string"
+          },
+          "metadata": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         },
         "required": ["type", "key"]
