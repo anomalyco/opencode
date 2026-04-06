@@ -116,37 +116,42 @@ export function Popover<T extends ValidComponent = "div">(props: PopoverProps<T>
   })
 
   const content = () => (
-    <Kobalte.Content
-      ref={(el: HTMLElement | undefined) => setState("contentRef", el)}
-      data-component="popover-content"
-      classList={{
-        ...(local.classList ?? {}),
-        [local.class ?? ""]: !!local.class,
-      }}
-      style={local.style}
-      onCloseAutoFocus={(event: Event) => {
-        if (state.dismiss === "outside") event.preventDefault()
-        setState("dismiss", null)
-      }}
-    >
-      {/* <Kobalte.Arrow data-slot="popover-arrow" /> */}
-      <Show when={local.title}>
-        <div data-slot="popover-header">
-          <Kobalte.Title data-slot="popover-title">{local.title}</Kobalte.Title>
-          <Kobalte.CloseButton
-            data-slot="popover-close-button"
-            as={IconButton}
-            icon="close"
-            variant="ghost"
-            aria-label={i18n.t("ui.common.close")}
-          />
-        </div>
+    <>
+      <Show when={local.modal && opened()}>
+        <div data-component="dialog-overlay" />
       </Show>
-      <Show when={local.description}>
-        <Kobalte.Description data-slot="popover-description">{local.description}</Kobalte.Description>
-      </Show>
-      <div data-slot="popover-body">{local.children}</div>
-    </Kobalte.Content>
+      <Kobalte.Content
+        ref={(el: HTMLElement | undefined) => setState("contentRef", el)}
+        data-component="popover-content"
+        classList={{
+          ...(local.classList ?? {}),
+          [local.class ?? ""]: !!local.class,
+        }}
+        style={local.style}
+        onCloseAutoFocus={(event: Event) => {
+          if (state.dismiss === "outside") event.preventDefault()
+          setState("dismiss", null)
+        }}
+      >
+        {/* <Kobalte.Arrow data-slot="popover-arrow" /> */}
+        <Show when={local.title}>
+          <div data-slot="popover-header">
+            <Kobalte.Title data-slot="popover-title">{local.title}</Kobalte.Title>
+            <Kobalte.CloseButton
+              data-slot="popover-close-button"
+              as={IconButton}
+              icon="close"
+              variant="ghost"
+              aria-label={i18n.t("ui.common.close")}
+            />
+          </div>
+        </Show>
+        <Show when={local.description}>
+          <Kobalte.Description data-slot="popover-description">{local.description}</Kobalte.Description>
+        </Show>
+        <div data-slot="popover-body">{local.children}</div>
+      </Kobalte.Content>
+    </>
   )
 
   return (
