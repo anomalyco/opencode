@@ -218,7 +218,6 @@ export namespace MessageV2 {
     prompt: z.string(),
     description: z.string(),
     agent: z.string(),
-    variant: z.string().optional(),
     model: z
       .object({
         providerID: ProviderID.zod,

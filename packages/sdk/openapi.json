@@ -9013,9 +9013,6 @@
           "agent": {
             "type": "string"
           },
-          "variant": {
-            "type": "string"
-          },
           "model": {
             "type": "object",
             "properties": {
@@ -12343,9 +12340,6 @@
             "type": "string"
           },
           "agent": {
-            "type": "string"
-          },
-          "variant": {
             "type": "string"
           },
           "model": {
