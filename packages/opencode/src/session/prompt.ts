@@ -560,7 +560,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }) {
         const { task, model, lastUser, sessionID, session, msgs } = input
         const ctx = yield* InstanceState.context
-        const taskTool = yield* Effect.promise(() => TaskTool.init())
+        const taskTool = yield* Effect.promise(() => registry.named.task.init())
         const taskModel = task.model ? yield* getModel(task.model.providerID, task.model.modelID, sessionID) : model
         const assistantMessage: MessageV2.Assistant = yield* sessions.updateMessage({
           id: MessageID.ascending(),
@@ -583,7 +583,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           sessionID: assistantMessage.sessionID,
           type: "tool",
           callID: ulid(),
-          tool: TaskTool.id,
+          tool: registry.named.task.id,
           state: {
             status: "running",
             input: {
@@ -1112,7 +1112,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                       text: `Called the Read tool with the following input: ${JSON.stringify(args)}`,
                     },
                   ]
-                  const read = yield* Effect.promise(() => ReadTool.init()).pipe(
+                  const read = yield* Effect.promise(() => registry.named.read.init()).pipe(
                     Effect.flatMap((t) =>
                       provider.getModel(info.model.providerID, info.model.modelID).pipe(
                         Effect.flatMap((mdl) =>
@@ -1176,7 +1176,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
                 if (part.mime === "application/x-directory") {
                   const args = { filePath: filepath }
-                  const result = yield* Effect.promise(() => ReadTool.init()).pipe(
+                  const result = yield* Effect.promise(() => registry.named.read.init()).pipe(
                     Effect.flatMap((t) =>
                       Effect.promise(() =>
                         t.execute(args, {
@@ -1514,6 +1514,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                   agent,
                   permission: session.permission,
                   sessionID,
+                  parentSessionID: session.parentID,
                   system,
                   messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
                   tools,
@@ -1718,7 +1719,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         Layer.provide(SessionCompaction.defaultLayer),
         Layer.provide(SessionProcessor.defaultLayer),
         Layer.provide(Command.defaultLayer),
-        Layer.provide(Permission.layer),
+        Layer.provide(Permission.defaultLayer),
         Layer.provide(MCP.defaultLayer),
         Layer.provide(LSP.defaultLayer),
         Layer.provide(FileTime.defaultLayer),

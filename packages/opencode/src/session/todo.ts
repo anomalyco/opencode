@@ -82,7 +82,7 @@ export namespace Todo {
     }),
   )
 
-  const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
+  export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
   const { runPromise } = makeRuntime(Service, defaultLayer)
 
   export async function update(input: { sessionID: SessionID; todos: Info[] }) {

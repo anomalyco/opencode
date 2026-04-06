@@ -25,6 +25,7 @@ export namespace LLM {
   export type StreamInput = {
     user: MessageV2.User
     sessionID: string
+    parentSessionID?: string
     model: Provider.Model
     agent: Agent.Info
     permission?: Permission.Ruleset
@@ -159,6 +160,11 @@ export namespace LLM {
             ...input.messages,
           ]
 
+    const maxOutputTokens =
+      isOpenaiOauth || provider.id.includes("github-copilot")
+        ? undefined
+        : ProviderTransform.maxOutputTokens(input.model)
+
     const params = await Plugin.trigger(
       "chat.params",
       {
@@ -174,6 +180,7 @@ export namespace LLM {
           : undefined,
         topP: input.agent.topP ?? ProviderTransform.topP(input.model),
         topK: ProviderTransform.topK(input.model),
+        maxOutputTokens,
         options,
       },
     )
@@ -191,11 +198,6 @@ export namespace LLM {
         headers: {},
       },
     )
-
-    const maxOutputTokens =
-      isOpenaiOauth || provider.id.includes("github-copilot")
-        ? undefined
-        : ProviderTransform.maxOutputTokens(input.model)
 
     const tools = await resolveTools(input)
 
@@ -290,7 +292,7 @@ export namespace LLM {
       activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
       tools,
       toolChoice: input.toolChoice,
-      maxOutputTokens,
+      maxOutputTokens: params.maxOutputTokens,
       abortSignal: input.abort,
       headers: {
         ...(input.model.providerID.startsWith("opencode")
@@ -301,6 +303,8 @@ export namespace LLM {
               "x-opencode-client": Flag.OPENCODE_CLIENT,
             }
           : {
+              "x-session-affinity": input.sessionID,
+              ...(input.parentSessionID ? { "x-parent-session-id": input.parentSessionID } : {}),
               "User-Agent": `opencode/${Installation.VERSION}`,
             }),
         ...input.model.headers,
