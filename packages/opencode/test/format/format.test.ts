@@ -1,13 +1,25 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
+import fs from "fs/promises"
+import path from "path"
 import { Effect, Layer } from "effect"
+import { Instance } from "../../src/project/instance"
 import { provideTmpdirInstance } from "../fixture/fixture"
+import { tmpdir } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { Format } from "../../src/format"
 import * as Formatter from "../../src/format/formatter"
 
 const it = testEffect(Layer.mergeAll(Format.defaultLayer, CrossSpawnSpawner.defaultLayer, NodeFileSystem.layer))
+
+async function cmd(dir: string, name: string, body: string) {
+  const ext = process.platform === "win32" ? ".cmd" : ""
+  const file = path.join(dir, name + ext)
+  await fs.writeFile(file, process.platform === "win32" ? body : `#!/bin/sh\n${body}`)
+  if (process.platform !== "win32") await fs.chmod(file, 0o755)
+  return file
+}
 
 describe("Format", () => {
   it.live("status() returns built-in formatters when no config overrides", () =>
@@ -168,4 +180,29 @@ describe("Format", () => {
       },
     ),
   )
+
+  test("prefers bundle exec for standardrb in Bundler projects", async () => {
+    await using tmp = await tmpdir()
+    const dir = path.join(tmp.path, "bin")
+    await fs.mkdir(dir)
+    const body =
+      process.platform === "win32"
+        ? '@echo off\r\nif "%~1"=="exec" if "%~2"=="standardrb" if "%~3"=="--version" exit /b 0\r\nexit /b 1\r\n'
+        : 'if [ "$1" = "exec" ] && [ "$2" = "standardrb" ] && [ "$3" = "--version" ]; then\n  exit 0\nfi\nexit 1\n'
+    const bundle = await cmd(dir, "bundle", body)
+    const prev = process.env.PATH
+    process.env.PATH = [dir, prev].filter(Boolean).join(path.delimiter)
+    await Bun.write(path.join(tmp.path, "Gemfile.lock"), "")
+
+    try {
+      const result = await Instance.provide({
+        directory: tmp.path,
+        fn: () => Formatter.standardrb.enabled(),
+      })
+      expect(result).toEqual([bundle, "exec", "standardrb", "--fix", "$FILE"])
+    } finally {
+      process.env.PATH = prev
+      await Instance.disposeAll()
+    }
+  })
 })

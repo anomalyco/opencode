@@ -3,6 +3,7 @@ import { Npm } from "@/npm"
 import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
 import { Process } from "../util/process"
+import { bundle } from "../util/ruby"
 import { which } from "../util/which"
 import { Flag } from "@/flag/flag"
 
@@ -259,6 +260,8 @@ export const rubocop: Info = {
   name: "rubocop",
   extensions: [".rb", ".rake", ".gemspec", ".ru"],
   async enabled() {
+    const cmd = await bundle("rubocop", ["--autocorrect", "$FILE"])
+    if (cmd) return cmd
     const match = which("rubocop")
     if (!match) return false
     return [match, "--autocorrect", "$FILE"]
@@ -269,6 +272,8 @@ export const standardrb: Info = {
   name: "standardrb",
   extensions: [".rb", ".rake", ".gemspec", ".ru"],
   async enabled() {
+    const cmd = await bundle("standardrb", ["--fix", "$FILE"])
+    if (cmd) return cmd
     const match = which("standardrb")
     if (!match) return false
     return [match, "--fix", "$FILE"]

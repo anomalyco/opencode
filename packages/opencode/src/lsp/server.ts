@@ -10,6 +10,7 @@ import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { Archive } from "../util/archive"
 import { Process } from "../util/process"
+import { bundle } from "../util/ruby"
 import { which } from "../util/which"
 import { Module } from "@opencode-ai/util/module"
 import { spawn } from "./launch"
@@ -387,6 +388,14 @@ export namespace LSPServer {
     root: NearestRoot(["Gemfile"]),
     extensions: [".rb", ".rake", ".gemspec", ".ru"],
     async spawn(root) {
+      const cmd = await bundle("rubocop", ["--lsp"], root)
+      if (cmd) {
+        return {
+          process: spawn(cmd[0]!, cmd.slice(1), {
+            cwd: root,
+          }),
+        }
+      }
       let bin = which("rubocop")
       if (!bin) {
         const ruby = which("ruby")
