@@ -116,7 +116,7 @@
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
     "@opencode-ai/util": "workspace:*",
-    "@openrouter/ai-sdk-provider": "2.3.3",
+    "@openrouter/ai-sdk-provider": "2.4.2",
     "@opentui/core": "0.1.97",
     "@opentui/solid": "0.1.97",
     "@parcel/watcher": "2.5.1",
