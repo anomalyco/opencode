@@ -289,10 +289,9 @@ describe("session.llm.stream", () => {
       throw new Error("Server not initialized")
     }
 
-    const providerID = "alibaba"
-    const modelID = "qwen-plus"
+    const providerID = "vivgrid"
+    const modelID = "gemini-3.1-pro-preview"
     const fixture = await loadFixture(providerID, modelID)
-    const provider = fixture.provider
     const model = fixture.model
 
     const request = waitRequest(
