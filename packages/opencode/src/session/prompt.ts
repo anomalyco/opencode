@@ -1371,7 +1371,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             // Skip provider-executed tool parts — those were fully handled within the
             // provider's stream (e.g. DWS Agent Platform) and don't need a re-loop.
             const hasToolCalls =
-              lastAssistantMsg?.parts.some((part) => part.type === "tool" && !part.providerExecuted) ?? false
+              lastAssistantMsg?.parts.some((part) => part.type === "tool" && !part.metadata?.providerExecuted) ?? false
 
             if (
               lastAssistant?.finish &&
