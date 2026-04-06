@@ -74,20 +74,19 @@ export namespace HubAuth {
   }
 
   // AIDEV-NOTE: HubOAuth.token_for_code 참고. Hub API에 authorization code를 보내 access token으로 교환.
+  // Python 원본은 파라미터를 URL query string으로 전달하고 body는 비워둔다.
   // https://github.com/jupyterhub/jupyterhub/blob/652390e/jupyterhub/services/auth.py#L1078-L1112
   async function exchange(code: string, callback: string): Promise<string | undefined> {
     try {
-      const res = await fetch(api("/oauth2/token"), {
+      const params = new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: callback,
+      })
+      const res = await fetch(`${api("/oauth2/token")}?${params}`, {
         method: "POST",
-        headers: {
-          "Authorization": `token ${Flag.JUPYTERHUB_API_TOKEN}`,
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams({
-          grant_type: "authorization_code",
-          code,
-          redirect_uri: callback,
-        }),
+        headers: { Authorization: `token ${Flag.JUPYTERHUB_API_TOKEN}` },
+        body: "",
       })
       if (!res.ok) {
         log.warn("token exchange failed", { status: res.status })
