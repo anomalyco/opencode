@@ -814,7 +814,28 @@ export async function openStatusPopover(page: Page) {
 
   if (!opened) {
     await expect(trigger).toBeVisible()
-    await trigger.click()
+
+    for (const timeout of [1500, 3000, undefined]) {
+      const clicked = await trigger
+        .click({ force: true, timeout })
+        .then(() => true)
+        .catch(() => false)
+
+      if (!clicked) {
+        await trigger.focus().catch(() => undefined)
+        await page.keyboard.press("Enter").catch(() => undefined)
+      }
+
+      const visible = await popoverBody
+        .waitFor({ state: "visible", timeout: timeout ?? 5000 })
+        .then(() => true)
+        .catch(() => false)
+
+      if (visible) {
+        break
+      }
+    }
+
     await expect(popoverBody).toBeVisible()
   }
 
