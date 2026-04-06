@@ -140,6 +140,14 @@ export namespace HubAuth {
     return `${proto}://${host}${callbackPath()}`
   }
 
+  function tryTokenAuth(c: Context, username: string, password: string): boolean {
+    const token = c.req.query("token")
+    if (!token) return false
+    const raw = Buffer.from(token, "base64").toString()
+    const i = raw.indexOf(":")
+    return i !== -1 && raw.slice(0, i) === username && raw.slice(i + 1) === password
+  }
+
   // AIDEV-NOTE: HubOAuthCallbackHandler.get 참고. state 검증 -> code 교환 -> userinfo -> 소유자 비교 -> 세션 쿠키 발급.
   // https://github.com/jupyterhub/jupyterhub/blob/652390e/jupyterhub/services/auth.py#L1547-L1618
   export async function callback(c: Context): Promise<Response> {
@@ -220,7 +228,7 @@ export namespace HubAuth {
             // Python 원본의 _check_hub_user -> user_for_token 호출과 동일한 패턴.
             const name = await userinfo(session.token)
             if (name === Flag.JUPYTERHUB_USER) {
-              session.cachedAt = Date.now()
+              sessions.set(sid, { ...session, cachedAt: Date.now() })
               return next()
             }
             log.warn("session revalidation failed", { cached_user: session.user, resolved_user: name })
@@ -229,13 +237,8 @@ export namespace HubAuth {
         }
 
         // 2. Basic Auth 자격 증명이 있으면 Basic Auth로 처리 (CLI/SDK 요청)
+        if (password && tryTokenAuth(c, username, password)) return next()
         if (password) {
-          const token = c.req.query("token")
-          if (token) {
-            const raw = Buffer.from(token, "base64").toString()
-            const i = raw.indexOf(":")
-            if (i !== -1 && raw.slice(0, i) === username && raw.slice(i + 1) === password) return next()
-          }
           const header = c.req.header("authorization")
           if (header?.startsWith("Basic ")) {
             return basicAuth({ username, password })(c, next)
@@ -259,12 +262,7 @@ export namespace HubAuth {
 
       // --- Basic Auth 전용 모드 (Hub 없음) ---
       if (!password) return next()
-      const token = c.req.query("token")
-      if (token) {
-        const raw = Buffer.from(token, "base64").toString()
-        const i = raw.indexOf(":")
-        if (i !== -1 && raw.slice(0, i) === username && raw.slice(i + 1) === password) return next()
-      }
+      if (tryTokenAuth(c, username, password)) return next()
       return basicAuth({ username, password })(c, next)
     }
   }
