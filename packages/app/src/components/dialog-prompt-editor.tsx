@@ -1,12 +1,18 @@
-import { createEffect, createMemo, onCleanup } from "solid-js"
+import { useFilteredList } from "@opencode-ai/ui/hooks"
+import { createEffect, createMemo, createSignal, For, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { Button } from "@opencode-ai/ui/button"
+import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
 import { monoFontFamily, useSettings } from "@/context/settings"
 import { usePlatform } from "@/context/platform"
+import { useFile } from "@/context/file"
 import { paint } from "@/components/prompt-input/expand"
+import { type AtOption } from "@/components/prompt-input/slash-popover"
+import { at, mention, pair } from "@/components/dialog-prompt-editor-input"
+import { getDirectory, getFilename } from "@opencode-ai/util/path"
 
 type DialogPromptEditorProps = {
   text: string
@@ -19,6 +25,7 @@ export function DialogPromptEditor(props: DialogPromptEditorProps) {
   const language = useLanguage()
   const settings = useSettings()
   const platform = usePlatform()
+  const files = useFile()
   const [state, setState] = createStore({
     text: props.text,
     h: 280,
@@ -26,9 +33,16 @@ export function DialogPromptEditor(props: DialogPromptEditorProps) {
   const html = createMemo(() => paint(state.text))
   const font = createMemo(() => monoFontFamily(settings.appearance.font()))
   const mod = createMemo(() => (platform.os === "macos" ? "⌘" : language.t("common.key.ctrl")))
+  const [popover, setPopover] = createSignal<"at" | null>(null)
+  const [menu, setMenu] = createStore({
+    top: 12,
+    left: 12,
+    max: 320,
+  })
   const ref = {
     box: undefined as HTMLTextAreaElement | undefined,
     back: undefined as HTMLDivElement | undefined,
+    menu: undefined as HTMLDivElement | undefined,
   }
 
   const fit = () => {
@@ -52,6 +66,115 @@ export function DialogPromptEditor(props: DialogPromptEditorProps) {
     dialog.close()
   }
 
+  const place = () => {
+    if (!ref.box) return
+    const box = ref.box
+    const style = window.getComputedStyle(box)
+    const mirror = document.createElement("div")
+    const before = state.text.slice(0, box.selectionStart ?? 0)
+    const value = before.length > 0 ? before : " "
+
+    mirror.style.position = "absolute"
+    mirror.style.visibility = "hidden"
+    mirror.style.pointerEvents = "none"
+    mirror.style.whiteSpace = "pre-wrap"
+    mirror.style.wordBreak = "break-word"
+    mirror.style.overflowWrap = "break-word"
+    mirror.style.font = style.font
+    mirror.style.fontFamily = style.fontFamily
+    mirror.style.fontSize = style.fontSize
+    mirror.style.fontWeight = style.fontWeight
+    mirror.style.lineHeight = style.lineHeight
+    mirror.style.letterSpacing = style.letterSpacing
+    mirror.style.padding = style.padding
+    mirror.style.border = style.border
+    mirror.style.boxSizing = style.boxSizing
+    mirror.style.width = `${box.clientWidth}px`
+    mirror.style.maxWidth = `${box.clientWidth}px`
+    mirror.textContent = value
+
+    const mark = document.createElement("span")
+    mark.textContent = "\u200b"
+    mirror.append(mark)
+    box.parentElement?.append(mirror)
+
+    const top = mark.offsetTop - box.scrollTop
+    const left = mark.offsetLeft - box.scrollLeft
+    mirror.remove()
+
+    const line = Number.parseFloat(style.lineHeight) || Number.parseFloat(style.fontSize) * 1.4 || 20
+    const padX = Number.parseFloat(style.paddingLeft) || 0
+    const padY = Number.parseFloat(style.paddingTop) || 0
+    const menuH = ref.menu?.offsetHeight ?? Math.min(320, Math.max(40, atFlat().length * 34 + 16))
+    const below = box.clientHeight - (top + padY + line)
+    const nextTop = below >= Math.min(menuH, 180) ? top + padY + line + 6 : Math.max(8, top + padY - menuH - 6)
+    const nextLeft = Math.max(8, Math.min(left + padX, box.clientWidth - 280))
+    const nextMax = Math.max(120, Math.min(320, box.clientHeight - nextTop - 8))
+
+    setMenu({
+      top: nextTop,
+      left: nextLeft,
+      max: nextMax,
+    })
+  }
+
+  const handleAtSelect = (item: AtOption | undefined) => {
+    if (!item || item.type !== "file" || !ref.box) return
+    const pos = ref.box.selectionStart ?? state.text.length
+    const match = at(state.text, pos)
+    if (!match) return
+    const next = mention(state.text, match.start, match.end, item.path)
+    setState("text", next.text)
+    setPopover(null)
+    requestAnimationFrame(() => {
+      if (!ref.box) return
+      ref.box.focus()
+      ref.box.setSelectionRange(next.start, next.end)
+      sync()
+    })
+  }
+
+  const atKey = (item: AtOption | undefined) => {
+    if (!item) return ""
+    return item.type === "agent" ? `agent:${item.name}` : `file:${item.path}`
+  }
+
+  const {
+    flat: atFlat,
+    active: atActive,
+    setActive: setAtActive,
+    onInput: atOnInput,
+    onKeyDown: atOnKeyDown,
+  } = useFilteredList<AtOption>({
+    items: async (query) =>
+      (await files.searchFilesAndDirectories(query)).map((path) => ({ type: "file", path, display: path })),
+    key: atKey,
+    filterKeys: ["display"],
+    onSelect: handleAtSelect,
+  })
+  const shown = createMemo(() => atFlat().slice(0, 6))
+
+  const refreshAt = () => {
+    if (!ref.box) return
+    const match = at(state.text, ref.box.selectionStart ?? 0)
+    if (!match) {
+      setPopover(null)
+      return
+    }
+    atOnInput(match.query)
+    setPopover("at")
+    requestAnimationFrame(place)
+  }
+
+  const reveal = () => {
+    const root = ref.menu
+    if (!root) return
+    const key = atActive()
+    if (!key) return
+    const node = root.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`)
+    node?.scrollIntoView({ block: "nearest" })
+  }
+
   createEffect(() => {
     state.text
     requestAnimationFrame(() => {
@@ -66,6 +189,18 @@ export function DialogPromptEditor(props: DialogPromptEditorProps) {
     onCleanup(() => window.removeEventListener("resize", onResize))
   })
 
+  createEffect(() => {
+    if (popover() !== "at") return
+    atFlat()
+    requestAnimationFrame(place)
+  })
+
+  createEffect(() => {
+    if (popover() !== "at") return
+    atActive()
+    requestAnimationFrame(reveal)
+  })
+
   return (
     <Dialog title={<div class="pl-3">{language.t("prompt.editor.title")}</div>} size="x-large" transition>
       <div class="flex min-h-0 flex-1 flex-col gap-4 px-1 pb-1">
@@ -76,6 +211,57 @@ export function DialogPromptEditor(props: DialogPromptEditorProps) {
             "max-height": "min(620px, calc(100dvh - 230px))",
           }}
         >
+          <div
+            ref={(el) => {
+              ref.menu = el
+            }}
+            class="absolute z-20 min-h-10 w-[min(560px,calc(100%-16px))] overflow-auto no-scrollbar rounded-[12px] border border-white/10 p-2 shadow-[var(--shadow-lg-border-base)]"
+            classList={{ hidden: popover() !== "at" }}
+            style={{
+              top: `${menu.top}px`,
+              left: `${menu.left}px`,
+              "max-height": `${menu.max}px`,
+              "background-color":
+                platform.platform === "desktop" && platform.os === "windows"
+                  ? "var(--surface-raised-stronger-non-alpha)"
+                  : "rgb(12 12 14 / 0.34)",
+              "backdrop-filter":
+                platform.platform === "desktop" && platform.os === "windows" ? "none" : "blur(40px) saturate(150%)",
+              "-webkit-backdrop-filter":
+                platform.platform === "desktop" && platform.os === "windows" ? "none" : "blur(40px) saturate(150%)",
+            }}
+            onMouseDown={(event) => event.preventDefault()}
+          >
+            <div classList={{ hidden: atFlat().length > 0 }} class="px-2 py-1 text-text-weak">
+              {language.t("prompt.popover.emptyResults")}
+            </div>
+            <For each={shown()}>
+              {(item) => {
+                if (item.type !== "file") return null
+                const key = atKey(item)
+                const dir = item.path.endsWith("/") ? item.path : getDirectory(item.path)
+                const file = item.path.endsWith("/") ? "" : getFilename(item.path)
+                return (
+                  <button
+                    data-key={key}
+                    class="flex w-full items-center gap-x-2 rounded-md px-2 py-0.5"
+                    classList={{ "bg-surface-raised-base-active": atActive() === key }}
+                    onClick={() => handleAtSelect(item)}
+                    onMouseEnter={() => setAtActive(key)}
+                  >
+                    <FileIcon
+                      node={{ path: item.path, type: item.path.endsWith("/") ? "directory" : "file" }}
+                      class="size-4 shrink-0"
+                    />
+                    <div class="min-w-0 flex items-center text-14-regular">
+                      <span class="min-w-0 truncate whitespace-nowrap text-text-weak">{dir}</span>
+                      <span class="whitespace-nowrap text-text-strong">{file}</span>
+                    </div>
+                  </button>
+                )
+              }}
+            </For>
+          </div>
           <div
             ref={(el) => {
               ref.back = el
@@ -95,13 +281,69 @@ export function DialogPromptEditor(props: DialogPromptEditorProps) {
             spellcheck={false}
             value={state.text}
             placeholder=""
-            onInput={(event) => setState("text", event.currentTarget.value)}
-            onScroll={sync}
+            onInput={(event) => {
+              setState("text", event.currentTarget.value)
+              refreshAt()
+            }}
+            onScroll={() => {
+              sync()
+              if (popover() === "at") requestAnimationFrame(place)
+            }}
+            onClick={refreshAt}
+            onKeyUp={refreshAt}
             onKeyDown={(event) => {
+              if (popover()) {
+                if (event.key === "Tab") {
+                  const item = atFlat().find((entry) => atKey(entry) === atActive()) ?? atFlat()[0]
+                  if (item) handleAtSelect(item)
+                  event.preventDefault()
+                  return
+                }
+
+                const nav = event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter"
+                const ctrl =
+                  event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && (event.key === "n" || event.key === "p")
+                if (nav || ctrl) {
+                  atOnKeyDown(event)
+                  event.preventDefault()
+                  return
+                }
+
+                if (event.key === "Escape") {
+                  setPopover(null)
+                  event.preventDefault()
+                  return
+                }
+              }
+
               if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key === "Enter") {
                 event.preventDefault()
                 save()
+                return
               }
+
+              const next = pair({
+                text: state.text,
+                start: event.currentTarget.selectionStart ?? 0,
+                end: event.currentTarget.selectionEnd ?? 0,
+                key: event.key,
+              })
+              if (!next) return
+              event.preventDefault()
+              setState("text", next.text)
+              setPopover(null)
+              requestAnimationFrame(() => {
+                if (!ref.box) return
+                ref.box.setSelectionRange(next.start, next.end)
+                sync()
+                refreshAt()
+              })
+            }}
+            onBlur={() => {
+              window.setTimeout(() => setPopover(null), 120)
+            }}
+            onFocus={() => {
+              refreshAt()
             }}
             class="absolute inset-0 resize-none overflow-auto px-4 py-3 text-14-mono whitespace-pre-wrap bg-transparent focus:outline-none"
             style={{
