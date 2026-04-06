@@ -93,6 +93,7 @@ This implementation follows the ACP specification v1:
 - `session/load` - Resume existing sessions (basic support)
 - Working directory context (`cwd`)
 - MCP server configuration support
+- Legacy `setSessionMode` and `unstable_setSessionModel` remain available for transition use, but are deprecated in favor of `session/set_config_option`
 
 ✅ **Prompting**
 

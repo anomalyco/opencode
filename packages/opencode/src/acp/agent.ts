@@ -1288,6 +1288,9 @@ export namespace ACP {
       }
     }
 
+    /**
+     * @deprecated Prefer `setSessionConfigOption` with `configId: "model"`.
+     */
     async unstable_setSessionModel(params: SetSessionModelRequest) {
       const session = this.sessionManager.get(params.sessionId)
       const providers = await this.sdk.config
@@ -1295,11 +1298,26 @@ export namespace ACP {
         .then((x) => x.data!.providers)
 
       const selection = parseModelSelection(params.modelId, providers)
+      assertModelSelection(params.modelId, providers, selection)
       this.sessionManager.setModel(session.id, selection.model)
       this.sessionManager.setVariant(session.id, selection.variant)
 
       const entries = sortProvidersByName(providers)
       const availableVariants = modelVariantsFromProviders(entries, selection.model)
+
+      this.options(session.id, session.cwd)
+        .then((configOptions) => {
+          this.connection.sessionUpdate({
+            sessionId: session.id,
+            update: {
+              sessionUpdate: "config_option_update",
+              configOptions,
+            },
+          })
+        })
+        .catch((error) => {
+          log.error("failed to send config_option_update after model change", { error })
+        })
 
       return {
         _meta: buildVariantMeta({
@@ -1310,6 +1328,9 @@ export namespace ACP {
       }
     }
 
+    /**
+     * @deprecated Prefer `setSessionConfigOption` with `configId: "mode"`.
+     */
     async setSessionMode(params: SetSessionModeRequest): Promise<SetSessionModeResponse | void> {
       const session = this.sessionManager.get(params.sessionId)
       const availableModes = await this.loadAvailableModes(session.cwd)
@@ -1317,23 +1338,38 @@ export namespace ACP {
         throw new Error(`Agent not found: ${params.modeId}`)
       }
       this.sessionManager.setMode(params.sessionId, params.modeId)
+
+      this.options(session.id, session.cwd)
+        .then((configOptions) => {
+          this.connection.sessionUpdate({
+            sessionId: session.id,
+            update: {
+              sessionUpdate: "config_option_update",
+              configOptions,
+            },
+          })
+        })
+        .catch((error) => {
+          log.error("failed to send config_option_update after mode change", { error })
+        })
     }
 
     async setSessionConfigOption(params: SetSessionConfigOptionRequest): Promise<SetSessionConfigOptionResponse> {
       const session = this.sessionManager.get(params.sessionId)
-      const providers = await this.sdk.config
-        .providers({ directory: session.cwd }, { throwOnError: true })
-        .then((x) => x.data!.providers)
-      const entries = sortProvidersByName(providers)
+      const dir = session.cwd
 
       if (params.configId === "model") {
         if (typeof params.value !== "string") throw RequestError.invalidParams("model value must be a string")
+        const providers = await this.sdk.config
+          .providers({ directory: dir }, { throwOnError: true })
+          .then((x) => x.data!.providers)
         const selection = parseModelSelection(params.value, providers)
+        assertModelSelection(params.value, providers, selection)
         this.sessionManager.setModel(session.id, selection.model)
         this.sessionManager.setVariant(session.id, selection.variant)
       } else if (params.configId === "mode") {
         if (typeof params.value !== "string") throw RequestError.invalidParams("mode value must be a string")
-        const availableModes = await this.loadAvailableModes(session.cwd)
+        const availableModes = await this.loadAvailableModes(dir)
         if (!availableModes.some((mode) => mode.id === params.value)) {
           throw RequestError.invalidParams(JSON.stringify({ error: `Mode not found: ${params.value}` }))
         }
@@ -1342,19 +1378,24 @@ export namespace ACP {
         throw RequestError.invalidParams(JSON.stringify({ error: `Unknown config option: ${params.configId}` }))
       }
 
-      const updatedSession = this.sessionManager.get(session.id)
-      const model = updatedSession.model ?? (await defaultModel(this.config, session.cwd))
+      return { configOptions: await this.options(session.id, dir) }
+    }
+
+    private async options(sessionId: string, dir: string): Promise<SetSessionConfigOptionResponse["configOptions"]> {
+      const session = this.sessionManager.get(sessionId)
+      const providers = await this.sdk.config
+        .providers({ directory: dir }, { throwOnError: true })
+        .then((x) => x.data!.providers)
+      const entries = sortProvidersByName(providers)
+      const model = session.model ?? (await defaultModel(this.config, dir))
       const availableVariants = modelVariantsFromProviders(entries, model)
-      const currentModelId = formatModelIdWithVariant(model, updatedSession.variant, availableVariants, true)
+      const currentModelId = formatModelIdWithVariant(model, session.variant, availableVariants, true)
       const availableModels = buildAvailableModels(entries, { includeVariants: true })
-      const modeState = await this.resolveModeState(session.cwd, session.id)
+      const modeState = await this.resolveModeState(dir, sessionId)
       const modes = modeState.currentModeId
         ? { availableModes: modeState.availableModes, currentModeId: modeState.currentModeId }
         : undefined
-
-      return {
-        configOptions: buildConfigOptions({ currentModelId, availableModels, modes }),
-      }
+      return buildConfigOptions({ currentModelId, availableModels, modes })
     }
 
     async prompt(params: PromptRequest) {
@@ -1811,6 +1852,24 @@ export namespace ACP {
     }
 
     return { model: parsed, variant: undefined }
+  }
+
+  function assertModelSelection(
+    modelId: string,
+    providers: Array<{ id: string; models: Record<string, { variants?: Record<string, any> }> }>,
+    selection: { model: { providerID: ProviderID; modelID: ModelID }; variant?: string },
+  ) {
+    const provider = providers.find((p) => p.id === selection.model.providerID)
+    if (!provider) {
+      throw RequestError.invalidParams(JSON.stringify({ error: `Model not found: ${modelId}` }))
+    }
+    const info = provider.models[selection.model.modelID]
+    if (!info) {
+      throw RequestError.invalidParams(JSON.stringify({ error: `Model not found: ${modelId}` }))
+    }
+    if (selection.variant && !info.variants?.[selection.variant]) {
+      throw RequestError.invalidParams(JSON.stringify({ error: `Model variant not found: ${modelId}` }))
+    }
   }
 
   function buildConfigOptions(input: {
