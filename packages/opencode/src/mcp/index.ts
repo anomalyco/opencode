@@ -889,8 +889,6 @@ export namespace MCP {
 
   export const status = async () => runPromise((svc) => svc.status())
 
-  export const clients = async () => runPromise((svc) => svc.clients())
-
   export const tools = async () => runPromise((svc) => svc.tools())
 
   export const prompts = async () => runPromise((svc) => svc.prompts())
@@ -905,9 +903,6 @@ export namespace MCP {
 
   export const getPrompt = async (clientName: string, name: string, args?: Record<string, string>) =>
     runPromise((svc) => svc.getPrompt(clientName, name, args))
-
-  export const readResource = async (clientName: string, resourceUri: string) =>
-    runPromise((svc) => svc.readResource(clientName, resourceUri))
 
   export const startAuth = async (mcpName: string) => runPromise((svc) => svc.startAuth(mcpName))
 
