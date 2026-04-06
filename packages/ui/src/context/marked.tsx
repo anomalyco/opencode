@@ -626,6 +626,7 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
       markedKatex({
         output,
         throwOnError: false,
+        strict: "ignore",
         nonStandard: true,
       }),
       markedShiki({

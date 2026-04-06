@@ -87,13 +87,22 @@ export function SessionTodoDock(props: {
   createEffect(() => {
     const el = contentRef
     if (!el) return
+    let raf: number | undefined
     const update = () => {
-      setStore("height", el.getBoundingClientRect().height)
+      if (raf !== undefined) cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => {
+        raf = undefined
+        setStore("height", el.getBoundingClientRect().height)
+      })
     }
     update()
     const observer = new ResizeObserver(update)
     observer.observe(el)
-    onCleanup(() => observer.disconnect())
+    onCleanup(() => {
+      observer.disconnect()
+      if (raf === undefined) return
+      cancelAnimationFrame(raf)
+    })
   })
 
   createEffect(() => {

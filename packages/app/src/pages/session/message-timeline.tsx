@@ -1265,6 +1265,7 @@ export function MessageTimeline(props: {
     const commentCount = createMemo(() => comments().length)
     let rootRef: HTMLDivElement | undefined
     let stop: (() => void) | undefined
+    let raf: number | undefined
 
     const measure = () => {
       const next = rootRef?.offsetHeight
@@ -1278,11 +1279,23 @@ export function MessageTimeline(props: {
     createEffect(() => {
       if (!rootRef) return
       measure()
+      const update = () => {
+        if (raf !== undefined) cancelAnimationFrame(raf)
+        raf = requestAnimationFrame(() => {
+          raf = undefined
+          measure()
+        })
+      }
       // Each rendered turn feeds back its real height so spacer estimates
       // converge as the user scrolls through long markdown/math history.
-      const observer = new ResizeObserver(() => measure())
+      const observer = new ResizeObserver(update)
       observer.observe(rootRef)
-      onCleanup(() => observer.disconnect())
+      onCleanup(() => {
+        observer.disconnect()
+        if (raf === undefined) return
+        cancelAnimationFrame(raf)
+        raf = undefined
+      })
     })
 
     onCleanup(() => stop?.())

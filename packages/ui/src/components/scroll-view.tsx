@@ -138,7 +138,7 @@ export function ScrollView(props: ScrollViewProps) {
       }
     })
 
-    updateThumb()
+    scheduleUpdateThumb()
   })
 
   let startY = 0
