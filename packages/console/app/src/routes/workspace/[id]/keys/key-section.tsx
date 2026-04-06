@@ -8,6 +8,7 @@ import { formatDateUTC, formatDateForTable } from "../../common"
 import styles from "./key-section.module.css"
 import { Actor } from "@opencode-ai/console-core/actor.js"
 import { useI18n } from "~/context/i18n"
+import { useLanguage } from "~/context/language"
 import { formError, localizeError } from "~/lib/form-error"
 
 const removeKey = action(async (form: FormData) => {
@@ -48,6 +49,7 @@ const listKeys = query(async (workspaceID: string) => {
 export function KeySection() {
   const params = useParams()
   const i18n = useI18n()
+  const language = useLanguage()
   const keys = createAsync(() => listKeys(params.id!))
   const submission = useSubmission(createKey)
   const [store, setStore] = createStore({ show: false })
@@ -78,7 +80,12 @@ export function KeySection() {
       <div data-slot="section-title">
         <h2>{i18n.t("workspace.keys.title")}</h2>
         <div data-slot="title-row">
-          <p>{i18n.t("workspace.keys.subtitle")}</p>
+          <p>
+            {i18n.t("workspace.keys.subtitle")}{" "}
+            <a target="_blank" href={language.route("/docs/providers#opencode-zen")}>
+              {i18n.t("common.learnMore")}
+            </a>
+          </p>
           <button data-color="primary" onClick={() => show()}>
             {i18n.t("workspace.keys.create")}
           </button>
