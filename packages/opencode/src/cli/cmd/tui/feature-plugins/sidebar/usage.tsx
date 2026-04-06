@@ -1,22 +1,24 @@
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
 import { Auth } from "@/auth"
 import { CopilotUsage, UsageError } from "@/plugin/github-copilot/usage"
+import { useLocal } from "@tui/context/local"
 import { createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 
 const id = "internal:sidebar-usage"
 
 function View(props: { api: TuiPluginApi; session_id: string }) {
   const theme = () => props.api.theme.current
+  const local = useLocal()
   const msg = createMemo(() => props.api.state.session.messages(props.session_id))
   const [used, setUsed] = createSignal("--")
   const [total, setTotal] = createSignal("--")
   const [pct, setPct] = createSignal<number | undefined>()
   const provider = createMemo(() => {
+    const current = local.model.current()
+    if (current) return current.providerID
     const item = msg().at(-1)
-    if (!item) return
-    if (item.role === "assistant") return item.providerID
-    if (item.role === "user") return item.model.providerID
-    return
+    if (item?.role === "assistant") return item.providerID
+    if (item?.role === "user") return item.model.providerID
   })
   const active = createMemo(() => provider()?.includes("github-copilot") === true)
   let last = 0
