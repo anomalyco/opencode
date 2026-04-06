@@ -25,11 +25,16 @@ export namespace HubAuth {
 
   const COOKIE = "opencode-hub-session"
   const STATE_COOKIE = "opencode-hub-state"
-  const SESSION_TTL = 5 * 60 * 1000
+  // AIDEV-NOTE: JupyterHub Python 원본의 cookie_cache_max_age (기본 300초)와 동일.
+  // 캐시 만료 시 전체 OAuth 재인증이 아니라 Hub API에 토큰 재검증만 수행한다.
+  // https://github.com/jupyterhub/jupyterhub/blob/652390e/jupyterhub/services/auth.py#L430-L441
+  const CACHE_TTL = 5 * 60 * 1000
+  const COOKIE_MAX_AGE = 24 * 60 * 60
 
   interface Session {
     user: string
-    expires: number
+    token: string
+    cachedAt: number
   }
 
   // AIDEV-NOTE: in-memory 세션 캐시. pod 재시작 시 초기화되며, Hub OAuth 재인증이 발생한다.
@@ -167,13 +172,13 @@ export namespace HubAuth {
     }
 
     const sid = crypto.randomUUID()
-    sessions.set(sid, { user: name, expires: Date.now() + SESSION_TTL })
+    sessions.set(sid, { user: name, token, cachedAt: Date.now() })
     setCookie(c, COOKIE, sid, {
       path: "/",
       httpOnly: true,
       sameSite: "Lax",
       secure: c.req.url.startsWith("https"),
-      maxAge: SESSION_TTL / 1000,
+      maxAge: COOKIE_MAX_AGE,
     })
 
     // AIDEV-NOTE: next URL은 state 파라미터에서 디코딩. 상대 경로만 허용하여 open redirect 방지.
@@ -203,14 +208,24 @@ export namespace HubAuth {
 
       // --- Hub OAuth 모드 ---
       if (enabled()) {
-        // 1. 세션 쿠키 확인
+        // 1. 세션 쿠키 확인 (캐시 만료 시 Hub API로 토큰 재검증)
         const sid = getCookie(c, COOKIE)
         if (sid) {
           const session = sessions.get(sid)
-          if (session && session.expires > Date.now() && session.user === Flag.JUPYTERHUB_USER) {
-            return next()
+          if (session) {
+            if (Date.now() - session.cachedAt < CACHE_TTL) {
+              return next()
+            }
+            // AIDEV-NOTE: 캐시 만료. Hub API에 토큰 유효성만 재확인한다.
+            // Python 원본의 _check_hub_user -> user_for_token 호출과 동일한 패턴.
+            const name = await userinfo(session.token)
+            if (name === Flag.JUPYTERHUB_USER) {
+              session.cachedAt = Date.now()
+              return next()
+            }
+            log.warn("session revalidation failed", { cached_user: session.user, resolved_user: name })
+            sessions.delete(sid)
           }
-          sessions.delete(sid)
         }
 
         // 2. Basic Auth 자격 증명이 있으면 Basic Auth로 처리 (CLI/SDK 요청)
