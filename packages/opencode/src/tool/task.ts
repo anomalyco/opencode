@@ -6,8 +6,9 @@ import { MessageV2 } from "../session/message-v2"
 import { Agent } from "../agent/agent"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
-import { Effect, Exit, Schema } from "effect"
+import { Cause, Effect, Exit, Schema } from "effect"
 import { EffectBridge } from "@/effect/bridge"
+import { Bus } from "@/bus"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -34,6 +35,7 @@ export const TaskTool = Tool.define(
     const agent = yield* Agent.Service
     const config = yield* Config.Service
     const sessions = yield* Session.Service
+    const bus = yield* Bus.Service
 
     const run = Effect.fn("TaskTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
@@ -121,12 +123,24 @@ export const TaskTool = Tool.define(
       if (!ops) return yield* Effect.fail(new Error("TaskTool requires promptOps in ctx.extra"))
       const runCancel = yield* EffectBridge.make()
 
+      const start = Date.now()
+      yield* bus.publish(Session.Event.SubagentStarted, {
+        sessionID: nextSession.id,
+        parentID: ctx.sessionID,
+        agent: next.name,
+        description: params.description,
+        model: { modelID: model.modelID, providerID: model.providerID },
+        time: { start },
+      })
+
       const messageID = MessageID.ascending()
       const cancel = ops.cancel(nextSession.id)
 
       function onAbort() {
         runCancel.fork(cancel)
       }
+
+      let last: MessageV2.Assistant | undefined
 
       return yield* Effect.acquireUseRelease(
         Effect.sync(() => {
@@ -150,6 +164,8 @@ export const TaskTool = Tool.define(
               },
               parts,
             })
+
+            if (result.info.role === "assistant") last = result.info
 
             return {
               title: params.description,
@@ -176,6 +192,38 @@ export const TaskTool = Tool.define(
               }),
             ),
           ),
+      ).pipe(
+        Effect.onExit((exit) =>
+          bus.publish(Session.Event.SubagentStopped, {
+            sessionID: nextSession.id,
+            parentID: ctx.sessionID,
+            agent: next.name,
+            description: params.description,
+            model: { modelID: model.modelID, providerID: model.providerID },
+            time: { start, end: Date.now() },
+            tokens: {
+              input: last?.tokens.input ?? 0,
+              output: last?.tokens.output ?? 0,
+              reasoning: last?.tokens.reasoning ?? 0,
+              cache: {
+                read: last?.tokens.cache.read ?? 0,
+                write: last?.tokens.cache.write ?? 0,
+              },
+            },
+            cost: last?.cost ?? 0,
+            status: Exit.isSuccess(exit)
+              ? "completed"
+              : Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)
+                ? "cancelled"
+                : ctx.abort.aborted
+                  ? "cancelled"
+                  : "failed",
+            error:
+              Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause) && !ctx.abort.aborted
+                ? String(Cause.squash(exit.cause))
+                : undefined,
+          }),
+        ),
       )
     })
 
