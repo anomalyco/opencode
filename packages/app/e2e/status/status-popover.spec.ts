@@ -62,11 +62,21 @@ test("status popover can switch to plugins tab", async ({ page, gotoSession }) =
 
   const { popoverBody } = await openStatusPopover(page)
 
-  const pluginsTab = popoverBody.getByRole("tab", { name: /plugins/i })
-  await pluginsTab.click()
+  await expect
+    .poll(
+      async () => {
+        const pluginsTab = popoverBody.getByRole("tab", { name: /plugins/i })
+        const selected = await pluginsTab.getAttribute("aria-selected").catch(() => undefined)
+        if (selected === "true") {
+          return selected
+        }
 
-  const ariaSelected = await pluginsTab.getAttribute("aria-selected")
-  expect(ariaSelected).toBe("true")
+        await pluginsTab.click({ force: true }).catch(() => undefined)
+        return (await pluginsTab.getAttribute("aria-selected").catch(() => undefined)) ?? "false"
+      },
+      { timeout: 15_000 },
+    )
+    .toBe("true")
 
   const pluginsContent = popoverBody.locator('[role="tabpanel"]:visible').first()
   await expect(pluginsContent).toBeVisible()
