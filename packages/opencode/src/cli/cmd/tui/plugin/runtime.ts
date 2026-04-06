@@ -7,6 +7,7 @@ import {
   type TuiPluginModule,
   type TuiPluginMeta,
   type TuiPluginStatus,
+  type TuiSlotPlugin,
   type TuiTheme,
 } from "@opencode-ai/plugin/tui"
 import path from "path"
@@ -491,6 +492,9 @@ function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScop
     trigger(value) {
       api.command.trigger(value)
     },
+    show() {
+      api.command.show()
+    },
   }
 
   const route: TuiPluginApi["route"] = {
@@ -518,7 +522,7 @@ function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScop
   let count = 0
 
   const slots: TuiPluginApi["slots"] = {
-    register(plugin) {
+    register(plugin: TuiSlotPlugin) {
       const id = count ? `${base}:${count}` : base
       count += 1
       scope.track(host.register({ ...plugin, id }))
