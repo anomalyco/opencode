@@ -19,7 +19,7 @@ function Directory(props: { api: TuiPluginApi }) {
 
 function Mcp(props: { api: TuiPluginApi }) {
   const theme = () => props.api.theme.current
-  const list = createMemo(() => props.api.state.mcp())
+  const list = createMemo(() => props.api.state.mcp() ?? [])
   const has = createMemo(() => list().length > 0)
   const err = createMemo(() => list().some((item) => item.status === "failed"))
   const count = createMemo(() => list().filter((item) => item.status === "connected").length)

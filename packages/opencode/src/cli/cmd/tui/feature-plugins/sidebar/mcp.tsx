@@ -6,7 +6,7 @@ const id = "internal:sidebar-mcp"
 function View(props: { api: TuiPluginApi }) {
   const [open, setOpen] = createSignal(true)
   const theme = () => props.api.theme.current
-  const list = createMemo(() => props.api.state.mcp())
+  const list = createMemo(() => props.api.state.mcp() ?? [])
   const on = createMemo(() => list().filter((item) => item.status === "connected").length)
   const bad = createMemo(
     () =>
