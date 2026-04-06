@@ -1,19 +1,4 @@
-# 2.0
-
-What we would change if we could
-
-## Keybindings vs. Keymappings
-
-Make it `keymappings`, closer to neovim. Can be layered like `<leader>abc`. Commands don't define their binding, but have an id that a key can be mapped to like
-
-```ts
-{ key: "ctrl+w", cmd: string | function, description }
-```
-
-_Why_
-Currently its keybindings that have an `id` like `message_redo` and then a command can use that or define it's own binding. While some keybindings are just used with `.match` in arbitrary key handlers and there is no info what the key is used for, except the binding id maybe. It also is unknown in which context/scope what binding is active, so a plugin like `which-key` is nearly impossible to get right.
-
-## Message Shape
+# Message Shape
 
 Problem:
 
@@ -21,7 +6,7 @@ Problem:
 - prompt hooks often just want to append a synthetic user/assistant message
 - today that means faking ids, timestamps, and request metadata
 
-### Option 1: Two Message Shapes
+## Option 1: Two Message Shapes
 
 Keep `User` / `Assistant` for stored history, but clean them up.
 
@@ -67,7 +52,7 @@ prompt.push({
 
 Tradeoff: prompt hooks get easy lightweight messages, but there are now two message shapes.
 
-### Option 2: Prompt Mutators
+## Option 2: Prompt Mutators
 
 Keep `User` / `Assistant` as the stored history model.
 
@@ -97,3 +82,55 @@ prompt.appendTo("last-user", [{ type: "text", text: BUILD_SWITCH }])
 ```
 
 Tradeoff: avoids a second full message type and avoids fake ids/timestamps, but moves more magic into the hook API.
+
+## Option 3: Separate Turn State
+
+Move execution settings out of `User` and into a separate turn/request object.
+
+```ts
+type Turn = {
+  id: string
+  request: {
+    agent: string
+    model: ModelRef
+    variant?: string
+    format?: OutputFormat
+    system?: string
+    tools?: Record<string, boolean>
+  }
+}
+
+type User = {
+  role: "user"
+  turnID: string
+  time: { created: number }
+}
+
+type Assistant = {
+  role: "assistant"
+  turnID: string
+  usage: { cost: number; tokens: Tokens }
+  result: { finish?: string; error?: Error; structured?: unknown; kind: "reply" | "summary" }
+}
+```
+
+Examples:
+
+```ts
+const turn = {
+  request: {
+    agent: "build",
+    model: { providerID: "openai", modelID: "gpt-5" },
+  },
+}
+```
+
+```ts
+const msg = {
+  role: "user",
+  turnID: turn.id,
+  parts: [{ type: "text", text: "Summarize the tool output above and continue." }],
+}
+```
+
+Tradeoff: stored messages get much smaller and cleaner, but replay now has to join messages with turn state and prompt hooks still need a way to pick which turn they belong to.
