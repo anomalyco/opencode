@@ -6,6 +6,7 @@ import { ACP } from "@/acp/agent"
 import { Server } from "@/server/server"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
+import { parseSessionUrl } from "@/util/parse-session-url"
 
 const log = Log.create({ service: "acp-command" })
 
@@ -13,20 +14,47 @@ export const AcpCommand = cmd({
   command: "acp",
   describe: "start ACP (Agent Client Protocol) server",
   builder: (yargs) => {
-    return withNetworkOptions(yargs).option("cwd", {
-      describe: "working directory",
-      type: "string",
-      default: process.cwd(),
-    })
+    return withNetworkOptions(yargs)
+      .option("cwd", {
+        describe: "working directory",
+        type: "string",
+        default: process.cwd(),
+      })
+      .option("prompt", {
+        describe: "prompt to use",
+        type: "string",
+      })
+      .option("attach", {
+        describe: "attach to existing server URL or session URL instead of starting new one",
+        type: "string",
+      })
+      .option("session", {
+        describe: "session id to continue",
+        type: "string",
+        alias: ["s"],
+      })
   },
   handler: async (args) => {
     process.env.OPENCODE_CLIENT = "acp"
     await bootstrap(process.cwd(), async () => {
-      const opts = await resolveNetworkOptions(args)
-      const server = Server.listen(opts)
+      let server: ReturnType<typeof Server.listen> | undefined
+      let baseUrl: string
+      let sessionId: string | undefined
+
+      // If attach URL is provided, use it instead of starting a server
+      if (args.attach) {
+        const parsed = parseSessionUrl(args.attach)
+        baseUrl = parsed.baseUrl
+        sessionId = args.session ?? parsed.sessionId
+      } else {
+        const opts = await resolveNetworkOptions(args)
+        server = Server.listen(opts)
+        baseUrl = `http://${server.hostname}:${server.port}`
+        sessionId = args.session
+      }
 
       const sdk = createOpencodeClient({
-        baseUrl: `http://${server.hostname}:${server.port}`,
+        baseUrl,
       })
 
       const input = new WritableStream<Uint8Array>({
@@ -56,7 +84,7 @@ export const AcpCommand = cmd({
       const agent = await ACP.init({ sdk })
 
       new AgentSideConnection((conn) => {
-        return agent.create(conn, { sdk })
+        return agent.create(conn, { sdk, initialPrompt: args.prompt, sessionId })
       }, stream)
 
       log.info("setup connection")
@@ -65,6 +93,11 @@ export const AcpCommand = cmd({
         process.stdin.on("end", resolve)
         process.stdin.on("error", reject)
       })
+
+      // Only stop server if we started one
+      if (server) {
+        await server.stop()
+      }
     })
   },
 })

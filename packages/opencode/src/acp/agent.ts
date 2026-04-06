@@ -587,6 +587,42 @@ export namespace ACP {
 
     async newSession(params: NewSessionRequest) {
       const directory = params.cwd
+
+      // If sessionId is provided in config, delegate to loadSession with additional prompt handling
+      if (this.config.sessionId) {
+        const result = await this.loadSession({
+          sessionId: this.config.sessionId,
+          cwd: params.cwd,
+          mcpServers: params.mcpServers,
+        })
+
+        // Send initial prompt if provided (after replay completes)
+        if (this.config.initialPrompt) {
+          this.sdk.session
+            .prompt({
+              sessionID: this.config.sessionId,
+              directory,
+              parts: [
+                {
+                  type: "text",
+                  text: this.config.initialPrompt,
+                },
+              ],
+            })
+            .catch((err) => {
+              log.error("failed to send initial prompt", { error: err, sessionId: this.config.sessionId })
+            })
+        }
+
+        return {
+          sessionId: this.config.sessionId,
+          models: result.models,
+          modes: result.modes,
+          _meta: {},
+        }
+      }
+
+      // Normal new session creation
       try {
         const model = await defaultModel(this.config, directory)
 
@@ -601,6 +637,30 @@ export namespace ACP {
           mcpServers: params.mcpServers,
           sessionId,
         })
+
+        // Send initial prompt if provided (don't await - let it stream via events)
+        if (this.config.initialPrompt) {
+          const agent = await AgentModule.defaultAgent()
+          this.sdk.session
+            .prompt({
+              sessionID: sessionId,
+              directory,
+              model: {
+                providerID: model.providerID,
+                modelID: model.modelID,
+              },
+              agent,
+              parts: [
+                {
+                  type: "text",
+                  text: this.config.initialPrompt!,
+                },
+              ],
+            })
+            .catch((err) => {
+              log.error("failed to send initial prompt", { error: err, sessionId })
+            })
+        }
 
         return {
           sessionId,

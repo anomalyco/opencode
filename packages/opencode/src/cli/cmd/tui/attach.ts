@@ -5,6 +5,8 @@ import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { TuiConfig } from "@/config/tui"
 import { Instance } from "@/project/instance"
 import { existsSync } from "fs"
+import { iife } from "@/util/iife"
+import { parseSessionUrl } from "@/util/parse-session-url"
 
 export const AttachCommand = cmd({
   command: "attach <url>",
@@ -13,7 +15,7 @@ export const AttachCommand = cmd({
     yargs
       .positional("url", {
         type: "string",
-        describe: "http://localhost:4096",
+        describe: "http://localhost:4096 or http://localhost:4096/ses_xxx/session/ses_xxx",
         demandOption: true,
       })
       .option("dir", {
@@ -38,6 +40,10 @@ export const AttachCommand = cmd({
         alias: ["p"],
         type: "string",
         describe: "basic auth password (defaults to OPENCODE_SERVER_PASSWORD)",
+      })
+      .option("prompt", {
+        type: "string",
+        describe: "prompt to use",
       }),
   handler: async (args) => {
     const unguard = win32InstallCtrlCGuard()
@@ -70,13 +76,23 @@ export const AttachCommand = cmd({
         directory: directory && existsSync(directory) ? directory : process.cwd(),
         fn: () => TuiConfig.get(),
       })
+
+      const prompt = await iife(async () => {
+        const piped = !process.stdin.isTTY ? await Bun.stdin.text() : undefined
+        if (!args.prompt) return piped
+        return piped ? piped + "\n" + args.prompt : args.prompt
+      })
+
+      const { baseUrl, sessionId } = parseSessionUrl(args.url)
+
       await tui({
-        url: args.url,
+        url: baseUrl,
         config,
         args: {
           continue: args.continue,
-          sessionID: args.session,
+          sessionID: args.session ?? sessionId,
           fork: args.fork,
+          prompt,
         },
         directory,
         headers,
