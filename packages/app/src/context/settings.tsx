@@ -55,12 +55,30 @@ export interface Settings {
   sounds: SoundSettings
 }
 
+function migrate(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value
+  const next = value as Record<string, unknown>
+  const general =
+    next.general && typeof next.general === "object" && !Array.isArray(next.general)
+      ? (next.general as Record<string, unknown>)
+      : undefined
+  if (!general) return value
+  if (general.showReasoningSummaries === true) return value
+  return {
+    ...next,
+    general: {
+      ...general,
+      showReasoningSummaries: true,
+    },
+  }
+}
+
 const defaultSettings: Settings = {
   general: {
     autoSave: true,
     releaseNotes: true,
     followup: "steer",
-    showReasoningSummaries: false,
+    showReasoningSummaries: true,
     showCustomHookParts: true,
     shellToolPartsExpanded: true,
     editToolPartsExpanded: false,
@@ -133,7 +151,13 @@ function loadFont() {
 export const { use: useSettings, provider: SettingsProvider } = createSimpleContext({
   name: "Settings",
   init: () => {
-    const [store, setStore, _, ready] = persisted("settings.v3", createStore<Settings>(defaultSettings))
+    const [store, setStore, _, ready] = persisted(
+      {
+        key: "settings.v3",
+        migrate,
+      },
+      createStore<Settings>(defaultSettings),
+    )
 
     createEffect(() => {
       if (typeof document === "undefined") return

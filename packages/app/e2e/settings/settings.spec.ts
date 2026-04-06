@@ -184,6 +184,31 @@ test("changing font persists in localStorage and updates CSS variable", async ({
   expect(newFontFamily).not.toBe(initialFontFamily)
 })
 
+test("reasoning display migrates to enabled for existing settings", async ({ page, gotoSession }) => {
+  await page.addInitScript((key) => {
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        general: {
+          showReasoningSummaries: false,
+        },
+      }),
+    )
+  }, settingsKey)
+
+  await gotoSession()
+
+  await expect
+    .poll(async () => {
+      return await page.evaluate((key) => {
+        const raw = localStorage.getItem(key)
+        if (!raw) return undefined
+        return JSON.parse(raw)?.general?.showReasoningSummaries
+      }, settingsKey)
+    })
+    .toBe(true)
+})
+
 test("color scheme and font rehydrate after reload", async ({ page, gotoSession }) => {
   await gotoSession()
 

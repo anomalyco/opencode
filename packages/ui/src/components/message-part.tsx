@@ -52,6 +52,7 @@ import { IconButton } from "./icon-button"
 import { TextShimmer } from "./text-shimmer"
 import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
+import { Spinner } from "./spinner"
 import { animate } from "motion"
 import { attached, inline, kind } from "./message-file"
 import { skillText } from "./message-skill"
@@ -1644,26 +1645,46 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 }
 
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
+  const i18n = useI18n()
   const part = props.part as ReasoningPart
   const text = () => part.text.trim()
+  const [open, setOpen] = createSignal(true)
   const streaming = createMemo(() => {
     if (props.message.role !== "assistant") return false
     return typeof (props.message as AssistantMessage).time.completed !== "number"
   })
+  const title = createMemo(() =>
+    streaming() ? i18n.t("ui.messagePart.reasoning.thinking") : i18n.t("ui.messagePart.reasoning.thought"),
+  )
 
   return (
     <Show when={text()}>
-      <div data-component="reasoning-part">
-        <Markdown
-          text={text()}
-          cacheKey={part.id}
-          streaming={streaming()}
-          eager={props.markdownEager}
-          viewport={props.markdownViewport}
-          highlight={props.markdownHighlight}
-          math={props.markdownMath}
-        />
-      </div>
+      <Collapsible open={open()} onOpenChange={setOpen} variant="ghost" class="reasoning-collapsible">
+        <Collapsible.Trigger>
+          <div data-component="reasoning-trigger" data-streaming={streaming()}>
+            <div data-slot="reasoning-trigger-title">
+              <span>{title()}</span>
+              <Show when={streaming()} fallback={<Icon name="circle-check" size="small" />}>
+                <Spinner />
+              </Show>
+            </div>
+            <Collapsible.Arrow />
+          </div>
+        </Collapsible.Trigger>
+        <Collapsible.Content>
+          <div data-component="reasoning-part">
+            <Markdown
+              text={text()}
+              cacheKey={part.id}
+              streaming={streaming()}
+              eager={props.markdownEager}
+              viewport={props.markdownViewport}
+              highlight={props.markdownHighlight}
+              math={props.markdownMath}
+            />
+          </div>
+        </Collapsible.Content>
+      </Collapsible>
     </Show>
   )
 }

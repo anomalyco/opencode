@@ -68,6 +68,8 @@ export const dict = {
   "ui.sessionTurn.status.thinkingWithTopic": "思考：{{topic}}",
   "ui.sessionTurn.status.gatheringThoughts": "正在整理思路",
   "ui.sessionTurn.status.consideringNextSteps": "正在考虑下一步",
+  "ui.messagePart.reasoning.thinking": "思考中",
+  "ui.messagePart.reasoning.thought": "思考完成",
 
   "ui.messagePart.questions.dismissed": "问题已忽略",
   "ui.messagePart.compaction": "会话已压缩",
