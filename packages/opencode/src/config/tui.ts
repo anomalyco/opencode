@@ -111,7 +111,15 @@ export namespace TuiConfig {
       }
     }
 
-    acc.result.keybinds = Config.Keybinds.parse(acc.result.keybinds ?? {})
+    const keybinds = { ...(acc.result.keybinds ?? {}) }
+    if (process.platform === "win32") {
+      // Native Windows terminals do not support POSIX suspend, so prefer prompt undo.
+      keybinds.terminal_suspend = "none"
+      keybinds.input_undo ??= unique(["ctrl+z", ...Config.Keybinds.shape.input_undo.parse(undefined).split(",")]).join(
+        ",",
+      )
+    }
+    acc.result.keybinds = Config.Keybinds.parse(keybinds)
 
     const deps: Promise<void>[] = []
     if (acc.result.plugin?.length) {
