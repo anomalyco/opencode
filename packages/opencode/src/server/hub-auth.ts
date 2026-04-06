@@ -5,17 +5,20 @@ import { Flag } from "../flag/flag"
 import { Log } from "../util/log"
 
 /**
- * JupyterHub OAuth2 Authorization Code flow for singleuser servers.
+ * AIDEV-NOTE: JupyterHub singleuser 서버용 OAuth2 Authorization Code 흐름의 TypeScript 구현.
  *
- * TypeScript port of the Python implementation in jupyterhub 5.4.3:
- * - HubOAuth (login_url, token_for_code):
+ * jupyterhub 5.4.3의 Python 구현을 참고하여 Hono 미들웨어로 포팅했다.
+ * - HubOAuth (authorize URL 생성, code->token 교환):
  *   https://github.com/jupyterhub/jupyterhub/blob/652390e/jupyterhub/services/auth.py#L874-L1112
- * - HubAuthenticated (get_current_user, get_login_url):
+ * - HubAuthenticated (요청에서 사용자 식별, 미인증 시 OAuth 리다이렉트):
  *   https://github.com/jupyterhub/jupyterhub/blob/652390e/jupyterhub/services/auth.py#L1298-L1538
- * - HubOAuthCallbackHandler (state validation, code exchange, cookie set):
+ * - HubOAuthCallbackHandler (state 검증, code 교환, 세션 쿠키 발급):
  *   https://github.com/jupyterhub/jupyterhub/blob/652390e/jupyterhub/services/auth.py#L1547-L1618
- * - Spawner.get_env (env vars injected into singleuser pods):
+ * - Spawner.get_env (singleuser pod에 주입되는 환경변수 목록):
  *   https://github.com/jupyterhub/jupyterhub/blob/652390e/jupyterhub/spawner.py#L1244-L1387
+ *
+ * 요청 흐름: 브라우저 -> CHP(/user/<name>/) -> pod:8888(opencode web)
+ * CHP는 인증 없이 라우팅만 수행하므로, 이 미들웨어에서 Hub OAuth로 사용자를 검증한다.
  */
 export namespace HubAuth {
   const log = Log.create({ service: "hub-auth" })
@@ -29,6 +32,7 @@ export namespace HubAuth {
     expires: number
   }
 
+  // AIDEV-NOTE: in-memory 세션 캐시. pod 재시작 시 초기화되며, Hub OAuth 재인증이 발생한다.
   const sessions = new Map<string, Session>()
 
   export function enabled(): boolean {
@@ -39,6 +43,8 @@ export namespace HubAuth {
     return `${Flag.JUPYTERHUB_API_URL!.replace(/\/+$/, "")}${path}`
   }
 
+  // AIDEV-NOTE: HubOAuth.login_url 참고.
+  // https://github.com/jupyterhub/jupyterhub/blob/652390e/jupyterhub/services/auth.py#L878-L887
   function authorizeUrl(callback: string, state: string): string {
     const base = Flag.JUPYTERHUB_BASE_URL?.replace(/\/+$/, "") ?? ""
     const params = new URLSearchParams({
@@ -51,6 +57,8 @@ export namespace HubAuth {
     return `${base}/hub/api/oauth2/authorize?${params}`
   }
 
+  // AIDEV-NOTE: HubOAuth.token_for_code 참고. Hub API에 authorization code를 보내 access token으로 교환.
+  // https://github.com/jupyterhub/jupyterhub/blob/652390e/jupyterhub/services/auth.py#L1078-L1112
   async function exchange(code: string, callback: string): Promise<string | undefined> {
     try {
       const res = await fetch(api("/oauth2/token"), {
@@ -76,6 +84,8 @@ export namespace HubAuth {
     }
   }
 
+  // AIDEV-NOTE: HubAuth.user_for_token 참고. access token으로 Hub API에서 사용자 정보 조회.
+  // https://github.com/jupyterhub/jupyterhub/blob/652390e/jupyterhub/services/auth.py#L686-L722
   async function userinfo(token: string): Promise<string | undefined> {
     try {
       const res = await fetch(api("/user"), {
@@ -97,6 +107,8 @@ export namespace HubAuth {
     return `${prefix}/oauth_callback`
   }
 
+  // AIDEV-NOTE: JUPYTERHUB_OAUTH_CALLBACK_URL은 KubeSpawner가 /user/<name>/oauth_callback 형태로 주입한다.
+  // CHP가 /user/<name>/ -> pod:8888로 라우팅하므로 이 URL이 그대로 opencode web에 도달한다.
   function buildCallbackUrl(c: Context): string {
     if (Flag.JUPYTERHUB_OAUTH_CALLBACK_URL) return Flag.JUPYTERHUB_OAUTH_CALLBACK_URL
     const proto = c.req.header("x-forwarded-proto") ?? "http"
@@ -104,7 +116,8 @@ export namespace HubAuth {
     return `${proto}://${host}${callbackPath()}`
   }
 
-  /** Hono route handler for GET /oauth_callback */
+  // AIDEV-NOTE: HubOAuthCallbackHandler.get 참고. state 검증 -> code 교환 -> userinfo -> 소유자 비교 -> 세션 쿠키 발급.
+  // https://github.com/jupyterhub/jupyterhub/blob/652390e/jupyterhub/services/auth.py#L1547-L1618
   export async function callback(c: Context): Promise<Response> {
     const code = c.req.query("code")
     const state = c.req.query("state")
@@ -119,7 +132,7 @@ export namespace HubAuth {
 
     const next = c.req.query("next") ?? "/"
     const cb = buildCallbackUrl(c)
-    // strip the next param from callback for token exchange (must match the registered redirect_uri)
+    // token exchange 시 redirect_uri는 등록된 값과 정확히 일치해야 하므로 next 파라미터를 제거
     const bare = cb.split("?")[0]!
     const token = await exchange(code, bare)
     if (!token) return c.text("Token exchange failed", 502)
@@ -146,16 +159,16 @@ export namespace HubAuth {
   }
 
   /**
-   * Combined auth middleware that handles both Hub OAuth and Basic Auth.
+   * AIDEV-NOTE: Hub OAuth와 Basic Auth를 모두 처리하는 통합 인증 미들웨어.
    *
-   * When Hub OAuth is enabled (JUPYTERHUB_API_URL set):
-   *   - Valid session cookie -> allow
-   *   - Basic Auth header or ?token -> validate with Basic Auth
-   *   - Neither -> redirect to Hub OAuth
+   * Hub 배포 환경 (JUPYTERHUB_API_URL 존재):
+   *   - 유효한 세션 쿠키 -> 통과
+   *   - Basic Auth 헤더 또는 ?token -> 기존 Basic Auth로 검증
+   *   - 둘 다 없음 -> Hub OAuth 리다이렉트 (브라우저 요청)
    *
-   * When Hub OAuth is disabled:
-   *   - OPENCODE_SERVER_PASSWORD set -> validate Basic Auth
-   *   - Not set -> allow (no auth)
+   * 독립 실행 환경 (JUPYTERHUB_API_URL 미존재):
+   *   - OPENCODE_SERVER_PASSWORD 설정됨 -> Basic Auth 검증
+   *   - 미설정 -> 인증 없이 통과
    */
   export function auth(): MiddlewareHandler {
     return async (c, next) => {
@@ -165,9 +178,9 @@ export namespace HubAuth {
       const password = Flag.OPENCODE_SERVER_PASSWORD
       const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
 
-      // --- Hub OAuth mode ---
+      // --- Hub OAuth 모드 ---
       if (enabled()) {
-        // 1. check session cookie
+        // 1. 세션 쿠키 확인
         const sid = getCookie(c, COOKIE)
         if (sid) {
           const session = sessions.get(sid)
@@ -177,7 +190,7 @@ export namespace HubAuth {
           sessions.delete(sid)
         }
 
-        // 2. fall through to Basic Auth if credentials are present
+        // 2. Basic Auth 자격 증명이 있으면 Basic Auth로 처리 (CLI/SDK 요청)
         if (password) {
           const token = c.req.query("token")
           if (token) {
@@ -191,7 +204,7 @@ export namespace HubAuth {
           }
         }
 
-        // 3. browser request -> redirect to Hub OAuth
+        // 3. 브라우저 요청 -> Hub OAuth 리다이렉트
         const state = crypto.randomUUID()
         const target = c.req.path === "/oauth_callback" ? "/" : c.req.path
         const cb = `${buildCallbackUrl(c)}?next=${encodeURIComponent(target)}`
@@ -205,7 +218,7 @@ export namespace HubAuth {
         return c.redirect(authorizeUrl(cb, state))
       }
 
-      // --- Basic Auth only mode (no Hub) ---
+      // --- Basic Auth 전용 모드 (Hub 없음) ---
       if (!password) return next()
       const token = c.req.query("token")
       if (token) {
