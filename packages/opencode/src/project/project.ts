@@ -318,6 +318,21 @@ export namespace Project {
               .where(and(eq(SessionTable.project_id, ProjectID.global), eq(SessionTable.directory, data.worktree)))
               .run(),
           )
+
+          // Migrate sessions from stale project entries with the same worktree
+          // This handles the case where project ID changes (e.g. after `git init`)
+          yield* db((d) => {
+            const stales = d
+              .select({ id: ProjectTable.id })
+              .from(ProjectTable)
+              .where(eq(ProjectTable.worktree, data.worktree))
+              .all()
+              .filter((row) => row.id !== data.id)
+            for (const stale of stales) {
+              d.update(SessionTable).set({ project_id: data.id }).where(eq(SessionTable.project_id, stale.id)).run()
+              d.delete(ProjectTable).where(eq(ProjectTable.id, stale.id)).run()
+            }
+          })
         }
 
         yield* emitUpdated(result)
