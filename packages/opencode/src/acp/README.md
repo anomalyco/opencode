@@ -42,6 +42,12 @@ opencode acp
 
 # Start in a specific directory
 opencode acp --cwd /path/to/project
+
+# Bridge ACP stdio to an existing OpenCode server
+opencode acp --attach http://localhost:4096
+
+# When attaching, --cwd still applies on the attached server
+opencode acp --attach http://localhost:4096 --cwd /path/to/project
 ```
 
 ### Question Tool Opt-In

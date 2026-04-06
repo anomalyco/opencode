@@ -479,13 +479,26 @@ opencode acp
 
 This command starts an ACP server that communicates via stdin/stdout using nd-JSON.
 
+You can also attach to a running `opencode serve` instance to bridge ACP stdio to it instead of starting a local backend:
+
+```bash
+# Start a headless server in one terminal
+opencode serve
+
+# In another terminal, bridge ACP stdio to it
+opencode acp --attach http://localhost:4096
+```
+
+When attaching, `--cwd` still applies, but the path is interpreted on the attached server.
+
 #### Flags
 
-| Flag         | Description           |
-| ------------ | --------------------- |
-| `--cwd`      | Working directory     |
-| `--port`     | Port to listen on     |
-| `--hostname` | Hostname to listen on |
+| Flag         | Description                                                   |
+| ------------ | ------------------------------------------------------------- |
+| `--cwd`      | Working directory                                             |
+| `--attach`   | Attach to a running opencode server (e.g. http://localhost:4096) |
+| `--port`     | Port to listen on                                             |
+| `--hostname` | Hostname to listen on                                         |
 
 ---
 

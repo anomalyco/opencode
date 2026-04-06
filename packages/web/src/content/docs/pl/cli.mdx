@@ -479,13 +479,26 @@ opencode acp
 
 Uruchamia serwer ACP, który komunikuje się przez stdin/stdout przy użyciu JSON-RPC.
 
+Możesz też podłączyć się do działającego `opencode serve`, aby zmostkować stdio ACP do istniejącego serwera zamiast uruchamiać lokalny backend:
+
+```bash
+# Start a headless server in one terminal
+opencode serve
+
+# In another terminal, bridge ACP stdio to it
+opencode acp --attach http://localhost:4096
+```
+
+Podczas podłączania `--cwd` nadal działa, ale ścieżka jest interpretowana na podłączonym serwerze.
+
 #### Flagi
 
-| Flaga        | Opis                                       |
-| ------------ | ------------------------------------------ |
-| `--cwd`      | Katalog roboczy                            |
-| `--port`     | Port do nasłuchiwania                      |
-| `--hostname` | Nazwa hosta, do której należy się powiązać |
+| Flaga        | Opis                                                          |
+| ------------ | ------------------------------------------------------------- |
+| `--cwd`      | Katalog roboczy                                               |
+| `--attach`   | Dołącz do działającego serwera OpenCode (np. http://localhost:4096) |
+| `--port`     | Port do nasłuchiwania                                         |
+| `--hostname` | Nazwa hosta, do której należy się powiązać                    |
 
 ---
 
