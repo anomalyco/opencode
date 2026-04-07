@@ -9,7 +9,6 @@ import { usePromptRef } from "../context/prompt"
 import { useLocal } from "../context/local"
 import { TuiPluginRuntime } from "../plugin"
 import { useTheme } from "../context/theme"
-import { isConsoleManagedProvider } from "../util/provider-origin"
 
 // TODO: what is the best way to do this?
 let once = false
@@ -28,13 +27,7 @@ export function Home() {
   const { theme } = useTheme()
   let sent = false
 
-  const org = createMemo(() => {
-    const current = local.model.current()
-    const name = sync.data.console_state.activeOrgName
-    if (!current || !name) return
-    if (!isConsoleManagedProvider(sync.data.console_state.consoleManagedProviders, current.providerID)) return
-    return name
-  })
+  const org = createMemo(() => sync.data.console_state.activeOrgName)
 
   const bind = (r: PromptRef | undefined) => {
     setRef(r)
