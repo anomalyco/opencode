@@ -43,7 +43,7 @@ export function DialogModel(props: { providerID?: string }) {
     const profileMap = createMemo(() => {
       const out = new Map<string, Set<string | undefined>>()
       const ensure = (providerID: string) => {
-        if (!out.has(providerID)) out.set(providerID, new Set([undefined]))
+        if (!out.has(providerID)) out.set(providerID, new Set())
         return out.get(providerID)!
       }
 
@@ -55,6 +55,11 @@ export function DialogModel(props: { providerID?: string }) {
         const providerID = idx === -1 ? key : key.slice(0, idx)
         const profile = idx === -1 ? undefined : key.slice(idx + 1)
         ensure(providerID).add(profile)
+      }
+
+      for (const provider of sync.data.provider) {
+        const set = ensure(provider.id)
+        if (set.size === 0) set.add(undefined)
       }
 
       return out
