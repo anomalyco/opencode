@@ -1,6 +1,8 @@
 import type {
+  AgentPart,
   OpencodeClient,
   Event,
+  FilePart,
   LspStatus,
   McpStatus,
   Todo,
@@ -10,10 +12,11 @@ import type {
   PermissionRequest,
   QuestionRequest,
   SessionStatus,
+  TextPart,
   Workspace,
   Config as SdkConfig,
 } from "@opencode-ai/sdk/v2"
-import type { CliRenderer, ParsedKey, RGBA } from "@opentui/core"
+import type { CliRenderer, ParsedKey, RGBA, SlotMode } from "@opentui/core"
 import type { JSX, SolidPlugin } from "@opentui/solid"
 import type { Config as PluginConfig, PluginOptions } from "./index.js"
 
@@ -135,12 +138,43 @@ export type TuiDialogSelectProps<Value = unknown> = {
   current?: Value
 }
 
+export type TuiPromptInfo = {
+  input: string
+  mode?: "normal" | "shell"
+  parts: (
+    | Omit<FilePart, "id" | "messageID" | "sessionID">
+    | Omit<AgentPart, "id" | "messageID" | "sessionID">
+    | (Omit<TextPart, "id" | "messageID" | "sessionID"> & {
+        source?: {
+          text: {
+            start: number
+            end: number
+            value: string
+          }
+        }
+      })
+  )[]
+}
+
+export type TuiPromptRef = {
+  focused: boolean
+  current: TuiPromptInfo
+  set(prompt: TuiPromptInfo): void
+  reset(): void
+  blur(): void
+  focus(): void
+  submit(): void
+}
+
 export type TuiPromptProps = {
+  sessionID?: string
   workspaceID?: string
   visible?: boolean
   disabled?: boolean
   onSubmit?: () => void
+  ref?: (ref: TuiPromptRef | undefined) => void
   hint?: JSX.Element
+  right?: JSX.Element
   showPlaceholder?: boolean
   placeholders?: {
     normal?: string[]
@@ -289,11 +323,25 @@ export type TuiSidebarFileItem = {
   deletions: number
 }
 
-export type TuiSlotMap = {
+export type TuiHostSlotMap = {
   app: {}
   home_logo: {}
   home_prompt: {
     workspace_id?: string
+    ref?: (ref: TuiPromptRef | undefined) => void
+  }
+  home_prompt_right: {
+    workspace_id?: string
+  }
+  session_prompt: {
+    session_id: string
+    visible?: boolean
+    disabled?: boolean
+    on_submit?: () => void
+    ref?: (ref: TuiPromptRef | undefined) => void
+  }
+  session_prompt_right: {
+    session_id: string
   }
   home_bottom: {}
   home_footer: {}
@@ -310,18 +358,35 @@ export type TuiSlotMap = {
   }
 }
 
+export type TuiSlotMap<Slots extends Record<string, object> = {}> = TuiHostSlotMap & Slots
+
+type TuiSlotShape<Name extends string, Slots extends Record<string, object>> = Name extends keyof TuiHostSlotMap
+  ? TuiHostSlotMap[Name]
+  : Name extends keyof Slots
+    ? Slots[Name]
+    : Record<string, unknown>
+
+export type TuiSlotProps<Name extends string = string, Slots extends Record<string, object> = {}> = {
+  name: Name
+  mode?: SlotMode
+  children?: JSX.Element
+} & TuiSlotShape<Name, Slots>
+
 export type TuiSlotContext = {
   theme: TuiTheme
 }
 
-type SlotCore = SolidPlugin<TuiSlotMap, TuiSlotContext>
+type SlotCore<Slots extends Record<string, object> = {}> = SolidPlugin<TuiSlotMap<Slots>, TuiSlotContext>
 
-export type TuiSlotPlugin = Omit<SlotCore, "id"> & {
+export type TuiSlotPlugin<Slots extends Record<string, object> = {}> = Omit<SlotCore<Slots>, "id"> & {
   id?: never
 }
 
 export type TuiSlots = {
-  register: (plugin: TuiSlotPlugin) => string
+  register: {
+    (plugin: TuiSlotPlugin): string
+    <Slots extends Record<string, object>>(plugin: TuiSlotPlugin<Slots>): string
+  }
 }
 
 export type TuiEventBus = {
@@ -391,6 +456,7 @@ export type TuiPluginApi = {
   command: {
     register: (cb: () => TuiCommand[]) => () => void
     trigger: (value: string) => void
+    show: () => void
   }
   route: {
     register: (routes: TuiRouteDefinition[]) => () => void
@@ -403,6 +469,7 @@ export type TuiPluginApi = {
     DialogConfirm: (props: TuiDialogConfirmProps) => JSX.Element
     DialogPrompt: (props: TuiDialogPromptProps) => JSX.Element
     DialogSelect: <Value = unknown>(props: TuiDialogSelectProps<Value>) => JSX.Element
+    Slot: <Name extends string>(props: TuiSlotProps<Name>) => JSX.Element | null
     Prompt: (props: TuiPromptProps) => JSX.Element
     toast: (input: TuiToast) => void
     dialog: TuiDialogStack

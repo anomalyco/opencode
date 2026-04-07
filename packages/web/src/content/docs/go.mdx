@@ -65,6 +65,8 @@ The current list of models includes:
 
 - **GLM-5**
 - **Kimi K2.5**
+- **MiMo-V2-Pro**
+- **MiMo-V2-Omni**
 - **MiniMax M2.5**
 - **MiniMax M2.7**
 
@@ -84,17 +86,19 @@ Limits are defined in dollar value. This means your actual request count depends
 
 The table below provides an estimated request count based on typical Go usage patterns:
 
-|                     | GLM-5 | Kimi K2.5 | MiniMax M2.7 | MiniMax M2.5 |
-| ------------------- | ----- | --------- | ------------ | ------------ |
-| requests per 5 hour | 1,150 | 1,850     | 14,000       | 20,000       |
-| requests per week   | 2,880 | 4,630     | 35,000       | 50,000       |
-| requests per month  | 5,750 | 9,250     | 70,000       | 100,000      |
+|                     | GLM-5 | Kimi K2.5 | MiMo-V2-Pro | MiMo-V2-Omni | MiniMax M2.7 | MiniMax M2.5 |
+| ------------------- | ----- | --------- | ----------- | ------------ | ------------ | ------------ |
+| requests per 5 hour | 1,150 | 1,850     | 1,290       | 2,150        | 14,000       | 20,000       |
+| requests per week   | 2,880 | 4,630     | 3,225       | 5,450        | 35,000       | 50,000       |
+| requests per month  | 5,750 | 9,250     | 6,450       | 10,900       | 70,000       | 100,000      |
 
 Estimates are based on observed average request patterns:
 
 - GLM-5 — 700 input, 52,000 cached, 150 output tokens per request
 - Kimi K2.5 — 870 input, 55,000 cached, 200 output tokens per request
 - MiniMax M2.7/M2.5 — 300 input, 55,000 cached, 125 output tokens per request
+- MiMo-V2-Pro — 350 input, 41,000 cached, 250 output tokens per request
+- MiMo-V2-Omni — 1000 input, 60,000 cached, 140 output tokens per request
 
 You can track your current usage in the **<a href={console}>console</a>**.
 
@@ -122,6 +126,8 @@ You can also access Go models through the following API endpoints.
 | ------------ | ------------ | ------------------------------------------------ | --------------------------- |
 | GLM-5        | glm-5        | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.5    | kimi-k2.5    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2-Pro  | mimo-v2-pro  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2-Omni | mimo-v2-omni | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7 | minimax-m2.7 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | MiniMax M2.5 | minimax-m2.5 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 

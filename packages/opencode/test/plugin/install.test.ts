@@ -62,6 +62,7 @@ async function plugin(
     server?: Record<string, unknown>
     tui?: Record<string, unknown>
   },
+  themes?: string[],
 ) {
   const p = path.join(dir, "plugin")
   const server = kinds?.includes("server") ?? false
@@ -92,6 +93,7 @@ async function plugin(
         version: "1.0.0",
         ...(server ? { main: "./server.js" } : {}),
         ...(Object.keys(exports).length ? { exports } : {}),
+        ...(themes?.length ? { "oc-themes": themes } : {}),
       },
       null,
       2,
@@ -435,6 +437,43 @@ describe("plugin.install.task", () => {
     const ok = await run(ctx(tmp.path))
     expect(ok).toBe(true)
     expect(await Filesystem.exists(path.join(tmp.path, ".opencode", "tui.jsonc"))).toBe(true)
+    expect(await Filesystem.exists(path.join(tmp.path, ".opencode", "opencode.jsonc"))).toBe(false)
+  })
+
+  test("writes tui config for oc-themes-only packages", async () => {
+    await using tmp = await tmpdir()
+    const target = await plugin(tmp.path, undefined, undefined, ["themes/forest.json"])
+    await fs.mkdir(path.join(target, "themes"), { recursive: true })
+    await Bun.write(path.join(target, "themes", "forest.json"), JSON.stringify({ theme: { text: "#fff" } }, null, 2))
+    const run = createPlugTask(
+      {
+        mod: "acme@1.2.3",
+      },
+      deps(path.join(tmp.path, "global"), target),
+    )
+
+    const ok = await run(ctx(tmp.path))
+    expect(ok).toBe(true)
+    expect(await Filesystem.exists(path.join(tmp.path, ".opencode", "tui.jsonc"))).toBe(true)
+    expect(await Filesystem.exists(path.join(tmp.path, ".opencode", "opencode.jsonc"))).toBe(false)
+
+    const tui = await read(path.join(tmp.path, ".opencode", "tui.jsonc"))
+    expect(tui.plugin).toEqual(["acme@1.2.3"])
+  })
+
+  test("returns false for oc-themes outside plugin directory", async () => {
+    await using tmp = await tmpdir()
+    const target = await plugin(tmp.path, undefined, undefined, ["../outside.json"])
+    const run = createPlugTask(
+      {
+        mod: "acme@1.2.3",
+      },
+      deps(path.join(tmp.path, "global"), target),
+    )
+
+    const ok = await run(ctx(tmp.path))
+    expect(ok).toBe(false)
+    expect(await Filesystem.exists(path.join(tmp.path, ".opencode", "tui.jsonc"))).toBe(false)
     expect(await Filesystem.exists(path.join(tmp.path, ".opencode", "opencode.jsonc"))).toBe(false)
   })
 

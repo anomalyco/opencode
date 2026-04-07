@@ -46,7 +46,7 @@ export namespace Bus {
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
-      const cache = yield* InstanceState.make<State>(
+      const state = yield* InstanceState.make<State>(
         Effect.fn("Bus.state")(function* (ctx) {
           const wildcard = yield* PubSub.unbounded<Payload>()
           const typed = new Map<string, PubSub.PubSub<Payload>>()
@@ -82,13 +82,13 @@ export namespace Bus {
 
       function publish<D extends BusEvent.Definition>(def: D, properties: z.output<D["properties"]>) {
         return Effect.gen(function* () {
-          const state = yield* InstanceState.get(cache)
+          const s = yield* InstanceState.get(state)
           const payload: Payload = { type: def.type, properties }
           log.info("publishing", { type: def.type })
 
-          const ps = state.typed.get(def.type)
+          const ps = s.typed.get(def.type)
           if (ps) yield* PubSub.publish(ps, payload)
-          yield* PubSub.publish(state.wildcard, payload)
+          yield* PubSub.publish(s.wildcard, payload)
 
           const dir = yield* InstanceState.directory
           GlobalBus.emit("event", {
@@ -102,8 +102,8 @@ export namespace Bus {
         log.info("subscribing", { type: def.type })
         return Stream.unwrap(
           Effect.gen(function* () {
-            const state = yield* InstanceState.get(cache)
-            const ps = yield* getOrCreate(state, def)
+            const s = yield* InstanceState.get(state)
+            const ps = yield* getOrCreate(s, def)
             return Stream.fromPubSub(ps)
           }),
         ).pipe(Stream.ensuring(Effect.sync(() => log.info("unsubscribing", { type: def.type }))))
@@ -113,8 +113,8 @@ export namespace Bus {
         log.info("subscribing", { type: "*" })
         return Stream.unwrap(
           Effect.gen(function* () {
-            const state = yield* InstanceState.get(cache)
-            return Stream.fromPubSub(state.wildcard)
+            const s = yield* InstanceState.get(state)
+            return Stream.fromPubSub(s.wildcard)
           }),
         ).pipe(Stream.ensuring(Effect.sync(() => log.info("unsubscribing", { type: "*" }))))
       }
@@ -150,14 +150,14 @@ export namespace Bus {
         def: D,
         callback: (event: Payload<D>) => unknown,
       ) {
-        const state = yield* InstanceState.get(cache)
-        const ps = yield* getOrCreate(state, def)
+        const s = yield* InstanceState.get(state)
+        const ps = yield* getOrCreate(s, def)
         return yield* on(ps, def.type, callback)
       })
 
       const subscribeAllCallback = Effect.fn("Bus.subscribeAllCallback")(function* (callback: (event: any) => unknown) {
-        const state = yield* InstanceState.get(cache)
-        return yield* on(state.wildcard, "*", callback)
+        const s = yield* InstanceState.get(state)
+        return yield* on(s.wildcard, "*", callback)
       })
 
       return Service.of({ publish, subscribe, subscribeAll, subscribeCallback, subscribeAllCallback })

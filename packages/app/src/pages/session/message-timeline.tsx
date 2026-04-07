@@ -29,6 +29,7 @@ import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { messageAgentColor } from "@/utils/agent"
+import { sessionTitle } from "@/utils/session-title"
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
 import { makeTimer } from "@solid-primitives/timer"
 
@@ -43,7 +44,6 @@ type MessageComment = {
 
 const emptyMessages: MessageType[] = []
 const idle = { type: "idle" as const }
-
 type UserActions = {
   fork?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
   revert?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
@@ -200,7 +200,7 @@ export function MessageTimeline(props: {
   mobileChanges: boolean
   mobileFallback: JSX.Element
   actions?: UserActions
-  scroll: { overflow: boolean; bottom: boolean }
+  scroll: { overflow: boolean; bottom: boolean; jump: boolean }
   onResumeScroll: () => void
   setScrollRef: (el: HTMLDivElement | undefined) => void
   onScheduleScrollState: (el: HTMLDivElement) => void
@@ -291,6 +291,7 @@ export function MessageTimeline(props: {
     return sync.session.get(id)
   })
   const titleValue = createMemo(() => info()?.title)
+  const titleLabel = createMemo(() => sessionTitle(titleValue()))
   const shareUrl = createMemo(() => info()?.share?.url)
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
   const parentID = createMemo(() => info()?.parentID)
@@ -399,7 +400,7 @@ export function MessageTimeline(props: {
 
   const openTitleEditor = () => {
     if (!sessionID()) return
-    setTitle({ editing: true, draft: titleValue() ?? "" })
+    setTitle({ editing: true, draft: titleLabel() ?? "" })
     requestAnimationFrame(() => {
       titleRef?.focus()
       titleRef?.select()
@@ -417,7 +418,7 @@ export function MessageTimeline(props: {
     if (titleMutation.isPending) return
 
     const next = title.draft.trim()
-    if (!next || next === (titleValue() ?? "")) {
+    if (!next || next === (titleLabel() ?? "")) {
       setTitle("editing", false)
       return
     }
@@ -532,7 +533,9 @@ export function MessageTimeline(props: {
   }
 
   function DialogDeleteSession(props: { sessionID: string }) {
-    const name = createMemo(() => sync.session.get(props.sessionID)?.title ?? language.t("command.session.new"))
+    const name = createMemo(
+      () => sessionTitle(sync.session.get(props.sessionID)?.title) ?? language.t("command.session.new"),
+    )
     const handleDelete = async () => {
       await deleteSession(props.sessionID)
       dialog.close()
@@ -568,17 +571,24 @@ export function MessageTimeline(props: {
         <div
           class="absolute left-1/2 -translate-x-1/2 bottom-6 z-[60] pointer-events-none transition-all duration-200 ease-out"
           classList={{
-            "opacity-100 translate-y-0 scale-100":
-              props.scroll.overflow && !props.scroll.bottom && !staging.isStaging(),
+            "opacity-100 translate-y-0 scale-100": props.scroll.overflow && props.scroll.jump && !staging.isStaging(),
             "opacity-0 translate-y-2 scale-95 pointer-events-none":
-              !props.scroll.overflow || props.scroll.bottom || staging.isStaging(),
+              !props.scroll.overflow || !props.scroll.jump || staging.isStaging(),
           }}
         >
           <button
-            class="pointer-events-auto size-8 flex items-center justify-center rounded-full bg-background-base border border-border-base shadow-sm text-text-base hover:bg-background-stronger transition-colors"
+            class="pointer-events-auto flex items-center justify-center w-10 h-8 bg-transparent border-none cursor-pointer p-0 group"
             onClick={props.onResumeScroll}
           >
-            <Icon name="arrow-down-to-line" />
+            <div
+              class="flex items-center justify-center w-8 h-6 rounded-[6px] border border-[var(--gray-dark-7)] bg-[color-mix(in_srgb,var(--gray-dark-3)_80%,transparent)] backdrop-blur-[0.75px] transition-colors group-hover:border-[var(--gray-dark-8)] [--icon-base:var(--gray-dark-10)] group-hover:[--icon-base:var(--gray-dark-11)]"
+              style={{
+                "box-shadow":
+                  "0 51px 60px 0 rgba(0,0,0,0.13), 0 15.375px 18.088px 0 rgba(0,0,0,0.19), 0 6.386px 7.513px 0 rgba(0,0,0,0.25), 0 2.31px 2.717px 0 rgba(0,0,0,0.38)",
+              }}
+            >
+              <Icon name="arrow-down-to-line" size="small" />
+            </div>
           </button>
         </div>
         <ScrollView
@@ -674,7 +684,7 @@ export function MessageTimeline(props: {
                           </div>
                         </Show>
                       </div>
-                      <Show when={titleValue() || title.editing}>
+                      <Show when={titleLabel() || title.editing}>
                         <Show
                           when={title.editing}
                           fallback={
@@ -682,7 +692,7 @@ export function MessageTimeline(props: {
                               class="text-14-medium text-text-strong truncate grow-1 min-w-0"
                               onDblClick={openTitleEditor}
                             >
-                              {titleValue()}
+                              {titleLabel()}
                             </h1>
                           }
                         >

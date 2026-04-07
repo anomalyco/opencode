@@ -12,6 +12,7 @@ import {
   untrack,
   type Accessor,
 } from "solid-js"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { useNavigate, useParams } from "@solidjs/router"
 import { useLayout, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
@@ -215,18 +216,11 @@ export default function Layout(props: ParentProps) {
       if (document.visibilityState !== "hidden") return
       reset()
     }
-    window.addEventListener("pointerup", stop)
-    window.addEventListener("pointercancel", stop)
-    window.addEventListener("blur", stop)
-    window.addEventListener("blur", blur)
-    document.addEventListener("visibilitychange", hide)
-    onCleanup(() => {
-      window.removeEventListener("pointerup", stop)
-      window.removeEventListener("pointercancel", stop)
-      window.removeEventListener("blur", stop)
-      window.removeEventListener("blur", blur)
-      document.removeEventListener("visibilitychange", hide)
-    })
+    makeEventListener(window, "pointerup", stop)
+    makeEventListener(window, "pointercancel", stop)
+    makeEventListener(window, "blur", stop)
+    makeEventListener(window, "blur", blur)
+    makeEventListener(document, "visibilitychange", hide)
   })
 
   const sidebarHovering = createMemo(() => !layout.sidebar.opened() && state.hoverProject !== undefined)
@@ -1394,8 +1388,7 @@ export default function Layout(props: ParentProps) {
     }
 
     handleDeepLinks(drainPendingDeepLinks(window))
-    window.addEventListener(deepLinkEvent, handler as EventListener)
-    onCleanup(() => window.removeEventListener(deepLinkEvent, handler as EventListener))
+    makeEventListener(window, deepLinkEvent, handler as EventListener)
   })
 
   async function renameProject(project: LocalProject, next: string) {

@@ -287,6 +287,8 @@ export function LiteSection() {
           <ul data-slot="promo-models">
             <li>Kimi K2.5</li>
             <li>GLM-5</li>
+            <li>Mimo-V2-Pro</li>
+            <li>Mimo-V2-Omni</li>
             <li>MiniMax M2.5</li>
             <li>MiniMax M2.7</li>
           </ul>
