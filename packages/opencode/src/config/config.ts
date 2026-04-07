@@ -1219,14 +1219,16 @@ export namespace Config {
         })
 
         const loadGlobal = Effect.fnUntraced(function* () {
+          const configBase = Flag.OPENCODE_CONFIG_DIR || Global.Path.config
+
           let result: Info = pipe(
             {},
-            mergeDeep(yield* loadFile(path.join(Global.Path.config, "config.json"))),
-            mergeDeep(yield* loadFile(path.join(Global.Path.config, "opencode.json"))),
-            mergeDeep(yield* loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
+            mergeDeep(yield* loadFile(path.join(configBase, "config.json"))),
+            mergeDeep(yield* loadFile(path.join(configBase, "opencode.json"))),
+            mergeDeep(yield* loadFile(path.join(configBase, "opencode.jsonc"))),
           )
 
-          const legacy = path.join(Global.Path.config, "config")
+          const legacy = path.join(configBase, "config")
           if (existsSync(legacy)) {
             yield* Effect.promise(() =>
               import(pathToFileURL(legacy).href, { with: { type: "toml" } })
@@ -1235,11 +1237,15 @@ export namespace Config {
                   if (provider && model) result.model = `${provider}/${model}`
                   result["$schema"] = "https://opencode.ai/config.json"
                   result = mergeDeep(result, rest)
-                  await fsNode.writeFile(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
+                  await fsNode.writeFile(path.join(configBase, "config.json"), JSON.stringify(result, null, 2))
                   await fsNode.unlink(legacy)
                 })
                 .catch(() => {}),
             )
+          }
+
+          if (Flag.OPENCODE_CONFIG) {
+            result = mergeDeep(result, yield* loadFile(Flag.OPENCODE_CONFIG))
           }
 
           return result
