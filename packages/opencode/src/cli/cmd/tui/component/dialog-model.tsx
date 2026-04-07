@@ -89,11 +89,11 @@ export function DialogModel(props: { providerID?: string }) {
             key: item,
             value: { providerID: provider.id, modelID: model.id, authProfile: item.authProfile },
             title: model.name ?? item.modelID,
-            description: consoleManagedProviderLabel(
+            description: `${consoleManagedProviderLabel(
               sync.data.console_state.consoleManagedProviders,
               provider.id,
               provider.name,
-            ),
+            )}${item.authProfile ? `:${item.authProfile}` : ":default"}`,
             category,
             disabled: provider.id === "opencode" && model.id.includes("-nano"),
             footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
