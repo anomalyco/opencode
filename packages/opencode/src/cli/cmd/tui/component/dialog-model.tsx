@@ -41,15 +41,39 @@ export function DialogModel(props: { providerID?: string }) {
       `${item.providerID}/${item.modelID}/${item.authProfile ?? "default"}`
 
     const profileMap = createMemo(() => {
-      const data = auth() ?? {}
       const out = new Map<string, Set<string | undefined>>()
+      const ensure = (providerID: string) => {
+        if (!out.has(providerID)) out.set(providerID, new Set([undefined]))
+        return out.get(providerID)!
+      }
+
+      for (const provider of sync.data.provider) ensure(provider.id)
+
+      const data = auth() ?? {}
       for (const key of Object.keys(data)) {
         const idx = key.lastIndexOf(":")
         const providerID = idx === -1 ? key : key.slice(0, idx)
         const profile = idx === -1 ? undefined : key.slice(idx + 1)
-        if (!out.has(providerID)) out.set(providerID, new Set())
-        out.get(providerID)!.add(profile)
+        ensure(providerID).add(profile)
       }
+
+      for (const item of local.model.recent()) {
+        ensure(item.providerID).add(item.authProfile)
+      }
+
+      for (const item of local.model.favorite()) {
+        ensure(item.providerID).add((item as { authProfile?: string }).authProfile)
+      }
+
+      const current = local.model.current()
+      if (current) ensure(current.providerID).add(current.authProfile)
+
+      for (const item of sync.data.agent) {
+        const model = item.model as { providerID?: string; authProfile?: string } | undefined
+        if (!model?.providerID) continue
+        ensure(model.providerID).add(model.authProfile)
+      }
+
       return out
     })
 
