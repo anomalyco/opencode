@@ -228,7 +228,7 @@ When constructing the summary, try to stick to this template:
           sessionID: input.sessionID,
           mode: "compaction",
           agent: "compaction",
-          variant: userMessage.variant,
+          variant: userMessage.model.variant,
           summary: true,
           path: {
             cwd: ctx.directory,
@@ -295,7 +295,6 @@ When constructing the summary, try to stick to this template:
               format: original.format,
               tools: original.tools,
               system: original.system,
-              variant: original.variant,
             })
             for (const part of replay.parts) {
               if (part.type === "compaction") continue
