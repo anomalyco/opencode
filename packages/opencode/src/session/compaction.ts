@@ -2,6 +2,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Session } from "."
 import { SessionID, MessageID, PartID } from "./schema"
+import { Instance } from "../project/instance"
 import { Provider } from "../provider/provider"
 import { MessageV2 } from "./message-v2"
 import z from "zod"
@@ -218,6 +219,7 @@ When constructing the summary, try to stick to this template:
         const prompt = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
         const msgs = structuredClone(messages)
         yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
+        const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, { stripMedia: true })
         const ctx = yield* InstanceState.context
         const msg: MessageV2.Assistant = {
           id: MessageID.ascending(),
@@ -259,29 +261,10 @@ When constructing the summary, try to stick to this template:
             tools: {},
             system: [],
             messages: [
-              ...msgs,
+              ...modelMessages,
               {
-                info: {
-                  role: "user",
-                  sessionID: input.sessionID,
-                  id: MessageID.ascending(),
-                  time: { created: Date.now() },
-                  agent: agent.name,
-                  model: {
-                    modelID: model.id,
-                    providerID: model.providerID,
-                  },
-                },
-                parts: [
-                  {
-                    type: "text",
-                    text: prompt,
-                    sessionID: input.sessionID,
-                    messageID: MessageID.ascending(),
-                    id: PartID.ascending(),
-                    synthetic: true,
-                  },
-                ],
+                role: "user",
+                content: [{ type: "text", text: prompt }],
               },
             ],
             model,

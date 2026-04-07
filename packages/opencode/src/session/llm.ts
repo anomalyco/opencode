@@ -1,6 +1,7 @@
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
-import { Effect, Layer, Record, ServiceMap } from "effect"
+import { Cause, Effect, Layer, Record, ServiceMap } from "effect"
+import * as Queue from "effect/Queue"
 import * as Stream from "effect/Stream"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, jsonSchema } from "ai"
 import { mergeDeep, pipe } from "remeda"
@@ -9,14 +10,13 @@ import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
 import { Instance } from "@/project/instance"
 import type { Agent } from "@/agent/agent"
-import { MessageV2 } from "./message-v2"
+import type { MessageV2 } from "./message-v2"
 import { Plugin } from "@/plugin"
 import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { Permission } from "@/permission"
 import { Auth } from "@/auth"
 import { Installation } from "@/installation"
-import { iife } from "@/util/iife"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -30,7 +30,7 @@ export namespace LLM {
     agent: Agent.Info
     permission?: Permission.Ruleset
     system: string[]
-    messages: MessageV2.WithParts[]
+    messages: ModelMessage[]
     small?: boolean
     tools: Record<string, Tool>
     retries?: number
@@ -148,23 +148,19 @@ export namespace LLM {
     }
 
     const isWorkflow = language instanceof GitLabWorkflowLanguageModel
-    const messages = await iife(async () => {
-      if (isOpenaiOauth || isWorkflow) return MessageV2.toModelMessages(input.messages, input.model)
-      return [
-        ...system.map(
-          (x): ModelMessage => ({
-            role: "system",
-            content: x,
-          }),
-        ),
-        ...(await MessageV2.toModelMessages(input.messages, input.model)),
-      ]
-    })
-
-    const maxOutputTokens =
-      isOpenaiOauth || provider.id.includes("github-copilot")
-        ? undefined
-        : ProviderTransform.maxOutputTokens(input.model)
+    const messages = isOpenaiOauth
+      ? input.messages
+      : isWorkflow
+        ? input.messages
+        : [
+            ...system.map(
+              (x): ModelMessage => ({
+                role: "system",
+                content: x,
+              }),
+            ),
+            ...input.messages,
+          ]
 
     const params = await Plugin.trigger(
       "chat.params",
@@ -181,7 +177,7 @@ export namespace LLM {
           : undefined,
         topP: input.agent.topP ?? ProviderTransform.topP(input.model),
         topK: ProviderTransform.topK(input.model),
-        maxOutputTokens,
+        maxOutputTokens: ProviderTransform.maxOutputTokens(input.model),
         options,
       },
     )
@@ -200,7 +196,7 @@ export namespace LLM {
       },
     )
 
-    const tools = resolveTools(input)
+    const tools = await resolveTools(input)
 
     // LiteLLM and some Anthropic proxies require the tools parameter to be present
     // when message history contains tool calls, even if no tools are being used.
@@ -244,7 +240,7 @@ export namespace LLM {
         try {
           const result = await t.execute!(JSON.parse(argsJson), {
             toolCallId: _requestID,
-            messages: [],
+            messages: input.messages,
             abortSignal: input.abort,
           })
           const output = typeof result === "string" ? result : (result?.output ?? JSON.stringify(result))
@@ -348,7 +344,13 @@ export namespace LLM {
 
   // Check if messages contain any tool-call content
   // Used to determine if a dummy tool should be added for LiteLLM proxy compatibility
-  export function hasToolCalls(messages: MessageV2.WithParts[]): boolean {
-    return messages.some((msg) => msg.parts.some((part) => part.type === "tool"))
+  export function hasToolCalls(messages: ModelMessage[]): boolean {
+    for (const msg of messages) {
+      if (!Array.isArray(msg.content)) continue
+      for (const part of msg.content) {
+        if (part.type === "tool-call" || part.type === "tool-result") return true
+      }
+    }
+    return false
   }
 }
