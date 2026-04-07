@@ -297,6 +297,8 @@ export const BashTool = Tool.define(
     const fs = yield* AppFileSystem.Service
     const plugin = yield* Plugin.Service
 
+    const exempt = new Set((yield* plugin.trigger("bash.commands", {}, { noTimeout: [] as string[] })).noTimeout)
+
     const cygpath = Effect.fn("BashTool.cygpath")(function* (shell: string, text: string) {
       const lines = yield* spawner
         .lines(ChildProcess.make(shell, ["-lc", 'cygpath -w -- "$1"', "_", text]))
@@ -378,6 +380,7 @@ export const BashTool = Tool.define(
         env: NodeJS.ProcessEnv
         timeout: number
         description: string
+        raw?: boolean
       },
       ctx: Tool.Context,
     ) {
@@ -415,13 +418,23 @@ export const BashTool = Tool.define(
             return Effect.sync(() => ctx.abort.removeEventListener("abort", handler))
           })
 
-          const timeout = Effect.sleep(`${input.timeout + 100} millis`)
-
-          const exit = yield* Effect.raceAll([
-            handle.exitCode.pipe(Effect.map((code) => ({ kind: "exit" as const, code }))),
+          // timeout === 0 means no timeout (scripts with plugin callbacks can run indefinitely)
+          const races: Effect.Effect<{ kind: "exit" | "abort" | "timeout"; code: number | null }>[] = [
+            handle.exitCode.pipe(
+              Effect.map((code) => ({ kind: "exit" as const, code })),
+              Effect.orElseSucceed(() => ({ kind: "exit" as const, code: -1 })),
+            ),
             abort.pipe(Effect.map(() => ({ kind: "abort" as const, code: null }))),
-            timeout.pipe(Effect.map(() => ({ kind: "timeout" as const, code: null }))),
-          ])
+          ]
+          if (input.timeout > 0) {
+            races.push(
+              Effect.sleep(`${input.timeout + 100} millis`).pipe(
+                Effect.map(() => ({ kind: "timeout" as const, code: null })),
+              ),
+            )
+          }
+
+          const exit = yield* Effect.raceAll(races)
 
           if (exit.kind === "abort") {
             aborted = true
@@ -449,6 +462,8 @@ export const BashTool = Tool.define(
           output: preview(output),
           exit: code,
           description: input.description,
+          // Signal Tool.wrap to skip truncation for unbounded plugin commands
+          ...(input.raw && { truncated: false }),
         },
         output,
       }
@@ -480,12 +495,22 @@ export const BashTool = Tool.define(
               if (params.timeout !== undefined && params.timeout < 0) {
                 throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
               }
-              const timeout = params.timeout ?? DEFAULT_TIMEOUT
               const ps = PS.has(name)
               const root = yield* parse(params.command, ps)
               const scan = yield* collect(root, cwd, ps, shell)
               if (!Instance.containsPath(cwd)) scan.dirs.add(cwd)
               yield* ask(ctx, scan)
+
+              // Plugin-registered commands that trigger long-running callbacks need no timeout.
+              // The bash.commands hook lets plugins declare which command names should disable
+              // the timeout (e.g., a plugin shipping a CLI binary that calls back into the AI).
+              const unbounded =
+                exempt.size > 0 &&
+                commands(root).some((node) => {
+                  const bin = node.childForFieldName("name") ?? node.firstChild
+                  return bin !== null && exempt.has(bin.text)
+                })
+              const timeout = unbounded ? 0 : (params.timeout ?? DEFAULT_TIMEOUT)
 
               return yield* run(
                 {
@@ -496,6 +521,7 @@ export const BashTool = Tool.define(
                   env: yield* shellEnv(ctx, cwd),
                   timeout,
                   description: params.description,
+                  raw: unbounded,
                 },
                 ctx,
               )
