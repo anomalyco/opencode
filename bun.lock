@@ -308,7 +308,7 @@
         "@actions/github": "6.0.1",
         "@agentclientprotocol/sdk": "0.16.1",
         "@ai-sdk/amazon-bedrock": "4.0.83",
-        "@ai-sdk/anthropic": "3.0.64",
+        "@ai-sdk/anthropic": "3.0.67",
         "@ai-sdk/azure": "3.0.49",
         "@ai-sdk/cerebras": "2.0.41",
         "@ai-sdk/cohere": "3.0.27",
@@ -621,7 +621,6 @@
   "patchedDependencies": {
     "solid-js@1.9.10": "patches/solid-js@1.9.10.patch",
     "@standard-community/standard-openapi@0.2.9": "patches/@standard-community%2Fstandard-openapi@0.2.9.patch",
-    "@ai-sdk/anthropic@3.0.64": "patches/@ai-sdk%2Fanthropic@3.0.64.patch",
   },
   "overrides": {
     "@types/bun": "catalog:",
@@ -5741,6 +5740,8 @@
     "nypm/citty": ["citty@0.2.1", "", {}, "sha512-kEV95lFBhQgtogAPlQfJJ0WGVSokvLr/UEoFPiKKOXF7pl98HfUVUD0ejsuTCld/9xH9vogSywZ5KqHzXrZpqg=="],
 
     "nypm/tinyexec": ["tinyexec@1.0.4", "", {}, "sha512-u9r3uZC0bdpGOXtlxUIdwf9pkmvhqJdrVCH9fapQtgy/OeTTMZ1nqH7agtvEfmGui6e1XxjcdrlxvxJvc3sMqw=="],
+
+    "opencode/@ai-sdk/anthropic": ["@ai-sdk/anthropic@3.0.67", "", { "dependencies": { "@ai-sdk/provider": "3.0.8", "@ai-sdk/provider-utils": "4.0.23" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-FFX4P5Fd6lcQJc2OLngZQkbbJHa0IDDZi087Edb8qRZx6h90krtM61ArbMUL8us/7ZUwojCXnyJ/wQ2Eflx2jQ=="],
 
     "opencontrol/@modelcontextprotocol/sdk": ["@modelcontextprotocol/sdk@1.6.1", "", { "dependencies": { "content-type": "^1.0.5", "cors": "^2.8.5", "eventsource": "^3.0.2", "express": "^5.0.1", "express-rate-limit": "^7.5.0", "pkce-challenge": "^4.1.0", "raw-body": "^3.0.0", "zod": "^3.23.8", "zod-to-json-schema": "^3.24.1" } }, "sha512-oxzMzYCkZHMntzuyerehK3fV6A2Kwh5BD6CGEJSVDU2QNEhfLOptf2X7esQgaHZXHZY0oHmMsOtIDLP71UJXgA=="],
 
