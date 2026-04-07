@@ -3,6 +3,7 @@ import { Tool } from "./tool"
 import { ProviderID, ModelID } from "../provider/schema"
 import { errorMessage } from "../util/error"
 import DESCRIPTION from "./batch.txt"
+import { Agent } from "../agent/agent"
 
 const DISALLOWED = new Set(["batch"])
 const FILTERED_FROM_SUGGESTIONS = new Set(["invalid", "patch", ...DISALLOWED])
@@ -35,11 +36,32 @@ export const BatchTool = Tool.define("batch", async () => {
       const { Session } = await import("../session")
       const { PartID } = await import("../session/schema")
 
+      const raw = ctx.extra?.["model"]
+      const info = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : undefined
+      const api =
+        info?.["api"] && typeof info["api"] === "object" ? (info["api"] as Record<string, unknown>) : undefined
+      const model =
+        typeof info?.["providerID"] === "string" && typeof api?.["id"] === "string"
+          ? {
+              providerID: ProviderID.make(info["providerID"]),
+              modelID: ModelID.make(api["id"]),
+            }
+          : {
+              providerID: ProviderID.make(""),
+              modelID: ModelID.make(""),
+            }
+      const allow = new Set(
+        (Array.isArray(ctx.extra?.["allow"]) ? ctx.extra["allow"] : []).filter(
+          (item): item is string => typeof item === "string",
+        ),
+      )
+      const ag = await Agent.get(ctx.agent)
+
       const toolCalls = params.tool_calls.slice(0, 25)
       const discardedCalls = params.tool_calls.slice(25)
 
       const { ToolRegistry } = await import("./registry")
-      const availableTools = await ToolRegistry.tools({ modelID: ModelID.make(""), providerID: ProviderID.make("") })
+      const availableTools = await ToolRegistry.tools(model, ag)
       const toolMap = new Map(availableTools.map((t) => [t.id, t]))
 
       const executeCall = async (call: (typeof toolCalls)[0]) => {
@@ -47,6 +69,10 @@ export const BatchTool = Tool.define("batch", async () => {
         const partID = PartID.ascending()
 
         try {
+          if (allow.size && !allow.has(call.tool)) {
+            throw new Error(`Tool '${call.tool}' is not enabled in this turn. Use only currently available tools.`)
+          }
+
           if (DISALLOWED.has(call.tool)) {
             throw new Error(
               `Tool '${call.tool}' is not allowed in batch. Disallowed tools: ${Array.from(DISALLOWED).join(", ")}`,

@@ -396,13 +396,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }) {
         using _ = log.time("resolveTools")
         const tools: Record<string, AITool> = {}
+        let allow: string[] = []
 
         const context = (args: any, options: ToolExecutionOptions): Tool.Context => ({
           sessionID: input.session.id,
           abort: options.abortSignal!,
           messageID: input.processor.message.id,
           callID: options.toolCallId,
-          extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck },
+          extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck, allow },
           agent: input.agent.name,
           messages: input.messages,
           metadata: (val) =>
@@ -546,6 +547,15 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             )
           tools[key] = item
         }
+
+        allow = Object.keys(
+          LLM.filterTools({
+            tools,
+            agent: input.agent,
+            permission: input.session.permission,
+            enabled: input.tools,
+          }),
+        )
 
         return tools
       })

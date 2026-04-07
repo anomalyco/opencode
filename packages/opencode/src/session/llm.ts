@@ -196,7 +196,12 @@ export namespace LLM {
       },
     )
 
-    const tools = await resolveTools(input)
+    const tools = filterTools({
+      tools: input.tools,
+      agent: input.agent,
+      permission: input.permission,
+      enabled: input.user.tools,
+    })
 
     // LiteLLM and some Anthropic proxies require the tools parameter to be present
     // when message history contains tool calls, even if no tools are being used.
@@ -334,12 +339,17 @@ export namespace LLM {
     })
   }
 
-  function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" | "user">) {
+  export function filterTools(input: {
+    tools: Record<string, Tool>
+    agent: Agent.Info
+    permission?: Permission.Ruleset
+    enabled?: Record<string, boolean>
+  }) {
     const disabled = Permission.disabled(
       Object.keys(input.tools),
       Permission.merge(input.agent.permission, input.permission ?? []),
     )
-    return Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k))
+    return Record.filter(input.tools, (_, k) => input.enabled?.[k] !== false && !disabled.has(k))
   }
 
   // Check if messages contain any tool-call content
