@@ -707,6 +707,35 @@
 
 [data-component="tool-part-wrapper"] {
   width: 100%;
+
+  [data-slot="tool-image-attachments"] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 0;
+  }
+
+  [data-slot="tool-image-attachment"] {
+    width: 48px;
+    height: 48px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--surface-weak);
+    border: 1px solid var(--border-weak-base);
+    cursor: pointer;
+    padding: 0;
+    transition: border-color 0.15s ease;
+
+    &:hover {
+      border-color: var(--border-strong-base);
+    }
+  }
+
+  [data-slot="tool-image-attachment"] img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
 }
 
 [data-component="dock-prompt"][data-kind="permission"] {
