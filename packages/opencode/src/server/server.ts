@@ -4,12 +4,14 @@ import { Hono } from "hono"
 import { compress } from "hono/compress"
 import { cors } from "hono/cors"
 import { basicAuth } from "hono/basic-auth"
+import type { UpgradeWebSocket } from "hono/ws"
 import z from "zod"
 import { Auth } from "../auth"
 import { Flag } from "../flag/flag"
 import { ProviderID } from "../provider/schema"
+import { createAdaptorServer, type ServerType } from "@hono/node-server"
+import { createNodeWebSocket } from "@hono/node-ws"
 import { WorkspaceRouterMiddleware } from "./router"
-import { websocket } from "hono/bun"
 import { errors } from "./error"
 import { GlobalRoutes } from "./routes/global"
 import { MDNS } from "./mdns"
@@ -24,8 +26,14 @@ globalThis.AI_SDK_LOG_WARNINGS = false
 initProjectors()
 
 export namespace Server {
-  const log = Log.create({ service: "server" })
+  export type Listener = {
+    hostname: string
+    port: number
+    url: URL
+    stop: (close?: boolean) => Promise<void>
+  }
 
+  const log = Log.create({ service: "server" })
   const zipped = compress()
 
   const skipCompress = (path: string, method: string) => {
@@ -34,10 +42,9 @@ export namespace Server {
     return false
   }
 
-  export const Default = lazy(() => ControlPlaneRoutes())
+  export const Default = lazy(() => create({}).app)
 
-  export const ControlPlaneRoutes = (opts?: { cors?: string[] }): Hono => {
-    const app = new Hono()
+  export function ControlPlaneRoutes(upgrade: UpgradeWebSocket, app = new Hono(), opts?: { cors?: string[] }): Hono {
     return app
       .onError(errorHandler(log))
       .use((c, next) => {
@@ -62,9 +69,7 @@ export namespace Server {
           path: c.req.path,
         })
         await next()
-        if (!skip) {
-          timer.stop()
-        }
+        if (!skip) timer.stop()
       })
       .use(
         cors({
@@ -81,15 +86,8 @@ export namespace Server {
             )
               return input
 
-            // *.opencode.ai (https only, adjust if needed)
-            if (/^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)) {
-              return input
-            }
-            if (opts?.cors?.includes(input)) {
-              return input
-            }
-
-            return
+            if (/^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)) return input
+            if (opts?.cors?.includes(input)) return input
           },
         }),
       )
@@ -234,11 +232,20 @@ export namespace Server {
           return c.json(true)
         },
       )
-      .use(WorkspaceRouterMiddleware)
+      .use(WorkspaceRouterMiddleware(upgrade))
+  }
+
+  function create(opts: { cors?: string[] }) {
+    const app = new Hono()
+    const ws = createNodeWebSocket({ app })
+    return {
+      app: ControlPlaneRoutes(ws.upgradeWebSocket, app, opts),
+      ws,
+    }
   }
 
   export function createApp(opts: { cors?: string[] }) {
-    return ControlPlaneRoutes(opts)
+    return create(opts).app
   }
 
   export async function openapi() {
@@ -246,8 +253,8 @@ export namespace Server {
     // hono-openapi can see describeRoute metadata (`.route()` wraps
     // handlers when the sub-app has a custom errorHandler, which
     // strips the metadata symbol).
-    const app = ControlPlaneRoutes()
-    InstanceRoutes(app)
+    const { app, ws } = create({})
+    InstanceRoutes(ws.upgradeWebSocket, app)
     const result = await generateSpecs(app, {
       documentation: {
         info: {
@@ -261,52 +268,86 @@ export namespace Server {
     return result
   }
 
-  /** @deprecated do not use this dumb shit */
   export let url: URL
 
-  export function listen(opts: {
+  export async function listen(opts: {
     port: number
     hostname: string
     mdns?: boolean
     mdnsDomain?: string
     cors?: string[]
-  }) {
-    url = new URL(`http://${opts.hostname}:${opts.port}`)
-    const app = ControlPlaneRoutes({ cors: opts.cors })
-    const args = {
-      hostname: opts.hostname,
-      idleTimeout: 0,
-      fetch: app.fetch,
-      websocket: websocket,
-    } as const
-    const tryServe = (port: number) => {
-      try {
-        return Bun.serve({ ...args, port })
-      } catch {
-        return undefined
-      }
-    }
-    const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
-    if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
+  }): Promise<Listener> {
+    const built = create(opts)
+    const start = (port: number) =>
+      new Promise<ServerType>((resolve, reject) => {
+        const server = createAdaptorServer({ fetch: built.app.fetch })
+        built.ws.injectWebSocket(server)
+        const fail = (err: Error) => {
+          cleanup()
+          reject(err)
+        }
+        const ready = () => {
+          cleanup()
+          resolve(server)
+        }
+        const cleanup = () => {
+          server.off("error", fail)
+          server.off("listening", ready)
+        }
+        server.once("error", fail)
+        server.once("listening", ready)
+        server.listen(port, opts.hostname)
+      })
 
-    const shouldPublishMDNS =
+    const server = opts.port === 0 ? await start(4096).catch(() => start(0)) : await start(opts.port)
+    const addr = server.address()
+    if (!addr || typeof addr === "string") {
+      throw new Error(`Failed to resolve server address for port ${opts.port}`)
+    }
+
+    const next = new URL("http://localhost")
+    next.hostname = opts.hostname
+    next.port = String(addr.port)
+    url = next
+
+    const mdns =
       opts.mdns &&
-      server.port &&
+      addr.port &&
       opts.hostname !== "127.0.0.1" &&
       opts.hostname !== "localhost" &&
       opts.hostname !== "::1"
-    if (shouldPublishMDNS) {
-      MDNS.publish(server.port!, opts.mdnsDomain)
+    if (mdns) {
+      MDNS.publish(addr.port, opts.mdnsDomain)
     } else if (opts.mdns) {
       log.warn("mDNS enabled but hostname is loopback; skipping mDNS publish")
     }
 
-    const originalStop = server.stop.bind(server)
-    server.stop = async (closeActiveConnections?: boolean) => {
-      if (shouldPublishMDNS) MDNS.unpublish()
-      return originalStop(closeActiveConnections)
+    let closing: Promise<void> | undefined
+    return {
+      hostname: opts.hostname,
+      port: addr.port,
+      url: next,
+      stop(close?: boolean) {
+        closing ??= new Promise((resolve, reject) => {
+          if (mdns) MDNS.unpublish()
+          server.close((err) => {
+            if (err) {
+              reject(err)
+              return
+            }
+            resolve()
+          })
+          if (close) {
+            if ("closeAllConnections" in server && typeof server.closeAllConnections === "function") {
+              server.closeAllConnections()
+            }
+            if ("closeIdleConnections" in server && typeof server.closeIdleConnections === "function") {
+              server.closeIdleConnections()
+            }
+          }
+        })
+        return closing
+      },
     }
-
-    return server
   }
 }
