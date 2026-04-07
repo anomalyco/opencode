@@ -333,17 +333,29 @@ it.live("loop exits when assistant parentID matches user message even with clock
       const sessions = yield* Session.Service
       const chat = yield* sessions.create({ title: "Clock skew test" })
 
-      // Simulate client clock being ahead: create assistant message first (server time),
-      // then create user message with a "future" timestamp that would sort after the assistant
-      const assistantTime = Date.now() - 1000 // 1 second in the past
-      const userTime = Date.now() + 1000 // 1 second in the future
+      // Simulate client clock being ahead: assistant ID sorts before user ID
+      // but assistant.parentID still points to the user message
+      const assistantTime = Date.now() - 1000
+      const userTime = Date.now() + 1000
 
-      // Create assistant message with older timestamp
-      const assistantID = Identifier.create("message", false, assistantTime)
+      // Create user message first (needed for parentID reference)
+      const userID = MessageID.make(Identifier.create("message", false, userTime))
+      const userMsg: MessageV2.User = {
+        id: userID,
+        role: "user",
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        time: { created: userTime },
+      }
+      yield* sessions.updateMessage(userMsg)
+
+      // Create assistant message with older timestamp but parentID = user.id
+      const assistantID = MessageID.make(Identifier.create("message", false, assistantTime))
       const assistant: MessageV2.Assistant = {
-        id: MessageID.make(assistantID),
+        id: assistantID,
         role: "assistant",
-        parentID: MessageID.make(Identifier.create("message", false, userTime)),
+        parentID: userID,
         sessionID: chat.id,
         mode: "build",
         agent: "build",
@@ -356,21 +368,15 @@ it.live("loop exits when assistant parentID matches user message even with clock
         finish: "stop",
       }
       yield* sessions.updateMessage(assistant)
-
-      // Create user message with newer timestamp (simulating client clock ahead)
-      const userID = Identifier.create("message", false, userTime)
-      const userMsg: MessageV2.User = {
-        id: MessageID.make(userID),
-        role: "user",
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        messageID: assistant.id,
         sessionID: chat.id,
-        agent: "build",
-        model: ref,
-        time: { created: userTime },
-      }
-      yield* sessions.updateMessage(userMsg)
+        type: "text",
+        text: "hi there",
+      })
 
-      // The loop should still exit because it checks parentID === user.id,
-      // not ID ordering
+      // The loop should exit because it checks parentID === user.id, not ID ordering
       const result = yield* prompt.loop({ sessionID: chat.id })
       expect(result.info.role).toBe("assistant")
       if (result.info.role === "assistant") expect(result.info.finish).toBe("stop")
