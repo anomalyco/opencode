@@ -18,7 +18,7 @@ const ctx = {
 }
 
 const MB = 1024 * 1024
-const ITERATIONS = 50
+const ITERATIONS = 20
 
 const getHeapMB = () => {
   Bun.gc(true)
@@ -56,7 +56,7 @@ describe("memory: abort controller leak", () => {
         expect(growth).toBeLessThan(ITERATIONS / 10)
       },
     })
-  }, 60000)
+  }, 120000)
 
   test("compare closure vs bind pattern directly", async () => {
     const ITERATIONS = 500

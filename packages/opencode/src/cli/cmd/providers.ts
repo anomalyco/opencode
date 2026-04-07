@@ -418,18 +418,18 @@ export const ProvidersLoginCommand = cmd({
         // Prompt for profile name (unless --profile was provided)
         let profile = args.profile
         if (!profile) {
-          const validateProfile = (input: string) => {
+          const validateProfile = (input: string | undefined) => {
             if (!input) return "Required"
             if (input.length > 20) return "Max 20 characters"
             if (!/^[a-zA-Z0-9_-]+$/.test(input)) return "Letters, numbers, hyphens, underscores only"
             return undefined
           }
-          profile = await prompts.text({
+          const input = await prompts.text({
             message: "Profile name",
             validate: validateProfile,
           })
-          if (prompts.isCancel(profile)) throw new UI.CancelledError()
-          profile = profile!.toLowerCase()
+          if (prompts.isCancel(input)) throw new UI.CancelledError()
+          profile = input.toLowerCase()
         } else {
           // Validate provided profile name
           if (profile.length > 20) {

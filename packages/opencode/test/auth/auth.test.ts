@@ -1,14 +1,14 @@
 import { test, expect } from "bun:test"
 import { Auth } from "../../src/auth"
 
-test("set normalizes trailing slashes and stores as providerID:default", async () => {
+test("set normalizes trailing slashes and stores as providerID", async () => {
   await Auth.set("https://example.com/", {
     type: "wellknown",
     key: "TOKEN",
     token: "abc",
   })
   const data = await Auth.all()
-  expect(data["https://example.com:default"]).toBeDefined()
+  expect(data["https://example.com"]).toBeDefined()
   expect(data["https://example.com/"]).toBeUndefined()
 })
 
@@ -27,51 +27,45 @@ test("set cleans up pre-existing trailing-slash entry", async () => {
   })
   const data = await Auth.all()
   const keys = Object.keys(data).filter((k) => k.includes("example.com"))
-  expect(keys).toEqual(["https://example.com:default"])
-  const entry = data["https://example.com:default"]!
+  expect(keys).toEqual(["https://example.com"])
+  const entry = data["https://example.com"]!
   expect(entry.type).toBe("wellknown")
   if (entry.type === "wellknown") expect(entry.token).toBe("new")
 })
 
 test("remove deletes exact key without normalization", async () => {
-  // Set stores as normalized (providerID:default for bare keys)
   await Auth.set("https://example.com", {
     type: "wellknown",
     key: "TOKEN",
     token: "abc",
   })
   const data = await Auth.all()
-  expect(data["https://example.com:default"]).toBeDefined()
-  // remove deletes exact key passed - so bare key won't delete the :default entry
+  expect(data["https://example.com"]).toBeDefined()
   await Auth.remove("https://example.com")
   const after = await Auth.all()
-  // Exact key "https://example.com" doesn't exist (it was stored as "https://example.com:default")
-  expect(after["https://example.com:default"]).toBeDefined()
+  expect(after["https://example.com"]).toBeUndefined()
 })
 
 test("remove deletes exact key when it exists", async () => {
-  // Set stores as normalized (providerID:default for bare keys)
   await Auth.set("https://example.com", {
     type: "wellknown",
     key: "TOKEN",
     token: "abc",
   })
-  // remove deletes exact key - pass the actual stored key
-  await Auth.remove("https://example.com:default")
+  await Auth.remove("https://example.com")
   const after = await Auth.all()
-  expect(after["https://example.com:default"]).toBeUndefined()
+  expect(after["https://example.com"]).toBeUndefined()
 })
 
 // Phase 1: Multi-profile auth tests
 
-test("normalizeKey stores keys as providerID:default format", async () => {
+test("normalizeKey stores bare provider keys", async () => {
   await Auth.set("openai", {
     type: "api",
     key: "sk-test-openai",
   })
   const data = await Auth.all()
-  expect(data["openai:default"]).toBeDefined()
-  expect(data["openai"]).toBeUndefined()
+  expect(data["openai"]).toBeDefined()
 })
 
 test("get returns credential for normalized key", async () => {
@@ -89,8 +83,6 @@ test("get returns credential for normalized key", async () => {
 test("get falls back to bare key for backward compat", async () => {
   // Inject a bare key directly into the file for backward compat test
   // This simulates old data that wasn't migrated
-  const data = await Auth.all()
-  // @ts-expect-error - directly manipulating internal state for testing
   const file = require("path").join(require("@/global").Global.Path.data, "auth.json")
   const fs = require("fs/promises")
   await fs.writeFile(file, JSON.stringify({ "bare-provider": { type: "api", key: "sk-bare" } }), "utf-8")
@@ -117,10 +109,8 @@ test("remove deletes exact key only", async () => {
     type: "api",
     key: "sk-remove",
   })
-  // Stored as to-remove:default
   expect(await Auth.get("to-remove")).toBeDefined()
-  // Must pass exact key to delete
-  await Auth.remove("to-remove:default")
+  await Auth.remove("to-remove")
   expect(await Auth.get("to-remove")).toBeUndefined()
 })
 
@@ -130,6 +120,6 @@ test("set with trailing slash normalizes correctly", async () => {
     key: "sk-test",
   })
   const data = await Auth.all()
-  expect(data["provider-with-slash:default"]).toBeDefined()
+  expect(data["provider-with-slash"]).toBeDefined()
   expect(data["provider-with-slash/"]).toBeUndefined()
 })
