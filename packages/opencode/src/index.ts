@@ -35,6 +35,7 @@ import { JsonMigration } from "./storage/json-migration"
 import { Database } from "./storage/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
+import { DoctorCommand } from "./cli/cmd/doctor"
 import { Heap } from "./cli/heap"
 
 process.on("unhandledRejection", (e) => {
@@ -169,6 +170,7 @@ const cli = yargs(args)
   .command(PrCommand)
   .command(SessionCommand)
   .command(PluginCommand)
+  .command(DoctorCommand)
   .command(DbCommand)
   .fail((msg, err) => {
     if (
