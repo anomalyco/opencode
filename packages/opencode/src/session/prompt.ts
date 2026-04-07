@@ -1762,6 +1762,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       .object({
         providerID: ProviderID.zod,
         modelID: ModelID.zod,
+        authProfile: z.string().optional(),
       })
       .optional(),
     agent: z.string().optional(),
