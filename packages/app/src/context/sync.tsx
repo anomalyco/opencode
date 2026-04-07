@@ -416,8 +416,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             role: "user",
             time: { created: Date.now() },
             agent: input.agent,
-            model: input.model,
-            variant: input.variant,
+            model: { ...input.model, variant: input.variant },
           }
           const [, setStore] = target()
           setOptimistic(sdk.directory, input.sessionID, { message, parts: input.parts })
