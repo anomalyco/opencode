@@ -21,12 +21,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const sdk = useSDK()
     const toast = useToast()
 
-    function isModelValid(model: { providerID: string; modelID: string }) {
+    function isModelValid(model: { providerID: string; modelID: string; authProfile?: string }) {
       const provider = sync.data.provider.find((x) => x.id === model.providerID)
       return !!provider?.models[model.modelID]
     }
 
-    function getFirstValidModel(...modelFns: (() => { providerID: string; modelID: string } | undefined)[]) {
+    function getFirstValidModel(
+      ...modelFns: (() => { providerID: string; modelID: string; authProfile?: string } | undefined)[]
+    ) {
       for (const modelFn of modelFns) {
         const model = modelFn()
         if (!model) continue
@@ -101,15 +103,18 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           {
             providerID: string
             modelID: string
+            authProfile?: string
           }
         >
         recent: {
           providerID: string
           modelID: string
+          authProfile?: string
         }[]
         favorite: {
           providerID: string
           modelID: string
+          authProfile?: string
         }[]
         variant: Record<string, string | undefined>
       }>({
@@ -153,21 +158,23 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const args = useArgs()
       const fallbackModel = createMemo(() => {
         if (args.model) {
-          const { providerID, modelID } = Provider.parseModel(args.model)
+          const { providerID, modelID, authProfile } = Provider.parseModel(args.model)
           if (isModelValid({ providerID, modelID })) {
             return {
               providerID,
               modelID,
+              authProfile,
             }
           }
         }
 
         if (sync.data.config.model) {
-          const { providerID, modelID } = Provider.parseModel(sync.data.config.model)
+          const { providerID, modelID, authProfile } = Provider.parseModel(sync.data.config.model)
           if (isModelValid({ providerID, modelID })) {
             return {
               providerID,
               modelID,
+              authProfile,
             }
           }
         }
@@ -187,6 +194,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         return {
           providerID: provider.id,
           modelID: model,
+          authProfile: undefined,
         }
       })
 
@@ -218,6 +226,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             return {
               provider: "Connect a provider",
               model: "No provider selected",
+              profile: undefined,
               reasoning: false,
             }
           }
@@ -226,6 +235,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return {
             provider: provider?.name ?? value.providerID,
             model: info?.name ?? value.modelID,
+            profile: value.authProfile,
             reasoning: info?.capabilities?.reasoning ?? false,
           }
         }),
@@ -275,7 +285,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           )
           save()
         },
-        set(model: { providerID: string; modelID: string }, options?: { recent?: boolean }) {
+        set(model: { providerID: string; modelID: string; authProfile?: string }, options?: { recent?: boolean }) {
           batch(() => {
             if (!isModelValid(model)) {
               toast.show({
@@ -291,7 +301,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               if (uniq.length > 10) uniq.pop()
               setModelStore(
                 "recent",
-                uniq.map((x) => ({ providerID: x.providerID, modelID: x.modelID })),
+                uniq.map((x) => ({ providerID: x.providerID, modelID: x.modelID, authProfile: x.authProfile })),
               )
               save()
             }
@@ -392,6 +402,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           model.set({
             providerID: value.model.providerID,
             modelID: value.model.modelID,
+            authProfile: value.model.authProfile,
           })
         else
           toast.show({

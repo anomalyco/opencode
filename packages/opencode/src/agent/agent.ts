@@ -58,7 +58,7 @@ export namespace Agent {
     readonly defaultAgent: () => Effect.Effect<string>
     readonly generate: (input: {
       description: string
-      model?: { providerID: ProviderID; modelID: ModelID }
+      model?: { providerID: ProviderID; modelID: ModelID; authProfile?: string }
     }) => Effect.Effect<{
       identifier: string
       whenToUse: string

@@ -101,8 +101,17 @@ export function Prompt(props: PromptProps) {
   const currentProviderLabel = createMemo(() => {
     const current = local.model.current()
     const provider = local.model.parsed().provider
+    const profile = local.model.parsed().profile
     if (!current) return provider
-    return consoleManagedProviderLabel(sync.data.console_state.consoleManagedProviders, current.providerID, provider)
+    const base = consoleManagedProviderLabel(
+      sync.data.console_state.consoleManagedProviders,
+      current.providerID,
+      provider,
+    )
+    if (profile && profile !== "default") {
+      return `${base}:${profile}`
+    }
+    return base
   })
   const hasRightContent = createMemo(() => Boolean(props.right || activeOrgName()))
 
