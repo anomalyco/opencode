@@ -6,6 +6,7 @@ import type { Provider } from "./provider"
 import type { ModelsDev } from "./models"
 import { iife } from "@/util/iife"
 import { Flag } from "@/flag/flag"
+import { Image } from "@/util/image"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -275,8 +276,87 @@ export namespace ProviderTransform {
     })
   }
 
-  export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
+
+  async function compressImages(msgs: ModelMessage[]): Promise<ModelMessage[]> {
+    const imageError = {
+      type: "text" as const,
+      text: "ERROR: Image could not be processed (file may be corrupted, too large, or in an unsupported format). Inform the user.",
+    }
+
+    const results: ModelMessage[] = []
+    for (const msg of msgs) {
+      if (!Array.isArray(msg.content)) {
+        results.push(msg)
+        continue
+      }
+
+      const parts = await Promise.all(
+        msg.content.map(async (part) => {
+          if (part.type === "image") {
+            const imageStr = part.image.toString()
+            const match = imageStr.match(/^data:([^;]+);base64,(.+)$/)
+            if (match && match[2] && Image.needsCompression(match[2])) {
+              const compressed = await Image.compress({
+                data: match[2],
+                mime: match[1],
+                allowFormatChange: true,
+              }).catch(() => undefined)
+              if (compressed)
+                return {
+                  ...part,
+                  image: new URL(`data:${compressed.mime};base64,${compressed.data}`),
+                }
+              return imageError
+            }
+          }
+          if (part.type === "file" && part.mediaType.startsWith("image/")) {
+            const raw = part.data
+            if (raw instanceof Uint8Array || raw instanceof ArrayBuffer || Buffer.isBuffer(raw)) {
+              const buf = Buffer.isBuffer(raw) ? raw : Buffer.from(raw as ArrayBuffer)
+              const data = buf.toString("base64")
+              if (Image.needsCompression(data)) {
+                const compressed = await Image.compress({
+                  data,
+                  mime: part.mediaType,
+                  allowFormatChange: true,
+                }).catch(() => undefined)
+                if (compressed)
+                  return {
+                    ...part,
+                    mediaType: compressed.mime,
+                    data: Buffer.from(compressed.data, "base64"),
+                  }
+                return imageError
+              }
+            } else if (typeof raw === "string") {
+              if (Image.needsCompression(raw)) {
+                const compressed = await Image.compress({
+                  data: raw,
+                  mime: part.mediaType,
+                  allowFormatChange: true,
+                }).catch(() => undefined)
+                if (compressed)
+                  return {
+                    ...part,
+                    mediaType: compressed.mime,
+                    data: Buffer.from(compressed.data, "base64"),
+                  }
+                return imageError
+              }
+            }
+          }
+          return part
+        }),
+      )
+
+      results.push({ ...msg, content: parts } as ModelMessage)
+    }
+    return results
+  }
+
+  export async function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
     msgs = unsupportedParts(msgs, model)
+    msgs = await compressImages(msgs)
     msgs = normalizeMessages(msgs, model, options)
     if (
       (model.providerID === "anthropic" ||

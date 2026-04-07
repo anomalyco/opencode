@@ -12,6 +12,7 @@ import DESCRIPTION from "./read.txt"
 import { Instance } from "../project/instance"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { Instruction } from "../session/instruction"
+import { Image } from "../util/image"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -153,6 +154,22 @@ export const ReadTool = Tool.defineEffect(
       const isImage = mime.startsWith("image/") && mime !== "image/svg+xml" && mime !== "image/vnd.fastbidsheet"
       const isPdf = mime === "application/pdf"
       if (isImage || isPdf) {
+        const raw = Buffer.from(yield* fs.readFile(filepath))
+        let finalMime = mime
+        let base64 = raw.toString("base64")
+
+        if (isImage) {
+          const validated = yield* Effect.tryPromise({
+            try: () => Image.optimizeForUpload({ data: base64, mime }),
+            catch: () =>
+              new Error(
+                `Cannot read image: ${filepath} (file may be corrupted or in an unsupported format)`,
+              ),
+          })
+          finalMime = validated.mime
+          base64 = validated.data
+        }
+
         const msg = `${isImage ? "Image" : "PDF"} read successfully`
         return {
           title,
@@ -165,8 +182,8 @@ export const ReadTool = Tool.defineEffect(
           attachments: [
             {
               type: "file" as const,
-              mime,
-              url: `data:${mime};base64,${Buffer.from(yield* fs.readFile(filepath)).toString("base64")}`,
+              mime: finalMime,
+              url: `data:${finalMime};base64,${base64}`,
             },
           ],
         }
