@@ -1,0 +1,18 @@
+Task 6 write metrics verification
+================================
+
+Command:
+  bun test test/storage/write-metrics.test.ts
+
+Result:
+  1 pass
+  0 fail
+  8 expect() calls
+
+Observed by the test:
+  Database.monitor() emitted db.metrics with the planned keys:
+    db.global.writes
+    db.global.retries
+    db.global.busy_errors
+  Metric values matched Database.stats() for write/retry/exhausted counters
+  Shard-local writes did not inflate the global write metric

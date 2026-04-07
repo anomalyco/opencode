@@ -1,0 +1,17 @@
+Task 4 shard no-retry verification
+=================================
+
+Command:
+  bun test test/storage/retry.test.ts -t "shard transactions skip global retry overhead"
+
+Result:
+  1 pass
+  2 filtered out
+  0 fail
+  9 expect() calls
+
+Observed by the test:
+  shard transaction failed with SQLITE_BUSY under lock contention
+  global retry counters stayed at { write: 0, retry: 0, exhausted: 0 }
+  stderr did not contain sqlite.busy.retry or sqlite.busy.exhausted
+  shard writes still bypass the global retry wrapper

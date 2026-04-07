@@ -1,0 +1,72 @@
+TASK 3: Verify Sibling Vendor Matches Source
+==============================================
+
+OBJECTIVE:
+Compare the vendored dist (packages/opencode-postgres-sync/dist/) against a fresh build 
+of the sibling source (/home/ubuntu/opencode/opencode-postgres-sync/), update if needed.
+
+EXECUTION:
+----------
+
+1. SIBLING REPO TESTS
+   Location: /home/ubuntu/opencode/opencode-postgres-sync
+   Command: bun test
+   Result: ✓ PASS
+   Output:
+     30 pass
+     0 fail
+     80 expect() calls
+     Ran 30 tests across 8 files. [2.91s]
+
+2. SIBLING REPO BUILD
+   Location: /home/ubuntu/opencode/opencode-postgres-sync
+   Command: bun run build
+   Result: ✓ PASS (tsc completed without errors)
+
+3. DIFF ANALYSIS
+   Command: diff -r /home/ubuntu/opencode/opencode-postgres-sync/dist /home/ubuntu/opencode/db/packages/opencode-postgres-sync/dist
+   
+   DIFFERENCES FOUND (27 lines of diff):
+   - index.js: 2 changes (backfill error handling, timeout wrapper)
+   - local.js: 25 changes (query optimization, pagination, async batching)
+   
+   Key changes in fresh build:
+   a) index.js line 112: Added .catch() error handler for backfill
+   b) index.js line 114: Added timeout wrapper for sync
+   c) local.js lines 176-177: Added LIMIT 5000 to query
+   d) local.js lines 206-211: Refactored loop with async batching (yield every 500 rows)
+   e) local.js lines 243-244: Changed ORDER BY from time_updated DESC to id
+
+4. VENDOR UPDATE
+   Command: cp -v /home/ubuntu/opencode/opencode-postgres-sync/dist/* /home/ubuntu/opencode/db/packages/opencode-postgres-sync/dist/
+   Result: ✓ SUCCESS
+   Files copied: 28 files (all .js, .d.ts, .test.* files)
+
+5. VERIFICATION AFTER UPDATE
+   Command: diff -r /home/ubuntu/opencode/opencode-postgres-sync/dist /home/ubuntu/opencode/db/packages/opencode-postgres-sync/dist
+   Result: ✓ NO DIFFERENCES (vendor now matches fresh build)
+
+SUMMARY:
+--------
+✓ Sibling tests: PASS (30/30)
+✓ Sibling build: PASS
+✓ Vendor was outdated: YES (27 lines of diff)
+✓ Vendor updated: YES (28 files copied)
+✓ Vendor now matches source: YES (verified with diff)
+
+CHANGES MADE:
+- packages/opencode-postgres-sync/dist/index.js (updated)
+- packages/opencode-postgres-sync/dist/local.js (updated)
+- All other .js and .d.ts files in dist/ (updated to match fresh build)
+
+IMPACT:
+The vendored dist now includes bug fixes from the sibling repo:
+- Better error handling in backfill
+- Query optimization with pagination limit
+- Async batching to prevent blocking on large result sets
+- Improved query ordering
+
+These fixes are critical for the sharding implementation to work correctly.
+
+VERDICT: ✓ TASK 3 COMPLETE
+Vendor is now current and matches the sibling source build.

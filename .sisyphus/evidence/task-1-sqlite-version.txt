@@ -1,0 +1,21 @@
+Task 1 sqlite version verification
+=================================
+
+Command:
+  bun -e 'import { Database } from "bun:sqlite"; const db = new Database(":memory:"); console.log(JSON.stringify(db.query("SELECT sqlite_version()").get()))'
+
+Output:
+  {"sqlite_version()":"3.51.2"}
+
+Startup probe:
+  OPENCODE_DB=/tmp/opencode-wave1-startup.db bun -e 'import { Database } from "./src/storage/db"; Database.Client()'
+
+Observed logs:
+  INFO service=db path=/tmp/opencode-wave1-startup.db opening database
+  INFO service=db version=3.51.2 sqlite version
+  WARN service=db version=3.51.2 SQLite < 3.51.3 — WAL-reset race possible
+  INFO service=db count=11 mode=dev applying migrations
+
+Conclusion:
+  Bun currently bundles SQLite 3.51.2 on this machine.
+  The branch now checks and logs the version at startup and warns when it is below 3.51.3.

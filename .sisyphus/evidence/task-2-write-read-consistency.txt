@@ -1,0 +1,7 @@
+scenario: sharded message write-read consistency
+session: ses_29136a2b3ffeiTD1ulQ3Fjzqrw
+message: msg_d6ec95d6a001HACQX4w3MceRbx
+parts: 1
+read_text: immediate shard read
+shard_message: msg_d6ec95d6a001HACQX4w3MceRbx
+global_message: missing

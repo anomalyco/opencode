@@ -1,0 +1,7 @@
+scenario: soak
+target_ms: 300000
+elapsed_ms: 305037
+rounds: 21
+global_stats: {"count":47040,"min":0.759,"p50":2.109,"p95":105.577,"p99":530.916,"max":3091.411}
+shard_stats: {"count":21000,"min":0.854,"p50":1.732,"p95":7.917,"p99":16.369,"max":301.99}
+wal_max_bytes: 36457912

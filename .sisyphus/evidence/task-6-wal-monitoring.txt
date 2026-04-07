@@ -1,0 +1,15 @@
+Task 6 WAL monitoring verification
+================================
+
+Command:
+  bun test test/storage/wal-monitoring.test.ts
+
+Result:
+  1 pass
+  0 fail
+  3 expect() calls
+
+Observed by the test:
+  Database.monitor() saw a real file-backed WAL and returned wal_bytes > 0
+  stderr contained wal.size logging
+  stderr contained db.metrics logging from the same monitor path

@@ -1,0 +1,7 @@
+scenario: cold-cache recovery
+session: ses_29136a410ffeIPMmUbY08Wd0NL
+message: msg_d6ec95c08001j8N5mXqwfFREqP
+file: /tmp/opencode-test-data-3367373/share/opencode/sessions/ses_29136a410ffeIPMmUbY08Wd0NL.db
+has_session: true
+shard_message: msg_d6ec95c08001j8N5mXqwfFREqP
+global_message: missing

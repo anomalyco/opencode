@@ -1,0 +1,14 @@
+Task 6 checkpoint monitoring verification
+=======================================
+
+Command:
+  bun test test/storage/checkpoint-monitoring.test.ts
+
+Result:
+  1 pass
+  0 fail
+  5 expect() calls
+
+Observed by the test:
+  Database.monitor() returned checkpoint payload with blocked, wal_pages, checkpointed_pages
+  stderr contained either wal.checkpoint.complete or wal.checkpoint.incomplete from the monitor path

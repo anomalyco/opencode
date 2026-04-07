@@ -59,6 +59,13 @@ export namespace Database {
   type Journal = { sql: string; timestamp: number; name: string }[]
 
   const limit = 50
+  const retry = [50, 200, 800]
+  const count = {
+    write: 0,
+    retry: 0,
+    exhausted: 0,
+  }
+  const buf = new Int32Array(new SharedArrayBuffer(4))
 
   const cache = new Map<string, Entry>()
 
@@ -141,13 +148,34 @@ export namespace Database {
     return sql.sort((a, b) => a.timestamp - b.timestamp)
   }
 
-  function pragma(db: Client) {
+  function pragma(db: Client, isGlobal: boolean = false) {
     db.run("PRAGMA journal_mode = WAL")
     db.run("PRAGMA synchronous = NORMAL")
-    db.run("PRAGMA busy_timeout = 5000")
+    const timeout = isGlobal ? 10000 : 5000
+    db.run(`PRAGMA busy_timeout = ${timeout}`)
     db.run("PRAGMA cache_size = -64000")
     db.run("PRAGMA foreign_keys = ON")
+    db.run("PRAGMA mmap_size = 134217728")
+    db.run("PRAGMA temp_store = MEMORY")
     db.run("PRAGMA wal_checkpoint(PASSIVE)")
+  }
+
+  function wait(ms: number) {
+    if (ms <= 0) return
+    Atomics.wait(buf, 0, 0, ms)
+  }
+
+  function backoff(ms: number) {
+    return Math.round(ms * (0.75 + Math.random() * 0.5))
+  }
+
+  function busy(err: unknown) {
+    if (!(err instanceof Error)) return
+    const code = "code" in err && typeof err.code === "string" ? err.code : undefined
+    if (code?.startsWith("SQLITE_BUSY")) return code
+    if (err.message.includes("SQLITE_BUSY_SNAPSHOT")) return "SQLITE_BUSY_SNAPSHOT"
+    if (err.message.includes("SQLITE_BUSY_RECOVERY")) return "SQLITE_BUSY_RECOVERY"
+    if (err.message.includes("SQLITE_BUSY") || err.message.includes("database is locked")) return "SQLITE_BUSY"
   }
 
   function evict() {
@@ -161,6 +189,70 @@ export namespace Database {
   }
 
   const idle = 5 * 60_000
+  function metrics() {
+    return {
+      "db.global.writes": count.write,
+      "db.global.retries": count.retry,
+      "db.global.busy_errors": count.exhausted,
+    }
+  }
+
+  export function monitor() {
+    try {
+      const result = {
+        wal_bytes: 0,
+        checkpoint: undefined as
+          | {
+              blocked: number
+              wal_pages: number
+              checkpointed_pages: number
+            }
+          | undefined,
+        metrics: metrics(),
+      }
+      if (!Path.endsWith(":memory:")) {
+        const db = Client()
+        const file = `${Path}-wal`
+        if (existsSync(file)) {
+          const bytes = Bun.file(file).size
+          const mb = (bytes / (1024 * 1024)).toFixed(2)
+          result.wal_bytes = bytes
+          if (bytes > 50 * 1024 * 1024) {
+            log.warn("wal.size.large", { bytes, mb })
+          } else {
+            log.info("wal.size", { bytes, mb })
+          }
+        }
+        const checkpoint = db.$client.query("PRAGMA wal_checkpoint(PASSIVE)").get() as {
+          busy: number
+          log: number
+          checkpointed: number
+        } | null
+        if (checkpoint) {
+          result.checkpoint = {
+            blocked: checkpoint.busy,
+            wal_pages: checkpoint.log,
+            checkpointed_pages: checkpoint.checkpointed,
+          }
+          if (checkpoint.log > checkpoint.checkpointed) {
+            log.warn("wal.checkpoint.incomplete", result.checkpoint)
+          } else {
+            log.info("wal.checkpoint.complete", result.checkpoint)
+          }
+        }
+      }
+      log.info("db.metrics", result.metrics)
+      return result
+    } catch (err) {
+      log.warn("wal.monitoring.error", { error: err })
+      return {
+        wal_bytes: 0,
+        checkpoint: undefined,
+        metrics: metrics(),
+      }
+    }
+  }
+
   const sweep = setInterval(() => {
     const cutoff = Date.now() - idle
     for (const [id, item] of cache) {
@@ -169,6 +261,7 @@ export namespace Database {
         cache.delete(id)
       }
     }
+    monitor()
   }, 60_000)
   if (typeof sweep === "object" && "unref" in sweep) sweep.unref()
 
@@ -176,8 +269,15 @@ export namespace Database {
     log.info("opening database", { path: Path })
 
     const db = init(Path)
+    const versionRow = db.$client.query("SELECT sqlite_version()").get() as Record<string, string>
+    const version = versionRow ? Object.values(versionRow)[0] : "unknown"
+    log.info("sqlite version", { version })
+    const [major, minor, patch] = version.split(".").map(Number)
+    if (major < 3 || (major === 3 && minor < 51) || (major === 3 && minor === 51 && patch < 3)) {
+      log.warn("SQLite < 3.51.3 — WAL-reset race possible", { version })
+    }
 
-    pragma(db)
+    pragma(db, true)
 
     // Apply schema migrations
     const entries =
@@ -220,7 +320,7 @@ export namespace Database {
     const file = path.join(sessionDir, id + ".db")
     const fresh = !existsSync(file)
     const db = init(file)
-    pragma(db)
+    pragma(db, false)
 
     if (fresh) {
       for (const sql of schema) db.run(sql)
@@ -295,6 +395,10 @@ export namespace Database {
     Client.reset()
   }
 
+  export function stats() {
+    return { ...count }
+  }
+
   export type TxOrDb = Transaction | Client
 
   const ctx = Context.create<{
@@ -337,11 +441,31 @@ export namespace Database {
       return callback(ctx.use().tx)
     } catch (err) {
       if (err instanceof Context.NotFound) {
-        const effects: (() => void | Promise<void>)[] = []
-        const txCallback = InstanceState.bind((tx: TxOrDb) => ctx.provide({ tx, effects }, () => callback(tx)))
-        const result = Client().transaction(txCallback, { behavior: options?.behavior })
-        for (const effect of effects) effect()
-        return result as NotPromise<T>
+        count.write += 1
+        let first: unknown
+        for (let i = 0; i <= retry.length; i++) {
+          const effects: (() => void | Promise<void>)[] = []
+          const txCallback = InstanceState.bind((tx: TxOrDb) => ctx.provide({ tx, effects }, () => callback(tx)))
+          try {
+            const result = Client().transaction(txCallback, { behavior: options?.behavior })
+            for (const effect of effects) effect()
+            return result as NotPromise<T>
+          } catch (err) {
+            const type = busy(err)
+            if (!type) throw err
+            first ??= err
+            const base = retry[i]
+            if (base === undefined) {
+              count.exhausted += 1
+              log.warn("sqlite.busy.exhausted", { attempt: i + 1, type, aggregate: stats() })
+              throw first
+            }
+            const delay = backoff(base)
+            count.retry += 1
+            log.warn("sqlite.busy.retry", { attempt: i + 1, delay, type, aggregate: stats() })
+            wait(delay)
+          }
+        }
       }
       throw err
     }

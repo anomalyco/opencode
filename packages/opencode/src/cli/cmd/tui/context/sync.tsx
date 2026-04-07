@@ -104,7 +104,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       mcp_resource: {},
       formatter: [],
       vcs: undefined,
-      path: { state: "", config: "", worktree: "", directory: "" },
+      path: { home: "", state: "", config: "", worktree: "", directory: "" },
       workspaceList: [],
     })
 

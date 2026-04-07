@@ -1,0 +1,25 @@
+Task 1 pragma verification
+==========================
+
+Command:
+  bun test test/storage/pragma.test.ts
+
+Result:
+  9 pass
+  0 fail
+  9 expect() calls
+
+Verified configuration:
+  global busy_timeout = 10000
+  shard busy_timeout = 5000
+  global mmap_size = 134217728
+  shard mmap_size = 134217728
+  global temp_store = 2 (MEMORY)
+  shard temp_store = 2 (MEMORY)
+  global journal_mode = wal
+  global synchronous = 1 (NORMAL)
+  global foreign_keys = 1 (ON)
+
+Files:
+  packages/opencode/src/storage/db.ts
+  packages/opencode/test/storage/pragma.test.ts

@@ -1,0 +1,17 @@
+Task 4 retry backoff verification
+================================
+
+Command:
+  bun test test/storage/retry.test.ts -t "retries global transactions with backoff and jitter"
+
+Result:
+  1 pass
+  2 filtered out
+  0 fail
+  14 expect() calls
+
+Observed by the test:
+  global Database.transaction() retried SQLITE_BUSY with synchronous backoff+jitter
+  retry counters = { write: 1, retry: 2, exhausted: 0 }
+  stderr contained sqlite.busy.retry and did not contain sqlite.busy.exhausted
+  logged delays stayed within the asserted jitter windows for the 50ms and 200ms retry tiers

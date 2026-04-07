@@ -419,8 +419,8 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
               const tokens = await refreshAccessToken(currentAuth.refresh)
               const newAccountId = extractAccountId(tokens) || authWithAccount.accountId
               await input.client.auth.set({
-                path: { id: "openai" },
-                body: {
+                providerID: "openai",
+                auth: {
                   type: "oauth",
                   refresh: tokens.refresh_token,
                   access: tokens.access_token,
@@ -436,7 +436,9 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
             const headers = new Headers()
             if (init?.headers) {
               if (init.headers instanceof Headers) {
-                init.headers.forEach((value, key) => headers.set(key, value))
+                init.headers.forEach((value, key) => {
+                  headers.set(key, value)
+                })
               } else if (Array.isArray(init.headers)) {
                 for (const [key, value] of init.headers) {
                   if (value !== undefined) headers.set(key, String(value))

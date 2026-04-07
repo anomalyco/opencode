@@ -326,34 +326,24 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
 
       const parts = await sdk.session
         .message({
-          path: {
-            id: incoming.message.sessionID,
-            messageID: incoming.message.id,
-          },
-          query: {
-            directory: input.directory,
-          },
-          throwOnError: true,
+          sessionID: incoming.message.sessionID,
+          messageID: incoming.message.id,
+          directory: input.directory,
         })
         .catch(() => undefined)
 
-      if (parts?.data.parts?.some((part) => part.type === "compaction")) {
+      if (parts?.data?.parts?.some((part) => part.type === "compaction")) {
         output.headers["x-initiator"] = "agent"
         return
       }
 
       const session = await sdk.session
         .get({
-          path: {
-            id: incoming.sessionID,
-          },
-          query: {
-            directory: input.directory,
-          },
-          throwOnError: true,
+          sessionID: incoming.sessionID,
+          directory: input.directory,
         })
         .catch(() => undefined)
-      if (!session || !session.data.parentID) return
+      if (!session?.data?.parentID) return
       // mark subagent sessions as agent initiated matching standard that other copilot tools have
       output.headers["x-initiator"] = "agent"
     },

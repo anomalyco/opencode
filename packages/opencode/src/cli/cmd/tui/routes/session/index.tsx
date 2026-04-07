@@ -261,7 +261,7 @@ export function Session() {
         if (!message) return false
 
         // Check if message has valid non-synthetic, non-ignored text parts
-        const parts = sync.data.part[message.id]
+        const parts = sync.data.part[message.id] ?? []
         if (!parts || !Array.isArray(parts)) return false
 
         return parts.some((part) => part && part.type === "text" && !part.synthetic && !part.ignored)
@@ -547,7 +547,7 @@ export function Session() {
             toBottom()
           })
         const parts = sync.data.part[message.id]
-        prompt.set(
+        prompt?.set(
           parts.reduce(
             (agg, part) => {
               if (part.type === "text") {

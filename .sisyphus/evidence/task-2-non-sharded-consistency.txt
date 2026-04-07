@@ -1,0 +1,6 @@
+scenario: non-sharded session uses global db
+session: ses_29136a266ffeRuvovyk7L2MUGC
+message: msg_d6ec95db6001FFXNb5IVdlpoXs
+shard_file: false
+has_session: false
+global_message: msg_d6ec95db6001FFXNb5IVdlpoXs

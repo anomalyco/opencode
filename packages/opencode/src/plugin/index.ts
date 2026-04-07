@@ -111,6 +111,12 @@ export namespace Plugin {
 
           const { Server } = yield* Effect.promise(() => import("../server/server"))
 
+          const fetcher = Object.assign(
+            (input: URL | RequestInfo, init?: BunFetchRequestInit | RequestInit) =>
+              Promise.resolve(Server.Default().fetch(input instanceof Request ? input : new Request(input, init))),
+            { preconnect: fetch.preconnect },
+          ) satisfies typeof fetch
+
           const client = createOpencodeClient({
             baseUrl: "http://localhost:4096",
             directory: ctx.directory,
@@ -119,7 +125,7 @@ export namespace Plugin {
                   Authorization: `Basic ${Buffer.from(`${Flag.OPENCODE_SERVER_USERNAME ?? "opencode"}:${Flag.OPENCODE_SERVER_PASSWORD}`).toString("base64")}`,
                 }
               : undefined,
-            fetch: async (...args) => Server.Default().fetch(...args),
+            fetch: fetcher,
           })
           const cfg = yield* config.get()
           const input: PluginInput = {

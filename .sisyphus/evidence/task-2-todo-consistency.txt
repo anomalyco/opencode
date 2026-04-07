@@ -1,0 +1,5 @@
+scenario: todo write-read consistency
+session: ses_29136a28cffeuVeA0okrWbDDl2
+todos: [{"content":"one","status":"pending","priority":"high"},{"content":"two","status":"completed","priority":"low"}]
+shard_rows: 2
+global_rows: 0
