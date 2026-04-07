@@ -146,29 +146,17 @@ const accountErrorFromCause = (cause: unknown, message: string): AccountError =>
   }
 
   if (HttpClientError.isHttpClientError(cause)) {
-    return accountErrorFromHttpClientError(cause, message)
+    switch (cause.reason._tag) {
+      case "TransportError": {
+        return AccountTransportError.fromHttpClientError(cause.reason)
+      }
+      default: {
+        return new AccountServiceError({ message, cause })
+      }
+    }
   }
 
   return new AccountServiceError({ message, cause })
-}
-
-const accountErrorFromHttpClientError = (
-  error: HttpClientError.HttpClientError,
-  message: string,
-): AccountError => {
-  switch (error.reason._tag) {
-    case "TransportError": {
-      return new AccountTransportError({
-        method: error.request.method,
-        url: error.request.url,
-        description: error.reason.description,
-        cause: error.reason.cause,
-      })
-    }
-    default: {
-      return new AccountServiceError({ message, cause: error })
-    }
-  }
 }
 
 export namespace Account {

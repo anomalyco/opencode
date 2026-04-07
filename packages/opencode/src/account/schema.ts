@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import type * as HttpClientError from "effect/unstable/http/HttpClientError"
 
 import { withStatics } from "@/util/schema"
 
@@ -65,7 +66,16 @@ export class AccountTransportError extends Schema.TaggedErrorClass<AccountTransp
   url: Schema.String,
   description: Schema.optional(Schema.String),
   cause: Schema.optional(Schema.Defect),
-}) {}
+}) {
+  static fromHttpClientError(error: HttpClientError.TransportError): AccountTransportError {
+    return new AccountTransportError({
+      method: error.request.method,
+      url: error.request.url,
+      description: error.description,
+      cause: error.cause,
+    })
+  }
+}
 
 export type AccountError = AccountRepoError | AccountServiceError | AccountTransportError
 
