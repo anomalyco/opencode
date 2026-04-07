@@ -94,7 +94,9 @@ export namespace LLM {
       Provider.getLanguage(input.model),
       Config.get(),
       Provider.getProvider(input.model.providerID),
-      Auth.get(input.model.providerID),
+      Auth.get(
+        input.model.authProfile ? `${input.model.providerID}:${input.model.authProfile}` : input.model.providerID,
+      ),
     ])
     // TODO: move this to a proper hook
     const isOpenaiOauth = provider.id === "openai" && auth?.type === "oauth"

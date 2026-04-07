@@ -659,6 +659,7 @@ export namespace ACP {
           this.sessionManager.setModel(sessionId, {
             providerID: ProviderID.make(lastUser.model.providerID),
             modelID: ModelID.make(lastUser.model.modelID),
+            authProfile: (lastUser.model as { authProfile?: string }).authProfile,
           })
           if (result.modes?.availableModes.some((m) => m.id === lastUser.agent)) {
             result.modes.currentModeId = lastUser.agent

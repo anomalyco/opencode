@@ -761,7 +761,11 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           time: { created: Date.now() },
           role: "user",
           agent: input.agent,
-          model: { providerID: model.providerID, modelID: model.modelID },
+          model: {
+            providerID: model.providerID,
+            modelID: model.modelID,
+            authProfile: (model as { authProfile?: string }).authProfile,
+          },
         }
         yield* sessions.updateMessage(userMsg)
         const userPart: MessageV2.Part = {
