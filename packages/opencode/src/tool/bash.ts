@@ -339,6 +339,7 @@ async function run(
     env: NodeJS.ProcessEnv
     timeout: number
     description: string
+    raw?: boolean
   },
   ctx: Tool.Context,
 ) {
@@ -378,13 +379,23 @@ async function run(
         return Effect.sync(() => ctx.abort.removeEventListener("abort", handler))
       })
 
-      const timeout = Effect.sleep(`${input.timeout + 100} millis`)
-
-      const exit = yield* Effect.raceAll([
-        handle.exitCode.pipe(Effect.map((code) => ({ kind: "exit" as const, code }))),
+      // timeout === 0 means no timeout (scripts with plugin callbacks can run indefinitely)
+      const races: Effect.Effect<{ kind: "exit" | "abort" | "timeout"; code: number | null }>[] = [
+        handle.exitCode.pipe(
+          Effect.map((code) => ({ kind: "exit" as const, code })),
+          Effect.orElseSucceed(() => ({ kind: "exit" as const, code: -1 })),
+        ),
         abort.pipe(Effect.map(() => ({ kind: "abort" as const, code: null }))),
-        timeout.pipe(Effect.map(() => ({ kind: "timeout" as const, code: null }))),
-      ])
+      ]
+      if (input.timeout > 0) {
+        races.push(
+          Effect.sleep(`${input.timeout + 100} millis`).pipe(
+            Effect.map(() => ({ kind: "timeout" as const, code: null })),
+          ),
+        )
+      }
+
+      const exit = yield* Effect.raceAll(races)
 
       if (exit.kind === "abort") {
         aborted = true
@@ -419,6 +430,8 @@ async function run(
       output: preview(output),
       exit: code,
       description: input.description,
+      // Signal Tool.wrap to skip truncation for unbounded plugin commands
+      ...(input.raw && { truncated: false }),
     },
     output,
   }
@@ -461,6 +474,10 @@ export const BashTool = Tool.define("bash", async () => {
       : "If the commands depend on each other and must run sequentially, use a single Bash call with '&&' to chain them together (e.g., `git add . && git commit -m \"message\" && git push`). For instance, if one operation must complete before another starts (like mkdir before cp, Write before Bash for git operations, or git add before git commit), run these operations sequentially instead."
   log.info("bash tool using shell", { shell })
 
+  // Collect command names from plugins that need no-timeout (e.g., CLI binaries that
+  // call back into the AI — their scripts can run indefinitely). Cached at init.
+  const exempt = new Set((await Plugin.trigger("bash.commands", {}, { noTimeout: [] as string[] })).noTimeout)
+
   return {
     description: DESCRIPTION.replaceAll("${directory}", Instance.directory)
       .replaceAll("${os}", process.platform)
@@ -474,12 +491,22 @@ export const BashTool = Tool.define("bash", async () => {
       if (params.timeout !== undefined && params.timeout < 0) {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
-      const timeout = params.timeout ?? DEFAULT_TIMEOUT
       const ps = PS.has(name)
       const root = await parse(params.command, ps)
       const scan = await collect(root, cwd, ps, shell)
       if (!Instance.containsPath(cwd)) scan.dirs.add(cwd)
       await ask(ctx, scan)
+
+      // Plugin-registered commands that trigger long-running callbacks need no timeout.
+      // The bash.commands hook lets plugins declare which command names should disable
+      // the timeout (e.g., a plugin shipping a CLI binary that calls back into the AI).
+      const unbounded =
+        exempt.size > 0 &&
+        commands(root).some((node) => {
+          const bin = node.childForFieldName("name") ?? node.firstChild
+          return bin !== null && exempt.has(bin.text)
+        })
+      const timeout = unbounded ? 0 : (params.timeout ?? DEFAULT_TIMEOUT)
 
       return run(
         {
@@ -490,6 +517,7 @@ export const BashTool = Tool.define("bash", async () => {
           env: await shellEnv(ctx, cwd),
           timeout,
           description: params.description,
+          raw: unbounded,
         },
         ctx,
       )

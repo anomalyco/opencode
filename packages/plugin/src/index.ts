@@ -237,6 +237,13 @@ export interface Hooks {
     input: { cwd: string; sessionID?: string; callID?: string },
     output: { env: Record<string, string> },
   ) => Promise<void>
+  /**
+   * Register command names that should disable bash timeout.
+   * Plugins shipping CLI binaries that call back into OpenCode should
+   * register their command names here so scripts using them can run
+   * indefinitely instead of being killed after the default 2-minute timeout.
+   */
+  "bash.commands"?: (input: {}, output: { noTimeout: string[] }) => Promise<void>
   "tool.execute.after"?: (
     input: { tool: string; sessionID: string; callID: string; args: any },
     output: {
