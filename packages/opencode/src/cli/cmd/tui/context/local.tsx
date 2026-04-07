@@ -1,5 +1,5 @@
 import { createStore } from "solid-js/store"
-import { batch, createEffect, createMemo } from "solid-js"
+import { batch, createEffect, createMemo, createResource } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
 import { uniqueBy } from "remeda"
@@ -9,6 +9,7 @@ import { iife } from "@/util/iife"
 import { createSimpleContext } from "./helper"
 import { useToast } from "../ui/toast"
 import { Provider } from "@/provider/provider"
+import { Auth } from "@/auth"
 import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
@@ -208,6 +209,20 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           ) ?? undefined
         )
       })
+      const [auths] = createResource(async () => Auth.all())
+
+      const inferredProfile = (providerID: string) => {
+        const data = auths()
+        if (!data) return undefined
+        if (providerID in data) return undefined
+        if (`${providerID}:default` in data) return "default"
+        const prefix = `${providerID}:`
+        const profiles = Object.keys(data)
+          .filter((key) => key.startsWith(prefix))
+          .map((key) => key.slice(prefix.length))
+          .sort()
+        return profiles[0]
+      }
 
       return {
         current: currentModel,
@@ -232,10 +247,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
           const provider = sync.data.provider.find((x) => x.id === value.providerID)
           const info = provider?.models[value.modelID]
+          const profile = value.authProfile ?? inferredProfile(value.providerID)
           return {
             provider: provider?.name ?? value.providerID,
             model: info?.name ?? value.modelID,
-            profile: value.authProfile,
+            profile,
             reasoning: info?.capabilities?.reasoning ?? false,
           }
         }),

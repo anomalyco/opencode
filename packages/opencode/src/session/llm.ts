@@ -90,16 +90,29 @@ export namespace LLM {
       modelID: input.model.id,
       providerID: input.model.providerID,
     })
-    const authKey = input.model.authProfile
-      ? `${input.model.providerID}:${input.model.authProfile}`
-      : input.model.providerID
-    const [cfg, provider, auth] = await Promise.all([
+    const [cfg, provider, auths] = await Promise.all([
       Config.get(),
       Provider.getProvider(input.model.providerID),
-      Auth.get(authKey),
+      Auth.all(),
     ])
+    const chooseProfile = () => {
+      if (input.model.authProfile) return input.model.authProfile
+      if (input.model.providerID in auths) return undefined
+      if (`${input.model.providerID}:default` in auths) return "default"
+      const prefix = `${input.model.providerID}:`
+      const profiles = Object.keys(auths)
+        .filter((key) => key.startsWith(prefix))
+        .map((key) => key.slice(prefix.length))
+        .sort()
+      if (profiles.length === 0) return undefined
+      return profiles[0]
+    }
+    const profile = chooseProfile()
+    const authKey = profile ? `${input.model.providerID}:${profile}` : input.model.providerID
+    const auth = auths[authKey]
     const runtimeModel = {
       ...input.model,
+      ...(profile ? { authProfile: profile } : {}),
       options:
         auth?.type === "api"
           ? mergeDeep(input.model.options, { apiKey: auth.key })
