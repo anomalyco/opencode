@@ -1,6 +1,7 @@
 import { describeRoute, resolver, validator } from "hono-openapi"
 import { Hono } from "hono"
 import { proxy } from "hono/proxy"
+import type { UpgradeWebSocket } from "hono/ws"
 import z from "zod"
 import { createHash } from "node:crypto"
 import { Log } from "../util/log"
@@ -41,11 +42,11 @@ const DEFAULT_CSP =
 const csp = (hash = "") =>
   `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:`
 
-export const InstanceRoutes = (app?: Hono) =>
-  (app ?? new Hono())
+export const InstanceRoutes = (upgrade: UpgradeWebSocket, app: Hono = new Hono()) =>
+  app
     .onError(errorHandler(log))
     .route("/project", ProjectRoutes())
-    .route("/pty", PtyRoutes())
+    .route("/pty", PtyRoutes(upgrade))
     .route("/config", ConfigRoutes())
     .route("/experimental", ExperimentalRoutes())
     .route("/session", SessionRoutes())
