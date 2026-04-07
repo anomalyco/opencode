@@ -6,6 +6,16 @@ import { TuiConfig } from "@/config/tui"
 import { Instance } from "@/project/instance"
 import { existsSync } from "fs"
 
+function resetTerminal() {
+  if (!process.stdout.isTTY) return
+  process.stdout.write(
+    "\x1b[0m" +    // reset all attributes (colors, bold, etc.)
+    "\x1b[?25h" +  // show cursor
+    "\x1b[?1049l" + // exit alternate screen buffer
+    "\x1b[?7h",    // re-enable auto-wrap
+  )
+}
+
 export const AttachCommand = cmd({
   command: "attach <url>",
   describe: "attach to a running opencode server",
@@ -83,6 +93,7 @@ export const AttachCommand = cmd({
       })
     } finally {
       unguard?.()
+      resetTerminal()
     }
   },
 })

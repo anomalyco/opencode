@@ -21,6 +21,19 @@ declare global {
   const OPENCODE_WORKER_PATH: string
 }
 
+function resetTerminal() {
+  if (!process.stdout.isTTY) return
+  process.stdout.write(
+    "\x1b[0m" +    // reset all attributes (colors, bold, etc.)
+    "\x1b[?25h" +  // show cursor
+    "\x1b[?1049l" + // exit alternate screen buffer
+    "\x1b[?7h",    // re-enable auto-wrap
+  )
+}
+
+// Backstop: runs even on process.exit() or uncaught crash
+process.on("exit", resetTerminal)
+
 type RpcClient = ReturnType<typeof Rpc.client<typeof rpc>>
 
 function createWorkerFetch(client: RpcClient): typeof fetch {
@@ -226,6 +239,7 @@ export const TuiThreadCommand = cmd({
       }
     } finally {
       unguard?.()
+      resetTerminal()
     }
     process.exit(0)
   },
