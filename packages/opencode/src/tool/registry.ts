@@ -4,7 +4,6 @@ import { BashTool } from "./bash"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
-import { BatchTool } from "./batch"
 import { ReadTool } from "./read"
 import { TaskDescription, TaskTool } from "./task"
 import { TodoWriteTool } from "./todo"
@@ -156,7 +155,6 @@ export namespace ToolRegistry {
                 ApplyPatchTool,
                 ...(question ? [QuestionTool] : []),
                 ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
-                ...(cfg.experimental?.batch_tool === true ? [BatchTool] : []),
                 ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool] : []),
               ],
               build,
