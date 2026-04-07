@@ -227,10 +227,8 @@
     color: var(--icon-weak);
     margin-left: auto;
     opacity: 0;
-    transform: translateX(-4px);
     transition:
       opacity 0.15s ease,
-      transform 0.15s ease,
       color 0.15s ease;
   }
 
@@ -256,7 +254,6 @@
 
     [data-component="task-tool-action"] {
       opacity: 1;
-      transform: translateX(0);
     }
   }
 }
