@@ -813,6 +813,61 @@ export namespace Provider {
             },
           },
         }),
+      ollama: Effect.fnUntraced(function* (input: Info) {
+        const config = (yield* dep.config()).ollama
+        if (!config || !config.host) return { autoload: false }
+
+        const baseURL = `${config.host}:${config.port ?? 11434}/api`
+
+        return {
+          autoload: true,
+          options: {
+            baseURL,
+          },
+          async discoverModels(): Promise<Record<string, Model>> {
+            try {
+              const response = await fetch(`${baseURL}/tags`)
+              const data = await response.json()
+              const models: Record<string, Model> = {}
+              for (const model of data.models) {
+                models[model.name] = {
+                  id: ModelID.make(model.name),
+                  providerID: ProviderID.make("ollama"),
+                  name: model.name,
+                  api: {
+                    id: model.name,
+                    url: baseURL,
+                    npm: "@ai-sdk/openai-compatible",
+                  },
+                  status: "active",
+                  headers: {},
+                  options: {},
+                  cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+                  limit: { context: 8192, output: 2048 },
+                  capabilities: {
+                    temperature: true,
+                    reasoning: false,
+                    attachment: true,
+                    toolcall: true,
+                    input: { text: true, audio: false, image: true, video: false, pdf: false },
+                    output: { text: true, audio: false, image: false, video: false, pdf: false },
+                    interleaved: false,
+                  },
+                  release_date: model.modified_at,
+                  variants: {},
+                }
+              }
+              return models
+            } catch (e) {
+              log.warn("ollama model discovery failed", { error: e })
+              return {}
+            }
+          },
+          async getModel(sdk: any, modelID: string) {
+            return sdk.chat(modelID)
+          },
+        }
+      }),
     }
   }
 
@@ -1231,20 +1286,27 @@ export namespace Provider {
             mergeProvider(providerID, partial)
           }
 
-          const gitlab = ProviderID.make("gitlab")
-          if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
+          // Run discovery for all providers that have a loader
+          for (const [id, loader] of Object.entries(discoveryLoaders)) {
+            if (!providers[id as ProviderID] || !isProviderAllowed(id as ProviderID)) continue
             yield* Effect.promise(async () => {
               try {
-                const discovered = await discoveryLoaders[gitlab]()
+                const discovered = await loader()
                 for (const [modelID, model] of Object.entries(discovered)) {
-                  if (!providers[gitlab].models[modelID]) {
-                    providers[gitlab].models[modelID] = model
+                  if (!providers[id as ProviderID].models[modelID]) {
+                    providers[id as ProviderID].models[modelID] = model
                   }
                 }
               } catch (e) {
-                log.warn("state discovery error", { id: "gitlab", error: e })
+                log.warn("state discovery error", { id, error: e })
               }
             })
+          }
+
+          const gitlab = ProviderID.make("gitlab")
+          if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
+            // GitLab is already handled above by the generic loop, but keep here if needed for specific logic.
+            // Or remove redundant logic if generic loop suffices.
           }
 
           for (const hook of plugins) {

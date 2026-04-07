@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
-const childProcess = require("child_process")
-const fs = require("fs")
-const path = require("path")
-const os = require("os")
+import { spawnSync } from "child_process"
+import fs from "fs"
+import path from "path"
+import os from "os"
 
 function run(target) {
-  const result = childProcess.spawnSync(target, process.argv.slice(2), {
+  const result = spawnSync(target, process.argv.slice(2), {
     stdio: "inherit",
   })
   if (result.error) {
@@ -22,7 +22,7 @@ if (envPath) {
   run(envPath)
 }
 
-const scriptPath = fs.realpathSync(__filename)
+const scriptPath = fs.realpathSync(import.meta.url.replace('file://', ''))
 const scriptDir = path.dirname(scriptPath)
 
 //
@@ -66,7 +66,7 @@ function supportsAvx2() {
 
   if (platform === "darwin") {
     try {
-      const result = childProcess.spawnSync("sysctl", ["-n", "hw.optional.avx2_0"], {
+      const result = spawnSync("sysctl", ["-n", "hw.optional.avx2_0"], {
         encoding: "utf8",
         timeout: 1500,
       })
@@ -83,7 +83,7 @@ function supportsAvx2() {
 
     for (const exe of ["powershell.exe", "pwsh.exe", "pwsh", "powershell"]) {
       try {
-        const result = childProcess.spawnSync(exe, ["-NoProfile", "-NonInteractive", "-Command", cmd], {
+        const result = spawnSync(exe, ["-NoProfile", "-NonInteractive", "-Command", cmd], {
           encoding: "utf8",
           timeout: 3000,
           windowsHide: true,
@@ -116,7 +116,7 @@ const names = (() => {
       }
 
       try {
-        const result = childProcess.spawnSync("ldd", ["--version"], { encoding: "utf8" })
+        const result = spawnSync("ldd", ["--version"], { encoding: "utf8" })
         const text = ((result.stdout || "") + (result.stderr || "")).toLowerCase()
         if (text.includes("musl")) return true
       } catch {

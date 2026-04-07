@@ -1037,6 +1037,13 @@ export namespace Config {
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
         })
         .optional(),
+      ollama: z
+        .object({
+          host: z.string().optional().describe("Ollama server host URL"),
+          port: z.number().int().positive().optional().describe("Ollama server port"),
+        })
+        .optional()
+        .describe("Ollama server configuration"),
     })
     .strict()
     .meta({
