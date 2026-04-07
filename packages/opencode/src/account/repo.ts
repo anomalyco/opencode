@@ -61,7 +61,7 @@ export class AccountRepo extends ServiceMap.Service<AccountRepo, AccountRepo.Ser
         if (!state?.active_account_id) return
         const account = db.select().from(AccountTable).where(eq(AccountTable.id, state.active_account_id)).get()
         if (!account) return
-        return { ...account, url: normalizeServerUrl(account.url), active_org_id: state.active_org_id ?? null }
+        return { ...account, active_org_id: state.active_org_id ?? null }
       }
 
       const state = (db: DbClient, accountID: AccountID, orgID: Option.Option<OrgID>) => {
@@ -86,7 +86,7 @@ export class AccountRepo extends ServiceMap.Service<AccountRepo, AccountRepo.Ser
             .select()
             .from(AccountTable)
             .all()
-            .map((row: AccountRow) => decode({ ...row, url: normalizeServerUrl(row.url), active_org_id: null })),
+            .map((row: AccountRow) => decode({ ...row, active_org_id: null })),
         ),
       )
 
@@ -106,9 +106,7 @@ export class AccountRepo extends ServiceMap.Service<AccountRepo, AccountRepo.Ser
 
       const getRow = Effect.fn("AccountRepo.getRow")((accountID: AccountID) =>
         query((db) => db.select().from(AccountTable).where(eq(AccountTable.id, accountID)).get()).pipe(
-          Effect.map((row) =>
-            row == null ? Option.none() : Option.some({ ...row, url: normalizeServerUrl(row.url) }),
-          ),
+          Effect.map(Option.fromNullishOr),
         ),
       )
 

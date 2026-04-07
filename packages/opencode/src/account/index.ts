@@ -188,11 +188,10 @@ export namespace Account {
         )
 
       const refreshToken = Effect.fnUntraced(function* (row: AccountRow) {
-        const server = normalizeServerUrl(row.url)
         const now = yield* Clock.currentTimeMillis
 
         const response = yield* executeEffectOk(
-          HttpClientRequest.post(`${server}/auth/device/token`).pipe(
+          HttpClientRequest.post(`${row.url}/auth/device/token`).pipe(
             HttpClientRequest.acceptJson,
             HttpClientRequest.schemaBodyJson(TokenRefreshRequest)(
               new TokenRefreshRequest({
@@ -258,9 +257,8 @@ export namespace Account {
       })
 
       const fetchOrgs = Effect.fnUntraced(function* (url: string, accessToken: AccessToken) {
-        const server = normalizeServerUrl(url)
         const response = yield* executeReadOk(
-          HttpClientRequest.get(`${server}/api/orgs`).pipe(
+          HttpClientRequest.get(`${url}/api/orgs`).pipe(
             HttpClientRequest.acceptJson,
             HttpClientRequest.bearerToken(accessToken),
           ),
@@ -272,9 +270,8 @@ export namespace Account {
       })
 
       const fetchUser = Effect.fnUntraced(function* (url: string, accessToken: AccessToken) {
-        const server = normalizeServerUrl(url)
         const response = yield* executeReadOk(
-          HttpClientRequest.get(`${server}/api/user`).pipe(
+          HttpClientRequest.get(`${url}/api/user`).pipe(
             HttpClientRequest.acceptJson,
             HttpClientRequest.bearerToken(accessToken),
           ),
@@ -330,10 +327,9 @@ export namespace Account {
         if (Option.isNone(resolved)) return Option.none()
 
         const { account, accessToken } = resolved.value
-        const server = normalizeServerUrl(account.url)
 
         const response = yield* executeRead(
-          HttpClientRequest.get(`${server}/api/config`).pipe(
+          HttpClientRequest.get(`${account.url}/api/config`).pipe(
             HttpClientRequest.acceptJson,
             HttpClientRequest.bearerToken(accessToken),
             HttpClientRequest.setHeaders({ "x-org-id": orgID }),

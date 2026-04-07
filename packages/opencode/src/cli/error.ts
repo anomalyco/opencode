@@ -1,7 +1,6 @@
 import { HttpClientError } from "effect/unstable/http"
 import { AccountServiceError } from "@/account"
 import { ConfigMarkdown } from "@/config/markdown"
-import { activeProxyEnvVars } from "@/util/network"
 import { errorFormat } from "@/util/error"
 import { Config } from "../config/config"
 import { MCP } from "../mcp"
@@ -19,12 +18,6 @@ const findTransportError = (input: unknown): HttpClientError.TransportError | un
   }
 }
 
-const formatProxyHint = () => {
-  const envVars = activeProxyEnvVars()
-  if (envVars.length === 0) return undefined
-  return `Proxy environment variables are set (${envVars.join(", ")}). If that proxy is unavailable, unset them and try again.`
-}
-
 export function FormatError(input: unknown) {
   if (MCP.Failed.isInstance(input))
     return `MCP server "${input.data.name}" failed. Note, opencode does not support MCP authentication yet.`
@@ -34,9 +27,8 @@ export function FormatError(input: unknown) {
       return [
         `Could not reach ${transportError.methodAndUrl}.`,
         `This failed before the server returned an HTTP response.`,
-        formatProxyHint(),
+        `Check your network, proxy, or VPN configuration and try again.`,
       ]
-        .filter(Boolean)
         .join("\n")
     }
 
