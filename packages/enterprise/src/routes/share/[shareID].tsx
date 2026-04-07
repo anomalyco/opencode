@@ -1,4 +1,12 @@
-import { FileDiff, Message, Model, Part, Session, SessionStatus, UserMessage } from "@opencode-ai/sdk/v2"
+import {
+  Message,
+  Model,
+  Part,
+  Session,
+  SessionStatus,
+  SnapshotFileDiff as FileDiff,
+  UserMessage,
+} from "@opencode-ai/sdk/v2"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import { DataProvider } from "@opencode-ai/ui/context"
