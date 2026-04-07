@@ -2,6 +2,7 @@ import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, decodePasteB
 import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
+import { fileURLToPath } from "url"
 import { Filesystem } from "@/util/filesystem"
 import { useLocal } from "@tui/context/local"
 import { useTheme } from "@tui/context/theme"
@@ -248,7 +249,7 @@ export function Prompt(props: PromptProps) {
         onSelect: async () => {
           const content = await Clipboard.read()
           if (content?.mime.startsWith("image/")) {
-            await pasteImage({
+            await pasteAttachment({
               filename: "clipboard",
               mime: content.mime,
               content: content.data,
@@ -771,11 +772,16 @@ export function Prompt(props: PromptProps) {
     )
   }
 
-  async function pasteImage(file: { filename?: string; content: string; mime: string }) {
+  async function pasteAttachment(file: { filename?: string; filepath?: string; content: string; mime: string }) {
     const currentOffset = input.visualCursor.offset
     const extmarkStart = currentOffset
-    const count = store.prompt.parts.filter((x) => x.type === "file" && x.mime.startsWith("image/")).length
-    const virtualText = `[Image ${count + 1}]`
+    const pdf = file.mime === "application/pdf"
+    const count = store.prompt.parts.filter((x) => {
+      if (x.type !== "file") return false
+      if (pdf) return x.mime === "application/pdf"
+      return x.mime.startsWith("image/")
+    }).length
+    const virtualText = pdf ? `[PDF ${count + 1}]` : `[Image ${count + 1}]`
     const extmarkEnd = extmarkStart + virtualText.length
     const textToInsert = virtualText + " "
 
@@ -796,7 +802,7 @@ export function Prompt(props: PromptProps) {
       url: `data:${file.mime};base64,${file.content}`,
       source: {
         type: "file",
-        path: file.filename ?? "",
+        path: file.filepath ?? file.filename ?? "",
         text: {
           start: extmarkStart,
           end: extmarkEnd,
@@ -926,7 +932,7 @@ export function Prompt(props: PromptProps) {
                   const content = await Clipboard.read()
                   if (content?.mime.startsWith("image/")) {
                     e.preventDefault()
-                    await pasteImage({
+                    await pasteAttachment({
                       filename: "clipboard",
                       mime: content.mime,
                       content: content.data,
@@ -1012,9 +1018,16 @@ export function Prompt(props: PromptProps) {
                   return
                 }
 
-                // trim ' from the beginning and end of the pasted content. just
-                // ' and nothing else
-                const filepath = pastedContent.replace(/^'+|'+$/g, "").replace(/\\ /g, " ")
+                const filepath = iife(() => {
+                  const raw = pastedContent.replace(/^['"]+|['"]+$/g, "")
+                  if (raw.startsWith("file://")) {
+                    try {
+                      return fileURLToPath(raw)
+                    } catch {}
+                  }
+                  if (process.platform === "win32") return raw
+                  return raw.replace(/\\(.)/g, "$1")
+                })
                 const isUrl = /^(https?):\/\//.test(filepath)
                 if (!isUrl) {
                   try {
@@ -1029,14 +1042,15 @@ export function Prompt(props: PromptProps) {
                         return
                       }
                     }
-                    if (mime.startsWith("image/")) {
+                    if (mime.startsWith("image/") || mime === "application/pdf") {
                       event.preventDefault()
                       const content = await Filesystem.readArrayBuffer(filepath)
                         .then((buffer) => Buffer.from(buffer).toString("base64"))
                         .catch(() => {})
                       if (content) {
-                        await pasteImage({
+                        await pasteAttachment({
                           filename,
+                          filepath,
                           mime,
                           content,
                         })
