@@ -2,7 +2,6 @@ import type {
   Agent,
   Command,
   Config,
-  FileDiff,
   LspStatus,
   McpStatus,
   Message,
@@ -14,6 +13,7 @@ import type {
   QuestionRequest,
   Session,
   SessionStatus,
+  SnapshotFileDiff as FileDiff,
   Todo,
   VcsInfo,
 } from "@opencode-ai/sdk/v2/client"

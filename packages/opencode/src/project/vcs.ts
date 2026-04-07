@@ -1,4 +1,5 @@
 import { Effect, Layer, ServiceMap, Stream } from "effect"
+import { formatPatch, structuredPatch } from "diff"
 import path from "path"
 import { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
@@ -48,6 +49,8 @@ export namespace Vcs {
     map: Map<string, { additions: number; deletions: number }>,
   ) {
     const base = ref ? yield* git.prefix(cwd) : ""
+    const patch = (file: string, before: string, after: string) =>
+      formatPatch(structuredPatch(file, file, before, after, "", "", { context: Number.MAX_SAFE_INTEGER }))
     const next = yield* Effect.forEach(
       list,
       (item) =>
@@ -57,8 +60,7 @@ export namespace Vcs {
           const stat = map.get(item.file)
           return {
             file: item.file,
-            before,
-            after,
+            patch: patch(item.file, before, after),
             additions: stat?.additions ?? (item.status === "added" ? count(after) : 0),
             deletions: stat?.deletions ?? (item.status === "deleted" ? count(before) : 0),
             status: item.status,
@@ -127,8 +129,7 @@ export namespace Vcs {
   export const FileDiff = z
     .object({
       file: z.string(),
-      before: z.string(),
-      after: z.string(),
+      patch: z.string(),
       additions: z.number(),
       deletions: z.number(),
       status: z.enum(["added", "deleted", "modified"]).optional(),

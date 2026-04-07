@@ -1,7 +1,6 @@
 import { Binary } from "@opencode-ai/util/binary"
 import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type {
-  FileDiff,
   Message,
   Part,
   PermissionRequest,
@@ -9,6 +8,7 @@ import type {
   QuestionRequest,
   Session,
   SessionStatus,
+  SnapshotFileDiff as FileDiff,
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 import type { State, VcsCache } from "./types"

@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import type {
-  FileDiff,
   Message,
   Part,
   PermissionRequest,
   QuestionRequest,
   SessionStatus,
+  SnapshotFileDiff as FileDiff,
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 import { dropSessionCaches, pickSessionCacheEvictions } from "./session-cache"

@@ -2010,8 +2010,7 @@ export type VcsInfo = {
 
 export type VcsFileDiff = {
   file: string
-  before: string
-  after: string
+  patch: string
   additions: number
   deletions: number
   status?: "added" | "deleted" | "modified"

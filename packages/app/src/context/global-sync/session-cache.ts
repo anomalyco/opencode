@@ -1,10 +1,10 @@
 import type {
-  FileDiff,
   Message,
   Part,
   PermissionRequest,
   QuestionRequest,
   SessionStatus,
+  SnapshotFileDiff as FileDiff,
   Todo,
 } from "@opencode-ai/sdk/v2/client"
 
