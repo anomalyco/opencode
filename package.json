@@ -48,7 +48,7 @@
       "drizzle-kit": "1.0.0-beta.19-d95b7a4",
       "drizzle-orm": "1.0.0-beta.19-d95b7a4",
       "effect": "4.0.0-beta.43",
-      "ai": "6.0.138",
+      "ai": "6.0.149",
       "cross-spawn": "7.0.6",
       "hono": "4.10.7",
       "hono-openapi": "1.1.2",
@@ -119,7 +119,6 @@
   "patchedDependencies": {
     "@standard-community/standard-openapi@0.2.9": "patches/@standard-community%2Fstandard-openapi@0.2.9.patch",
     "solid-js@1.9.10": "patches/solid-js@1.9.10.patch",
-    "@ai-sdk/provider-utils@4.0.21": "patches/@ai-sdk%2Fprovider-utils@4.0.21.patch",
     "@ai-sdk/anthropic@3.0.64": "patches/@ai-sdk%2Fanthropic@3.0.64.patch"
   }
 }
