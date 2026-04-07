@@ -902,31 +902,59 @@ export namespace ProviderTransform {
     amazon: "bedrock",
   }
 
+  // Gateway-native routing/caching controls that always belong in providerOptions.gateway,
+  // regardless of whether the user nested them under a `gateway` key.
+  // Sourced from GatewayProviderOptions in @ai-sdk/gateway.
+  const GATEWAY_ROUTING_KEYS = new Set([
+    "only",
+    "order",
+    "user",
+    "tags",
+    "models",
+    "byok",
+    "zeroDataRetention",
+    "disallowPromptTraining",
+    "hipaaCompliant",
+    "quotaEntityId",
+    "providerTimeouts",
+  ])
+
   export function providerOptions(model: Provider.Model, options: { [x: string]: any }) {
     if (model.api.npm === "@ai-sdk/gateway") {
       // Gateway providerOptions are split across two namespaces:
       // - `gateway`: gateway-native routing/caching controls (order, only, byok, etc.)
       // - `<upstream slug>`: provider-specific model options (anthropic/openai/...)
-      // We keep `gateway` as-is and route every other top-level option under the
-      // model-derived upstream slug.
+      // We keep `gateway` as-is. Top-level keys that are known gateway routing controls
+      // are merged into `gateway`; all other top-level keys go under the upstream slug.
       const i = model.api.id.indexOf("/")
       const rawSlug = i > 0 ? model.api.id.slice(0, i) : undefined
       const slug = rawSlug ? (SLUG_OVERRIDES[rawSlug] ?? rawSlug) : undefined
       const gateway = options.gateway
-      const rest = Object.fromEntries(Object.entries(options).filter(([k]) => k !== "gateway"))
-      const has = Object.keys(rest).length > 0
+      const rest = Object.entries(options).filter(([k]) => k !== "gateway")
+      const gatewayRest = Object.fromEntries(rest.filter(([k]) => GATEWAY_ROUTING_KEYS.has(k)))
+      const providerRest = Object.fromEntries(rest.filter(([k]) => !GATEWAY_ROUTING_KEYS.has(k)))
 
       const result: Record<string, any> = {}
-      if (gateway !== undefined) result.gateway = gateway
 
-      if (has) {
+      // Merge explicit `gateway` key with any top-level gateway routing keys
+      const hasGatewayRest = Object.keys(gatewayRest).length > 0
+      if (gateway !== undefined || hasGatewayRest) {
+        result.gateway =
+          gateway && typeof gateway === "object" && !Array.isArray(gateway)
+            ? { ...gateway, ...gatewayRest }
+            : hasGatewayRest
+              ? gatewayRest
+              : gateway
+      }
+
+      const hasProviderRest = Object.keys(providerRest).length > 0
+      if (hasProviderRest) {
         if (slug) {
-          // Route model-specific options under the provider slug
-          result[slug] = rest
-        } else if (gateway && typeof gateway === "object" && !Array.isArray(gateway)) {
-          result.gateway = { ...gateway, ...rest }
+          result[slug] = providerRest
+        } else if (result.gateway && typeof result.gateway === "object" && !Array.isArray(result.gateway)) {
+          result.gateway = { ...result.gateway, ...providerRest }
         } else {
-          result.gateway = rest
+          result.gateway = providerRest
         }
       }
 
