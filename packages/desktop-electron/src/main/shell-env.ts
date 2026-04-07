@@ -3,7 +3,7 @@ import { basename } from "node:path"
 
 const TIMEOUT = 5_000
 
-type Probe = { type: "loaded"; value: Record<string, string> } | { type: "timeout" } | { type: "unavailable" }
+type Probe = { type: "Loaded"; value: Record<string, string> } | { type: "Timeout" } | { type: "Unavailable" }
 
 export function getUserShell() {
   return process.env.SHELL || "/bin/sh"
@@ -29,23 +29,23 @@ function probe(shell: string, mode: "-il" | "-l"): Probe {
 
   const err = out.error as NodeJS.ErrnoException | undefined
   if (err) {
-    if (err.code === "ETIMEDOUT") return { type: "timeout" }
+    if (err.code === "ETIMEDOUT") return { type: "Timeout" }
     console.log(`[server] Shell env probe failed for ${shell} ${mode}: ${err.message}`)
-    return { type: "unavailable" }
+    return { type: "Unavailable" }
   }
 
   if (out.status !== 0) {
     console.log(`[server] Shell env probe exited with non-zero status for ${shell} ${mode}`)
-    return { type: "unavailable" }
+    return { type: "Unavailable" }
   }
 
   const env = parseShellEnv(out.stdout)
   if (Object.keys(env).length === 0) {
     console.log(`[server] Shell env probe returned empty env for ${shell} ${mode}`)
-    return { type: "unavailable" }
+    return { type: "Unavailable" }
   }
 
-  return { type: "loaded", value: env }
+  return { type: "Loaded", value: env }
 }
 
 export function isNushell(shell: string) {
@@ -61,17 +61,17 @@ export function loadShellEnv(shell: string) {
   }
 
   const interactive = probe(shell, "-il")
-  if (interactive.type === "loaded") {
+  if (interactive.type === "Loaded") {
     console.log(`[server] Loaded shell environment with -il (${Object.keys(interactive.value).length} vars)`)
     return interactive.value
   }
-  if (interactive.type === "timeout") {
+  if (interactive.type === "Timeout") {
     console.warn(`[server] Interactive shell env probe timed out: ${shell}`)
     return null
   }
 
   const login = probe(shell, "-l")
-  if (login.type === "loaded") {
+  if (login.type === "Loaded") {
     console.log(`[server] Loaded shell environment with -l (${Object.keys(login.value).length} vars)`)
     return login.value
   }
