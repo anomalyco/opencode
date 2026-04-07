@@ -356,8 +356,8 @@ export namespace Project {
       })
 
       const update = Effect.fn("Project.update")(function* (input: UpdateInput) {
-        const result = yield* db((d) =>
-          d
+        const result = yield* db(async (d) => {
+          await d
             .update(ProjectTable)
             .set({
               name: input.name,
@@ -367,9 +367,9 @@ export namespace Project {
               time_updated: Date.now(),
             })
             .where(eq(ProjectTable.id, input.projectID))
-            .returning()
-            .get(),
-        )
+            .run()
+          return d.select().from(ProjectTable).where(eq(ProjectTable.id, input.projectID)).get()
+        })
         if (!result) throw new Error(`Project not found: ${input.projectID}`)
         const data = fromRow(result)
         yield* emitUpdated(data)
@@ -413,14 +413,14 @@ export namespace Project {
         if (!row) throw new Error(`Project not found: ${id}`)
         const sboxes = [...row.sandboxes]
         if (!sboxes.includes(directory)) sboxes.push(directory)
-        const result = yield* db((d) =>
-          d
+        const result = yield* db(async (d) => {
+          await d
             .update(ProjectTable)
             .set({ sandboxes: sboxes, time_updated: Date.now() })
             .where(eq(ProjectTable.id, id))
-            .returning()
-            .get(),
-        )
+            .run()
+          return d.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get()
+        })
         if (!result) throw new Error(`Project not found: ${id}`)
         yield* emitUpdated(fromRow(result))
       })
@@ -429,14 +429,14 @@ export namespace Project {
         const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
         if (!row) throw new Error(`Project not found: ${id}`)
         const sboxes = row.sandboxes.filter((s) => s !== directory)
-        const result = yield* db((d) =>
-          d
+        const result = yield* db(async (d) => {
+          await d
             .update(ProjectTable)
             .set({ sandboxes: sboxes, time_updated: Date.now() })
             .where(eq(ProjectTable.id, id))
-            .returning()
-            .get(),
-        )
+            .run()
+          return d.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get()
+        })
         if (!result) throw new Error(`Project not found: ${id}`)
         yield* emitUpdated(fromRow(result))
       })

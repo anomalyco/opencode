@@ -20,6 +20,7 @@ import { DIALECT } from "./dialect-detect"
 
 declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number; name: string }[] | undefined
 declare const OPENCODE_PG_MIGRATIONS: { sql: string; timestamp: number; name: string }[] | undefined
+declare const OPENCODE_MYSQL_MIGRATIONS: { sql: string; timestamp: number; name: string }[] | undefined
 
 export const NotFoundError = NamedError.create(
   "NotFoundError",
@@ -90,6 +91,40 @@ export namespace Database {
     return sql.sort((a, b) => a.timestamp - b.timestamp)
   }
 
+  async function initMysql(url: string): Promise<Client> {
+    const { init } = await import("./db.mysql")
+    const db = await init(url)
+
+    if (!Flag.OPENCODE_SKIP_MIGRATIONS) {
+      const { migrate } = await import("drizzle-orm/mysql2/migrator")
+
+      if (typeof OPENCODE_MYSQL_MIGRATIONS !== "undefined" && OPENCODE_MYSQL_MIGRATIONS.length > 0) {
+        const os = await import("os")
+        const fs = await import("fs")
+        const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-mysql-migrations-"))
+        try {
+          for (const entry of OPENCODE_MYSQL_MIGRATIONS) {
+            const migDir = path.join(tmpDir, entry.name)
+            fs.mkdirSync(migDir, { recursive: true })
+            fs.writeFileSync(path.join(migDir, "migration.sql"), entry.sql)
+          }
+          log.info("applying bundled mysql migrations", { count: OPENCODE_MYSQL_MIGRATIONS.length })
+          await migrate(db as any, { migrationsFolder: tmpDir })
+        } finally {
+          fs.rmSync(tmpDir, { recursive: true, force: true })
+        }
+      } else {
+        const migrationsDir = path.join(import.meta.dirname, "../../migration-mysql")
+        if (existsSync(migrationsDir)) {
+          log.info("applying mysql migrations from folder", { dir: migrationsDir })
+          await migrate(db as any, { migrationsFolder: migrationsDir })
+        }
+      }
+    }
+
+    return db as unknown as Client
+  }
+
   async function initPostgres(url: string): Promise<Client> {
     const { init } = await import("./db.pg")
     const db = init(url)
@@ -158,26 +193,26 @@ export namespace Database {
     return db
   }
 
-  // Postgres-only client state
-  let _pgClient: Client | undefined
-  let _pgClientPromise: Promise<Client> | undefined
+  // Async (Postgres / MySQL) client state
+  let _asyncClient: Client | undefined
+  let _asyncClientPromise: Promise<Client> | undefined
 
   /** Synchronous SQLite client accessor. */
   export const Client = lazy(() => {
-    if (DIALECT === "postgres") {
-      throw new Error("Cannot use synchronous Client accessor with Postgres. Use Database.getClient() instead.")
+    if (DIALECT !== "sqlite") {
+      throw new Error(`Cannot use synchronous Client accessor with ${DIALECT}. Use Database.getClient() instead.`)
     }
     log.info("opening database", { path: Path })
     return initSqliteClient(Path) as SQLiteBunDatabase
   })
 
   export async function getClient(): Promise<Client> {
-    if (DIALECT === "postgres") {
-      if (_pgClient) return _pgClient
-      if (_pgClientPromise) return _pgClientPromise
-      _pgClientPromise = initPostgres(Path)
-      _pgClient = await _pgClientPromise
-      return _pgClient
+    if (DIALECT === "postgres" || DIALECT === "mysql") {
+      if (_asyncClient) return _asyncClient
+      if (_asyncClientPromise) return _asyncClientPromise
+      _asyncClientPromise = DIALECT === "postgres" ? initPostgres(Path) : initMysql(Path)
+      _asyncClient = await _asyncClientPromise
+      return _asyncClient
     }
 
     // For SQLite, always delegate to the lazy Client singleton
@@ -185,11 +220,11 @@ export namespace Database {
   }
 
   export async function close() {
-    if (DIALECT === "postgres" && _pgClient) {
-      const pgClient = (_pgClient as any).$client
-      if (pgClient?.end) await pgClient.end()
-      _pgClient = undefined
-      _pgClientPromise = undefined
+    if ((DIALECT === "postgres" || DIALECT === "mysql") && _asyncClient) {
+      const underlying = (_asyncClient as any).$client
+      if (underlying?.end) await underlying.end()
+      _asyncClient = undefined
+      _asyncClientPromise = undefined
     } else if (DIALECT === "sqlite") {
       ;(Client() as any).$client.close()
       Client.reset()
@@ -241,9 +276,9 @@ export namespace Database {
         const client = await getClient()
 
         let result: T
-        if (DIALECT === "postgres") {
-          const pgDb = client as unknown as PostgresJsDatabase
-          result = await (pgDb.transaction as any)(async (tx: any) => {
+        if (DIALECT === "postgres" || DIALECT === "mysql") {
+          const asyncDb = client as unknown as PostgresJsDatabase
+          result = await (asyncDb.transaction as any)(async (tx: any) => {
             return await ctx.provide({ tx, effects }, () => callback(tx))
           })
         } else {

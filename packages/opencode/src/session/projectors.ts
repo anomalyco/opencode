@@ -1,4 +1,4 @@
-import { NotFoundError, eq, and } from "../storage/db"
+import { eq, and } from "../storage/db"
 import { SyncEvent } from "@/sync"
 import { Session } from "./index"
 import { MessageV2 } from "./message-v2"
@@ -68,13 +68,16 @@ export default [
 
   SyncEvent.project(Session.Event.Updated, (db, data) => {
     const info = data.info
-    const row = db
-      .update(SessionTable)
+    // NOTE: previously this used .returning().get() to assert the row existed,
+    // but that pattern is broken on async dialects (PG/MySQL) because the
+    // projector callback is sync — the returned Promise is never awaited and
+    // the existence check silently passes. We now just run the update; if the
+    // row doesn't exist the update is a no-op, matching the dialect-agnostic
+    // behavior we already had on PG.
+    db.update(SessionTable)
       .set(toPartialRow(info))
       .where(eq(SessionTable.id, data.sessionID))
-      .returning()
-      .get()
-    if (!row) throw new NotFoundError({ message: `Session not found: ${data.sessionID}` })
+      .run()
   }),
 
   SyncEvent.project(Session.Event.Deleted, (db, data) => {
