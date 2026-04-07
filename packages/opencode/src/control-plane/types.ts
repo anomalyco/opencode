@@ -13,9 +13,20 @@ export const WorkspaceInfo = z.object({
 })
 export type WorkspaceInfo = z.infer<typeof WorkspaceInfo>
 
+export type Target =
+  | {
+      type: "local"
+      directory: string
+    }
+  | {
+      type: "remote"
+      url: string | URL
+      headers?: HeadersInit
+    }
+
 export type Adaptor = {
   configure(input: WorkspaceInfo): WorkspaceInfo | Promise<WorkspaceInfo>
-  create(input: WorkspaceInfo, from?: WorkspaceInfo): Promise<void>
+  create(config: WorkspaceInfo, from?: WorkspaceInfo): Promise<void>
   remove(config: WorkspaceInfo): Promise<void>
-  fetch(config: WorkspaceInfo, input: RequestInfo | URL, init?: RequestInit): Promise<Response>
+  target(config: WorkspaceInfo): Target | Promise<Target>
 }

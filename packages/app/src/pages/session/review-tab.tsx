@@ -1,4 +1,5 @@
-import { createEffect, onCleanup, type JSX } from "solid-js"
+import { createEffect, createSignal, onCleanup, type JSX } from "solid-js"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import type { FileDiff } from "@opencode-ai/sdk/v2"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import type {
@@ -123,13 +124,6 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
 
   onCleanup(() => {
     if (restoreFrame !== undefined) cancelAnimationFrame(restoreFrame)
-    if (scroll) {
-      scroll.removeEventListener("wheel", handleInteraction, { capture: true })
-      scroll.removeEventListener("mousewheel", handleInteraction, { capture: true })
-      scroll.removeEventListener("pointerdown", handleInteraction, { capture: true })
-      scroll.removeEventListener("touchstart", handleInteraction, { capture: true })
-      scroll.removeEventListener("keydown", handleInteraction, { capture: true })
-    }
   })
 
   return (
@@ -138,11 +132,11 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
       empty={props.empty}
       scrollRef={(el) => {
         scroll = el
-        el.addEventListener("wheel", handleInteraction, { passive: true, capture: true })
-        el.addEventListener("mousewheel", handleInteraction, { passive: true, capture: true })
-        el.addEventListener("pointerdown", handleInteraction, { passive: true, capture: true })
-        el.addEventListener("touchstart", handleInteraction, { passive: true, capture: true })
-        el.addEventListener("keydown", handleInteraction, { passive: true, capture: true })
+        makeEventListener(el, "wheel", handleInteraction, { passive: true, capture: true })
+        makeEventListener(el, "mousewheel", handleInteraction, { passive: true, capture: true })
+        makeEventListener(el, "pointerdown", handleInteraction, { passive: true, capture: true })
+        makeEventListener(el, "touchstart", handleInteraction, { passive: true, capture: true })
+        makeEventListener(el, "keydown", handleInteraction, { capture: true })
         props.onScrollRef?.(el)
         queueRestore()
       }}

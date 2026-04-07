@@ -289,10 +289,9 @@ describe("session.llm.stream", () => {
       throw new Error("Server not initialized")
     }
 
-    const providerID = "alibaba"
-    const modelID = "qwen-plus"
+    const providerID = "vivgrid"
+    const modelID = "gemini-3.1-pro-preview"
     const fixture = await loadFixture(providerID, modelID)
-    const provider = fixture.provider
     const model = fixture.model
 
     const request = waitRequest(
@@ -744,8 +743,7 @@ describe("session.llm.stream", () => {
         expect((body.reasoning as { effort?: string } | undefined)?.effort).toBe("high")
 
         const maxTokens = body.max_output_tokens as number | undefined
-        const expectedMaxTokens = ProviderTransform.maxOutputTokens(resolved)
-        expect(maxTokens).toBe(expectedMaxTokens)
+        expect(maxTokens).toBe(undefined) // match codex cli behavior
       },
     })
   })
@@ -874,16 +872,15 @@ describe("session.llm.stream", () => {
     })
   })
 
-  test("sends messages API payload for Anthropic models", async () => {
+  test("sends messages API payload for Anthropic Compatible models", async () => {
     const server = state.server
     if (!server) {
       throw new Error("Server not initialized")
     }
 
-    const providerID = "anthropic"
-    const modelID = "claude-3-5-sonnet-20241022"
+    const providerID = "minimax"
+    const modelID = "MiniMax-M2.5"
     const fixture = await loadFixture(providerID, modelID)
-    const provider = fixture.provider
     const model = fixture.model
 
     const chunks = [
@@ -964,7 +961,7 @@ describe("session.llm.stream", () => {
           role: "user",
           time: { created: Date.now() },
           agent: agent.name,
-          model: { providerID: ProviderID.make("minimax"), modelID: ModelID.make("MiniMax-M2.7") },
+          model: { providerID: ProviderID.make("minimax"), modelID: ModelID.make("MiniMax-M2.5") },
         } satisfies MessageV2.User
 
         const stream = await LLM.stream({
