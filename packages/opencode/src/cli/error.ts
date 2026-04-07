@@ -1,13 +1,47 @@
+import { HttpClientError } from "effect/unstable/http"
+import { AccountServiceError } from "@/account"
 import { ConfigMarkdown } from "@/config/markdown"
+import { activeProxyEnvVars } from "@/util/network"
 import { errorFormat } from "@/util/error"
 import { Config } from "../config/config"
 import { MCP } from "../mcp"
 import { Provider } from "../provider/provider"
 import { UI } from "./ui"
 
+const findTransportError = (input: unknown): HttpClientError.TransportError | undefined => {
+  let current = input
+  const seen = new Set<object>()
+
+  while (typeof current === "object" && current !== null && !seen.has(current)) {
+    if (current instanceof HttpClientError.TransportError) return current
+    seen.add(current)
+    current = Reflect.get(current, "cause")
+  }
+}
+
+const formatProxyHint = () => {
+  const envVars = activeProxyEnvVars()
+  if (envVars.length === 0) return undefined
+  return `Proxy environment variables are set (${envVars.join(", ")}). If that proxy is unavailable, unset them and try again.`
+}
+
 export function FormatError(input: unknown) {
   if (MCP.Failed.isInstance(input))
     return `MCP server "${input.data.name}" failed. Note, opencode does not support MCP authentication yet.`
+  if (input instanceof AccountServiceError) {
+    const transportError = findTransportError(input)
+    if (transportError) {
+      return [
+        `Could not reach ${transportError.methodAndUrl}.`,
+        `This failed before the server returned an HTTP response.`,
+        formatProxyHint(),
+      ]
+        .filter(Boolean)
+        .join("\n")
+    }
+
+    return input.message
+  }
   if (Provider.ModelNotFoundError.isInstance(input)) {
     const { providerID, modelID, suggestions } = input.data
     return [

@@ -4,6 +4,7 @@ import { Effect, Layer, Option, Schema, ServiceMap } from "effect"
 import { Database } from "@/storage/db"
 import { AccountStateTable, AccountTable } from "./account.sql"
 import { AccessToken, AccountID, AccountRepoError, Info, OrgID, RefreshToken } from "./schema"
+import { normalizeServerUrl } from "./url"
 
 export type AccountRow = (typeof AccountTable)["$inferSelect"]
 
@@ -60,7 +61,7 @@ export class AccountRepo extends ServiceMap.Service<AccountRepo, AccountRepo.Ser
         if (!state?.active_account_id) return
         const account = db.select().from(AccountTable).where(eq(AccountTable.id, state.active_account_id)).get()
         if (!account) return
-        return { ...account, active_org_id: state.active_org_id ?? null }
+        return { ...account, url: normalizeServerUrl(account.url), active_org_id: state.active_org_id ?? null }
       }
 
       const state = (db: DbClient, accountID: AccountID, orgID: Option.Option<OrgID>) => {
@@ -85,7 +86,7 @@ export class AccountRepo extends ServiceMap.Service<AccountRepo, AccountRepo.Ser
             .select()
             .from(AccountTable)
             .all()
-            .map((row: AccountRow) => decode({ ...row, active_org_id: null })),
+            .map((row: AccountRow) => decode({ ...row, url: normalizeServerUrl(row.url), active_org_id: null })),
         ),
       )
 
@@ -105,7 +106,9 @@ export class AccountRepo extends ServiceMap.Service<AccountRepo, AccountRepo.Ser
 
       const getRow = Effect.fn("AccountRepo.getRow")((accountID: AccountID) =>
         query((db) => db.select().from(AccountTable).where(eq(AccountTable.id, accountID)).get()).pipe(
-          Effect.map(Option.fromNullishOr),
+          Effect.map((row) =>
+            row == null ? Option.none() : Option.some({ ...row, url: normalizeServerUrl(row.url) }),
+          ),
         ),
       )
 
@@ -125,11 +128,13 @@ export class AccountRepo extends ServiceMap.Service<AccountRepo, AccountRepo.Ser
 
       const persistAccount = Effect.fn("AccountRepo.persistAccount")((input) =>
         tx((db) => {
+          const url = normalizeServerUrl(input.url)
+
           db.insert(AccountTable)
             .values({
               id: input.id,
               email: input.email,
-              url: input.url,
+              url,
               access_token: input.accessToken,
               refresh_token: input.refreshToken,
               token_expiry: input.expiry,
@@ -138,7 +143,7 @@ export class AccountRepo extends ServiceMap.Service<AccountRepo, AccountRepo.Ser
               target: AccountTable.id,
               set: {
                 email: input.email,
-                url: input.url,
+                url,
                 access_token: input.accessToken,
                 refresh_token: input.refreshToken,
                 token_expiry: input.expiry,

@@ -57,6 +57,35 @@ const deviceTokenClient = (body: unknown, status = 400) =>
 const poll = (body: unknown, status = 400) =>
   Account.Service.use((s) => s.poll(login())).pipe(Effect.provide(live(deviceTokenClient(body, status))))
 
+it.live("login normalizes trailing slashes in the provided server URL", () =>
+  Effect.gen(function* () {
+    const seen: Array<string> = []
+    const client = HttpClient.make((req) =>
+      Effect.gen(function* () {
+        seen.push(`${req.method} ${req.url}`)
+
+        if (req.url === "https://one.example.com/auth/device/code") {
+          return json(req, {
+            device_code: "device-code",
+            user_code: "user-code",
+            verification_uri_complete: "/device?user_code=user-code",
+            expires_in: 600,
+            interval: 5,
+          })
+        }
+
+        return json(req, {}, 404)
+      }),
+    )
+
+    const result = yield* Account.Service.use((s) => s.login("https://one.example.com/")).pipe(Effect.provide(live(client)))
+
+    expect(seen).toEqual(["POST https://one.example.com/auth/device/code"])
+    expect(result.server).toBe("https://one.example.com")
+    expect(result.url).toBe("https://one.example.com/device?user_code=user-code")
+  }),
+)
+
 it.live("orgsByAccount groups orgs per account", () =>
   Effect.gen(function* () {
     yield* AccountRepo.use((r) =>
