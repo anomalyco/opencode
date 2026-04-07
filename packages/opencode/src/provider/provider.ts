@@ -1192,7 +1192,10 @@ export namespace Provider {
           // load apikeys
           const auths = yield* auth.all().pipe(Effect.orDie)
           for (const [id, provider] of Object.entries(auths)) {
-            const providerID = ProviderID.make(id)
+            // Extract base provider from composite keys (e.g., "minimax-coding-plan:personal" → "minimax-coding-plan")
+            const lastColon = id.lastIndexOf(":")
+            const baseProvider = lastColon === -1 ? id : id.slice(0, lastColon)
+            const providerID = ProviderID.make(baseProvider)
             if (disabled.has(providerID)) continue
             if (provider.type === "api") {
               mergeProvider(providerID, {

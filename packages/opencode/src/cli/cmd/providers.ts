@@ -228,7 +228,9 @@ export const ProvidersListCommand = cmd({
 
     const byProvider: Record<string, Array<{ profile: string; type: string }>> = {}
     for (const [compositeKey, result] of results) {
-      const [baseProvider, profile] = compositeKey.includes(":") ? compositeKey.split(":") : [compositeKey, "default"]
+      const lastColon = compositeKey.lastIndexOf(":")
+      const baseProvider = lastColon === -1 ? compositeKey : compositeKey.slice(0, lastColon)
+      const profile = lastColon === -1 ? "default" : compositeKey.slice(lastColon + 1)
       if (!byProvider[baseProvider]) byProvider[baseProvider] = []
       byProvider[baseProvider]!.push({ profile, type: result.type })
     }
