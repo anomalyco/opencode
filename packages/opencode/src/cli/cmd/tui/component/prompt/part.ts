@@ -8,9 +8,9 @@ export function strip(part: Item & { id: string; messageID: string; sessionID: s
   return rest
 }
 
-export function assign(part: Item): Item & { id: PartID } {
+export function assign(part: Item): Item & { id: `prt${string}` } {
   return {
     ...part,
-    id: PartID.ascending(),
+    id: PartID.ascending() as `prt${string}`,
   }
 }

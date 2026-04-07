@@ -1834,8 +1834,10 @@ export type McpResource = {
   client: string
 }
 
+export type PartIDInput = `prt${string}`
+
 export type TextPartInput = {
-  id?: string
+  id?: PartIDInput
   type: "text"
   text: string
   synthetic?: boolean
@@ -1850,7 +1852,7 @@ export type TextPartInput = {
 }
 
 export type FilePartInput = {
-  id?: string
+  id?: PartIDInput
   type: "file"
   mime: string
   filename?: string
@@ -1859,7 +1861,7 @@ export type FilePartInput = {
 }
 
 export type AgentPartInput = {
-  id?: string
+  id?: PartIDInput
   type: "agent"
   name: string
   source?: {
@@ -1870,7 +1872,7 @@ export type AgentPartInput = {
 }
 
 export type SubtaskPartInput = {
-  id?: string
+  id?: PartIDInput
   type: "subtask"
   prompt: string
   description: string

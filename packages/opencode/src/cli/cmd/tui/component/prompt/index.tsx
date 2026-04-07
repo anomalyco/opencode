@@ -705,7 +705,7 @@ export function Prompt(props: PromptProps) {
           variant,
           parts: [
             {
-              id: PartID.ascending(),
+              id: PartID.ascending() as `prt${string}`,
               type: "text",
               text: inputText,
             },

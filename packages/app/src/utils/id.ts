@@ -19,25 +19,25 @@ export namespace Identifier {
     return z.string().startsWith(prefixes[prefix])
   }
 
-  export function ascending(prefix: Prefix, given?: string) {
+  export function ascending<K extends Prefix>(prefix: K, given?: string) {
     return generateID(prefix, false, given)
   }
 
-  export function descending(prefix: Prefix, given?: string) {
+  export function descending<K extends Prefix>(prefix: K, given?: string) {
     return generateID(prefix, true, given)
   }
 }
 
-function generateID(prefix: Prefix, descending: boolean, given?: string): string {
+function generateID<K extends Prefix>(prefix: K, descending: boolean, given?: string): `${(typeof prefixes)[K]}${string}` {
   if (!given) {
-    return create(prefix, descending)
+    return create(prefix, descending) as `${(typeof prefixes)[K]}${string}`
   }
 
   if (!given.startsWith(prefixes[prefix])) {
     throw new Error(`ID ${given} does not start with ${prefixes[prefix]}`)
   }
 
-  return given
+  return given as `${(typeof prefixes)[K]}${string}`
 }
 
 function create(prefix: Prefix, descending: boolean, timestamp?: number): string {
