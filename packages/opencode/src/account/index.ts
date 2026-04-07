@@ -137,19 +137,39 @@ const mapAccountServiceError =
   (message = "Account service operation failed") =>
   <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, AccountError, R> =>
     effect.pipe(
-      Effect.mapError((cause) =>
-        cause instanceof AccountServiceError || cause instanceof AccountTransportError
-          ? cause
-          : HttpClientError.isHttpClientError(cause) && cause.reason._tag === "TransportError"
-            ? new AccountTransportError({
-                method: cause.request.method,
-                url: cause.request.url,
-                description: cause.reason.description,
-                cause: cause.reason.cause,
-              })
-            : new AccountServiceError({ message, cause }),
-      ),
+      Effect.mapError((cause) => accountErrorFromCause(cause, message)),
     )
+
+const accountErrorFromCause = (cause: unknown, message: string): AccountError => {
+  if (cause instanceof AccountServiceError || cause instanceof AccountTransportError) {
+    return cause
+  }
+
+  if (HttpClientError.isHttpClientError(cause)) {
+    return accountErrorFromHttpClientError(cause, message)
+  }
+
+  return new AccountServiceError({ message, cause })
+}
+
+const accountErrorFromHttpClientError = (
+  error: HttpClientError.HttpClientError,
+  message: string,
+): AccountError => {
+  switch (error.reason._tag) {
+    case "TransportError": {
+      return new AccountTransportError({
+        method: error.request.method,
+        url: error.request.url,
+        description: error.reason.description,
+        cause: error.reason.cause,
+      })
+    }
+    default: {
+      return new AccountServiceError({ message, cause: error })
+    }
+  }
+}
 
 export namespace Account {
   export interface Interface {
