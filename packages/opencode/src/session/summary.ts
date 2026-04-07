@@ -174,8 +174,4 @@ export namespace SessionSummary {
   export async function diff(input: z.infer<typeof DiffInput>) {
     return runPromise((svc) => svc.diff(input))
   }
-
-  export async function computeDiff(input: { messages: MessageV2.WithParts[] }) {
-    return runPromise((svc) => svc.computeDiff(input))
-  }
 }

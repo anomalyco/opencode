@@ -9,6 +9,7 @@ import { app } from "electron"
 import treeKill from "tree-kill"
 
 import { WSL_ENABLED_KEY } from "./constants"
+import { getUserShell, loadShellEnv, mergeShellEnv } from "./shell-env"
 import { store } from "./store"
 
 const CLI_INSTALL_DIR = ".opencode/bin"
@@ -135,7 +136,7 @@ export function spawnCommand(args: string, extraEnv: Record<string, string>) {
   const base = Object.fromEntries(
     Object.entries(process.env).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
   )
-  const envs = {
+  const env = {
     ...base,
     OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
     OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
@@ -143,8 +144,10 @@ export function spawnCommand(args: string, extraEnv: Record<string, string>) {
     XDG_STATE_HOME: app.getPath("userData"),
     ...extraEnv,
   }
+  const shell = process.platform === "win32" ? null : getUserShell()
+  const envs = shell ? mergeShellEnv(loadShellEnv(shell), env) : env
 
-  const { cmd, cmdArgs } = buildCommand(args, envs)
+  const { cmd, cmdArgs } = buildCommand(args, envs, shell)
   console.log(`[cli] Executing: ${cmd} ${cmdArgs.join(" ")}`)
   const child = spawn(cmd, cmdArgs, {
     env: envs,
@@ -210,7 +213,7 @@ function handleSqliteProgress(events: EventEmitter, line: string) {
   return false
 }
 
-function buildCommand(args: string, env: Record<string, string>) {
+function buildCommand(args: string, env: Record<string, string>, shell: string | null) {
   if (process.platform === "win32" && isWslEnabled()) {
     console.log(`[cli] Using WSL mode`)
     const version = app.getVersion()
@@ -233,10 +236,10 @@ function buildCommand(args: string, env: Record<string, string>) {
   }
 
   const sidecar = getSidecarPath()
-  const shell = process.env.SHELL || "/bin/sh"
-  const line = shell.endsWith("/nu") ? `^\"${sidecar}\" ${args}` : `\"${sidecar}\" ${args}`
-  console.log(`[cli] Unix mode, shell: ${shell}, command: ${line}`)
-  return { cmd: shell, cmdArgs: ["-l", "-c", line] }
+  const user = shell || getUserShell()
+  const line = user.endsWith("/nu") ? `^\"${sidecar}\" ${args}` : `\"${sidecar}\" ${args}`
+  console.log(`[cli] Unix mode, shell: ${user}, command: ${line}`)
+  return { cmd: user, cmdArgs: ["-l", "-c", line] }
 }
 
 function envPrefix(env: Record<string, string>) {

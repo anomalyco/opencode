@@ -3,10 +3,10 @@ import path from "path"
 import { Global } from "../global"
 import { NamedError } from "@opencode-ai/util/error"
 import z from "zod"
-import { git } from "@/util/git"
 import { AppFileSystem } from "@/filesystem"
 import { makeRuntime } from "@/effect/run-service"
 import { Effect, Exit, Layer, Option, RcMap, Schema, ServiceMap, TxReentrantLock } from "effect"
+import { Git } from "@/git"
 
 export namespace Storage {
   const log = Log.create({ service: "storage" })
@@ -111,7 +111,7 @@ export namespace Storage {
           if (!worktree) continue
           if (!(yield* fs.isDir(worktree))) continue
           const result = yield* Effect.promise(() =>
-            git(["rev-list", "--max-parents=0", "--all"], {
+            Git.run(["rev-list", "--max-parents=0", "--all"], {
               cwd: worktree,
             }),
           )
