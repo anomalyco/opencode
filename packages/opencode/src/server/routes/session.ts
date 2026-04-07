@@ -23,8 +23,38 @@ import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { Bus } from "../../bus"
 import { NamedError } from "@opencode-ai/util/error"
+import { ToolRegistry } from "../../tool/registry"
 
 const log = Log.create({ service: "server" })
+
+/** Walk parent session messages backwards to find the model used in the last user message. */
+async function resolveModel(sessionID: SessionID) {
+  const msgs = await Session.messages({ sessionID })
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const info = msgs[i].info
+    if (info.role === "user" && info.model) return info.model
+  }
+}
+
+/** Create an emitter for external ToolPart updates (no-op when messageID is absent). */
+function emitter(opts: { sessionID: SessionID; messageID?: string; tool: string }) {
+  const mid = opts.messageID ? MessageID.make(opts.messageID) : undefined
+  const pid = mid ? PartID.ascending() : undefined
+  const fn = (state: z.infer<typeof MessageV2.ToolState>) =>
+    mid && pid
+      ? Session.updatePart({
+          id: pid,
+          messageID: mid,
+          sessionID: opts.sessionID,
+          type: "tool" as const,
+          tool: opts.tool,
+          callID: pid,
+          external: true,
+          state,
+        })
+      : undefined
+  return { mid, pid, fn }
+}
 
 export const SessionRoutes = lazy(() =>
   new Hono()
@@ -1039,6 +1069,336 @@ export const SessionRoutes = lazy(() =>
           reply: c.req.valid("json").response,
         })
         return c.json(true)
+      },
+    )
+    // Direct tool execution — no LLM, deterministic. Enables plugins, tests,
+    // and scripts to execute tools outside the LLM event loop.
+    .post(
+      "/:sessionID/tool",
+      describeRoute({
+        summary: "Execute tool directly",
+        description:
+          "Execute an OpenCode tool without LLM involvement. Results are streamed as plain text. Optionally creates an external ToolPart for TUI visibility.",
+        operationId: "session.tool",
+        responses: {
+          200: {
+            description: "Tool output as plain text",
+            content: { "text/plain": { schema: resolver(z.string()) } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ sessionID: SessionID.zod })),
+      validator(
+        "json",
+        z.object({
+          name: z.string().describe("Tool name (e.g. read, edit, grep, glob)"),
+          args: z.record(z.string(), z.unknown()).describe("Tool arguments"),
+          agent: z.string().optional().describe("Agent context for permissions"),
+          messageID: z.string().optional().describe("Parent message ID — creates external ToolPart when present"),
+        }),
+      ),
+      async (c) => {
+        const param = c.req.valid("param")
+        const body = c.req.valid("json")
+        const session = await Session.get(param.sessionID)
+        const agent = body.agent ?? (await Agent.defaultAgent())
+        const ag = await Agent.get(agent)
+
+        const tools = await ToolRegistry.tools({
+          providerID: ProviderID.make(""),
+          modelID: ModelID.make(""),
+          agent: ag,
+        })
+        const tool = tools.find((t) => t.id === body.name)
+        if (!tool) return c.text(`Tool not found: ${body.name}`, 404)
+
+        const t0 = Date.now()
+        const emit = emitter({ sessionID: param.sessionID, messageID: body.messageID, tool: body.name })
+
+        await emit.fn({ status: "running", input: body.args, time: { start: t0 } })
+
+        const ctx = {
+          sessionID: param.sessionID,
+          messageID: emit.mid ?? MessageID.ascending(),
+          callID: emit.pid ?? PartID.ascending(),
+          agent,
+          abort: c.req.raw.signal,
+          messages: [] as MessageV2.WithParts[],
+          metadata(val: { title?: string; metadata?: Record<string, unknown> }) {
+            emit
+              .fn({
+                status: "running",
+                input: body.args,
+                title: val.title,
+                metadata: val.metadata,
+                time: { start: t0 },
+              })
+              ?.catch(() => {})
+          },
+          async ask(req: Omit<Permission.Request, "id" | "sessionID" | "tool">) {
+            await Permission.ask({
+              ...req,
+              sessionID: param.sessionID,
+              tool: emit.mid ? { messageID: emit.mid, callID: emit.pid ?? ctx.callID } : undefined,
+              ruleset: Permission.merge(ag.permission ?? [], session.permission ?? []),
+            })
+          },
+        }
+
+        c.status(200)
+        c.header("Content-Type", "text/plain")
+        return stream(c, async (stream) => {
+          try {
+            const result = await tool.execute(body.args, ctx)
+            await emit.fn({
+              status: "completed",
+              input: body.args,
+              output: result.output,
+              title: result.title ?? "",
+              metadata: result.metadata ?? {},
+              time: { start: t0, end: Date.now() },
+            })
+            const file = typeof body.args.filePath === "string" ? body.args.filePath : undefined
+            await stream.write(result.output + (result.attachments?.length && file ? `\n\x00OC_FILE\x00:${file}` : ""))
+          } catch (error) {
+            const err = error instanceof Error ? error.message : String(error)
+            await emit.fn({
+              status: "error",
+              input: body.args,
+              error: err,
+              time: { start: t0, end: Date.now() },
+            })
+            await stream.write(`Error: ${err}`)
+          }
+        })
+      },
+    )
+    // Display-only status message — creates an external ToolPart for TUI visibility
+    .post(
+      "/:sessionID/status",
+      describeRoute({
+        summary: "Post status message",
+        description: "Create an external ToolPart for display in the TUI. Not sent to the LLM.",
+        operationId: "session.status.post",
+        responses: {
+          200: { description: "Status accepted", content: { "text/plain": { schema: resolver(z.string()) } } },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ sessionID: SessionID.zod })),
+      validator("json", z.object({ message: z.string(), messageID: z.string().optional() })),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const body = c.req.valid("json")
+        await Session.get(sessionID)
+        const emit = emitter({ sessionID, messageID: body.messageID, tool: "status" })
+        if (emit.mid && body.message) {
+          await emit.fn({
+            status: "completed",
+            input: { message: body.message },
+            output: body.message,
+            title: "",
+            metadata: {},
+            time: { start: Date.now(), end: Date.now() },
+          })
+        }
+        return c.text("ok")
+      },
+    )
+    // AI judgment via child session — scripts can delegate decisions to the LLM.
+    // Each callback gets a fresh context (no token accumulation).
+    .post(
+      "/:sessionID/exec",
+      describeRoute({
+        summary: "Execute AI prompt",
+        description:
+          "Create a child session, send a prompt, and stream the AI response as plain text. Designed for script callbacks that need AI judgment at decision points.",
+        operationId: "session.exec",
+        responses: {
+          200: {
+            description: "AI response as plain text",
+            content: { "text/plain": { schema: resolver(z.string()) } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ sessionID: SessionID.zod })),
+      validator(
+        "json",
+        z.object({
+          prompt: z.string().describe("The prompt text to send to the AI"),
+          system: z.string().optional().describe("Custom system prompt for specialist creation"),
+          agent: z.string().optional().describe("Agent type"),
+          model: z.object({ providerID: ProviderID.zod, modelID: ModelID.zod }).optional().describe("Model override"),
+          files: z
+            .array(z.object({ filename: z.string(), mime: z.string(), url: z.string() }))
+            .optional()
+            .describe("File attachments (PDFs, images) for multimodal prompts"),
+          format: z
+            .object({ type: z.literal("json_schema"), schema: z.record(z.string(), z.unknown()) })
+            .optional()
+            .describe("Force structured output via json_schema"),
+          messageID: z.string().optional().describe("Parent message ID — creates external ToolPart when present"),
+        }),
+      ),
+      async (c) => {
+        const parent = c.req.valid("param").sessionID
+        const body = c.req.valid("json")
+        await Session.get(parent)
+
+        // Inherit model from parent session if not explicitly provided
+        const msgs = body.model ? [] : await Session.messages({ sessionID: parent })
+        const model =
+          body.model ??
+          msgs.findLast((m): m is typeof m & { info: MessageV2.User } => m.info.role === "user")?.info.model
+
+        const title = body.system ? `oc prompt -s "${body.system}"` : "oc prompt"
+        const child = await Session.create({ parentID: parent, title })
+        const cleanup = () => SessionPrompt.cancel(child.id)
+        // Register listener before checking — avoids race where abort fires
+        // between the check and addEventListener.
+        c.req.raw.signal.addEventListener("abort", cleanup)
+        if (c.req.raw.signal.aborted) {
+          c.req.raw.signal.removeEventListener("abort", cleanup)
+          cleanup()
+          return c.text("aborted", 503)
+        }
+
+        // Create external ToolPart for subagent visibility (opt-in via messageID)
+        const t0 = Date.now()
+        const preview = body.prompt.substring(0, 80) + (body.prompt.length > 80 ? "..." : "")
+        const emit = emitter({ sessionID: parent, messageID: body.messageID, tool: "task" })
+
+        await emit.fn({
+          status: "running",
+          input: { prompt: preview, description: preview, subagent_type: "oc" },
+          title,
+          metadata: { sessionId: child.id, model },
+          time: { start: t0 },
+        })
+
+        c.status(200)
+        c.header("Content-Type", "text/plain")
+        return stream(c, async (stream) => {
+          let text = ""
+          const unsub =
+            emit.mid && emit.pid
+              ? Bus.subscribe(MessageV2.Event.PartDelta, (event) => {
+                  if (event.properties.sessionID === child.id && event.properties.field === "text") {
+                    text += event.properties.delta
+                    if (text.length > 10_000) text = text.slice(-10_000)
+                    // fire-and-forget — emitter already logs on rejection
+                    void emit.fn({
+                      status: "running",
+                      input: { prompt: preview },
+                      title,
+                      metadata: { sessionId: child.id, model, output: text.substring(0, 2000) },
+                      time: { start: t0 },
+                    })
+                  }
+                })
+              : undefined
+
+          // Keepalive markers prevent HTTP idle timeout for long-running callbacks
+          const timer = setInterval(() => stream.write("\x00OC_KEEPALIVE\x00").catch(() => {}), 15_000)
+
+          try {
+            const msg = await SessionPrompt.prompt({
+              sessionID: child.id,
+              parts: [
+                { type: "text", text: body.prompt },
+                ...(body.files ?? []).map((f) => ({
+                  type: "file" as const,
+                  mime: f.mime,
+                  url: f.url,
+                  filename: f.filename,
+                })),
+              ],
+              system: body.system,
+              agent: body.agent,
+              model,
+              format: body.format ? { ...body.format, retryCount: 3 } : undefined,
+            })
+            const out =
+              body.format && msg.info.role === "assistant" && msg.info.structured !== undefined
+                ? JSON.stringify(msg.info.structured)
+                : (msg.parts.findLast((p): p is typeof p & { type: "text"; text: string } => p.type === "text")?.text ??
+                  "")
+
+            await emit.fn({
+              status: "completed",
+              input: { prompt: preview },
+              output: out.substring(0, 2000),
+              title,
+              metadata: { sessionId: child.id, model },
+              time: { start: t0, end: Date.now() },
+            })
+            await stream.write(out)
+          } catch (error) {
+            const err = error instanceof Error ? error.message : String(error)
+            await emit.fn({
+              status: "error",
+              input: { prompt: preview },
+              error: err,
+              time: { start: t0, end: Date.now() },
+            })
+            await stream.write(`Error: ${err}`)
+          } finally {
+            clearInterval(timer)
+            unsub?.()
+            c.req.raw.signal.removeEventListener("abort", cleanup)
+          }
+        })
+      },
+    )
+    // Todo CRUD — create and bulk update
+    .post(
+      "/:sessionID/todo",
+      describeRoute({
+        summary: "Create session todo",
+        operationId: "session.todo.create",
+        responses: {
+          200: {
+            description: "Updated todo list",
+            content: { "application/json": { schema: resolver(Todo.Info.array()) } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ sessionID: SessionID.zod })),
+      validator("json", Todo.Info),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        await Session.get(sessionID)
+        const todo = c.req.valid("json")
+        const existing = await Todo.get(sessionID)
+        const todos = [...existing, todo]
+        await Todo.update({ sessionID, todos })
+        return c.json(todos)
+      },
+    )
+    .put(
+      "/:sessionID/todo",
+      describeRoute({
+        summary: "Update session todos",
+        operationId: "session.todo.update",
+        responses: {
+          200: {
+            description: "Updated todo list",
+            content: { "application/json": { schema: resolver(Todo.Info.array()) } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ sessionID: SessionID.zod })),
+      validator("json", z.object({ todos: Todo.Info.array() })),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        await Session.get(sessionID)
+        const body = c.req.valid("json")
+        await Todo.update({ sessionID, todos: body.todos })
+        return c.json(body.todos)
       },
     ),
 )

@@ -1,6 +1,16 @@
-import { describe, test, expect } from "bun:test"
+import { afterEach, describe, test, expect, mock } from "bun:test"
 import z from "zod"
 import { Tool } from "../../src/tool/tool"
+import { Instance } from "../../src/project/instance"
+import { Log } from "../../src/util/log"
+import { tmpdir } from "../fixture/fixture"
+
+Log.init({ print: false })
+
+afterEach(async () => {
+  mock.restore()
+  await Instance.disposeAll()
+})
 
 const params = z.object({ input: z.string() })
 const defaultArgs = { input: "test" }
@@ -49,24 +59,30 @@ describe("Tool.define", () => {
   })
 
   test("validation still works after many init() calls", async () => {
-    const tool = Tool.define("test-validation", {
-      description: "validation test",
-      parameters: z.object({ count: z.number().int().positive() }),
-      async execute(args) {
-        return { title: "test", output: String(args.count), metadata: {} }
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const tool = Tool.define("test-validation", {
+          description: "validation test",
+          parameters: z.object({ count: z.number().int().positive() }),
+          async execute(args) {
+            return { title: "test", output: String(args.count), metadata: {} }
+          },
+        })
+
+        for (let i = 0; i < 100; i++) {
+          await tool.init()
+        }
+
+        const resolved = await tool.init()
+
+        const result = await resolved.execute({ count: 42 }, {} as any)
+        expect(result.output).toBe("42")
+
+        await expect(resolved.execute({ count: -1 }, {} as any)).rejects.toThrow("invalid arguments")
       },
     })
-
-    for (let i = 0; i < 100; i++) {
-      await tool.init()
-    }
-
-    const resolved = await tool.init()
-
-    const result = await resolved.execute({ count: 42 }, {} as any)
-    expect(result.output).toBe("42")
-
-    await expect(resolved.execute({ count: -1 }, {} as any)).rejects.toThrow("invalid arguments")
   })
 
   test("skips truncation when metadata.truncated is already set to false", async () => {
@@ -88,21 +104,27 @@ describe("Tool.define", () => {
   })
 
   test("applies truncation when metadata.truncated is undefined", async () => {
-    const big = "x".repeat(200_000)
-    const tool = Tool.define("test-truncate", {
-      description: "truncated output tool",
-      parameters: params,
-      async execute() {
-        return { title: "test", output: big, metadata: {} as Record<string, any> }
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const big = "x".repeat(200_000)
+        const tool = Tool.define("test-truncate", {
+          description: "truncated output tool",
+          parameters: params,
+          async execute() {
+            return { title: "test", output: big, metadata: {} as Record<string, any> }
+          },
+        })
+
+        const resolved = await tool.init()
+        const result = await resolved.execute(defaultArgs, {} as any)
+
+        // The wrap() layer should apply Truncate.output() because truncated is undefined
+        expect(result.metadata.truncated).toBe(true)
+        expect(result.output.length).toBeLessThan(big.length)
       },
     })
-
-    const resolved = await tool.init()
-    const result = await resolved.execute(defaultArgs, {} as any)
-
-    // The wrap() layer should apply Truncate.output() because truncated is undefined
-    expect(result.metadata.truncated).toBe(true)
-    expect(result.output.length).toBeLessThan(big.length)
   })
 
   test("skips truncation when metadata.truncated is false and output is small", async () => {
