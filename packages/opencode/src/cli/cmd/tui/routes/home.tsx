@@ -1,5 +1,5 @@
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import { createEffect, createMemo, createSignal, Show } from "solid-js"
+import { createEffect, createSignal } from "solid-js"
 import { Logo } from "../component/logo"
 import { useSync } from "../context/sync"
 import { Toast } from "../ui/toast"
@@ -8,7 +8,6 @@ import { useRouteData } from "@tui/context/route"
 import { usePromptRef } from "../context/prompt"
 import { useLocal } from "../context/local"
 import { TuiPluginRuntime } from "../plugin"
-import { useTheme } from "../context/theme"
 
 // TODO: what is the best way to do this?
 let once = false
@@ -24,10 +23,7 @@ export function Home() {
   const [ref, setRef] = createSignal<PromptRef | undefined>()
   const args = useArgs()
   const local = useLocal()
-  const { theme } = useTheme()
   let sent = false
-
-  const org = createMemo(() => sync.data.console_state.activeOrgName)
 
   const bind = (r: PromptRef | undefined) => {
     setRef(r)
@@ -71,7 +67,6 @@ export function Home() {
             <Prompt
               ref={bind}
               workspaceID={route.workspaceID}
-              hint={<Show when={org()}>{(item) => <text fg={theme.textMuted}>{item()}</text>}</Show>}
               right={<TuiPluginRuntime.Slot name="home_prompt_right" workspace_id={route.workspaceID} />}
               placeholders={placeholder}
             />
