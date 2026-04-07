@@ -1,6 +1,7 @@
 import { useIsRouting, useLocation } from "@solidjs/router"
 import { batch, createEffect, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useLanguage } from "@/context/language"
 
@@ -349,13 +350,12 @@ export function DebugBar() {
 
     syncHeap()
     start()
-    document.addEventListener("visibilitychange", vis)
+    makeEventListener(document, "visibilitychange", vis)
 
     onCleanup(() => {
       if (one !== 0) cancelAnimationFrame(one)
       if (two !== 0) cancelAnimationFrame(two)
       stop()
-      document.removeEventListener("visibilitychange", vis)
       for (const ob of obs) ob.disconnect()
     })
   })

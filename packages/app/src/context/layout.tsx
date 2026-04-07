@@ -1,6 +1,7 @@
 import { createStore, produce } from "solid-js/store"
 import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
+import { makeEventListener } from "@solid-primitives/event-listener"
 import { useGlobalSync } from "./global-sync"
 import { useGlobalSDK } from "./global-sdk"
 import { useServer } from "./server"
@@ -366,12 +367,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         flush()
       }
 
-      window.addEventListener("pagehide", flush)
-      document.addEventListener("visibilitychange", handleVisibility)
+      makeEventListener(window, "pagehide", flush)
+      makeEventListener(document, "visibilitychange", handleVisibility)
 
       onCleanup(() => {
-        window.removeEventListener("pagehide", flush)
-        document.removeEventListener("visibilitychange", handleVisibility)
         scroll.dispose()
       })
     })

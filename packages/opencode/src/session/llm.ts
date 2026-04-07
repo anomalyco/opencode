@@ -1,6 +1,7 @@
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Cause, Effect, Layer, Record, ServiceMap } from "effect"
+import * as Queue from "effect/Queue"
 import * as Stream from "effect/Stream"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool, tool, jsonSchema } from "ai"
 import { mergeDeep, pipe } from "remeda"
@@ -24,16 +25,20 @@ export namespace LLM {
   export type StreamInput = {
     user: MessageV2.User
     sessionID: string
+    parentSessionID?: string
     model: Provider.Model
     agent: Agent.Info
     permission?: Permission.Ruleset
     system: string[]
-    abort: AbortSignal
     messages: ModelMessage[]
     small?: boolean
     tools: Record<string, Tool>
     retries?: number
     toolChoice?: "auto" | "required" | "none"
+  }
+
+  export type StreamRequest = StreamInput & {
+    abort: AbortSignal
   }
 
   export type Event = Awaited<ReturnType<typeof stream>>["fullStream"] extends AsyncIterable<infer T> ? T : never
@@ -49,13 +54,20 @@ export namespace LLM {
     Effect.gen(function* () {
       return Service.of({
         stream(input) {
-          return Stream.unwrap(
-            Effect.promise(() => LLM.stream(input)).pipe(
-              Effect.map((result) =>
-                Stream.fromAsyncIterable(result.fullStream, (err) => err).pipe(
-                  Stream.mapEffect((event) => Effect.succeed(event)),
-                ),
-              ),
+          return Stream.scoped(
+            Stream.unwrap(
+              Effect.gen(function* () {
+                const ctrl = yield* Effect.acquireRelease(
+                  Effect.sync(() => new AbortController()),
+                  (ctrl) => Effect.sync(() => ctrl.abort()),
+                )
+
+                const result = yield* Effect.promise(() => LLM.stream({ ...input, abort: ctrl.signal }))
+
+                return Stream.fromAsyncIterable(result.fullStream, (e) =>
+                  e instanceof Error ? e : new Error(String(e)),
+                )
+              }),
             ),
           )
         },
@@ -65,7 +77,7 @@ export namespace LLM {
 
   export const defaultLayer = layer
 
-  export async function stream(input: StreamInput) {
+  export async function stream(input: StreamRequest) {
     const l = log
       .clone()
       .tag("providerID", input.model.providerID)
@@ -115,7 +127,9 @@ export namespace LLM {
     }
 
     const variant =
-      !input.small && input.model.variants && input.user.variant ? input.model.variants[input.user.variant] : {}
+      !input.small && input.model.variants && input.user.model.variant
+        ? input.model.variants[input.user.model.variant]
+        : {}
     const base = input.small
       ? ProviderTransform.smallOptions(input.model)
       : ProviderTransform.options({
@@ -152,7 +166,7 @@ export namespace LLM {
       "chat.params",
       {
         sessionID: input.sessionID,
-        agent: input.agent,
+        agent: input.agent.name,
         model: input.model,
         provider,
         message: input.user,
@@ -163,6 +177,7 @@ export namespace LLM {
           : undefined,
         topP: input.agent.topP ?? ProviderTransform.topP(input.model),
         topK: ProviderTransform.topK(input.model),
+        maxOutputTokens: ProviderTransform.maxOutputTokens(input.model),
         options,
       },
     )
@@ -171,7 +186,7 @@ export namespace LLM {
       "chat.headers",
       {
         sessionID: input.sessionID,
-        agent: input.agent,
+        agent: input.agent.name,
         model: input.model,
         provider,
         message: input.user,
@@ -180,11 +195,6 @@ export namespace LLM {
         headers: {},
       },
     )
-
-    const maxOutputTokens =
-      isOpenaiOauth || provider.id.includes("github-copilot")
-        ? undefined
-        : ProviderTransform.maxOutputTokens(input.model)
 
     const tools = await resolveTools(input)
 
@@ -199,11 +209,19 @@ export namespace LLM {
       input.model.providerID.toLowerCase().includes("litellm") ||
       input.model.api.id.toLowerCase().includes("litellm")
 
+    // LiteLLM/Bedrock rejects requests where the message history contains tool
+    // calls but no tools param is present. When there are no active tools (e.g.
+    // during compaction), inject a stub tool to satisfy the validation requirement.
+    // The stub description explicitly tells the model not to call it.
     if (isLiteLLMProxy && Object.keys(tools).length === 0 && hasToolCalls(input.messages)) {
       tools["_noop"] = tool({
-        description:
-          "Placeholder for LiteLLM/Anthropic proxy compatibility - required when message history contains tool calls but no active tools are needed",
-        inputSchema: jsonSchema({ type: "object", properties: {} }),
+        description: "Do not call this tool. It exists only for API compatibility and must never be invoked.",
+        inputSchema: jsonSchema({
+          type: "object",
+          properties: {
+            reason: { type: "string", description: "Unused" },
+          },
+        }),
         execute: async () => ({ output: "", title: "", metadata: {} }),
       })
     }
@@ -271,7 +289,7 @@ export namespace LLM {
       activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
       tools,
       toolChoice: input.toolChoice,
-      maxOutputTokens,
+      maxOutputTokens: params.maxOutputTokens,
       abortSignal: input.abort,
       headers: {
         ...(input.model.providerID.startsWith("opencode")
@@ -282,6 +300,8 @@ export namespace LLM {
               "x-opencode-client": Flag.OPENCODE_CLIENT,
             }
           : {
+              "x-session-affinity": input.sessionID,
+              ...(input.parentSessionID ? { "x-parent-session-id": input.parentSessionID } : {}),
               "User-Agent": `opencode/${Installation.VERSION}`,
             }),
         ...input.model.headers,
@@ -296,7 +316,6 @@ export namespace LLM {
             specificationVersion: "v3" as const,
             async transformParams(args) {
               if (args.type === "stream") {
-                // TODO: verify that LanguageModelV3Prompt is still compat here!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 // @ts-expect-error
                 args.params.prompt = ProviderTransform.message(args.params.prompt, input.model, options)
               }
@@ -315,17 +334,12 @@ export namespace LLM {
     })
   }
 
-  async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" | "user">) {
+  function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "permission" | "user">) {
     const disabled = Permission.disabled(
       Object.keys(input.tools),
       Permission.merge(input.agent.permission, input.permission ?? []),
     )
-    for (const tool of Object.keys(input.tools)) {
-      if (input.user.tools?.[tool] === false || disabled.has(tool)) {
-        delete input.tools[tool]
-      }
-    }
-    return input.tools
+    return Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k))
   }
 
   // Check if messages contain any tool-call content

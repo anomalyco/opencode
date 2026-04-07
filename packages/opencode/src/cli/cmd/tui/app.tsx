@@ -36,6 +36,7 @@ import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { DialogWorkspaceList } from "@tui/component/dialog-workspace-list"
+import { DialogConsoleOrg } from "@tui/component/dialog-console-org"
 import { KeybindProvider, useKeybind } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
@@ -124,13 +125,17 @@ import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
 
 function rendererConfig(_config: TuiConfig.Info): CliRendererConfig {
+  const mouseEnabled = !Flag.OPENCODE_DISABLE_MOUSE && (_config.mouse ?? true)
+
   return {
+    externalOutputMode: "passthrough",
     targetFps: 60,
     gatherStats: false,
     exitOnCtrlC: false,
-    useKittyKeyboard: { events: process.platform === "win32" },
+    useKittyKeyboard: {},
     autoFocus: false,
     openConsoleOnError: false,
+    useMouse: mouseEnabled,
     consoleOptions: {
       keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
       onCopySelection: (text) => {
@@ -250,7 +255,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   const route = useRoute()
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
-  renderer.disableStdoutInterception()
   const dialog = useDialog()
   const local = useLocal()
   const kv = useKV()
@@ -285,9 +289,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     toast,
     renderer,
   })
-  onCleanup(() => {
-    api.dispose()
-  })
   const [ready, setReady] = createSignal(false)
   TuiPluginRuntime.init(api)
     .catch((error) => {
@@ -299,7 +300,8 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
 
   useKeyboard((evt) => {
     if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
-    if (!renderer.getSelection()) return
+    const sel = renderer.getSelection()
+    if (!sel) return
 
     // Windows Terminal-like behavior:
     // - Ctrl+C copies and dismisses selection
@@ -320,6 +322,11 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       renderer.clearSelection()
       evt.preventDefault()
       evt.stopPropagation()
+      return
+    }
+
+    const focus = renderer.currentFocusedRenderable
+    if (focus?.hasSelection() && sel.selectedRenderables.includes(focus)) {
       return
     }
 
@@ -581,10 +588,23 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
     },
     {
-      title: "Switch model variant",
+      title: "Variant cycle",
       value: "variant.cycle",
       keybind: "variant_cycle",
       category: "Agent",
+      onSelect: () => {
+        local.model.variant.cycle()
+      },
+    },
+    {
+      title: "Switch model variant",
+      value: "variant.list",
+      keybind: "variant_list",
+      category: "Agent",
+      hidden: local.model.variant.list().length === 0,
+      slash: {
+        name: "variants",
+      },
       onSelect: () => {
         dialog.replace(() => <DialogVariant />)
       },
@@ -611,6 +631,23 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       },
       category: "Provider",
     },
+    ...(sync.data.console_state.switchableOrgCount > 1
+      ? [
+          {
+            title: "Switch org",
+            value: "console.org.switch",
+            suggested: Boolean(sync.data.console_state.activeOrgName),
+            slash: {
+              name: "org",
+              aliases: ["orgs", "switch-org"],
+            },
+            onSelect: () => {
+              dialog.replace(() => <DialogConsoleOrg />)
+            },
+            category: "Provider",
+          },
+        ]
+      : []),
     {
       title: "View status",
       keybind: "status_view",
@@ -636,7 +673,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       category: "System",
     },
     {
-      title: "Toggle Theme Mode",
+      title: "Toggle theme mode",
       value: "theme.switch_mode",
       onSelect: (dialog) => {
         setMode(mode() === "dark" ? "light" : "dark")
@@ -645,7 +682,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       category: "System",
     },
     {
-      title: locked() ? "Unlock Theme Mode" : "Lock Theme Mode",
+      title: locked() ? "Unlock theme mode" : "Lock theme mode",
       value: "theme.mode.lock",
       onSelect: (dialog) => {
         if (locked()) unlock()
@@ -722,6 +759,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
       keybind: "terminal_suspend",
       category: "System",
       hidden: true,
+      enabled: tuiConfig.keybinds?.terminal_suspend !== "none",
       onSelect: () => {
         process.once("SIGCONT", () => {
           renderer.resume()

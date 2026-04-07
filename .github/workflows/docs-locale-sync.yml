@@ -9,7 +9,8 @@ on:
 
 jobs:
   sync-locales:
-    if: github.actor != 'opencode-agent[bot]'
+    if: false
+    #if: github.actor != 'opencode-agent[bot]'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: write
@@ -34,7 +35,7 @@ jobs:
       - name: Compute changed English docs
         id: changes
         run: |
-          FILES=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" -- 'packages/web/src/content/docs/*.mdx' || true)
+          FILES=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" -- ':(glob)packages/web/src/content/docs/*.mdx' || true)
           if [ -z "$FILES" ]; then
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
             echo "No English docs changed in push range"
