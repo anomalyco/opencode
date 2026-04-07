@@ -51,6 +51,10 @@ export namespace ProviderTransform {
     model: Provider.Model,
     options: Record<string, unknown>,
   ): ModelMessage[] {
+    if (model.providerID === "langdock" || model.api.url.includes("langdock")) {
+      while (msgs.at(-1)?.role === "assistant") msgs = msgs.slice(0, -1)
+    }
+
     // Anthropic rejects messages with empty content - filter out empty string messages
     // and remove empty text/reasoning parts from array content
     if (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/amazon-bedrock") {

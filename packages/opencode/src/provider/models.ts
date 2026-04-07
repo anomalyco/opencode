@@ -88,6 +88,17 @@ export namespace ModelsDev {
 
   export type Provider = z.infer<typeof Provider>
 
+  const BUILTIN_PROVIDERS: Record<string, Provider> = {
+    langdock: {
+      id: "langdock",
+      name: "Langdock",
+      env: ["LANGDOCK_API_KEY"],
+      api: "https://api.langdock.com/openai/${LANGDOCK_REGION}/v1",
+      npm: "@ai-sdk/openai-compatible",
+      models: {},
+    },
+  }
+
   function url() {
     return Flag.OPENCODE_MODELS_URL || "https://models.dev"
   }
@@ -132,7 +143,10 @@ export namespace ModelsDev {
 
   export async function get() {
     const result = await Data()
-    return result as Record<string, Provider>
+    return {
+      ...(result as Record<string, Provider>),
+      ...BUILTIN_PROVIDERS,
+    }
   }
 
   export async function refresh(force = false) {

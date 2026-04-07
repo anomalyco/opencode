@@ -83,9 +83,15 @@ export const ConfigRoutes = lazy(() =>
       async (c) => {
         using _ = log.time("providers")
         const providers = await Provider.list().then((x) => mapValues(x, (item) => item))
+        const defaults = Object.fromEntries(
+          Object.entries(providers as Record<string, Provider.Info>).flatMap(([id, item]) => {
+            const model = Provider.sort(Object.keys(item.models).map((modelID) => ({ id: modelID })))[0]
+            return model ? [[id, model.id]] : []
+          }),
+        )
         return c.json({
           providers: Object.values(providers),
-          default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
+          default: defaults,
         })
       },
     ),

@@ -104,6 +104,46 @@ describe("ProviderTransform.options - setCacheKey", () => {
   })
 })
 
+describe("ProviderTransform.message - langdock", () => {
+  const langdockModel = {
+    id: "langdock/gpt-5",
+    providerID: "langdock",
+    api: {
+      id: "gpt-5",
+      url: "https://api.langdock.com/openai/eu/v1",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "Gpt 5",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: true },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+    limit: { context: 128000, output: 32768 },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  test("strips trailing assistant messages before sending to Langdock", () => {
+    const result = ProviderTransform.message(
+      [
+        { role: "user", content: "hello" },
+        { role: "assistant", content: "draft answer" },
+      ],
+      langdockModel,
+      {},
+    )
+
+    expect(result).toEqual([{ role: "user", content: "hello" }])
+  })
+})
+
 describe("ProviderTransform.options - google thinkingConfig gating", () => {
   const sessionID = "test-session-123"
 

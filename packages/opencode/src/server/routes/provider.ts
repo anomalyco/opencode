@@ -56,9 +56,15 @@ export const ProviderRoutes = lazy(() =>
           mapValues(filteredProviders, (x) => Provider.fromModelsDevProvider(x)),
           connected,
         )
+        const defaults = Object.fromEntries(
+          Object.entries(providers as Record<string, Provider.Info>).flatMap(([id, item]) => {
+            const model = Provider.sort(Object.keys(item.models).map((modelID) => ({ id: modelID })))[0]
+            return model ? [[id, model.id]] : []
+          }),
+        )
         return c.json({
           all: Object.values(providers),
-          default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
+          default: defaults,
           connected: Object.keys(connected),
         })
       },

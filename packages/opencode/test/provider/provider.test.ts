@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test"
+import { test, expect, mock } from "bun:test"
 import { mkdir, unlink } from "fs/promises"
 import path from "path"
 
@@ -69,6 +69,85 @@ test("provider loaded from config with apiKey option", async () => {
       expect(providers[ProviderID.anthropic]).toBeDefined()
     },
   })
+})
+
+test("langdock provider auto-discovers models from the built-in endpoint", async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = mock((url: string | URL | Request) => {
+    if (url.toString() === "https://api.langdock.com/openai/eu/v1/models") {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            object: "list",
+            data: [{ id: "gpt-5" }, { id: "claude-sonnet-4-5" }],
+          }),
+          { status: 200 },
+        ),
+      )
+    }
+    if (url.toString() === "https://api.langdock.com/anthropic/eu/v1/models") {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: [{ id: "claude-sonnet-4-5" }],
+          }),
+          { status: 200 },
+        ),
+      )
+    }
+    if (url.toString() === "https://api.langdock.com/google/eu/v1beta/models") {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            models: [
+              { name: "models/gemini-2.5-flash", supportedGenerationMethods: ["generateContent"] },
+              { name: "models/embedding-001", supportedGenerationMethods: ["embedContent"] },
+            ],
+          }),
+          { status: 200 },
+        ),
+      )
+    }
+    return originalFetch(url)
+  }) as unknown as typeof fetch
+
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        Env.set("LANGDOCK_API_KEY", "test-langdock-key")
+        Env.set("LANGDOCK_REGION", "eu")
+      },
+      fn: async () => {
+        const providers = await Provider.list()
+        expect(providers[ProviderID.langdock]).toBeDefined()
+        expect(providers[ProviderID.langdock].models["gpt-5"]).toBeDefined()
+        expect(providers[ProviderID.langdock].models["claude-sonnet-4-5"]).toBeDefined()
+        expect(providers[ProviderID.langdock].models["gemini-2.5-flash"]).toBeDefined()
+        expect(providers[ProviderID.langdock].models["gpt-5"].api.npm).toBe("@ai-sdk/openai")
+        expect(providers[ProviderID.langdock].models["claude-sonnet-4-5"].api.npm).toBe("@ai-sdk/anthropic")
+        expect(providers[ProviderID.langdock].models["gemini-2.5-flash"].api.npm).toBe("@ai-sdk/google")
+        expect(providers[ProviderID.langdock].models["claude-sonnet-4-5"].api.url).toBe(
+          "https://api.langdock.com/anthropic/eu/v1",
+        )
+        expect(providers[ProviderID.langdock].models["gemini-2.5-flash"].api.url).toBe(
+          "https://api.langdock.com/google/eu/v1beta",
+        )
+      },
+    })
+  } finally {
+    globalThis.fetch = originalFetch
+  }
 })
 
 test("disabled_providers excludes provider", async () => {

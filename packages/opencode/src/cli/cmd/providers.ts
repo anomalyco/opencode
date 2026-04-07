@@ -323,6 +323,7 @@ export const ProvidersLoginCommand = cmd({
         const priority: Record<string, number> = {
           opencode: 0,
           openai: 1,
+          langdock: 2,
           "github-copilot": 2,
           google: 3,
           anthropic: 4,
@@ -428,6 +429,12 @@ export const ProvidersLoginCommand = cmd({
 
         if (provider === "vercel") {
           prompts.log.info("You can create an api key at https://vercel.link/ai-gateway-token")
+        }
+
+        if (provider === "langdock") {
+          prompts.log.info(
+            "Langdock uses LANGDOCK_API_KEY and defaults to the eu region. Override the region with LANGDOCK_REGION or provider.options.region if needed.",
+          )
         }
 
         if (["cloudflare", "cloudflare-ai-gateway"].includes(provider)) {
