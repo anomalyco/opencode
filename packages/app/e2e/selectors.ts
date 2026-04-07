@@ -11,6 +11,7 @@ export const sessionTodoDockSelector = '[data-component="session-todo-dock"]'
 export const sessionTodoToggleSelector = '[data-action="session-todo-toggle"]'
 export const sessionTodoToggleButtonSelector = '[data-action="session-todo-toggle-button"]'
 export const sessionTodoListSelector = '[data-slot="session-todo-list"]'
+export const promptReadSelector = '[data-action="prompt-read"]'
 
 export const modelVariantCycleSelector = '[data-action="model-variant-cycle"]'
 export const promptAgentSelector = '[data-component="prompt-agent-control"]'

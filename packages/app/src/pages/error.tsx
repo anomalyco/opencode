@@ -16,6 +16,24 @@ export type InitError = {
 type Translator = ReturnType<typeof useLanguage>["t"]
 const CHAIN_SEPARATOR = "\n" + "─".repeat(40) + "\n"
 
+const ACTIONS = {
+  en: {
+    webview: "Restart frontend",
+    backend: "Restart backend",
+    app: "Restart app",
+  },
+  zh: {
+    webview: "重启前端",
+    backend: "重启后端",
+    app: "重启应用",
+  },
+  zht: {
+    webview: "重新啟動前端",
+    backend: "重新啟動後端",
+    app: "重新啟動應用程式",
+  },
+} as const
+
 function isIssue(value: unknown): value is { message: string; path: string[] } {
   if (!value || typeof value !== "object") return false
   if (!("message" in value) || !("path" in value)) return false
@@ -223,6 +241,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
   const language = useLanguage()
   const [store, setStore] = createStore({
     checking: false,
+    acting: false,
     version: undefined as string | undefined,
     actionError: undefined as string | undefined,
   })
@@ -262,6 +281,27 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
       })
   }
 
+  async function act(run: () => Promise<void>) {
+    setStore("acting", true)
+    await run()
+      .then(() => setStore("actionError", undefined))
+      .catch((err) => {
+        setStore("actionError", formatError(err, language.t))
+      })
+      .finally(() => {
+        setStore("acting", false)
+      })
+  }
+
+  const webview = () => act(() => Promise.resolve(window.location.reload()))
+  const backend = () => {
+    if (!platform.reloadBackend) return
+    return act(() => platform.reloadBackend!())
+  }
+  const app = () => act(() => platform.restart())
+  const desktop = () => platform.platform === "desktop"
+  const text = () => ACTIONS[language.locale() as keyof typeof ACTIONS] ?? ACTIONS.en
+
   return (
     <div class="relative flex-1 h-screen w-screen min-h-0 flex flex-col items-center justify-center bg-background-base font-sans">
       <div class="w-2/3 max-w-3xl flex flex-col items-center justify-center gap-8">
@@ -279,15 +319,34 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
           label={language.t("error.page.details.label")}
           hideLabel
         />
-        <div class="flex items-center gap-3">
-          <Button size="large" onClick={platform.restart}>
-            {language.t("error.page.action.restart")}
-          </Button>
+        <div class="flex items-center gap-3 flex-wrap justify-center">
+          <Show
+            when={desktop()}
+            fallback={
+              <Button size="large" onClick={app} disabled={store.acting}>
+                {language.t("error.page.action.restart")}
+              </Button>
+            }
+          >
+            <>
+              <Button size="large" onClick={webview} disabled={store.acting}>
+                {text().webview}
+              </Button>
+              <Show when={platform.reloadBackend}>
+                <Button size="large" variant="secondary" onClick={backend} disabled={store.acting}>
+                  {text().backend}
+                </Button>
+              </Show>
+              <Button size="large" variant="secondary" onClick={app} disabled={store.acting}>
+                {text().app}
+              </Button>
+            </>
+          </Show>
           <Show when={platform.checkUpdate}>
             <Show
               when={store.version}
               fallback={
-                <Button size="large" variant="ghost" onClick={checkForUpdates} disabled={store.checking}>
+                <Button size="large" variant="ghost" onClick={checkForUpdates} disabled={store.checking || store.acting}>
                   {store.checking
                     ? language.t("error.page.action.checking")
                     : language.t("error.page.action.checkUpdates")}

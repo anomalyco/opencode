@@ -10,6 +10,7 @@ import {
   permissionDockSelector,
   promptSelector,
   questionDockSelector,
+  promptReadSelector,
   sessionComposerDockSelector,
   sessionTodoToggleButtonSelector,
 } from "../selectors"
@@ -259,6 +260,26 @@ test("default dock shows prompt input", async ({ page, sdk, gotoSession }) => {
 
     await page.locator(promptSelector).click()
     await expect(page.locator(promptSelector)).toBeFocused()
+  })
+})
+
+test("read mode toggles prompt input visibility", async ({ page, sdk, gotoSession }) => {
+  await withDockSession(sdk, "e2e composer dock read mode", async (session) => {
+    await gotoSession(session.id)
+
+    await expect(page.locator(promptSelector)).toBeVisible()
+
+    const button = page.locator(promptReadSelector).first()
+    await expect(button).toBeVisible()
+    await expect(button).toHaveAttribute("aria-pressed", "false")
+
+    await button.click()
+    await expect(button).toHaveAttribute("aria-pressed", "true")
+    await expect(page.locator(promptSelector)).toHaveCount(0)
+
+    await button.click()
+    await expect(button).toHaveAttribute("aria-pressed", "false")
+    await expect(page.locator(promptSelector)).toBeVisible()
   })
 })
 

@@ -23,6 +23,7 @@ import {
   type JSX,
   lazy,
   onCleanup,
+  onMount,
   type ParentProps,
   Show,
   Suspense,
@@ -68,6 +69,19 @@ const ConfigRoute = () => (
     <Config />
   </Suspense>
 )
+
+function CrashProbe() {
+  const [armed, setArmed] = createSignal(false)
+
+  onMount(() => {
+    if (!import.meta.env.DEV) return
+    if (!new URLSearchParams(location.search).has("force_error")) return
+    requestAnimationFrame(() => setArmed(true))
+  })
+
+  if (armed()) throw new Error("Forced error page")
+  return null
+}
 
 function UiI18nBridge(props: ParentProps) {
   const language = useLanguage()
@@ -161,6 +175,7 @@ export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
         <LanguageProvider locale={props.locale}>
           <UiI18nBridge>
             <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
+              <CrashProbe />
               <QueryProvider>
                 <DialogProvider>
                   <MarkedProviderWithNativeParser>
