@@ -3851,7 +3851,7 @@ export type SessionCommandData = {
     command: string
     variant?: string
     parts?: Array<{
-      id?: string
+      id?: PartIDInput
       type: "file"
       mime: string
       filename?: string

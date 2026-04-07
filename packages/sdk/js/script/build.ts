@@ -20,6 +20,11 @@ async function patchPartInputIDs(file: string) {
   for (const name of ["TextPartInput", "FilePartInput", "AgentPartInput", "SubtaskPartInput"]) {
     content = content.replace(new RegExp(`(export type ${name} = \\{\\n)  id\\?: string`), `$1  id?: PartIDInput`)
   }
+  // SessionCommandData has an inline part type with the same prt constraint
+  content = content.replace(
+    /(export type SessionCommandData[\s\S]*?parts\?\: Array<\{\n\s+)id\?: string/,
+    "$1id?: PartIDInput",
+  )
   await Bun.write(file, content)
 }
 
