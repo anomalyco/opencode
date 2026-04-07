@@ -1239,3 +1239,111 @@ unix(
     ),
   30_000,
 )
+
+// Title auto-generation semantics
+
+it.live("loop sets session title from first user message when no title model is configured", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+
+      const chat = yield* sessions.create({
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        noReply: true,
+        parts: [{ type: "text", text: "How do I fix the memory leak in my Unity game?" }],
+      })
+      yield* llm.text("here is my answer")
+      yield* prompt.loop({ sessionID: chat.id })
+
+      const updated = yield* sessions.get(chat.id)
+      expect(updated.title).toBe("How do I fix the memory leak in my Unity game?")
+    }),
+    { git: true, config: providerCfg },
+  ),
+)
+
+it.live("loop truncates long first message to 100 chars with ellipsis as title", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+
+      const longText = "A".repeat(120)
+      const chat = yield* sessions.create({
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        noReply: true,
+        parts: [{ type: "text", text: longText }],
+      })
+      yield* llm.text("ok")
+      yield* prompt.loop({ sessionID: chat.id })
+
+      const updated = yield* sessions.get(chat.id)
+      expect(updated.title).toBe("A".repeat(97) + "...")
+    }),
+    { git: true, config: providerCfg },
+  ),
+)
+
+it.live("loop uses only first line of multiline user message as title", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+
+      const chat = yield* sessions.create({
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        noReply: true,
+        parts: [{ type: "text", text: "First line of message\nSecond line should be ignored\nThird line too" }],
+      })
+      yield* llm.text("ok")
+      yield* prompt.loop({ sessionID: chat.id })
+
+      const updated = yield* sessions.get(chat.id)
+      expect(updated.title).toBe("First line of message")
+    }),
+    { git: true, config: providerCfg },
+  ),
+)
+
+it.live("loop does not overwrite manually set session title", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+
+      const chat = yield* sessions.create({
+        title: "My Custom Title",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        noReply: true,
+        parts: [{ type: "text", text: "This should not override the title" }],
+      })
+      yield* llm.text("ok")
+      yield* prompt.loop({ sessionID: chat.id })
+
+      const updated = yield* sessions.get(chat.id)
+      expect(updated.title).toBe("My Custom Title")
+    }),
+    { git: true, config: providerCfg },
+  ),
+)
