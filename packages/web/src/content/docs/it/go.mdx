@@ -62,6 +62,7 @@ Solo un membro per workspace può abbonarsi a OpenCode Go.
 L'elenco attuale dei modelli include:
 
 - **GLM-5**
+- **GLM-5.1**
 - **Kimi K2.5**
 - **MiMo-V2-Pro**
 - **MiMo-V2-Omni**
@@ -80,19 +81,19 @@ OpenCode Go include i seguenti limiti:
 - **Limite settimanale** — 30 $ di utilizzo
 - **Limite mensile** — 60 $ di utilizzo
 
-I limiti sono definiti in valore in dollari. Questo significa che il conteggio effettivo delle richieste dipende dal modello utilizzato. Modelli più economici come MiniMax M2.5 consentono più richieste, mentre modelli più costosi come GLM-5 ne consentono di meno.
+I limiti sono definiti in valore in dollari. Questo significa che il conteggio effettivo delle richieste dipende dal modello utilizzato. Modelli più economici come MiniMax M2.5 consentono più richieste, mentre modelli più costosi come GLM-5.1 ne consentono di meno.
 
 La tabella seguente fornisce una stima del conteggio delle richieste in base a pattern di utilizzo tipici di Go:
 
-|                       | GLM-5 | Kimi K2.5 | MiMo-V2-Pro | MiMo-V2-Omni | MiniMax M2.7 | MiniMax M2.5 |
-| --------------------- | ----- | --------- | ----------- | ------------ | ------------ | ------------ |
-| richieste ogni 5 ore  | 1.150 | 1.850     | 1.290       | 2.150        | 14.000       | 20.000       |
-| richieste a settimana | 2.880 | 4.630     | 3.225       | 5.450        | 35.000       | 50.000       |
-| richieste al mese     | 5.750 | 9.250     | 6.450       | 10.900       | 70.000       | 100.000      |
+|                       | GLM-5.1 | GLM-5 | Kimi K2.5 | MiMo-V2-Pro | MiMo-V2-Omni | MiniMax M2.7 | MiniMax M2.5 |
+| --------------------- | ------- | ----- | --------- | ----------- | ------------ | ------------ | ------------ |
+| richieste ogni 5 ore  | 880     | 1.150 | 1.850     | 1.290       | 2.150        | 14.000       | 20.000       |
+| richieste a settimana | 2.150   | 2.880 | 4.630     | 3.225       | 5.450        | 35.000       | 50.000       |
+| richieste al mese     | 4.300   | 5.750 | 9.250     | 6.450       | 10.900       | 70.000       | 100.000      |
 
 Le stime si basano sui pattern medi di richieste osservati:
 
-- GLM-5 — 700 di input, 52.000 in cache, 150 token di output per richiesta
+- GLM-5/5.1 — 700 di input, 52.000 in cache, 150 token di output per richiesta
 - Kimi K2.5 — 870 di input, 55.000 in cache, 200 token di output per richiesta
 - MiniMax M2.7/M2.5 — 300 di input, 55.000 in cache, 125 token di output per richiesta
 - MiMo-V2-Pro — 350 di input, 41.000 in cache, 250 token di output per richiesta
@@ -122,6 +123,7 @@ Puoi anche accedere ai modelli Go tramite i seguenti endpoint API.
 
 | Modello      | ID Modello   | Endpoint                                         | Pacchetto AI SDK            |
 | ------------ | ------------ | ------------------------------------------------ | --------------------------- |
+| GLM-5.1      | glm-5.1      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5        | glm-5        | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.5    | kimi-k2.5    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2-Pro  | mimo-v2-pro  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
