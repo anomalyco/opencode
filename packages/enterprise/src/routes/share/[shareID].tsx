@@ -1,12 +1,4 @@
-import {
-  Message,
-  Model,
-  Part,
-  Session,
-  SessionStatus,
-  SnapshotFileDiff as FileDiff,
-  UserMessage,
-} from "@opencode-ai/sdk/v2"
+import { Message, Model, Part, Session, SessionStatus, SnapshotFileDiff, UserMessage } from "@opencode-ai/sdk/v2"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import { DataProvider } from "@opencode-ai/ui/context"
@@ -59,7 +51,7 @@ const getData = query(async (shareID) => {
     shareID: string
     session: Session[]
     session_diff: {
-      [sessionID: string]: FileDiff[]
+      [sessionID: string]: SnapshotFileDiff[]
     }
     session_status: {
       [sessionID: string]: SessionStatus
