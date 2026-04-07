@@ -1374,7 +1374,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               lastAssistant?.finish &&
               !["tool-calls"].includes(lastAssistant.finish) &&
               !hasToolCalls &&
-              lastUser.id < lastAssistant.id
+              (
+                // Use parentID to determine if assistant message is a response to the last user message.
+                // This is more reliable than timestamp comparison when client/server clocks are out of sync.
+                lastAssistant.parentID === lastUser.id ||
+                // Fallback to timestamp comparison for backward compatibility with messages
+                // that may not have parentID set.
+                (!lastAssistant.parentID && lastUser.id < lastAssistant.id)
+              )
             ) {
               log.info("exiting loop", { sessionID })
               break
