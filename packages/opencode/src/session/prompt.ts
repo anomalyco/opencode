@@ -1377,7 +1377,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               lastAssistant?.finish &&
               !["tool-calls"].includes(lastAssistant.finish) &&
               !hasToolCalls &&
-              lastUser.id < lastAssistant.id
+              lastAssistant.parentID === lastUser.id
             ) {
               log.info("exiting loop", { sessionID })
               break

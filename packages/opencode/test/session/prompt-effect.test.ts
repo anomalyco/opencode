@@ -34,6 +34,7 @@ import { ToolRegistry } from "../../src/tool/registry"
 import { Truncate } from "../../src/tool/truncate"
 import { Log } from "../../src/util/log"
 import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
+import { Identifier } from "../../src/id/id"
 import { provideTmpdirInstance, provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { reply, TestLLMServer } from "../lib/llm-server"
@@ -316,6 +317,60 @@ it.live("loop exits immediately when last assistant has stop finish", () =>
       const chat = yield* sessions.create({ title: "Pinned" })
       yield* seed(chat.id, { finish: "stop" })
 
+      const result = yield* prompt.loop({ sessionID: chat.id })
+      expect(result.info.role).toBe("assistant")
+      if (result.info.role === "assistant") expect(result.info.finish).toBe("stop")
+      expect(yield* llm.calls).toBe(0)
+    }),
+    { git: true, config: providerCfg },
+  ),
+)
+
+it.live("loop exits when assistant parentID matches user message even with clock skew", () =>
+  provideTmpdirServer(
+    Effect.fnUntraced(function* ({ llm }) {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Clock skew test" })
+
+      // Simulate client clock being ahead: create assistant message first (server time),
+      // then create user message with a "future" timestamp that would sort after the assistant
+      const assistantTime = Date.now() - 1000 // 1 second in the past
+      const userTime = Date.now() + 1000 // 1 second in the future
+
+      // Create assistant message with older timestamp
+      const assistantID = Identifier.create("message", false, assistantTime)
+      const assistant: MessageV2.Assistant = {
+        id: MessageID.make(assistantID),
+        role: "assistant",
+        parentID: MessageID.make(Identifier.create("message", false, userTime)),
+        sessionID: chat.id,
+        mode: "build",
+        agent: "build",
+        cost: 0,
+        path: { cwd: "/tmp", root: "/tmp" },
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: ref.modelID,
+        providerID: ref.providerID,
+        time: { created: assistantTime },
+        finish: "stop",
+      }
+      yield* sessions.updateMessage(assistant)
+
+      // Create user message with newer timestamp (simulating client clock ahead)
+      const userID = Identifier.create("message", false, userTime)
+      const userMsg: MessageV2.User = {
+        id: MessageID.make(userID),
+        role: "user",
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        time: { created: userTime },
+      }
+      yield* sessions.updateMessage(userMsg)
+
+      // The loop should still exit because it checks parentID === user.id,
+      // not ID ordering
       const result = yield* prompt.loop({ sessionID: chat.id })
       expect(result.info.role).toBe("assistant")
       if (result.info.role === "assistant") expect(result.info.finish).toBe("stop")
