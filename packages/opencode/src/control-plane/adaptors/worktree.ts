@@ -1,26 +1,42 @@
+import z from "zod"
 import { Worktree } from "@/worktree"
-import type { Config } from "../config"
-import type { Adaptor } from "./types"
+import { type Adaptor, WorkspaceInfo } from "../types"
 
-type WorktreeConfig = Extract<Config, { type: "worktree" }>
+const Config = WorkspaceInfo.extend({
+  name: WorkspaceInfo.shape.name.unwrap(),
+  branch: WorkspaceInfo.shape.branch.unwrap(),
+  directory: WorkspaceInfo.shape.directory.unwrap(),
+})
 
-export const WorktreeAdaptor: Adaptor<WorktreeConfig> = {
-  async create(_from: WorktreeConfig, _branch: string) {
-    const next = await Worktree.create(undefined)
+type Config = z.infer<typeof Config>
+
+export const WorktreeAdaptor: Adaptor = {
+  async configure(info) {
+    const worktree = await Worktree.makeWorktreeInfo(info.name ?? undefined)
     return {
-      config: {
-        type: "worktree",
-        directory: next.directory,
-      },
-      // Hack for now: `Worktree.create` puts all its async code in a
-      // `setTimeout` so it doesn't use this, but we should change that
-      init: async () => {},
+      ...info,
+      name: worktree.name,
+      branch: worktree.branch,
+      directory: worktree.directory,
     }
   },
-  async remove(config: WorktreeConfig) {
+  async create(info) {
+    const config = Config.parse(info)
+    await Worktree.createFromInfo({
+      name: config.name,
+      directory: config.directory,
+      branch: config.branch,
+    })
+  },
+  async remove(info) {
+    const config = Config.parse(info)
     await Worktree.remove({ directory: config.directory })
   },
-  async request(_from: WorktreeConfig, _method: string, _url: string, _data?: BodyInit, _signal?: AbortSignal) {
-    throw new Error("worktree does not support request")
+  target(info) {
+    const config = Config.parse(info)
+    return {
+      type: "local",
+      directory: config.directory,
+    }
   },
 }

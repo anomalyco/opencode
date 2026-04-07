@@ -8,6 +8,7 @@ export const TextShimmer = <T extends ValidComponent = "span">(props: {
   active?: boolean
   offset?: number
 }) => {
+  const text = createMemo(() => props.text ?? "")
   const active = createMemo(() => props.active ?? true)
   const offset = createMemo(() => props.offset ?? 0)
   const [run, setRun] = createSignal(active())
@@ -42,7 +43,7 @@ export const TextShimmer = <T extends ValidComponent = "span">(props: {
       data-component="text-shimmer"
       data-active={active() ? "true" : "false"}
       class={props.class}
-      aria-label={props.text}
+      aria-label={text()}
       style={{
         "--text-shimmer-swap": `${swap}ms`,
         "--text-shimmer-index": `${offset()}`,
@@ -50,10 +51,10 @@ export const TextShimmer = <T extends ValidComponent = "span">(props: {
     >
       <span data-slot="text-shimmer-char">
         <span data-slot="text-shimmer-char-base" aria-hidden="true">
-          {props.text}
+          {text()}
         </span>
         <span data-slot="text-shimmer-char-shimmer" data-run={run() ? "true" : "false"} aria-hidden="true">
-          {props.text}
+          {text()}
         </span>
       </span>
     </Dynamic>

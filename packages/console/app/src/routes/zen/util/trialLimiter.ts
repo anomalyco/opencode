@@ -3,8 +3,8 @@ import { IpTable } from "@opencode-ai/console-core/schema/ip.sql.js"
 import { UsageInfo } from "./provider/provider"
 import { Subscription } from "@opencode-ai/console-core/subscription.js"
 
-export function createTrialLimiter(trialProvider: string | undefined, ip: string) {
-  if (!trialProvider) return
+export function createTrialLimiter(trialProviders: string[] | undefined, ip: string) {
+  if (!trialProviders) return
   if (!ip) return
 
   const limit = Subscription.getFreeLimits().promoTokens
@@ -24,7 +24,7 @@ export function createTrialLimiter(trialProvider: string | undefined, ip: string
       )
 
       _isTrial = (data?.usage ?? 0) < limit
-      return _isTrial ? trialProvider : undefined
+      return _isTrial ? trialProviders : undefined
     },
     track: async (usageInfo: UsageInfo) => {
       if (!_isTrial) return

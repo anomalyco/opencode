@@ -1,27 +1,29 @@
-import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg } from "@opentui/core"
-import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
+import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, decodePasteBytes, t, dim, fg } from "@opentui/core"
+import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
+import { fileURLToPath } from "url"
 import { Filesystem } from "@/util/filesystem"
 import { useLocal } from "@tui/context/local"
 import { useTheme } from "@tui/context/theme"
-import { EmptyBorder } from "@tui/component/border"
+import { EmptyBorder, SplitBorder } from "@tui/component/border"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
-import { Identifier } from "@/id/id"
+import { MessageID, PartID } from "@/session/schema"
 import { createStore, produce } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
+import { assign } from "./part"
 import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
-import { useRenderer } from "@opentui/solid"
+import { useRenderer, type JSX } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
-import type { FilePart } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
@@ -34,15 +36,22 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { CONSOLE_MANAGED_ICON, consoleManagedProviderLabel } from "@tui/util/provider-origin"
 
 export type PromptProps = {
   sessionID?: string
+  workspaceID?: string
   visible?: boolean
   disabled?: boolean
   onSubmit?: () => void
-  ref?: (ref: PromptRef) => void
+  ref?: (ref: PromptRef | undefined) => void
   hint?: JSX.Element
+  right?: JSX.Element
   showPlaceholder?: boolean
+  placeholders?: {
+    normal?: string[]
+    shell?: string[]
+  }
 }
 
 export type PromptRef = {
@@ -55,8 +64,15 @@ export type PromptRef = {
   submit(): void
 }
 
-const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
-const SHELL_PLACEHOLDERS = ["ls -la", "git status", "pwd"]
+const money = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+})
+
+function randomIndex(count: number) {
+  if (count <= 0) return 0
+  return Math.floor(Math.random() * count)
+}
 
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
@@ -77,6 +93,18 @@ export function Prompt(props: PromptProps) {
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
   const kv = useKV()
+  const list = createMemo(() => props.placeholders?.normal ?? [])
+  const shell = createMemo(() => props.placeholders?.shell ?? [])
+  const [auto, setAuto] = createSignal<AutocompleteRef>()
+  const activeOrgName = createMemo(() => sync.data.console_state.activeOrgName)
+  const canSwitchOrgs = createMemo(() => sync.data.console_state.switchableOrgCount > 1)
+  const currentProviderLabel = createMemo(() => {
+    const current = local.model.current()
+    const provider = local.model.parsed().provider
+    if (!current) return provider
+    return consoleManagedProviderLabel(sync.data.console_state.consoleManagedProviders, current.providerID, provider)
+  })
+  const hasRightContent = createMemo(() => Boolean(props.right || activeOrgName()))
 
   function promptModelWarning() {
     toast.show({
@@ -117,7 +145,26 @@ export function Prompt(props: PromptProps) {
     if (!props.sessionID) return undefined
     const messages = sync.data.message[props.sessionID]
     if (!messages) return undefined
-    return messages.findLast((m) => m.role === "user")
+    return messages.findLast((m): m is UserMessage => m.role === "user")
+  })
+
+  const usage = createMemo(() => {
+    if (!props.sessionID) return
+    const msg = sync.data.message[props.sessionID] ?? []
+    const last = msg.findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
+    if (!last) return
+
+    const tokens =
+      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
+    if (tokens <= 0) return
+
+    const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
+    const pct = model?.limit.context ? `${Math.round((tokens / model.limit.context) * 100)}%` : undefined
+    const cost = msg.reduce((sum, item) => sum + (item.role === "assistant" ? item.cost : 0), 0)
+    return {
+      context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
+      cost: cost > 0 ? money.format(cost) : undefined,
+    }
   })
 
   const [store, setStore] = createStore<{
@@ -127,7 +174,7 @@ export function Prompt(props: PromptProps) {
     interrupt: number
     placeholder: number
   }>({
-    placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
+    placeholder: randomIndex(list().length),
     prompt: {
       input: "",
       parts: [],
@@ -141,7 +188,7 @@ export function Prompt(props: PromptProps) {
     on(
       () => props.sessionID,
       () => {
-        setStore("placeholder", Math.floor(Math.random() * PLACEHOLDERS.length))
+        setStore("placeholder", randomIndex(list().length))
       },
       { defer: true },
     ),
@@ -162,8 +209,10 @@ export function Prompt(props: PromptProps) {
       const isPrimaryAgent = local.agent.list().some((x) => x.name === msg.agent)
       if (msg.agent && isPrimaryAgent) {
         local.agent.set(msg.agent)
-        if (msg.model) local.model.set(msg.model)
-        if (msg.variant) local.model.variant.set(msg.variant)
+        if (msg.model) {
+          local.model.set(msg.model)
+          local.model.variant.set(msg.model.variant)
+        }
       }
     }
   })
@@ -202,7 +251,7 @@ export function Prompt(props: PromptProps) {
         onSelect: async () => {
           const content = await Clipboard.read()
           if (content?.mime.startsWith("image/")) {
-            await pasteImage({
+            await pasteAttachment({
               filename: "clipboard",
               mime: content.mime,
               content: content.data,
@@ -387,9 +436,29 @@ export function Prompt(props: PromptProps) {
     },
   }
 
+  onCleanup(() => {
+    props.ref?.(undefined)
+  })
+
   createEffect(() => {
-    if (props.visible !== false) input?.focus()
-    if (props.visible === false) input?.blur()
+    if (!input || input.isDestroyed) return
+    if (props.visible === false || dialog.stack.length > 0) {
+      input.blur()
+      return
+    }
+
+    // Slot/plugin updates can remount the background prompt while a dialog is open.
+    // Keep focus with the dialog and let the prompt reclaim it after the dialog closes.
+    input.focus()
+  })
+
+  createEffect(() => {
+    if (!input || input.isDestroyed) return
+    input.traits = {
+      capture: auto()?.visible ? ["escape", "navigate", "submit", "tab"] : undefined,
+      suspend: !!props.disabled || store.mode === "shell",
+      status: store.mode === "shell" ? "SHELL" : undefined,
+    }
   })
 
   function restoreExtmarksFromParts(parts: PromptInfo["parts"]) {
@@ -539,13 +608,28 @@ export function Prompt(props: PromptProps) {
       promptModelWarning()
       return
     }
-    const sessionID = props.sessionID
-      ? props.sessionID
-      : await (async () => {
-          const sessionID = await sdk.client.session.create({}).then((x) => x.data!.id)
-          return sessionID
-        })()
-    const messageID = Identifier.ascending("message")
+
+    let sessionID = props.sessionID
+    if (sessionID == null) {
+      const res = await sdk.client.session.create({
+        workspaceID: props.workspaceID,
+      })
+
+      if (res.error) {
+        console.log("Creating a session failed:", res.error)
+
+        toast.show({
+          message: "Creating a session failed. Open console for more details.",
+          variant: "error",
+        })
+
+        return
+      }
+
+      sessionID = res.data.id
+    }
+
+    const messageID = MessageID.ascending()
     let inputText = store.prompt.input
 
     // Expand pasted text inline before submitting
@@ -608,7 +692,7 @@ export function Prompt(props: PromptProps) {
         parts: nonTextParts
           .filter((x) => x.type === "file")
           .map((x) => ({
-            id: Identifier.ascending("part"),
+            id: PartID.ascending(),
             ...x,
           })),
       })
@@ -623,14 +707,11 @@ export function Prompt(props: PromptProps) {
           variant,
           parts: [
             {
-              id: Identifier.ascending("part"),
+              id: PartID.ascending(),
               type: "text",
               text: inputText,
             },
-            ...nonTextParts.map((x) => ({
-              id: Identifier.ascending("part"),
-              ...x,
-            })),
+            ...nonTextParts.map(assign),
           ],
         })
         .catch(() => {})
@@ -693,11 +774,16 @@ export function Prompt(props: PromptProps) {
     )
   }
 
-  async function pasteImage(file: { filename?: string; content: string; mime: string }) {
+  async function pasteAttachment(file: { filename?: string; filepath?: string; content: string; mime: string }) {
     const currentOffset = input.visualCursor.offset
     const extmarkStart = currentOffset
-    const count = store.prompt.parts.filter((x) => x.type === "file" && x.mime.startsWith("image/")).length
-    const virtualText = `[Image ${count + 1}]`
+    const pdf = file.mime === "application/pdf"
+    const count = store.prompt.parts.filter((x) => {
+      if (x.type !== "file") return false
+      if (pdf) return x.mime === "application/pdf"
+      return x.mime.startsWith("image/")
+    }).length
+    const virtualText = pdf ? `[PDF ${count + 1}]` : `[Image ${count + 1}]`
     const extmarkEnd = extmarkStart + virtualText.length
     const textToInsert = virtualText + " "
 
@@ -718,7 +804,7 @@ export function Prompt(props: PromptProps) {
       url: `data:${file.mime};base64,${file.content}`,
       source: {
         type: "file",
-        path: file.filename ?? "",
+        path: file.filepath ?? file.filename ?? "",
         text: {
           start: extmarkStart,
           end: extmarkEnd,
@@ -750,12 +836,14 @@ export function Prompt(props: PromptProps) {
   })
 
   const placeholderText = createMemo(() => {
-    if (props.sessionID) return undefined
+    if (props.showPlaceholder === false) return undefined
     if (store.mode === "shell") {
-      const example = SHELL_PLACEHOLDERS[store.placeholder % SHELL_PLACEHOLDERS.length]
+      if (!shell().length) return undefined
+      const example = shell()[store.placeholder % shell().length]
       return `Run a command... "${example}"`
     }
-    return `Ask anything... "${PLACEHOLDERS[store.placeholder % PLACEHOLDERS.length]}"`
+    if (!list().length) return undefined
+    return `Ask anything... "${list()[store.placeholder % list().length]}"`
   })
 
   const spinnerDef = createMemo(() => {
@@ -782,7 +870,10 @@ export function Prompt(props: PromptProps) {
     <>
       <Autocomplete
         sessionID={props.sessionID}
-        ref={(r) => (autocomplete = r)}
+        ref={(r) => {
+          autocomplete = r
+          setAuto(() => r)
+        }}
         anchor={() => anchor}
         input={() => input}
         setPrompt={(cb) => {
@@ -805,8 +896,7 @@ export function Prompt(props: PromptProps) {
           border={["left"]}
           borderColor={highlight()}
           customBorderChars={{
-            ...EmptyBorder,
-            vertical: "┃",
+            ...SplitBorder.customBorderChars,
             bottomLeft: "╹",
           }}
         >
@@ -820,6 +910,7 @@ export function Prompt(props: PromptProps) {
           >
             <textarea
               placeholder={placeholderText()}
+              placeholderColor={theme.textMuted}
               textColor={keybind.leader ? theme.textMuted : theme.text}
               focusedTextColor={keybind.leader ? theme.textMuted : theme.text}
               minHeight={1}
@@ -836,15 +927,14 @@ export function Prompt(props: PromptProps) {
                   e.preventDefault()
                   return
                 }
-                // Handle clipboard paste (Ctrl+V) - check for images first on Windows
-                // This is needed because Windows terminal doesn't properly send image data
-                // through bracketed paste, so we need to intercept the keypress and
-                // directly read from clipboard before the terminal handles it
+                // Check clipboard for images before terminal-handled paste runs.
+                // This helps terminals that forward Ctrl+V to the app; Windows
+                // Terminal 1.25+ usually handles Ctrl+V before this path.
                 if (keybind.match("input_paste", e)) {
                   const content = await Clipboard.read()
                   if (content?.mime.startsWith("image/")) {
                     e.preventDefault()
-                    await pasteImage({
+                    await pasteAttachment({
                       filename: "clipboard",
                       mime: content.mime,
                       content: content.data,
@@ -872,7 +962,7 @@ export function Prompt(props: PromptProps) {
                   }
                 }
                 if (e.name === "!" && input.visualCursor.offset === 0) {
-                  setStore("placeholder", Math.floor(Math.random() * SHELL_PLACEHOLDERS.length))
+                  setStore("placeholder", randomIndex(shell().length))
                   setStore("mode", "shell")
                   e.preventDefault()
                   return
@@ -920,16 +1010,26 @@ export function Prompt(props: PromptProps) {
                 // Normalize line endings at the boundary
                 // Windows ConPTY/Terminal often sends CR-only newlines in bracketed paste
                 // Replace CRLF first, then any remaining CR
-                const normalizedText = event.text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+                const normalizedText = decodePasteBytes(event.bytes).replace(/\r\n/g, "\n").replace(/\r/g, "\n")
                 const pastedContent = normalizedText.trim()
+
+                // Windows Terminal <1.25 can surface image-only clipboard as an
+                // empty bracketed paste. Windows Terminal 1.25+ does not.
                 if (!pastedContent) {
                   command.trigger("prompt.paste")
                   return
                 }
 
-                // trim ' from the beginning and end of the pasted content. just
-                // ' and nothing else
-                const filepath = pastedContent.replace(/^'+|'+$/g, "").replace(/\\ /g, " ")
+                const filepath = iife(() => {
+                  const raw = pastedContent.replace(/^['"]+|['"]+$/g, "")
+                  if (raw.startsWith("file://")) {
+                    try {
+                      return fileURLToPath(raw)
+                    } catch {}
+                  }
+                  if (process.platform === "win32") return raw
+                  return raw.replace(/\\(.)/g, "$1")
+                })
                 const isUrl = /^(https?):\/\//.test(filepath)
                 if (!isUrl) {
                   try {
@@ -944,14 +1044,15 @@ export function Prompt(props: PromptProps) {
                         return
                       }
                     }
-                    if (mime.startsWith("image/")) {
+                    if (mime.startsWith("image/") || mime === "application/pdf") {
                       event.preventDefault()
                       const content = await Filesystem.readArrayBuffer(filepath)
                         .then((buffer) => Buffer.from(buffer).toString("base64"))
                         .catch(() => {})
                       if (content) {
-                        await pasteImage({
+                        await pasteAttachment({
                           filename,
+                          filepath,
                           mime,
                           content,
                         })
@@ -996,20 +1097,38 @@ export function Prompt(props: PromptProps) {
               cursorColor={theme.text}
               syntaxStyle={syntax()}
             />
-            <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
-              <text fg={highlight()}>
-                {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
-              </text>
-              <Show when={store.mode === "normal"}>
-                <box flexDirection="row" gap={1}>
-                  <text flexShrink={0} fg={keybind.leader ? theme.textMuted : theme.text}>
-                    {local.model.parsed().model}
-                  </text>
-                  <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
-                  <Show when={showVariant()}>
-                    <text fg={theme.textMuted}>·</text>
-                    <text>
-                      <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
+            <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
+              <box flexDirection="row" gap={1}>
+                <text fg={highlight()}>
+                  {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
+                </text>
+                <Show when={store.mode === "normal"}>
+                  <box flexDirection="row" gap={1}>
+                    <text flexShrink={0} fg={keybind.leader ? theme.textMuted : theme.text}>
+                      {local.model.parsed().model}
+                    </text>
+                    <text fg={theme.textMuted}>{currentProviderLabel()}</text>
+                    <Show when={showVariant()}>
+                      <text fg={theme.textMuted}>·</text>
+                      <text>
+                        <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
+                      </text>
+                    </Show>
+                  </box>
+                </Show>
+              </box>
+              <Show when={hasRightContent()}>
+                <box flexDirection="row" gap={1} alignItems="center">
+                  {props.right}
+                  <Show when={activeOrgName()}>
+                    <text
+                      fg={theme.textMuted}
+                      onMouseUp={() => {
+                        if (!canSwitchOrgs()) return
+                        command.trigger("console.org.switch")
+                      }}
+                    >
+                      {`${CONSOLE_MANAGED_ICON} ${activeOrgName()}`}
                     </text>
                   </Show>
                 </box>
@@ -1044,7 +1163,7 @@ export function Prompt(props: PromptProps) {
           />
         </box>
         <box flexDirection="row" justifyContent="space-between">
-          <Show when={status().type !== "idle"} fallback={<text />}>
+          <Show when={status().type !== "idle"} fallback={props.hint ?? <text />}>
             <box
               flexDirection="row"
               gap={1}
@@ -1128,14 +1247,20 @@ export function Prompt(props: PromptProps) {
             <box gap={2} flexDirection="row">
               <Switch>
                 <Match when={store.mode === "normal"}>
-                  <Show when={local.model.variant.list().length > 0}>
-                    <text fg={theme.text}>
-                      {keybind.print("variant_cycle")} <span style={{ fg: theme.textMuted }}>variants</span>
-                    </text>
-                  </Show>
-                  <text fg={theme.text}>
-                    {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>agents</span>
-                  </text>
+                  <Switch>
+                    <Match when={usage()}>
+                      {(item) => (
+                        <text fg={theme.textMuted} wrapMode="none">
+                          {[item().context, item().cost].filter(Boolean).join(" · ")}
+                        </text>
+                      )}
+                    </Match>
+                    <Match when={true}>
+                      <text fg={theme.text}>
+                        {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>agents</span>
+                      </text>
+                    </Match>
+                  </Switch>
                   <text fg={theme.text}>
                     {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
                   </text>

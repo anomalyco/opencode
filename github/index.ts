@@ -8,6 +8,7 @@ import type { Context as GitHubContext } from "@actions/github/lib/context"
 import type { IssueCommentEvent, PullRequestReviewCommentEvent } from "@octokit/webhooks-types"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { spawn } from "node:child_process"
+import { setTimeout as sleep } from "node:timers/promises"
 
 type GitHubAuthor = {
   login: string
@@ -281,7 +282,7 @@ async function assertOpencodeConnected() {
       connected = true
       break
     } catch (e) {}
-    await Bun.sleep(300)
+    await sleep(300)
   } while (retry++ < 30)
 
   if (!connected) {
@@ -495,7 +496,6 @@ async function subscribeSessionEvents() {
 
   const TOOL: Record<string, [string, string]> = {
     todowrite: ["Todo", "\x1b[33m\x1b[1m"],
-    todoread: ["Todo", "\x1b[33m\x1b[1m"],
     bash: ["Bash", "\x1b[31m\x1b[1m"],
     edit: ["Edit", "\x1b[32m\x1b[1m"],
     glob: ["Glob", "\x1b[34m\x1b[1m"],

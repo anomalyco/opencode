@@ -1,5 +1,6 @@
 // @ts-nocheck
-import { createSignal, onCleanup } from "solid-js"
+import { onCleanup } from "solid-js"
+import { createStore } from "solid-js/store"
 import { AnimatedCountList, type CountItem } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
 
@@ -57,11 +58,18 @@ const smallBtn = (active?: boolean) =>
 
 export const Playground = {
   render: () => {
-    const [reads, setReads] = createSignal(0)
-    const [searches, setSearches] = createSignal(0)
-    const [lists, setLists] = createSignal(0)
-    const [active, setActive] = createSignal(false)
-    const [reducedMotion, setReducedMotion] = createSignal(false)
+    const [state, setState] = createStore({
+      reads: 0,
+      searches: 0,
+      lists: 0,
+      active: false,
+      reducedMotion: false,
+    })
+    const reads = () => state.reads
+    const searches = () => state.searches
+    const lists = () => state.lists
+    const active = () => state.active
+    const reducedMotion = () => state.reducedMotion
 
     let timeouts: ReturnType<typeof setTimeout>[] = []
 
@@ -74,10 +82,10 @@ export const Playground = {
 
     const startSim = () => {
       clearAll()
-      setReads(0)
-      setSearches(0)
-      setLists(0)
-      setActive(true)
+      setState("reads", 0)
+      setState("searches", 0)
+      setState("lists", 0)
+      setState("active", true)
       const steps = rand(3, 10)
       let elapsed = 0
 
@@ -86,27 +94,27 @@ export const Playground = {
         elapsed += delay
         const t = setTimeout(() => {
           const pick = rand(0, 2)
-          if (pick === 0) setReads((n) => n + 1)
-          else if (pick === 1) setSearches((n) => n + 1)
-          else setLists((n) => n + 1)
+          if (pick === 0) setState("reads", (value) => value + 1)
+          else if (pick === 1) setState("searches", (value) => value + 1)
+          else setState("lists", (value) => value + 1)
         }, elapsed)
         timeouts.push(t)
       }
 
-      const end = setTimeout(() => setActive(false), elapsed + 100)
+      const end = setTimeout(() => setState("active", false), elapsed + 100)
       timeouts.push(end)
     }
 
     const stopSim = () => {
       clearAll()
-      setActive(false)
+      setState("active", false)
     }
 
     const reset = () => {
       stopSim()
-      setReads(0)
-      setSearches(0)
-      setLists(0)
+      setState("reads", 0)
+      setState("searches", 0)
+      setState("lists", 0)
     }
 
     const items = (): CountItem[] => [
@@ -164,19 +172,19 @@ export const Playground = {
           <button onClick={reset} style={btn()}>
             Reset
           </button>
-          <button onClick={() => setReducedMotion((v) => !v)} style={smallBtn(reducedMotion())}>
+          <button onClick={() => setState("reducedMotion", (value) => !value)} style={smallBtn(reducedMotion())}>
             {reducedMotion() ? "Motion: reduced" : "Motion: normal"}
           </button>
         </div>
 
         <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
-          <button onClick={() => setReads((n) => n + 1)} style={smallBtn()}>
+          <button onClick={() => setState("reads", (value) => value + 1)} style={smallBtn()}>
             + read
           </button>
-          <button onClick={() => setSearches((n) => n + 1)} style={smallBtn()}>
+          <button onClick={() => setState("searches", (value) => value + 1)} style={smallBtn()}>
             + search
           </button>
-          <button onClick={() => setLists((n) => n + 1)} style={smallBtn()}>
+          <button onClick={() => setState("lists", (value) => value + 1)} style={smallBtn()}>
             + list
           </button>
         </div>
