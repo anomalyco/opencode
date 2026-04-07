@@ -13,9 +13,9 @@ const fail = (message: string) => (cause: unknown) => new Auth.AuthError({ messa
 
 const normalizeKey = (providerID: string, profile?: string): string => {
   const base = providerID.replace(/\/+$/, "")
-  // If key already contains a profile separator and no profile arg provided, treat as already normalized
+  // If key already contains a profile separator, treat as already normalized
   if (!profile && base.includes(":")) return base
-  return profile ? `${base}:${profile}` : `${base}:default`
+  return profile ? `${base}:${profile}` : base
 }
 
 export namespace Auth {
