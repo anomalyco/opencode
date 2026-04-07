@@ -27,32 +27,28 @@ import { ToolRegistry } from "../../tool/registry"
 
 const log = Log.create({ service: "server" })
 
-/** Walk parent session messages backwards to find the model used in the last user message. */
-async function resolveModel(sessionID: SessionID) {
-  const msgs = await Session.messages({ sessionID })
-  for (let i = msgs.length - 1; i >= 0; i--) {
-    const info = msgs[i].info
-    if (info.role === "user" && info.model) return info.model
-  }
-}
-
 /** Create an emitter for external ToolPart updates (no-op when messageID is absent). */
 function emitter(opts: { sessionID: SessionID; messageID?: string; tool: string }) {
   const mid = opts.messageID ? MessageID.make(opts.messageID) : undefined
   const pid = mid ? PartID.ascending() : undefined
-  const fn = (state: z.infer<typeof MessageV2.ToolState>) =>
-    mid && pid
-      ? Session.updatePart({
-          id: pid,
-          messageID: mid,
-          sessionID: opts.sessionID,
-          type: "tool" as const,
-          tool: opts.tool,
-          callID: pid,
-          external: true,
-          state,
-        })
-      : undefined
+  const fn = (state: z.infer<typeof MessageV2.ToolState>): Promise<void> => {
+    if (!(mid && pid)) return Promise.resolve()
+    return Session.updatePart({
+      id: pid,
+      messageID: mid,
+      sessionID: opts.sessionID,
+      type: "tool" as const,
+      tool: opts.tool,
+      callID: pid,
+      external: true,
+      state,
+    }).then(
+      () => {},
+      (err) => {
+        log.warn("external part update failed", { tool: opts.tool, error: err })
+      },
+    )
+  }
   return { mid, pid, fn }
 }
 
@@ -1126,15 +1122,14 @@ export const SessionRoutes = lazy(() =>
           abort: c.req.raw.signal,
           messages: [] as MessageV2.WithParts[],
           metadata(val: { title?: string; metadata?: Record<string, unknown> }) {
-            emit
-              .fn({
-                status: "running",
-                input: body.args,
-                title: val.title,
-                metadata: val.metadata,
-                time: { start: t0 },
-              })
-              ?.catch(() => {})
+            // fire-and-forget — emitter already logs on rejection
+            void emit.fn({
+              status: "running",
+              input: body.args,
+              title: val.title,
+              metadata: val.metadata,
+              time: { start: t0 },
+            })
           },
           async ask(req: Omit<Permission.Request, "id" | "sessionID" | "tool">) {
             await Permission.ask({
@@ -1304,17 +1299,18 @@ export const SessionRoutes = lazy(() =>
           const timer = setInterval(() => stream.write("\x00OC_KEEPALIVE\x00").catch(() => {}), 15_000)
 
           try {
+            const parts: Parameters<typeof SessionPrompt.prompt>[0]["parts"] = [
+              { type: "text", text: body.prompt },
+              ...(body.files ?? []).map((f) => ({
+                type: "file" as const,
+                mime: f.mime,
+                url: f.url,
+                filename: f.filename,
+              })),
+            ]
             const msg = await SessionPrompt.prompt({
               sessionID: child.id,
-              parts: [
-                { type: "text", text: body.prompt },
-                ...(body.files ?? []).map((f) => ({
-                  type: "file" as const,
-                  mime: f.mime,
-                  url: f.url,
-                  filename: f.filename,
-                })),
-              ],
+              parts,
               system: body.system,
               agent: body.agent,
               model,

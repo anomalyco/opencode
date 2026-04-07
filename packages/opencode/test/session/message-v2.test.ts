@@ -1448,7 +1448,7 @@ describe("session.message-v2.ToolPart.external", () => {
   const pid = PartID.ascending()
   const mid = MessageID.ascending()
 
-  function toolPart(ext?: boolean) {
+  function make(ext?: boolean) {
     return {
       id: pid,
       sessionID,
@@ -1469,19 +1469,19 @@ describe("session.message-v2.ToolPart.external", () => {
   }
 
   test("schema accepts external: true", () => {
-    const result = MessageV2.ToolPart.safeParse(toolPart(true))
+    const result = MessageV2.ToolPart.safeParse(make(true))
     expect(result.success).toBe(true)
     if (result.success) expect(result.data.external).toBe(true)
   })
 
   test("schema accepts external: false", () => {
-    const result = MessageV2.ToolPart.safeParse(toolPart(false))
+    const result = MessageV2.ToolPart.safeParse(make(false))
     expect(result.success).toBe(true)
     if (result.success) expect(result.data.external).toBe(false)
   })
 
   test("schema accepts missing external field (undefined)", () => {
-    const result = MessageV2.ToolPart.safeParse(toolPart())
+    const result = MessageV2.ToolPart.safeParse(make())
     expect(result.success).toBe(true)
     if (result.success) expect(result.data.external).toBeUndefined()
   })
