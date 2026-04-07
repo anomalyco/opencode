@@ -48,22 +48,10 @@ export namespace HubAuth {
     return `${Flag.JUPYTERHUB_API_URL!.replace(/\/+$/, "")}${path}`
   }
 
-  // AIDEV-NOTE: OAuth2 state 파라미터에 CSRF 토큰과 next URL을 함께 인코딩한다.
-  // state는 Hub이 콜백에 그대로 전달하므로, 별도 쿠키 없이 리다이렉트 대상을 유지할 수 있다.
-  // 쿠키에는 CSRF 토큰만 저장하여 state 위변조를 검증한다.
-  function encodeState(csrf: string, next: string): string {
-    return Buffer.from(JSON.stringify({ csrf, next })).toString("base64url")
-  }
-
-  function decodeState(raw: string): { csrf: string; next: string } | undefined {
-    try {
-      const parsed = JSON.parse(Buffer.from(raw, "base64url").toString())
-      if (typeof parsed.csrf === "string" && typeof parsed.next === "string") return parsed
-      return undefined
-    } catch {
-      return undefined
-    }
-  }
+  // AIDEV-NOTE: Python 원본의 _oauth_states dict와 동일한 server-side state 저장.
+  // state ID만 Hub에 전달하고, CSRF 토큰과 next URL은 서버에 보관한다.
+  // https://github.com/jupyterhub/jupyterhub/blob/652390e/jupyterhub/services/auth.py#L1547-L1618
+  const oauthStates = new Map<string, { csrf: string; next: string }>()
 
   // AIDEV-NOTE: HubOAuth.login_url 참고. scope는 전달하지 않는다 -- Hub이 client 등록 시점에 이미 보유.
   // https://github.com/jupyterhub/jupyterhub/blob/652390e/jupyterhub/services/auth.py#L878-L887
@@ -152,20 +140,21 @@ export namespace HubAuth {
   // https://github.com/jupyterhub/jupyterhub/blob/652390e/jupyterhub/services/auth.py#L1547-L1618
   export async function callback(c: Context): Promise<Response> {
     const code = c.req.query("code")
-    const raw = c.req.query("state")
+    const stateId = c.req.query("state")
     const csrf = getCookie(c, STATE_COOKIE)
 
-    if (!code || !raw || !csrf) {
-      log.warn("invalid oauth callback", { has_code: !!code, has_state: !!raw, has_csrf: !!csrf })
+    if (!code || !stateId || !csrf) {
+      log.warn("invalid oauth callback", { has_code: !!code, has_state: !!stateId, has_csrf: !!csrf })
       return c.text("Bad request", 400)
     }
 
-    const state = decodeState(raw)
+    const state = oauthStates.get(stateId)
     if (!state || state.csrf !== csrf) {
       log.warn("state mismatch", { valid: !!state, csrf_match: state?.csrf === csrf })
       return c.text("Bad request", 400)
     }
 
+    oauthStates.delete(stateId)
     setCookie(c, STATE_COOKIE, "", { path: "/", maxAge: 0 })
 
     const token = await exchange(code, buildCallbackUrl(c))
@@ -246,10 +235,9 @@ export namespace HubAuth {
         }
 
         // 3. 브라우저 요청 -> Hub OAuth 리다이렉트
-        // AIDEV-NOTE: state에 CSRF 토큰과 next URL을 함께 인코딩. 쿠키에는 CSRF만 저장.
         const csrf = crypto.randomUUID()
-        const target = c.req.path
-        const state = encodeState(csrf, target)
+        const stateId = crypto.randomUUID()
+        oauthStates.set(stateId, { csrf, next: c.req.path })
         setCookie(c, STATE_COOKIE, csrf, {
           path: "/",
           httpOnly: true,
@@ -257,7 +245,7 @@ export namespace HubAuth {
           secure: c.req.url.startsWith("https"),
           maxAge: 300,
         })
-        return c.redirect(authorizeUrl(buildCallbackUrl(c), state))
+        return c.redirect(authorizeUrl(buildCallbackUrl(c), stateId))
       }
 
       // --- Basic Auth 전용 모드 (Hub 없음) ---
