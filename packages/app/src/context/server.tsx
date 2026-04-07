@@ -4,7 +4,7 @@ import { createStore } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 import { useCheckServerHealth } from "@/utils/server-health"
 
-type StoredProject = { worktree: string; expanded: boolean }
+type StoredProject = { worktree: string; expanded: boolean; pinned?: boolean }
 type StoredServer = string | ServerConnection.HttpBase | ServerConnection.Http
 const HEALTH_POLL_INTERVAL_MS = 10_000
 
@@ -31,6 +31,10 @@ function projectsKey(key: ServerConnection.Key) {
 function isLocalHost(url: string) {
   const host = url.replace(/^https?:\/\//, "").split(":")[0]
   if (host === "localhost" || host === "127.0.0.1") return "local"
+}
+
+function order(list: StoredProject[]) {
+  return [...list.filter((item) => item.pinned), ...list.filter((item) => !item.pinned)]
 }
 
 export namespace ServerConnection {
@@ -250,7 +254,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           if (!key) return
           const current = store.projects[key] ?? []
           if (current.find((x) => x.worktree === directory)) return
-          setStore("projects", key, [{ worktree: directory, expanded: true }, ...current])
+          setStore("projects", key, order([{ worktree: directory, expanded: true }, ...current]))
         },
         close(directory: string) {
           const key = origin()
@@ -285,7 +289,25 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           const result = [...current]
           const [item] = result.splice(fromIndex, 1)
           result.splice(toIndex, 0, item)
-          setStore("projects", key, result)
+          setStore("projects", key, order(result))
+        },
+        pin(directory: string, pinned: boolean) {
+          const key = origin()
+          if (!key) return
+          const current = store.projects[key] ?? []
+          const index = current.findIndex((x) => x.worktree === directory)
+          if (index === -1) return
+          const item = current[index]
+          if (!item || !!item.pinned === pinned) return
+          const rest = current.filter((x) => x.worktree !== directory)
+          const next = { ...item, pinned }
+          if (pinned) {
+            const split = rest.findIndex((x) => !x.pinned)
+            const at = split === -1 ? rest.length : split
+            setStore("projects", key, [...rest.slice(0, at), next, ...rest.slice(at)])
+            return
+          }
+          setStore("projects", key, order([...rest, next]))
         },
         last() {
           const key = origin()

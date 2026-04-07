@@ -26,6 +26,7 @@ export type ProjectSidebarContext = {
   navigateToProject: (directory: string) => void
   openSidebar: () => void
   closeProject: (directory: string) => void
+  pinProject: (directory: string, pinned: boolean) => void
   showEditProjectDialog: (project: LocalProject) => void
   toggleProjectWorkspaces: (project: LocalProject) => void
   workspacesEnabled: (project: LocalProject) => boolean
@@ -64,6 +65,7 @@ const ProjectTile = (props: {
   onProjectFocus: (worktree: string) => void
   navigateToProject: (directory: string) => void
   showEditProjectDialog: (project: LocalProject) => void
+  pinProject: (directory: string, pinned: boolean) => void
   toggleProjectWorkspaces: (project: LocalProject) => void
   workspacesEnabled: (project: LocalProject) => boolean
   closeProject: (directory: string) => void
@@ -143,12 +145,28 @@ const ProjectTile = (props: {
         }}
         onBlur={() => props.setOpen(false)}
       >
-        <ProjectIcon project={props.project} notify />
+        <div class="relative">
+          <ProjectIcon project={props.project} notify />
+          <Show when={props.project.pinned}>
+            <div class="absolute bottom-0 right-0 flex size-4 items-center justify-center rounded-full border border-border-weak-base bg-background-base">
+              <Icon name="pin" class="size-2.5 text-icon-weak" />
+            </div>
+          </Show>
+        </div>
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
         <ContextMenu.Content>
           <ContextMenu.Item onSelect={() => props.showEditProjectDialog(props.project)}>
             <ContextMenu.ItemLabel>{props.language.t("common.edit")}</ContextMenu.ItemLabel>
+          </ContextMenu.Item>
+          <ContextMenu.Item
+            data-action="project-pin-toggle"
+            data-project={base64Encode(props.project.worktree)}
+            onSelect={() => props.pinProject(props.project.worktree, !props.project.pinned)}
+          >
+            <ContextMenu.ItemLabel>
+              {props.project.pinned ? props.language.t("sidebar.project.unpin") : props.language.t("sidebar.project.pin")}
+            </ContextMenu.ItemLabel>
           </ContextMenu.Item>
           <ContextMenu.Item
             data-action="project-workspaces-toggle"
@@ -321,6 +339,7 @@ export const SortableProject = (props: {
       onProjectFocus={props.ctx.onProjectFocus}
       navigateToProject={props.ctx.navigateToProject}
       showEditProjectDialog={props.ctx.showEditProjectDialog}
+      pinProject={props.ctx.pinProject}
       toggleProjectWorkspaces={props.ctx.toggleProjectWorkspaces}
       workspacesEnabled={props.ctx.workspacesEnabled}
       closeProject={props.ctx.closeProject}

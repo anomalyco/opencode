@@ -547,6 +547,8 @@ export const dict = {
   "sidebar.project.recentSessions": "최근 세션",
   "sidebar.project.viewAllSessions": "모든 세션 보기",
   "sidebar.project.clearNotifications": "알림 지우기",
+  "sidebar.project.pin": "Pin project",
+  "sidebar.project.unpin": "Unpin project",
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "데스크톱",
   "settings.section.server": "서버",

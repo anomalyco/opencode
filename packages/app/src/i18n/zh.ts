@@ -603,6 +603,8 @@ export const dict = {
   "sidebar.project.recentSessions": "最近会话",
   "sidebar.project.viewAllSessions": "查看全部会话",
   "sidebar.project.clearNotifications": "清除通知",
+  "sidebar.project.pin": "Pin project",
+  "sidebar.project.unpin": "Unpin project",
 
   "app.name.desktop": "OpenCode Desktop",
 

@@ -51,7 +51,7 @@ type TabHandoff = {
   at: number
 }
 
-export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
+export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean; pinned?: boolean }
 
 export type ReviewDiffStyle = "unified" | "split"
 
@@ -596,6 +596,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         move(directory: string, toIndex: number) {
           server.projects.move(directory, toIndex)
+        },
+        pin(directory: string, pinned: boolean) {
+          server.projects.pin(directory, pinned)
         },
       },
       sidebar: {

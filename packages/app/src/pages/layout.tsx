@@ -1441,6 +1441,10 @@ export default function Layout(props: ParentProps) {
     layout.sidebar.toggleWorkspaces(project.worktree)
   }
 
+  function pinProject(directory: string, pinned: boolean) {
+    layout.projects.pin(directory, pinned)
+  }
+
   const showEditProjectDialog = (project: LocalProject) => {
     const run = ++dialogRun
     void import("@/components/dialog-edit-project").then((x) => {
@@ -1848,10 +1852,14 @@ export default function Layout(props: ParentProps) {
     const { draggable, droppable } = event
     if (draggable && droppable) {
       const projects = layout.projects.list()
-      const fromIndex = projects.findIndex((p) => p.worktree === draggable.id.toString())
-      const toIndex = projects.findIndex((p) => p.worktree === droppable.id.toString())
+      const source = projects.find((p) => p.worktree === draggable.id.toString())
+      const target = projects.find((p) => p.worktree === droppable.id.toString())
+      if (!source || !target) return
+      if (!!source.pinned !== !!target.pinned) return
+      const fromIndex = projects.findIndex((p) => p.worktree === source.worktree)
+      const toIndex = projects.findIndex((p) => p.worktree === target.worktree)
       if (fromIndex !== toIndex && toIndex !== -1) {
-        layout.projects.move(draggable.id.toString(), toIndex)
+        layout.projects.move(source.worktree, toIndex)
       }
     }
   }
@@ -2005,6 +2013,7 @@ export default function Layout(props: ParentProps) {
     navigateToProject,
     openSidebar: () => layout.sidebar.open(),
     closeProject,
+    pinProject,
     showEditProjectDialog,
     toggleProjectWorkspaces,
     workspacesEnabled: (project) => project.vcs === "git" && layout.sidebar.workspaces(project.worktree)(),
@@ -2158,6 +2167,19 @@ export default function Layout(props: ParentProps) {
                         }}
                       >
                         <DropdownMenu.ItemLabel>{language.t("common.edit")}</DropdownMenu.ItemLabel>
+                      </DropdownMenu.Item>
+                      <DropdownMenu.Item
+                        data-action="project-pin-toggle"
+                        data-project={slug()}
+                        onSelect={() => {
+                          const item = project()
+                          if (!item) return
+                          pinProject(item.worktree, !item.pinned)
+                        }}
+                      >
+                        <DropdownMenu.ItemLabel>
+                          {project()?.pinned ? language.t("sidebar.project.unpin") : language.t("sidebar.project.pin")}
+                        </DropdownMenu.ItemLabel>
                       </DropdownMenu.Item>
                       <DropdownMenu.Item
                         data-action="project-workspaces-toggle"

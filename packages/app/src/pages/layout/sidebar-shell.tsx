@@ -34,6 +34,7 @@ export const SidebarContent = (props: {
 }): JSX.Element => {
   const expanded = createMemo(() => !!props.mobile || props.opened())
   const placement = () => (props.mobile ? "bottom" : "right")
+  const first = createMemo(() => props.projects().findIndex((project) => !project.pinned))
   let panel: HTMLDivElement | undefined
 
   createEffect(() => {
@@ -64,7 +65,16 @@ export const SidebarContent = (props: {
             <ConstrainDragXAxis />
             <div class="h-full w-full flex flex-col items-center gap-3 px-3 py-3 overflow-y-auto no-scrollbar">
               <SortableProvider ids={props.projects().map((p) => p.worktree)}>
-                <For each={props.projects()}>{(project) => props.renderProject(project)}</For>
+                <For each={props.projects()}>
+                  {(project, index) => (
+                    <>
+                      <Show when={first() > 0 && index() === first()}>
+                        <div class="h-px w-6 rounded-full bg-border-weak-base" aria-hidden="true" />
+                      </Show>
+                      {props.renderProject(project)}
+                    </>
+                  )}
+                </For>
               </SortableProvider>
               <Tooltip
                 placement={placement()}
