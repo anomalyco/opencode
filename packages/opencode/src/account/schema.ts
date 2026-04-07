@@ -75,6 +75,17 @@ export class AccountTransportError extends Schema.TaggedErrorClass<AccountTransp
       cause: error.cause,
     })
   }
+
+  override get message(): string {
+    return [
+      `Could not reach ${this.method} ${this.url}.`,
+      `This failed before the server returned an HTTP response.`,
+      this.description,
+      `Check your network, proxy, or VPN configuration and try again.`,
+    ]
+      .filter(Boolean)
+      .join("\n")
+  }
 }
 
 export type AccountError = AccountRepoError | AccountServiceError | AccountTransportError

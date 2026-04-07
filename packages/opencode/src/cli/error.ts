@@ -9,14 +9,7 @@ import { UI } from "./ui"
 export function FormatError(input: unknown) {
   if (MCP.Failed.isInstance(input))
     return `MCP server "${input.data.name}" failed. Note, opencode does not support MCP authentication yet.`
-  if (input instanceof AccountTransportError) {
-    return [
-      `Could not reach ${input.method} ${input.url}.`,
-      `This failed before the server returned an HTTP response.`,
-      `Check your network, proxy, or VPN configuration and try again.`,
-    ].join("\n")
-  }
-  if (input instanceof AccountServiceError) {
+  if (input instanceof AccountTransportError || input instanceof AccountServiceError) {
     return input.message
   }
   if (Provider.ModelNotFoundError.isInstance(input)) {
