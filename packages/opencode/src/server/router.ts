@@ -3,6 +3,7 @@ import type { UpgradeWebSocket } from "hono/ws"
 import { getAdaptor } from "@/control-plane/adaptors"
 import { WorkspaceID } from "@/control-plane/schema"
 import { Workspace } from "@/control-plane/workspace"
+import { ServerProxy } from "./proxy"
 import { lazy } from "@/util/lazy"
 import { Filesystem } from "@/util/filesystem"
 import { Instance } from "@/project/instance"
@@ -41,7 +42,7 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
     )
 
     const url = new URL(c.req.url)
-    const workspaceParam = url.searchParams.get("workspace")
+    const workspaceParam = url.searchParams.get("workspace") || c.req.header("x-opencode-workspace")
 
     // TODO: If session is being routed, force it to lookup the
     // project/workspace
@@ -68,11 +69,12 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
       })
     }
 
-    // Handle local workspaces directly so we can pass env to `fetch`,
-    // necessary for websocket upgrades
-    if (workspace.type === "worktree") {
+    const adaptor = await getAdaptor(workspace.type)
+    const target = await adaptor.target(workspace)
+
+    if (target.type === "local") {
       return Instance.provide({
-        directory: workspace.directory!,
+        directory: target.directory,
         init: InstanceBootstrap,
         async fn() {
           return routes().fetch(c.req.raw, c.env)
@@ -80,23 +82,24 @@ export function WorkspaceRouterMiddleware(upgrade: UpgradeWebSocket): Middleware
       })
     }
 
-    // Remote workspaces
-
     if (local(c.req.method, url.pathname)) {
       // No instance provided because we are serving cached data; there
       // is no instance to work with
       return routes().fetch(c.req.raw, c.env)
     }
 
-    const adaptor = await getAdaptor(workspace.type)
+    if (c.req.header("upgrade")?.toLowerCase() === "websocket") {
+      return ServerProxy.websocket(target, c.req.raw, c.env)
+    }
+
     const headers = new Headers(c.req.raw.headers)
     headers.delete("x-opencode-workspace")
 
-    return adaptor.fetch(workspace, `${url.pathname}${url.search}`, {
-      method: c.req.method,
-      body: c.req.method === "GET" || c.req.method === "HEAD" ? undefined : await c.req.raw.arrayBuffer(),
-      signal: c.req.raw.signal,
-      headers,
-    })
+    return ServerProxy.http(
+      target,
+      new Request(c.req.raw, {
+        headers,
+      }),
+    )
   }
 }
