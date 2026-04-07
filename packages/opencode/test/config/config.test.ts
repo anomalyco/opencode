@@ -2362,3 +2362,88 @@ test("parseManagedPlist handles empty config", async () => {
   )
   expect(config.$schema).toBe("https://opencode.ai/config.json")
 })
+
+test("loadGlobal respects OPENCODE_CONFIG env var", async () => {
+  await using tmp = await tmpdir()
+  const customConfigPath = path.join(tmp.path, "custom-config.json")
+  await Filesystem.write(
+    customConfigPath,
+    JSON.stringify({
+      $schema: "https://opencode.ai/config.json",
+      username: "custom-user-from-env",
+      model: "custom/model",
+    }),
+  )
+
+  const prevConfig = process.env.OPENCODE_CONFIG
+  const prevManagedConfig = process.env.OPENCODE_TEST_MANAGED_CONFIG
+
+  try {
+    process.env.OPENCODE_CONFIG = customConfigPath
+    delete process.env.OPENCODE_TEST_MANAGED_CONFIG
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.username).toBe("custom-user-from-env")
+        expect(config.model).toBe("custom/model")
+      },
+    })
+  } finally {
+    if (prevConfig !== undefined) {
+      process.env.OPENCODE_CONFIG = prevConfig
+    } else {
+      delete process.env.OPENCODE_CONFIG
+    }
+    if (prevManagedConfig !== undefined) {
+      process.env.OPENCODE_TEST_MANAGED_CONFIG = prevManagedConfig
+    } else {
+      delete process.env.OPENCODE_TEST_MANAGED_CONFIG
+    }
+    await Config.invalidate()
+  }
+})
+
+test("loadGlobal respects OPENCODE_CONFIG_DIR env var", async () => {
+  await using tmp = await tmpdir()
+  const customConfigDir = path.join(tmp.path, "custom-config-dir")
+  await fs.mkdir(customConfigDir, { recursive: true })
+  await Filesystem.write(
+    path.join(customConfigDir, "opencode.json"),
+    JSON.stringify({
+      $schema: "https://opencode.ai/config.json",
+      username: "custom-user-from-config-dir",
+      model: "custom/model-from-dir",
+    }),
+  )
+
+  const prevConfigDir = process.env.OPENCODE_CONFIG_DIR
+  const prevManagedConfig = process.env.OPENCODE_TEST_MANAGED_CONFIG
+
+  try {
+    process.env.OPENCODE_CONFIG_DIR = customConfigDir
+    delete process.env.OPENCODE_TEST_MANAGED_CONFIG
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.username).toBe("custom-user-from-config-dir")
+        expect(config.model).toBe("custom/model-from-dir")
+      },
+    })
+  } finally {
+    if (prevConfigDir !== undefined) {
+      process.env.OPENCODE_CONFIG_DIR = prevConfigDir
+    } else {
+      delete process.env.OPENCODE_CONFIG_DIR
+    }
+    if (prevManagedConfig !== undefined) {
+      process.env.OPENCODE_TEST_MANAGED_CONFIG = prevManagedConfig
+    } else {
+      delete process.env.OPENCODE_TEST_MANAGED_CONFIG
+    }
+    await Config.invalidate()
+  }
+})
