@@ -750,6 +750,7 @@ export namespace Config {
         .optional()
         .default("ctrl+w,ctrl+backspace,alt+backspace")
         .describe("Delete word backward in input"),
+      history_search: z.string().optional().default("ctrl+r").describe("Search prompt history"),
       history_previous: z.string().optional().default("up").describe("Previous history item"),
       history_next: z.string().optional().default("down").describe("Next history item"),
       session_child_first: z.string().optional().default("<leader>down").describe("Go to first child session"),

@@ -968,6 +968,18 @@ export function Prompt(props: PromptProps) {
                 }
                 if (store.mode === "normal") autocomplete.onKeyDown(e)
                 if (!autocomplete.visible) {
+                  if (keybind.match("history_search", e)) {
+                    const item = history.search(input.plainText)
+                    e.preventDefault()
+                    if (!item) return
+                    input.setText(item.input)
+                    setStore("prompt", item)
+                    setStore("mode", item.mode ?? "normal")
+                    restoreExtmarksFromParts(item.parts)
+                    input.gotoBufferEnd()
+                    return
+                  }
+
                   if (
                     (keybind.match("history_previous", e) && input.cursorOffset === 0) ||
                     (keybind.match("history_next", e) && input.cursorOffset === input.plainText.length)
