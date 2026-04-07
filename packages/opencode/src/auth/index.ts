@@ -11,6 +11,11 @@ const file = path.join(Global.Path.data, "auth.json")
 
 const fail = (message: string) => (cause: unknown) => new Auth.AuthError({ message, cause })
 
+const normalizeKey = (providerID: string, profile?: string): string => {
+  const base = providerID.replace(/\/+$/, "")
+  return profile ? `${base}:${profile}` : `${base}:default`
+}
+
 export namespace Auth {
   export class Oauth extends Schema.Class<Oauth>("OAuth")({
     type: Schema.Literal("oauth"),
@@ -63,24 +68,31 @@ export namespace Auth {
       })
 
       const get = Effect.fn("Auth.get")(function* (providerID: string) {
-        return (yield* all())[providerID]
+        const allData = yield* all()
+        // Direct lookup (original behavior for backward compat with bare keys)
+        if (providerID in allData) return allData[providerID]
+        const withSlash = providerID.endsWith("/") ? providerID.slice(0, -1) : providerID + "/"
+        if (withSlash in allData) return allData[withSlash]
+        // Multi-profile support: try normalized key
+        const withProfile = normalizeKey(providerID)
+        if (withProfile in allData) return allData[withProfile]
+        const bare = providerID.replace(/\/+$/, "")
+        if (`${bare}:default` in allData) return allData[`${bare}:default`]
+        return undefined
       })
 
       const set = Effect.fn("Auth.set")(function* (key: string, info: Info) {
-        const norm = key.replace(/\/+$/, "")
+        const norm = normalizeKey(key)
         const data = yield* all()
-        if (norm !== key) delete data[key]
-        delete data[norm + "/"]
+        delete data[key]
         yield* fsys
           .writeJson(file, { ...data, [norm]: info }, 0o600)
           .pipe(Effect.mapError(fail("Failed to write auth data")))
       })
 
       const remove = Effect.fn("Auth.remove")(function* (key: string) {
-        const norm = key.replace(/\/+$/, "")
         const data = yield* all()
         delete data[key]
-        delete data[norm]
         yield* fsys.writeJson(file, data, 0o600).pipe(Effect.mapError(fail("Failed to write auth data")))
       })
 

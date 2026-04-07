@@ -836,6 +836,7 @@ export namespace Config {
             .describe(
               "Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.",
             ),
+          authProfile: z.string().optional().describe("Auth profile to use for this provider"),
         })
         .catchall(z.any())
         .optional(),

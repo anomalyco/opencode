@@ -16,7 +16,12 @@ import { text } from "node:stream/consumers"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
 
-async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, methodName?: string): Promise<boolean> {
+async function handlePluginAuth(
+  plugin: { auth: PluginAuth },
+  provider: string,
+  methodName?: string,
+  profile?: string,
+): Promise<boolean> {
   let index = 0
   if (methodName) {
     const match = plugin.auth.methods.findIndex((x) => x.label.toLowerCase() === methodName.toLowerCase())
@@ -91,9 +96,10 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
       }
       if (result.type === "success") {
         const saveProvider = result.provider ?? provider
+        const key = profile ? `${saveProvider}:${profile}` : `${saveProvider}:default`
         if ("refresh" in result) {
           const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
-          await Auth.set(saveProvider, {
+          await Auth.set(key, {
             type: "oauth",
             refresh,
             access,
@@ -102,7 +108,7 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
           })
         }
         if ("key" in result) {
-          await Auth.set(saveProvider, {
+          await Auth.set(key, {
             type: "api",
             key: result.key,
           })
@@ -123,9 +129,10 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
       }
       if (result.type === "success") {
         const saveProvider = result.provider ?? provider
+        const key = profile ? `${saveProvider}:${profile}` : `${saveProvider}:default`
         if ("refresh" in result) {
           const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
-          await Auth.set(saveProvider, {
+          await Auth.set(key, {
             type: "oauth",
             refresh,
             access,
@@ -134,7 +141,7 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
           })
         }
         if ("key" in result) {
-          await Auth.set(saveProvider, {
+          await Auth.set(key, {
             type: "api",
             key: result.key,
           })
@@ -155,7 +162,8 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
       }
       if (result.type === "success") {
         const saveProvider = result.provider ?? provider
-        await Auth.set(saveProvider, {
+        const key = profile ? `${saveProvider}:${profile}` : `${saveProvider}:default`
+        await Auth.set(key, {
           type: "api",
           key: result.key,
         })
@@ -218,9 +226,23 @@ export const ProvidersListCommand = cmd({
     const results = Object.entries(await Auth.all())
     const database = await ModelsDev.get()
 
-    for (const [providerID, result] of results) {
-      const name = database[providerID]?.name || providerID
-      prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}`)
+    const byProvider: Record<string, Array<{ profile: string; type: string }>> = {}
+    for (const [compositeKey, result] of results) {
+      const [baseProvider, profile] = compositeKey.includes(":") ? compositeKey.split(":") : [compositeKey, "default"]
+      if (!byProvider[baseProvider]) byProvider[baseProvider] = []
+      byProvider[baseProvider]!.push({ profile, type: result.type })
+    }
+
+    for (const [baseProvider, credentials] of Object.entries(byProvider)) {
+      const name = database[baseProvider]?.name || baseProvider
+      if (credentials.length === 1) {
+        prompts.log.info(`${name}:${credentials[0]!.profile} ${UI.Style.TEXT_DIM}(${credentials[0]!.type})`)
+      } else {
+        prompts.log.info(name)
+        for (const cred of credentials) {
+          prompts.log.info(`  ${cred.profile} ${UI.Style.TEXT_DIM}(${cred.type})`)
+        }
+      }
     }
 
     prompts.outro(`${results.length} credentials`)
@@ -268,6 +290,10 @@ export const ProvidersLoginCommand = cmd({
       .option("method", {
         alias: ["m"],
         describe: "login method label (skips method selection)",
+        type: "string",
+      })
+      .option("profile", {
+        describe: "profile name for this provider (skips interactive prompt)",
         type: "string",
       }),
   async handler(args) {
@@ -387,9 +413,52 @@ export const ProvidersLoginCommand = cmd({
           provider = selected as string
         }
 
+        // Prompt for profile name (unless --profile was provided)
+        let profile = args.profile
+        if (!profile) {
+          const validateProfile = (input: string) => {
+            if (!input) return "Required"
+            if (input.length > 20) return "Max 20 characters"
+            if (!/^[a-zA-Z0-9_-]+$/.test(input)) return "Letters, numbers, hyphens, underscores only"
+            return undefined
+          }
+          profile = await prompts.text({
+            message: "Profile name",
+            validate: validateProfile,
+          })
+          if (prompts.isCancel(profile)) throw new UI.CancelledError()
+          profile = profile!.toLowerCase()
+        } else {
+          // Validate provided profile name
+          if (profile.length > 20) {
+            prompts.log.error("Profile name must be max 20 characters")
+            process.exit(1)
+          }
+          if (!/^[a-zA-Z0-9_-]+$/.test(profile)) {
+            prompts.log.error("Profile name can only contain letters, numbers, hyphens, and underscores")
+            process.exit(1)
+          }
+          profile = profile.toLowerCase()
+        }
+
+        const normalizedKey = `${provider}:${profile}`
+        const existing = await Auth.get(normalizedKey)
+        if (existing) {
+          const confirmed = await prompts.confirm({
+            message: `Profile '${profile}' already exists for ${provider}. Replace?`,
+            active: "yes",
+            inactive: "no",
+          })
+          if (prompts.isCancel(confirmed)) throw new UI.CancelledError()
+          if (!confirmed) {
+            prompts.outro("Cancelled")
+            return
+          }
+        }
+
         const plugin = await Plugin.list().then((x) => x.findLast((x) => x.auth?.provider === provider))
         if (plugin && plugin.auth) {
-          const handled = await handlePluginAuth({ auth: plugin.auth }, provider, args.method)
+          const handled = await handlePluginAuth({ auth: plugin.auth }, provider, args.method, profile)
           if (handled) return
         }
 
@@ -403,7 +472,7 @@ export const ProvidersLoginCommand = cmd({
 
           const customPlugin = await Plugin.list().then((x) => x.findLast((x) => x.auth?.provider === provider))
           if (customPlugin && customPlugin.auth) {
-            const handled = await handlePluginAuth({ auth: customPlugin.auth }, provider, args.method)
+            const handled = await handlePluginAuth({ auth: customPlugin.auth }, provider, args.method, profile)
             if (handled) return
           }
 
@@ -441,7 +510,7 @@ export const ProvidersLoginCommand = cmd({
           validate: (x) => (x && x.length > 0 ? undefined : "Required"),
         })
         if (prompts.isCancel(key)) throw new UI.CancelledError()
-        await Auth.set(provider, {
+        await Auth.set(normalizedKey, {
           type: "api",
           key,
         })
@@ -455,24 +524,98 @@ export const ProvidersLoginCommand = cmd({
 export const ProvidersLogoutCommand = cmd({
   command: "logout",
   describe: "log out from a configured provider",
-  async handler(_args) {
+  builder: (yargs) =>
+    yargs
+      .option("provider", {
+        alias: ["p"],
+        describe: "provider id or name (skips provider selection)",
+        type: "string",
+      })
+      .option("profile", {
+        alias: ["P"],
+        describe: "profile name (skips profile selection, requires --provider)",
+        type: "string",
+      }),
+  async handler(args) {
     UI.empty()
-    const credentials = await Auth.all().then((x) => Object.entries(x))
+    const allCredentials = await Auth.all()
+    const credentials = Object.entries(allCredentials)
     prompts.intro("Remove credential")
+
     if (credentials.length === 0) {
       prompts.log.error("No credentials found")
       return
     }
+
+    // Extract unique providerIDs from composite keys (strip :profile suffix)
+    const getProviderID = (key: string) => key.replace(/:[^:]+$/, "")
+    const uniqueProviders = [...new Set(credentials.map(([key]) => getProviderID(key)))]
+
     const database = await ModelsDev.get()
-    const providerID = await prompts.select({
-      message: "Select provider",
-      options: credentials.map(([key, value]) => ({
-        label: (database[key]?.name || key) + UI.Style.TEXT_DIM + " (" + value.type + ")",
-        value: key,
+
+    // Helper to get display name for a provider
+    const providerName = (pid: string) => database[pid]?.name || pid
+
+    let selectedProvider: string
+
+    if (args.provider) {
+      // Validate provider exists
+      const match = uniqueProviders.find(
+        (p) => p === args.provider || providerName(p).toLowerCase() === args.provider!.toLowerCase(),
+      )
+      if (!match) {
+        prompts.log.error(`Provider '${args.provider}' not found`)
+        return
+      }
+      selectedProvider = match
+    } else {
+      // Show provider selection (unique providers only)
+      const selected = await prompts.select({
+        message: "Select provider",
+        options: uniqueProviders.map((p) => ({
+          label: providerName(p),
+          value: p,
+        })),
+      })
+      if (prompts.isCancel(selected)) throw new UI.CancelledError()
+      selectedProvider = selected
+    }
+
+    // Get all profiles for selected provider
+    const providerCredentials = credentials.filter(([key]) => getProviderID(key) === selectedProvider)
+    const profiles = providerCredentials.map(([key]) => key.replace(/^[^:]+:/, "")) // Extract profile suffix
+
+    // If --profile given, use it directly
+    if (args.profile) {
+      const profileKey = `${selectedProvider}:${args.profile}`
+      if (!(profileKey in allCredentials)) {
+        prompts.log.error(`Profile '${args.profile}' not found for ${providerName(selectedProvider)}`)
+        return
+      }
+      await Auth.remove(profileKey)
+      prompts.outro("Logout successful")
+      return
+    }
+
+    // If only one profile, skip selection
+    if (profiles.length === 1) {
+      const profileKey = `${selectedProvider}:${profiles[0]}`
+      await Auth.remove(profileKey)
+      prompts.outro("Logout successful")
+      return
+    }
+
+    // Show profile selection
+    const selectedProfile = await prompts.select({
+      message: "Select profile",
+      options: profiles.map((p) => ({
+        label: p,
+        value: p,
       })),
     })
-    if (prompts.isCancel(providerID)) throw new UI.CancelledError()
-    await Auth.remove(providerID)
+    if (prompts.isCancel(selectedProfile)) throw new UI.CancelledError()
+    const profileKey = `${selectedProvider}:${selectedProfile}`
+    await Auth.remove(profileKey)
     prompts.outro("Logout successful")
   },
 })

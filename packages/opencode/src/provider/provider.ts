@@ -1029,8 +1029,30 @@ export namespace Provider {
           const discoveryLoaders: {
             [providerID: string]: CustomDiscoverModels
           } = {}
+          // resolveProfile returns the auth profile for a provider with precedence:
+          // 1. opencode.json → provider[providerID].options.authProfile
+          // 2. {PROVIDER_ID_UPPERCASE}_AUTH_PROFILE env var (dots replaced by underscores)
+          // 3. "default"
+          function resolveProfile(providerID: string): string {
+            const cfg = providers[providerID as ProviderID]
+            if (cfg?.options?.authProfile) return cfg.options.authProfile
+            const envKey = `${providerID.toUpperCase().replace(/\./g, "_")}_AUTH_PROFILE`
+            const envProfile = Env.get(envKey)
+            if (envProfile) return envProfile
+            return "default"
+          }
+
           const dep = {
-            auth: (id: string) => auth.get(id).pipe(Effect.orDie),
+            auth: (id: string) => {
+              const profile = resolveProfile(id)
+              if (profile !== "default") {
+                log.info(`Using auth profile: ${profile}`)
+                const key = `${id.replace(/\/+$/, "")}:${profile}`
+                return auth.get(key).pipe(Effect.orDie)
+              }
+              // For default profile, pass original ID to preserve backward compat
+              return auth.get(id).pipe(Effect.orDie)
+            },
             config: () => config.get(),
           }
 
