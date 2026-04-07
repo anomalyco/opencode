@@ -73,7 +73,11 @@ export namespace Auth {
         if (providerID in allData) return allData[providerID]
         const withSlash = providerID.endsWith("/") ? providerID.slice(0, -1) : providerID + "/"
         if (withSlash in allData) return allData[withSlash]
-        // Multi-profile support: try normalized key
+        // Multi-profile support: if key has embedded profile (provider:profile), try direct
+        if (providerID.includes(":")) {
+          if (providerID in allData) return allData[providerID]
+        }
+        // Multi-profile support: try normalized key with :default
         const withProfile = normalizeKey(providerID)
         if (withProfile in allData) return allData[withProfile]
         const bare = providerID.replace(/\/+$/, "")

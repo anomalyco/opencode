@@ -39,6 +39,7 @@ export namespace Agent {
         .object({
           modelID: ModelID.zod,
           providerID: ProviderID.zod,
+          authProfile: z.string().optional(),
         })
         .optional(),
       variant: z.string().optional(),

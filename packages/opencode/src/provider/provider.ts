@@ -820,6 +820,7 @@ export namespace Provider {
     .object({
       id: ModelID.zod,
       providerID: ProviderID.zod,
+      authProfile: z.string().optional(),
       api: z.object({
         id: z.string(),
         url: z.string(),
@@ -1030,10 +1031,12 @@ export namespace Provider {
             [providerID: string]: CustomDiscoverModels
           } = {}
           // resolveProfile returns the auth profile for a provider with precedence:
-          // 1. opencode.json → provider[providerID].options.authProfile
-          // 2. {PROVIDER_ID_UPPERCASE}_AUTH_PROFILE env var (dots replaced by underscores)
-          // 3. "default"
-          function resolveProfile(providerID: string): string {
+          // 1. Embedded profile from model string (e.g., "provider:profile/model") - highest priority
+          // 2. opencode.json → provider[providerID].options.authProfile
+          // 3. {PROVIDER_ID_UPPERCASE}_AUTH_PROFILE env var (dots replaced by underscores)
+          // 4. "default"
+          function resolveProfile(providerID: string, profileOverride?: string): string {
+            if (profileOverride) return profileOverride
             const cfg = providers[providerID as ProviderID]
             if (cfg?.options?.authProfile) return cfg.options.authProfile
             const envKey = `${providerID.toUpperCase().replace(/\./g, "_")}_AUTH_PROFILE`
@@ -1043,15 +1046,13 @@ export namespace Provider {
           }
 
           const dep = {
-            auth: (id: string) => {
-              const profile = resolveProfile(id)
+            auth: (id: string, profileOverride?: string) => {
+              const profile = resolveProfile(id, profileOverride)
+              const key = profile !== "default" ? `${id.replace(/\/+$/, "")}:${profile}` : id
               if (profile !== "default") {
                 log.info(`Using auth profile: ${profile}`)
-                const key = `${id.replace(/\/+$/, "")}:${profile}`
-                return auth.get(key).pipe(Effect.orDie)
               }
-              // For default profile, pass original ID to preserve backward compat
-              return auth.get(id).pipe(Effect.orDie)
+              return auth.get(key).pipe(Effect.orDie)
             },
             config: () => config.get(),
           }
@@ -1705,10 +1706,19 @@ export namespace Provider {
     )
   }
 
-  export function parseModel(model: string) {
-    const [providerID, ...rest] = model.split("/")
+  export function parseModel(model: string): { providerID: ProviderID; modelID: ModelID; authProfile?: string } {
+    const [first, ...rest] = model.split("/")
+    // Check if providerID contains a profile (e.g., "provider:profile")
+    if (first.includes(":")) {
+      const [providerID, authProfile] = first.split(":")
+      return {
+        providerID: ProviderID.make(providerID),
+        modelID: ModelID.make(rest.join("/")),
+        authProfile,
+      }
+    }
     return {
-      providerID: ProviderID.make(providerID),
+      providerID: ProviderID.make(first),
       modelID: ModelID.make(rest.join("/")),
     }
   }
