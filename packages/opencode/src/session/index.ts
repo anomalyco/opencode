@@ -1,5 +1,6 @@
 import { Slug } from "@opencode-ai/util/slug"
 import path from "path"
+import fs from "fs"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
@@ -845,6 +846,76 @@ export namespace Session {
       yield { ...fromRow(row), project }
     }
   }
+
+  export function* listOrphans() {
+    const rows = Database.use((db) =>
+      db
+        .select()
+        .from(SessionTable)
+        .where(isNull(SessionTable.parent_id))
+        .orderBy(desc(SessionTable.time_updated))
+        .all(),
+    )
+
+    const items = Database.use((db) =>
+      db
+        .select({ id: ProjectTable.id, name: ProjectTable.name, worktree: ProjectTable.worktree })
+        .from(ProjectTable)
+        .all(),
+    )
+    const projects = new Map<string, ProjectInfo>()
+    const worktrees: Array<{ id: string; worktree: string }> = []
+    for (const item of items) {
+      projects.set(item.id, {
+        id: item.id,
+        name: item.name ?? undefined,
+        worktree: item.worktree,
+      })
+      if (item.id !== ProjectID.global && item.worktree !== "/") {
+        worktrees.push({ id: item.id, worktree: item.worktree })
+      }
+    }
+
+    for (const row of rows) {
+      // Case 1: directory no longer exists on disk
+      if (!fs.existsSync(row.directory)) {
+        const project = projects.get(row.project_id) ?? null
+        yield { ...fromRow(row), project }
+        continue
+      }
+      // Case 2: global session whose directory is inside a known project worktree
+      if (row.project_id === ProjectID.global) {
+        const misplaced = worktrees.some(
+          (w) => row.directory === w.worktree || row.directory.startsWith(w.worktree + path.sep),
+        )
+        if (misplaced) {
+          const project = projects.get(row.project_id) ?? null
+          yield { ...fromRow(row), project }
+        }
+      }
+    }
+  }
+
+  export const migrate = fn(
+    z.object({
+      sessionID: SessionID.zod,
+      projectID: ProjectID.zod,
+      directory: z.string(),
+    }),
+    async (input) => {
+      Database.use((db) => {
+        db.update(SessionTable)
+          .set({ project_id: input.projectID, directory: input.directory })
+          .where(eq(SessionTable.id, input.sessionID))
+          .run()
+        db.update(SessionTable)
+          .set({ project_id: input.projectID, directory: input.directory })
+          .where(eq(SessionTable.parent_id, input.sessionID))
+          .run()
+      })
+      return Session.get(input.sessionID)
+    },
+  )
 
   export const children = fn(SessionID.zod, (id) => runPromise((svc) => svc.children(id)))
   export const remove = fn(SessionID.zod, (id) => runPromise((svc) => svc.remove(id)))

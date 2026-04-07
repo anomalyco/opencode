@@ -3069,6 +3069,25 @@ export type SessionStatusResponses = {
 
 export type SessionStatusResponse = SessionStatusResponses[keyof SessionStatusResponses]
 
+export type SessionOrphansData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/orphans"
+}
+
+export type SessionOrphansResponses = {
+  /**
+   * List of orphaned sessions
+   */
+  200: Array<GlobalSession>
+}
+
+export type SessionOrphansResponse = SessionOrphansResponses[keyof SessionOrphansResponses]
+
 export type SessionDeleteData = {
   body?: never
   path: {
@@ -3304,6 +3323,43 @@ export type SessionForkResponses = {
 }
 
 export type SessionForkResponse = SessionForkResponses[keyof SessionForkResponses]
+
+export type SessionMigrateData = {
+  body?: {
+    projectID: string
+    directory: string
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/migrate"
+}
+
+export type SessionMigrateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionMigrateError = SessionMigrateErrors[keyof SessionMigrateErrors]
+
+export type SessionMigrateResponses = {
+  /**
+   * Migrated session
+   */
+  200: Session
+}
+
+export type SessionMigrateResponse = SessionMigrateResponses[keyof SessionMigrateResponses]
 
 export type SessionAbortData = {
   body?: never

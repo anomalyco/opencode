@@ -3,11 +3,13 @@ import { DialogSelect } from "@tui/ui/dialog-select"
 import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { createMemo, createSignal, createResource, onMount, Show } from "solid-js"
+import { useKeyboard } from "@opentui/solid"
 import { Locale } from "@/util/locale"
 import { useKeybind } from "../context/keybind"
 import { useTheme } from "../context/theme"
 import { useSDK } from "../context/sdk"
 import { DialogSessionRename } from "./dialog-session-rename"
+import { DialogSessionMigrate } from "./dialog-session-migrate"
 import { useKV } from "../context/kv"
 import { createDebouncedSignal } from "../util/signal"
 import { Spinner } from "./spinner"
@@ -63,6 +65,14 @@ export function DialogSessionList() {
     dialog.setSize("large")
   })
 
+  useKeyboard((evt) => {
+    if (keybind.match("session_migrate", evt)) {
+      evt.preventDefault()
+      evt.stopPropagation()
+      dialog.replace(() => <DialogSessionMigrate />)
+    }
+  })
+
   return (
     <DialogSelect
       title="Sessions"
@@ -101,6 +111,11 @@ export function DialogSessionList() {
           onTrigger: async (option) => {
             dialog.replace(() => <DialogSessionRename session={option.value} />)
           },
+        },
+        {
+          keybind: keybind.all.session_migrate?.[0],
+          title: "migrate",
+          onTrigger: () => {},
         },
       ]}
     />

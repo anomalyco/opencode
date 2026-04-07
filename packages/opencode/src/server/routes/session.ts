@@ -17,6 +17,7 @@ import { Log } from "../../util/log"
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
 import { ModelID, ProviderID } from "@/provider/schema"
+import { ProjectID } from "@/project/schema"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { Bus } from "../../bus"
@@ -92,6 +93,32 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const result = await SessionStatus.list()
         return c.json(Object.fromEntries(result))
+      },
+    )
+    .get(
+      "/orphans",
+      describeRoute({
+        summary: "List orphaned sessions",
+        description:
+          "Get sessions whose directory no longer exists on disk. These sessions may have been orphaned when a project was moved or deleted.",
+        operationId: "session.orphans",
+        responses: {
+          200: {
+            description: "List of orphaned sessions",
+            content: {
+              "application/json": {
+                schema: resolver(Session.GlobalInfo.array()),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const sessions: Session.GlobalInfo[] = []
+        for (const session of Session.listOrphans()) {
+          sessions.push(session)
+        }
+        return c.json(sessions)
       },
     )
     .get(
@@ -353,6 +380,38 @@ export const SessionRoutes = lazy(() =>
         const sessionID = c.req.valid("param").sessionID
         const body = c.req.valid("json")
         const result = await Session.fork({ ...body, sessionID })
+        return c.json(result)
+      },
+    )
+    .post(
+      "/:sessionID/migrate",
+      describeRoute({
+        summary: "Migrate session",
+        description: "Migrate a session to a new project and directory. Also migrates child sessions (sub-agents).",
+        operationId: "session.migrate",
+        responses: {
+          200: {
+            description: "Migrated session",
+            content: {
+              "application/json": {
+                schema: resolver(Session.Info),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: Session.migrate.schema.shape.sessionID,
+        }),
+      ),
+      validator("json", Session.migrate.schema.omit({ sessionID: true })),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const body = c.req.valid("json")
+        const result = await Session.migrate({ ...body, sessionID })
         return c.json(result)
       },
     )
