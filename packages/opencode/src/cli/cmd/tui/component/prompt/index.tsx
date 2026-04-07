@@ -209,8 +209,12 @@ export function Prompt(props: PromptProps) {
       const isPrimaryAgent = local.agent.list().some((x) => x.name === msg.agent)
       if (msg.agent && isPrimaryAgent) {
         local.agent.set(msg.agent)
-        if (msg.model) local.model.set(msg.model)
-        if (msg.variant) local.model.variant.set(msg.variant)
+        if (msg.model) {
+          local.model.set(msg.model)
+          local.model.variant.set(
+            "variant" in msg.model && typeof msg.model.variant === "string" ? msg.model.variant : undefined,
+          )
+        }
       }
     }
   })

@@ -146,7 +146,7 @@ beforeAll(async () => {
           add: (value: {
             directory?: string
             sessionID?: string
-            message: { agent: string; model: { providerID: string; modelID: string }; variant?: string }
+            message: { agent: string; model: { providerID: string; modelID: string; variant?: string } }
           }) => {
             optimistic.push(value)
             optimisticSeeded.push(
