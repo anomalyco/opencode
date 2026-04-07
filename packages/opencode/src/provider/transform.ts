@@ -375,8 +375,8 @@ export namespace ProviderTransform {
       id.includes("glm") ||
       id.includes("mistral") ||
       id.includes("kimi") ||
-      // TODO: Remove this after models.dev data is fixed to use "kimi-k2.5" instead of "k2p5"
-      id.includes("k2p5")
+      id.includes("k2p5") ||
+      id.includes("qwen")
     )
       return {}
 
@@ -465,9 +465,7 @@ export namespace ProviderTransform {
           return {}
         }
         if (model.id.includes("claude")) {
-          return {
-            thinking: { thinking_budget: 4000 },
-          }
+          return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
         }
         const copilotEfforts = iife(() => {
           if (id.includes("5.1-codex-max") || id.includes("5.2") || id.includes("5.3"))

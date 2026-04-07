@@ -548,12 +548,12 @@ export type UserMessage = {
   model: {
     providerID: string
     modelID: string
+    variant?: string
   }
   system?: string
   tools?: {
     [key: string]: boolean
   }
-  variant?: string
 }
 
 export type AssistantMessage = {

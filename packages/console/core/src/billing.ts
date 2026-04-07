@@ -254,7 +254,7 @@ export namespace Billing {
       const createSession = () =>
         Billing.stripe().checkout.sessions.create({
           mode: "subscription",
-          discounts: [{ coupon: LiteData.firstMonth50Coupon() }],
+          discounts: [{ coupon: LiteData.firstMonthCoupon(email!) }],
           ...(billing.customerID
             ? {
                 customer: billing.customerID,
