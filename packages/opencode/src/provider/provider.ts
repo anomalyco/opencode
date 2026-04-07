@@ -829,6 +829,7 @@ export namespace Provider {
           },
           async discoverModels(): Promise<Record<string, Model>> {
             try {
+              log.info("Fetching ollama tags", { baseURL })
               const response = await fetch(`${baseURL}/tags`)
               const data = await response.json()
               const models: Record<string, Model> = {}
@@ -1261,16 +1262,43 @@ export namespace Provider {
           for (const [id, fn] of Object.entries(custom(dep))) {
             const providerID = ProviderID.make(id)
             if (disabled.has(providerID)) continue
-            const data = database[providerID]
+
+            // For ollama, we allow it even if it's not in database (since models are discovered dynamically)
+            const isOllama = providerID === "ollama"
+            let data = database[providerID]
+
             if (!data) {
-              log.error("Provider does not exist in model list " + providerID)
-              continue
+              if (isOllama) {
+                // Mock a default provider info for ollama
+                data = {
+                  id: providerID,
+                  name: "Ollama",
+                  source: "custom",
+                  env: [],
+                  options: {},
+                  models: {},
+                }
+                database[providerID] = data
+              } else {
+                log.error("Provider does not exist in model list " + providerID)
+                continue
+              }
             }
+
+            log.info("Processing custom provider", { providerID, hasData: !!data })
             const result = yield* fn(data)
             if (result && (result.autoload || providers[providerID])) {
+              log.info("Custom provider autoloaded", {
+                providerID,
+                autoload: result.autoload,
+                exists: !!providers[providerID],
+              })
               if (result.getModel) modelLoaders[providerID] = result.getModel
               if (result.vars) varsLoaders[providerID] = result.vars
-              if (result.discoverModels) discoveryLoaders[providerID] = result.discoverModels
+              if (result.discoverModels) {
+                log.info("added discovery loader", { providerID })
+                discoveryLoaders[providerID] = result.discoverModels
+              }
               const opts = result.options ?? {}
               const patch: Partial<Info> = providers[providerID]
                 ? { options: opts }
@@ -1290,9 +1318,16 @@ export namespace Provider {
           }
 
           // Run discovery for all providers that have a loader
-          for (const [id, loader] of Object.entries(discoveryLoaders)) {
-            if (!providers[id as ProviderID] || !isProviderAllowed(id as ProviderID)) continue
-            yield* Effect.promise(async () => {
+          const discoveryPromises = Object.entries(discoveryLoaders).map(([id, loader]) => {
+            log.info("Checking discovery loader", {
+              id,
+              hasProvider: !!providers[id as ProviderID],
+              allowed: isProviderAllowed(id as ProviderID),
+            })
+            if (!providers[id as ProviderID] || !isProviderAllowed(id as ProviderID)) return Effect.void
+
+            return Effect.promise(async () => {
+              log.info("Running discovery loader", { id })
               try {
                 const discovered = await loader()
                 for (const [modelID, model] of Object.entries(discovered)) {
@@ -1304,7 +1339,9 @@ export namespace Provider {
                 log.warn("state discovery error", { id, error: e })
               }
             })
-          }
+          })
+
+          yield* Effect.all(discoveryPromises, { concurrency: "unbounded" })
 
           const gitlab = ProviderID.make("gitlab")
           if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
