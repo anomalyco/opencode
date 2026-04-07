@@ -1219,6 +1219,7 @@ export namespace Config {
         })
 
         const loadGlobal = Effect.fnUntraced(function* () {
+          if (Flag.OPENCODE_DISABLE_GLOBAL_CONFIG) return {} as Info
           let result: Info = pipe(
             {},
             mergeDeep(yield* loadFile(path.join(Global.Path.config, "config.json"))),

@@ -16,6 +16,7 @@ export namespace Flag {
   export const OPENCODE_GIT_BASH_PATH = process.env["OPENCODE_GIT_BASH_PATH"]
   export const OPENCODE_CONFIG = process.env["OPENCODE_CONFIG"]
   export declare const OPENCODE_PURE: boolean
+  export declare const OPENCODE_DISABLE_GLOBAL_CONFIG: boolean
   export declare const OPENCODE_TUI_CONFIG: string | undefined
   export declare const OPENCODE_CONFIG_DIR: string | undefined
   export declare const OPENCODE_PLUGIN_META_FILE: string | undefined
@@ -128,6 +129,17 @@ Object.defineProperty(Flag, "OPENCODE_CONFIG_DIR", {
 Object.defineProperty(Flag, "OPENCODE_PURE", {
   get() {
     return truthy("OPENCODE_PURE")
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+// Dynamic getter for OPENCODE_DISABLE_GLOBAL_CONFIG
+// This must be evaluated at access time, not module load time,
+// because external tooling may set this env var at runtime
+Object.defineProperty(Flag, "OPENCODE_DISABLE_GLOBAL_CONFIG", {
+  get() {
+    return truthy("OPENCODE_DISABLE_GLOBAL_CONFIG")
   },
   enumerable: true,
   configurable: false,
