@@ -52,10 +52,10 @@ port 8888은 OpenCode 웹 UI가 사용 중입니다. 결과물 서빙에는 port
 
 컨테이너의 port 3000에서 HTTP 서버를 실행하면, 외부에서 접근할 수 있습니다.
 
-접근 주소의 환경변수 `$OPENCODE_HUB_HOST`와 `$JUPYTERHUB_USER`를 반드시 셸에서 실행하여 실제 값으로 치환한 뒤 사용자에게 안내하세요. 환경변수를 그대로 노출하지 마세요.
+접근 주소의 환경변수 `$JUPYTERHUB_USER`와 `$OPENCODE_SERVE_DOMAIN`을 반드시 셸에서 실행하여 실제 값으로 치환한 뒤 사용자에게 안내하세요. 환경변수를 그대로 노출하지 마세요.
 
 ```bash
-echo "https://$OPENCODE_HUB_HOST/serve/$JUPYTERHUB_USER/"
+echo "https://$JUPYTERHUB_USER.$OPENCODE_SERVE_DOMAIN/"
 ```
 
 ### 예시
