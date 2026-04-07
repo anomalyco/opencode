@@ -1,6 +1,6 @@
 import type { ToolPart } from "@opencode-ai/sdk/v2/client"
 import { test, expect } from "../fixtures"
-import { withSession } from "../actions"
+import { closeDialog, openSettings, withSession } from "../actions"
 import { promptModelSelector, promptSelector, promptVariantSelector } from "../selectors"
 
 const isBash = (part: unknown): part is ToolPart => {
@@ -19,12 +19,15 @@ test("shell mode runs a command in the project directory", async ({ page, projec
   await withSession(project.sdk, `e2e shell ${Date.now()}`, async (session) => {
     project.trackSession(session.id)
     await project.gotoSession(session.id)
-    const button = page.locator('[data-action="prompt-permissions"]').first()
-    await expect(button).toBeVisible()
-    if ((await button.getAttribute("aria-pressed")) !== "true") {
-      await button.click()
-      await expect(button).toHaveAttribute("aria-pressed", "true")
+    const dialog = await openSettings(page)
+    const toggle = dialog.locator('[data-action="settings-auto-accept-permissions"]').first()
+    const input = toggle.locator('[data-slot="switch-input"]').first()
+    await expect(toggle).toBeVisible()
+    if ((await input.getAttribute("aria-checked")) !== "true") {
+      await toggle.locator('[data-slot="switch-control"]').click()
+      await expect(input).toHaveAttribute("aria-checked", "true")
     }
+    await closeDialog(page, dialog)
     await project.shell(cmd)
 
     await expect
