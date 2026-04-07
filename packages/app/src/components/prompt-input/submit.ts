@@ -104,19 +104,23 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
     }
   }
 
-  const messageID = input.messageID ?? Identifier.ascending("message")
+  // Don't generate message ID on the client - let the server handle it exclusively
+  // to maintain monotonic ordering and prevent session loop from misfiring
+  // Generated a temporary ID for optimistic UI only
+  // see: https://github.com/anomalyco/opencode/issues/17012
+  const optimisticID = Identifier.ascending("message")
   const { requestParts, optimisticParts } = buildRequestParts({
     prompt: input.draft.prompt,
     context: input.draft.context,
     images,
     text,
     sessionID: input.draft.sessionID,
-    messageID,
+    messageID: optimisticID,
     sessionDirectory: input.draft.sessionDirectory,
   })
 
   const message: Message = {
-    id: messageID,
+    id: optimisticID,
     sessionID: input.draft.sessionID,
     role: "user",
     time: { created: Date.now() },
@@ -136,7 +140,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
     input.sync.session.optimistic.remove({
       directory: input.draft.sessionDirectory,
       sessionID: input.draft.sessionID,
-      messageID,
+      messageID: optimisticID,
     })
 
   setBusy()
@@ -153,7 +157,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       sessionID: input.draft.sessionID,
       agent: input.draft.agent,
       model: input.draft.model,
-      messageID,
+      // Don't include messageID - let server generate it to maintain monotonic ordering
       parts: requestParts,
       variant: input.draft.variant,
     })
