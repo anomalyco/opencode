@@ -1517,7 +1517,7 @@ export namespace Provider {
 
       const getLanguage = Effect.fn("Provider.getLanguage")(function* (model: Model) {
         const s = yield* InstanceState.get(state)
-        const key = `${model.providerID}/${model.id}`
+        const key = `${model.providerID}/${model.id}/${model.authProfile ?? "default"}`
         if (s.models.has(key)) return s.models.get(key)!
 
         return yield* Effect.promise(async () => {

@@ -924,9 +924,16 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         providerID: ProviderID,
         modelID: ModelID,
         sessionID: SessionID,
+        authProfile?: string,
       ) {
         const exit = yield* provider.getModel(providerID, modelID).pipe(Effect.exit)
-        if (Exit.isSuccess(exit)) return exit.value
+        if (Exit.isSuccess(exit)) {
+          if (!authProfile) return exit.value
+          return {
+            ...exit.value,
+            authProfile,
+          }
+        }
         const err = Cause.squash(exit.cause)
         if (Provider.ModelNotFoundError.isInstance(err)) {
           const hint = err.data.suggestions?.length ? ` Did you mean: ${err.data.suggestions.join(", ")}?` : ""
@@ -1393,7 +1400,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
                 history: msgs,
               }).pipe(Effect.ignore, Effect.forkIn(scope))
 
-            const model = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
+            const model = yield* getModel(
+              lastUser.model.providerID,
+              lastUser.model.modelID,
+              sessionID,
+              lastUser.model.authProfile,
+            )
             const task = tasks.pop()
 
             if (task?.type === "subtask") {

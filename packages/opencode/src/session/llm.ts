@@ -90,14 +90,24 @@ export namespace LLM {
       modelID: input.model.id,
       providerID: input.model.providerID,
     })
-    const [language, cfg, provider, auth] = await Promise.all([
-      Provider.getLanguage(input.model),
+    const authKey = input.model.authProfile
+      ? `${input.model.providerID}:${input.model.authProfile}`
+      : input.model.providerID
+    const [cfg, provider, auth] = await Promise.all([
       Config.get(),
       Provider.getProvider(input.model.providerID),
-      Auth.get(
-        input.model.authProfile ? `${input.model.providerID}:${input.model.authProfile}` : input.model.providerID,
-      ),
+      Auth.get(authKey),
     ])
+    const runtimeModel = {
+      ...input.model,
+      options:
+        auth?.type === "api"
+          ? mergeDeep(input.model.options, { apiKey: auth.key })
+          : auth?.type === "oauth"
+            ? mergeDeep(input.model.options, { apiKey: auth.access })
+            : input.model.options,
+    }
+    const language = await Provider.getLanguage(runtimeModel)
     // TODO: move this to a proper hook
     const isOpenaiOauth = provider.id === "openai" && auth?.type === "oauth"
 
@@ -105,7 +115,7 @@ export namespace LLM {
     system.push(
       [
         // use agent prompt otherwise provider prompt
-        ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
+        ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(runtimeModel)),
         // any custom prompt passed into this call
         ...input.system,
         // any custom prompt from last user message
@@ -118,7 +128,7 @@ export namespace LLM {
     const header = system[0]
     await Plugin.trigger(
       "experimental.chat.system.transform",
-      { sessionID: input.sessionID, model: input.model },
+      { sessionID: input.sessionID, model: runtimeModel },
       { system },
     )
     // rejoin to maintain 2-part structure for caching if header unchanged
@@ -129,17 +139,17 @@ export namespace LLM {
     }
 
     const variant =
-      !input.small && input.model.variants && input.user.variant ? input.model.variants[input.user.variant] : {}
+      !input.small && runtimeModel.variants && input.user.variant ? runtimeModel.variants[input.user.variant] : {}
     const base = input.small
-      ? ProviderTransform.smallOptions(input.model)
+      ? ProviderTransform.smallOptions(runtimeModel)
       : ProviderTransform.options({
-          model: input.model,
+          model: runtimeModel,
           sessionID: input.sessionID,
           providerOptions: provider.options,
         })
     const options: Record<string, any> = pipe(
       base,
-      mergeDeep(input.model.options),
+      mergeDeep(runtimeModel.options),
       mergeDeep(input.agent.options),
       mergeDeep(variant),
     )
@@ -167,17 +177,17 @@ export namespace LLM {
       {
         sessionID: input.sessionID,
         agent: input.agent.name,
-        model: input.model,
+        model: runtimeModel,
         provider,
         message: input.user,
       },
       {
-        temperature: input.model.capabilities.temperature
-          ? (input.agent.temperature ?? ProviderTransform.temperature(input.model))
+        temperature: runtimeModel.capabilities.temperature
+          ? (input.agent.temperature ?? ProviderTransform.temperature(runtimeModel))
           : undefined,
-        topP: input.agent.topP ?? ProviderTransform.topP(input.model),
-        topK: ProviderTransform.topK(input.model),
-        maxOutputTokens: ProviderTransform.maxOutputTokens(input.model),
+        topP: input.agent.topP ?? ProviderTransform.topP(runtimeModel),
+        topK: ProviderTransform.topK(runtimeModel),
+        maxOutputTokens: ProviderTransform.maxOutputTokens(runtimeModel),
         options,
       },
     )
@@ -187,7 +197,7 @@ export namespace LLM {
       {
         sessionID: input.sessionID,
         agent: input.agent.name,
-        model: input.model,
+        model: runtimeModel,
         provider,
         message: input.user,
       },
@@ -206,8 +216,8 @@ export namespace LLM {
     // 2. Providers with explicit "litellmProxy: true" option (opt-in for custom gateways)
     const isLiteLLMProxy =
       provider.options?.["litellmProxy"] === true ||
-      input.model.providerID.toLowerCase().includes("litellm") ||
-      input.model.api.id.toLowerCase().includes("litellm")
+      runtimeModel.providerID.toLowerCase().includes("litellm") ||
+      runtimeModel.api.id.toLowerCase().includes("litellm")
 
     // LiteLLM/Bedrock rejects requests where the message history contains tool
     // calls but no tools param is present. When there are no active tools (e.g.
@@ -285,14 +295,14 @@ export namespace LLM {
       temperature: params.temperature,
       topP: params.topP,
       topK: params.topK,
-      providerOptions: ProviderTransform.providerOptions(input.model, params.options),
+      providerOptions: ProviderTransform.providerOptions(runtimeModel, params.options),
       activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
       tools,
       toolChoice: input.toolChoice,
       maxOutputTokens: params.maxOutputTokens,
       abortSignal: input.abort,
       headers: {
-        ...(input.model.providerID.startsWith("opencode")
+        ...(runtimeModel.providerID.startsWith("opencode")
           ? {
               "x-opencode-project": Instance.project.id,
               "x-opencode-session": input.sessionID,
@@ -304,7 +314,7 @@ export namespace LLM {
               ...(input.parentSessionID ? { "x-parent-session-id": input.parentSessionID } : {}),
               "User-Agent": `opencode/${Installation.VERSION}`,
             }),
-        ...input.model.headers,
+        ...runtimeModel.headers,
         ...headers,
       },
       maxRetries: input.retries ?? 0,
@@ -317,7 +327,7 @@ export namespace LLM {
             async transformParams(args) {
               if (args.type === "stream") {
                 // @ts-expect-error
-                args.params.prompt = ProviderTransform.message(args.params.prompt, input.model, options)
+                args.params.prompt = ProviderTransform.message(args.params.prompt, runtimeModel, options)
               }
               return args.params
             },
