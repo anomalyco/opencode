@@ -3,6 +3,7 @@ import { Tool } from "./tool"
 import TurndownService from "turndown"
 import DESCRIPTION from "./webfetch.txt"
 import { abortAfterAny } from "../util/abort"
+import { iife } from "@/util/iife"
 
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
@@ -62,7 +63,7 @@ export const WebFetchTool = Tool.define("webfetch", {
       "Accept-Language": "en-US,en;q=0.9",
     }
 
-    const response = await (async () => {
+    const response = await iife(async () => {
       try {
         const initial = await fetch(params.url, { signal, headers })
 
@@ -73,7 +74,7 @@ export const WebFetchTool = Tool.define("webfetch", {
       } finally {
         clearTimeout()
       }
-    })()
+    })
 
     if (!response.ok) {
       throw new Error(`Request failed with status code: ${response.status}`)
