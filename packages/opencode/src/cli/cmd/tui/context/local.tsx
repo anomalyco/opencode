@@ -2,6 +2,7 @@ import { createStore } from "solid-js/store"
 import { batch, createEffect, createMemo } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
+import { useTuiConfig } from "@tui/context/tui-config"
 import { uniqueBy } from "remeda"
 import path from "path"
 import { Global } from "@/global"
@@ -35,7 +36,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const agent = iife(() => {
-      const agents = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden))
+      const tuiConfig = useTuiConfig()
+      const showSubagents = () => tuiConfig.footerShowSubagents ?? false
+      const agents = createMemo(() => 
+        sync.data.agent.filter((x) => {
+          if (x.hidden) return false
+          if (showSubagents()) return true
+          return x.mode !== "subagent"
+        })
+      )
       const visibleAgents = createMemo(() => sync.data.agent.filter((x) => !x.hidden))
       const [agentStore, setAgentStore] = createStore<{
         current: string

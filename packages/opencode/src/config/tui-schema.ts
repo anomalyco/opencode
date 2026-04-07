@@ -23,6 +23,10 @@ export const TuiOptions = z.object({
     .optional()
     .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
   mouse: z.boolean().optional().describe("Enable or disable mouse capture (default: true)"),
+  footerShowSubagents: z
+    .boolean()
+    .optional()
+    .describe("Show subagents in footer tab selector (default: false, only shows primary agents)"),
 })
 
 export const TuiInfo = z
