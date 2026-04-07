@@ -57,23 +57,6 @@ export function DialogModel(props: { providerID?: string }) {
         ensure(providerID).add(profile)
       }
 
-      for (const item of local.model.recent()) {
-        ensure(item.providerID).add(item.authProfile)
-      }
-
-      for (const item of local.model.favorite()) {
-        ensure(item.providerID).add((item as { authProfile?: string }).authProfile)
-      }
-
-      const current = local.model.current()
-      if (current) ensure(current.providerID).add(current.authProfile)
-
-      for (const item of sync.data.agent) {
-        const model = item.model as { providerID?: string; authProfile?: string } | undefined
-        if (!model?.providerID) continue
-        ensure(model.providerID).add(model.authProfile)
-      }
-
       return out
     })
 

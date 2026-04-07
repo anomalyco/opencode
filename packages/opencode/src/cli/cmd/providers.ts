@@ -549,9 +549,12 @@ export const ProvidersLogoutCommand = cmd({
       return
     }
 
-    // Extract unique providerIDs from composite keys (strip :profile suffix)
-    const getProviderID = (key: string) => key.replace(/:[^:]+$/, "")
-    const uniqueProviders = [...new Set(credentials.map(([key]) => getProviderID(key)))]
+    const parseKey = (key: string) => {
+      const idx = key.lastIndexOf(":")
+      if (idx === -1) return { providerID: key, profile: "default" as const, raw: key }
+      return { providerID: key.slice(0, idx), profile: key.slice(idx + 1), raw: key }
+    }
+    const uniqueProviders = [...new Set(credentials.map(([key]) => parseKey(key).providerID))]
 
     const database = await ModelsDev.get()
 
@@ -584,25 +587,37 @@ export const ProvidersLogoutCommand = cmd({
     }
 
     // Get all profiles for selected provider
-    const providerCredentials = credentials.filter(([key]) => getProviderID(key) === selectedProvider)
-    const profiles = providerCredentials.map(([key]) => key.replace(/^[^:]+:/, "")) // Extract profile suffix
+    const providerCredentials = credentials
+      .map(([key, value]) => ({ ...parseKey(key), value }))
+      .filter((item) => item.providerID === selectedProvider)
+    const profiles = [...new Set(providerCredentials.map((item) => item.profile))]
+
+    const removeProfile = async (providerID: string, profile: string) => {
+      if (profile === "default") {
+        const bare = providerID
+        const legacy = `${providerID}:default`
+        if (bare in allCredentials) await Auth.remove(bare)
+        if (legacy in allCredentials) await Auth.remove(legacy)
+        return
+      }
+      await Auth.remove(`${providerID}:${profile}`)
+    }
 
     // If --profile given, use it directly
     if (args.profile) {
-      const profileKey = `${selectedProvider}:${args.profile}`
-      if (!(profileKey in allCredentials)) {
+      const requested = args.profile.toLowerCase()
+      if (!profiles.includes(requested)) {
         prompts.log.error(`Profile '${args.profile}' not found for ${providerName(selectedProvider)}`)
         return
       }
-      await Auth.remove(profileKey)
+      await removeProfile(selectedProvider, requested)
       prompts.outro("Logout successful")
       return
     }
 
     // If only one profile, skip selection
     if (profiles.length === 1) {
-      const profileKey = `${selectedProvider}:${profiles[0]}`
-      await Auth.remove(profileKey)
+      await removeProfile(selectedProvider, profiles[0]!)
       prompts.outro("Logout successful")
       return
     }
@@ -616,8 +631,7 @@ export const ProvidersLogoutCommand = cmd({
       })),
     })
     if (prompts.isCancel(selectedProfile)) throw new UI.CancelledError()
-    const profileKey = `${selectedProvider}:${selectedProfile}`
-    await Auth.remove(profileKey)
+    await removeProfile(selectedProvider, selectedProfile)
     prompts.outro("Logout successful")
   },
 })
