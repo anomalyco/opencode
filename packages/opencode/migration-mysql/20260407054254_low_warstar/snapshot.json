@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "mysql",
-  "id": "547eb258-2d3e-4c74-a76e-4f8bab63e6b9",
+  "id": "c714074d-d8db-4946-a343-cfad5e8bb8cd",
   "prevIds": [
     "00000000-0000-0000-0000-000000000000"
   ],
@@ -73,7 +73,7 @@
       "table": "account_state"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": false,
       "autoIncrement": false,
       "default": null,
@@ -87,7 +87,7 @@
       "table": "account_state"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": false,
       "autoIncrement": false,
       "default": null,
@@ -101,7 +101,7 @@
       "table": "account_state"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -115,7 +115,7 @@
       "table": "account"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -129,7 +129,7 @@
       "table": "account"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -143,7 +143,7 @@
       "table": "account"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -157,7 +157,7 @@
       "table": "account"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -213,7 +213,7 @@
       "table": "account"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -227,7 +227,7 @@
       "table": "control_account"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -241,7 +241,7 @@
       "table": "control_account"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -255,7 +255,7 @@
       "table": "control_account"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -325,7 +325,7 @@
       "table": "control_account"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -339,7 +339,7 @@
       "table": "workspace"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -353,7 +353,7 @@
       "table": "workspace"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": false,
       "autoIncrement": false,
       "default": null,
@@ -367,7 +367,7 @@
       "table": "workspace"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": false,
       "autoIncrement": false,
       "default": null,
@@ -381,7 +381,7 @@
       "table": "workspace"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": false,
       "autoIncrement": false,
       "default": null,
@@ -409,7 +409,7 @@
       "table": "workspace"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -423,7 +423,7 @@
       "table": "workspace"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -437,7 +437,7 @@
       "table": "project"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -451,7 +451,7 @@
       "table": "project"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": false,
       "autoIncrement": false,
       "default": null,
@@ -465,7 +465,7 @@
       "table": "project"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": false,
       "autoIncrement": false,
       "default": null,
@@ -479,7 +479,7 @@
       "table": "project"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": false,
       "autoIncrement": false,
       "default": null,
@@ -493,7 +493,7 @@
       "table": "project"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": false,
       "autoIncrement": false,
       "default": null,
@@ -577,7 +577,7 @@
       "table": "project"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -591,7 +591,7 @@
       "table": "message"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -647,7 +647,7 @@
       "table": "message"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -661,7 +661,7 @@
       "table": "part"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -675,7 +675,7 @@
       "table": "part"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -731,7 +731,7 @@
       "table": "part"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -787,7 +787,7 @@
       "table": "permission"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -801,7 +801,7 @@
       "table": "session"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -815,7 +815,7 @@
       "table": "session"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": false,
       "autoIncrement": false,
       "default": null,
@@ -829,7 +829,7 @@
       "table": "session"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": false,
       "autoIncrement": false,
       "default": null,
@@ -843,7 +843,7 @@
       "table": "session"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -857,7 +857,7 @@
       "table": "session"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -871,7 +871,7 @@
       "table": "session"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -885,7 +885,7 @@
       "table": "session"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -899,7 +899,7 @@
       "table": "session"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": false,
       "autoIncrement": false,
       "default": null,
@@ -1053,7 +1053,7 @@
       "table": "session"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -1067,7 +1067,7 @@
       "table": "todo"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -1081,7 +1081,7 @@
       "table": "todo"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -1095,7 +1095,7 @@
       "table": "todo"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -1151,7 +1151,7 @@
       "table": "todo"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -1165,7 +1165,7 @@
       "table": "session_share"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -1179,7 +1179,7 @@
       "table": "session_share"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -1193,7 +1193,7 @@
       "table": "session_share"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -1235,7 +1235,7 @@
       "table": "session_share"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -1263,7 +1263,7 @@
       "table": "event_sequence"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -1277,7 +1277,7 @@
       "table": "event"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,
@@ -1305,7 +1305,7 @@
       "table": "event"
     },
     {
-      "type": "varchar(512)",
+      "type": "varchar(255)",
       "notNull": true,
       "autoIncrement": false,
       "default": null,

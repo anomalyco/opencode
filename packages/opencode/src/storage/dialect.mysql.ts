@@ -12,11 +12,11 @@ import {
 // MySQL TEXT columns cannot be used as PRIMARY KEY without an index prefix.
 // Since the dialect shim cannot know at column-construction time whether a
 // column will become a PK / FK / index member, we map text() → varchar(MAX_LEN)
-// uniformly. 512 fits all known usages (ses_/msg_/prj_ IDs, slugs, titles,
-// typical directory paths) while staying well under MySQL's index key limit
-// (varchar(512) utf8mb4 = 2048 bytes per index entry, well below the
-// innodb_large_prefix 3072-byte cap).
-const VARCHAR_LEN = 512
+// uniformly. 255 is chosen so compound keys fit InnoDB's 3072-byte index limit
+// under utf8mb4: 255 * 4 = 1020 bytes per column, so a 2-column compound key
+// (e.g. control_account PK on (email, url)) is 2040 bytes — under the cap.
+// Covers all known IDs (ses_/msg_/prj_), slugs, titles, emails, and URLs.
+const VARCHAR_LEN = 255
 
 // Wrap text() to intercept { mode: "json" } and route to json()
 function text(nameOrConfig?: any, config?: any) {

@@ -1,25 +1,25 @@
 CREATE TABLE `account_state` (
 	`id` bigint PRIMARY KEY,
-	`active_account_id` varchar(512),
-	`active_org_id` varchar(512)
+	`active_account_id` varchar(255),
+	`active_org_id` varchar(255)
 );
 --> statement-breakpoint
 CREATE TABLE `account` (
-	`id` varchar(512) PRIMARY KEY,
-	`email` varchar(512) NOT NULL,
-	`url` varchar(512) NOT NULL,
-	`access_token` varchar(512) NOT NULL,
-	`refresh_token` varchar(512) NOT NULL,
+	`id` varchar(255) PRIMARY KEY,
+	`email` varchar(255) NOT NULL,
+	`url` varchar(255) NOT NULL,
+	`access_token` varchar(255) NOT NULL,
+	`refresh_token` varchar(255) NOT NULL,
 	`token_expiry` bigint,
 	`time_created` bigint NOT NULL,
 	`time_updated` bigint NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE `control_account` (
-	`email` varchar(512) NOT NULL,
-	`url` varchar(512) NOT NULL,
-	`access_token` varchar(512) NOT NULL,
-	`refresh_token` varchar(512) NOT NULL,
+	`email` varchar(255) NOT NULL,
+	`url` varchar(255) NOT NULL,
+	`access_token` varchar(255) NOT NULL,
+	`refresh_token` varchar(255) NOT NULL,
 	`token_expiry` bigint,
 	`active` boolean NOT NULL,
 	`time_created` bigint NOT NULL,
@@ -28,22 +28,22 @@ CREATE TABLE `control_account` (
 );
 --> statement-breakpoint
 CREATE TABLE `workspace` (
-	`id` varchar(512) PRIMARY KEY,
-	`type` varchar(512) NOT NULL,
-	`branch` varchar(512),
-	`name` varchar(512),
-	`directory` varchar(512),
+	`id` varchar(255) PRIMARY KEY,
+	`type` varchar(255) NOT NULL,
+	`branch` varchar(255),
+	`name` varchar(255),
+	`directory` varchar(255),
 	`extra` json,
-	`project_id` varchar(512) NOT NULL
+	`project_id` varchar(255) NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE `project` (
-	`id` varchar(512) PRIMARY KEY,
-	`worktree` varchar(512) NOT NULL,
-	`vcs` varchar(512),
-	`name` varchar(512),
-	`icon_url` varchar(512),
-	`icon_color` varchar(512),
+	`id` varchar(255) PRIMARY KEY,
+	`worktree` varchar(255) NOT NULL,
+	`vcs` varchar(255),
+	`name` varchar(255),
+	`icon_url` varchar(255),
+	`icon_color` varchar(255),
 	`time_created` bigint NOT NULL,
 	`time_updated` bigint NOT NULL,
 	`time_initialized` bigint,
@@ -52,39 +52,39 @@ CREATE TABLE `project` (
 );
 --> statement-breakpoint
 CREATE TABLE `message` (
-	`id` varchar(512) PRIMARY KEY,
-	`session_id` varchar(512) NOT NULL,
+	`id` varchar(255) PRIMARY KEY,
+	`session_id` varchar(255) NOT NULL,
 	`time_created` bigint NOT NULL,
 	`time_updated` bigint NOT NULL,
 	`data` json NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE `part` (
-	`id` varchar(512) PRIMARY KEY,
-	`message_id` varchar(512) NOT NULL,
-	`session_id` varchar(512) NOT NULL,
+	`id` varchar(255) PRIMARY KEY,
+	`message_id` varchar(255) NOT NULL,
+	`session_id` varchar(255) NOT NULL,
 	`time_created` bigint NOT NULL,
 	`time_updated` bigint NOT NULL,
 	`data` json NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE `permission` (
-	`project_id` varchar(512) PRIMARY KEY,
+	`project_id` varchar(255) PRIMARY KEY,
 	`time_created` bigint NOT NULL,
 	`time_updated` bigint NOT NULL,
 	`data` json NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE `session` (
-	`id` varchar(512) PRIMARY KEY,
-	`project_id` varchar(512) NOT NULL,
-	`workspace_id` varchar(512),
-	`parent_id` varchar(512),
-	`slug` varchar(512) NOT NULL,
-	`directory` varchar(512) NOT NULL,
-	`title` varchar(512) NOT NULL,
-	`version` varchar(512) NOT NULL,
-	`share_url` varchar(512),
+	`id` varchar(255) PRIMARY KEY,
+	`project_id` varchar(255) NOT NULL,
+	`workspace_id` varchar(255),
+	`parent_id` varchar(255),
+	`slug` varchar(255) NOT NULL,
+	`directory` varchar(255) NOT NULL,
+	`title` varchar(255) NOT NULL,
+	`version` varchar(255) NOT NULL,
+	`share_url` varchar(255),
 	`summary_additions` bigint,
 	`summary_deletions` bigint,
 	`summary_files` bigint,
@@ -98,10 +98,10 @@ CREATE TABLE `session` (
 );
 --> statement-breakpoint
 CREATE TABLE `todo` (
-	`session_id` varchar(512) NOT NULL,
-	`content` varchar(512) NOT NULL,
-	`status` varchar(512) NOT NULL,
-	`priority` varchar(512) NOT NULL,
+	`session_id` varchar(255) NOT NULL,
+	`content` varchar(255) NOT NULL,
+	`status` varchar(255) NOT NULL,
+	`priority` varchar(255) NOT NULL,
 	`position` bigint NOT NULL,
 	`time_created` bigint NOT NULL,
 	`time_updated` bigint NOT NULL,
@@ -109,24 +109,24 @@ CREATE TABLE `todo` (
 );
 --> statement-breakpoint
 CREATE TABLE `session_share` (
-	`session_id` varchar(512) PRIMARY KEY,
-	`id` varchar(512) NOT NULL,
-	`secret` varchar(512) NOT NULL,
-	`url` varchar(512) NOT NULL,
+	`session_id` varchar(255) PRIMARY KEY,
+	`id` varchar(255) NOT NULL,
+	`secret` varchar(255) NOT NULL,
+	`url` varchar(255) NOT NULL,
 	`time_created` bigint NOT NULL,
 	`time_updated` bigint NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE `event_sequence` (
-	`aggregate_id` varchar(512) PRIMARY KEY,
+	`aggregate_id` varchar(255) PRIMARY KEY,
 	`seq` bigint NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE `event` (
-	`id` varchar(512) PRIMARY KEY,
-	`aggregate_id` varchar(512) NOT NULL,
+	`id` varchar(255) PRIMARY KEY,
+	`aggregate_id` varchar(255) NOT NULL,
 	`seq` bigint NOT NULL,
-	`type` varchar(512) NOT NULL,
+	`type` varchar(255) NOT NULL,
 	`data` json NOT NULL
 );
 --> statement-breakpoint
