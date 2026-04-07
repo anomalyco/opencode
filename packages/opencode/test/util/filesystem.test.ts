@@ -83,6 +83,95 @@ describe("filesystem", () => {
     })
   })
 
+  describe("findUp()", () => {
+    test("keeps previous nearest-first behavior for single target", async () => {
+      await using tmp = await tmpdir()
+      const parent = path.join(tmp.path, "parent")
+      const child = path.join(parent, "child")
+      await fs.mkdir(child, { recursive: true })
+      await fs.writeFile(path.join(tmp.path, "marker"), "root", "utf-8")
+      await fs.writeFile(path.join(parent, "marker"), "parent", "utf-8")
+
+      const result = await Filesystem.findUp("marker", child, tmp.path)
+
+      expect(result).toEqual([path.join(parent, "marker"), path.join(tmp.path, "marker")])
+    })
+
+    test("respects stop boundary", async () => {
+      await using tmp = await tmpdir()
+      const parent = path.join(tmp.path, "parent")
+      const child = path.join(parent, "child")
+      await fs.mkdir(child, { recursive: true })
+      await fs.writeFile(path.join(tmp.path, "marker"), "root", "utf-8")
+      await fs.writeFile(path.join(parent, "marker"), "parent", "utf-8")
+
+      const result = await Filesystem.findUp("marker", child, parent)
+
+      expect(result).toEqual([path.join(parent, "marker")])
+    })
+
+    test("supports multiple targets with nearest-first default ordering", async () => {
+      await using tmp = await tmpdir()
+      const parent = path.join(tmp.path, "parent")
+      const child = path.join(parent, "child")
+      await fs.mkdir(child, { recursive: true })
+
+      await fs.writeFile(path.join(parent, "cfg.jsonc"), "{}", "utf-8")
+      await fs.writeFile(path.join(tmp.path, "cfg.json"), "{}", "utf-8")
+      await fs.writeFile(path.join(tmp.path, "cfg.jsonc"), "{}", "utf-8")
+
+      const result = await Filesystem.findUp(["cfg.json", "cfg.jsonc"], child, tmp.path)
+
+      expect(result).toEqual([
+        path.join(parent, "cfg.jsonc"),
+        path.join(tmp.path, "cfg.json"),
+        path.join(tmp.path, "cfg.jsonc"),
+      ])
+    })
+
+    test("supports rootFirst ordering for multiple targets", async () => {
+      await using tmp = await tmpdir()
+      const parent = path.join(tmp.path, "parent")
+      const child = path.join(parent, "child")
+      await fs.mkdir(child, { recursive: true })
+
+      await fs.writeFile(path.join(parent, "cfg.jsonc"), "{}", "utf-8")
+      await fs.writeFile(path.join(tmp.path, "cfg.json"), "{}", "utf-8")
+      await fs.writeFile(path.join(tmp.path, "cfg.jsonc"), "{}", "utf-8")
+
+      const result = await Filesystem.findUp(["cfg.json", "cfg.jsonc"], child, tmp.path, { rootFirst: true })
+
+      expect(result).toEqual([
+        path.join(tmp.path, "cfg.json"),
+        path.join(tmp.path, "cfg.jsonc"),
+        path.join(parent, "cfg.jsonc"),
+      ])
+    })
+
+    test("rootFirst preserves json then jsonc order per directory", async () => {
+      await using tmp = await tmpdir()
+      const project = path.join(tmp.path, "project")
+      const nested = path.join(project, "nested")
+      await fs.mkdir(nested, { recursive: true })
+
+      await fs.writeFile(path.join(tmp.path, "opencode.json"), "{}", "utf-8")
+      await fs.writeFile(path.join(tmp.path, "opencode.jsonc"), "{}", "utf-8")
+      await fs.writeFile(path.join(project, "opencode.json"), "{}", "utf-8")
+      await fs.writeFile(path.join(project, "opencode.jsonc"), "{}", "utf-8")
+
+      const result = await Filesystem.findUp(["opencode.json", "opencode.jsonc"], nested, tmp.path, {
+        rootFirst: true,
+      })
+
+      expect(result).toEqual([
+        path.join(tmp.path, "opencode.json"),
+        path.join(tmp.path, "opencode.jsonc"),
+        path.join(project, "opencode.json"),
+        path.join(project, "opencode.jsonc"),
+      ])
+    })
+  })
+
   describe("readText()", () => {
     test("reads file content", async () => {
       await using tmp = await tmpdir()
@@ -553,6 +642,15 @@ describe("filesystem", () => {
       const file = path.join(tmp.path, "not-a-directory")
       await fs.writeFile(file, "x")
       expect(() => Filesystem.resolve(path.join(file, "child"))).toThrow()
+    })
+  })
+
+  describe("normalizePathPattern()", () => {
+    test("preserves drive root globs on Windows", async () => {
+      if (process.platform !== "win32") return
+      await using tmp = await tmpdir()
+      const root = path.parse(tmp.path).root
+      expect(Filesystem.normalizePathPattern(path.join(root, "*"))).toBe(path.join(root, "*"))
     })
   })
 })

@@ -2,10 +2,10 @@ import { $ } from "bun"
 import { afterEach, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Deferred, Effect, Option } from "effect"
+import { ConfigProvider, Deferred, Effect, Layer, ManagedRuntime, Option } from "effect"
 import { tmpdir } from "../fixture/fixture"
-import { watcherConfigLayer, withServices } from "../fixture/instance"
 import { Bus } from "../../src/bus"
+import { Config } from "../../src/config/config"
 import { FileWatcher } from "../../src/file/watcher"
 import { Instance } from "../../src/project/instance"
 
@@ -16,20 +16,34 @@ const describeWatcher = FileWatcher.hasNativeBinding() && !process.env.CI ? desc
 // Helpers
 // ---------------------------------------------------------------------------
 
+const watcherConfigLayer = ConfigProvider.layer(
+  ConfigProvider.fromUnknown({
+    OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
+    OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "false",
+  }),
+)
+
 type WatcherEvent = { file: string; event: "add" | "change" | "unlink" }
 
 /** Run `body` with a live FileWatcher service. */
 function withWatcher<E>(directory: string, body: Effect.Effect<void, E>) {
-  return withServices(
+  return Instance.provide({
     directory,
-    FileWatcher.layer,
-    async (rt) => {
-      await rt.runPromise(FileWatcher.Service.use((s) => s.init()))
-      await Effect.runPromise(ready(directory))
-      await Effect.runPromise(body)
+    fn: async () => {
+      const layer: Layer.Layer<FileWatcher.Service, never, never> = FileWatcher.layer.pipe(
+        Layer.provide(Config.defaultLayer),
+        Layer.provide(watcherConfigLayer),
+      )
+      const rt = ManagedRuntime.make(layer)
+      try {
+        await rt.runPromise(FileWatcher.Service.use((s) => s.init()))
+        await Effect.runPromise(ready(directory))
+        await Effect.runPromise(body)
+      } finally {
+        await rt.dispose()
+      }
     },
-    { provide: [watcherConfigLayer] },
-  )
+  })
 }
 
 function listen(directory: string, check: (evt: WatcherEvent) => boolean, hit: (evt: WatcherEvent) => void) {

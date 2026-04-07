@@ -1,172 +1,171 @@
-import { Effect } from "effect"
-import { afterEach, describe, expect, test } from "bun:test"
-import { tmpdir } from "../fixture/fixture"
-import { withServices } from "../fixture/instance"
-import { Bus } from "../../src/bus"
-import { File } from "../../src/file"
+import { NodeFileSystem } from "@effect/platform-node"
+import { describe, expect } from "bun:test"
+import { Effect, Layer } from "effect"
+import { provideTmpdirInstance } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
+import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
 import { Format } from "../../src/format"
 import * as Formatter from "../../src/format/formatter"
-import { Instance } from "../../src/project/instance"
+
+const it = testEffect(Layer.mergeAll(Format.defaultLayer, CrossSpawnSpawner.defaultLayer, NodeFileSystem.layer))
 
 describe("Format", () => {
-  afterEach(async () => {
-    await Instance.disposeAll()
-  })
+  it.live("status() returns built-in formatters when no config overrides", () =>
+    provideTmpdirInstance(() =>
+      Format.Service.use((fmt) =>
+        Effect.gen(function* () {
+          const statuses = yield* fmt.status()
+          expect(Array.isArray(statuses)).toBe(true)
+          expect(statuses.length).toBeGreaterThan(0)
 
-  test("status() returns built-in formatters when no config overrides", async () => {
-    await using tmp = await tmpdir()
+          for (const item of statuses) {
+            expect(typeof item.name).toBe("string")
+            expect(Array.isArray(item.extensions)).toBe(true)
+            expect(typeof item.enabled).toBe("boolean")
+          }
 
-    await withServices(tmp.path, Format.layer, async (rt) => {
-      const statuses = await rt.runPromise(Format.Service.use((s) => s.status()))
-      expect(Array.isArray(statuses)).toBe(true)
-      expect(statuses.length).toBeGreaterThan(0)
+          const gofmt = statuses.find((item) => item.name === "gofmt")
+          expect(gofmt).toBeDefined()
+          expect(gofmt!.extensions).toContain(".go")
+        }),
+      ),
+    ),
+  )
 
-      for (const s of statuses) {
-        expect(typeof s.name).toBe("string")
-        expect(Array.isArray(s.extensions)).toBe(true)
-        expect(typeof s.enabled).toBe("boolean")
-      }
+  it.live("status() returns empty list when formatter is disabled", () =>
+    provideTmpdirInstance(
+      () =>
+        Format.Service.use((fmt) =>
+          Effect.gen(function* () {
+            expect(yield* fmt.status()).toEqual([])
+          }),
+        ),
+      { config: { formatter: false } },
+    ),
+  )
 
-      const gofmt = statuses.find((s) => s.name === "gofmt")
-      expect(gofmt).toBeDefined()
-      expect(gofmt!.extensions).toContain(".go")
-    })
-  })
-
-  test("status() returns empty list when formatter is disabled", async () => {
-    await using tmp = await tmpdir({
-      config: { formatter: false },
-    })
-
-    await withServices(tmp.path, Format.layer, async (rt) => {
-      const statuses = await rt.runPromise(Format.Service.use((s) => s.status()))
-      expect(statuses).toEqual([])
-    })
-  })
-
-  test("status() excludes formatters marked as disabled in config", async () => {
-    await using tmp = await tmpdir({
-      config: {
-        formatter: {
-          gofmt: { disabled: true },
+  it.live("status() excludes formatters marked as disabled in config", () =>
+    provideTmpdirInstance(
+      () =>
+        Format.Service.use((fmt) =>
+          Effect.gen(function* () {
+            const statuses = yield* fmt.status()
+            const gofmt = statuses.find((item) => item.name === "gofmt")
+            expect(gofmt).toBeUndefined()
+          }),
+        ),
+      {
+        config: {
+          formatter: {
+            gofmt: { disabled: true },
+          },
         },
       },
-    })
+    ),
+  )
 
-    await withServices(tmp.path, Format.layer, async (rt) => {
-      const statuses = await rt.runPromise(Format.Service.use((s) => s.status()))
-      const gofmt = statuses.find((s) => s.name === "gofmt")
-      expect(gofmt).toBeUndefined()
-    })
-  })
+  it.live("service initializes without error", () => provideTmpdirInstance(() => Format.Service.use(() => Effect.void)))
 
-  test("service initializes without error", async () => {
-    await using tmp = await tmpdir()
-
-    await withServices(tmp.path, Format.layer, async (rt) => {
-      await rt.runPromise(Format.Service.use(() => Effect.void))
-    })
-  })
-
-  test("status() initializes formatter state per directory", async () => {
-    await using off = await tmpdir({
-      config: { formatter: false },
-    })
-    await using on = await tmpdir()
-
-    const a = await Instance.provide({
-      directory: off.path,
-      fn: () => Format.status(),
-    })
-    const b = await Instance.provide({
-      directory: on.path,
-      fn: () => Format.status(),
-    })
-
-    expect(a).toEqual([])
-    expect(b.length).toBeGreaterThan(0)
-  })
-
-  test("runs enabled checks for matching formatters in parallel", async () => {
-    await using tmp = await tmpdir()
-
-    const file = `${tmp.path}/test.parallel`
-    await Bun.write(file, "x")
-
-    const one = {
-      extensions: Formatter.gofmt.extensions,
-      enabled: Formatter.gofmt.enabled,
-      command: Formatter.gofmt.command,
-    }
-    const two = {
-      extensions: Formatter.mix.extensions,
-      enabled: Formatter.mix.enabled,
-      command: Formatter.mix.command,
-    }
-
-    let active = 0
-    let max = 0
-
-    Formatter.gofmt.extensions = [".parallel"]
-    Formatter.mix.extensions = [".parallel"]
-    Formatter.gofmt.command = ["sh", "-c", "true"]
-    Formatter.mix.command = ["sh", "-c", "true"]
-    Formatter.gofmt.enabled = async () => {
-      active++
-      max = Math.max(max, active)
-      await Bun.sleep(20)
-      active--
-      return true
-    }
-    Formatter.mix.enabled = async () => {
-      active++
-      max = Math.max(max, active)
-      await Bun.sleep(20)
-      active--
-      return true
-    }
-
-    try {
-      await withServices(tmp.path, Format.layer, async (rt) => {
-        await rt.runPromise(Format.Service.use((s) => s.init()))
-        await Bus.publish(File.Event.Edited, { file })
+  it.live("status() initializes formatter state per directory", () =>
+    Effect.gen(function* () {
+      const a = yield* provideTmpdirInstance(() => Format.Service.use((fmt) => fmt.status()), {
+        config: { formatter: false },
       })
-    } finally {
-      Formatter.gofmt.extensions = one.extensions
-      Formatter.gofmt.enabled = one.enabled
-      Formatter.gofmt.command = one.command
-      Formatter.mix.extensions = two.extensions
-      Formatter.mix.enabled = two.enabled
-      Formatter.mix.command = two.command
-    }
+      const b = yield* provideTmpdirInstance(() => Format.Service.use((fmt) => fmt.status()))
 
-    expect(max).toBe(2)
-  })
+      expect(a).toEqual([])
+      expect(b.length).toBeGreaterThan(0)
+    }),
+  )
 
-  test("runs matching formatters sequentially for the same file", async () => {
-    await using tmp = await tmpdir({
-      config: {
-        formatter: {
-          first: {
-            command: ["sh", "-c", 'sleep 0.05; v=$(cat "$1"); printf \'%sA\' "$v" > "$1"', "sh", "$FILE"],
-            extensions: [".seq"],
-          },
-          second: {
-            command: ["sh", "-c", 'v=$(cat "$1"); printf \'%sB\' "$v" > "$1"', "sh", "$FILE"],
-            extensions: [".seq"],
+  it.live("runs enabled checks for matching formatters in parallel", () =>
+    provideTmpdirInstance((path) =>
+      Effect.gen(function* () {
+        const file = `${path}/test.parallel`
+        yield* Effect.promise(() => Bun.write(file, "x"))
+
+        const one = {
+          extensions: Formatter.gofmt.extensions,
+          enabled: Formatter.gofmt.enabled,
+        }
+        const two = {
+          extensions: Formatter.mix.extensions,
+          enabled: Formatter.mix.enabled,
+        }
+
+        let active = 0
+        let max = 0
+
+        yield* Effect.acquireUseRelease(
+          Effect.sync(() => {
+            Formatter.gofmt.extensions = [".parallel"]
+            Formatter.mix.extensions = [".parallel"]
+            Formatter.gofmt.enabled = async () => {
+              active++
+              max = Math.max(max, active)
+              await Bun.sleep(20)
+              active--
+              return ["sh", "-c", "true"]
+            }
+            Formatter.mix.enabled = async () => {
+              active++
+              max = Math.max(max, active)
+              await Bun.sleep(20)
+              active--
+              return ["sh", "-c", "true"]
+            }
+          }),
+          () =>
+            Format.Service.use((fmt) =>
+              Effect.gen(function* () {
+                yield* fmt.init()
+                yield* fmt.file(file)
+              }),
+            ),
+          () =>
+            Effect.sync(() => {
+              Formatter.gofmt.extensions = one.extensions
+              Formatter.gofmt.enabled = one.enabled
+              Formatter.mix.extensions = two.extensions
+              Formatter.mix.enabled = two.enabled
+            }),
+        )
+
+        expect(max).toBe(2)
+      }),
+    ),
+  )
+
+  it.live("runs matching formatters sequentially for the same file", () =>
+    provideTmpdirInstance(
+      (path) =>
+        Effect.gen(function* () {
+          const file = `${path}/test.seq`
+          yield* Effect.promise(() => Bun.write(file, "x"))
+
+          yield* Format.Service.use((fmt) =>
+            Effect.gen(function* () {
+              yield* fmt.init()
+              yield* fmt.file(file)
+            }),
+          )
+
+          expect(yield* Effect.promise(() => Bun.file(file).text())).toBe("xAB")
+        }),
+      {
+        config: {
+          formatter: {
+            first: {
+              command: ["sh", "-c", 'sleep 0.05; v=$(cat "$1"); printf \'%sA\' "$v" > "$1"', "sh", "$FILE"],
+              extensions: [".seq"],
+            },
+            second: {
+              command: ["sh", "-c", 'v=$(cat "$1"); printf \'%sB\' "$v" > "$1"', "sh", "$FILE"],
+              extensions: [".seq"],
+            },
           },
         },
       },
-    })
-
-    const file = `${tmp.path}/test.seq`
-    await Bun.write(file, "x")
-
-    await withServices(tmp.path, Format.layer, async (rt) => {
-      await rt.runPromise(Format.Service.use((s) => s.init()))
-      await Bus.publish(File.Event.Edited, { file })
-    })
-
-    expect(await Bun.file(file).text()).toBe("xAB")
-  })
+    ),
+  )
 })
