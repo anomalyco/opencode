@@ -152,7 +152,9 @@ export namespace LLM {
     }
 
     const variant =
-      !input.small && runtimeModel.variants && input.user.variant ? runtimeModel.variants[input.user.variant] : {}
+      !input.small && runtimeModel.variants && input.user.model.variant
+        ? runtimeModel.variants[input.user.model.variant]
+        : {}
     const base = input.small
       ? ProviderTransform.smallOptions(runtimeModel)
       : ProviderTransform.options({

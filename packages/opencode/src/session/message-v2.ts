@@ -372,6 +372,7 @@ export namespace MessageV2 {
       providerID: ProviderID.zod,
       modelID: ModelID.zod,
       authProfile: z.string().optional(),
+      variant: z.string().optional(),
     }),
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
