@@ -11,6 +11,7 @@ import { Plugin } from "../plugin"
 import { NamedError } from "@opencode-ai/util/error"
 import { type LanguageModelV3 } from "@ai-sdk/provider"
 import { ModelsDev } from "./models"
+import { LANGDOCK_CATALOG, type LangdockCatalogEntry } from "./langdock-catalog"
 import { Auth } from "../auth"
 import { Env } from "../env"
 import { Instance } from "../project/instance"
@@ -222,13 +223,6 @@ export namespace Provider {
       .join(" ")
   }
 
-  function langdockOpenAINpm(modelID: string) {
-    if (modelID.includes("gpt-5") && !modelID.includes("gpt-5-chat")) {
-      return "@ai-sdk/openai"
-    }
-    return "@ai-sdk/openai-compatible"
-  }
-
   function langdockReasoning(id: string) {
     const value = id.toLowerCase()
     return ["gpt-5", "o1", "o3", "o4", "claude-3.7", "claude-4", "gemini-2.5", "gemini-3", "r1"]
@@ -290,83 +284,101 @@ export namespace Provider {
     }
   }
 
-  async function langdockDiscoverOpenAIModels(baseURL: string, apiKey: string) {
-    const response = await fetch(`${baseURL}/models`, {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
+  function langdockCatalogModel(
+    entry: LangdockCatalogEntry,
+    baseURL: string,
+    npm: string,
+    modelID: string,
+    reasoning: boolean,
+  ): Model {
+    const attachment = entry.supportsVision
+    const name = entry.displayName.replace(/\s+Reasoning$/i, "")
+    return {
+      id: ModelID.make(modelID),
+      providerID: ProviderID.langdock,
+      name,
+      family: "",
+      api: {
+        id: entry.apiModelId ?? entry.providerModelId,
+        url: baseURL,
+        npm,
       },
-    })
-    if (!response.ok) {
-      log.warn("langdock openai model discovery failed", {
-        status: response.status,
-        statusText: response.statusText,
-      })
-      return {}
+      status: "active",
+      headers: {},
+      options: {},
+      cost: {
+        input: entry.inputTokenPriceUSD ?? 0,
+        output: entry.outputTokenPriceUSD ?? 0,
+        cache: {
+          read: entry.cacheReadPriceUSD ?? 0,
+          write: entry.cacheWritePriceUSD ?? 0,
+        },
+      },
+      limit: {
+        context: entry.contextWindowSize ?? 128000,
+        output: entry.maxOutputTokens ?? 32000,
+      },
+      capabilities: {
+        temperature: entry.supportsTemperature,
+        reasoning,
+        attachment,
+        toolcall: entry.supportsToolCalls,
+        input: {
+          text: true,
+          audio: false,
+          image: attachment,
+          video: false,
+          pdf: attachment,
+        },
+        output: {
+          text: true,
+          audio: false,
+          image: false,
+          video: false,
+          pdf: false,
+        },
+        interleaved: false,
+      },
+      release_date: "",
+      variants: {},
     }
-
-    const payload = (await response.json().catch(() => undefined)) as
-      | { data?: Array<{ id?: string }> }
-      | undefined
-    const items = Array.isArray(payload?.data) ? payload.data : []
-    return Object.fromEntries(
-      items
-        .map((item) => item?.id)
-        .filter((id): id is string => typeof id === "string" && id.length > 0)
-        .map((id) => [id, langdockModel(baseURL, id, langdockOpenAINpm(id))]),
-    )
   }
 
-  async function langdockDiscoverAnthropicModels(baseURL: string, apiKey: string) {
-    const response = await fetch(`${baseURL}/models`, {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-      },
+  function langdockCatalogModels(urls: { openai: string; anthropic: string; google: string }): Record<string, Model> {
+    const active = LANGDOCK_CATALOG.filter((entry) => entry.isActive)
+    const hidden = new Set(
+      active
+        .filter((entry) => entry.providerModelId.endsWith("-reasoning"))
+        .map((entry) => entry.providerModelId.replace(/-reasoning$/, "")),
+    )
+    const supported = active.filter((entry) => {
+      if (entry.displayThinking) return true
+      if (entry.displayName.toLowerCase().includes("reasoning")) return true
+      if (hidden.has(entry.providerModelId)) return false
+      return true
     })
-    if (!response.ok) {
-      log.warn("langdock anthropic model discovery failed", {
-        status: response.status,
-        statusText: response.statusText,
-      })
-      return {}
+    const grouped = Object.groupBy(supported, (entry) => `${entry.provider}:${entry.providerModelId}`)
+    const result: Record<string, Model> = {}
+
+    for (const [key, items] of Object.entries(grouped)) {
+      if (!items || items.length === 0) continue
+      const [provider] = key.split(":") as [LangdockCatalogEntry["provider"], string]
+      const preferred =
+        items.find((item) => item.displayThinking || item.displayName.toLowerCase().includes("reasoning")) ?? items[0]
+      const reasoning = preferred.displayThinking || preferred.defaultReasoningEffort !== null
+      const baseURL = provider === "anthropic" ? urls.anthropic : provider === "google" ? urls.google : urls.openai
+      const npm = provider === "anthropic" ? "@ai-sdk/anthropic" : provider === "google" ? "@ai-sdk/google" : "@ai-sdk/openai-compatible"
+
+      result[preferred.providerModelId] = langdockCatalogModel(
+        preferred,
+        baseURL,
+        npm,
+        preferred.providerModelId,
+        reasoning,
+      )
     }
 
-    const payload = (await response.json().catch(() => undefined)) as
-      | { data?: Array<{ id?: string }> }
-      | undefined
-    const items = Array.isArray(payload?.data) ? payload.data : []
-    return Object.fromEntries(
-      items
-        .map((item) => item?.id)
-        .filter((id): id is string => typeof id === "string" && id.length > 0)
-        .map((id) => [id, langdockModel(baseURL, id, "@ai-sdk/anthropic")]),
-    )
-  }
-
-  async function langdockDiscoverGoogleModels(baseURL: string, apiKey: string) {
-    const response = await fetch(`${baseURL}/models`, {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-      },
-    })
-    if (!response.ok) {
-      log.warn("langdock google model discovery failed", {
-        status: response.status,
-        statusText: response.statusText,
-      })
-      return {}
-    }
-
-    const payload = (await response.json().catch(() => undefined)) as
-      | { models?: Array<{ name?: string; supportedGenerationMethods?: string[] }> }
-      | undefined
-    const items = Array.isArray(payload?.models) ? payload.models : []
-    return Object.fromEntries(
-      items
-        .filter((item) => item.supportedGenerationMethods?.includes("generateContent") ?? true)
-        .map((item) => item.name?.replace(/^models\//, ""))
-        .filter((id): id is string => typeof id === "string" && id.length > 0)
-        .map((id) => [id, langdockModel(baseURL, id, "@ai-sdk/google")]),
-    )
+    return result
   }
 
   function custom(dep: CustomDep): Record<string, CustomLoader> {
@@ -1027,22 +1039,11 @@ export namespace Provider {
             region: langdockRegion(provider),
           },
           async discoverModels(): Promise<Record<string, Model>> {
-            if (!apiKey) return {}
-
-            try {
-              const openAIModels = await langdockDiscoverOpenAIModels(openAIBaseURL, apiKey)
-              const anthropicModels = await langdockDiscoverAnthropicModels(anthropicBaseURL, apiKey)
-              const googleModels = await langdockDiscoverGoogleModels(googleBaseURL, apiKey)
-
-              return {
-                ...openAIModels,
-                ...anthropicModels,
-                ...googleModels,
-              }
-            } catch (error) {
-              log.warn("langdock model discovery failed", { error })
-              return {}
-            }
+            return langdockCatalogModels({
+              openai: openAIBaseURL,
+              anthropic: anthropicBaseURL,
+              google: googleBaseURL,
+            })
           },
         }
       }),
