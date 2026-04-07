@@ -302,6 +302,11 @@ export const RunCommand = cmd({
         describe: "show thinking blocks",
         default: false,
       })
+      .option("dangerously-skip-permissions", {
+        type: "boolean",
+        describe: "auto-approve permissions that are not explicitly denied (dangerous!)",
+        default: false,
+      })
   },
   handler: async (args) => {
     let message = [...args.message, ...(args["--"] || [])]
@@ -544,15 +549,23 @@ export const RunCommand = cmd({
           if (event.type === "permission.asked") {
             const permission = event.properties
             if (permission.sessionID !== sessionID) continue
-            UI.println(
-              UI.Style.TEXT_WARNING_BOLD + "!",
-              UI.Style.TEXT_NORMAL +
-                `permission requested: ${permission.permission} (${permission.patterns.join(", ")}); auto-rejecting`,
-            )
-            await sdk.permission.reply({
-              requestID: permission.id,
-              reply: "reject",
-            })
+
+            if (args["dangerously-skip-permissions"]) {
+              await sdk.permission.reply({
+                requestID: permission.id,
+                reply: "once",
+              })
+            } else {
+              UI.println(
+                UI.Style.TEXT_WARNING_BOLD + "!",
+                UI.Style.TEXT_NORMAL +
+                  `permission requested: ${permission.permission} (${permission.patterns.join(", ")}); auto-rejecting`,
+              )
+              await sdk.permission.reply({
+                requestID: permission.id,
+                reply: "reject",
+              })
+            }
           }
         }
       }

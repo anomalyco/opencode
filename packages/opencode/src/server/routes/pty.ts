@@ -1,15 +1,14 @@
-import { Hono } from "hono"
+import { Hono, type MiddlewareHandler } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
-import { upgradeWebSocket } from "hono/bun"
+import type { UpgradeWebSocket } from "hono/ws"
 import z from "zod"
 import { Pty } from "@/pty"
 import { PtyID } from "@/pty/schema"
 import { NotFoundError } from "../../storage/db"
 import { errors } from "../error"
-import { lazy } from "../../util/lazy"
 
-export const PtyRoutes = lazy(() =>
-  new Hono()
+export function PtyRoutes(upgradeWebSocket: UpgradeWebSocket) {
+  return new Hono()
     .get(
       "/",
       describeRoute({
@@ -207,5 +206,5 @@ export const PtyRoutes = lazy(() =>
           },
         }
       }),
-    ),
-)
+    )
+}
