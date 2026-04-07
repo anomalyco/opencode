@@ -4,6 +4,7 @@ import { spawnSync } from "child_process"
 import fs from "fs"
 import path from "path"
 import os from "os"
+import { fileURLToPath } from "url"
 
 function run(target) {
   const result = spawnSync(target, process.argv.slice(2), {
@@ -22,7 +23,7 @@ if (envPath) {
   run(envPath)
 }
 
-const scriptPath = fs.realpathSync(import.meta.url.replace('file://', ''))
+const scriptPath = fs.realpathSync(fileURLToPath(import.meta.url))
 const scriptDir = path.dirname(scriptPath)
 
 //

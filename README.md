@@ -139,3 +139,32 @@ It's very similar to Claude Code in terms of capability. Here are the key differ
 ---
 
 **Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+
+### Ollama Integration
+
+OpenCode supports Ollama for local LLMs out of the box!
+Ensure your Ollama server is running (default is `http://127.0.0.1:11434`), and OpenCode will automatically discover your models and make them available for use. You can change the default configuration in your config file if your Ollama instance runs on a different host or port:
+
+```json
+{
+  "ollama": {
+    "host": "http://127.0.0.1",
+    "port": 11434
+  }
+}
+```
+
+### Building the Binary Manually
+
+To manually build the OpenCode standalone binary, ensure you have [Bun](https://bun.sh/) installed, then run the build script from the repository root:
+
+```bash
+bun install
+bun run --cwd packages/opencode build
+```
+
+This will output the standalone executables for various platforms to the `packages/opencode/dist/` directory. For example, on a macOS arm64 machine, your binary will be located at `packages/opencode/dist/opencode-darwin-arm64/bin/opencode`. You can run it directly:
+
+```bash
+./packages/opencode/dist/opencode-darwin-arm64/bin/opencode
+```

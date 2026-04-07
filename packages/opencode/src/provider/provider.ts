@@ -815,9 +815,12 @@ export namespace Provider {
         }),
       ollama: Effect.fnUntraced(function* (input: Info) {
         const config = (yield* dep.config()).ollama
-        if (!config || !config.host) return { autoload: false }
-
-        const baseURL = `${config.host}:${config.port ?? 11434}/api`
+        let host = config?.host || "http://127.0.0.1"
+        if (!host.startsWith("http://") && !host.startsWith("https://")) {
+          host = `http://${host}`
+        }
+        const port = config?.port ?? 11434
+        const baseURL = `${host}:${port}/api`
 
         return {
           autoload: true,
