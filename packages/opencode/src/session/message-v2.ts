@@ -347,6 +347,10 @@ export namespace MessageV2 {
     tool: z.string(),
     state: ToolState,
     metadata: z.record(z.string(), z.any()).optional(),
+    /** When true, this tool execution was initiated externally (not by the LLM).
+     *  External parts are displayed in the TUI and persisted, but excluded from
+     *  model messages to prevent orphaned tool_use/tool_result pairs. */
+    external: z.boolean().optional(),
   }).meta({
     ref: "ToolPart",
   })
@@ -722,6 +726,9 @@ export namespace MessageV2 {
               type: "step-start",
             })
           if (part.type === "tool") {
+            // External tool executions (from plugins/HTTP, not LLM) are display-only.
+            // Including them would create orphaned tool_use/tool_result pairs.
+            if (part.external) continue
             toolNames.add(part.tool)
             if (part.state.status === "completed") {
               const outputText = part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output
