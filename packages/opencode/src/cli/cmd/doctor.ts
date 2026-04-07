@@ -690,7 +690,9 @@ export const DoctorCommand = cmd({
       sections.push(await runSection("Paths", checkPaths))
 
       if (json) {
-        process.stdout.write(JSON.stringify(toJSON(sections), null, 2) + EOL)
+        const output = toJSON(sections)
+        process.stdout.write(JSON.stringify(output, null, 2) + EOL)
+        if ((output as any).summary.fail > 0) process.exit(1)
         return
       }
 
@@ -717,6 +719,8 @@ export const DoctorCommand = cmd({
       if (totalWarn > 0) parts.push(`${UI.Style.TEXT_WARNING}${totalWarn} warnings${UI.Style.TEXT_NORMAL}`)
       if (totalFail > 0) parts.push(`${UI.Style.TEXT_DANGER}${totalFail} errors${UI.Style.TEXT_NORMAL}`)
       process.stderr.write(parts.join(", ") + EOL)
+
+      if (totalFail > 0) process.exit(1)
     })
   },
 })
