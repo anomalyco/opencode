@@ -20,10 +20,11 @@ test("shell mode runs a command in the project directory", async ({ page, projec
     project.trackSession(session.id)
     await project.gotoSession(session.id)
     const dialog = await openSettings(page)
-    const input = dialog.locator('[data-action="settings-auto-accept-permissions"] [role="switch"]').first()
-    await expect(input).toBeVisible()
+    const toggle = dialog.locator('[data-action="settings-auto-accept-permissions"]').first()
+    const input = toggle.locator('[data-slot="switch-input"]').first()
+    await expect(toggle).toBeVisible()
     if ((await input.getAttribute("aria-checked")) !== "true") {
-      await input.click()
+      await toggle.locator('[data-slot="switch-control"]').click()
       await expect(input).toHaveAttribute("aria-checked", "true")
     }
     await closeDialog(page, dialog)
