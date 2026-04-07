@@ -17,6 +17,7 @@ const ctx = {
   messages: [],
   metadata: () => {},
   ask: async () => {},
+  question: async () => [],
 }
 
 const it = testEffect(Layer.mergeAll(Question.defaultLayer, CrossSpawnSpawner.defaultLayer))

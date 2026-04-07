@@ -12,6 +12,7 @@
     "@slack/bolt": "^3.17.1"
   },
   "devDependencies": {
+    "@types/cross-spawn": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "@typescript/native-preview": "catalog:"

@@ -21,13 +21,15 @@ export const QuestionTool = Tool.defineEffect<typeof parameters, Metadata, Quest
       description: DESCRIPTION,
       parameters,
       async execute(params: z.infer<typeof parameters>, ctx: Tool.Context<Metadata>) {
-        const answers = await question
+        const result = await question
           .ask({
             sessionID: ctx.sessionID,
             questions: params.questions,
             tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
           })
           .pipe(Effect.runPromise)
+
+        const answers = result
 
         const formatted = params.questions
           .map((q, i) => `"${q.question}"="${answers[i]?.length ? answers[i].join(", ") : "Unanswered"}"`)
