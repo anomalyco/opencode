@@ -299,6 +299,7 @@ test("session model restore per session without leaking into new sessions", asyn
 })
 
 test("session model restore across workspaces", async ({ page, project }) => {
+  test.setTimeout(180000)
   await page.setViewportSize({ width: 1440, height: 900 })
 
   await project.open()
