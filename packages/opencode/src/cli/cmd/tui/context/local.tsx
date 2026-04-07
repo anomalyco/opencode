@@ -243,7 +243,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const current = currentModel()
           if (!current) return
           const recent = modelStore.recent
-          const index = recent.findIndex((x) => x.providerID === current.providerID && x.modelID === current.modelID)
+          const index = recent.findIndex(
+            (x) =>
+              x.providerID === current.providerID &&
+              x.modelID === current.modelID &&
+              x.authProfile === current.authProfile,
+          )
           if (index === -1) return
           let next = index + direction
           if (next < 0) next = recent.length - 1
@@ -265,7 +270,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const current = currentModel()
           let index = -1
           if (current) {
-            index = favorites.findIndex((x) => x.providerID === current.providerID && x.modelID === current.modelID)
+            index = favorites.findIndex(
+              (x) =>
+                x.providerID === current.providerID &&
+                x.modelID === current.modelID &&
+                x.authProfile === current.authProfile,
+            )
           }
           if (index === -1) {
             index = direction === 1 ? 0 : favorites.length - 1
@@ -277,11 +287,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const next = favorites[index]
           if (!next) return
           setModelStore("model", agent.current().name, { ...next })
-          const uniq = uniqueBy([next, ...modelStore.recent], (x) => `${x.providerID}/${x.modelID}`)
+          const uniq = uniqueBy(
+            [next, ...modelStore.recent],
+            (x) => `${x.providerID}/${x.modelID}/${x.authProfile ?? "default"}`,
+          )
           if (uniq.length > 10) uniq.pop()
           setModelStore(
             "recent",
-            uniq.map((x) => ({ providerID: x.providerID, modelID: x.modelID })),
+            uniq.map((x) => ({ providerID: x.providerID, modelID: x.modelID, authProfile: x.authProfile })),
           )
           save()
         },
@@ -297,7 +310,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             }
             setModelStore("model", agent.current().name, model)
             if (options?.recent) {
-              const uniq = uniqueBy([model, ...modelStore.recent], (x) => `${x.providerID}/${x.modelID}`)
+              const uniq = uniqueBy(
+                [model, ...modelStore.recent],
+                (x) => `${x.providerID}/${x.modelID}/${x.authProfile ?? "default"}`,
+              )
               if (uniq.length > 10) uniq.pop()
               setModelStore(
                 "recent",
@@ -307,7 +323,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             }
           })
         },
-        toggleFavorite(model: { providerID: string; modelID: string }) {
+        toggleFavorite(model: { providerID: string; modelID: string; authProfile?: string }) {
           batch(() => {
             if (!isModelValid(model)) {
               toast.show({
@@ -318,14 +334,20 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               return
             }
             const exists = modelStore.favorite.some(
-              (x) => x.providerID === model.providerID && x.modelID === model.modelID,
+              (x) =>
+                x.providerID === model.providerID && x.modelID === model.modelID && x.authProfile === model.authProfile,
             )
             const next = exists
-              ? modelStore.favorite.filter((x) => x.providerID !== model.providerID || x.modelID !== model.modelID)
+              ? modelStore.favorite.filter(
+                  (x) =>
+                    x.providerID !== model.providerID ||
+                    x.modelID !== model.modelID ||
+                    x.authProfile !== model.authProfile,
+                )
               : [model, ...modelStore.favorite]
             setModelStore(
               "favorite",
-              next.map((x) => ({ providerID: x.providerID, modelID: x.modelID })),
+              next.map((x) => ({ providerID: x.providerID, modelID: x.modelID, authProfile: x.authProfile })),
             )
             save()
           })
@@ -402,7 +424,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           model.set({
             providerID: value.model.providerID,
             modelID: value.model.modelID,
-            authProfile: value.model.authProfile,
+            authProfile: (value.model as { authProfile?: string }).authProfile,
           })
         else
           toast.show({

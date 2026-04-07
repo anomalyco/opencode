@@ -1,4 +1,4 @@
-import { createMemo, createSignal } from "solid-js"
+import { createMemo, createResource, createSignal } from "solid-js"
 import { useLocal } from "@tui/context/local"
 import { useSync } from "@tui/context/sync"
 import { map, pipe, flatMap, entries, filter, sortBy, take } from "remeda"
@@ -9,6 +9,7 @@ import { DialogVariant } from "./dialog-variant"
 import { useKeybind } from "../context/keybind"
 import * as fuzzysort from "fuzzysort"
 import { consoleManagedProviderLabel } from "@tui/util/provider-origin"
+import { Auth } from "@/auth"
 
 export function useConnected() {
   const sync = useSync()
@@ -26,6 +27,7 @@ export function DialogModel(props: { providerID?: string }) {
 
   const connected = useConnected()
   const providers = createDialogProviderOptions()
+  const [auth] = createResource(async () => Auth.all())
 
   const showExtra = createMemo(() => connected() && !props.providerID)
 
@@ -34,6 +36,22 @@ export function DialogModel(props: { providerID?: string }) {
     const showSections = showExtra() && needle.length === 0
     const favorites = connected() ? local.model.favorite() : []
     const recents = local.model.recent()
+
+    const keyOf = (item: { providerID: string; modelID: string; authProfile?: string }) =>
+      `${item.providerID}/${item.modelID}/${item.authProfile ?? "default"}`
+
+    const profileMap = createMemo(() => {
+      const data = auth() ?? {}
+      const out = new Map<string, Set<string | undefined>>()
+      for (const key of Object.keys(data)) {
+        const idx = key.lastIndexOf(":")
+        const providerID = idx === -1 ? key : key.slice(0, idx)
+        const profile = idx === -1 ? undefined : key.slice(idx + 1)
+        if (!out.has(providerID)) out.set(providerID, new Set())
+        out.get(providerID)!.add(profile)
+      }
+      return out
+    })
 
     function toOptions(items: typeof favorites, category: string) {
       if (!showSections) return []
@@ -45,7 +63,7 @@ export function DialogModel(props: { providerID?: string }) {
         return [
           {
             key: item,
-            value: { providerID: provider.id, modelID: model.id },
+            value: { providerID: provider.id, modelID: model.id, authProfile: item.authProfile },
             title: model.name ?? item.modelID,
             description: consoleManagedProviderLabel(
               sync.data.console_state.consoleManagedProviders,
@@ -56,7 +74,7 @@ export function DialogModel(props: { providerID?: string }) {
             disabled: provider.id === "opencode" && model.id.includes("-nano"),
             footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
             onSelect: () => {
-              onSelect(provider.id, model.id)
+              onSelect(provider.id, model.id, item.authProfile)
             },
           },
         ]
@@ -65,9 +83,7 @@ export function DialogModel(props: { providerID?: string }) {
 
     const favoriteOptions = toOptions(favorites, "Favorites")
     const recentOptions = toOptions(
-      recents.filter(
-        (item) => !favorites.some((fav) => fav.providerID === item.providerID && fav.modelID === item.modelID),
-      ),
+      recents.filter((item) => !favorites.some((fav) => keyOf(fav) === keyOf(item))),
       "Recent",
     )
 
@@ -83,27 +99,29 @@ export function DialogModel(props: { providerID?: string }) {
           entries(),
           filter(([_, info]) => info.status !== "deprecated"),
           filter(([_, info]) => (props.providerID ? info.providerID === props.providerID : true)),
-          map(([model, info]) => ({
-            value: { providerID: provider.id, modelID: model },
-            title: info.name ?? model,
-            description: favorites.some((item) => item.providerID === provider.id && item.modelID === model)
-              ? "(Favorite)"
-              : undefined,
-            category: connected()
-              ? consoleManagedProviderLabel(sync.data.console_state.consoleManagedProviders, provider.id, provider.name)
-              : undefined,
-            disabled: provider.id === "opencode" && model.includes("-nano"),
-            footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
-            onSelect() {
-              onSelect(provider.id, model)
-            },
-          })),
+          flatMap(([model, info]) => {
+            const profiles = [...(profileMap().get(provider.id) ?? new Set([undefined]))]
+            return profiles.map((authProfile) => {
+              const value = { providerID: provider.id, modelID: model, authProfile }
+              return {
+                value,
+                title: info.name ?? model,
+                description: favorites.some((item) => keyOf(item) === keyOf(value)) ? "(Favorite)" : undefined,
+                category: connected()
+                  ? `${consoleManagedProviderLabel(sync.data.console_state.consoleManagedProviders, provider.id, provider.name)}${authProfile ? `:${authProfile}` : ""}`
+                  : undefined,
+                disabled: provider.id === "opencode" && model.includes("-nano"),
+                footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+                onSelect() {
+                  onSelect(provider.id, model, authProfile)
+                },
+              }
+            })
+          }),
           filter((x) => {
             if (!showSections) return true
-            if (favorites.some((item) => item.providerID === x.value.providerID && item.modelID === x.value.modelID))
-              return false
-            if (recents.some((item) => item.providerID === x.value.providerID && item.modelID === x.value.modelID))
-              return false
+            if (favorites.some((item) => keyOf(item) === keyOf(x.value))) return false
+            if (recents.some((item) => keyOf(item) === keyOf(x.value))) return false
             return true
           }),
           sortBy(
@@ -145,8 +163,8 @@ export function DialogModel(props: { providerID?: string }) {
     return consoleManagedProviderLabel(sync.data.console_state.consoleManagedProviders, value.id, value.name)
   })
 
-  function onSelect(providerID: string, modelID: string) {
-    local.model.set({ providerID, modelID }, { recent: true })
+  function onSelect(providerID: string, modelID: string, authProfile?: string) {
+    local.model.set({ providerID, modelID, authProfile }, { recent: true })
     const list = local.model.variant.list()
     const cur = local.model.variant.selected()
     if (cur === "default" || (cur && list.includes(cur))) {
@@ -176,7 +194,7 @@ export function DialogModel(props: { providerID?: string }) {
           title: "Favorite",
           disabled: !connected(),
           onTrigger: (option) => {
-            local.model.toggleFavorite(option.value as { providerID: string; modelID: string })
+            local.model.toggleFavorite(option.value as { providerID: string; modelID: string; authProfile?: string })
           },
         },
       ]}
@@ -184,7 +202,7 @@ export function DialogModel(props: { providerID?: string }) {
       flat={true}
       skipFilter={true}
       title={title()}
-      current={local.model.current()}
+      current={local.model.current() as any}
     />
   )
 }
