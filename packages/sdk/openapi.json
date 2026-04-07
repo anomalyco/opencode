@@ -8717,6 +8717,9 @@
               },
               "modelID": {
                 "type": "string"
+              },
+              "variant": {
+                "type": "string"
               }
             },
             "required": ["providerID", "modelID"]
@@ -8732,9 +8735,6 @@
             "additionalProperties": {
               "type": "boolean"
             }
-          },
-          "variant": {
-            "type": "string"
           }
         },
         "required": ["id", "sessionID", "role", "time", "agent", "model"]

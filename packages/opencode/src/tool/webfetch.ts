@@ -3,6 +3,7 @@ import { Tool } from "./tool"
 import TurndownService from "turndown"
 import DESCRIPTION from "./webfetch.txt"
 import { abortAfterAny } from "../util/abort"
+import { iife } from "@/util/iife"
 
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
@@ -62,15 +63,18 @@ export const WebFetchTool = Tool.define("webfetch", {
       "Accept-Language": "en-US,en;q=0.9",
     }
 
-    const initial = await fetch(params.url, { signal, headers })
+    const response = await iife(async () => {
+      try {
+        const initial = await fetch(params.url, { signal, headers })
 
-    // Retry with honest UA if blocked by Cloudflare bot detection (TLS fingerprint mismatch)
-    const response =
-      initial.status === 403 && initial.headers.get("cf-mitigated") === "challenge"
-        ? await fetch(params.url, { signal, headers: { ...headers, "User-Agent": "opencode" } })
-        : initial
-
-    clearTimeout()
+        // Retry with honest UA if blocked by Cloudflare bot detection (TLS fingerprint mismatch)
+        return initial.status === 403 && initial.headers.get("cf-mitigated") === "challenge"
+          ? await fetch(params.url, { signal, headers: { ...headers, "User-Agent": "opencode" } })
+          : initial
+      } finally {
+        clearTimeout()
+      }
+    })
 
     if (!response.ok) {
       throw new Error(`Request failed with status code: ${response.status}`)
