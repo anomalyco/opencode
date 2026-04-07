@@ -587,9 +587,9 @@ test("selecting none disables agent sound", async ({ page, gotoSession }) => {
   await expect(trigger).toBeEnabled()
 
   await trigger.click()
-  const items = page.locator('[data-slot="select-select-item"]')
-  await expect(items.first()).toBeVisible()
-  await items.first().click()
+  const opt = page.locator('[data-slot="select-select-item"][data-key="none"]').first()
+  await expect(opt).toBeVisible()
+  await opt.click()
 
   const stored = await page.evaluate((key) => {
     const raw = localStorage.getItem(key)
