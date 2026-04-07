@@ -4,6 +4,7 @@ import { createWriteStream } from "fs"
 import { Global } from "../global"
 import z from "zod"
 import { Glob } from "./glob"
+import { Locale } from "./locale"
 
 export namespace Log {
   export const Level = z.enum(["DEBUG", "INFO", "WARN", "ERROR"]).meta({ ref: "LogLevel", description: "Log level" })
@@ -61,10 +62,7 @@ export namespace Log {
     if (options.level) level = options.level
     cleanup(Global.Path.log)
     if (options.print) return
-    logpath = path.join(
-      Global.Path.log,
-      options.dev ? "dev.log" : new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log",
-    )
+    logpath = path.join(Global.Path.log, options.dev ? "dev.log" : Locale.localDatetime().replace(/:/g, "") + ".log")
     await fs.truncate(logpath).catch(() => {})
     const stream = createWriteStream(logpath, { flags: "a" })
     write = async (msg: any) => {
@@ -124,7 +122,7 @@ export namespace Log {
       const next = new Date()
       const diff = next.getTime() - last
       last = next.getTime()
-      return [next.toISOString().split(".")[0], "+" + diff + "ms", prefix, message].filter(Boolean).join(" ") + "\n"
+      return [Locale.localDatetime(next.getTime()), "+" + diff + "ms", prefix, message].filter(Boolean).join(" ") + "\n"
     }
     const result: Logger = {
       debug(message?: any, extra?: Record<string, any>) {
