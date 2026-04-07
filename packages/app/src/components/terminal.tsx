@@ -518,6 +518,7 @@ export const Terminal = (props: TerminalProps) => {
         const next = new URL(url + `/pty/${id}/connect`)
         next.searchParams.set("directory", directory)
         next.searchParams.set("cursor", String(seek))
+        next.searchParams.set("token", btoa(`${username}:${password}`))
         next.protocol = next.protocol === "https:" ? "wss:" : "ws:"
         next.username = username
         next.password = password

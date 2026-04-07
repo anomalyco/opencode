@@ -54,6 +54,9 @@ export namespace Server {
         const password = Flag.OPENCODE_SERVER_PASSWORD
         if (!password) return next()
         const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
+
+        if (c.req.query("token")) c.req.raw.headers.set("authorization", `Basic ${c.req.query("token")}`)
+
         return basicAuth({ username, password })(c, next)
       })
       .use(async (c, next) => {
