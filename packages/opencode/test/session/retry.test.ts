@@ -145,6 +145,25 @@ describe("session.retry.retryable", () => {
     expect(SessionRetry.retryable(error)).toBeUndefined()
   })
 
+  test("retries plain text rate limit errors from Alibaba", () => {
+    const msg =
+      "Upstream error from Alibaba: Request rate increased too quickly. To ensure system stability, please adjust your client logic to scale requests more smoothly over time."
+    const error = wrap(msg)
+    expect(SessionRetry.retryable(error)).toBe(msg)
+  })
+
+  test("retries plain text rate limit errors", () => {
+    const msg = "Rate limit exceeded, please try again later"
+    const error = wrap(msg)
+    expect(SessionRetry.retryable(error)).toBe(msg)
+  })
+
+  test("retries too many requests in plain text", () => {
+    const msg = "Too many requests, please slow down"
+    const error = wrap(msg)
+    expect(SessionRetry.retryable(error)).toBe(msg)
+  })
+
   test("does not retry context overflow errors", () => {
     const error = new MessageV2.ContextOverflowError({
       message: "Input exceeds context window of this model",
