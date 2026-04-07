@@ -3,6 +3,10 @@ import { createSimpleContext } from "./helper"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 
 type Data = {
+  agent?: {
+    name: string
+    color?: string
+  }[]
   provider?: ProviderListResponse
   session: Session[]
   session_status: {

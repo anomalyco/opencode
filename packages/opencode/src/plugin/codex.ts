@@ -599,5 +599,10 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
       output.headers["User-Agent"] = `opencode/${Installation.VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`
       output.headers.session_id = input.sessionID
     },
+    "chat.params": async (input, output) => {
+      if (input.model.providerID !== "openai") return
+      // Match codex cli
+      output.maxOutputTokens = undefined
+    },
   }
 }

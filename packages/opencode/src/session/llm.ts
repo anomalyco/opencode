@@ -127,7 +127,9 @@ export namespace LLM {
     }
 
     const variant =
-      !input.small && input.model.variants && input.user.variant ? input.model.variants[input.user.variant] : {}
+      !input.small && input.model.variants && input.user.model.variant
+        ? input.model.variants[input.user.model.variant]
+        : {}
     const base = input.small
       ? ProviderTransform.smallOptions(input.model)
       : ProviderTransform.options({
@@ -160,11 +162,6 @@ export namespace LLM {
             ...input.messages,
           ]
 
-    const maxOutputTokens =
-      isOpenaiOauth || provider.id.includes("github-copilot")
-        ? undefined
-        : ProviderTransform.maxOutputTokens(input.model)
-
     const params = await Plugin.trigger(
       "chat.params",
       {
@@ -180,7 +177,7 @@ export namespace LLM {
           : undefined,
         topP: input.agent.topP ?? ProviderTransform.topP(input.model),
         topK: ProviderTransform.topK(input.model),
-        maxOutputTokens,
+        maxOutputTokens: ProviderTransform.maxOutputTokens(input.model),
         options,
       },
     )
