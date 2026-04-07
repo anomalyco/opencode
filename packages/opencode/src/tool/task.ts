@@ -13,8 +13,15 @@ import { Permission } from "@/permission"
 import { Effect } from "effect"
 
 export const TaskTool = Tool.define("task", async () => {
+  const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
+  const list = agents.toSorted((a, b) => a.name.localeCompare(b.name))
+  const agentList = list
+    .map((a) => `- ${a.name}: ${a.description ?? "This subagent should only be called manually by the user."}`)
+    .join("\n")
+  const description = [`Available agent types and the tools they have access to:`, agentList].join("\n")
+
   return {
-    description: DESCRIPTION,
+    description,
     parameters: z.object({
       description: z.string().describe("A short (3-5 words) description of the task"),
       prompt: z.string().describe("The task for the agent to perform"),
