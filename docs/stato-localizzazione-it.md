@@ -14,9 +14,6 @@ Abilitare e preparare la localizzazione italiana nel progetto OpenCode.
 - Aggiornato test di parità i18n per includere `it`.
 - Aggiunto glossario italiano in `.opencode/glossary/it.md`.
 - Rifinitura lessicale della UI italiana (terminologia più naturale e coerente).
-- Installato Bun `1.3.11`.
-- Installati prerequisiti Windows per moduli nativi (Build Tools C++).
-- Aggiornato PATH utente con `C:\Program Files\Git\cmd`.
 
 ## Verifiche eseguite
 - `bun test parity.test.ts` in `packages/app/src/i18n`: OK.

@@ -553,10 +553,10 @@ export const dict = {
   "session.messages.jumpToLatest": "Salta al più recente",
 
   "session.context.addToContext": "Aggiungi {{selection}} al contesto",
-  "session.todo.title": "Attivita",
+  "session.todo.title": "Attività",
   "session.todo.collapse": "Comprimi",
   "session.todo.expand": "Espandi",
-  "session.todo.progress": "{{done}} di {{total}} attivita completate",
+  "session.todo.progress": "{{done}} di {{total}} attività completate",
   "session.question.progress": "{{current}} di {{total}} domande",
   "session.followupDock.summary.one": "{{count}} messaggio in coda",
   "session.followupDock.summary.other": "{{count}} messaggi in coda",
