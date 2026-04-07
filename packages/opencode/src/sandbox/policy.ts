@@ -15,7 +15,6 @@ export namespace SandboxPolicy {
     extra_deny_paths?: string[]
     opencode_roots?: string[]
     allow_network?: boolean
-    allow_unix_sockets?: boolean
   }
 
   export interface Output {
@@ -96,13 +95,6 @@ export namespace SandboxPolicy {
       ...deny(denyRoots),
       ...denyWrite(protectedRoots),
       ...(input.allow_network ? ["(allow network*)"] : []),
-      ...(input.allow_unix_sockets
-        ? [
-            "(allow system-socket (socket-domain AF_UNIX))",
-            "(allow network-bind (local unix-socket))",
-            "(allow network-outbound (remote unix-socket))",
-          ]
-        : []),
     ].join("\n")
     return {
       profile,

@@ -1,4 +1,6 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
+import fs from "fs/promises"
+import path from "path"
 import { AppRuntime } from "../../src/effect/app-runtime"
 import { Bus } from "../../src/bus"
 import { Effect } from "effect"
@@ -7,6 +9,15 @@ import { Pty } from "../../src/pty"
 import type { PtyID } from "../../src/pty/schema"
 import { tmpdir } from "../fixture/fixture"
 import { setTimeout as sleep } from "node:timers/promises"
+
+const env = {
+  HOME: process.env.HOME,
+}
+
+afterEach(() => {
+  if (env.HOME === undefined) delete process.env.HOME
+  else process.env.HOME = env.HOME
+})
 
 const wait = async (fn: () => boolean, ms = 5000) => {
   const end = Date.now() + ms
@@ -132,6 +143,43 @@ describe("pty", () => {
           out.length = 0
           await Pty.write(info.id, "AAA\n")
           await wait(() => out.join("").includes("AAA"))
+        } finally {
+          await Pty.remove(info.id)
+        }
+      },
+    })
+  })
+
+  test("keeps pty shell startup deterministic in sandbox mode", async () => {
+    if (process.platform !== "darwin") return
+
+    await using home = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, ".bashrc"), 'printf hit > "$HOME/bashrc-hit"\n')
+      },
+    })
+    await using dir = await tmpdir({
+      config: {
+        experimental: {
+          sandbox: {
+            enabled: true,
+          },
+        },
+      },
+    })
+    process.env.HOME = home.path
+
+    await Instance.provide({
+      directory: dir.path,
+      fn: async () => {
+        const info = await Pty.create({ command: "/bin/bash", title: "bash" })
+        try {
+          await sleep(150)
+          const hit = await fs
+            .access(path.join(home.path, "bashrc-hit"))
+            .then(() => true)
+            .catch(() => false)
+          expect(hit).toBe(false)
         } finally {
           await Pty.remove(info.id)
         }

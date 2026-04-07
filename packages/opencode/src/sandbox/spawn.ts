@@ -34,7 +34,6 @@ export namespace SandboxSpawn {
     write_roots: string[]
     unsafe_roots: string[]
     allow_network: boolean
-    allow_unix_sockets: boolean
   }
 
   export interface Settings {
@@ -59,7 +58,6 @@ export namespace SandboxSpawn {
     preset?: string
     mode?: Mode
     allow_network?: boolean
-    allow_unix_sockets?: boolean
   }
 
   export interface PlanInput extends ResolveInput {
@@ -224,7 +222,6 @@ export namespace SandboxSpawn {
       write_roots: [],
       unsafe_roots: [],
       allow_network: input.allow_network === true,
-      allow_unix_sockets: input.allow_unix_sockets === true,
     } satisfies Diag
   }
 
@@ -370,7 +367,6 @@ export namespace SandboxSpawn {
       opencode_roots: input.opencode_roots,
       mode: input.mode,
       allow_network: input.allow_network,
-      allow_unix_sockets: input.allow_unix_sockets,
     })
 
     const diag = {
@@ -384,7 +380,6 @@ export namespace SandboxSpawn {
       write_roots: policy.write,
       unsafe_roots: [],
       allow_network: input.allow_network === true,
-      allow_unix_sockets: input.allow_unix_sockets === true,
     } satisfies Diag
 
     return {
@@ -444,7 +439,6 @@ export namespace SandboxSpawn {
       extra_write_roots: mode === "read-only" ? writeRoots : [...writeRoots, ...temp],
       extra_deny_paths: raw.extra_deny_paths.map(Filesystem.resolve),
       allow_network: allowNetwork,
-      allow_unix_sockets: input.allow_unix_sockets,
     })
 
     if (out.active) log.debug("sandbox active", out.diag)

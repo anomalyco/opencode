@@ -41,20 +41,19 @@ describe("sandbox.policy", () => {
     expect(out.profile).toContain('(subpath "/opt/homebrew")')
   })
 
-  test("adds network and unix socket rules only when requested", () => {
+  test("adds network rules only when requested", () => {
     const out = SandboxPolicy.build({
       cwd: "/tmp/project",
       project_root: "/tmp/project",
       worktree_root: "/tmp/project",
       home: "/Users/tester",
       allow_network: true,
-      allow_unix_sockets: true,
     })
 
     expect(out.profile).toContain("(allow network*)")
-    expect(out.profile).toContain("AF_UNIX")
-    expect(out.profile).toContain("network-bind")
-    expect(out.profile).toContain("network-outbound")
+    expect(out.profile).not.toContain("AF_UNIX")
+    expect(out.profile).not.toContain("network-bind")
+    expect(out.profile).not.toContain("network-outbound")
   })
 
   test("supports read-only mode without project write roots", () => {
