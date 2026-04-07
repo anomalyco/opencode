@@ -82,8 +82,6 @@ function themeCurrent(): HostPluginApi["theme"]["current"] {
 
 type Opts = {
   client?: HostPluginApi["client"] | (() => HostPluginApi["client"])
-  scopedClient?: HostPluginApi["scopedClient"]
-  workspace?: Partial<HostPluginApi["workspace"]>
   renderer?: HostPluginApi["renderer"]
   count?: Count
   keybind?: Partial<HostPluginApi["keybind"]>
@@ -127,11 +125,6 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
         ? () => opts.client as HostPluginApi["client"]
         : fallback
   const client = () => read()
-  const scopedClient = opts.scopedClient ?? ((_workspaceID?: string) => client())
-  const workspace: HostPluginApi["workspace"] = {
-    current: opts.workspace?.current ?? (() => undefined),
-    set: opts.workspace?.set ?? (() => {}),
-  }
   let depth = 0
   let size: "medium" | "large" | "xlarge" = "medium"
   const has = opts.theme?.has ?? (() => false)
@@ -171,8 +164,6 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
     get client() {
       return client()
     },
-    scopedClient,
-    workspace,
     event: {
       on: () => {
         if (count) count.event_add += 1
