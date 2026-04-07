@@ -1,3 +1,4 @@
+import { Effect } from "effect"
 import path from "path"
 import { pathToFileURL } from "url"
 import z from "zod"
@@ -11,33 +12,8 @@ const Parameters = z.object({
 })
 
 export const SkillTool = Tool.define("skill", async () => {
-  const list = await Skill.all()
-  const description =
-    list.length === 0
-      ? "Load a specialized skill that provides domain-specific instructions and workflows. No skills are currently available."
-      : [
-          "Load a specialized skill that provides domain-specific instructions and workflows.",
-          "",
-          "When you recognize that a task matches one of the available skills listed below, use this tool to load the full skill instructions.",
-          "",
-          "The skill will inject detailed instructions, workflows, and access to bundled resources (scripts, references, templates) into the conversation context.",
-          "",
-          'Tool output includes a `<skill_content name="...">` block with the loaded content.',
-          "",
-          "The following skills provide specialized sets of instructions for particular tasks",
-          "Invoke this tool to load a skill when a task matches one of the available skills listed below:",
-          "",
-          Skill.fmt(list, { verbose: false }),
-        ].join("\n")
-
-  const examples = list
-    .map((skill) => `'${skill.name}'`)
-    .slice(0, 3)
-    .join(", ")
-  const hint = examples.length > 0 ? ` (e.g., ${examples}, ...)` : ""
-
   return {
-    description,
+    description: `Load a specialized skill that provides domain-specific instructions and workflows.`,
     parameters: Parameters,
     async execute(params: z.infer<typeof Parameters>, ctx) {
       const skill = await Skill.get(params.name)
@@ -102,3 +78,23 @@ export const SkillTool = Tool.define("skill", async () => {
     },
   }
 })
+
+export const SkillDescription: Tool.DynamicDescription = (agent) =>
+  Effect.gen(function* () {
+    const list = yield* Effect.promise(() => Skill.available(agent))
+    if (list.length === 0) return "No skills are currently available."
+    return [
+      "Load a specialized skill that provides domain-specific instructions and workflows.",
+      "",
+      "When you recognize that a task matches one of the available skills listed below, use this tool to load the full skill instructions.",
+      "",
+      "The skill will inject detailed instructions, workflows, and access to bundled resources (scripts, references, templates) into the conversation context.",
+      "",
+      'Tool output includes a `<skill_content name="...">` block with the loaded content.',
+      "",
+      "The following skills provide specialized sets of instructions for particular tasks",
+      "Invoke this tool to load a skill when a task matches one of the available skills listed below:",
+      "",
+      Skill.fmt(list, { verbose: false }),
+    ].join("\n")
+  })

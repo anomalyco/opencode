@@ -6,12 +6,12 @@ import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
 import { BatchTool } from "./batch"
 import { ReadTool } from "./read"
-import { TaskTool } from "./task"
+import { TaskDescription, TaskTool } from "./task"
 import { TodoWriteTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
-import { SkillTool } from "./skill"
+import { SkillDescription, SkillTool } from "./skill"
 import { Tool } from "./tool"
 import { Config } from "../config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
@@ -51,7 +51,11 @@ export namespace ToolRegistry {
   export interface Interface {
     readonly ids: () => Effect.Effect<string[]>
     readonly all: () => Effect.Effect<Tool.Def[]>
-    readonly tools: (model: { providerID: ProviderID; modelID: ModelID }) => Effect.Effect<Tool.Def[]>
+    readonly tools: (model: {
+      providerID: ProviderID
+      modelID: ModelID
+      agent: Agent.Info
+    }) => Effect.Effect<Tool.Def[]>
     readonly fromID: (id: string) => Effect.Effect<Tool.Def>
   }
 
@@ -178,18 +182,15 @@ export namespace ToolRegistry {
         return (yield* all()).map((tool) => tool.id)
       })
 
-      const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (model: {
-        providerID: ProviderID
-        modelID: ModelID
-      }) {
+      const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
         const filtered = (yield* all()).filter((tool) => {
           if (tool.id === CodeSearchTool.id || tool.id === WebSearchTool.id) {
-            return model.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
+            return input.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
           }
 
           const usePatch =
             !!Env.get("OPENCODE_E2E_LLM_URL") ||
-            (model.modelID.includes("gpt-") && !model.modelID.includes("oss") && !model.modelID.includes("gpt-4"))
+            (input.modelID.includes("gpt-") && !input.modelID.includes("oss") && !input.modelID.includes("gpt-4"))
           if (tool.id === ApplyPatchTool.id) return usePatch
           if (tool.id === EditTool.id || tool.id === WriteTool.id) return !usePatch
 
@@ -207,7 +208,14 @@ export namespace ToolRegistry {
             yield* plugin.trigger("tool.definition", { toolID: tool.id }, output)
             return {
               id: tool.id,
-              description: output.description,
+              description: [
+                output.description,
+                // TODO: remove this hack
+                tool.id === TaskTool.id ? yield* TaskDescription(input.agent) : undefined,
+                tool.id === SkillTool.id ? yield* SkillDescription(input.agent) : undefined,
+              ]
+                .filter(Boolean)
+                .join("\n"),
               parameters: output.parameters,
               execute: tool.execute,
               formatValidationError: tool.formatValidationError,
@@ -242,10 +250,11 @@ export namespace ToolRegistry {
     return runPromise((svc) => svc.ids())
   }
 
-  export async function tools(model: {
+  export async function tools(input: {
     providerID: ProviderID
     modelID: ModelID
+    agent: Agent.Info
   }): Promise<(Tool.Def & { id: string })[]> {
-    return runPromise((svc) => svc.tools(model))
+    return runPromise((svc) => svc.tools(input))
   }
 }
