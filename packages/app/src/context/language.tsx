@@ -8,6 +8,7 @@ import { dict as uiEn } from "@opencode-ai/ui/i18n/en"
 
 export type Locale =
   | "en"
+  | "it"
   | "zh"
   | "zht"
   | "ko"
@@ -35,6 +36,7 @@ function cookie(locale: Locale) {
 
 const LOCALES: readonly Locale[] = [
   "en",
+  "it",
   "zh",
   "zht",
   "ko",
@@ -55,6 +57,7 @@ const LOCALES: readonly Locale[] = [
 
 const INTL: Record<Locale, string> = {
   en: "en",
+  it: "it",
   zh: "zh-Hans",
   zht: "zh-Hant",
   ko: "ko",
@@ -75,6 +78,7 @@ const INTL: Record<Locale, string> = {
 
 const LABEL_KEY: Record<Locale, keyof Dictionary> = {
   en: "language.en",
+  it: "language.it",
   zh: "language.zh",
   zht: "language.zht",
   ko: "language.ko",
@@ -100,6 +104,7 @@ const merge = (app: Promise<Source>, ui: Promise<Source>) =>
   Promise.all([app, ui]).then(([a, b]) => ({ ...base, ...i18n.flatten({ ...a.dict, ...b.dict }) }) as Dictionary)
 
 const loaders: Record<Exclude<Locale, "en">, () => Promise<Dictionary>> = {
+  it: () => merge(import("@/i18n/it"), import("@opencode-ai/ui/i18n/it")),
   zh: () => merge(import("@/i18n/zh"), import("@opencode-ai/ui/i18n/zh")),
   zht: () => merge(import("@/i18n/zht"), import("@opencode-ai/ui/i18n/zht")),
   ko: () => merge(import("@/i18n/ko"), import("@opencode-ai/ui/i18n/ko")),
@@ -135,6 +140,7 @@ export function loadLocaleDict(locale: Locale) {
 
 const localeMatchers: Array<{ locale: Locale; match: (language: string) => boolean }> = [
   { locale: "en", match: (language) => language.startsWith("en") },
+  { locale: "it", match: (language) => language.startsWith("it") },
   { locale: "zht", match: (language) => language.startsWith("zh") && language.includes("hant") },
   { locale: "zh", match: (language) => language.startsWith("zh") },
   { locale: "ko", match: (language) => language.startsWith("ko") },

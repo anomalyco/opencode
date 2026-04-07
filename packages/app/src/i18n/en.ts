@@ -406,6 +406,7 @@ export const dict = {
   "language.de": "Deutsch",
   "language.es": "Español",
   "language.fr": "Français",
+  "language.it": "Italiano",
   "language.da": "Dansk",
   "language.ja": "日本語",
   "language.pl": "Polski",
