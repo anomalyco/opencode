@@ -58,10 +58,11 @@ export async function spawnLocalServer(hostname: string, port: number, password:
 }
 
 function prepareServerEnv(password: string) {
+  const shell = process.platform === "win32" ? null : getUserShell()
+  const shellEnv = shell ? (loadShellEnv(shell) ?? {}) : {}
   const env = {
-    ...Object.fromEntries(
-      Object.entries(process.env).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
-    ),
+    ...process.env,
+    ...shellEnv,
     OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
     OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
     OPENCODE_CLIENT: "desktop",
@@ -69,9 +70,7 @@ function prepareServerEnv(password: string) {
     OPENCODE_SERVER_PASSWORD: password,
     XDG_STATE_HOME: app.getPath("userData"),
   }
-  const shell = process.platform === "win32" ? null : getUserShell()
-  const shellEnv = shell ? (loadShellEnv(shell) ?? {}) : {}
-  Object.assign(process.env, { ...env, ...shellEnv })
+  Object.assign(process.env, env)
 }
 
 export async function checkHealth(url: string, password?: string | null): Promise<boolean> {
