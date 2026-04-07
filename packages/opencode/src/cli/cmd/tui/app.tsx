@@ -289,9 +289,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     toast,
     renderer,
   })
-  onCleanup(() => {
-    api.dispose()
-  })
   const [ready, setReady] = createSignal(false)
   TuiPluginRuntime.init(api)
     .catch((error) => {
