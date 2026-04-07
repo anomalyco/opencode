@@ -569,7 +569,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           sessionID,
           mode: task.agent,
           agent: task.agent,
-          variant: lastUser.variant,
+          variant: lastUser.model.variant,
           path: { cwd: ctx.directory, root: ctx.worktree },
           cost: 0,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -967,17 +967,20 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             : undefined
         const variant = input.variant ?? (ag.variant && full?.variants?.[ag.variant] ? ag.variant : undefined)
 
-        const info: MessageV2.Info = {
+        const info: MessageV2.User = {
           id: input.messageID ?? MessageID.ascending(),
           role: "user",
           sessionID: input.sessionID,
           time: { created: Date.now() },
           tools: input.tools,
           agent: ag.name,
-          model,
+          model: {
+            providerID: model.providerID,
+            modelID: model.modelID,
+            variant,
+          },
           system: input.system,
           format: input.format,
-          variant,
         }
 
         yield* Effect.addFinalizer(() =>
@@ -1436,7 +1439,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
               role: "assistant",
               mode: agent.name,
               agent: agent.name,
-              variant: lastUser.variant,
+              variant: lastUser.model.variant,
               path: { cwd: ctx.directory, root: ctx.worktree },
               cost: 0,
               tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
