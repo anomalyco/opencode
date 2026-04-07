@@ -2,7 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { BashTool, commandFamilies } from "../../src/tool/bash"
-import { SandboxRuntime } from "../../src/sandbox/runtime"
+import { SandboxSpawn } from "../../src/sandbox/spawn"
 import { Tool } from "../../src/tool/tool"
 import { Instance } from "../../src/project/instance"
 import { SessionID, MessageID } from "../../src/session/schema"
@@ -83,6 +83,7 @@ describe("tool.bash sandbox", () => {
       init: async (dir) => {
         await fs.mkdir(path.join(dir, ".ssh"), { recursive: true })
         await Bun.write(path.join(dir, ".ssh", "secret"), "secret\n")
+        await Bun.write(path.join(dir, ".zshenv"), "export OPENCODE_ZSHENV_HIT=1\n")
       },
     })
     await using tmp = await tmpdir({
@@ -259,6 +260,7 @@ describe("tool.bash sandbox", () => {
         expect(seen).toContain("bash:unsandboxed")
         expect(out.output).toContain("secret\n")
         expect(out.output).toContain("Retried command without sandbox")
+        expect(out.output).not.toContain("1\n")
       },
     })
   })
@@ -269,6 +271,7 @@ describe("tool.bash sandbox", () => {
       init: async (dir) => {
         await fs.mkdir(path.join(dir, ".ssh"), { recursive: true })
         await Bun.write(path.join(dir, ".ssh", "secret"), "secret\n")
+        await Bun.write(path.join(dir, ".zshenv"), "export OPENCODE_ZSHENV_HIT=1\n")
       },
     })
     await using tmp = await tmpdir({
@@ -302,6 +305,7 @@ describe("tool.bash sandbox", () => {
         expect(seen).toContain("bash:unsandboxed")
         expect(out.output).toContain("secret\n")
         expect(out.output).not.toContain("Retried command without sandbox")
+        expect(out.output).not.toContain("1\n")
       },
     })
   })
@@ -397,23 +401,9 @@ describe("tool.bash sandbox", () => {
 
   test("reports sandboxed fallback launch failures after explicit rejection", async () => {
     if (process.platform !== "darwin") return
-    const plan = spyOn(SandboxRuntime, "plan").mockResolvedValue({
-      active: true,
+    const wrap = spyOn(SandboxSpawn, "wrap").mockReturnValue({
       file: "/definitely/missing-sandbox-exec",
       args: [],
-      diag: {
-        requested: true,
-        active: true,
-        reason: "enabled",
-        wrapper: "/usr/bin/sandbox-exec",
-        cwd: "/tmp/project",
-        mode: "workspace-write",
-        read_roots: [],
-        write_roots: [],
-        unsafe_roots: [],
-        allow_network: false,
-        allow_unix_sockets: false,
-      },
     })
     try {
       await using tmp = await tmpdir({
@@ -446,7 +436,7 @@ describe("tool.bash sandbox", () => {
         },
       })
     } finally {
-      plan.mockRestore()
+      wrap.mockRestore()
     }
   })
 

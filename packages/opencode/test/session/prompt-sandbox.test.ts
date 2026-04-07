@@ -3,7 +3,7 @@ import fs from "fs/promises"
 import path from "path"
 import { Permission } from "../../src/permission"
 import { Instance } from "../../src/project/instance"
-import { SandboxRuntime } from "../../src/sandbox/runtime"
+import { SandboxSpawn } from "../../src/sandbox/spawn"
 import { Session } from "../../src/session"
 import { SessionPrompt } from "../../src/session/prompt"
 import { tmpdir } from "../fixture/fixture"
@@ -41,6 +41,7 @@ describe("session.prompt sandbox", () => {
       },
     })
     await using tmp = await tmpdir({
+      git: true,
       config: {
         experimental: {
           sandbox: {
@@ -82,9 +83,11 @@ describe("session.prompt sandbox", () => {
       init: async (dir) => {
         await fs.mkdir(path.join(dir, ".ssh"), { recursive: true })
         await Bun.write(path.join(dir, ".ssh", "secret"), "secret\n")
+        await Bun.write(path.join(dir, ".zshenv"), "export OPENCODE_ZSHENV_HIT=1\n")
       },
     })
     await using tmp = await tmpdir({
+      git: true,
       config: {
         experimental: {
           sandbox: {
@@ -140,6 +143,7 @@ describe("session.prompt sandbox", () => {
 
   test("blocks excluded commands before spawning", async () => {
     await using tmp = await tmpdir({
+      git: true,
       config: {
         experimental: {
           sandbox: {
@@ -182,6 +186,7 @@ describe("session.prompt sandbox", () => {
       },
     })
     await using tmp = await tmpdir({
+      git: true,
       config: {
         experimental: {
           sandbox: {
@@ -217,6 +222,7 @@ describe("session.prompt sandbox", () => {
         if (part.state.status !== "completed") throw new Error("expected completed part")
         expect(part.state.output).toContain("secret\n")
         expect(part.state.output).toContain("Retried command without sandbox")
+        expect(part.state.output).not.toContain("1\n")
         await Session.remove(session.id)
       },
     })
@@ -228,9 +234,11 @@ describe("session.prompt sandbox", () => {
       init: async (dir) => {
         await fs.mkdir(path.join(dir, ".ssh"), { recursive: true })
         await Bun.write(path.join(dir, ".ssh", "secret"), "secret\n")
+        await Bun.write(path.join(dir, ".zshenv"), "export OPENCODE_ZSHENV_HIT=1\n")
       },
     })
     await using tmp = await tmpdir({
+      git: true,
       config: {
         experimental: {
           sandbox: {
@@ -266,6 +274,7 @@ describe("session.prompt sandbox", () => {
         if (part.state.status !== "completed") throw new Error("expected completed part")
         expect(part.state.output).toContain("secret\n")
         expect(part.state.output).not.toContain("Retried command without sandbox")
+        expect(part.state.output).not.toContain("1\n")
         await Session.remove(session.id)
       },
     })
@@ -280,6 +289,7 @@ describe("session.prompt sandbox", () => {
       },
     })
     await using tmp = await tmpdir({
+      git: true,
       config: {
         experimental: {
           sandbox: {
@@ -338,6 +348,7 @@ describe("session.prompt sandbox", () => {
       },
     })
     await using tmp = await tmpdir({
+      git: true,
       config: {
         experimental: {
           sandbox: {
@@ -410,6 +421,7 @@ describe("session.prompt sandbox", () => {
       },
     })
     await using tmp = await tmpdir({
+      git: true,
       config: {
         experimental: {
           sandbox: {
@@ -469,26 +481,13 @@ describe("session.prompt sandbox", () => {
 
   test("signals when explicit rejection is followed by sandboxed launch failure", async () => {
     if (process.platform !== "darwin") return
-    const plan = spyOn(SandboxRuntime, "plan").mockResolvedValue({
-      active: true,
+    const wrap = spyOn(SandboxSpawn, "wrap").mockReturnValue({
       file: "/definitely/missing-sandbox-exec",
       args: [],
-      diag: {
-        requested: true,
-        active: true,
-        reason: "enabled",
-        wrapper: "/usr/bin/sandbox-exec",
-        cwd: "/tmp/project",
-        mode: "workspace-write",
-        read_roots: [],
-        write_roots: [],
-        unsafe_roots: [],
-        allow_network: false,
-        allow_unix_sockets: false,
-      },
     })
     try {
       await using tmp = await tmpdir({
+        git: true,
         config: {
           experimental: {
             sandbox: {
@@ -534,7 +533,7 @@ describe("session.prompt sandbox", () => {
         },
       })
     } finally {
-      plan.mockRestore()
+      wrap.mockRestore()
     }
   })
 })

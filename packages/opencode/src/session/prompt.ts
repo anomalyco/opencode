@@ -881,7 +881,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           }),
         )
         const cleanArgs = clean[shellName]?.args ?? clean[""]?.args ?? ["-c", input.command]
-        const raw = { file: sh, args: invocations[shellName]?.args ?? invocations[""].args }
+        const rawArgs = invocations[shellName]?.args ?? invocations[""].args
+        const raw = { file: sh, args: sandbox.active ? cleanArgs : rawArgs }
         const call =
           sandbox.active && sandbox.profile
             ? SandboxSpawn.wrap({ profile: sandbox.profile, file: sh, args: cleanArgs })
